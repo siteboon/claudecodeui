@@ -3,7 +3,7 @@ import { ScrollArea } from './ui/scroll-area';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
-import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2 } from 'lucide-react';
+import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2, Star, ChevronUp } from 'lucide-react';
 import { cn } from '../lib/utils';
 import ClaudeLogo from './ClaudeLogo';
 
@@ -60,6 +60,29 @@ function Sidebar({
   const [editingSession, setEditingSession] = useState(null);
   const [editingSessionName, setEditingSessionName] = useState('');
   const [generatingSummary, setGeneratingSummary] = useState({});
+  const [starredProjects, setStarredProjects] = useState(() => {
+    // Load starred projects from localStorage
+    const saved = localStorage.getItem('starredProjects');
+    return saved ? new Set(JSON.parse(saved)) : new Set();
+  });
+  const [showOtherProjects, setShowOtherProjects] = useState(false);
+
+  // Save starred projects to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('starredProjects', JSON.stringify([...starredProjects]));
+  }, [starredProjects]);
+
+  const toggleStarred = (projectName) => {
+    setStarredProjects(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(projectName)) {
+        newSet.delete(projectName);
+      } else {
+        newSet.add(projectName);
+      }
+      return newSet;
+    });
+  };
 
   // Touch handler to prevent double-tap issues on iPad
   const handleTouchClick = (callback) => {
@@ -300,6 +323,34 @@ function Sidebar({
     return [...initialSessions, ...additional];
   };
 
+  const updateSessionSummary = async (projectName, sessionId, newSummary) => {
+    try {
+      const response = await fetch(`/api/projects/${projectName}/sessions/${sessionId}/summary`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ summary: newSummary }),
+      });
+
+      if (response.ok) {
+        // Refresh projects to get updated data
+        if (window.refreshProjects) {
+          window.refreshProjects();
+        } else {
+          window.location.reload();
+        }
+      } else {
+        console.error('Failed to update session summary');
+      }
+    } catch (error) {
+      console.error('Error updating session summary:', error);
+    }
+    
+    setEditingSession(null);
+    setEditingSessionName('');
+  };
+
   return (
     <div className="h-full flex flex-col bg-card md:select-none">
       {/* Header */}
@@ -508,12 +559,28 @@ function Sidebar({
               </p>
             </div>
           ) : (
-            projects.map((project) => {
-              const isExpanded = expandedProjects.has(project.name);
-              const isSelected = selectedProject?.name === project.name;
+            (() => {
+              // Separate starred and other projects
+              const starredProjectsList = projects.filter(p => starredProjects.has(p.name));
+              const otherProjectsList = projects.filter(p => !starredProjects.has(p.name));
               
               return (
-                <div key={project.name} className="md:space-y-1">
+                <>
+                  {/* Starred Projects */}
+                  {starredProjectsList.length > 0 && (
+                    <>
+                      <div className="px-3 py-2">
+                        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                          <Star className="w-3 h-3 fill-current" />
+                          收藏项目
+                        </h3>
+                      </div>
+                      {starredProjectsList.map((project) => {
+                        const isExpanded = expandedProjects.has(project.name);
+                        const isSelected = selectedProject?.name === project.name;
+                        
+                        return (
+                          <div key={project.name} className="md:space-y-1">
                   {/* Project Header */}
                   <div className="group md:group">
                     {/* Mobile Project Item */}
@@ -603,6 +670,26 @@ function Sidebar({
                               </>
                             ) : (
                               <>
+                                <button
+                                  className={cn(
+                                    "w-8 h-8 rounded-lg flex items-center justify-center active:scale-90 transition-all duration-150 shadow-sm active:shadow-none",
+                                    starredProjects.has(project.name) 
+                                      ? "bg-yellow-500/20 dark:bg-yellow-600/20 border border-yellow-300 dark:border-yellow-700" 
+                                      : "bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
+                                  )}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleStarred(project.name);
+                                  }}
+                                  onTouchEnd={handleTouchClick(() => toggleStarred(project.name))}
+                                >
+                                  <Star className={cn(
+                                    "w-4 h-4",
+                                    starredProjects.has(project.name) 
+                                      ? "text-yellow-600 dark:text-yellow-400 fill-current" 
+                                      : "text-gray-400 dark:text-gray-600"
+                                  )} />
+                                </button>
                                 {getAllSessions(project).length === 0 && (
                                   <button
                                     className="w-8 h-8 rounded-lg bg-red-500/10 dark:bg-red-900/30 flex items-center justify-center active:scale-90 border border-red-200 dark:border-red-800"
@@ -731,6 +818,26 @@ function Sidebar({
                           </>
                         ) : (
                           <>
+                            <div
+                              className={cn(
+                                "w-6 h-6 transition-all duration-200 flex items-center justify-center rounded cursor-pointer",
+                                starredProjects.has(project.name) 
+                                  ? "opacity-100 hover:bg-yellow-50 dark:hover:bg-yellow-900/20" 
+                                  : "opacity-0 group-hover:opacity-100 hover:bg-accent touch:opacity-100"
+                              )}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleStarred(project.name);
+                              }}
+                              title={starredProjects.has(project.name) ? "取消收藏" : "收藏项目"}
+                            >
+                              <Star className={cn(
+                                "w-3 h-3",
+                                starredProjects.has(project.name) 
+                                  ? "text-yellow-600 dark:text-yellow-400 fill-current" 
+                                  : "text-gray-400 dark:text-gray-600"
+                              )} />
+                            </div>
                             <div
                               className="w-6 h-6 opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-accent flex items-center justify-center rounded cursor-pointer touch:opacity-100"
                               onClick={(e) => {
@@ -1030,8 +1137,573 @@ function Sidebar({
                     </div>
                   )}
                 </div>
+                        );
+                      })}
+                    </>
+                  )}
+                  
+                  {/* Other Projects */}
+                  {otherProjectsList.length > 0 && (
+                    <>
+                      <div className="px-3 py-2 mt-4">
+                        <button
+                          className="w-full flex items-center justify-between text-xs font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors"
+                          onClick={() => setShowOtherProjects(!showOtherProjects)}
+                        >
+                          <span className="flex items-center gap-1">
+                            <Folder className="w-3 h-3" />
+                            其他项目 ({otherProjectsList.length})
+                          </span>
+                          {showOtherProjects ? (
+                            <ChevronUp className="w-3 h-3" />
+                          ) : (
+                            <ChevronDown className="w-3 h-3" />
+                          )}
+                        </button>
+                      </div>
+                      
+                      {showOtherProjects && otherProjectsList.map((project) => {
+                        const isExpanded = expandedProjects.has(project.name);
+                        const isSelected = selectedProject?.name === project.name;
+                        
+                        return (
+                          <div key={project.name} className="md:space-y-1">
+                            {/* Project Header */}
+                            <div className="group md:group">
+                              {/* Mobile Project Item */}
+                              <div className="md:hidden">
+                                <div
+                                  className={cn(
+                                    "p-3 mx-3 my-1 rounded-lg bg-card border border-border/50 active:scale-[0.98] transition-all duration-150",
+                                    isSelected && "bg-primary/5 border-primary/20"
+                                  )}
+                                  onClick={() => {
+                                    toggleProject(project.name);
+                                  }}
+                                  onTouchEnd={handleTouchClick(() => toggleProject(project.name))}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                                      <div className={cn(
+                                        "w-8 h-8 rounded-lg flex items-center justify-center transition-colors",
+                                        isExpanded ? "bg-primary/10" : "bg-muted"
+                                      )}>
+                                        {isExpanded ? (
+                                          <FolderOpen className="w-4 h-4 text-primary" />
+                                        ) : (
+                                          <Folder className="w-4 h-4 text-muted-foreground" />
+                                        )}
+                                      </div>
+                                      <div className="min-w-0 flex-1">
+                                        {editingProject === project.name ? (
+                                          <input
+                                            type="text"
+                                            value={editingName}
+                                            onChange={(e) => setEditingName(e.target.value)}
+                                            className="w-full px-3 py-2 text-sm border-2 border-primary/40 focus:border-primary rounded-lg bg-background text-foreground shadow-sm focus:shadow-md transition-all duration-200 focus:outline-none"
+                                            placeholder="Project name"
+                                            autoFocus
+                                            autoComplete="off"
+                                            onClick={(e) => e.stopPropagation()}
+                                            onKeyDown={(e) => {
+                                              if (e.key === 'Enter') saveProjectName(project.name);
+                                              if (e.key === 'Escape') cancelEditing();
+                                            }}
+                                            style={{
+                                              fontSize: '16px',
+                                              WebkitAppearance: 'none',
+                                              borderRadius: '8px'
+                                            }}
+                                          />
+                                        ) : (
+                                          <>
+                                            <h3 className="text-sm font-medium text-foreground truncate">
+                                              {project.displayName}
+                                            </h3>
+                                            <p className="text-xs text-muted-foreground">
+                                              {(() => {
+                                                const sessionCount = getAllSessions(project).length;
+                                                const hasMore = project.sessionMeta?.hasMore !== false;
+                                                const count = hasMore && sessionCount >= 5 ? `${sessionCount}+` : sessionCount;
+                                                return `${count} session${count === 1 ? '' : 's'}`;
+                                              })()}
+                                            </p>
+                                          </>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      {editingProject === project.name ? (
+                                        <>
+                                          <button
+                                            className="w-8 h-8 rounded-lg bg-green-500 dark:bg-green-600 flex items-center justify-center active:scale-90 transition-all duration-150 shadow-sm active:shadow-none"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              saveProjectName(project.name);
+                                            }}
+                                          >
+                                            <Check className="w-4 h-4 text-white" />
+                                          </button>
+                                          <button
+                                            className="w-8 h-8 rounded-lg bg-gray-500 dark:bg-gray-600 flex items-center justify-center active:scale-90 transition-all duration-150 shadow-sm active:shadow-none"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              cancelEditing();
+                                            }}
+                                          >
+                                            <X className="w-4 h-4 text-white" />
+                                          </button>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <button
+                                            className={cn(
+                                              "w-8 h-8 rounded-lg flex items-center justify-center active:scale-90 transition-all duration-150 shadow-sm active:shadow-none",
+                                              starredProjects.has(project.name) 
+                                                ? "bg-yellow-500/20 dark:bg-yellow-600/20 border border-yellow-300 dark:border-yellow-700" 
+                                                : "bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
+                                            )}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              toggleStarred(project.name);
+                                            }}
+                                            onTouchEnd={handleTouchClick(() => toggleStarred(project.name))}
+                                          >
+                                            <Star className={cn(
+                                              "w-4 h-4",
+                                              starredProjects.has(project.name) 
+                                                ? "text-yellow-600 dark:text-yellow-400 fill-current" 
+                                                : "text-gray-400 dark:text-gray-600"
+                                            )} />
+                                          </button>
+                                          {getAllSessions(project).length === 0 && (
+                                            <button
+                                              className="w-8 h-8 rounded-lg bg-red-500/10 dark:bg-red-900/30 flex items-center justify-center active:scale-90 border border-red-200 dark:border-red-800"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                deleteProject(project.name);
+                                              }}
+                                              onTouchEnd={handleTouchClick(() => deleteProject(project.name))}
+                                            >
+                                              <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400" />
+                                            </button>
+                                          )}
+                                          <button
+                                            className="w-8 h-8 rounded-lg bg-primary/10 dark:bg-primary/20 flex items-center justify-center active:scale-90 border border-primary/20 dark:border-primary/30"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              startEditing(project);
+                                            }}
+                                            onTouchEnd={handleTouchClick(() => startEditing(project))}
+                                          >
+                                            <Edit3 className="w-4 h-4 text-primary" />
+                                          </button>
+                                          <div className="w-6 h-6 rounded-md bg-muted/30 flex items-center justify-center">
+                                            {isExpanded ? (
+                                              <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                                            ) : (
+                                              <ChevronRight className="w-3 h-3 text-muted-foreground" />
+                                            )}
+                                          </div>
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              {/* Desktop Project Item */}
+                              <Button
+                                variant="ghost"
+                                className={cn(
+                                  "hidden md:flex w-full justify-between p-2 h-auto font-normal hover:bg-accent/50",
+                                  isSelected && "bg-accent text-accent-foreground"
+                                )}
+                                onClick={() => {
+                                  if (selectedProject?.name !== project.name) {
+                                    onProjectSelect(project);
+                                  }
+                                  toggleProject(project.name);
+                                }}
+                                onTouchEnd={handleTouchClick(() => {
+                                  if (selectedProject?.name !== project.name) {
+                                    onProjectSelect(project);
+                                  }
+                                  toggleProject(project.name);
+                                })}
+                              >
+                                <div className="flex items-center gap-3 min-w-0 flex-1">
+                                  {isExpanded ? (
+                                    <FolderOpen className="w-4 h-4 text-primary flex-shrink-0" />
+                                  ) : (
+                                    <Folder className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                                  )}
+                                  <div className="min-w-0 flex-1 text-left">
+                                    {editingProject === project.name ? (
+                                      <div className="space-y-1">
+                                        <input
+                                          type="text"
+                                          value={editingName}
+                                          onChange={(e) => setEditingName(e.target.value)}
+                                          className="w-full px-2 py-1 text-sm border border-border rounded bg-background text-foreground focus:ring-2 focus:ring-primary/20"
+                                          placeholder="Project name"
+                                          autoFocus
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter') saveProjectName(project.name);
+                                            if (e.key === 'Escape') cancelEditing();
+                                          }}
+                                        />
+                                        <div className="text-xs text-muted-foreground truncate" title={project.fullPath}>
+                                          {project.fullPath}
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div>
+                                        <div className="text-sm font-semibold truncate text-foreground" title={project.displayName}>
+                                          {project.displayName}
+                                        </div>
+                                        <div className="text-xs text-muted-foreground">
+                                          {(() => {
+                                            const sessionCount = getAllSessions(project).length;
+                                            const hasMore = project.sessionMeta?.hasMore !== false;
+                                            return hasMore && sessionCount >= 5 ? `${sessionCount}+` : sessionCount;
+                                          })()}
+                                          {project.fullPath !== project.displayName && (
+                                            <span className="ml-1 opacity-60" title={project.fullPath}>
+                                              • {project.fullPath.length > 25 ? '...' + project.fullPath.slice(-22) : project.fullPath}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                  {editingProject === project.name ? (
+                                    <>
+                                      <div
+                                        className="w-6 h-6 text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-900/20 flex items-center justify-center rounded cursor-pointer transition-colors"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          saveProjectName(project.name);
+                                        }}
+                                      >
+                                        <Check className="w-3 h-3" />
+                                      </div>
+                                      <div
+                                        className="w-6 h-6 text-gray-500 hover:text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center justify-center rounded cursor-pointer transition-colors"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          cancelEditing();
+                                        }}
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <div
+                                        className={cn(
+                                          "w-6 h-6 transition-all duration-200 flex items-center justify-center rounded cursor-pointer",
+                                          starredProjects.has(project.name) 
+                                            ? "opacity-100 hover:bg-yellow-50 dark:hover:bg-yellow-900/20" 
+                                            : "opacity-0 group-hover:opacity-100 hover:bg-accent touch:opacity-100"
+                                        )}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          toggleStarred(project.name);
+                                        }}
+                                        title={starredProjects.has(project.name) ? "取消收藏" : "收藏项目"}
+                                      >
+                                        <Star className={cn(
+                                          "w-3 h-3",
+                                          starredProjects.has(project.name) 
+                                            ? "text-yellow-600 dark:text-yellow-400 fill-current" 
+                                            : "text-gray-400 dark:text-gray-600"
+                                        )} />
+                                      </div>
+                                      <div
+                                        className="w-6 h-6 opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-accent flex items-center justify-center rounded cursor-pointer touch:opacity-100"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          startEditing(project);
+                                        }}
+                                        title="Rename project (F2)"
+                                      >
+                                        <Edit3 className="w-3 h-3" />
+                                      </div>
+                                      {getAllSessions(project).length === 0 && (
+                                        <div
+                                          className="w-6 h-6 opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center justify-center rounded cursor-pointer touch:opacity-100"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            deleteProject(project.name);
+                                          }}
+                                          title="Delete empty project (Delete)"
+                                        >
+                                          <Trash2 className="w-3 h-3 text-red-600 dark:text-red-400" />
+                                        </div>
+                                      )}
+                                      {isExpanded ? (
+                                        <ChevronDown className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+                                      ) : (
+                                        <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                              </Button>
+                            </div>
+
+                            {/* Sessions List */}
+                            {isExpanded && (
+                              <div className="ml-3 space-y-1 border-l border-border pl-3">
+                                {!initialSessionsLoaded.has(project.name) ? (
+                                  Array.from({ length: 3 }).map((_, i) => (
+                                    <div key={i} className="p-2 rounded-md">
+                                      <div className="flex items-start gap-2">
+                                        <div className="w-3 h-3 bg-muted rounded-full animate-pulse mt-0.5" />
+                                        <div className="flex-1 space-y-1">
+                                          <div className="h-3 bg-muted rounded animate-pulse" style={{ width: `${60 + i * 15}%` }} />
+                                          <div className="h-2 bg-muted rounded animate-pulse w-1/2" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))
+                                ) : getAllSessions(project).length === 0 && !loadingSessions[project.name] ? (
+                                  <div className="py-2 px-3 text-left">
+                                    <p className="text-xs text-muted-foreground">No sessions yet</p>
+                                  </div>
+                                ) : (
+                                  getAllSessions(project).map((session) => {
+                                    const sessionDate = new Date(session.lastActivity);
+                                    const diffInMinutes = Math.floor((currentTime - sessionDate) / (1000 * 60));
+                                    const isActive = diffInMinutes < 10;
+                                    
+                                    return (
+                                    <div key={session.id} className="group relative">
+                                      {isActive && (
+                                        <div className="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-1">
+                                          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                                        </div>
+                                      )}
+                                      {/* Mobile Session Item */}
+                                      <div className="md:hidden">
+                                        <div
+                                          className={cn(
+                                            "p-2 mx-3 my-0.5 rounded-md bg-card border active:scale-[0.98] transition-all duration-150 relative",
+                                            selectedSession?.id === session.id ? "bg-primary/5 border-primary/20" :
+                                            isActive ? "border-green-500/30 bg-green-50/5 dark:bg-green-900/5" : "border-border/30"
+                                          )}
+                                          onClick={() => {
+                                            onProjectSelect(project);
+                                            onSessionSelect(session);
+                                          }}
+                                          onTouchEnd={handleTouchClick(() => {
+                                            onProjectSelect(project);
+                                            onSessionSelect(session);
+                                          })}
+                                        >
+                                          <div className="flex items-center gap-2">
+                                            <div className={cn(
+                                              "w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0",
+                                              selectedSession?.id === session.id ? "bg-primary/10" : "bg-muted/50"
+                                            )}>
+                                              <MessageSquare className={cn(
+                                                "w-3 h-3",
+                                                selectedSession?.id === session.id ? "text-primary" : "text-muted-foreground"
+                                              )} />
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                              <div className="text-xs font-medium truncate text-foreground">
+                                                {session.summary || 'New Session'}
+                                              </div>
+                                              <div className="flex items-center gap-1 mt-0.5">
+                                                <Clock className="w-2.5 h-2.5 text-muted-foreground" />
+                                                <span className="text-xs text-muted-foreground">
+                                                  {formatTimeAgo(session.lastActivity, currentTime)}
+                                                </span>
+                                                {session.messageCount > 0 && (
+                                                  <Badge variant="secondary" className="text-xs px-1 py-0 ml-auto">
+                                                    {session.messageCount}
+                                                  </Badge>
+                                                )}
+                                              </div>
+                                            </div>
+                                            <button
+                                              className="w-5 h-5 rounded-md bg-red-50 dark:bg-red-900/20 flex items-center justify-center active:scale-95 transition-transform opacity-70 ml-1"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                deleteSession(project.name, session.id);
+                                              }}
+                                              onTouchEnd={handleTouchClick(() => deleteSession(project.name, session.id))}
+                                            >
+                                              <Trash2 className="w-2.5 h-2.5 text-red-600 dark:text-red-400" />
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                      
+                                      {/* Desktop Session Item */}
+                                      <div className="hidden md:block">
+                                        <Button
+                                          variant="ghost"
+                                          className={cn(
+                                            "w-full justify-start p-2 h-auto font-normal text-left hover:bg-accent/50 transition-colors duration-200",
+                                            selectedSession?.id === session.id && "bg-accent text-accent-foreground"
+                                          )}
+                                          onClick={() => onSessionSelect(session)}
+                                          onTouchEnd={handleTouchClick(() => onSessionSelect(session))}
+                                        >
+                                          <div className="flex items-start gap-2 min-w-0 w-full">
+                                            <MessageSquare className="w-3 h-3 text-muted-foreground mt-0.5 flex-shrink-0" />
+                                            <div className="min-w-0 flex-1">
+                                              <div className="text-xs font-medium truncate text-foreground">
+                                                {session.summary || 'New Session'}
+                                              </div>
+                                              <div className="flex items-center gap-1 mt-0.5">
+                                                <Clock className="w-2.5 h-2.5 text-muted-foreground" />
+                                                <span className="text-xs text-muted-foreground">
+                                                  {formatTimeAgo(session.lastActivity, currentTime)}
+                                                </span>
+                                                {session.messageCount > 0 && (
+                                                  <Badge variant="secondary" className="text-xs px-1 py-0 ml-auto">
+                                                    {session.messageCount}
+                                                  </Badge>
+                                                )}
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </Button>
+                                        <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200">
+                                          {editingSession === session.id ? (
+                                            <>
+                                              <input
+                                                type="text"
+                                                value={editingSessionName}
+                                                onChange={(e) => setEditingSessionName(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                  e.stopPropagation();
+                                                  if (e.key === 'Enter') {
+                                                    updateSessionSummary(project.name, session.id, editingSessionName);
+                                                  } else if (e.key === 'Escape') {
+                                                    setEditingSession(null);
+                                                    setEditingSessionName('');
+                                                  }
+                                                }}
+                                                onClick={(e) => e.stopPropagation()}
+                                                className="w-32 px-2 py-1 text-xs border border-border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+                                                autoFocus
+                                              />
+                                              <button
+                                                className="w-6 h-6 bg-green-50 hover:bg-green-100 dark:bg-green-900/20 dark:hover:bg-green-900/40 rounded flex items-center justify-center"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  updateSessionSummary(project.name, session.id, editingSessionName);
+                                                }}
+                                                title="Save"
+                                              >
+                                                <Check className="w-3 h-3 text-green-600 dark:text-green-400" />
+                                              </button>
+                                              <button
+                                                className="w-6 h-6 bg-gray-50 hover:bg-gray-100 dark:bg-gray-900/20 dark:hover:bg-gray-900/40 rounded flex items-center justify-center"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  setEditingSession(null);
+                                                  setEditingSessionName('');
+                                                }}
+                                                title="Cancel"
+                                              >
+                                                <X className="w-3 h-3 text-gray-600 dark:text-gray-400" />
+                                              </button>
+                                            </>
+                                          ) : (
+                                            <>
+                                              <button
+                                                className="w-6 h-6 bg-gray-50 hover:bg-gray-100 dark:bg-gray-900/20 dark:hover:bg-gray-900/40 rounded flex items-center justify-center"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  setEditingSession(session.id);
+                                                  setEditingSessionName(session.summary || 'New Session');
+                                                }}
+                                                title="Manually edit session name"
+                                              >
+                                                <Edit2 className="w-3 h-3 text-gray-600 dark:text-gray-400" />
+                                              </button>
+                                              <button
+                                                className="w-6 h-6 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 rounded flex items-center justify-center"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  deleteSession(project.name, session.id);
+                                                }}
+                                                title="Delete this session permanently"
+                                              >
+                                                <Trash2 className="w-3 h-3 text-red-600 dark:text-red-400" />
+                                              </button>
+                                            </>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    );
+                                  })
+                                )}
+
+                                {getAllSessions(project).length > 0 && project.sessionMeta?.hasMore !== false && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="w-full justify-center gap-2 mt-2 text-muted-foreground"
+                                    onClick={() => loadMoreSessions(project)}
+                                    disabled={loadingSessions[project.name]}
+                                  >
+                                    {loadingSessions[project.name] ? (
+                                      <>
+                                        <div className="w-3 h-3 animate-spin rounded-full border border-muted-foreground border-t-transparent" />
+                                        Loading...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <ChevronDown className="w-3 h-3" />
+                                        Show more sessions
+                                      </>
+                                    )}
+                                  </Button>
+                                )}
+                                
+                                <div className="md:hidden px-3 pb-2">
+                                  <button
+                                    className="w-full h-8 bg-primary hover:bg-primary/90 text-primary-foreground rounded-md flex items-center justify-center gap-2 font-medium text-xs active:scale-[0.98] transition-all duration-150"
+                                    onClick={() => {
+                                      onProjectSelect(project);
+                                      onNewSession(project);
+                                    }}
+                                  >
+                                    <Plus className="w-3 h-3" />
+                                    New Session
+                                  </button>
+                                </div>
+                                
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  className="hidden md:flex w-full justify-start gap-2 mt-1 h-8 text-xs font-medium bg-primary hover:bg-primary/90 text-primary-foreground transition-colors"
+                                  onClick={() => onNewSession(project)}
+                                >
+                                  <Plus className="w-3 h-3" />
+                                  New Session
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </>
+                  )}
+                </>
               );
-            })
+            })()
           )}
         </div>
       </ScrollArea>
