@@ -12,7 +12,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Default values
-REPO_URL="https://github.com/yourusername/claudecodeui.git"
+REPO_URL="https://github.com/RuKapSan/claudecodeui.git"
 INSTALL_DIR="claudecodeui"
 
 # Parse command line arguments
@@ -32,6 +32,11 @@ while [[ $# -gt 0 ]]; do
       echo "  --repo URL     Git repository URL (default: $REPO_URL)"
       echo "  --dir PATH     Installation directory (default: $INSTALL_DIR)"
       echo "  --help         Show this help message"
+      echo ""
+      echo "Examples:"
+      echo "  Default installation:     ./install.sh"
+      echo "  Custom repo:             ./install.sh --repo https://github.com/user/repo.git"
+      echo "  Custom directory:        ./install.sh --dir myapp"
       exit 0
       ;;
     *)
@@ -40,6 +45,12 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# Validate arguments
+if [ -z "$INSTALL_DIR" ]; then
+  # Extract directory name from repo URL if not specified
+  INSTALL_DIR=$(basename "$REPO_URL" .git)
+fi
 
 echo -e "${GREEN}Claude Code UI Installation Script${NC}"
 echo "======================================"
