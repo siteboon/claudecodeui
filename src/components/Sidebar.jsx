@@ -64,6 +64,8 @@ function Sidebar({
   const [editingSession, setEditingSession] = useState(null);
   const [editingSessionName, setEditingSessionName] = useState('');
   const [generatingSummary, setGeneratingSummary] = useState({});
+  const [showCreateFolderDialog, setShowCreateFolderDialog] = useState(false);
+  const [pendingProjectPath, setPendingProjectPath] = useState('');
 
   // Touch handler to prevent double-tap issues on iPad
   const handleTouchClick = (callback) => {
@@ -241,7 +243,14 @@ function Sidebar({
         }
       } else {
         const error = await response.json();
-        alert(error.error || 'Failed to create project. Please try again.');
+        
+        // Check if the path doesn't exist
+        if (error.pathNotExists) {
+          setPendingProjectPath(error.absolutePath);
+          setShowCreateFolderDialog(true);
+        } else {
+          alert(error.error || 'Failed to create project. Please try again.');
+        }
       }
     } catch (error) {
       console.error('Error creating project:', error);
@@ -254,6 +263,63 @@ function Sidebar({
   const cancelNewProject = () => {
     setShowNewProject(false);
     setNewProjectPath('');
+  };
+
+  const handleCreateFolder = async () => {
+    try {
+      // Create the directory
+      const response = await fetch('/api/projects/create-directory', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          path: pendingProjectPath
+        }),
+      });
+
+      if (response.ok) {
+        // Directory created, now create the project
+        setShowCreateFolderDialog(false);
+        
+        const projectResponse = await fetch('/api/projects/create', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ 
+            path: pendingProjectPath
+          }),
+        });
+
+        if (projectResponse.ok) {
+          setShowNewProject(false);
+          setNewProjectPath('');
+          setPendingProjectPath('');
+          
+          // Refresh projects to show the new one
+          if (window.refreshProjects) {
+            window.refreshProjects();
+          } else {
+            window.location.reload();
+          }
+        } else {
+          const error = await projectResponse.json();
+          alert(error.error || 'Failed to create project after creating directory.');
+        }
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Failed to create directory.');
+      }
+    } catch (error) {
+      console.error('Error creating directory:', error);
+      alert('Error creating directory. Please try again.');
+    }
+  };
+
+  const cancelCreateFolder = () => {
+    setShowCreateFolderDialog(false);
+    setPendingProjectPath('');
   };
 
   const loadMoreSessions = async (project) => {
@@ -483,6 +549,48 @@ function Sidebar({
               
               {/* Safe area for mobile */}
               <div className="h-4" />
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Create Folder Dialog */}
+      {showCreateFolderDialog && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card rounded-lg border border-border p-6 max-w-md w-full shadow-xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-orange-100 dark:bg-orange-900/20 rounded-lg flex items-center justify-center">
+                <FolderPlus className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-foreground">Folder doesn't exist</h3>
+                <p className="text-sm text-muted-foreground">Would you like to create it?</p>
+              </div>
+            </div>
+            
+            <div className="mb-6">
+              <p className="text-sm text-muted-foreground mb-2">The following folder will be created:</p>
+              <div className="p-3 bg-muted/50 rounded-md">
+                <code className="text-sm text-foreground break-all">{pendingProjectPath}</code>
+              </div>
+            </div>
+            
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={cancelCreateFolder}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="default"
+                onClick={handleCreateFolder}
+                className="flex-1 bg-orange-600 hover:bg-orange-700 text-white"
+              >
+                <FolderPlus className="w-4 h-4 mr-2" />
+                Create Folder
+              </Button>
             </div>
           </div>
         </div>

@@ -183,7 +183,9 @@ function AppContent() {
   const fetchProjects = async () => {
     try {
       setIsLoadingProjects(true);
-      const response = await fetch('/api/projects');
+      const response = await fetch('/api/projects', {
+        credentials: 'include'
+      });
       const data = await response.json();
       
       // Optimize to preserve object references when data hasn't changed
@@ -638,7 +640,9 @@ function AuthGuard({ children }) {
     // Check authentication status
     const checkAuth = async () => {
       try {
-        const response = await fetch('/api/auth/check');
+        const response = await fetch('/api/auth/check', {
+          credentials: 'include'
+        });
         if (response.ok) {
           setIsAuthenticated(true);
         } else {

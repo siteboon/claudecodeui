@@ -554,7 +554,13 @@ async function addProjectManually(projectPath, displayName = null) {
     // Check if the path exists
     await fs.access(absolutePath);
   } catch (error) {
-    throw new Error(`Path does not exist: ${absolutePath}`);
+    // Return a special response indicating the path doesn't exist
+    return {
+      success: false,
+      pathNotExists: true,
+      absolutePath: absolutePath,
+      error: `Path does not exist: ${absolutePath}`
+    };
   }
   
   // Generate project name (encode path for use as directory name)
@@ -591,12 +597,15 @@ async function addProjectManually(projectPath, displayName = null) {
   
   
   return {
-    name: projectName,
-    path: absolutePath,
-    fullPath: absolutePath,
-    displayName: displayName || await generateDisplayName(projectName, absolutePath),
-    isManuallyAdded: true,
-    sessions: []
+    success: true,
+    project: {
+      name: projectName,
+      path: absolutePath,
+      fullPath: absolutePath,
+      displayName: displayName || await generateDisplayName(projectName, absolutePath),
+      isManuallyAdded: true,
+      sessions: []
+    }
   };
 }
 

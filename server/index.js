@@ -143,32 +143,55 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ 
   server,
   verifyClient: (info) => {
-    console.log('WebSocket connection attempt to:', info.req.url);
+    console.log('=== WebSocket Authentication Debug ===');
+    console.log('URL:', info.req.url);
+    console.log('Headers:', JSON.stringify(info.req.headers, null, 2));
+    console.log('Origin:', info.req.headers.origin);
     
     // Parse cookies from WebSocket request
     const cookies = {};
     const cookieHeader = info.req.headers.cookie;
+    console.log('Raw cookie header:', cookieHeader);
+    
     if (cookieHeader) {
       cookieHeader.split(';').forEach(cookie => {
-        const [name, value] = cookie.trim().split('=');
+        const parts = cookie.trim().split('=');
+        const name = parts[0];
+        const value = parts.slice(1).join('='); // Handle values with = in them
         cookies[name] = value;
+        console.log(`Parsed cookie: ${name} = ${value}`);
       });
     }
     
     // Check auth token
     const authToken = process.env.AUTH_TOKEN;
-    const tokenFromCookie = cookies.auth_token;
+    console.log('AUTH_TOKEN from env:', authToken ? `${authToken.substring(0, 10)}...` : 'NOT SET');
+    console.log('All parsed cookies:', Object.keys(cookies));
     
-    if (!authToken || tokenFromCookie !== authToken) {
-      console.log('WebSocket authentication failed');
+    // If no auth token is configured, allow connection (no auth mode)
+    if (!authToken) {
+      console.log('RESULT: No AUTH_TOKEN configured, allowing connection');
+      return true;
+    }
+    
+    // If auth token is configured, check cookie
+    const tokenFromCookie = cookies.auth_token;
+    console.log('auth_token from cookie:', tokenFromCookie ? `${tokenFromCookie.substring(0, 10)}...` : 'NOT FOUND');
+    
+    if (tokenFromCookie !== authToken) {
+      console.log('RESULT: WebSocket authentication failed - token mismatch');
       return false;
     }
     
+    console.log('RESULT: WebSocket authentication successful');
     return true;
   }
 });
 
-app.use(cors());
+app.use(cors({
+  origin: true,
+  credentials: true
+}));
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../dist')));
@@ -189,6 +212,7 @@ app.post('/api/auth/verify', (req, res) => {
     res.cookie('auth_token', token, {
       httpOnly: true,
       sameSite: 'lax',
+      path: '/',
       maxAge: 365 * 24 * 60 * 60 * 1000, // 365 days
       secure: req.secure || req.get('x-forwarded-proto') === 'https'
     });
@@ -303,10 +327,52 @@ app.post('/api/projects/create', async (req, res) => {
       return res.status(400).json({ error: 'Project path is required' });
     }
     
-    const project = await addProjectManually(projectPath.trim());
-    res.json({ success: true, project });
+    const result = await addProjectManually(projectPath.trim());
+    
+    // Check if the path doesn't exist
+    if (result.pathNotExists) {
+      return res.status(400).json({ 
+        pathNotExists: true, 
+        absolutePath: result.absolutePath,
+        error: result.error 
+      });
+    }
+    
+    res.json({ success: true, project: result.project });
   } catch (error) {
     console.error('Error creating project:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Create directory endpoint
+app.post('/api/projects/create-directory', async (req, res) => {
+  try {
+    const { path: dirPath } = req.body;
+    
+    if (!dirPath || !dirPath.trim()) {
+      return res.status(400).json({ error: 'Directory path is required' });
+    }
+    
+    const absolutePath = path.resolve(dirPath.trim());
+    
+    // Security check - ensure path is reasonable
+    if (absolutePath.includes('..') || !absolutePath.startsWith('/')) {
+      return res.status(400).json({ error: 'Invalid directory path' });
+    }
+    
+    try {
+      // Check if already exists
+      await fs.access(absolutePath);
+      return res.status(409).json({ error: 'Directory already exists' });
+    } catch (error) {
+      // Directory doesn't exist, create it
+      await fs.mkdir(absolutePath, { recursive: true });
+      console.log('✅ Created directory:', absolutePath);
+      res.json({ success: true, path: absolutePath });
+    }
+  } catch (error) {
+    console.error('Error creating directory:', error);
     res.status(500).json({ error: error.message });
   }
 });
