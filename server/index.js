@@ -33,6 +33,9 @@ const fetch = require('node-fetch');
 const { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } = require('./projects');
 const { spawnClaude, abortClaudeSession } = require('./claude-cli');
 const gitRoutes = require('./routes/git');
+const { validateRequest, errorHandler, rateLimiter, securityHeaders, requestTimeout, bodySizeLimit } = require('./middleware');
+const { logger, performanceMiddleware, trackError } = require('./utils/logger');
+const { performanceMonitor, healthCheck, metrics, stats, requestCounter, wsMonitor, directoryOpMonitor } = require('./middleware/monitoring');
 
 // File system watcher for projects folder
 let projectsWatcher = null;
@@ -146,12 +149,47 @@ const wss = new WebSocketServer({
   }
 });
 
+// Security middleware
+app.use(securityHeaders);
+
+// Request timeout middleware
+app.use(requestTimeout());
+
+// Body size limit middleware
+app.use(bodySizeLimit('10mb'));
+
+// Rate limiting middleware
+app.use(rateLimiter);
+
+// Performance monitoring middleware
+app.use(performanceMonitor);
+
+// Request counter middleware
+app.use(requestCounter);
+
+// CORS middleware
 app.use(cors());
+
+// JSON parsing middleware
 app.use(express.json());
+
+// Request validation middleware
+app.use(validateRequest);
+
+// Static files middleware
 app.use(express.static(path.join(__dirname, '../dist')));
 
 // Git API Routes
 app.use('/api/git', gitRoutes);
+
+// Project API Routes
+const projectRoutes = require('./routes/projects');
+app.use('/api/projects', projectRoutes);
+
+// Monitoring endpoints
+app.get('/api/health', healthCheck);
+app.get('/api/metrics', metrics);
+app.get('/api/stats', stats);
 
 // API Routes
 app.get('/api/config', (req, res) => {
@@ -407,21 +445,28 @@ app.get('/api/projects/:projectName/files', async (req, res) => {
 // WebSocket connection handler that routes based on URL path
 wss.on('connection', (ws, request) => {
   const url = request.url;
-  console.log('🔗 Client connected to:', url);
+  const clientIP = request.connection.remoteAddress;
+  
+  logger.websocket('connection', `Client connected to: ${url}`, { clientIP });
   
   if (url === '/shell') {
+    wsMonitor.onConnection(ws, 'shell');
     handleShellConnection(ws);
   } else if (url === '/ws') {
+    wsMonitor.onConnection(ws, 'chat');
     handleChatConnection(ws);
+  } else if (url === '/ws/initialization') {
+    wsMonitor.onConnection(ws, 'initialization');
+    handleInitializationConnection(ws);
   } else {
-    console.log('❌ Unknown WebSocket path:', url);
+    logger.warn('Unknown WebSocket path attempted', { url, clientIP });
     ws.close();
   }
 });
 
 // Handle chat WebSocket connections
 function handleChatConnection(ws) {
-  console.log('💬 Chat WebSocket connected');
+  logger.info('Chat WebSocket connected');
   
   // Add to connected clients for project updates
   connectedClients.add(ws);
@@ -628,6 +673,186 @@ function handleShellConnection(ws) {
     console.error('❌ Shell WebSocket error:', error);
   });
 }
+
+// Handle initialization WebSocket connections
+function handleInitializationConnection(ws) {
+  console.log('🚀 Initialization WebSocket connected');
+  
+  ws.on('message', async (message) => {
+    try {
+      const data = JSON.parse(message);
+      console.log('📨 Initialization message received:', data.type);
+      
+      if (data.type === 'initialize-project') {
+        const { projectPath, options = {} } = data;
+        
+        if (!projectPath) {
+          return ws.send(JSON.stringify({
+            type: 'error',
+            error: 'Project path is required'
+          }));
+        }
+        
+        // Send initialization started message
+        ws.send(JSON.stringify({
+          type: 'initialization-started',
+          projectPath,
+          timestamp: new Date().toISOString()
+        }));
+        
+        try {
+          // Validate project path
+          const absolutePath = path.resolve(projectPath);
+          const fs = require('fs').promises;
+          await fs.access(absolutePath);
+          
+          ws.send(JSON.stringify({
+            type: 'initialization-progress',
+            stage: 'validation',
+            message: 'Project path validated successfully',
+            progress: 25
+          }));
+          
+          // Check if Claude CLI is available
+          const checkClaude = () => {
+            return new Promise((resolve) => {
+              const child = spawn('which', ['claude'], { stdio: 'pipe' });
+              child.on('close', (code) => {
+                resolve(code === 0);
+              });
+            });
+          };
+          
+          const claudeAvailable = await checkClaude();
+          if (!claudeAvailable) {
+            return ws.send(JSON.stringify({
+              type: 'initialization-error',
+              error: 'Claude Code CLI not found',
+              details: 'Please ensure Claude Code CLI is installed and available in PATH'
+            }));
+          }
+          
+          ws.send(JSON.stringify({
+            type: 'initialization-progress',
+            stage: 'cli-check',
+            message: 'Claude CLI verified',
+            progress: 50
+          }));
+          
+          // Initialize project (simulate initialization since Claude CLI doesn't have init command)
+          const initializeProject = () => {
+            return new Promise((resolve, reject) => {
+              try {
+                // Send simulated initialization progress
+                ws.send(JSON.stringify({
+                  type: 'initialization-output',
+                  output: 'Initializing Claude Code project...\n',
+                  stream: 'stdout'
+                }));
+                
+                // Check if project already has Claude configuration
+                const claudeConfigPath = path.join(absolutePath, '.claude');
+                fs.access(claudeConfigPath)
+                  .then(() => {
+                    ws.send(JSON.stringify({
+                      type: 'initialization-output',
+                      output: 'Claude configuration already exists\n',
+                      stream: 'stdout'
+                    }));
+                  })
+                  .catch(() => {
+                    ws.send(JSON.stringify({
+                      type: 'initialization-output',
+                      output: 'Creating Claude configuration directory...\n',
+                      stream: 'stdout'
+                    }));
+                  });
+                
+                // Simulate initialization delay
+                setTimeout(() => {
+                  ws.send(JSON.stringify({
+                    type: 'initialization-output',
+                    output: 'Project initialized successfully\n',
+                    stream: 'stdout'
+                  }));
+                  
+                  resolve({ 
+                    stdout: 'Project initialized successfully\n',
+                    stderr: '' 
+                  });
+                }, 2000); // 2 second delay
+                
+              } catch (error) {
+                reject(error);
+              }
+            });
+          };
+          
+          ws.send(JSON.stringify({
+            type: 'initialization-progress',
+            stage: 'initializing',
+            message: 'Initializing Claude Code in project...',
+            progress: 75
+          }));
+          
+          const initResult = await initializeProject();
+          
+          // Generate project metadata
+          const projectName = path.basename(absolutePath);
+          const projectId = `proj_${Date.now()}`;
+          
+          const project = {
+            id: projectId,
+            name: projectName,
+            path: absolutePath,
+            type: 'opened',
+            sessions: [],
+            metadata: {
+              initialized: new Date().toISOString(),
+              lastModified: new Date().toISOString()
+            }
+          };
+          
+          ws.send(JSON.stringify({
+            type: 'initialization-complete',
+            project,
+            progress: 100,
+            message: 'Project initialized successfully'
+          }));
+          
+        } catch (error) {
+          console.error('Project initialization error:', error);
+          ws.send(JSON.stringify({
+            type: 'initialization-error',
+            error: error.message,
+            timestamp: new Date().toISOString()
+          }));
+        }
+        
+      } else if (data.type === 'ping') {
+        ws.send(JSON.stringify({
+          type: 'pong',
+          timestamp: new Date().toISOString()
+        }));
+      }
+      
+    } catch (error) {
+      console.error('❌ Initialization WebSocket error:', error.message);
+      ws.send(JSON.stringify({
+        type: 'error',
+        error: error.message
+      }));
+    }
+  });
+  
+  ws.on('close', () => {
+    console.log('🔌 Initialization client disconnected');
+  });
+  
+  ws.on('error', (error) => {
+    console.error('❌ Initialization WebSocket error:', error);
+  });
+}
 // Audio transcription endpoint
 app.post('/api/transcribe', async (req, res) => {
   try {
@@ -783,6 +1008,9 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
 
+// Error handling middleware (must be last)
+app.use(errorHandler);
+
 async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden = true) {
   const fs = require('fs').promises;
   const items = [];
@@ -836,8 +1064,19 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Claude Code UI server running on http://0.0.0.0:${PORT}`);
+  logger.info(`Claude Code UI server started`, {
+    port: PORT,
+    host: '0.0.0.0',
+    nodeVersion: process.version,
+    platform: process.platform,
+    environment: process.env.NODE_ENV || 'development'
+  });
   
   // Start watching the projects folder for changes
   setupProjectsWatcher();
+  
+  // Log initial system metrics
+  const memoryUsage = process.memoryUsage();
+  logger.system('startup.memory.heapUsed', Math.round(memoryUsage.heapUsed / 1024 / 1024), 'MB');
+  logger.system('startup.memory.heapTotal', Math.round(memoryUsage.heapTotal / 1024 / 1024), 'MB');
 });

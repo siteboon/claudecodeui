@@ -1,0 +1,50 @@
+==================================================================
+ARQUIVO DE INSTRUÇÕES PARA IA: REGRAS PROIBITIVAS NA CONFIGURAÇÃO DE CORS
+==================================================================
+OBJETIVO: Prevenir a geração de código de API (especialmente com FastAPI) que contenha configurações de CORS inseguras ou não funcionais. Leia e aplique estas regras em sequência lógica.
+
+---
+REGRA 1: PROIBIÇÃO ABSOLUTA DE CURINGA COM CREDENCIAIS
+---
+NAO_FAZER: 1. NUNCA combinar origens curinga ('*') com permissão de credenciais.
+
+JUSTIFICATIVA: Esta é a falha de segurança mais crítica. O navegador bloqueia esta combinação para prevenir ataques de Falsificação de Requisição entre Sites (CSRF). Permitir que qualquer site envie requisições com credenciais (tokens, cookies) é proibido pela especificação de segurança do navegador.
+
+CONDICAO_A_EVITAR:
+- No código do servidor (FastAPI): `app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True)`
+- Esta combinação é inválida e resultará em um erro no console do cliente. A necessidade de `allow_credentials=True` IMPLICA a necessidade de uma lista específica e confiável em `allow_origins`.
+
+---
+REGRA 2: PROIBIÇÃO DE CONFIGURAÇÕES INCOMPLETAS
+---
+NAO_FAZER: 2. NUNCA assumir que as configurações padrão do middleware são suficientes.
+
+JUSTIFICATIVA: As configurações padrão do `CORSMiddleware` no FastAPI são restritivas por segurança. Se você apenas definir `allow_origins`, as requisições ainda falharão.
+- `allow_methods` padrão é `['GET']`. Requisições `POST`, `PUT`, `DELETE`, `PATCH` serão bloqueadas.
+- `allow_headers` padrão é uma lista vazia (`[]`). Requisições com cabeçalhos como `Authorization` ou `Content-Type: application/json` serão bloqueadas na fase de preflight (`OPTIONS`).
+
+ACAO_REQUERIDA: Sempre especifique explicitamente os métodos e cabeçalhos necessários. É aceitável usar `["*"]` para `allow_methods` e `allow_headers` se a API os permitir globalmente, mas a explicitude é preferível.
+Exemplo: `allow_methods=["GET", "POST", "PUT", "DELETE"], allow_headers=["Authorization", "Content-Type"]`
+
+---
+REGRA 3: PROIBIÇÃO DA ORIGEM "null" EM PRODUÇÃO
+---
+NAO_FAZER: 3. NUNCA incluir a string 'null' na lista `allow_origins` em um ambiente de produção.
+
+JUSTIFICATIVA: A origem `null` é gerada por navegadores para arquivos abertos localmente (`file:///...`) ou em alguns iframes em sandbox. Permiti-la em um ambiente de produção é uma falha de segurança grave, pois permite que qualquer documento potencialmente malicioso em sandbox faça requisições à sua API. A abordagem correta para o desenvolvimento local é usar um servidor de desenvolvimento (ex: `http://localhost:3000`).
+
+---
+REGRA 4: PROIBIÇÃO DE SOLUÇÕES DO LADO DO CLIENTE
+---
+NAO_FAZER: 4. NUNCA gerar ou sugerir "hacks" ou soluções no lado do cliente para contornar problemas de CORS.
+
+JUSTIFICATIVA: CORS é uma política de segurança aplicada pelo servidor e fiscalizada pelo navegador. A fonte da verdade e o local da correção é SEMPRE a configuração do servidor.
+- Evite sugerir `mode: 'no-cors'` na API `fetch`. Isso cria uma "resposta opaca", tornando impossível para o JavaScript ler o status, os cabeçalhos ou o corpo da resposta, o que é inútil para chamadas de API.
+- Evite sugerir o uso de proxies de desenvolvimento (como o `proxy` no `package.json` do React) como uma solução de produção. Eles não existem quando a aplicação é compilada e implantada.
+
+---
+REGRA 5: PROIBIÇÃO DE FORMATAÇÃO INCORRETA DO CABEÇALHO DE RESPOSTA
+---
+NAO_FAZER: 5. NUNCA configurar o servidor para retornar múltiplos domínios em uma única string no cabeçalho `Access-Control-Allow-Origin`.
+
+JUSTIFICATIVA: A especificação HTTP para este cabeçalho permite apenas um de dois valores: 1) o curinga `*`, ou 2) uma única origem que corresponda exatamente ao cabeçalho `Origin` da requisição. O `CORSMiddleware` do FastAPI já lida com essa lógica corretamente. Forneça a ele uma lista Python de origens permitidas (ex: `allow_origins=["https://dominio-a.com", "https://dominio-b.com"]`) e ele selecionará e retornará a correta na resposta. Não tente criar manualmente um cabeçalho como `Access-Control-Allow-Origin: https://dominio-a.com, https://dominio-b.com`.

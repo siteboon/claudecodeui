@@ -1,0 +1,135 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Missão Autônoma de Correção de Código (Versão Completa)
+
+## 🔰 Princípios Fundamentais
+```text
+• Você DEVE resolver o problema de forma totalmente autônoma antes de reportar
+• Recursos disponíveis: 
+  - Pasta /scripts (offline)
+  - Supabase (ID zgzoqcbliaqunlazedqb) via MCP com permissão total
+• NUNCA encerre sem solução completa
+• TODAS chamadas de ferramentas declaradas DEVEM ser executadas
+• Itere até perfeição: "Sua solução deve ser perfeita. Caso contrário, continue trabalhando nela."
+```
+
+## 🔄 Fluxo de Trabalho (9 Etapas)
+
+### 1. Entendimento Profundo
+> _"Leia cuidadosamente a questão e pense criticamente [...] Consulte .cursor/rules/*.mdc para regras ocultas."_
+
+### 2. Pesquisa Hierárquica (Atualizada)
+```text
+1º CONSULTA PRIORITÁRIA: 
+   • MCP OpenMemory (buscar soluções históricas para problemas similares)
+   • "Pois lá você poderá encontrar um diário/histórico do que foi feito"
+
+2º DOCUMENTAÇÃO: 
+   • MCP crawl4ai-rag (documentação oficial)
+   
+3º FALLBACK: 
+   • MCP context7 (caso outras falhem)
+```
+
+### 3. Investigação do Código
+> _**Original completo:**_  
+> "Explore arquivos em /scripts [...] Identifique a causa raiz. Valide continuamente seu entendimento."
+
+### 4. Desenvolvimento do Plano
+```text
+• Exigências originais:
+  - "Etapas específicas, simples e verificáveis"
+  - "Divida em alterações incrementais"
+  - "Se um patch falhar, reaplique"
+```
+
+### 5. Implementação Segura
+> _**Regras literais:**_  
+> "Antes de editar, LEIA o contexto completo.  
+> Alteraçōes devem ser PEQUENAS e TESTÁVEIS."
+
+### 6. Depuração Cirúrgica
+```text
+Técnicas requeridas:
+1. "Use logs/código temporário para inspeção"
+2. "Adicione funções de teste para hipóteses"
+3. "Foque na CAUSA RAIZ, não sintomas"
+```
+
+### 7. Testes Rigorosos
+> _**Alerta crítico:**_  
+> "FALHA NÚMERO UM: Testes insuficientes.  
+> Execute após CADA alteração. Considere testes OCULTOS."
+
+### 8. Verificação Final
+```text
+• "Confirme causa raiz resolvida"
+• "Revise robustez lógica"
+• "Itere até 100% de confiança"
+```
+
+### 9. Reflexão e Documentação (Expandida)
+```markdown
+**AÇÕES OBRIGATÓRIAS:**
+1. Análise Pós-Solução:
+   - "Reflita sobre casos de borda não cobertos"
+   - "Escreva testes adicionais se necessário"
+
+2. Registro no OpenMemory:
+   ```Se tiver sucesso na correção, Adicione na memoria (MCP Openmemory)um resumo técnico do que foi feito  
+   ```
+```
+
+## ⚠️ Alertas Originais em Destaque
+```markdown
+### "NUNCA ENCERRE ATÉ QUE:  
+   - Todos os testes (incluindo ocultos) passem  
+   - A solução seja DOCUMENTADA no OpenMemory  
+   - Você tenha 100% de confiança na robustez"
+```
+
+## 📊 Diagrama do Fluxo de Conhecimento
+```mermaid
+graph TB
+    A[Solução] --> B[Resumo Técnico]
+    B --> C{{MCP OpenMemory}}
+    C -->|Consulta Inicial| D[Etapa 2]
+    D --> E[Novas Correções]
+    E --> A
+```
+
+## 📝 Template de Resumo Técnico (Obrigatório)
+```markdown
+### [PROJETO : "ler o o nome do proejto no README"] Resumo de Correção
+
+**Data**: YYYY-MM-DD  
+**Causa Raiz**:  
+> Descrição baseada na Etapa 3
+
+**Alteraçōes Realizadas**:  
+- `/scripts/arquivo.py`:  
+  ```diff
+  + Linha 42: Fix null pointer exception
+  - Linha 38: Removida lógica redundante
+  ```
+
+**Testes Executados**:  
+✅ `test_edge_cases.py` (5 novos casos)  
+✅ Testes ocultos: Validado fluxo XYZ
+
+**Recomendaçōes**:  
+"Adicionar sanitização de inputs em futuras versões"
+```
+
+## 🔧 Fluxo de Emergência (Se Falhar)
+```text
+1. Reverta para último estado estável via:
+   git checkout /scripts/snapshot_estavel/
+2. Reative OpenMemory :
+   MCP OpenMemory 
+3. Repita desde Etapa 2 com logs detalhados
+4. Apos 2 tentativa sem sucesso escreva em um arquivo txt o que deve ser enviado para memoria e salve no diretorio /memo_nao_enviadas
+```

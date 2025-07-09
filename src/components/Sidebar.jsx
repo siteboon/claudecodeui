@@ -6,6 +6,7 @@ import { Input } from './ui/input';
 import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import ClaudeLogo from './ClaudeLogo';
+import DirectorySelector from './DirectorySelector';
 
 // Move formatTimeAgo outside component to avoid recreation on every render
 const formatTimeAgo = (dateString, currentTime) => {
@@ -64,6 +65,8 @@ function Sidebar({
   const [editingSession, setEditingSession] = useState(null);
   const [editingSessionName, setEditingSessionName] = useState('');
   const [generatingSummary, setGeneratingSummary] = useState({});
+  const [openingProject, setOpeningProject] = useState(false);
+  const [showDirectorySelector, setShowDirectorySelector] = useState(false);
 
   // Touch handler to prevent double-tap issues on iPad
   const handleTouchClick = (callback) => {
@@ -209,6 +212,47 @@ function Sidebar({
     }
   };
 
+  const openExistingProject = () => {
+    setShowDirectorySelector(true);
+  };
+
+  const handleDirectorySelect = async (selectedPath) => {
+    setOpeningProject(true);
+    
+    try {
+      const response = await fetch('/api/projects/open', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          path: selectedPath
+        }),
+      });
+
+      if (response.ok) {
+        // Refresh projects to show the opened one
+        if (window.refreshProjects) {
+          window.refreshProjects();
+        } else {
+          window.location.reload();
+        }
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Failed to open project. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error opening project:', error);
+      alert('Error opening project. Please try again.');
+    } finally {
+      setOpeningProject(false);
+    }
+  };
+
+  const handleDirectorySelectorClose = () => {
+    setShowDirectorySelector(false);
+  };
+
   const createNewProject = async () => {
     if (!newProjectPath.trim()) {
       alert('Please enter a project path');
@@ -336,6 +380,16 @@ function Sidebar({
               title="Refresh projects and sessions (Ctrl+R)"
             >
               <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''} group-hover:rotate-180 transition-transform duration-300`} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-9 w-9 px-0 bg-green-600 hover:bg-green-700 text-white transition-all duration-200 shadow-sm hover:shadow-md"
+              onClick={openExistingProject}
+              disabled={openingProject}
+              title="Open existing project (Ctrl+O)"
+            >
+              <FolderOpen className="w-4 h-4" />
             </Button>
             <Button
               variant="default"
@@ -1109,6 +1163,13 @@ function Sidebar({
           <span className="text-xs">Tools Settings</span>
         </Button>
       </div>
+
+      {/* Directory Selector Modal */}
+      <DirectorySelector
+        isOpen={showDirectorySelector}
+        onClose={handleDirectorySelectorClose}
+        onSelect={handleDirectorySelect}
+      />
     </div>
   );
 }

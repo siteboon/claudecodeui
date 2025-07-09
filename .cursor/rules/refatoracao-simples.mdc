@@ -1,0 +1,55 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Simple Refactoring Protocol - Version: 1.0.0
+
+## Purpose & Scope
+
+This rule defines a strict protocol for simple refactoring tasks. It ensures work is done on the correct branch, commits are managed deliberately, and unsolicited improvements are proposed before implementation. This protocol is intended for focused refactoring efforts to maintain code quality and alignment with project goals.
+
+## Implementation Guidelines
+
+- **Branch Verification:**
+  - Before initiating any code modifications, you **MUST** verify that the current Git branch is `coderabbit-full-review`.
+  - If you are on a different branch, you **MUST** execute the necessary Git commands to switch to `coderabbit-full-review` before proceeding.
+
+- **Commit Management:**
+  - You **MUST NOT** commit any changes until you receive explicit authorization from the user.
+  - Once authorized, all commits **MUST** be made to the current open Pull Request associated with the `coderabbit-full-review` branch.
+
+- **Post-Commit Logging:**
+  - After a successful commit, you **MUST** log a summary of the changes made to the "MCP Openmemory" to ensure the knowledge base is updated.
+
+- **Scope Adherence:**
+  - You **MUST** only implement the changes that have been explicitly requested.
+
+- **Proposing Improvements:**
+  - If you identify a potential improvement that is outside the requested scope, you **MUST** first seek authorization before implementation.
+  - Your proposal **MUST** clearly explain what the improvement is and why it is beneficial.
+  - You **MUST NEVER** implement unrequested improvements without explicit user approval.
+
+### Examples
+
+```bash
+# ✅ DO: Check branch and ask for permission for improvements
+
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+if [ "$CURRENT_BRANCH" != "coderabbit-full-review" ]; then
+  echo "Switching to 'coderabbit-full-review' branch..."
+  git checkout coderabbit-full-review
+fi
+
+# ... perform requested refactoring ...
+
+# After refactoring:
+# "I have completed the requested refactoring. I also noticed we could optimize the database query in this module. This would involve [brief explanation]. May I proceed with this improvement?"
+```
+
+## Suggested Metadata
+---
+description: Protocol for simple refactoring tasks, including branch checks, commit authorization, and scope management.
+globs: ["**/*"]
+alwaysApply: false
+---

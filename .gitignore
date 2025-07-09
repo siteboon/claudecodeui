@@ -25,6 +25,13 @@ out/
 *.swp
 *.swo
 *~
+.roo/
+.roomodes/
+.windsurfrules/
+public/assets/
+.env*
+.mcp.json
+.gemini/settings.json
 
 # OS generated files
 .DS_Store
@@ -99,8 +106,26 @@ temp/
 
 # Claude specific
 .claude/
+# Cursor specific
+.cursor/mcp.json
 
 # Database files
 *.db
 *.sqlite
 *.sqlite3 
+
+logs
+dev-debug.log
+# Editor directories and files
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+# OS specific
+
+# Task files
+# tasks.json
+# tasks/ 

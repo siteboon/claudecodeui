@@ -1,0 +1,137 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# 🛠️ Regras para Implementação de Tasks e Commits no GitHub
+
+## 1. Atualização de Status de Tasks
+
+Sempre que for pedido a implementação de alguma task:
+- Antes, pedir autorização do usuário para atualizar o status da task.
+- Após a confirmação do usuário, executar:
+
+```bash
+task-master update-subtask --id=<id> --status=in-progress
+```
+
+## 2. Subtasks
+
+Se a task possuir subtasks:
+- A cada início de uma subtask, executar:
+
+```bash
+task-master set-status --id=<parentId.subtaskId> --status=in-progress
+```
+
+- Ao finalizar a subtask:
+
+```bash
+task-master set-status --id=<parentId.subtaskId> --status=done
+```
+> **AÇÃO CRÍTICA:** **NÃO comece a subtask até receber minha autorização** pois o codigo nesta hora esta sob revisão, após meu OK (ordem de autorização) você imediatamente começará os trabalhos na proxima subtask.
+
+## 2.1. Enviar para o git hub a subtask
+> **AÇÃO CRÍTICA:** Siga rigorosamente as diretrizesAo alterar o status para done da subtask, **SEMPRE PEDIR AUTORIZACAO** para commitar e enviar para o github caso positivo seguindo **estritamente as regras no passo 4** , caso negativo aguarde novas instruncoes. 
+
+## 3. Finalização da Task Principal
+
+Sempre que toda a tarefa e todas as subtasks estiverem com o status `done`, atualizar o progresso da task principal:
+
+```bash
+task-master set-status --id=<id> --status=done
+```
+
+---
+
+## 4  🎯 Regas de Commit e enviar para o gitHub
+
+Realizar um commit e envio de código para o GitHub com **mensagem padronizada**, respeitando os seguintes formatos de `summary` e `description`, além da **sequência correta de comandos Git**.
+
+## 📌 Formatos de Mensagem
+
+### ✅ 4.1. Commit do tipo *implementação com task identificada*
+**Resumo (summary):**
+```
+#ID da Task - Nome da task
+```
+**Exemplo:**
+```
+#123 - Implementação da tela de login com autenticação via API
+```
+
+---
+
+### ✅ 4.2. Commit do tipo *correção de bug ou issue com task identificada*
+**Resumo (summary):**
+```
+Correcao - #ID da Task - Nome da task
+```
+**Exemplo:**
+```
+Correcao - #12 - Implementacao do Pedido de Compras
+```
+
+---
+
+### ✅ 4.3. Commit do tipo *correção de bug ou issue sem task identificada*
+**Resumo (summary):**
+```
+Correcao - #Causa Principal
+```
+**Exemplo:**
+```
+Correcao - #Erro de arredondamento em cálculo de total de pedido
+```
+
+---
+
+### ✅ 4.4. Commit do tipo *implementação sem task associada*
+**Resumo (summary):**
+```
+Implementação - #Principal Implementação
+```
+**Exemplo:**
+```
+Implementação - #Adição de componente de modal genérico reutilizável
+```
+
+---
+
+## 📝 Description (descrição do commit)
+
+Deve conter um **resumo claro do que foi feito**, incluindo:
+- O que foi implementado ou corrigido
+- Como foi feito ou resolvido
+- Tecnologias, componentes ou arquivos principais envolvidos
+
+**Exemplo:**
+```
+Foi implementado o componente Modal reutilizável com controle de abertura via props e uso de portal para inserção no body.
+Corrigido problema de foco no campo de input ao abrir o modal.
+```
+
+---
+
+## 🧩 Comandos Git a serem executados
+
+```bash
+# 1. Verificar modificações no projeto
+git status
+
+# 2. Adicionar todos os arquivos modificados
+git add .
+
+# 3. Realizar commit com título e descrição
+git commit -m "<summary>" -m "<description>"
+
+# 4. Enviar para o GitHub (branch atual, ex: main)
+git push origin HEAD
+```
+
+---
+
+## 🧠 Importante
+
+Sempre ao terminar o passo 3, adicione na memória o que foi acabado de implementar utilizando o **MCP Openmemory**.

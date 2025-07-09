@@ -1,0 +1,245 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# 🚨 DIRETRIZES CRÍTICAS DE DESENVOLVIMENTO - PREVENÇÃO DE RETRABALHO
+
+## ⚠️ ESTA REGRA É OBRIGATÓRIA ANTES DE QUALQUER DESENVOLVIMENTO
+
+---
+
+## 🛑 **JAMAIS FAÇA - LISTA DE PROIBIÇÕES ABSOLUTAS**
+
+### 🚫 **1. USO DE `any` - TERMINANTEMENTE PROIBIDO**
+```typescript
+// ❌ NUNCA FAÇA ISSO:
+function processData(data: any): any {
+    return data.something;
+}
+
+const result: any = someFunction();
+catch (error: any) { }
+
+// ✅ SEMPRE FAÇA ASSIM:
+function processData(data: ProcessedData): ProcessedData {
+    return data.something;
+}
+
+const result: SpecificType = someFunction();
+catch (error) { } // ou catch (error: Error)
+```
+
+### 🚫 **2. IMPORTS NÃO UTILIZADOS - REMOÇÃO OBRIGATÓRIA**
+```typescript
+// ❌ NUNCA DEIXE IMPORTS ÓRFÃOS:
+import { UnusedType, AnotherUnused } from './types';
+import { SomeFunction } from './utils'; // se não usar, REMOVA
+
+// ✅ APENAS IMPORTS EFETIVAMENTE UTILIZADOS:
+import { UsedType } from './types';
+```
+
+### 🚫 **3. VARIÁVEIS E PARÂMETROS NÃO UTILIZADOS**
+```typescript
+// ❌ NUNCA DEIXE PARÂMETROS SEM USO:
+function process(data: Data, unusedParam: string) {
+    return data.value;
+}
+
+// ✅ REMOVA O PARÂMETRO NÃO UTILIZADO:
+function process(data: Data) {
+    return data.value;
+}
+```
+
+### 🚫 **4. FUNÇÕES SEM TIPAGEM ADEQUADA**
+```typescript
+// ❌ JAMAIS FAÇA RETORNOS SEM TIPO:
+function calculate() { // Tipo de retorno indefinido
+    return someComplexCalculation();
+}
+
+// ✅ SEMPRE DEFINA TIPOS DE RETORNO:
+function calculate(): CalculationResult {
+    return someComplexCalculation();
+}
+```
+
+---
+
+## ✅ **OBRIGAÇÕES DURANTE O DESENVOLVIMENTO**
+
+### 📋 **1. CHECKLIST PRÉ-COMMIT OBRIGATÓRIO**
+Antes de finalizar QUALQUER arquivo, execute:
+
+```bash
+# 1. VERIFICAÇÃO OBRIGATÓRIA DE ESLINT:
+npm run lint
+
+# 2. SE HOUVER WARNINGS/ERRORS, CORRIJA IMEDIATAMENTE
+# 3. NÃO PROSSIGA SEM 0 WARNINGS
+```
+
+### 📋 **2. TIPAGEM DEFENSIVA OBRIGATÓRIA**
+```typescript
+// ✅ SEMPRE crie interfaces/types específicos:
+interface ProcessingConfig {
+    timeout: number;
+    retries: number;
+    batchSize: number;
+}
+
+interface ProcessingResult {
+    success: boolean;
+    data: ProcessedData[];
+    errors: ProcessingError[];
+}
+
+// ✅ SEMPRE tipifique catch blocks adequadamente:
+try {
+    // operação
+} catch (error) { // SEM any!
+    if (error instanceof Error) {
+        logger.error('Processing failed:', error.message);
+    }
+}
+```
+
+### 📋 **3. LIMPEZA CONTÍNUA OBRIGATÓRIA**
+- **A cada função criada**: Verificar se todos os imports são necessários
+- **A cada interface/type**: Verificar se está sendo utilizada
+- **A cada parâmetro**: Verificar se está sendo usado ou marcar com `_`
+
+---
+
+## 🎯 **PADRÕES OBRIGATÓRIOS POR CATEGORIA**
+
+### **APIs/Routes**
+```typescript
+// ✅ SEMPRE:
+interface RequestBody {
+    // tipos específicos
+}
+
+interface ResponseData {
+    // tipos específicos  
+}
+
+export async function POST(request: NextRequest): Promise<NextResponse<ResponseData>> {
+    try {
+        // implementação
+    } catch (error) { // SEM any
+        return NextResponse.json({ error: 'Processing failed' }, { status: 500 });
+    }
+}
+```
+
+### **Services/Utilities**
+```typescript
+// ✅ SEMPRE:
+class ServiceClass {
+    private readonly config: ServiceConfig; // tipo específico
+    
+    public async processData(input: InputType): Promise<OutputType> {
+        // implementação com tipos específicos
+    }
+    
+    private handleError(error: unknown): ServiceError {
+        // tratamento tipado de erro
+    }
+}
+```
+
+### **React Components**
+```typescript
+// ✅ SEMPRE:
+interface ComponentProps {
+    // props tipificadas
+}
+
+export function Component({ prop1, prop2 }: ComponentProps): JSX.Element {
+    // implementação
+}
+```
+
+---
+
+## 🔍 **VERIFICAÇÕES AUTOMÁTICAS OBRIGATÓRIAS**
+
+### **Antes de cada commit:**
+1. `npm run lint` deve retornar **0 warnings, 0 errors**
+2. `npm run type-check` deve passar sem erros
+3. Revisão manual para `any` em arquivos modificados
+
+### **Durante desenvolvimento:**
+```bash
+# Configure seu editor para mostrar eslint em tempo real
+# VSCode: ESLint extension
+# Cursor: ESLint integration ativado
+```
+
+---
+
+## ⚡ **COMANDOS DE VERIFICAÇÃO RÁPIDA**
+
+```bash
+# Verificar apenas arquivos modificados:
+npx eslint $(git diff --name-only --cached | grep -E '\.(ts|tsx)$')
+
+# Buscar por 'any' em arquivos TypeScript:
+grep -r ": any\|any\[\]\|as any" src/ --include="*.ts" --include="*.tsx"
+
+# Buscar imports não utilizados:
+npx eslint src/ --rule="@typescript-eslint/no-unused-vars: error"
+```
+
+---
+
+## 🎯 **LIÇÃO APRENDIDA - REFLEXÃO OBRIGATÓRIA**
+
+**LEMBRE-SE SEMPRE:**
+- **334 warnings eliminados em 3 dias de retrabalho**
+- **Tempo perdido que poderia ter sido prevenido**
+- **Cada `any` usado = débito técnico futuro**
+- **Cada import não utilizado = poluição de código**
+
+---
+
+## 🚨 **RESPONSABILIDADE DA IA DE DESENVOLVIMENTO**
+
+### **ANTES de escrever qualquer código:**
+1. "Vou usar algum `any` neste código?" → **SE SIM, REPENSAR**
+2. "Todos os imports serão utilizados?" → **SE NÃO, NÃO IMPORTAR**
+3. "Todos os parâmetros são necessários?" → **SE NÃO, REMOVER**
+4. "Tenho tipos específicos para tudo?" → **SE NÃO, CRIAR**
+
+### **APÓS escrever código:**
+1. Revisar linha por linha procurando por `any`
+2. Verificar cada import
+3. Verificar cada parâmetro de função
+4. Executar lint mentalmente
+
+---
+
+## 💀 **PENALIDADES POR DESCUMPRIMENTO**
+
+**Se esta regra for ignorada e códigos com warnings forem entregues:**
+- **Retrabalho extensivo necessário**
+- **Perda de tempo em limpeza posterior**  
+- **Deterioração da qualidade do código**
+- **Frustração da equipe de desenvolvimento**
+
+---
+
+## ✅ **RESUMO EXECUTIVO**
+
+**REGRA DE OURO**: *"Se você não faria isso em código de produção enterprise, não faça aqui."*
+
+**MANTRA**: *"Código limpo desde a primeira linha, tipos específicos sempre, imports apenas necessários."*
+
+**VERIFICAÇÃO FINAL**: *"0 warnings é o único resultado aceitável."*
+
+---
+
+**Esta regra foi criada com base em 3 dias de retrabalho e 334 warnings eliminados. Não repita os erros do passado.**

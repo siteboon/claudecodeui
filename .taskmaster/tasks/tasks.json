@@ -1,0 +1,707 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": 1,
+        "title": "Setup Backend API Infrastructure",
+        "description": "Create the foundational backend API endpoints for project management including directory browsing, validation, and project initialization",
+        "details": "Implement REST API endpoints: GET /api/projects/browse for directory listing, POST /api/projects/open for project initialization, GET /api/projects/validate for path validation. Use Express.js or similar framework. Implement middleware for error handling, request validation, and CORS. Set up WebSocket endpoint /ws/initialization for real-time progress updates during project initialization. Include proper logging and monitoring.",
+        "testStrategy": "Unit tests for each endpoint with mock file system operations. Integration tests with actual file system. Test error scenarios like invalid paths, permission denied, and network issues. Performance tests for directory browsing response times (<200ms requirement).",
+        "priority": "high",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Setup Express.js Framework",
+            "description": "Install and configure Express.js for the backend API",
+            "dependencies": [],
+            "details": "Install Express.js using npm and set up a basic server to handle HTTP requests.",
+            "status": "done",
+            "testStrategy": "Verify server startup and basic request handling"
+          },
+          {
+            "id": 2,
+            "title": "Implement REST API Endpoints",
+            "description": "Create REST API endpoints for project management",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement GET /api/projects/browse, POST /api/projects/open, and GET /api/projects/validate endpoints using Express.js",
+            "status": "done",
+            "testStrategy": "Test each endpoint with sample data"
+          },
+          {
+            "id": 3,
+            "title": "Configure Middleware",
+            "description": "Set up middleware for error handling, request validation, and CORS",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement middleware functions to handle errors, validate requests, and enable CORS support",
+            "status": "done",
+            "testStrategy": "Test middleware functionality with various request scenarios"
+          },
+          {
+            "id": 4,
+            "title": "Setup WebSocket Endpoint",
+            "description": "Create a WebSocket endpoint for real-time progress updates",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement the /ws/initialization WebSocket endpoint to provide real-time updates during project initialization",
+            "status": "done",
+            "testStrategy": "Test WebSocket connection and data transmission"
+          },
+          {
+            "id": 5,
+            "title": "Implement Logging and Monitoring",
+            "description": "Set up logging and monitoring for the backend API",
+            "dependencies": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "details": "Configure logging tools to track API requests and errors, and set up monitoring tools for performance tracking",
+            "status": "done",
+            "testStrategy": "Verify logging and monitoring functionality under load"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Implement Directory Selection Component",
+        "description": "Create a cross-platform directory selection interface that works on desktop and mobile platforms",
+        "details": "Build React component with native file dialog integration using Electron/Tauri for desktop. Implement HTML5 File System Access API with fallback for web. Create mobile-optimized interface using platform-specific folder pickers. Include breadcrumb navigation, recent folders list, and favorites bookmarking. Support drag & drop functionality for desktop. Implement keyboard navigation and accessibility features.",
+        "testStrategy": "Test on Windows, macOS, Linux, iOS, and Android. Verify native dialog integration works correctly. Test accessibility with screen readers. Validate touch interface on mobile devices. Test drag & drop functionality and keyboard shortcuts.",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Design Cross-Platform UI",
+            "description": "Create a consistent UI design for the directory selection component that works across desktop and mobile platforms.",
+            "dependencies": [],
+            "details": "Include breadcrumb navigation, recent folders list, and favorites bookmarking.",
+            "status": "done",
+            "testStrategy": "Visual inspection and user testing"
+          },
+          {
+            "id": 2,
+            "title": "Implement Desktop Integration",
+            "description": "Use Electron/Tauri to integrate native file dialogs for desktop platforms.",
+            "dependencies": [],
+            "details": "Support drag & drop functionality.",
+            "status": "done",
+            "testStrategy": "Unit tests and integration tests"
+          },
+          {
+            "id": 3,
+            "title": "Implement Web and Mobile Integration",
+            "description": "Use HTML5 File System Access API for web with fallbacks, and platform-specific folder pickers for mobile.",
+            "dependencies": [],
+            "details": "Ensure mobile-optimized interface.",
+            "status": "done",
+            "testStrategy": "Cross-browser testing and mobile app testing"
+          },
+          {
+            "id": 4,
+            "title": "Develop Keyboard Navigation and Accessibility",
+            "description": "Implement keyboard navigation and accessibility features for the directory selection component.",
+            "dependencies": [
+              1,
+              2,
+              3
+            ],
+            "details": "Ensure compliance with accessibility standards.",
+            "status": "done",
+            "testStrategy": "Accessibility audits and user testing"
+          },
+          {
+            "id": 5,
+            "title": "Integrate and Test the Component",
+            "description": "Integrate all features and perform comprehensive testing across platforms.",
+            "dependencies": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "details": "Conduct unit tests, integration tests, and user acceptance testing.",
+            "status": "done",
+            "testStrategy": "End-to-end testing and user feedback"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Build Project Validation Logic",
+        "description": "Implement comprehensive project directory validation to ensure selected directories are valid for Claude Code initialization",
+        "details": "Create validation service that checks directory accessibility, file permissions, project structure patterns (package.json, git repository, etc.). Implement path sanitization to prevent traversal attacks. Add support for detecting project types (Node.js, Python, etc.) and providing helpful suggestions. Handle edge cases like network drives, special characters in paths, and very large directories. Return structured validation results with issues and suggestions.",
+        "testStrategy": "Test with various project types and directory structures. Validate security against path traversal attacks. Test with edge cases like network drives, symbolic links, and corrupted directories. Performance test with large directories (up to 10GB requirement).",
+        "priority": "medium",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Design Validation Service Architecture",
+            "description": "Create a comprehensive architecture for the validation service to check directory accessibility, file permissions, and project structure patterns.",
+            "dependencies": [],
+            "details": "Ensure the service can handle various project types and edge cases.",
+            "status": "pending",
+            "testStrategy": "Unit testing"
+          },
+          {
+            "id": 2,
+            "title": "Implement Path Sanitization",
+            "description": "Develop path sanitization logic to prevent directory traversal attacks.",
+            "dependencies": [
+              1
+            ],
+            "details": "Use secure methods to normalize and validate paths.",
+            "status": "pending",
+            "testStrategy": "Integration testing"
+          },
+          {
+            "id": 3,
+            "title": "Develop Validation Rules for Project Structure",
+            "description": "Create validation rules for checking project structure patterns like package.json and git repositories.",
+            "dependencies": [
+              1
+            ],
+            "details": "Ensure rules are flexible for different project types (Node.js, Python, etc.).",
+            "status": "pending",
+            "testStrategy": "Functional testing"
+          },
+          {
+            "id": 4,
+            "title": "Handle Edge Cases and Special Scenarios",
+            "description": "Implement logic to handle network drives, special characters in paths, and very large directories.",
+            "dependencies": [
+              2,
+              3
+            ],
+            "details": "Ensure robust error handling and informative error messages.",
+            "status": "pending",
+            "testStrategy": "Scenario-based testing"
+          },
+          {
+            "id": 5,
+            "title": "Integrate and Test Validation Service",
+            "description": "Integrate all validation components and test the service for accuracy and reliability.",
+            "dependencies": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "details": "Conduct thorough testing to ensure the service provides structured validation results with issues and suggestions.",
+            "status": "pending",
+            "testStrategy": "End-to-end testing"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Integrate Claude Code CLI Initialization",
+        "description": "Implement the core logic to automatically initialize Claude Code CLI within selected project directories",
+        "details": "Create service to execute 'claude-code init' or equivalent in selected directory. Monitor initialization progress via stdout/stderr and provide real-time updates through WebSocket. Handle existing configuration files appropriately without overwriting user settings. Implement timeout handling (5 second requirement) and graceful error recovery. Support preserving existing project context and session history.",
+        "testStrategy": "Test initialization with various project types and sizes. Verify progress monitoring and timeout handling. Test with existing Claude Code projects to ensure no data loss. Mock CLI responses for unit testing. Test concurrent initialization attempts.",
+        "priority": "high",
+        "dependencies": [
+          3
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement Service for Executing 'claude-code init'",
+            "description": "Create a service that can execute the 'claude-code init' command in selected project directories.",
+            "dependencies": [],
+            "details": "Use Node.js to create a service that can run the 'claude-code init' command programmatically.",
+            "status": "pending",
+            "testStrategy": "Unit testing with mock directories"
+          },
+          {
+            "id": 2,
+            "title": "Monitor Initialization Progress via stdout/stderr",
+            "description": "Develop a mechanism to monitor the initialization progress of Claude Code CLI through stdout and stderr.",
+            "dependencies": [
+              1
+            ],
+            "details": "Capture and parse output from the 'claude-code init' command to track progress.",
+            "status": "pending",
+            "testStrategy": "Integration testing with real project directories"
+          },
+          {
+            "id": 3,
+            "title": "Provide Real-time Updates via WebSocket",
+            "description": "Implement WebSocket functionality to provide real-time updates of the initialization progress.",
+            "dependencies": [
+              2
+            ],
+            "details": "Use a WebSocket library to send updates to clients as initialization progresses.",
+            "status": "pending",
+            "testStrategy": "End-to-end testing with client-side WebSocket listeners"
+          },
+          {
+            "id": 4,
+            "title": "Handle Existing Configuration Files and Implement Timeout Handling",
+            "description": "Ensure that existing configuration files are handled appropriately without overwriting user settings and implement a 5-second timeout.",
+            "dependencies": [
+              3
+            ],
+            "details": "Check for existing CLAUDE.md files and handle them gracefully. Implement a timeout mechanism to handle slow initialization.",
+            "status": "pending",
+            "testStrategy": "Scenario testing with various configuration file scenarios"
+          },
+          {
+            "id": 5,
+            "title": "Implement Graceful Error Recovery and Preserve Project Context",
+            "description": "Develop a system for recovering from errors gracefully and preserving existing project context and session history.",
+            "dependencies": [
+              4
+            ],
+            "details": "Catch and handle errors during initialization, ensuring that project context remains intact.",
+            "status": "pending",
+            "testStrategy": "Error injection testing with recovery verification"
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Create Open Project UI Button and Integration",
+        "description": "Design and implement the 'Open Project' button in the sidebar header with proper styling and user interaction",
+        "details": "Add green-colored button (#22c55e) with folder-open icon in sidebar header next to 'Create Project' button. Implement Ctrl+O keyboard shortcut. Create modal/dialog for directory selection process. Add loading states and progress indicators during initialization. Ensure responsive design for mobile with minimum 44px touch targets. Include tooltip with 'Open Existing Project (Ctrl+O)' text.",
+        "testStrategy": "Test button placement and visual hierarchy. Verify keyboard shortcut functionality. Test responsive design on various screen sizes. Validate accessibility compliance. Test loading states and user feedback during operations.",
+        "priority": "medium",
+        "dependencies": [
+          2,
+          4
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Design and Implement 'Open Project' Button",
+            "description": "Create a green-colored button with a folder-open icon in the sidebar header next to the 'Create Project' button.",
+            "dependencies": [],
+            "details": "Use #22c55e as the button color and ensure proper styling.",
+            "status": "pending",
+            "testStrategy": "Visual inspection and interaction testing"
+          },
+          {
+            "id": 2,
+            "title": "Implement Ctrl+O Keyboard Shortcut",
+            "description": "Add functionality to open the project dialog when Ctrl+O is pressed.",
+            "dependencies": [],
+            "details": "Use JavaScript event listeners to capture the shortcut.",
+            "status": "pending",
+            "testStrategy": "Functional testing with keyboard input"
+          },
+          {
+            "id": 3,
+            "title": "Create Modal for Directory Selection",
+            "description": "Develop a modal/dialog for selecting project directories.",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Use HTML, CSS, and JavaScript to create a responsive modal.",
+            "status": "pending",
+            "testStrategy": "Functional and UI testing"
+          },
+          {
+            "id": 4,
+            "title": "Add Loading States and Progress Indicators",
+            "description": "Implement loading animations and progress bars during project initialization.",
+            "dependencies": [
+              3
+            ],
+            "details": "Use CSS animations and JavaScript to display loading states.",
+            "status": "pending",
+            "testStrategy": "Visual inspection and performance testing"
+          },
+          {
+            "id": 5,
+            "title": "Ensure Responsive Design and Tooltip Integration",
+            "description": "Ensure the UI is responsive for mobile devices with minimum 44px touch targets and add a tooltip with 'Open Existing Project (Ctrl+O)' text.",
+            "dependencies": [
+              1,
+              3,
+              4
+            ],
+            "details": "Use media queries for responsiveness and HTML/CSS for tooltips.",
+            "status": "pending",
+            "testStrategy": "Responsive design testing and tooltip functionality"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Implement Project State Management",
+        "description": "Integrate opened projects into the existing application state management system and persist project data",
+        "details": "Extend Redux/Context store to handle opened projects alongside created projects. Implement local storage persistence for opened projects list. Add project metadata tracking (initialization time, last modified, session history). Handle project registration in application database. Implement state synchronization between multiple app instances. Support concurrent project operations without conflicts.",
+        "testStrategy": "Test state persistence across app restarts. Verify project data integrity and synchronization. Test concurrent project operations. Validate state management performance with multiple open projects. Test edge cases like corrupted local storage.",
+        "priority": "medium",
+        "dependencies": [
+          4,
+          5
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Extend Redux/Context Store",
+            "description": "Modify the existing Redux or Context API store to handle both opened and created projects.",
+            "dependencies": [],
+            "details": "Integrate project data into the state management system using Redux Toolkit or Context API.",
+            "status": "pending",
+            "testStrategy": "Unit tests for store integration"
+          },
+          {
+            "id": 2,
+            "title": "Implement Local Storage Persistence",
+            "description": "Add local storage persistence for the list of opened projects.",
+            "dependencies": [
+              1
+            ],
+            "details": "Use local storage to save and retrieve the list of opened projects.",
+            "status": "pending",
+            "testStrategy": "Integration tests for persistence"
+          },
+          {
+            "id": 3,
+            "title": "Track Project Metadata",
+            "description": "Implement tracking for project metadata such as initialization time, last modified, and session history.",
+            "dependencies": [
+              1
+            ],
+            "details": "Create reducers and actions to manage project metadata.",
+            "status": "pending",
+            "testStrategy": "Unit tests for metadata handling"
+          },
+          {
+            "id": 4,
+            "title": "Handle Project Registration",
+            "description": "Implement project registration in the application database.",
+            "dependencies": [
+              1,
+              3
+            ],
+            "details": "Create API calls to register projects in the database.",
+            "status": "pending",
+            "testStrategy": "API integration tests"
+          },
+          {
+            "id": 5,
+            "title": "Implement State Synchronization",
+            "description": "Synchronize state between multiple app instances and support concurrent project operations without conflicts.",
+            "dependencies": [
+              1,
+              2,
+              4
+            ],
+            "details": "Use websockets or similar technology for real-time state synchronization.",
+            "status": "pending",
+            "testStrategy": "End-to-end tests for synchronization"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Build Comprehensive Error Handling System",
+        "description": "Implement robust error handling for all failure scenarios with user-friendly messages and recovery options",
+        "details": "Create error classification system for path errors, project errors, and system errors. Implement user-friendly error messages with actionable suggestions. Add expandable technical details for debugging. Create error recovery workflows (retry, browse again, cancel options). Handle specific errors: invalid paths, permission denied, network issues, CLI unavailable, insufficient memory/disk space. Implement error logging without exposing sensitive information.",
+        "testStrategy": "Test all error scenarios systematically. Verify error message clarity and actionability. Test error recovery workflows. Validate that no sensitive information is logged. Test error handling under various system conditions (low memory, network issues, etc.).",
+        "priority": "medium",
+        "dependencies": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Develop Error Classification System",
+            "description": "Create a classification system for path errors, project errors, and system errors to categorize and handle different types of errors effectively.",
+            "dependencies": [],
+            "details": "This system should be able to differentiate between various error types and provide a structured approach to error handling.",
+            "status": "pending",
+            "testStrategy": "Unit testing for error categorization"
+          },
+          {
+            "id": 2,
+            "title": "Implement User-Friendly Error Messages",
+            "description": "Design and implement user-friendly error messages with actionable suggestions to enhance user experience.",
+            "dependencies": [
+              1
+            ],
+            "details": "Ensure messages are clear, concise, and provide guidance on resolving the issue.",
+            "status": "pending",
+            "testStrategy": "User acceptance testing for clarity and usability"
+          },
+          {
+            "id": 3,
+            "title": "Add Expandable Technical Details",
+            "description": "Include expandable technical details for debugging purposes to support advanced troubleshooting.",
+            "dependencies": [
+              2
+            ],
+            "details": "These details should be accessible but not visible by default to avoid overwhelming non-technical users.",
+            "status": "pending",
+            "testStrategy": "Integration testing for technical detail accessibility"
+          },
+          {
+            "id": 4,
+            "title": "Create Error Recovery Workflows",
+            "description": "Develop error recovery workflows with retry, browse again, and cancel options to provide users with actionable recovery paths.",
+            "dependencies": [
+              3
+            ],
+            "details": "Ensure workflows are intuitive and support common error scenarios like invalid paths, permission denied, and network issues.",
+            "status": "pending",
+            "testStrategy": "End-to-end testing for workflow functionality"
+          },
+          {
+            "id": 5,
+            "title": "Implement Secure Error Logging",
+            "description": "Set up error logging to track and analyze errors without exposing sensitive information.",
+            "dependencies": [
+              4
+            ],
+            "details": "Use logging tools to monitor error recurrence rates and resolution times while ensuring data privacy.",
+            "status": "pending",
+            "testStrategy": "Security testing for data privacy compliance"
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Optimize Mobile User Experience",
+        "description": "Enhance the mobile interface with platform-specific optimizations and touch-friendly interactions",
+        "details": "Implement full-screen directory selection modal for mobile. Add swipe gestures for folder navigation. Optimize touch targets and spacing for mobile devices. Implement platform-specific folder picker integration for iOS and Android. Add haptic feedback for touch interactions. Ensure smooth animations and transitions. Handle device orientation changes gracefully.",
+        "testStrategy": "Test on actual iOS and Android devices. Verify touch interactions and gesture recognition. Test with various screen sizes and orientations. Validate performance on lower-end mobile devices. Test platform-specific folder picker integration.",
+        "priority": "low",
+        "dependencies": [
+          2,
+          5,
+          6
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement Full-Screen Directory Selection Modal",
+            "description": "Design and implement a full-screen modal for directory selection on mobile devices.",
+            "dependencies": [],
+            "details": "Ensure the modal is touch-friendly and accessible with one-handed use.",
+            "status": "pending",
+            "testStrategy": "Test on various mobile screen sizes and orientations."
+          },
+          {
+            "id": 2,
+            "title": "Add Swipe Gestures for Folder Navigation",
+            "description": "Integrate swipe gestures to enhance folder navigation on mobile devices.",
+            "dependencies": [],
+            "details": "Implement swipe gestures for intuitive navigation between folders.",
+            "status": "pending",
+            "testStrategy": "Test swipe gestures on different mobile devices."
+          },
+          {
+            "id": 3,
+            "title": "Optimize Touch Targets and Spacing",
+            "description": "Ensure touch targets are large enough and well-spaced for mobile devices.",
+            "dependencies": [],
+            "details": "Use buttons at least 44x44 pixels and provide ample spacing between touch targets.",
+            "status": "pending",
+            "testStrategy": "Conduct usability testing to ensure ease of use."
+          },
+          {
+            "id": 4,
+            "title": "Implement Platform-Specific Folder Picker Integration",
+            "description": "Integrate folder picker functionality specific to iOS and Android platforms.",
+            "dependencies": [
+              1,
+              3
+            ],
+            "details": "Ensure seamless integration with native folder pickers on both platforms.",
+            "status": "pending",
+            "testStrategy": "Test integration on both iOS and Android devices."
+          },
+          {
+            "id": 5,
+            "title": "Enhance Interactions with Haptic Feedback and Smooth Animations",
+            "description": "Add haptic feedback for touch interactions and ensure smooth animations and transitions.",
+            "dependencies": [
+              2,
+              4
+            ],
+            "details": "Implement haptic feedback for taps and ensure animations are smooth across different device orientations.",
+            "status": "pending",
+            "testStrategy": "Test haptic feedback and animations on various mobile devices."
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "Implement Performance Optimization and Caching",
+        "description": "Add performance optimizations to meet response time requirements and improve user experience",
+        "details": "Implement directory browsing caching to achieve <200ms response times. Add lazy loading for large directory listings. Implement project initialization progress caching and resumption. Add memory management for large projects (up to 10GB requirement). Implement background preloading of frequently accessed directories. Add performance monitoring and metrics collection.",
+        "testStrategy": "Performance test directory browsing with large directories. Measure project initialization times with various project sizes. Test memory usage with large projects. Validate caching effectiveness and cache invalidation. Load test with multiple concurrent users.",
+        "priority": "low",
+        "dependencies": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement Directory Browsing Caching",
+            "description": "Optimize directory browsing to achieve response times under 200ms",
+            "dependencies": [],
+            "details": "Use Cache-Control headers to cache frequently accessed directories",
+            "status": "pending",
+            "testStrategy": "Monitor response times for cached directories"
+          },
+          {
+            "id": 2,
+            "title": "Add Lazy Loading for Large Directory Listings",
+            "description": "Implement lazy loading to improve performance for large directory listings",
+            "dependencies": [
+              1
+            ],
+            "details": "Load directory contents only when needed to reduce initial load times",
+            "status": "pending",
+            "testStrategy": "Verify lazy loading functionality and measure performance improvements"
+          },
+          {
+            "id": 3,
+            "title": "Implement Project Initialization Progress Caching and Resumption",
+            "description": "Cache project initialization progress to allow resumption from last point",
+            "dependencies": [
+              2
+            ],
+            "details": "Use client-side storage or server-side caching for progress tracking",
+            "status": "pending",
+            "testStrategy": "Test resumption functionality and verify progress caching"
+          },
+          {
+            "id": 4,
+            "title": "Add Memory Management for Large Projects",
+            "description": "Optimize memory usage to handle projects up to 10GB",
+            "dependencies": [
+              3
+            ],
+            "details": "Implement efficient memory allocation and deallocation strategies",
+            "status": "pending",
+            "testStrategy": "Test memory usage under load and verify performance"
+          },
+          {
+            "id": 5,
+            "title": "Implement Background Preloading and Performance Monitoring",
+            "description": "Preload frequently accessed directories in the background and collect performance metrics",
+            "dependencies": [
+              4
+            ],
+            "details": "Use background tasks for preloading and integrate performance monitoring tools",
+            "status": "pending",
+            "testStrategy": "Verify preloading functionality and analyze collected metrics"
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "Conduct End-to-End Testing and Quality Assurance",
+        "description": "Perform comprehensive testing across all platforms and scenarios to ensure feature meets quality standards",
+        "details": "Execute complete end-to-end testing workflows from button click to project initialization. Test cross-platform compatibility on Windows, macOS, Linux, iOS, and Android. Perform user acceptance testing with real users. Conduct accessibility testing with screen readers and keyboard navigation. Test security aspects including file system permissions and path validation. Validate performance benchmarks and success criteria.",
+        "testStrategy": "Run automated end-to-end test suites. Manual testing on all supported platforms. User acceptance testing with target demographics. Security penetration testing. Performance benchmarking against requirements. Accessibility compliance testing with WCAG guidelines.",
+        "priority": "high",
+        "dependencies": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Plan End-to-End Testing",
+            "description": "Define testing scope, identify critical workflows, and schedule testing sessions across all platforms.",
+            "dependencies": [],
+            "details": "Identify key user scenarios and system integrations to test.",
+            "status": "pending",
+            "testStrategy": "Manual and Automated Testing"
+          },
+          {
+            "id": 2,
+            "title": "Execute Cross-Platform Compatibility Testing",
+            "description": "Test feature functionality on Windows, macOS, Linux, iOS, and Android platforms.",
+            "dependencies": [
+              1
+            ],
+            "details": "Verify consistent performance across different operating systems and devices.",
+            "status": "pending",
+            "testStrategy": "Automated Testing"
+          },
+          {
+            "id": 3,
+            "title": "Conduct User Acceptance Testing (UAT)",
+            "description": "Engage real users to validate feature usability and acceptance.",
+            "dependencies": [
+              2
+            ],
+            "details": "Gather feedback on user experience and identify areas for improvement.",
+            "status": "pending",
+            "testStrategy": "Manual Testing"
+          },
+          {
+            "id": 4,
+            "title": "Perform Accessibility and Security Testing",
+            "description": "Test accessibility features with screen readers and keyboard navigation, and evaluate security aspects like file system permissions.",
+            "dependencies": [
+              3
+            ],
+            "details": "Ensure compliance with accessibility standards and security protocols.",
+            "status": "pending",
+            "testStrategy": "Manual and Automated Testing"
+          },
+          {
+            "id": 5,
+            "title": "Validate Performance Benchmarks and Success Criteria",
+            "description": "Measure performance against predefined benchmarks and evaluate success criteria for the feature.",
+            "dependencies": [
+              4
+            ],
+            "details": "Analyze test results to confirm that the feature meets quality standards.",
+            "status": "pending",
+            "testStrategy": "Automated Testing"
+          }
+        ]
+      }
+    ],
+    "metadata": {
+      "created": "2025-07-09T13:42:01.940Z",
+      "updated": "2025-07-09T14:56:30.632Z",
+      "description": "Tasks for master context"
+    }
+  }
+}
