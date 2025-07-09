@@ -47,28 +47,115 @@ echo "======================================"
 # Check prerequisites
 echo -e "\n${YELLOW}Checking prerequisites...${NC}"
 
-# Check for Node.js
-if ! command -v node &> /dev/null; then
-  echo -e "${RED}Node.js is not installed. Please install Node.js 18+ first.${NC}"
-  echo "Visit: https://nodejs.org/"
+# Check for curl (needed for nvm installation)
+if ! command -v curl &> /dev/null; then
+  echo -e "${RED}curl is not installed. Please install curl first.${NC}"
+  echo "On Ubuntu/Debian: sudo apt-get install curl"
+  echo "On macOS: brew install curl"
   exit 1
 fi
 
-NODE_VERSION=$(node -v | cut -d 'v' -f 2 | cut -d '.' -f 1)
-if [ "$NODE_VERSION" -lt 18 ]; then
-  echo -e "${RED}Node.js version 18+ is required. Current version: $(node -v)${NC}"
-  exit 1
+# Function to install nvm
+install_nvm() {
+  echo -e "${YELLOW}Installing nvm...${NC}"
+  curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+  
+  # Load nvm for current session
+  export NVM_DIR="$HOME/.nvm"
+  [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+  [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+  
+  if command -v nvm &> /dev/null; then
+    echo -e "${GREEN}✓ nvm installed successfully${NC}"
+    return 0
+  else
+    echo -e "${RED}Failed to install nvm${NC}"
+    return 1
+  fi
+}
+
+# Check for nvm
+if ! command -v nvm &> /dev/null 2>&1; then
+  # Try to load nvm if it exists but not loaded
+  export NVM_DIR="$HOME/.nvm"
+  [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+  
+  if ! command -v nvm &> /dev/null 2>&1; then
+    echo -e "${YELLOW}nvm not found.${NC}"
+    read -p "Do you want to install nvm and the latest Node.js? (Y/n) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+      if install_nvm; then
+        # Install latest Node.js
+        echo -e "${YELLOW}Installing latest Node.js...${NC}"
+        nvm install node
+        nvm use node
+        echo -e "${GREEN}✓ Installed Node.js $(node -v)${NC}"
+        
+        # Update npm
+        echo -e "${YELLOW}Updating npm to latest version...${NC}"
+        npm install -g npm@latest
+        echo -e "${GREEN}✓ Updated npm to $(npm -v)${NC}"
+      else
+        echo -e "${RED}Failed to install nvm. Please install Node.js manually.${NC}"
+        exit 1
+      fi
+    else
+      # Check if Node.js is installed without nvm
+      if ! command -v node &> /dev/null; then
+        echo -e "${RED}Node.js is not installed. Please install Node.js 18+ first.${NC}"
+        echo "Visit: https://nodejs.org/ or install nvm"
+        exit 1
+      fi
+    fi
+  else
+    echo -e "${GREEN}✓ nvm found${NC}"
+  fi
 fi
 
-echo -e "${GREEN}✓ Node.js $(node -v) found${NC}"
-
-# Check for npm
-if ! command -v npm &> /dev/null; then
-  echo -e "${RED}npm is not installed.${NC}"
+# Check Node.js version
+if command -v node &> /dev/null; then
+  NODE_VERSION=$(node -v | cut -d 'v' -f 2 | cut -d '.' -f 1)
+  if [ "$NODE_VERSION" -lt 18 ]; then
+    echo -e "${YELLOW}Node.js version 18+ is required. Current version: $(node -v)${NC}"
+    
+    if command -v nvm &> /dev/null 2>&1; then
+      read -p "Do you want to install the latest Node.js using nvm? (Y/n) " -n 1 -r
+      echo
+      if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+        echo -e "${YELLOW}Installing latest Node.js...${NC}"
+        nvm install node
+        nvm use node
+        echo -e "${GREEN}✓ Installed Node.js $(node -v)${NC}"
+        
+        # Update npm
+        echo -e "${YELLOW}Updating npm to latest version...${NC}"
+        npm install -g npm@latest
+        echo -e "${GREEN}✓ Updated npm to $(npm -v)${NC}"
+      else
+        exit 1
+      fi
+    else
+      exit 1
+    fi
+  else
+    echo -e "${GREEN}✓ Node.js $(node -v) found${NC}"
+    
+    # Ask to update npm
+    read -p "Do you want to update npm to the latest version? (y/N) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+      echo -e "${YELLOW}Updating npm...${NC}"
+      npm install -g npm@latest
+      echo -e "${GREEN}✓ Updated npm to $(npm -v)${NC}"
+    else
+      echo -e "${GREEN}✓ npm $(npm -v) found${NC}"
+    fi
+  fi
+else
+  echo -e "${RED}Node.js is not installed after nvm setup. Please check your installation.${NC}"
   exit 1
 fi
-
-echo -e "${GREEN}✓ npm $(npm -v) found${NC}"
 
 # Check for git
 if ! command -v git &> /dev/null; then
