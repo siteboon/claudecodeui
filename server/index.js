@@ -17,8 +17,6 @@ try {
   console.log('No .env file found or error reading it:', e.message);
 }
 
-console.log('PORT from env:', process.env.PORT);
-
 const express = require('express');
 const { WebSocketServer } = require('ws');
 const http = require('http');
@@ -143,15 +141,9 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ 
   server,
   verifyClient: (info) => {
-    console.log('=== WebSocket Authentication Debug ===');
-    console.log('URL:', info.req.url);
-    console.log('Headers:', JSON.stringify(info.req.headers, null, 2));
-    console.log('Origin:', info.req.headers.origin);
-    
     // Parse cookies from WebSocket request
     const cookies = {};
     const cookieHeader = info.req.headers.cookie;
-    console.log('Raw cookie header:', cookieHeader);
     
     if (cookieHeader) {
       cookieHeader.split(';').forEach(cookie => {
@@ -159,31 +151,24 @@ const wss = new WebSocketServer({
         const name = parts[0];
         const value = parts.slice(1).join('='); // Handle values with = in them
         cookies[name] = value;
-        console.log(`Parsed cookie: ${name} = ${value}`);
       });
     }
     
     // Check auth token
     const authToken = process.env.AUTH_TOKEN;
-    console.log('AUTH_TOKEN from env:', authToken ? `${authToken.substring(0, 10)}...` : 'NOT SET');
-    console.log('All parsed cookies:', Object.keys(cookies));
     
     // If no auth token is configured, allow connection (no auth mode)
     if (!authToken) {
-      console.log('RESULT: No AUTH_TOKEN configured, allowing connection');
       return true;
     }
     
     // If auth token is configured, check cookie
     const tokenFromCookie = cookies.auth_token;
-    console.log('auth_token from cookie:', tokenFromCookie ? `${tokenFromCookie.substring(0, 10)}...` : 'NOT FOUND');
-    
     if (tokenFromCookie !== authToken) {
-      console.log('RESULT: WebSocket authentication failed - token mismatch');
+      console.log('WebSocket authentication failed');
       return false;
     }
     
-    console.log('RESULT: WebSocket authentication successful');
     return true;
   }
 });
@@ -246,8 +231,6 @@ app.get('/api/config', (req, res) => {
   const serverIP = getServerIP();
   const host = `${serverIP}:${PORT}`;
   const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'wss' : 'ws';
-  
-  console.log('Config API called - Returning host:', host, 'Protocol:', protocol);
   
   res.json({
     serverPort: PORT,
@@ -597,7 +580,6 @@ function handleShellConnection(ws) {
   ws.on('message', async (message) => {
     try {
       const data = JSON.parse(message);
-      console.log('📨 Shell message received:', data.type);
       
       if (data.type === 'init') {
         // Initialize shell with project path and session info

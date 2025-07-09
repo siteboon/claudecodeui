@@ -30,7 +30,6 @@ export function useWebSocket() {
         // Use relative URL to go through Vite proxy
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         wsUrl = `${protocol}//${window.location.host}/ws`;
-        console.log('Development mode: using Vite proxy for WebSocket');
       } else {
         // In production, fetch server configuration
         try {
@@ -46,9 +45,6 @@ export function useWebSocket() {
         }
       }
       
-      console.log('Creating WebSocket connection to:', wsUrl);
-      console.log('Current location:', window.location.href);
-      console.log('Document cookies:', document.cookie);
       const websocket = new WebSocket(wsUrl);
 
       websocket.onopen = () => {
