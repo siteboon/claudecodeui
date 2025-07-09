@@ -175,6 +175,62 @@ if ! command -v git &> /dev/null; then
 fi
 echo -e "${GREEN}✓ git found${NC}"
 
+# Check for build tools (required for node-gyp)
+echo -e "\n${YELLOW}Checking build tools...${NC}"
+if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+  # Linux
+  if ! command -v make &> /dev/null || ! command -v gcc &> /dev/null || ! command -v g++ &> /dev/null; then
+    echo -e "${YELLOW}Build tools not found. These are required for compiling native Node.js modules.${NC}"
+    read -p "Do you want to install build-essential? (Y/n) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+      echo -e "${YELLOW}Installing build-essential...${NC}"
+      if command -v apt-get &> /dev/null; then
+        sudo apt-get update
+        sudo apt-get install -y build-essential
+        echo -e "${GREEN}✓ Build tools installed${NC}"
+      elif command -v yum &> /dev/null; then
+        sudo yum groupinstall -y "Development Tools"
+        echo -e "${GREEN}✓ Build tools installed${NC}"
+      else
+        echo -e "${RED}Unable to install build tools automatically. Please install manually:${NC}"
+        echo "  Ubuntu/Debian: sudo apt-get install build-essential"
+        echo "  RedHat/CentOS: sudo yum groupinstall 'Development Tools'"
+        exit 1
+      fi
+    else
+      echo -e "${RED}Build tools are required. Installation cancelled.${NC}"
+      exit 1
+    fi
+  else
+    echo -e "${GREEN}✓ Build tools found${NC}"
+  fi
+elif [[ "$OSTYPE" == "darwin"* ]]; then
+  # macOS
+  if ! command -v make &> /dev/null; then
+    echo -e "${YELLOW}Xcode Command Line Tools not found. These are required for compiling native Node.js modules.${NC}"
+    read -p "Do you want to install Xcode Command Line Tools? (Y/n) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+      echo -e "${YELLOW}Installing Xcode Command Line Tools...${NC}"
+      xcode-select --install
+      echo -e "${YELLOW}Please complete the installation in the popup window, then press Enter to continue...${NC}"
+      read -r
+      if command -v make &> /dev/null; then
+        echo -e "${GREEN}✓ Xcode Command Line Tools installed${NC}"
+      else
+        echo -e "${RED}Installation failed or not completed. Please install Xcode Command Line Tools manually.${NC}"
+        exit 1
+      fi
+    else
+      echo -e "${RED}Build tools are required. Installation cancelled.${NC}"
+      exit 1
+    fi
+  else
+    echo -e "${GREEN}✓ Build tools found${NC}"
+  fi
+fi
+
 # Clone repository
 echo -e "\n${YELLOW}Cloning repository...${NC}"
 if [ -d "$INSTALL_DIR" ]; then
