@@ -24,6 +24,7 @@ const { WebSocketServer } = require('ws');
 const http = require('http');
 const path = require('path');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
 const fs = require('fs').promises;
 const { spawn } = require('child_process');
 const os = require('os');
@@ -33,6 +34,7 @@ const fetch = require('node-fetch');
 const { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } = require('./projects');
 const { spawnClaude, abortClaudeSession } = require('./claude-cli');
 const gitRoutes = require('./routes/git');
+const authMiddleware = require('./middleware/auth');
 
 // File system watcher for projects folder
 let projectsWatcher = null;
@@ -142,16 +144,77 @@ const wss = new WebSocketServer({
   server,
   verifyClient: (info) => {
     console.log('WebSocket connection attempt to:', info.req.url);
-    return true; // Accept all connections for now
+    
+    // Parse cookies from WebSocket request
+    const cookies = {};
+    const cookieHeader = info.req.headers.cookie;
+    if (cookieHeader) {
+      cookieHeader.split(';').forEach(cookie => {
+        const [name, value] = cookie.trim().split('=');
+        cookies[name] = value;
+      });
+    }
+    
+    // Check auth token
+    const authToken = process.env.AUTH_TOKEN;
+    const tokenFromCookie = cookies.auth_token;
+    
+    if (!authToken || tokenFromCookie !== authToken) {
+      console.log('WebSocket authentication failed');
+      return false;
+    }
+    
+    return true;
   }
 });
 
 app.use(cors());
+app.use(cookieParser());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../dist')));
 
 // Git API Routes
 app.use('/api/git', gitRoutes);
+
+// Auth Routes (before auth middleware)
+app.post('/api/auth/verify', (req, res) => {
+  const { token } = req.body;
+  const authToken = process.env.AUTH_TOKEN;
+  
+  if (!authToken) {
+    return res.status(500).json({ error: 'Server authentication not configured' });
+  }
+  
+  if (token === authToken) {
+    res.cookie('auth_token', token, {
+      httpOnly: true,
+      sameSite: 'lax',
+      maxAge: 365 * 24 * 60 * 60 * 1000, // 365 days
+      secure: req.secure || req.get('x-forwarded-proto') === 'https'
+    });
+    res.json({ success: true });
+  } else {
+    res.status(401).json({ error: 'Invalid token' });
+  }
+});
+
+app.get('/api/auth/check', (req, res) => {
+  const authToken = process.env.AUTH_TOKEN;
+  const tokenFromCookie = req.cookies?.auth_token;
+  
+  if (!authToken) {
+    return res.status(500).json({ error: 'Server authentication not configured' });
+  }
+  
+  if (tokenFromCookie === authToken) {
+    res.json({ authenticated: true });
+  } else {
+    res.status(401).json({ authenticated: false });
+  }
+});
+
+// Apply auth middleware to all routes below this point
+app.use(authMiddleware);
 
 // API Routes
 app.get('/api/config', (req, res) => {

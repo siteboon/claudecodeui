@@ -25,6 +25,7 @@ import MainContent from './components/MainContent';
 import MobileNav from './components/MobileNav';
 import ToolsSettings from './components/ToolsSettings';
 import QuickSettingsPanel from './components/QuickSettingsPanel';
+import AuthForm from './components/AuthForm';
 
 import { useWebSocket } from './utils/websocket';
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -629,16 +630,61 @@ function AppContent() {
   );
 }
 
+// Auth Guard component
+function AuthGuard({ children }) {
+  const [isAuthenticated, setIsAuthenticated] = useState(null); // null = checking, true/false = result
+  
+  useEffect(() => {
+    // Check authentication status
+    const checkAuth = async () => {
+      try {
+        const response = await fetch('/api/auth/check');
+        if (response.ok) {
+          setIsAuthenticated(true);
+        } else {
+          setIsAuthenticated(false);
+        }
+      } catch (err) {
+        setIsAuthenticated(false);
+      }
+    };
+    
+    checkAuth();
+  }, []);
+  
+  // Still checking auth
+  if (isAuthenticated === null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  // Not authenticated
+  if (!isAuthenticated) {
+    return <AuthForm />;
+  }
+  
+  // Authenticated
+  return children;
+}
+
 // Root App component with router
 function App() {
   return (
     <ThemeProvider>
-      <Router>
-        <Routes>
-          <Route path="/" element={<AppContent />} />
-          <Route path="/session/:sessionId" element={<AppContent />} />
-        </Routes>
-      </Router>
+      <AuthGuard>
+        <Router>
+          <Routes>
+            <Route path="/" element={<AppContent />} />
+            <Route path="/session/:sessionId" element={<AppContent />} />
+          </Routes>
+        </Router>
+      </AuthGuard>
     </ThemeProvider>
   );
 }
