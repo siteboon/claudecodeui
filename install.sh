@@ -8,6 +8,12 @@
 #   RedHat/CentOS: sudo yum groupinstall 'Development Tools' && sudo yum install python3 python3-devel
 #   Fedora: sudo dnf groupinstall 'Development Tools' && sudo dnf install python3 python3-devel
 #   macOS: xcode-select --install
+#
+# If you ran this script with sudo and npm/node are not available:
+#   1. Load nvm for your user: source ~/.nvm/nvm.sh
+#   2. Or reinstall nvm as your regular user (not root)
+#   3. Add to your ~/.bashrc: export NVM_DIR="$HOME/.nvm"
+#                            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 
 set -e  # Exit on error
 
@@ -16,6 +22,22 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
+
+# Check if running with sudo
+if [ "$EUID" -eq 0 ]; then 
+  echo -e "${RED}Warning: This script is running as root (with sudo).${NC}"
+  echo -e "${YELLOW}This can cause Node.js and npm to be installed for the wrong user.${NC}"
+  echo ""
+  echo "It's recommended to run this script as your normal user:"
+  echo "  ./install.sh"
+  echo ""
+  read -p "Do you want to continue anyway? (y/N) " -n 1 -r
+  echo
+  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo -e "${GREEN}Good choice! Please run without sudo.${NC}"
+    exit 0
+  fi
+fi
 
 # Default values
 REPO_URL="https://github.com/RuKapSan/claudecodeui.git"
@@ -307,6 +329,31 @@ echo -e "\n${YELLOW}Building application...${NC}"
 npm run build
 echo -e "${GREEN}✓ Application built${NC}"
 
+# Check and install Claude Code CLI
+echo -e "\n${YELLOW}Checking Claude Code CLI...${NC}"
+if ! command -v claude &> /dev/null; then
+  echo -e "${YELLOW}Claude Code CLI not found.${NC}"
+  read -p "Do you want to install Claude Code CLI? (Y/n) " -n 1 -r
+  echo
+  if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+    echo -e "${YELLOW}Installing Claude Code CLI...${NC}"
+    npm install -g @anthropic-ai/claude-code
+    if command -v claude &> /dev/null; then
+      echo -e "${GREEN}✓ Claude Code CLI installed successfully${NC}"
+      echo -e "${YELLOW}Please run 'claude login' to authenticate with your API key${NC}"
+    else
+      echo -e "${RED}Failed to install Claude Code CLI. You can install it manually with:${NC}"
+      echo "  npm install -g @anthropic-ai/claude-code"
+    fi
+  else
+    echo -e "${YELLOW}Skipping Claude Code CLI installation.${NC}"
+    echo "You can install it later with: npm install -g @anthropic-ai/claude-code"
+  fi
+else
+  CLAUDE_VERSION=$(claude --version 2>/dev/null | head -n1 || echo "Unknown version")
+  echo -e "${GREEN}✓ Claude Code CLI found: $CLAUDE_VERSION${NC}"
+fi
+
 echo -e "\n${GREEN}Installation complete!${NC}"
 echo "======================================"
 echo "To start the application:"
@@ -320,6 +367,12 @@ echo ""
 echo "The application will be available at:"
 echo "  Frontend: http://localhost:3009"
 echo "  Backend:  http://localhost:3008"
+echo ""
+if command -v claude &> /dev/null; then
+  echo "Claude Code CLI is installed. Remember to authenticate:"
+  echo "  claude login"
+  echo ""
+fi
 
 # Ask if user wants to start now
 echo ""
