@@ -2,6 +2,12 @@
 
 # Claude Code UI Installation Script
 # This script automates the installation process from git clone to running the application
+#
+# For existing installations getting node-gyp errors, install build tools manually:
+#   Ubuntu/Debian: sudo apt-get install build-essential python3 python3-dev
+#   RedHat/CentOS: sudo yum groupinstall 'Development Tools' && sudo yum install python3 python3-devel
+#   Fedora: sudo dnf groupinstall 'Development Tools' && sudo dnf install python3 python3-devel
+#   macOS: xcode-select --install
 
 set -e  # Exit on error
 
@@ -14,6 +20,7 @@ NC='\033[0m' # No Color
 # Default values
 REPO_URL="https://github.com/RuKapSan/claudecodeui.git"
 INSTALL_DIR="claudecodeui"
+SKIP_CLONE=false
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -26,17 +33,23 @@ while [[ $# -gt 0 ]]; do
       INSTALL_DIR="$2"
       shift 2
       ;;
+    --skip-clone)
+      SKIP_CLONE=true
+      shift
+      ;;
     --help)
       echo "Usage: $0 [options]"
       echo "Options:"
       echo "  --repo URL     Git repository URL (default: $REPO_URL)"
       echo "  --dir PATH     Installation directory (default: $INSTALL_DIR)"
+      echo "  --skip-clone   Skip cloning and run in current directory"
       echo "  --help         Show this help message"
       echo ""
       echo "Examples:"
       echo "  Default installation:     ./install.sh"
       echo "  Custom repo:             ./install.sh --repo https://github.com/user/repo.git"
       echo "  Custom directory:        ./install.sh --dir myapp"
+      echo "  Existing project:        ./install.sh --skip-clone"
       exit 0
       ;;
     *)
@@ -179,23 +192,29 @@ echo -e "${GREEN}✓ git found${NC}"
 echo -e "\n${YELLOW}Checking build tools...${NC}"
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
   # Linux
-  if ! command -v make &> /dev/null || ! command -v gcc &> /dev/null || ! command -v g++ &> /dev/null; then
+  if ! command -v make &> /dev/null || ! command -v gcc &> /dev/null || ! command -v g++ &> /dev/null || ! command -v python3 &> /dev/null; then
     echo -e "${YELLOW}Build tools not found. These are required for compiling native Node.js modules.${NC}"
-    read -p "Do you want to install build-essential? (Y/n) " -n 1 -r
+    read -p "Do you want to install required build tools? (Y/n) " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-      echo -e "${YELLOW}Installing build-essential...${NC}"
+      echo -e "${YELLOW}Installing build tools...${NC}"
       if command -v apt-get &> /dev/null; then
         sudo apt-get update
-        sudo apt-get install -y build-essential
+        sudo apt-get install -y build-essential python3 python3-dev
         echo -e "${GREEN}✓ Build tools installed${NC}"
       elif command -v yum &> /dev/null; then
         sudo yum groupinstall -y "Development Tools"
+        sudo yum install -y python3 python3-devel
+        echo -e "${GREEN}✓ Build tools installed${NC}"
+      elif command -v dnf &> /dev/null; then
+        sudo dnf groupinstall -y "Development Tools"
+        sudo dnf install -y python3 python3-devel
         echo -e "${GREEN}✓ Build tools installed${NC}"
       else
         echo -e "${RED}Unable to install build tools automatically. Please install manually:${NC}"
-        echo "  Ubuntu/Debian: sudo apt-get install build-essential"
-        echo "  RedHat/CentOS: sudo yum groupinstall 'Development Tools'"
+        echo "  Ubuntu/Debian: sudo apt-get install build-essential python3 python3-dev"
+        echo "  RedHat/CentOS: sudo yum groupinstall 'Development Tools' && sudo yum install python3 python3-devel"
+        echo "  Fedora: sudo dnf groupinstall 'Development Tools' && sudo dnf install python3 python3-devel"
         exit 1
       fi
     else
@@ -231,23 +250,34 @@ elif [[ "$OSTYPE" == "darwin"* ]]; then
   fi
 fi
 
-# Clone repository
-echo -e "\n${YELLOW}Cloning repository...${NC}"
-if [ -d "$INSTALL_DIR" ]; then
-  echo -e "${YELLOW}Directory '$INSTALL_DIR' already exists.${NC}"
-  read -p "Do you want to remove it and continue? (y/N) " -n 1 -r
-  echo
-  if [[ $REPLY =~ ^[Yy]$ ]]; then
-    rm -rf "$INSTALL_DIR"
-  else
-    echo -e "${RED}Installation cancelled.${NC}"
+# Clone repository or use existing
+if [ "$SKIP_CLONE" = false ]; then
+  echo -e "\n${YELLOW}Cloning repository...${NC}"
+  if [ -d "$INSTALL_DIR" ]; then
+    echo -e "${YELLOW}Directory '$INSTALL_DIR' already exists.${NC}"
+    read -p "Do you want to remove it and continue? (y/N) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+      rm -rf "$INSTALL_DIR"
+    else
+      echo -e "${RED}Installation cancelled.${NC}"
+      exit 1
+    fi
+  fi
+
+  git clone "$REPO_URL" "$INSTALL_DIR"
+  cd "$INSTALL_DIR"
+  echo -e "${GREEN}✓ Repository cloned${NC}"
+else
+  echo -e "\n${YELLOW}Using existing project directory...${NC}"
+  # Check if we're in a valid project directory
+  if [ ! -f "package.json" ]; then
+    echo -e "${RED}Error: No package.json found in current directory.${NC}"
+    echo "Make sure you're in the claudecodeui project directory."
     exit 1
   fi
+  echo -e "${GREEN}✓ Found existing project${NC}"
 fi
-
-git clone "$REPO_URL" "$INSTALL_DIR"
-cd "$INSTALL_DIR"
-echo -e "${GREEN}✓ Repository cloned${NC}"
 
 # Create .env file if it doesn't exist
 echo -e "\n${YELLOW}Setting up environment...${NC}"
