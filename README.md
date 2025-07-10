@@ -33,11 +33,26 @@ A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/cla
 
 ## Features
 
+### Core Functionality
 - **Responsive Design** - Works seamlessly across desktop, tablet, and mobile
 - **Interactive Chat Interface** - Built-in chat interface for seamless communication with Claude Code
 - **Integrated Shell Terminal** - Direct access to Claude Code CLI through built-in shell functionality
 - **File Explorer** - Interactive file tree with syntax highlighting and live editing
 - **Session Management** - Resume conversations, manage multiple sessions, and track history
+
+### 🆕 Latest Enhancements
+
+#### Checkpoint System with Revert Functionality
+- **Create Checkpoints** - Automatically capture project state at key conversation points
+- **Revert to Checkpoints** - Click any checkpoint to restore files and truncate conversation history
+- **Server-Side Persistence** - Messages are permanently removed from server storage, not just hidden
+- **Smart Recovery** - Maintains checkpoint integrity across browser sessions and page refreshes
+
+#### Enhanced Tools Configuration
+- **Expanded Tool Library** - 30+ pre-configured bash commands for quick setup
+- **Quick Add Buttons** - One-click addition of common development tools (git, npm, file operations)
+- **Organized Categories** - Tools grouped by function: Git commands, package management, file operations, development tools
+- **Granular Permissions** - Fine-grained control over which bash commands are allowed
 
 
 ## Quick Start
@@ -51,7 +66,7 @@ A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/cla
 
 1. **Clone the repository:**
 ```bash
-git clone https://github.com/siteboon/claudecodeui.git
+git clone https://github.com/ItsAChillBear/claudecodeui.git
 cd claudecodeui
 ```
 
@@ -74,7 +89,7 @@ npm run dev
 ```
 
 5. **Open your browser:**
-   - Development: `http://localhost:3001`
+   - Development: `http://localhost:3009` (Frontend) and `http://localhost:3008` (API Server)
 
 ## Security & Tools Configuration
 
@@ -85,7 +100,13 @@ npm run dev
 To use Claude Code's full functionality, you'll need to manually enable tools:
 
 1. **Open Tools Settings** - Click the gear icon in the sidebar
-3. **Enable Selectively** - Turn on only the tools you need
+2. **Quick Add Common Tools** - Use the new one-click buttons to add essential development tools:
+   - **Git Commands**: `add`, `commit`, `push`, `pull`, `checkout`, `branch`, `merge`, `reset`, `stash`, `config`, `remote`
+   - **Package Management**: `npm`, `yarn`, `pnpm`, `node`, `npx`
+   - **File Operations**: `ls`, `cat`, `mkdir`, `cp`, `mv`, `rm`, `find`
+   - **Development Tools**: `rg` (ripgrep), `code`, `curl`, `wget`
+   - **Process Management**: `ps`, `kill`, `killall`
+3. **Enable Selectively** - Turn on only the tools you need, or add custom patterns
 4. **Apply Settings** - Your preferences are saved locally
 
 <div align="center">
@@ -96,6 +117,28 @@ To use Claude Code's full functionality, you'll need to manually enable tools:
 </div>
 
 **Recommended approach**: Start with basic tools enabled and add more as needed. You can always adjust these settings later.
+
+## Recent Updates & Changelog
+
+### Latest Release - Enhanced Checkpoint & Tools System
+
+#### 🎯 Major Features Added
+- **Complete Checkpoint System**: Full implementation of checkpoint creation, restoration, and conversation truncation
+- **Server-Side Message Persistence**: Messages are permanently removed from JSONL files, not just hidden client-side
+- **Expanded Tools Library**: 30+ pre-configured bash commands with categorized quick-add buttons
+- **Enhanced Permission System**: Granular control over development tools and commands
+
+#### 🔧 Technical Improvements
+- **Fuzzy Checkpoint Matching**: Robust checkpoint ID assignment that handles timestamp mismatches
+- **WebSocket Message Truncation**: Real-time coordination between client and server for conversation management
+- **Atomic File Operations**: Safe file restoration using temporary files and atomic renames
+- **Cross-Session Persistence**: Checkpoint markers survive browser refreshes and session reloads
+
+#### 🐛 Bug Fixes
+- Fixed checkpoint revert button not permanently removing messages after checkpoint
+- Resolved issue where messages reappeared after page refresh following revert
+- Improved checkpoint ID assignment for messages loaded from server sessions
+- Enhanced error handling for checkpoint restoration failures
 
 ## Usage Guide
 
@@ -113,6 +156,8 @@ The UI automatically discovers Claude Code projects from `~/.claude/projects/` a
 - **Session Management** - Resume previous conversations or start fresh sessions
 - **Message History** - Complete conversation history with timestamps and metadata
 - **Multi-format Support** - Text, code blocks, and file references
+- **🆕 Checkpoint System** - Automatically create checkpoints at key conversation points
+- **🆕 Revert Functionality** - Click checkpoint buttons to restore project state and truncate conversation history
 
 #### File Explorer & Editor
 - **Interactive File Tree** - Browse project structure with expand/collapse navigation
@@ -149,10 +194,14 @@ The UI automatically discovers Claude Code projects from `~/.claude/projects/` a
 - **Claude CLI Integration** - Process spawning and management
 - **Session Management** - JSONL parsing and conversation persistence
 - **File System API** - Exposing file browser for projects
+- **🆕 Checkpoint Management** - File state capture and restoration system
+- **🆕 Message Truncation** - Server-side conversation history management
 
 ### Frontend (React + Vite)
 - **React 18** - Modern component architecture with hooks
 - **CodeMirror** - Advanced code editor with syntax highlighting
+- **🆕 Enhanced Tools Settings** - Comprehensive tool configuration interface
+- **🆕 Checkpoint UI** - Visual checkpoint creation and revert functionality
 
 
 
