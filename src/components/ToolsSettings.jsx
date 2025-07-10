@@ -32,6 +32,7 @@ function ToolsSettings({ isOpen, onClose }) {
     'Bash(git reset:*)',
     'Bash(git stash:*)',
     'Bash(git config:*)',
+    'Bash(git remote:*)',
     // Package management
     'Bash(npm:*)',
     'Bash(yarn:*)',
