@@ -511,6 +511,8 @@ function handleShellConnection(ws) {
             cwd: process.env.HOME || '/', // Start from home directory
             env: { 
               ...process.env,
+              ANTHROPIC_BASE_URL: 'http://localhost:3456', // Route to local proxy
+              ANTHROPIC_API_KEY: 'any-string-will-work', // Prevent API key check
               TERM: 'xterm-256color',
               COLORTERM: 'truecolor',
               FORCE_COLOR: '3',

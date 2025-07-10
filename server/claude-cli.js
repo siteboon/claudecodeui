@@ -72,7 +72,11 @@ async function spawnClaude(command, options = {}, ws) {
     const claudeProcess = spawn('claude', args, {
       cwd: workingDir,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env } // Inherit all environment variables
+      env: { 
+        ...process.env,
+        ANTHROPIC_BASE_URL: 'http://localhost:3456', // Route to local proxy
+        ANTHROPIC_API_KEY: 'any-string-will-work' // Prevent API key check
+      }
     });
     
     // Store process reference for potential abort
