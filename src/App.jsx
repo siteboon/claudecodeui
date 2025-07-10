@@ -25,6 +25,7 @@ import MainContent from './components/MainContent';
 import MobileNav from './components/MobileNav';
 import ToolsSettings from './components/ToolsSettings';
 import QuickSettingsPanel from './components/QuickSettingsPanel';
+import Login from './components/Login';
 
 import { useWebSocket } from './utils/websocket';
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -35,6 +36,9 @@ import { useVersionCheck } from './hooks/useVersionCheck';
 function AppContent() {
   const navigate = useNavigate();
   const { sessionId } = useParams();
+
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
   
   const { updateAvailable, latestVersion, currentVersion } = useVersionCheck('siteboon', 'claudecodeui');
   const [showVersionModal, setShowVersionModal] = useState(false);
@@ -81,9 +85,27 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    // Fetch projects on component mount
-    fetchProjects();
+    const checkAuthStatus = async () => {
+      try {
+        const response = await fetch('/api/auth/status');
+        const data = await response.json();
+        setIsAuthenticated(data.isAuthenticated);
+      } catch (error) {
+        console.error('Error checking auth status:', error);
+        setIsAuthenticated(false);
+      } finally {
+        setAuthChecked(true);
+      }
+    };
+    checkAuthStatus();
   }, []);
+
+  useEffect(() => {
+    // Fetch projects on component mount only if authenticated
+    if (isAuthenticated) {
+      fetchProjects();
+    }
+  }, [isAuthenticated]);
 
   // Helper function to determine if an update is purely additive (new sessions/projects)
   // vs modifying existing selected items that would interfere with active conversations
@@ -488,6 +510,22 @@ function AppContent() {
       </div>
     );
   };
+
+  const handleLoginSuccess = () => {
+    setIsAuthenticated(true);
+  };
+
+  if (!authChecked) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900">
+        <div className="text-white">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Login onLoginSuccess={handleLoginSuccess} />;
+  }
 
   return (
     <div className="fixed inset-0 flex bg-background">

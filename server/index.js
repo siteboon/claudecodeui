@@ -29,6 +29,8 @@ const { spawn } = require('child_process');
 const os = require('os');
 const pty = require('node-pty');
 const fetch = require('node-fetch');
+const session = require('express-session');
+const cookieParser = require('cookie-parser');
 
 const { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } = require('./projects');
 const { spawnClaude, abortClaudeSession } = require('./claude-cli');
@@ -137,21 +139,75 @@ function getServerIP() {
 const app = express();
 const server = http.createServer(app);
 
-// Single WebSocket server that handles both paths
-const wss = new WebSocketServer({ 
-  server,
-  verifyClient: (info) => {
-    console.log('WebSocket connection attempt to:', info.req.url);
-    return true; // Accept all connections for now
-  }
+// Session Middleware Setup
+const sessionMiddleware = session({
+  secret: process.env.SESSION_SECRET || 'default-secret-key',
+  resave: false,
+  saveUninitialized: true,
+  cookie: { secure: process.env.NODE_ENV === 'production', maxAge: 86400000 } // 24 hours
+});
+
+const wss = new WebSocketServer({ noServer: true });
+
+server.on('upgrade', (request, socket, head) => {
+  // Use session middleware to parse session cookie
+  sessionMiddleware(request, {}, () => {
+    if (!request.session.isAuthenticated) {
+      console.log('Unauthorized WebSocket upgrade attempt.');
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
+    // If authenticated, proceed with WebSocket upgrade
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request);
+    });
+  });
 });
 
 app.use(cors());
 app.use(express.json());
+app.use(cookieParser());
+app.use(sessionMiddleware);
+
+// Auth Routes
+app.post('/api/login', (req, res) => {
+  const { password } = req.body;
+  if (password && password === process.env.APP_PASSWORD) {
+    req.session.isAuthenticated = true;
+    res.json({ success: true });
+  } else {
+    res.status(401).json({ success: false, message: 'Invalid password' });
+  }
+});
+
+app.post('/api/logout', (req, res) => {
+  req.session.destroy((err) => {
+    if (err) {
+      return res.status(500).json({ success: false, message: 'Could not log out.' });
+    }
+    res.clearCookie('connect.sid'); // The default session cookie name
+    res.json({ success: true });
+  });
+});
+
+app.get('/api/auth/status', (req, res) => {
+  res.json({ isAuthenticated: !!req.session.isAuthenticated });
+});
+
+// Middleware to protect routes
+const isAuthenticated = (req, res, next) => {
+  if (req.session.isAuthenticated) {
+    return next();
+  }
+  res.status(401).json({ error: 'Unauthorized' });
+};
+
 app.use(express.static(path.join(__dirname, '../dist')));
 
 // Git API Routes
-app.use('/api/git', gitRoutes);
+app.use('/api/git', isAuthenticated, gitRoutes);
 
 // API Routes
 app.get('/api/config', (req, res) => {
@@ -168,7 +224,7 @@ app.get('/api/config', (req, res) => {
   });
 });
 
-app.get('/api/projects', async (req, res) => {
+app.get('/api/projects', isAuthenticated, async (req, res) => {
   try {
     const projects = await getProjects();
     res.json(projects);
@@ -177,7 +233,7 @@ app.get('/api/projects', async (req, res) => {
   }
 });
 
-app.get('/api/projects/:projectName/sessions', async (req, res) => {
+app.get('/api/projects/:projectName/sessions', isAuthenticated, async (req, res) => {
   try {
     const { limit = 5, offset = 0 } = req.query;
     const result = await getSessions(req.params.projectName, parseInt(limit), parseInt(offset));
@@ -188,7 +244,7 @@ app.get('/api/projects/:projectName/sessions', async (req, res) => {
 });
 
 // Get messages for a specific session
-app.get('/api/projects/:projectName/sessions/:sessionId/messages', async (req, res) => {
+app.get('/api/projects/:projectName/sessions/:sessionId/messages', isAuthenticated, async (req, res) => {
   try {
     const { projectName, sessionId } = req.params;
     const messages = await getSessionMessages(projectName, sessionId);
@@ -199,7 +255,7 @@ app.get('/api/projects/:projectName/sessions/:sessionId/messages', async (req, r
 });
 
 // Rename project endpoint
-app.put('/api/projects/:projectName/rename', async (req, res) => {
+app.put('/api/projects/:projectName/rename', isAuthenticated, async (req, res) => {
   try {
     const { displayName } = req.body;
     await renameProject(req.params.projectName, displayName);
@@ -210,7 +266,7 @@ app.put('/api/projects/:projectName/rename', async (req, res) => {
 });
 
 // Delete session endpoint
-app.delete('/api/projects/:projectName/sessions/:sessionId', async (req, res) => {
+app.delete('/api/projects/:projectName/sessions/:sessionId', isAuthenticated, async (req, res) => {
   try {
     const { projectName, sessionId } = req.params;
     await deleteSession(projectName, sessionId);
@@ -221,7 +277,7 @@ app.delete('/api/projects/:projectName/sessions/:sessionId', async (req, res) =>
 });
 
 // Delete project endpoint (only if empty)
-app.delete('/api/projects/:projectName', async (req, res) => {
+app.delete('/api/projects/:projectName', isAuthenticated, async (req, res) => {
   try {
     const { projectName } = req.params;
     await deleteProject(projectName);
@@ -232,7 +288,7 @@ app.delete('/api/projects/:projectName', async (req, res) => {
 });
 
 // Create project endpoint
-app.post('/api/projects/create', async (req, res) => {
+app.post('/api/projects/create', isAuthenticated, async (req, res) => {
   try {
     const { path: projectPath } = req.body;
     
@@ -249,7 +305,7 @@ app.post('/api/projects/create', async (req, res) => {
 });
 
 // Read file content endpoint
-app.get('/api/projects/:projectName/file', async (req, res) => {
+app.get('/api/projects/:projectName/file', isAuthenticated, async (req, res) => {
   try {
     const { projectName } = req.params;
     const { filePath } = req.query;
@@ -278,7 +334,7 @@ app.get('/api/projects/:projectName/file', async (req, res) => {
 });
 
 // Serve binary file content endpoint (for images, etc.)
-app.get('/api/projects/:projectName/files/content', async (req, res) => {
+app.get('/api/projects/:projectName/files/content', isAuthenticated, async (req, res) => {
   try {
     const { projectName } = req.params;
     const { path: filePath } = req.query;
@@ -324,7 +380,7 @@ app.get('/api/projects/:projectName/files/content', async (req, res) => {
 });
 
 // Save file content endpoint
-app.put('/api/projects/:projectName/file', async (req, res) => {
+app.put('/api/projects/:projectName/file', isAuthenticated, async (req, res) => {
   try {
     const { projectName } = req.params;
     const { filePath, content } = req.body;
@@ -371,7 +427,7 @@ app.put('/api/projects/:projectName/file', async (req, res) => {
   }
 });
 
-app.get('/api/projects/:projectName/files', async (req, res) => {
+app.get('/api/projects/:projectName/files', isAuthenticated, async (req, res) => {
   try {
     
     const fs = require('fs').promises;
@@ -407,11 +463,11 @@ app.get('/api/projects/:projectName/files', async (req, res) => {
 // WebSocket connection handler that routes based on URL path
 wss.on('connection', (ws, request) => {
   const url = request.url;
-  console.log('🔗 Client connected to:', url);
+  console.log('🔗 Authenticated client connected to:', url);
   
-  if (url === '/shell') {
+  if (url.startsWith('/shell')) {
     handleShellConnection(ws);
-  } else if (url === '/ws') {
+  } else if (url.startsWith('/ws')) {
     handleChatConnection(ws);
   } else {
     console.log('❌ Unknown WebSocket path:', url);
@@ -631,7 +687,7 @@ function handleShellConnection(ws) {
   });
 }
 // Audio transcription endpoint
-app.post('/api/transcribe', async (req, res) => {
+app.post('/api/transcribe', isAuthenticated, async (req, res) => {
   try {
     const multer = require('multer');
     const upload = multer({ storage: multer.memoryStorage() });

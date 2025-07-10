@@ -3,7 +3,7 @@ import { ScrollArea } from './ui/scroll-area';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
-import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2 } from 'lucide-react';
+import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2, LogOut } from 'lucide-react';
 import { cn } from '../lib/utils';
 import ClaudeLogo from './ClaudeLogo';
 
@@ -72,6 +72,16 @@ function Sidebar({
       e.stopPropagation();
       callback();
     };
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/logout', { method: 'POST' });
+      window.location.reload();
+    } catch (error) {
+      console.error('Error logging out:', error);
+      alert('Failed to log out.');
+    }
   };
 
   // Auto-update timestamps every minute
@@ -1107,6 +1117,14 @@ function Sidebar({
         >
           <Settings className="w-3 h-3" />
           <span className="text-xs">Tools Settings</span>
+        </Button>
+        <Button
+          variant="ghost"
+          className="hidden md:flex w-full justify-start gap-2 p-2 h-auto font-normal text-muted-foreground hover:text-foreground hover:bg-accent transition-colors duration-200"
+          onClick={handleLogout}
+        >
+          <LogOut className="w-3 h-3" />
+          <span className="text-xs">Logout</span>
         </Button>
       </div>
     </div>
