@@ -600,6 +600,101 @@ async function addProjectManually(projectPath, displayName = null) {
   };
 }
 
+// Truncate session messages to a specific checkpoint
+async function truncateSessionMessages(projectName, sessionId, checkpointId, targetMessageCount) {
+  try {
+    console.log(`✂️ Truncating session ${sessionId} to checkpoint ${checkpointId} (${targetMessageCount} messages)`);
+    
+    const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
+    
+    // Check if project directory exists
+    try {
+      await fs.access(projectDir);
+    } catch (error) {
+      throw new Error(`Project directory not found: ${projectName}`);
+    }
+    
+    const files = await fs.readdir(projectDir);
+    const jsonlFiles = files.filter(file => file.endsWith('.jsonl'));
+    
+    if (jsonlFiles.length === 0) {
+      console.log('No JSONL files found for truncation');
+      return { truncated: 0, files: 0 };
+    }
+    
+    let totalTruncated = 0;
+    let filesModified = 0;
+    
+    // Process each JSONL file
+    for (const file of jsonlFiles) {
+      const jsonlFile = path.join(projectDir, file);
+      const tempFile = jsonlFile + '.tmp';
+      
+      // Read all lines from the file
+      const fileStream = require('fs').createReadStream(jsonlFile);
+      const rl = readline.createInterface({
+        input: fileStream,
+        crlfDelay: Infinity
+      });
+      
+      const allLines = [];
+      const sessionLines = [];
+      let sessionMessageCount = 0;
+      
+      // Collect all lines and identify session messages
+      for await (const line of rl) {
+        if (line.trim()) {
+          try {
+            const entry = JSON.parse(line);
+            if (entry.sessionId === sessionId) {
+              sessionLines.push({ line, entry, index: allLines.length });
+              sessionMessageCount++;
+            }
+            allLines.push(line);
+          } catch (parseError) {
+            console.warn('Error parsing line during truncation:', parseError.message);
+            allLines.push(line); // Keep malformed lines as-is
+          }
+        }
+      }
+      
+      // If this file has session messages and we need to truncate
+      if (sessionLines.length > 0 && sessionMessageCount > targetMessageCount) {
+        // Calculate how many messages to keep (target count from the beginning)
+        const linesToKeep = sessionLines.slice(0, targetMessageCount);
+        const indicesToRemove = sessionLines.slice(targetMessageCount).map(item => item.index);
+        
+        // Create new file content excluding truncated messages
+        const newLines = allLines.filter((_, index) => !indicesToRemove.includes(index));
+        
+        // Write the truncated content to temp file
+        await fs.writeFile(tempFile, newLines.join('\n') + (newLines.length > 0 ? '\n' : ''));
+        
+        // Replace original file with truncated version
+        await fs.rename(tempFile, jsonlFile);
+        
+        const removedCount = indicesToRemove.length;
+        totalTruncated += removedCount;
+        filesModified++;
+        
+        console.log(`✂️ Truncated ${removedCount} messages from ${file}`);
+      }
+    }
+    
+    console.log(`✅ Truncation complete: ${totalTruncated} messages removed from ${filesModified} files`);
+    
+    return {
+      truncated: totalTruncated,
+      files: filesModified,
+      remainingMessages: targetMessageCount
+    };
+    
+  } catch (error) {
+    console.error(`Error truncating session messages:`, error);
+    throw new Error(`Failed to truncate session: ${error.message}`);
+  }
+}
+
 
 module.exports = {
   getProjects,
@@ -614,5 +709,6 @@ module.exports = {
   loadProjectConfig,
   saveProjectConfig,
   extractProjectDirectory,
-  clearProjectDirectoryCache
+  clearProjectDirectoryCache,
+  truncateSessionMessages
 };

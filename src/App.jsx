@@ -582,6 +582,7 @@ function AppContent() {
           onShowSettings={() => setShowToolsSettings(true)}
           autoExpandTools={autoExpandTools}
           showRawParameters={showRawParameters}
+          onProjectUpdate={fetchProjects}
         />
       </div>
 

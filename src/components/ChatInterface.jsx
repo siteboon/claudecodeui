@@ -25,7 +25,7 @@ import ClaudeStatus from './ClaudeStatus';
 import { MicButton } from './MicButton.jsx';
 
 // Memoized message component to prevent unnecessary re-renders
-const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFileOpen, onShowSettings, autoExpandTools, showRawParameters }) => {
+const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFileOpen, onShowSettings, autoExpandTools, showRawParameters, onRevertToCheckpoint }) => {
   const isGrouped = prevMessage && prevMessage.type === message.type && 
                    prevMessage.type === 'assistant' && 
                    !prevMessage.isToolUse && !message.isToolUse;
@@ -71,8 +71,24 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
             <div className="text-sm whitespace-pre-wrap break-words">
               {message.content}
             </div>
-            <div className="text-xs text-blue-100 mt-1 text-right">
-              {new Date(message.timestamp).toLocaleTimeString()}
+            <div className="flex items-center justify-between mt-1">
+              <div className="text-xs text-blue-100">
+                {new Date(message.timestamp).toLocaleTimeString()}
+              </div>
+              {message.checkpointId && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onRevertToCheckpoint(message.checkpointId);
+                  }}
+                  className="text-xs text-blue-100 hover:text-white bg-blue-500 hover:bg-blue-400 px-2 py-1 rounded ml-2 transition-colors"
+                  title="Revert to checkpoint"
+                >
+                  ↶ Revert
+                </button>
+              )}
             </div>
           </div>
           {!isGrouped && (
@@ -90,13 +106,17 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 <div className="w-8 h-8 bg-red-600 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0">
                   !
                 </div>
+              ) : message.type === 'system' ? (
+                <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0">
+                  ✓
+                </div>
               ) : (
                 <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0 p-1">
                   <ClaudeLogo className="w-full h-full" />
                 </div>
               )}
               <div className="text-sm font-medium text-gray-900 dark:text-white">
-                {message.type === 'error' ? 'Error' : 'Claude'}
+                {message.type === 'error' ? 'Error' : message.type === 'system' ? 'System' : 'Claude'}
               </div>
             </div>
           )}
@@ -227,12 +247,8 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                   );
                 })()}
                 {message.toolInput && message.toolName !== 'Edit' && (() => {
-                  // Debug log to see what we're dealing with
-                  console.log('Tool display - name:', message.toolName, 'input type:', typeof message.toolInput);
-                  
                   // Special handling for Write tool
                   if (message.toolName === 'Write') {
-                    console.log('Write tool detected, toolInput:', message.toolInput);
                     try {
                       let input;
                       // Handle both JSON string and already parsed object
@@ -241,8 +257,6 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                       } else {
                         input = message.toolInput;
                       }
-                      
-                      console.log('Parsed Write input:', input);
                       
                       if (input.file_path && input.content !== undefined) {
                         return (
@@ -882,7 +896,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
 // - onReplaceTemporarySession: Called to replace temporary session ID with real WebSocket session ID
 //
 // This ensures uninterrupted chat experience by pausing sidebar refreshes during conversations.
-function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, messages, onFileOpen, onInputFocusChange, onSessionActive, onSessionInactive, onReplaceTemporarySession, onNavigateToSession, onShowSettings, autoExpandTools, showRawParameters, autoScrollToBottom }) {
+function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, messages, onFileOpen, onInputFocusChange, onSessionActive, onSessionInactive, onReplaceTemporarySession, onNavigateToSession, onShowSettings, autoExpandTools, showRawParameters, autoScrollToBottom, onProjectUpdate }) {
   const [input, setInput] = useState(() => {
     if (typeof window !== 'undefined' && selectedProject) {
       return localStorage.getItem(`draft_input_${selectedProject.name}`) || '';
@@ -1047,11 +1061,46 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         
         // Skip command messages and empty content
         if (content && !content.startsWith('<command-name>') && !content.startsWith('[Request interrupted')) {
-          converted.push({
+          const messageObj = {
             type: messageType,
             content: content,
             timestamp: msg.timestamp || new Date().toISOString()
-          });
+          };
+          
+          // Try to restore checkpoint ID from localStorage
+          if (selectedProject) {
+            const checkpointKey = `checkpoints-${selectedProject.name}`;
+            const existingCheckpoints = JSON.parse(localStorage.getItem(checkpointKey) || '{}');
+            
+            // Look for a matching checkpoint based on content only (fuzzy match)
+            // Since timestamps can differ between sessions, match by content prefix
+            const contentPrefix = content.substring(0, 50);
+            
+            // First try exact timestamp match
+            let timestampValue;
+            if (msg.timestamp instanceof Date) {
+              timestampValue = msg.timestamp.getTime();
+            } else {
+              timestampValue = new Date(msg.timestamp).getTime();
+            }
+            
+            const exactKey = `${contentPrefix}-${timestampValue}`;
+            
+            if (existingCheckpoints[exactKey]) {
+              messageObj.checkpointId = existingCheckpoints[exactKey].checkpointId;
+            } else {
+              // Fallback: search for any checkpoint with matching content prefix
+              const matchingKey = Object.keys(existingCheckpoints).find(key => 
+                key.startsWith(contentPrefix + '-')
+              );
+              
+              if (matchingKey) {
+                messageObj.checkpointId = existingCheckpoints[matchingKey].checkpointId;
+              }
+            }
+          }
+          
+          converted.push(messageObj);
         }
       }
       
@@ -1157,9 +1206,49 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   // Update chatMessages when convertedMessages changes
   useEffect(() => {
     if (sessionMessages.length > 0) {
-      setChatMessages(convertedMessages);
+      let finalMessages = convertedMessages;
+      
+      // Check for truncation marker and apply it
+      if (selectedProject && selectedSession) {
+        const truncationKey = `truncation_${selectedProject.name}_${selectedSession.id}`;
+        const truncationData = localStorage.getItem(truncationKey);
+        
+        if (truncationData) {
+          try {
+            const { checkpointId, truncatedAt, messageCount } = JSON.parse(truncationData);
+            
+            // Only apply truncation if it's recent (within last 5 seconds) or if current messages exceed expected count
+            const isRecentTruncation = Date.now() - truncatedAt < 5000;
+            const shouldApplyTruncation = isRecentTruncation || finalMessages.length > messageCount;
+            
+            if (shouldApplyTruncation) {
+              // Find the checkpoint message in the converted messages
+              const checkpointIndex = finalMessages.findIndex(msg => msg.checkpointId === checkpointId);
+              
+              if (checkpointIndex !== -1) {
+                // Truncate to the checkpoint point and add system message
+                const truncatedMessages = finalMessages.slice(0, checkpointIndex + 1);
+                finalMessages = [...truncatedMessages, {
+                  type: 'system',
+                  content: `✅ Reverted to checkpoint (restored from previous session)`,
+                  timestamp: new Date()
+                }];
+                
+                // Clear the marker after applying to prevent repeated application
+                if (!isRecentTruncation) {
+                  localStorage.removeItem(truncationKey);
+                }
+              }
+            }
+          } catch (error) {
+            console.warn('Error parsing truncation data:', error);
+          }
+        }
+      }
+      
+      setChatMessages(finalMessages);
     }
-  }, [convertedMessages, sessionMessages]);
+  }, [convertedMessages, sessionMessages, selectedProject, selectedSession]);
 
   // Notify parent when input focus changes
   useEffect(() => {
@@ -1582,6 +1671,48 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, [handleScroll]);
 
+  // Effect to restore checkpoint IDs for all user messages
+  useEffect(() => {
+    if (!selectedProject || chatMessages.length === 0) return;
+
+    const checkpointKey = `checkpoints-${selectedProject.name}`;
+    const existingCheckpoints = JSON.parse(localStorage.getItem(checkpointKey) || '{}');
+    
+    if (Object.keys(existingCheckpoints).length === 0) return;
+
+    let hasUpdates = false;
+    const updatedMessages = chatMessages.map(msg => {
+      if (msg.type === 'user' && !msg.checkpointId) {
+        // Only try to match messages from after checkpoint system was implemented
+        const messageTime = new Date(msg.timestamp).getTime();
+        const cutoffTime = new Date('2025-01-10').getTime(); // Approximate time checkpoint system was added
+        
+        if (messageTime > cutoffTime) {
+          // Try exact content match first
+          for (const [key, checkpoint] of Object.entries(existingCheckpoints)) {
+            if (checkpoint.content === msg.content) {
+              hasUpdates = true;
+              return { ...msg, checkpointId: checkpoint.checkpointId };
+            }
+          }
+          
+          // Try partial content match
+          for (const [key, checkpoint] of Object.entries(existingCheckpoints)) {
+            if (msg.content.trim() === checkpoint.content.trim()) {
+              hasUpdates = true;
+              return { ...msg, checkpointId: checkpoint.checkpointId };
+            }
+          }
+        }
+      }
+      return msg;
+    });
+
+    if (hasUpdates) {
+      setChatMessages(updatedMessages);
+    }
+  }, [chatMessages, selectedProject]);
+
   // Initial textarea setup
   useEffect(() => {
     if (textareaRef.current) {
@@ -1618,7 +1749,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, []);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!input.trim() || isLoading || !selectedProject) return;
 
@@ -1650,6 +1781,49 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     const sessionToActivate = currentSessionId || `new-session-${Date.now()}`;
     if (onSessionActive) {
       onSessionActive(sessionToActivate);
+    }
+
+    // Create checkpoint before sending the message
+    try {
+      const promptId = `prompt-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const response = await fetch('/api/checkpoints/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectName: selectedProject.name,
+          promptId,
+          userMessage: input
+        })
+      });
+      
+      if (!response.ok) {
+        console.warn('Failed to create checkpoint:', await response.text());
+      } else {
+        const result = await response.json();
+        console.log(`✅ Checkpoint created: ${result.fileCount} files captured`);
+        
+        // Store the checkpoint ID with the user message for later reference
+        userMessage.checkpointId = promptId;
+        setChatMessages(prev => prev.map(msg => 
+          msg === userMessage ? { ...msg, checkpointId: promptId } : msg
+        ));
+        
+        // Persist checkpoint mapping in localStorage for this project
+        const checkpointKey = `checkpoints-${selectedProject.name}`;
+        const existingCheckpoints = JSON.parse(localStorage.getItem(checkpointKey) || '{}');
+        
+        // Create a unique key for this message (content + timestamp)
+        const messageKey = `${input.substring(0, 50)}-${userMessage.timestamp.getTime()}`;
+        existingCheckpoints[messageKey] = {
+          checkpointId: promptId,
+          content: input,
+          timestamp: userMessage.timestamp.getTime()
+        };
+        
+        localStorage.setItem(checkpointKey, JSON.stringify(existingCheckpoints));
+      }
+    } catch (error) {
+      console.warn('Error creating checkpoint:', error);
     }
 
     // Get tools settings from localStorage
@@ -1737,6 +1911,93 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         handleSubmit(e);
       }
       // Shift+Enter: Allow default behavior (new line)
+    }
+  };
+
+  const handleRevertToCheckpoint = async (checkpointId) => {
+    if (!selectedProject || !checkpointId) return;
+    
+    if (!confirm('Are you sure you want to revert to this checkpoint? This will overwrite current file changes.')) {
+      return;
+    }
+    
+    try {
+      const response = await fetch('/api/checkpoints/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectName: selectedProject.name,
+          promptId: checkpointId
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      
+      const result = await response.json();
+      console.log(`✅ Checkpoint restored: ${result.restoredFiles} files restored`);
+      
+      // Truncate chat history to the checkpoint point
+      setChatMessages(prev => {
+        // Find the index of the message with the matching checkpointId
+        const checkpointIndex = prev.findIndex(msg => msg.checkpointId === checkpointId);
+        
+        if (checkpointIndex !== -1) {
+          // Keep messages up to and including the checkpoint message, then add success message
+          const truncatedMessages = prev.slice(0, checkpointIndex + 1);
+          const finalMessages = [...truncatedMessages, {
+            type: 'system',
+            content: `✅ Reverted to checkpoint: ${result.restoredFiles} files restored${result.deletedFiles > 0 ? `, ${result.deletedFiles} files deleted` : ''}${result.errors.length > 0 ? ` (${result.errors.length} errors)` : ''}`,
+            timestamp: new Date()
+          }];
+          
+          // Store truncation marker to persist across browser refreshes
+          if (selectedProject && selectedSession) {
+            const truncationKey = `truncation_${selectedProject.name}_${selectedSession.id}`;
+            localStorage.setItem(truncationKey, JSON.stringify({
+              checkpointId,
+              truncatedAt: Date.now(),
+              messageCount: finalMessages.length
+            }));
+          }
+          
+          // Clear the WebSocket session messages to prevent them from overriding truncation
+          if (ws && ws.readyState === WebSocket.OPEN && selectedProject && selectedSession) {
+            ws.send(JSON.stringify({
+              type: 'truncate_messages',
+              data: { 
+                checkpointId, 
+                messageCount: finalMessages.length,
+                projectName: selectedProject.name,
+                sessionId: selectedSession.id
+              }
+            }));
+          }
+          
+          return finalMessages;
+        } else {
+          // Fallback: if checkpoint message not found, just add success message
+          return [...prev, {
+            type: 'system',
+            content: `✅ Checkpoint restored: ${result.restoredFiles} files restored${result.deletedFiles > 0 ? `, ${result.deletedFiles} files deleted` : ''}${result.errors.length > 0 ? ` (${result.errors.length} errors)` : ''}`,
+            timestamp: new Date()
+          }];
+        }
+      });
+      
+      // Refresh file tree and trigger any necessary updates
+      if (onProjectUpdate && typeof onProjectUpdate === 'function') {
+        onProjectUpdate();
+      }
+      
+    } catch (error) {
+      console.error('Error restoring checkpoint:', error);
+      setChatMessages(prev => [...prev, {
+        type: 'error', 
+        content: `Failed to restore checkpoint: ${error.message}`,
+        timestamp: new Date()
+      }]);
     }
   };
 
@@ -1856,6 +2117,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   onShowSettings={onShowSettings}
                   autoExpandTools={autoExpandTools}
                   showRawParameters={showRawParameters}
+                  onRevertToCheckpoint={handleRevertToCheckpoint}
                 />
               );
             })}

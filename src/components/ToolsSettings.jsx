@@ -18,9 +18,44 @@ function ToolsSettings({ isOpen, onClose }) {
 
   // Common tool patterns
   const commonTools = [
+    // Git commands
     'Bash(git log:*)',
     'Bash(git diff:*)',
     'Bash(git status:*)',
+    'Bash(git add:*)',
+    'Bash(git commit:*)',
+    'Bash(git push:*)',
+    'Bash(git pull:*)',
+    'Bash(git checkout:*)',
+    'Bash(git branch:*)',
+    'Bash(git merge:*)',
+    'Bash(git reset:*)',
+    'Bash(git stash:*)',
+    'Bash(git config:*)',
+    // Package management
+    'Bash(npm:*)',
+    'Bash(yarn:*)',
+    'Bash(pnpm:*)',
+    'Bash(node:*)',
+    'Bash(npx:*)',
+    // File operations
+    'Bash(ls:*)',
+    'Bash(cat:*)',
+    'Bash(mkdir:*)',
+    'Bash(cp:*)',
+    'Bash(mv:*)',
+    'Bash(rm:*)',
+    'Bash(find:*)',
+    // Development tools
+    'Bash(rg:*)',
+    'Bash(code:*)',
+    'Bash(curl:*)',
+    'Bash(wget:*)',
+    // Process management
+    'Bash(ps:*)',
+    'Bash(kill:*)',
+    'Bash(killall:*)',
+    // Core tools
     'Write',
     'Read',
     'Edit',

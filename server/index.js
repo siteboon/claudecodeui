@@ -33,6 +33,7 @@ const fetch = require('node-fetch');
 const { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } = require('./projects');
 const { spawnClaude, abortClaudeSession } = require('./claude-cli');
 const gitRoutes = require('./routes/git');
+const { createCheckpoint, restoreCheckpoint, getCheckpoints, deleteCheckpoint, clearProjectCheckpoints } = require('./checkpoints');
 
 // File system watcher for projects folder
 let projectsWatcher = null;
@@ -152,6 +153,72 @@ app.use(express.static(path.join(__dirname, '../dist')));
 
 // Git API Routes
 app.use('/api/git', gitRoutes);
+
+// Checkpoint API Routes
+app.post('/api/checkpoints/create', async (req, res) => {
+  try {
+    const { projectName, promptId, userMessage } = req.body;
+    
+    if (!projectName || !promptId || !userMessage) {
+      return res.status(400).json({ error: 'Project name, prompt ID, and user message are required' });
+    }
+    
+    const result = await createCheckpoint(projectName, promptId, userMessage);
+    res.json(result);
+  } catch (error) {
+    console.error('Create checkpoint error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/checkpoints/restore', async (req, res) => {
+  try {
+    const { projectName, promptId } = req.body;
+    
+    if (!projectName || !promptId) {
+      return res.status(400).json({ error: 'Project name and prompt ID are required' });
+    }
+    
+    const result = await restoreCheckpoint(projectName, promptId);
+    res.json(result);
+  } catch (error) {
+    console.error('Restore checkpoint error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/checkpoints/:projectName', async (req, res) => {
+  try {
+    const { projectName } = req.params;
+    const checkpoints = getCheckpoints(projectName);
+    res.json({ checkpoints });
+  } catch (error) {
+    console.error('Get checkpoints error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/checkpoints/:projectName/:promptId', async (req, res) => {
+  try {
+    const { projectName, promptId } = req.params;
+    const success = deleteCheckpoint(projectName, promptId);
+    res.json({ success });
+  } catch (error) {
+    console.error('Delete checkpoint error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/checkpoints/:projectName', async (req, res) => {
+  try {
+    const { projectName } = req.params;
+    const deletedCount = clearProjectCheckpoints(projectName);
+    res.json({ success: true, deletedCount });
+  } catch (error) {
+    console.error('Clear project checkpoints error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // API Routes
 app.get('/api/config', (req, res) => {
@@ -443,6 +510,39 @@ function handleChatConnection(ws) {
           sessionId: data.sessionId,
           success
         }));
+      } else if (data.type === 'truncate_messages') {
+        console.log('✂️ Truncate messages request:', data.data);
+        
+        try {
+          const { checkpointId, messageCount, projectName, sessionId } = data.data;
+          
+          if (!projectName || !sessionId || !checkpointId || !messageCount) {
+            throw new Error('Missing required truncation parameters');
+          }
+          
+          // Perform server-side truncation
+          const { truncateSessionMessages } = require('./projects');
+          const result = await truncateSessionMessages(projectName, sessionId, checkpointId, messageCount);
+          
+          ws.send(JSON.stringify({
+            type: 'messages-truncated',
+            checkpointId: checkpointId,
+            messageCount: messageCount,
+            truncatedCount: result.truncated,
+            filesModified: result.files,
+            success: true
+          }));
+          
+        } catch (truncateError) {
+          console.error('❌ Truncation error:', truncateError.message);
+          ws.send(JSON.stringify({
+            type: 'messages-truncated',
+            checkpointId: data.data.checkpointId,
+            messageCount: data.data.messageCount,
+            success: false,
+            error: truncateError.message
+          }));
+        }
       }
     } catch (error) {
       console.error('❌ Chat WebSocket error:', error.message);

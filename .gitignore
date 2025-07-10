@@ -104,3 +104,9 @@ temp/
 *.db
 *.sqlite
 *.sqlite3 
+
+# Checkpoint backup files
+*.backup.*
+
+# Checkpoint data files
+server/checkpoints.json

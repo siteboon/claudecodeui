@@ -39,7 +39,8 @@ function MainContent({
   onShowSettings,         // Show tools settings panel
   autoExpandTools,        // Auto-expand tool accordions
   showRawParameters,      // Show raw parameters in tool accordions
-  autoScrollToBottom      // Auto-scroll to bottom when new messages arrive
+  autoScrollToBottom,     // Auto-scroll to bottom when new messages arrive
+  onProjectUpdate         // Refresh project data after checkpoint restoration
 }) {
   const [editingFile, setEditingFile] = useState(null);
 
@@ -285,6 +286,7 @@ function MainContent({
             autoExpandTools={autoExpandTools}
             showRawParameters={showRawParameters}
             autoScrollToBottom={autoScrollToBottom}
+            onProjectUpdate={onProjectUpdate}
           />
         </div>
         <div className={`h-full overflow-hidden ${activeTab === 'files' ? 'block' : 'hidden'}`}>
