@@ -42,11 +42,11 @@ const connectedClients = new Set();
 function setupProjectsWatcher() {
   const chokidar = require('chokidar');
   const claudeProjectsPath = path.join(process.env.HOME, '.claude', 'projects');
-  
+
   if (projectsWatcher) {
     projectsWatcher.close();
   }
-  
+
   try {
     // Initialize chokidar watcher with optimized settings
     projectsWatcher = chokidar.watch(claudeProjectsPath, {
@@ -68,20 +68,20 @@ function setupProjectsWatcher() {
         pollInterval: 50
       }
     });
-    
+
     // Debounce function to prevent excessive notifications
     let debounceTimer;
     const debouncedUpdate = async (eventType, filePath) => {
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(async () => {
         try {
-          
+
           // Clear project directory cache when files change
           clearProjectDirectoryCache();
-          
+
           // Get updated projects list
           const updatedProjects = await getProjects();
-          
+
           // Notify all connected clients about the project changes
           const updateMessage = JSON.stringify({
             type: 'projects_updated',
@@ -90,19 +90,19 @@ function setupProjectsWatcher() {
             changeType: eventType,
             changedFile: path.relative(claudeProjectsPath, filePath)
           });
-          
+
           connectedClients.forEach(client => {
             if (client.readyState === client.OPEN) {
               client.send(updateMessage);
             }
           });
-          
+
         } catch (error) {
           console.error('❌ Error handling project changes:', error);
         }
       }, 300); // 300ms debounce (slightly faster than before)
     };
-    
+
     // Set up event listeners
     projectsWatcher
       .on('add', (filePath) => debouncedUpdate('add', filePath))
@@ -115,7 +115,7 @@ function setupProjectsWatcher() {
       })
       .on('ready', () => {
       });
-    
+
   } catch (error) {
     console.error('❌ Failed to setup projects watcher:', error);
   }
@@ -138,7 +138,7 @@ const app = express();
 const server = http.createServer(app);
 
 // Single WebSocket server that handles both paths
-const wss = new WebSocketServer({ 
+const wss = new WebSocketServer({
   server,
   verifyClient: (info) => {
     console.log('WebSocket connection attempt to:', info.req.url);
@@ -146,7 +146,55 @@ const wss = new WebSocketServer({
   }
 });
 
-app.use(cors());
+const backendPort = process.env.PORT || 3000
+const frontendPort = process.env.VITE_PORT || 3001
+
+// Build default localhost origins using configured ports
+const defaultLocalhostOrigins = [
+  `http://localhost:${backendPort}`,
+  `http://127.0.0.1:${backendPort}`,
+  `http://localhost:${frontendPort}`,
+  `http://127.0.0.1:${frontendPort}`
+]
+
+// Parse ALLOWED_ORIGINS as comma-separated, supporting wildcards (e.g., https://*.taila8c4.ts.net)
+function parseAllowedOrigins(envVar) {
+  if (!envVar) return []
+  return envVar
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean)
+    .map(pattern => {
+      // Convert wildcard patterns to RegExp
+      if (pattern.includes('*')) {
+        // Escape dots, replace * with .*
+        const regex = '^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$'
+        return new RegExp(regex)
+      }
+      return pattern
+    })
+}
+
+const allowedOriginPatterns = [
+  ...defaultLocalhostOrigins,
+  ...parseAllowedOrigins(process.env.ALLOWED_ORIGINS)
+]
+
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true) // allow non-browser requests
+
+    for (const allowed of allowedOriginPatterns) {
+      if (typeof allowed === 'string' && origin === allowed) {
+        return callback(null, true)
+      }
+      if (allowed instanceof RegExp && allowed.test(origin)) {
+        return callback(null, true)
+      }
+    }
+    return callback(new Error('Not allowed by CORS'))
+  }
+}))
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../dist')));
 
@@ -159,9 +207,9 @@ app.get('/api/config', (req, res) => {
   const serverIP = getServerIP();
   const host = `${serverIP}:${PORT}`;
   const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'wss' : 'ws';
-  
+
   console.log('Config API called - Returning host:', host, 'Protocol:', protocol);
-  
+
   res.json({
     serverPort: PORT,
     wsUrl: `${protocol}://${host}`
@@ -235,11 +283,11 @@ app.delete('/api/projects/:projectName', async (req, res) => {
 app.post('/api/projects/create', async (req, res) => {
   try {
     const { path: projectPath } = req.body;
-    
+
     if (!projectPath || !projectPath.trim()) {
       return res.status(400).json({ error: 'Project path is required' });
     }
-    
+
     const project = await addProjectManually(projectPath.trim());
     res.json({ success: true, project });
   } catch (error) {
@@ -253,16 +301,16 @@ app.get('/api/projects/:projectName/file', async (req, res) => {
   try {
     const { projectName } = req.params;
     const { filePath } = req.query;
-    
+
     console.log('📄 File read request:', projectName, filePath);
-    
+
     const fs = require('fs').promises;
-    
+
     // Security check - ensure the path is safe and absolute
     if (!filePath || !path.isAbsolute(filePath)) {
       return res.status(400).json({ error: 'Invalid file path' });
     }
-    
+
     const content = await fs.readFile(filePath, 'utf8');
     res.json({ content, path: filePath });
   } catch (error) {
@@ -282,39 +330,39 @@ app.get('/api/projects/:projectName/files/content', async (req, res) => {
   try {
     const { projectName } = req.params;
     const { path: filePath } = req.query;
-    
+
     console.log('🖼️ Binary file serve request:', projectName, filePath);
-    
+
     const fs = require('fs');
     const mime = require('mime-types');
-    
+
     // Security check - ensure the path is safe and absolute
     if (!filePath || !path.isAbsolute(filePath)) {
       return res.status(400).json({ error: 'Invalid file path' });
     }
-    
+
     // Check if file exists
     try {
       await fs.promises.access(filePath);
     } catch (error) {
       return res.status(404).json({ error: 'File not found' });
     }
-    
+
     // Get file extension and set appropriate content type
     const mimeType = mime.lookup(filePath) || 'application/octet-stream';
     res.setHeader('Content-Type', mimeType);
-    
+
     // Stream the file
     const fileStream = fs.createReadStream(filePath);
     fileStream.pipe(res);
-    
+
     fileStream.on('error', (error) => {
       console.error('Error streaming file:', error);
       if (!res.headersSent) {
         res.status(500).json({ error: 'Error reading file' });
       }
     });
-    
+
   } catch (error) {
     console.error('Error serving binary file:', error);
     if (!res.headersSent) {
@@ -328,20 +376,20 @@ app.put('/api/projects/:projectName/file', async (req, res) => {
   try {
     const { projectName } = req.params;
     const { filePath, content } = req.body;
-    
+
     console.log('💾 File save request:', projectName, filePath);
-    
+
     const fs = require('fs').promises;
-    
+
     // Security check - ensure the path is safe and absolute
     if (!filePath || !path.isAbsolute(filePath)) {
       return res.status(400).json({ error: 'Invalid file path' });
     }
-    
+
     if (content === undefined) {
       return res.status(400).json({ error: 'Content is required' });
     }
-    
+
     // Create backup of original file
     try {
       const backupPath = filePath + '.backup.' + Date.now();
@@ -350,14 +398,14 @@ app.put('/api/projects/:projectName/file', async (req, res) => {
     } catch (backupError) {
       console.warn('Could not create backup:', backupError.message);
     }
-    
+
     // Write the new content
     await fs.writeFile(filePath, content, 'utf8');
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       path: filePath,
-      message: 'File saved successfully' 
+      message: 'File saved successfully'
     });
   } catch (error) {
     console.error('Error saving file:', error);
@@ -373,9 +421,9 @@ app.put('/api/projects/:projectName/file', async (req, res) => {
 
 app.get('/api/projects/:projectName/files', async (req, res) => {
   try {
-    
+
     const fs = require('fs').promises;
-    
+
     // Use extractProjectDirectory to get the actual project path
     let actualPath;
     try {
@@ -385,14 +433,14 @@ app.get('/api/projects/:projectName/files', async (req, res) => {
       // Fallback to simple dash replacement
       actualPath = req.params.projectName.replace(/-/g, '/');
     }
-    
+
     // Check if path exists
     try {
       await fs.access(actualPath);
     } catch (e) {
       return res.status(404).json({ error: `Project path not found: ${actualPath}` });
     }
-    
+
     const files = await getFileTree(actualPath, 3, 0, true);
     const hiddenFiles = files.filter(f => f.name.startsWith('.'));
     console.log('📄 Found', files.length, 'files/folders, including', hiddenFiles.length, 'hidden files');
@@ -408,7 +456,7 @@ app.get('/api/projects/:projectName/files', async (req, res) => {
 wss.on('connection', (ws, request) => {
   const url = request.url;
   console.log('🔗 Client connected to:', url);
-  
+
   if (url === '/shell') {
     handleShellConnection(ws);
   } else if (url === '/ws') {
@@ -422,14 +470,14 @@ wss.on('connection', (ws, request) => {
 // Handle chat WebSocket connections
 function handleChatConnection(ws) {
   console.log('💬 Chat WebSocket connected');
-  
+
   // Add to connected clients for project updates
   connectedClients.add(ws);
-  
+
   ws.on('message', async (message) => {
     try {
       const data = JSON.parse(message);
-      
+
       if (data.type === 'claude-command') {
         console.log('💬 User message:', data.command || '[Continue/Resume]');
         console.log('📁 Project:', data.options?.projectPath || 'Unknown');
@@ -452,7 +500,7 @@ function handleChatConnection(ws) {
       }));
     }
   });
-  
+
   ws.on('close', () => {
     console.log('🔌 Chat client disconnected');
     // Remove from connected clients
@@ -464,52 +512,52 @@ function handleChatConnection(ws) {
 function handleShellConnection(ws) {
   console.log('🐚 Shell client connected');
   let shellProcess = null;
-  
+
   ws.on('message', async (message) => {
     try {
       const data = JSON.parse(message);
       console.log('📨 Shell message received:', data.type);
-      
+
       if (data.type === 'init') {
         // Initialize shell with project path and session info
         const projectPath = data.projectPath || process.cwd();
         const sessionId = data.sessionId;
         const hasSession = data.hasSession;
-        
+
         console.log('🚀 Starting shell in:', projectPath);
         console.log('📋 Session info:', hasSession ? `Resume session ${sessionId}` : 'New session');
-        
+
         // First send a welcome message
-        const welcomeMsg = hasSession ? 
+        const welcomeMsg = hasSession ?
           `\x1b[36mResuming Claude session ${sessionId} in: ${projectPath}\x1b[0m\r\n` :
           `\x1b[36mStarting new Claude session in: ${projectPath}\x1b[0m\r\n`;
-        
+
         ws.send(JSON.stringify({
           type: 'output',
           data: welcomeMsg
         }));
-        
+
         try {
           // Build shell command that changes to project directory first, then runs claude
           let claudeCommand = 'claude';
-          
+
           if (hasSession && sessionId) {
             // Try to resume session, but with fallback to new session if it fails
             claudeCommand = `claude --resume ${sessionId} || claude`;
           }
-          
+
           // Create shell command that cds to the project directory first
           const shellCommand = `cd "${projectPath}" && ${claudeCommand}`;
-          
+
           console.log('🔧 Executing shell command:', shellCommand);
-          
+
           // Start shell using PTY for proper terminal emulation
           shellProcess = pty.spawn('bash', ['-c', shellCommand], {
             name: 'xterm-256color',
             cols: 80,
             rows: 24,
             cwd: process.env.HOME || '/', // Start from home directory
-            env: { 
+            env: {
               ...process.env,
               TERM: 'xterm-256color',
               COLORTERM: 'truecolor',
@@ -518,14 +566,14 @@ function handleShellConnection(ws) {
               BROWSER: 'echo "OPEN_URL:"'
             }
           });
-          
+
           console.log('🟢 Shell process started with PTY, PID:', shellProcess.pid);
-          
+
           // Handle data output
           shellProcess.onData((data) => {
             if (ws.readyState === ws.OPEN) {
               let outputData = data;
-              
+
               // Check for various URL opening patterns
               const patterns = [
                 // Direct browser opening commands
@@ -539,26 +587,26 @@ function handleShellConnection(ws) {
                 /View at:\s*(https?:\/\/[^\s\x1b\x07]+)/gi,
                 /Browse to:\s*(https?:\/\/[^\s\x1b\x07]+)/gi
               ];
-              
+
               patterns.forEach(pattern => {
                 let match;
                 while ((match = pattern.exec(data)) !== null) {
                   const url = match[1];
                   console.log('🔗 Detected URL for opening:', url);
-                  
+
                   // Send URL opening message to client
                   ws.send(JSON.stringify({
                     type: 'url_open',
                     url: url
                   }));
-                  
+
                   // Replace the OPEN_URL pattern with a user-friendly message
                   if (pattern.source.includes('OPEN_URL')) {
                     outputData = outputData.replace(match[0], `🌐 Opening in browser: ${url}`);
                   }
                 }
               });
-              
+
               // Send regular output
               ws.send(JSON.stringify({
                 type: 'output',
@@ -566,7 +614,7 @@ function handleShellConnection(ws) {
               }));
             }
           });
-          
+
           // Handle process exit
           shellProcess.onExit((exitCode) => {
             console.log('🔚 Shell process exited with code:', exitCode.exitCode, 'signal:', exitCode.signal);
@@ -578,7 +626,7 @@ function handleShellConnection(ws) {
             }
             shellProcess = null;
           });
-          
+
         } catch (spawnError) {
           console.error('❌ Error spawning process:', spawnError);
           ws.send(JSON.stringify({
@@ -586,7 +634,7 @@ function handleShellConnection(ws) {
             data: `\r\n\x1b[31mError: ${spawnError.message}\x1b[0m\r\n`
           }));
         }
-        
+
       } else if (data.type === 'input') {
         // Send input to shell process
         if (shellProcess && shellProcess.write) {
@@ -615,7 +663,7 @@ function handleShellConnection(ws) {
       }
     }
   });
-  
+
   ws.on('close', () => {
     console.log('🔌 Shell client disconnected');
     if (shellProcess && shellProcess.kill) {
@@ -623,7 +671,7 @@ function handleShellConnection(ws) {
       shellProcess.kill();
     }
   });
-  
+
   ws.on('error', (error) => {
     console.error('❌ Shell WebSocket error:', error);
   });
@@ -633,22 +681,22 @@ app.post('/api/transcribe', async (req, res) => {
   try {
     const multer = require('multer');
     const upload = multer({ storage: multer.memoryStorage() });
-    
+
     // Handle multipart form data
     upload.single('audio')(req, res, async (err) => {
       if (err) {
         return res.status(400).json({ error: 'Failed to process audio file' });
       }
-      
+
       if (!req.file) {
         return res.status(400).json({ error: 'No audio file provided' });
       }
-      
+
       const apiKey = process.env.OPENAI_API_KEY;
       if (!apiKey) {
         return res.status(500).json({ error: 'OpenAI API key not configured. Please set OPENAI_API_KEY in server environment.' });
       }
-      
+
       try {
         // Create form data for OpenAI
         const FormData = require('form-data');
@@ -660,7 +708,7 @@ app.post('/api/transcribe', async (req, res) => {
         formData.append('model', 'whisper-1');
         formData.append('response_format', 'json');
         formData.append('language', 'en');
-        
+
         // Make request to OpenAI
         const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
           method: 'POST',
@@ -670,35 +718,35 @@ app.post('/api/transcribe', async (req, res) => {
           },
           body: formData
         });
-        
+
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           throw new Error(errorData.error?.message || `Whisper API error: ${response.status}`);
         }
-        
+
         const data = await response.json();
         let transcribedText = data.text || '';
-        
+
         // Check if enhancement mode is enabled
         const mode = req.body.mode || 'default';
-        
+
         // If no transcribed text, return empty
         if (!transcribedText) {
           return res.json({ text: '' });
         }
-        
+
         // If default mode, return transcribed text without enhancement
         if (mode === 'default') {
           return res.json({ text: transcribedText });
         }
-        
+
         // Handle different enhancement modes
         try {
           const OpenAI = require('openai');
           const openai = new OpenAI({ apiKey });
-          
+
           let prompt, systemMessage, temperature = 0.7, maxTokens = 800;
-          
+
           switch (mode) {
             case 'prompt':
               systemMessage = 'You are an expert prompt engineer who creates clear, detailed, and effective prompts.';
@@ -717,7 +765,7 @@ Transform this rough instruction into a well-crafted prompt:
 
 Enhanced prompt:`;
               break;
-              
+
             case 'vibe':
             case 'instructions':
             case 'architect':
@@ -738,12 +786,12 @@ Transform this idea into agent-friendly instructions:
 
 Agent instructions:`;
               break;
-              
+
             default:
               // No enhancement needed
               break;
           }
-          
+
           // Only make GPT call if we have a prompt
           if (prompt) {
             const completion = await openai.chat.completions.create({
@@ -755,17 +803,17 @@ Agent instructions:`;
               temperature: temperature,
               max_tokens: maxTokens
             });
-            
+
             transcribedText = completion.choices[0].message.content || transcribedText;
           }
-          
+
         } catch (gptError) {
           console.error('GPT processing error:', gptError);
           // Fall back to original transcription if GPT fails
         }
-        
+
         res.json({ text: transcribedText });
-        
+
       } catch (error) {
         console.error('Transcription error:', error);
         res.status(500).json({ error: error.message });
@@ -786,25 +834,25 @@ app.get('*', (req, res) => {
 async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden = true) {
   const fs = require('fs').promises;
   const items = [];
-  
+
   try {
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
-    
+
     for (const entry of entries) {
       // Debug: log all entries including hidden files
-   
-      
+
+
       // Skip only heavy build directories
-      if (entry.name === 'node_modules' || 
-          entry.name === 'dist' || 
-          entry.name === 'build') continue;
-      
+      if (entry.name === 'node_modules' ||
+        entry.name === 'dist' ||
+        entry.name === 'build') continue;
+
       const item = {
         name: entry.name,
         path: path.join(dirPath, entry.name),
         type: entry.isDirectory() ? 'directory' : 'file'
       };
-      
+
       if (entry.isDirectory() && currentDepth < maxDepth) {
         // Recursively get subdirectories but limit depth
         try {
@@ -816,7 +864,7 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
           item.children = [];
         }
       }
-      
+
       items.push(item);
     }
   } catch (error) {
@@ -825,7 +873,7 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
       console.error('Error reading directory:', error);
     }
   }
-  
+
   return items.sort((a, b) => {
     if (a.type !== b.type) {
       return a.type === 'directory' ? -1 : 1;
@@ -837,7 +885,7 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Claude Code UI server running on http://0.0.0.0:${PORT}`);
-  
+
   // Start watching the projects folder for changes
   setupProjectsWatcher();
 });
