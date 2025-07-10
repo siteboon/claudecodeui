@@ -39,6 +39,7 @@ function Sidebar({
   selectedSession, 
   onProjectSelect, 
   onSessionSelect, 
+  onConversationSelect,
   onNewSession,
   onSessionDelete,
   onProjectDelete,
@@ -51,18 +52,18 @@ function Sidebar({
   onShowVersionModal
 }) {
   const [expandedProjects, setExpandedProjects] = useState(new Set());
+  const [expandedConversations, setExpandedConversations] = useState(new Set());
   const [editingProject, setEditingProject] = useState(null);
   const [showNewProject, setShowNewProject] = useState(false);
   const [editingName, setEditingName] = useState('');
   const [newProjectPath, setNewProjectPath] = useState('');
   const [creatingProject, setCreatingProject] = useState(false);
-  const [loadingSessions, setLoadingSessions] = useState({});
-  const [additionalSessions, setAdditionalSessions] = useState({});
-  const [initialSessionsLoaded, setInitialSessionsLoaded] = useState(new Set());
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [editingSession, setEditingSession] = useState(null);
   const [editingSessionName, setEditingSessionName] = useState('');
+  const [editingConversation, setEditingConversation] = useState(null);
+  const [editingConversationName, setEditingConversationName] = useState('');
   const [generatingSummary, setGeneratingSummary] = useState({});
 
   // Touch handler to prevent double-tap issues on iPad
@@ -83,10 +84,9 @@ function Sidebar({
     return () => clearInterval(timer);
   }, []);
 
-  // Clear additional sessions when projects list changes (e.g., after refresh)
+  // Clear cache when projects list changes (e.g., after refresh)
   useEffect(() => {
-    setAdditionalSessions({});
-    setInitialSessionsLoaded(new Set());
+    // Projects have been refreshed
   }, [projects]);
 
   // Auto-expand project folder when a session is selected
@@ -96,18 +96,7 @@ function Sidebar({
     }
   }, [selectedSession, selectedProject]);
 
-  // Mark sessions as loaded when projects come in
-  useEffect(() => {
-    if (projects.length > 0 && !isLoading) {
-      const newLoaded = new Set();
-      projects.forEach(project => {
-        if (project.sessions && project.sessions.length >= 0) {
-          newLoaded.add(project.name);
-        }
-      });
-      setInitialSessionsLoaded(newLoaded);
-    }
-  }, [projects, isLoading]);
+
 
   const toggleProject = (projectName) => {
     const newExpanded = new Set(expandedProjects);
@@ -117,6 +106,16 @@ function Sidebar({
       newExpanded.add(projectName);
     }
     setExpandedProjects(newExpanded);
+  };
+
+  const toggleConversation = (conversationId) => {
+    const newExpanded = new Set(expandedConversations);
+    if (newExpanded.has(conversationId)) {
+      newExpanded.delete(conversationId);
+    } else {
+      newExpanded.add(conversationId);
+    }
+    setExpandedConversations(newExpanded);
   };
 
 
@@ -183,6 +182,52 @@ function Sidebar({
     }
   };
 
+  const deleteAllSessions = async (projectName) => {
+    const project = projects.find(p => p.name === projectName);
+    const visibleSessions = getAllSessions(project);
+    const conversations = groupSessionsIntoConversations(visibleSessions);
+    const conversationCount = conversations.length;
+    
+    if (conversationCount === 0) {
+      alert('No conversations to delete.');
+      return;
+    }
+
+    // Count total messages/sessions across all conversations
+    const totalMessages = conversations.reduce((sum, conv) => sum + conv.sessions.length, 0);
+    const conversationText = `ALL ${conversationCount} conversation${conversationCount === 1 ? '' : 's'} (containing ${totalMessages} message${totalMessages === 1 ? '' : 's'})`;
+
+    if (!confirm(`Are you sure you want to delete ${conversationText} for this project? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/projects/${projectName}/sessions`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        // Refresh projects to update session counts
+        if (window.refreshProjects) {
+          window.refreshProjects();
+        } else {
+          window.location.reload();
+        }
+        
+        // If currently viewing a session from this project, clear it
+        if (selectedProject?.name === projectName) {
+          onSessionSelect(null);
+        }
+      } else {
+        console.error('Failed to delete all conversations');
+        alert('Failed to delete all conversations. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error deleting all conversations:', error);
+      alert('Error deleting all conversations. Please try again.');
+    }
+  };
+
   const deleteProject = async (projectName) => {
     if (!confirm('Are you sure you want to delete this empty project? This action cannot be undone.')) {
       return;
@@ -207,6 +252,89 @@ function Sidebar({
       console.error('Error deleting project:', error);
       alert('Error deleting project. Please try again.');
     }
+  };
+
+  const updateSessionSummary = async (projectName, sessionId, newSummary) => {
+    try {
+      const response = await fetch(`/api/projects/${projectName}/sessions/${sessionId}/summary`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ summary: newSummary }),
+      });
+
+      if (response.ok) {
+        // Refresh projects to get updated data
+        if (window.refreshProjects) {
+          window.refreshProjects();
+        } else {
+          window.location.reload();
+        }
+      } else {
+        console.error('Failed to update session summary');
+      }
+    } catch (error) {
+      console.error('Error updating session summary:', error);
+    }
+  };
+
+  const deleteConversation = async (projectName, conversation) => {
+    const sessionCount = conversation.sessions.length;
+    if (!confirm(`Are you sure you want to delete this conversation with ${sessionCount} session${sessionCount === 1 ? '' : 's'}? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      // Delete all sessions in the conversation
+      for (const session of conversation.sessions) {
+        const response = await fetch(`/api/projects/${projectName}/sessions/${session.id}`, {
+          method: 'DELETE',
+        });
+
+        if (!response.ok) {
+          console.error(`Failed to delete session ${session.id}`);
+          alert('Failed to delete some sessions. Please try again.');
+          return;
+        }
+      }
+
+      // Refresh projects to update session counts
+      if (window.refreshProjects) {
+        window.refreshProjects();
+      } else {
+        window.location.reload();
+      }
+      
+      // If currently viewing a session from this conversation, clear it
+      if (selectedSession && conversation.sessions.some(s => s.id === selectedSession.id)) {
+        onSessionSelect(null);
+      }
+    } catch (error) {
+      console.error('Error deleting conversation:', error);
+      alert('Error deleting conversation. Please try again.');
+    }
+  };
+
+  const startEditingConversation = (conversation) => {
+    setEditingConversation(conversation.id);
+    setEditingConversationName(conversation.title);
+  };
+
+  const cancelEditingConversation = () => {
+    setEditingConversation(null);
+    setEditingConversationName('');
+  };
+
+  const saveConversationTitle = async (projectName, conversation) => {
+    // For now, we'll update the first session's summary as the conversation title
+    // In a real implementation, you might want a separate conversation title field
+    const firstSession = conversation.sessions[0];
+    if (firstSession) {
+      await updateSessionSummary(projectName, firstSession.id, editingConversationName);
+    }
+    setEditingConversation(null);
+    setEditingConversationName('');
   };
 
   const createNewProject = async () => {
@@ -256,52 +384,68 @@ function Sidebar({
     setNewProjectPath('');
   };
 
-  const loadMoreSessions = async (project) => {
-    // Check if we can load more sessions
-    const canLoadMore = project.sessionMeta?.hasMore !== false;
+
+  // Helper function to get all sessions for a project
+  const getAllSessions = (project) => {
+    return project.sessions || [];
+  };
+
+  // Helper function to group sessions into conversations
+  const groupSessionsIntoConversations = (sessions) => {
+    // Group sessions by day and create conversation groups
+    const conversations = [];
+    const sessionsByDate = {};
+    const placeholderSessions = [];
     
-    if (!canLoadMore || loadingSessions[project.name]) {
+    sessions.forEach(session => {
+      // Placeholder sessions should always be their own individual conversations
+      if (session.isPlaceholder) {
+        placeholderSessions.push(session);
       return;
     }
 
-    setLoadingSessions(prev => ({ ...prev, [project.name]: true }));
-
-    try {
-      const currentSessionCount = (project.sessions?.length || 0) + (additionalSessions[project.name]?.length || 0);
-      const response = await fetch(
-        `/api/projects/${project.name}/sessions?limit=5&offset=${currentSessionCount}`
+      const date = new Date(session.lastActivity);
+      const dateKey = date.toDateString();
+      
+      if (!sessionsByDate[dateKey]) {
+        sessionsByDate[dateKey] = [];
+      }
+      sessionsByDate[dateKey].push(session);
+    });
+    
+    // Create individual conversations for placeholder sessions
+    placeholderSessions.forEach(session => {
+      conversations.push({
+        id: `placeholder_${session.id}`,
+        title: session.summary || 'New Conversation',
+        sessions: [session],
+        lastActivity: session.lastActivity,
+        messageCount: 0,
+        isPlaceholder: true
+      });
+    });
+    
+    // Convert regular sessions to conversations with proper grouping
+    Object.entries(sessionsByDate).forEach(([dateKey, dateSessions]) => {
+      // For now, create one conversation per day
+      // In the future, this could be more sophisticated grouping
+      const conversationId = `conv_${dateKey.replace(/\s/g, '_')}`;
+      const mostRecentSession = dateSessions.reduce((latest, current) => 
+        new Date(current.lastActivity) > new Date(latest.lastActivity) ? current : latest
       );
       
-      if (response.ok) {
-        const result = await response.json();
-        
-        // Store additional sessions locally
-        setAdditionalSessions(prev => ({
-          ...prev,
-          [project.name]: [
-            ...(prev[project.name] || []),
-            ...result.sessions
-          ]
-        }));
-        
-        // Update project metadata if needed
-        if (result.hasMore === false) {
-          // Mark that there are no more sessions to load
-          project.sessionMeta = { ...project.sessionMeta, hasMore: false };
-        }
-      }
-    } catch (error) {
-      console.error('Error loading more sessions:', error);
-    } finally {
-      setLoadingSessions(prev => ({ ...prev, [project.name]: false }));
-    }
-  };
-
-  // Helper function to get all sessions for a project (initial + additional)
-  const getAllSessions = (project) => {
-    const initialSessions = project.sessions || [];
-    const additional = additionalSessions[project.name] || [];
-    return [...initialSessions, ...additional];
+      conversations.push({
+        id: conversationId,
+        title: dateSessions.length === 1 ? 
+          (mostRecentSession.summary || 'Conversation') : 
+          `${dateSessions.length} messages from ${new Date(dateKey).toLocaleDateString()}`,
+        sessions: dateSessions.sort((a, b) => new Date(b.lastActivity) - new Date(a.lastActivity)),
+        lastActivity: mostRecentSession.lastActivity,
+        messageCount: dateSessions.reduce((sum, session) => sum + (session.messageCount || 0), 0)
+      });
+    });
+    
+    return conversations.sort((a, b) => new Date(b.lastActivity) - new Date(a.lastActivity));
   };
 
   return (
@@ -573,10 +717,15 @@ function Sidebar({
                                   </h3>
                                   <p className="text-xs text-muted-foreground">
                                     {(() => {
+                                      const totalCount = project.sessionMeta?.total;
+                                      if (totalCount !== undefined) {
+                                        const convCount = groupSessionsIntoConversations(getAllSessions(project)).length;
+                                        return `${convCount} conversation${convCount === 1 ? '' : 's'}`;
+                                      }
                                       const sessionCount = getAllSessions(project).length;
                                       const hasMore = project.sessionMeta?.hasMore !== false;
-                                      const count = hasMore && sessionCount >= 5 ? `${sessionCount}+` : sessionCount;
-                                      return `${count} session${count === 1 ? '' : 's'}`;
+                                      const convCount = groupSessionsIntoConversations(getAllSessions(project)).length;
+                                      return `${convCount} conversation${convCount === 1 ? '' : 's'}`;
                                     })()}
                                   </p>
                                 </>
@@ -696,9 +845,15 @@ function Sidebar({
                               </div>
                               <div className="text-xs text-muted-foreground">
                                 {(() => {
+                                  const totalCount = project.sessionMeta?.total;
+                                  if (totalCount !== undefined) {
+                                    const convCount = groupSessionsIntoConversations(getAllSessions(project)).length;
+                                    return convCount;
+                                  }
                                   const sessionCount = getAllSessions(project).length;
                                   const hasMore = project.sessionMeta?.hasMore !== false;
-                                  return hasMore && sessionCount >= 5 ? `${sessionCount}+` : sessionCount;
+                                  const convCount = groupSessionsIntoConversations(getAllSessions(project)).length;
+                                  return convCount;
                                 })()}
                                 {project.fullPath !== project.displayName && (
                                   <span className="ml-1 opacity-60" title={project.fullPath}>
@@ -768,12 +923,12 @@ function Sidebar({
                     </Button>
                   </div>
 
-                  {/* Sessions List */}
+                  {/* Conversations List */}
                   {isExpanded && (
                     <div className="ml-3 space-y-1 border-l border-border pl-3">
-                      {!initialSessionsLoaded.has(project.name) ? (
-                        // Loading skeleton for sessions
-                        Array.from({ length: 3 }).map((_, i) => (
+                      {isLoading ? (
+                        // Loading skeleton for conversations
+                        Array.from({ length: 2 }).map((_, i) => (
                           <div key={i} className="p-2 rounded-md">
                             <div className="flex items-start gap-2">
                               <div className="w-3 h-3 bg-muted rounded-full animate-pulse mt-0.5" />
@@ -784,12 +939,250 @@ function Sidebar({
                             </div>
                           </div>
                         ))
-                      ) : getAllSessions(project).length === 0 && !loadingSessions[project.name] ? (
+                      ) : getAllSessions(project).length === 0 ? (
                         <div className="py-2 px-3 text-left">
-                          <p className="text-xs text-muted-foreground">No sessions yet</p>
+                          <p className="text-xs text-muted-foreground">No conversations yet</p>
                         </div>
                       ) : (
-                        getAllSessions(project).map((session) => {
+                        <>
+                          {/* Delete All Conversations Button - only show if there are conversations */}
+                          {(project.sessionMeta?.total > 0 || getAllSessions(project).length > 0) && (
+                            <div className="mb-2">
+                              {/* Mobile Delete All Button */}
+                              <div className="md:hidden px-3">
+                                <button
+                                  className="w-full h-8 bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 rounded-md flex items-center justify-center gap-2 text-xs font-medium active:scale-[0.98] transition-all duration-150 border border-red-200 dark:border-red-800"
+                                  onClick={() => deleteAllSessions(project.name)}
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                  Delete All Conversations ({groupSessionsIntoConversations(getAllSessions(project)).length})
+                                </button>
+                              </div>
+                              
+                              {/* Desktop Delete All Button */}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="hidden md:flex w-full justify-center gap-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-xs h-7"
+                                onClick={() => deleteAllSessions(project.name)}
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                Delete All Conversations ({groupSessionsIntoConversations(getAllSessions(project)).length})
+                              </Button>
+                            </div>
+                          )}
+                          
+                          {/* Conversations list */}
+                          <div className="overflow-y-auto">
+                            {groupSessionsIntoConversations(getAllSessions(project)).map((conversation) => {
+                              const isConversationExpanded = expandedConversations.has(conversation.id);
+                              
+                              return (
+                                <div key={conversation.id} className="space-y-1">
+                                  {/* Conversation Header */}
+                                  <div className="group">
+                                    {/* Mobile Conversation Item */}
+                                    <div className="md:hidden">
+                                      {editingConversation === conversation.id ? (
+                                        <div className="p-2 mx-3 my-0.5 rounded-md bg-muted/30 border border-border/40">
+                                          <div className="flex items-center gap-2">
+                                            <input
+                                              type="text"
+                                              value={editingConversationName}
+                                              onChange={(e) => setEditingConversationName(e.target.value)}
+                                              onKeyDown={(e) => {
+                                                e.stopPropagation();
+                                                if (e.key === 'Enter') {
+                                                  saveConversationTitle(project.name, conversation);
+                                                } else if (e.key === 'Escape') {
+                                                  cancelEditingConversation();
+                                                }
+                                              }}
+                                              onClick={(e) => e.stopPropagation()}
+                                              className="flex-1 px-2 py-1 text-xs border border-border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+                                              autoFocus
+                                            />
+                                            <button
+                                              className="w-6 h-6 bg-green-50 hover:bg-green-100 dark:bg-green-900/20 dark:hover:bg-green-900/40 rounded flex items-center justify-center"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                saveConversationTitle(project.name, conversation);
+                                              }}
+                                              title="Save"
+                                            >
+                                              <Check className="w-3 h-3 text-green-600 dark:text-green-400" />
+                                            </button>
+                                            <button
+                                              className="w-6 h-6 bg-gray-50 hover:bg-gray-100 dark:bg-gray-900/20 dark:hover:bg-gray-900/40 rounded flex items-center justify-center"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                cancelEditingConversation();
+                                              }}
+                                              title="Cancel"
+                                            >
+                                              <X className="w-3 h-3 text-gray-600 dark:text-gray-400" />
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div className="group relative">
+                                          <div
+                                            className="p-2 mx-3 my-0.5 rounded-md bg-muted/30 border border-border/40 active:scale-[0.98] transition-all duration-150"
+                                            onClick={() => toggleConversation(conversation.id)}
+                                            onTouchEnd={handleTouchClick(() => toggleConversation(conversation.id))}
+                                          >
+                                            <div className="flex items-center gap-2">
+                                              <div className="w-5 h-5 rounded-md bg-muted/50 flex items-center justify-center flex-shrink-0">
+                                                {isConversationExpanded ? (
+                                                  <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                                                ) : (
+                                                  <ChevronRight className="w-3 h-3 text-muted-foreground" />
+                                                )}
+                                              </div>
+                                              <div className="min-w-0 flex-1">
+                                                <div className="text-xs font-medium truncate text-foreground">
+                                                  {conversation.title}
+                                                </div>
+                                                <div className="flex items-center gap-1 mt-0.5">
+                                                  <Clock className="w-2.5 h-2.5 text-muted-foreground" />
+                                                  <span className="text-xs text-muted-foreground">
+                                                    {formatTimeAgo(conversation.lastActivity, currentTime)}
+                                                  </span>
+                                                </div>
+                                              </div>
+                                              {/* Mobile conversation action buttons */}
+                                              <div className="flex items-center gap-1">
+                                                <button
+                                                  className="w-6 h-6 rounded-md bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center active:scale-95 transition-transform opacity-70"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    startEditingConversation(conversation);
+                                                  }}
+                                                  onTouchEnd={handleTouchClick(() => startEditingConversation(conversation))}
+                                                  title="Edit conversation"
+                                                >
+                                                  <Edit2 className="w-2.5 h-2.5 text-blue-600 dark:text-blue-400" />
+                                                </button>
+                                                <button
+                                                  className="w-6 h-6 rounded-md bg-red-50 dark:bg-red-900/20 flex items-center justify-center active:scale-95 transition-transform opacity-70"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    deleteConversation(project.name, conversation);
+                                                  }}
+                                                  onTouchEnd={handleTouchClick(() => deleteConversation(project.name, conversation))}
+                                                  title="Delete conversation"
+                                                >
+                                                  <Trash2 className="w-2.5 h-2.5 text-red-600 dark:text-red-400" />
+                                                </button>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                    
+                                    {/* Desktop Conversation Item */}
+                                    <div className="hidden md:block group relative">
+                                      {editingConversation === conversation.id ? (
+                                        <div className="p-2 h-auto bg-accent/50 rounded">
+                                          <div className="flex items-center gap-2">
+                                            <input
+                                              type="text"
+                                              value={editingConversationName}
+                                              onChange={(e) => setEditingConversationName(e.target.value)}
+                                              onKeyDown={(e) => {
+                                                e.stopPropagation();
+                                                if (e.key === 'Enter') {
+                                                  saveConversationTitle(project.name, conversation);
+                                                } else if (e.key === 'Escape') {
+                                                  cancelEditingConversation();
+                                                }
+                                              }}
+                                              onClick={(e) => e.stopPropagation()}
+                                              className="flex-1 px-2 py-1 text-xs border border-border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+                                              autoFocus
+                                            />
+                                            <button
+                                              className="w-6 h-6 bg-green-50 hover:bg-green-100 dark:bg-green-900/20 dark:hover:bg-green-900/40 rounded flex items-center justify-center"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                saveConversationTitle(project.name, conversation);
+                                              }}
+                                              title="Save"
+                                            >
+                                              <Check className="w-3 h-3 text-green-600 dark:text-green-400" />
+                                            </button>
+                                            <button
+                                              className="w-6 h-6 bg-gray-50 hover:bg-gray-100 dark:bg-gray-900/20 dark:hover:bg-gray-900/40 rounded flex items-center justify-center"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                cancelEditingConversation();
+                                              }}
+                                              title="Cancel"
+                                            >
+                                              <X className="w-3 h-3 text-gray-600 dark:text-gray-400" />
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <Button
+                                          variant="ghost"
+                                          className="w-full justify-start p-2 h-auto font-normal text-left hover:bg-accent/50 transition-colors duration-200"
+                                          onClick={() => toggleConversation(conversation.id)}
+                                          onTouchEnd={handleTouchClick(() => toggleConversation(conversation.id))}
+                                        >
+                                          <div className="flex items-start gap-2 min-w-0 w-full">
+                                            {isConversationExpanded ? (
+                                              <ChevronDown className="w-3 h-3 text-muted-foreground mt-0.5 flex-shrink-0" />
+                                            ) : (
+                                              <ChevronRight className="w-3 h-3 text-muted-foreground mt-0.5 flex-shrink-0" />
+                                            )}
+                                            <div className="min-w-0 flex-1">
+                                              <div className="text-xs font-medium truncate text-foreground">
+                                                {conversation.title}
+                                              </div>
+                                              <div className="flex items-center gap-1 mt-0.5">
+                                                <Clock className="w-2.5 h-2.5 text-muted-foreground" />
+                                                <span className="text-xs text-muted-foreground">
+                                                  {formatTimeAgo(conversation.lastActivity, currentTime)}
+                                                </span>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </Button>
+                                      )}
+                                      {/* Desktop conversation hover buttons */}
+                                      {editingConversation !== conversation.id && (
+                                        <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200">
+                                          <button
+                                            className="w-6 h-6 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 rounded flex items-center justify-center"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              startEditingConversation(conversation);
+                                            }}
+                                            title="Edit conversation"
+                                          >
+                                            <Edit2 className="w-3 h-3 text-blue-600 dark:text-blue-400" />
+                                          </button>
+                                          <button
+                                            className="w-6 h-6 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 rounded flex items-center justify-center"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              deleteConversation(project.name, conversation);
+                                            }}
+                                            title="Delete conversation"
+                                          >
+                                            <Trash2 className="w-3 h-3 text-red-600 dark:text-red-400" />
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Messages within conversation */}
+                                  {isConversationExpanded && (
+                                    <div className="ml-4 space-y-1 border-l border-border pl-3">
+                                      {conversation.sessions.map((session) => {
                           // Calculate if session is active (within last 10 minutes)
                           const sessionDate = new Date(session.lastActivity);
                           const diffInMinutes = Math.floor((currentTime - sessionDate) / (1000 * 60));
@@ -803,7 +1196,7 @@ function Sidebar({
                                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
                               </div>
                             )}
-                            {/* Mobile Session Item */}
+                            {/* Mobile Conversation Item */}
                             <div className="md:hidden">
                               <div
                                 className={cn(
@@ -813,11 +1206,19 @@ function Sidebar({
                                 )}
                                 onClick={() => {
                                   onProjectSelect(project);
+                                  if (onConversationSelect) {
+                                    onConversationSelect(conversation, session.id);
+                                  } else {
                                   onSessionSelect(session);
+                                  }
                                 }}
                                 onTouchEnd={handleTouchClick(() => {
                                   onProjectSelect(project);
+                                  if (onConversationSelect) {
+                                    onConversationSelect(conversation, session.id);
+                                  } else {
                                   onSessionSelect(session);
+                                  }
                                 })}
                               >
                                 <div className="flex items-center gap-2">
@@ -831,19 +1232,17 @@ function Sidebar({
                                     )} />
                                   </div>
                                   <div className="min-w-0 flex-1">
-                                    <div className="text-xs font-medium truncate text-foreground">
-                                      {session.summary || 'New Session'}
+                                    <div className={cn(
+                                      "text-xs font-medium truncate text-foreground",
+                                      session.isPlaceholder && "italic text-muted-foreground"
+                                    )}>
+                                      {session.isPlaceholder ? '✏️ New Conversation' : (session.summary || 'New Conversation')}
                                     </div>
                                     <div className="flex items-center gap-1 mt-0.5">
                                       <Clock className="w-2.5 h-2.5 text-muted-foreground" />
                                       <span className="text-xs text-muted-foreground">
                                         {formatTimeAgo(session.lastActivity, currentTime)}
                                       </span>
-                                      {session.messageCount > 0 && (
-                                        <Badge variant="secondary" className="text-xs px-1 py-0 ml-auto">
-                                          {session.messageCount}
-                                        </Badge>
-                                      )}
                                     </div>
                                   </div>
                                   {/* Mobile delete button */}
@@ -861,7 +1260,7 @@ function Sidebar({
                               </div>
                             </div>
                             
-                            {/* Desktop Session Item */}
+                            {/* Desktop Conversation Item */}
                             <div className="hidden md:block">
                               <Button
                                 variant="ghost"
@@ -869,25 +1268,35 @@ function Sidebar({
                                   "w-full justify-start p-2 h-auto font-normal text-left hover:bg-accent/50 transition-colors duration-200",
                                   selectedSession?.id === session.id && "bg-accent text-accent-foreground"
                                 )}
-                                onClick={() => onSessionSelect(session)}
-                                onTouchEnd={handleTouchClick(() => onSessionSelect(session))}
+                                onClick={() => {
+                                  if (onConversationSelect) {
+                                    onConversationSelect(conversation, session.id);
+                                  } else {
+                                    onSessionSelect(session);
+                                  }
+                                }}
+                                onTouchEnd={handleTouchClick(() => {
+                                  if (onConversationSelect) {
+                                    onConversationSelect(conversation, session.id);
+                                  } else {
+                                    onSessionSelect(session);
+                                  }
+                                })}
                               >
                                 <div className="flex items-start gap-2 min-w-0 w-full">
                                   <MessageSquare className="w-3 h-3 text-muted-foreground mt-0.5 flex-shrink-0" />
                                   <div className="min-w-0 flex-1">
-                                    <div className="text-xs font-medium truncate text-foreground">
-                                      {session.summary || 'New Session'}
+                                    <div className={cn(
+                                      "text-xs font-medium truncate text-foreground",
+                                      session.isPlaceholder && "italic text-muted-foreground"
+                                    )}>
+                                      {session.isPlaceholder ? '✏️ New Conversation' : (session.summary || 'New Conversation')}
                                     </div>
                                     <div className="flex items-center gap-1 mt-0.5">
                                       <Clock className="w-2.5 h-2.5 text-muted-foreground" />
                                       <span className="text-xs text-muted-foreground">
                                         {formatTimeAgo(session.lastActivity, currentTime)}
                                       </span>
-                                      {session.messageCount > 0 && (
-                                        <Badge variant="secondary" className="text-xs px-1 py-0 ml-auto">
-                                          {session.messageCount}
-                                        </Badge>
-                                      )}
                                     </div>
                                   </div>
                                 </div>
@@ -953,18 +1362,7 @@ function Sidebar({
                                         <Sparkles className="w-3 h-3 text-blue-600 dark:text-blue-400" />
                                       )}
                                     </button> */}
-                                    {/* Edit button */}
-                                    <button
-                                      className="w-6 h-6 bg-gray-50 hover:bg-gray-100 dark:bg-gray-900/20 dark:hover:bg-gray-900/40 rounded flex items-center justify-center"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setEditingSession(session.id);
-                                        setEditingSessionName(session.summary || 'New Session');
-                                      }}
-                                      title="Manually edit session name"
-                                    >
-                                      <Edit2 className="w-3 h-3 text-gray-600 dark:text-gray-400" />
-                                    </button>
+
                                     {/* Delete button */}
                                     <button
                                       className="w-6 h-6 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 rounded flex items-center justify-center"
@@ -982,33 +1380,17 @@ function Sidebar({
                             </div>
                           </div>
                           );
-                        })
-                      )}
-
-                      {/* Show More Sessions Button */}
-                      {getAllSessions(project).length > 0 && project.sessionMeta?.hasMore !== false && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="w-full justify-center gap-2 mt-2 text-muted-foreground"
-                          onClick={() => loadMoreSessions(project)}
-                          disabled={loadingSessions[project.name]}
-                        >
-                          {loadingSessions[project.name] ? (
-                            <>
-                              <div className="w-3 h-3 animate-spin rounded-full border border-muted-foreground border-t-transparent" />
-                              Loading...
-                            </>
-                          ) : (
-                            <>
-                              <ChevronDown className="w-3 h-3" />
-                              Show more sessions
-                            </>
-                          )}
-                        </Button>
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </>
                       )}
                       
-                      {/* New Session Button */}
+                      {/* New Conversation Button */}
                       <div className="md:hidden px-3 pb-2">
                         <button
                           className="w-full h-8 bg-primary hover:bg-primary/90 text-primary-foreground rounded-md flex items-center justify-center gap-2 font-medium text-xs active:scale-[0.98] transition-all duration-150"
@@ -1018,7 +1400,7 @@ function Sidebar({
                           }}
                         >
                           <Plus className="w-3 h-3" />
-                          New Session
+                          New Conversation
                         </button>
                       </div>
                       
@@ -1029,7 +1411,7 @@ function Sidebar({
                         onClick={() => onNewSession(project)}
                       >
                         <Plus className="w-3 h-3" />
-                        New Session
+                        New Conversation
                       </Button>
                     </div>
                   )}

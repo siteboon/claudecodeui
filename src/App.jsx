@@ -36,12 +36,14 @@ function AppContent() {
   const navigate = useNavigate();
   const { sessionId } = useParams();
   
-  const { updateAvailable, latestVersion, currentVersion } = useVersionCheck('siteboon', 'claudecodeui');
+  const { updateAvailable, latestVersion, currentVersion } = useVersionCheck('ItsAChillBear', 'claudecodeui');
   const [showVersionModal, setShowVersionModal] = useState(false);
   
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
   const [selectedSession, setSelectedSession] = useState(null);
+  const [selectedConversation, setSelectedConversation] = useState(null);
+  const [targetSessionId, setTargetSessionId] = useState(null);
   const [activeTab, setActiveTab] = useState('chat'); // 'chat' or 'files'
   const [isMobile, setIsMobile] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -61,6 +63,11 @@ function AppContent() {
     const saved = localStorage.getItem('autoScrollToBottom');
     return saved !== null ? JSON.parse(saved) : true;
   });
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const saved = localStorage.getItem('sidebarWidth');
+    return saved !== null ? parseInt(saved, 10) : 420; // Default 420px (320px + 100px)
+  });
+  const [isResizing, setIsResizing] = useState(false);
   // Session Protection System: Track sessions with active conversations to prevent
   // automatic project updates from interrupting ongoing chats. When a user sends
   // a message, the session is marked as "active" and project updates are paused
@@ -185,15 +192,61 @@ function AppContent() {
       const response = await fetch('/api/projects');
       const data = await response.json();
       
+      // Restore placeholder sessions from localStorage
+      const storedPlaceholders = JSON.parse(localStorage.getItem('placeholderSessions') || '{}');
+      const now = Date.now();
+      const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+      
+      // Clean up old placeholders (older than 24 hours)
+      const validPlaceholders = {};
+      Object.entries(storedPlaceholders).forEach(([sessionId, placeholderData]) => {
+        if (now - placeholderData.createdAt < maxAge) {
+          validPlaceholders[sessionId] = placeholderData;
+        }
+      });
+      
+      // Update localStorage with cleaned placeholders
+      if (Object.keys(validPlaceholders).length !== Object.keys(storedPlaceholders).length) {
+        localStorage.setItem('placeholderSessions', JSON.stringify(validPlaceholders));
+      }
+      
+      // Add placeholder sessions back to their respective projects
+      const dataWithPlaceholders = data.map(project => {
+        const projectPlaceholders = Object.entries(validPlaceholders)
+          .filter(([sessionId, placeholderData]) => placeholderData.projectName === project.name)
+          .map(([sessionId, placeholderData]) => ({
+            id: sessionId,
+            title: placeholderData.title,
+            summary: placeholderData.summary,
+            created_at: placeholderData.created_at,
+            updated_at: placeholderData.updated_at,
+            lastActivity: placeholderData.lastActivity,
+            isPlaceholder: true
+          }));
+        
+        if (projectPlaceholders.length > 0) {
+          return {
+            ...project,
+            sessions: [...projectPlaceholders, ...(project.sessions || [])],
+            sessionMeta: {
+              ...project.sessionMeta,
+              total: (project.sessionMeta?.total || 0) + projectPlaceholders.length
+            }
+          };
+        }
+        
+        return project;
+      });
+      
       // Optimize to preserve object references when data hasn't changed
       setProjects(prevProjects => {
         // If no previous projects, just set the new data
         if (prevProjects.length === 0) {
-          return data;
+          return dataWithPlaceholders;
         }
         
         // Check if the projects data has actually changed
-        const hasChanges = data.some((newProject, index) => {
+        const hasChanges = dataWithPlaceholders.some((newProject, index) => {
           const prevProject = prevProjects[index];
           if (!prevProject) return true;
           
@@ -205,10 +258,10 @@ function AppContent() {
             JSON.stringify(newProject.sessionMeta) !== JSON.stringify(prevProject.sessionMeta) ||
             JSON.stringify(newProject.sessions) !== JSON.stringify(prevProject.sessions)
           );
-        }) || data.length !== prevProjects.length;
+        }) || dataWithPlaceholders.length !== prevProjects.length;
         
         // Only update if there are actual changes
-        return hasChanges ? data : prevProjects;
+        return hasChanges ? dataWithPlaceholders : prevProjects;
       });
       
       // Don't auto-select any project - user should choose manually
@@ -258,6 +311,8 @@ function AppContent() {
 
   const handleSessionSelect = (session) => {
     setSelectedSession(session);
+    setSelectedConversation(null); // Clear conversation when selecting individual session
+    setTargetSessionId(null);
     // Only switch to chat tab when user explicitly selects a session
     // This prevents tab switching during automatic updates
     if (activeTab !== 'git' && activeTab !== 'preview') {
@@ -269,17 +324,90 @@ function AppContent() {
     navigate(`/session/${session.id}`);
   };
 
+  const handleConversationSelect = (conversation, targetSessionId = null) => {
+    setSelectedConversation(conversation);
+    setSelectedSession(null); // Clear individual session when selecting conversation
+    setTargetSessionId(targetSessionId);
+    // Only switch to chat tab when user explicitly selects a conversation
+    if (activeTab !== 'git' && activeTab !== 'preview') {
+      setActiveTab('chat');
+    }
+    if (isMobile) {
+      setSidebarOpen(false);
+    }
+    // Navigate to the conversation view (using the most recent session ID for URL)
+    const mostRecentSession = conversation.sessions.reduce((latest, current) => 
+      new Date(current.lastActivity) > new Date(latest.lastActivity) ? current : latest
+    );
+    navigate(`/conversation/${mostRecentSession.id}${targetSessionId ? `#${targetSessionId}` : ''}`);
+  };
+
   const handleNewSession = (project) => {
-    setSelectedProject(project);
-    setSelectedSession(null);
+    // Create a temporary placeholder session that appears immediately in sidebar
+    const placeholderSessionId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const placeholderSession = {
+      id: placeholderSessionId,
+      title: 'New Conversation',
+      summary: 'New Conversation',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      lastActivity: new Date().toISOString(),
+      isPlaceholder: true // Mark as placeholder
+    };
+
+    // Persist placeholder session to localStorage
+    const existingPlaceholders = JSON.parse(localStorage.getItem('placeholderSessions') || '{}');
+    existingPlaceholders[placeholderSessionId] = {
+      ...placeholderSession,
+      projectName: project.name,
+      createdAt: Date.now()
+    };
+    localStorage.setItem('placeholderSessions', JSON.stringify(existingPlaceholders));
+
+    // Add placeholder session to the project
+    setProjects(prevProjects => 
+      prevProjects.map(p => {
+        if (p.name === project.name) {
+          return {
+            ...p,
+            sessions: [placeholderSession, ...(p.sessions || [])],
+            sessionMeta: {
+              ...p.sessionMeta,
+              total: (p.sessionMeta?.total || 0) + 1
+            }
+          };
+        }
+        return p;
+      })
+    );
+
+    // Update selected project to include the new session
+    const updatedProject = {
+      ...project,
+      sessions: [placeholderSession, ...(project.sessions || [])],
+      sessionMeta: {
+        ...project.sessionMeta,
+        total: (project.sessionMeta?.total || 0) + 1
+      }
+    };
+
+    setSelectedProject(updatedProject);
+    setSelectedSession(placeholderSession);
     setActiveTab('chat');
-    navigate('/');
+    navigate(`/session/${placeholderSessionId}`);
     if (isMobile) {
       setSidebarOpen(false);
     }
   };
 
   const handleSessionDelete = (sessionId) => {
+    // Clean up placeholder from localStorage if it's a placeholder session
+    const storedPlaceholders = JSON.parse(localStorage.getItem('placeholderSessions') || '{}');
+    if (storedPlaceholders[sessionId]) {
+      delete storedPlaceholders[sessionId];
+      localStorage.setItem('placeholderSessions', JSON.stringify(storedPlaceholders));
+    }
+
     // If the deleted session was currently selected, clear it
     if (selectedSession?.id === sessionId) {
       setSelectedSession(null);
@@ -403,6 +531,103 @@ function AppContent() {
     }
   };
 
+  // replacePlaceholderSession: Called when a real session is created to replace placeholder
+  const replacePlaceholderSession = (realSessionId, placeholderSessionId) => {
+    if (realSessionId && placeholderSessionId) {
+      // Clean up placeholder from localStorage
+      const existingPlaceholders = JSON.parse(localStorage.getItem('placeholderSessions') || '{}');
+      delete existingPlaceholders[placeholderSessionId];
+      localStorage.setItem('placeholderSessions', JSON.stringify(existingPlaceholders));
+
+      // Remove placeholder session ID from active sessions and add real session ID
+      setActiveSessions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(placeholderSessionId);
+        newSet.add(realSessionId);
+        return newSet;
+      });
+    }
+  };
+
+  // updateSessionActivity: Immediately update session metadata when new messages are sent
+  // This provides instant visual feedback in the sidebar during active conversations
+  const updateSessionActivity = (activityData) => {
+    const { sessionId, lastActivity, messageContent, increment } = activityData;
+    
+    if (!sessionId || !selectedProject) return;
+    
+    setProjects(prevProjects => 
+      prevProjects.map(project => {
+        if (project.name === selectedProject.name) {
+          return {
+            ...project,
+            sessions: (project.sessions || []).map(session => {
+              if (session.id === sessionId) {
+                const updates = {
+                  ...session,
+                  lastActivity: lastActivity || session.lastActivity
+                };
+                
+                // Increment message count if requested
+                if (increment) {
+                  updates.messageCount = (session.messageCount || 0) + 1;
+                }
+                
+                // Update summary for new conversations if messageContent provided
+                if (messageContent && (!session.summary || session.summary === 'New Conversation' || session.isPlaceholder)) {
+                  const summary = messageContent.length > 50 ? 
+                    messageContent.substring(0, 50) + '...' : 
+                    messageContent;
+                  updates.summary = summary;
+                  updates.title = summary; // Also update title for consistency
+                }
+                
+                return updates;
+              }
+              return session;
+            })
+          };
+        }
+        return project;
+      })
+    );
+
+    // Also update selected project if it matches
+    if (selectedProject) {
+      setSelectedProject(prevProject => {
+        if (prevProject.name === selectedProject.name) {
+          return {
+            ...prevProject,
+            sessions: (prevProject.sessions || []).map(session => {
+              if (session.id === sessionId) {
+                const updates = {
+                  ...session,
+                  lastActivity: lastActivity || session.lastActivity
+                };
+                
+                if (increment) {
+                  updates.messageCount = (session.messageCount || 0) + 1;
+                }
+                
+                if (messageContent && (!session.summary || session.summary === 'New Conversation' || session.isPlaceholder)) {
+                  const summary = messageContent.length > 50 ? 
+                    messageContent.substring(0, 50) + '...' : 
+                    messageContent;
+                  updates.summary = summary;
+                  updates.title = summary;
+                }
+                
+                return updates;
+              }
+              return session;
+            })
+          };
+        }
+        return prevProject;
+      });
+    }
+  };
+
   // Version Upgrade Modal Component
   const VersionUpgradeModal = () => {
     if (!showVersionModal) return null;
@@ -489,11 +714,49 @@ function AppContent() {
     );
   };
 
+  // Handle sidebar resizing
+  const handleMouseDown = (e) => {
+    e.preventDefault();
+    setIsResizing(true);
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (!isResizing) return;
+      
+      const newWidth = e.clientX;
+      // Set min/max width constraints
+      const constrainedWidth = Math.max(280, Math.min(600, newWidth));
+      setSidebarWidth(constrainedWidth);
+    };
+
+    const handleMouseUp = () => {
+      if (isResizing) {
+        setIsResizing(false);
+        // Save to localStorage
+        localStorage.setItem('sidebarWidth', sidebarWidth.toString());
+      }
+    };
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing, sidebarWidth]);
+
   return (
-    <div className="fixed inset-0 flex bg-background">
+    <div className={`fixed inset-0 flex bg-background ${isResizing ? 'select-none' : ''}`}>
       {/* Fixed Desktop Sidebar */}
       {!isMobile && (
-        <div className="w-80 flex-shrink-0 border-r border-border bg-card">
+        <div 
+          className="flex-shrink-0 border-r border-border bg-card relative"
+          style={{ width: `${sidebarWidth}px` }}
+        >
           <div className="h-full overflow-hidden">
             <Sidebar
               projects={projects}
@@ -501,6 +764,7 @@ function AppContent() {
               selectedSession={selectedSession}
               onProjectSelect={handleProjectSelect}
               onSessionSelect={handleSessionSelect}
+              onConversationSelect={handleConversationSelect}
               onNewSession={handleNewSession}
               onSessionDelete={handleSessionDelete}
               onProjectDelete={handleProjectDelete}
@@ -512,6 +776,19 @@ function AppContent() {
               currentVersion={currentVersion}
               onShowVersionModal={() => setShowVersionModal(true)}
             />
+          </div>
+          {/* Resize Handle */}
+          <div
+            className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 active:bg-primary/30 transition-colors group"
+            onMouseDown={handleMouseDown}
+            style={{
+              width: '6px',
+              marginRight: '-3px',
+              zIndex: 10
+            }}
+          >
+            {/* Visual indicator on hover */}
+            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-0.5 h-8 bg-border rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
         </div>
       )}
@@ -546,6 +823,7 @@ function AppContent() {
               selectedSession={selectedSession}
               onProjectSelect={handleProjectSelect}
               onSessionSelect={handleSessionSelect}
+              onConversationSelect={handleConversationSelect}
               onNewSession={handleNewSession}
               onSessionDelete={handleSessionDelete}
               onProjectDelete={handleProjectDelete}
@@ -566,6 +844,8 @@ function AppContent() {
         <MainContent
           selectedProject={selectedProject}
           selectedSession={selectedSession}
+          selectedConversation={selectedConversation}
+          targetSessionId={targetSessionId}
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           ws={ws}
@@ -578,11 +858,13 @@ function AppContent() {
           onSessionActive={markSessionAsActive}
           onSessionInactive={markSessionAsInactive}
           onReplaceTemporarySession={replaceTemporarySession}
+          onReplacePlaceholderSession={replacePlaceholderSession}
           onNavigateToSession={(sessionId) => navigate(`/session/${sessionId}`)}
           onShowSettings={() => setShowToolsSettings(true)}
           autoExpandTools={autoExpandTools}
           showRawParameters={showRawParameters}
           onProjectUpdate={fetchProjects}
+          onUpdateSessionActivity={updateSessionActivity}
         />
       </div>
 
@@ -638,6 +920,7 @@ function App() {
         <Routes>
           <Route path="/" element={<AppContent />} />
           <Route path="/session/:sessionId" element={<AppContent />} />
+          <Route path="/conversation/:sessionId" element={<AppContent />} />
         </Routes>
       </Router>
     </ThemeProvider>

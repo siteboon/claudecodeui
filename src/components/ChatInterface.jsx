@@ -63,6 +63,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
     <div
       ref={messageRef}
       className={`chat-message ${message.type} ${isGrouped ? 'grouped' : ''} ${message.type === 'user' ? 'flex justify-end px-3 sm:px-0' : 'px-3 sm:px-0'}`}
+      data-session-id={message.sessionId}
     >
       {message.type === 'user' ? (
         /* User message bubble on the right */
@@ -896,15 +897,17 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
 // - onReplaceTemporarySession: Called to replace temporary session ID with real WebSocket session ID
 //
 // This ensures uninterrupted chat experience by pausing sidebar refreshes during conversations.
-function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, messages, onFileOpen, onInputFocusChange, onSessionActive, onSessionInactive, onReplaceTemporarySession, onNavigateToSession, onShowSettings, autoExpandTools, showRawParameters, autoScrollToBottom, onProjectUpdate }) {
+function ChatInterface({ selectedProject, selectedSession, selectedConversation, targetSessionId, ws, sendMessage, messages, onFileOpen, onInputFocusChange, onSessionActive, onSessionInactive, onReplaceTemporarySession, onReplacePlaceholderSession, onNavigateToSession, onShowSettings, autoExpandTools, showRawParameters, autoScrollToBottom, onProjectUpdate, onUpdateSessionActivity }) {
   const [input, setInput] = useState(() => {
-    if (typeof window !== 'undefined' && selectedProject) {
+    // Only load draft input if we have both a project AND a session
+    if (typeof window !== 'undefined' && selectedProject && selectedSession) {
       return localStorage.getItem(`draft_input_${selectedProject.name}`) || '';
     }
     return '';
   });
   const [chatMessages, setChatMessages] = useState(() => {
-    if (typeof window !== 'undefined' && selectedProject) {
+    // Only load from localStorage if we have both a project AND a session
+    if (typeof window !== 'undefined' && selectedProject && selectedSession) {
       const saved = localStorage.getItem(`chat_messages_${selectedProject.name}`);
       return saved ? JSON.parse(saved) : [];
     }
@@ -971,6 +974,54 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       return data.messages || [];
     } catch (error) {
       console.error('Error loading session messages:', error);
+      return [];
+    } finally {
+      setIsLoadingSessionMessages(false);
+    }
+  }, []);
+
+  // Load conversation messages from multiple sessions
+  const loadConversationMessages = useCallback(async (projectName, sessions, targetSessionId = null) => {
+    if (!projectName || !sessions || sessions.length === 0) return [];
+    
+    setIsLoadingSessionMessages(true);
+    try {
+      // Load messages from all sessions in the conversation
+      const allMessages = [];
+      
+      for (const session of sessions) {
+        const response = await fetch(`/api/projects/${projectName}/sessions/${session.id}/messages`);
+        if (response.ok) {
+          const data = await response.json();
+          const messages = data.messages || [];
+          
+          // Add session metadata to each message for tracking
+          const messagesWithSessionInfo = messages.map(msg => ({
+            ...msg,
+            sessionId: session.id,
+            sessionSummary: session.summary
+          }));
+          
+          allMessages.push(...messagesWithSessionInfo);
+        }
+      }
+      
+      // Sort all messages chronologically
+      allMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      
+      // If a target session is specified, we'll scroll to it after loading
+      if (targetSessionId) {
+        setTimeout(() => {
+          const targetElements = document.querySelectorAll(`[data-session-id="${targetSessionId}"]`);
+          if (targetElements.length > 0) {
+            targetElements[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 300);
+      }
+      
+      return allMessages;
+    } catch (error) {
+      console.error('Error loading conversation messages:', error);
       return [];
     } finally {
       setIsLoadingSessionMessages(false);
@@ -1064,7 +1115,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           const messageObj = {
             type: messageType,
             content: content,
-            timestamp: msg.timestamp || new Date().toISOString()
+            timestamp: msg.timestamp || new Date().toISOString(),
+            sessionId: msg.sessionId,
+            sessionSummary: msg.sessionSummary
           };
           
           // Try to restore checkpoint ID from localStorage
@@ -1112,7 +1165,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               converted.push({
                 type: 'assistant',
                 content: part.text,
-                timestamp: msg.timestamp || new Date().toISOString()
+                timestamp: msg.timestamp || new Date().toISOString(),
+                sessionId: msg.sessionId,
+                sessionSummary: msg.sessionSummary
               });
             } else if (part.type === 'tool_use') {
               // Get the corresponding tool result
@@ -1127,7 +1182,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 toolInput: JSON.stringify(part.input),
                 toolResult: toolResult ? (typeof toolResult.content === 'string' ? toolResult.content : JSON.stringify(toolResult.content)) : null,
                 toolError: toolResult?.isError || false,
-                toolResultTimestamp: toolResult?.timestamp || new Date()
+                toolResultTimestamp: toolResult?.timestamp || new Date(),
+                sessionId: msg.sessionId,
+                sessionSummary: msg.sessionSummary
               });
             }
           }
@@ -1135,7 +1192,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           converted.push({
             type: 'assistant',
             content: msg.message.content,
-            timestamp: msg.timestamp || new Date().toISOString()
+            timestamp: msg.timestamp || new Date().toISOString(),
+            sessionId: msg.sessionId,
+            sessionSummary: msg.sessionSummary
           });
         }
       }
@@ -1176,7 +1235,24 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   useEffect(() => {
     // Load session messages when session changes
     const loadMessages = async () => {
-      if (selectedSession && selectedProject) {
+      if (selectedConversation && selectedProject) {
+        // Load full conversation history (multiple sessions)
+        if (!isSystemSessionChange) {
+          const messages = await loadConversationMessages(selectedProject.name, selectedConversation.sessions, targetSessionId);
+          setSessionMessages(messages);
+          // convertedMessages will be automatically updated via useMemo
+          // Note: scrolling to target session is handled inside loadConversationMessages
+        } else {
+          setIsSystemSessionChange(false);
+        }
+        
+        // Set current session ID to the most recent session in the conversation
+        const mostRecentSession = selectedConversation.sessions.reduce((latest, current) => 
+          new Date(current.lastActivity) > new Date(latest.lastActivity) ? current : latest
+        );
+        setCurrentSessionId(mostRecentSession.id);
+      } else if (selectedSession && selectedProject) {
+        // Load single session (existing behavior)
         setCurrentSessionId(selectedSession.id);
         
         // Only load messages from API if this is a user-initiated session change
@@ -1194,14 +1270,22 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           setIsSystemSessionChange(false);
         }
       } else {
+        // Clear all message state when no session is selected (new conversation)
         setChatMessages([]);
         setSessionMessages([]);
         setCurrentSessionId(null);
+        setInput(''); // Clear input field for new conversation
+        
+        // Also clear localStorage for this project to ensure a truly blank chat
+        if (selectedProject) {
+          localStorage.removeItem(`chat_messages_${selectedProject.name}`);
+          localStorage.removeItem(`draft_input_${selectedProject.name}`);
+        }
       }
     };
     
     loadMessages();
-  }, [selectedSession, selectedProject, loadSessionMessages, scrollToBottom, isSystemSessionChange]);
+  }, [selectedSession, selectedConversation, targetSessionId, selectedProject, loadSessionMessages, loadConversationMessages, scrollToBottom, isSystemSessionChange]);
 
   // Update chatMessages when convertedMessages changes
   useEffect(() => {
@@ -1247,6 +1331,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       }
       
       setChatMessages(finalMessages);
+    } else {
+      // Clear chatMessages when sessionMessages is empty (new conversation)
+      setChatMessages([]);
     }
   }, [convertedMessages, sessionMessages, selectedProject, selectedSession]);
 
@@ -1268,8 +1355,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
   // Persist chat messages to localStorage
   useEffect(() => {
-    if (selectedProject && chatMessages.length > 0) {
-      localStorage.setItem(`chat_messages_${selectedProject.name}`, JSON.stringify(chatMessages));
+    if (selectedProject) {
+      if (chatMessages.length > 0) {
+        localStorage.setItem(`chat_messages_${selectedProject.name}`, JSON.stringify(chatMessages));
+      } else {
+        // Remove localStorage entry when chat messages are empty (new conversation)
+        localStorage.removeItem(`chat_messages_${selectedProject.name}`);
+      }
     }
   }, [chatMessages, selectedProject]);
 
@@ -1293,15 +1385,37 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       switch (latestMessage.type) {
         case 'session-created':
           // New session created by Claude CLI - we receive the real session ID here
-          // Store it temporarily until conversation completes (prevents premature session association)
           if (latestMessage.sessionId && !currentSessionId) {
-            sessionStorage.setItem('pendingSessionId', latestMessage.sessionId);
+            console.log('🔄 New session created:', latestMessage.sessionId);
+            
+            // Immediately set the current session ID
+            setCurrentSessionId(latestMessage.sessionId);
+            
+            // Mark this as a system-initiated session change to preserve messages
+            setIsSystemSessionChange(true);
             
             // Session Protection: Replace temporary "new-session-*" identifier with real session ID
             // This maintains protection continuity - no gap between temp ID and real ID
             // The temporary session is removed and real session is marked as active
             if (onReplaceTemporarySession) {
               onReplaceTemporarySession(latestMessage.sessionId);
+            }
+            
+            // Replace placeholder session if we have one
+            if (selectedSession?.isPlaceholder && onReplacePlaceholderSession) {
+              onReplacePlaceholderSession(latestMessage.sessionId, selectedSession.id);
+            } else {
+              // Force refresh the project data to include the new session, then navigate
+              if (onProjectUpdate) {
+                onProjectUpdate();
+                
+                // Wait for the refresh to complete, then navigate
+                setTimeout(() => {
+                  if (onNavigateToSession) {
+                    onNavigateToSession(latestMessage.sessionId);
+                  }
+                }, 500); // Give more time for the refresh to complete
+              }
             }
           }
           break;
@@ -1366,6 +1480,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           }
           
           // Handle different types of content in the response
+          let hasNewContent = false;
           if (Array.isArray(messageData.content)) {
             for (const part of messageData.content) {
               if (part.type === 'tool_use') {
@@ -1381,6 +1496,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   toolId: part.id,
                   toolResult: null // Will be updated when result comes in
                 }]);
+                hasNewContent = true;
               } else if (part.type === 'text' && part.text?.trim()) {
                 // Add regular text message
                 setChatMessages(prev => [...prev, {
@@ -1388,6 +1504,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   content: part.text,
                   timestamp: new Date()
                 }]);
+                hasNewContent = true;
               }
             }
           } else if (typeof messageData.content === 'string' && messageData.content.trim()) {
@@ -1397,6 +1514,16 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               content: messageData.content,
               timestamp: new Date()
             }]);
+            hasNewContent = true;
+          }
+          
+          // Update session activity when Claude sends new content
+          if (hasNewContent && onUpdateSessionActivity && (currentSessionId || selectedSession)) {
+            onUpdateSessionActivity({
+              sessionId: currentSessionId || selectedSession?.id,
+              lastActivity: new Date().toISOString(),
+              increment: true // Increment message count for actual content
+            });
           }
           
           // Handle tool results from user messages (these come separately)
@@ -1428,6 +1555,15 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             content: latestMessage.data,
             timestamp: new Date()
           }]);
+          
+          // Update session activity when Claude sends output
+          if (onUpdateSessionActivity && (currentSessionId || selectedSession)) {
+            onUpdateSessionActivity({
+              sessionId: currentSessionId || selectedSession?.id,
+              lastActivity: new Date().toISOString(),
+              increment: true // Increment message count for output
+            });
+          }
           break;
         case 'claude-interactive-prompt':
           // Handle interactive prompts from CLI
@@ -1437,6 +1573,15 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             timestamp: new Date(),
             isInteractivePrompt: true
           }]);
+          
+          // Update session activity when Claude sends interactive prompt
+          if (onUpdateSessionActivity && (currentSessionId || selectedSession)) {
+            onUpdateSessionActivity({
+              sessionId: currentSessionId || selectedSession?.id,
+              lastActivity: new Date().toISOString(),
+              increment: true // Increment message count for interactive prompts
+            });
+          }
           break;
 
         case 'claude-error':
@@ -1445,6 +1590,15 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             content: `Error: ${latestMessage.error}`,
             timestamp: new Date()
           }]);
+          
+          // Update session activity when Claude encounters an error
+          if (onUpdateSessionActivity && (currentSessionId || selectedSession)) {
+            onUpdateSessionActivity({
+              sessionId: currentSessionId || selectedSession?.id,
+              lastActivity: new Date().toISOString(),
+              increment: false // Don't increment message count for errors
+            });
+          }
           break;
           
         case 'claude-complete':
@@ -1452,20 +1606,19 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           setCanAbortSession(false);
           setClaudeStatus(null);
 
+          // Update session activity when Claude completes a response
+          if (onUpdateSessionActivity && (currentSessionId || selectedSession)) {
+            onUpdateSessionActivity({
+              sessionId: currentSessionId || selectedSession?.id,
+              lastActivity: new Date().toISOString(),
+              increment: false // Don't increment message count for completion signal
+            });
+          }
           
           // Session Protection: Mark session as inactive to re-enable automatic project updates
           // Conversation is complete, safe to allow project updates again
-          // Use real session ID if available, otherwise use pending session ID
-          const activeSessionId = currentSessionId || sessionStorage.getItem('pendingSessionId');
-          if (activeSessionId && onSessionInactive) {
-            onSessionInactive(activeSessionId);
-          }
-          
-          // If we have a pending session ID and the conversation completed successfully, use it
-          const pendingSessionId = sessionStorage.getItem('pendingSessionId');
-          if (pendingSessionId && !currentSessionId && latestMessage.exitCode === 0) {
-                setCurrentSessionId(pendingSessionId);
-            sessionStorage.removeItem('pendingSessionId');
+          if (currentSessionId && onSessionInactive) {
+            onSessionInactive(currentSessionId);
           }
           break;
           
@@ -1781,6 +1934,17 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     const sessionToActivate = currentSessionId || `new-session-${Date.now()}`;
     if (onSessionActive) {
       onSessionActive(sessionToActivate);
+    }
+
+    // Immediately update sidebar session activity to show new message
+    // This bypasses the session protection system for immediate visual feedback
+    if (onUpdateSessionActivity && (currentSessionId || selectedSession)) {
+      onUpdateSessionActivity({
+        sessionId: currentSessionId || selectedSession?.id,
+        lastActivity: new Date().toISOString(),
+        messageContent: input.trim(),
+        increment: true // Increment message count
+      });
     }
 
     // Create checkpoint before sending the message

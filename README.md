@@ -42,6 +42,15 @@ A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/cla
 
 ### 🆕 Latest Enhancements
 
+#### Advanced Conversation Management System
+- **Smart Conversation Grouping** - Messages are automatically grouped into logical conversations based on related sessions
+- **Full Conversation History** - Click any message in the sidebar to view complete conversation history across multiple sessions
+- **Real-time Sidebar Updates** - New messages immediately appear in the sidebar with updated counts and timestamps
+- **Instant New Conversations** - "New Conversation" button creates placeholder conversations that appear instantly in the sidebar
+- **Persistent Placeholders** - New conversations persist across browser refreshes until messages are sent
+- **Conversation Navigation** - Navigate between conversations and jump to specific sessions/messages
+- **Message Count Accuracy** - Sidebar correctly displays message counts instead of session counts
+
 #### Checkpoint System with Revert Functionality
 - **Create Checkpoints** - Automatically capture project state at key conversation points
 - **Revert to Checkpoints** - Click any checkpoint to restore files and truncate conversation history
@@ -120,21 +129,31 @@ To use Claude Code's full functionality, you'll need to manually enable tools:
 
 ## Recent Updates & Changelog
 
-### Latest Release - Enhanced Checkpoint & Tools System
+### Latest Release - Enhanced Conversation Management & Checkpoint System
 
 #### 🎯 Major Features Added
+- **Advanced Conversation Management**: Smart grouping, full history navigation, and instant conversation creation
+- **Real-time Sidebar Updates**: Messages appear immediately in sidebar with accurate counts and timestamps
 - **Complete Checkpoint System**: Full implementation of checkpoint creation, restoration, and conversation truncation
 - **Server-Side Message Persistence**: Messages are permanently removed from JSONL files, not just hidden client-side
 - **Expanded Tools Library**: 30+ pre-configured bash commands with categorized quick-add buttons
 - **Enhanced Permission System**: Granular control over development tools and commands
 
 #### 🔧 Technical Improvements
+- **Intelligent Session Grouping**: Advanced algorithms for grouping sessions into logical conversations
+- **Real-time Activity Tracking**: Immediate sidebar updates bypassing session protection for visual feedback
+- **Placeholder Session System**: Persistent conversation placeholders with localStorage-based persistence
+- **Conversation State Management**: Comprehensive state management for navigation and history viewing
 - **Fuzzy Checkpoint Matching**: Robust checkpoint ID assignment that handles timestamp mismatches
 - **WebSocket Message Truncation**: Real-time coordination between client and server for conversation management
 - **Atomic File Operations**: Safe file restoration using temporary files and atomic renames
 - **Cross-Session Persistence**: Checkpoint markers survive browser refreshes and session reloads
 
 #### 🐛 Bug Fixes
+- Fixed new conversations not appearing immediately in sidebar when created
+- Resolved issue where conversation counts showed sessions instead of actual conversation counts
+- Fixed placeholder sessions disappearing on browser refresh
+- Improved message routing to ensure new messages appear in correct conversations
 - Fixed checkpoint revert button not permanently removing messages after checkpoint
 - Resolved issue where messages reappeared after page refresh following revert
 - Improved checkpoint ID assignment for messages loaded from server sessions
@@ -170,6 +189,10 @@ The UI automatically discovers Claude Code projects from `~/.claude/projects/` a
 - **Session Organization** - Group sessions by project and timestamp
 - **Session Actions** - Rename, delete, and export conversation history
 - **Cross-device Sync** - Access sessions from any device
+- **🆕 Conversation Management** - Sessions are intelligently grouped into conversations
+- **🆕 Instant Conversation Creation** - New conversations appear immediately in sidebar before sending messages
+- **🆕 Full History Navigation** - Click any conversation to view complete message history across all sessions
+- **🆕 Smart Conversation Counting** - Delete operations count conversations, not individual sessions
 
 ### Mobile Experience
 - **Responsive Design** - Optimized for all screen sizes

@@ -30,7 +30,7 @@ const os = require('os');
 const pty = require('node-pty');
 const fetch = require('node-fetch');
 
-const { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } = require('./projects');
+const { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteAllSessions, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } = require('./projects');
 const { spawnClaude, abortClaudeSession } = require('./claude-cli');
 const gitRoutes = require('./routes/git');
 const { createCheckpoint, restoreCheckpoint, getCheckpoints, deleteCheckpoint, clearProjectCheckpoints } = require('./checkpoints');
@@ -282,6 +282,17 @@ app.delete('/api/projects/:projectName/sessions/:sessionId', async (req, res) =>
     const { projectName, sessionId } = req.params;
     await deleteSession(projectName, sessionId);
     res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete all sessions endpoint
+app.delete('/api/projects/:projectName/sessions', async (req, res) => {
+  try {
+    const { projectName } = req.params;
+    const result = await deleteAllSessions(projectName);
+    res.json({ success: true, deletedCount: result.deletedCount });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

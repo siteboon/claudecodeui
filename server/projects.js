@@ -65,6 +65,26 @@ async function generateDisplayName(projectName, actualProjectDir = null) {
   return projectPath;
 }
 
+// Smart decode project name from encoded format, handling spaces properly
+function smartDecodeProjectName(projectName) {
+  // First convert dashes to slashes
+  let decoded = projectName.replace(/-/g, '/');
+  
+  console.log(`🔍 Decoding project name: ${projectName} -> ${decoded}`);
+  
+  // Handle specific known patterns first
+  decoded = decoded.replace(/\/Claude\/Code\/UI($|\/)/g, '/Claude Code UI$1');
+  decoded = decoded.replace(/\/Jetset\/Health($|\/)/g, '/Jetset Health$1');
+  
+  // Handle general pattern: multiple consecutive single capitalized words
+  // This is for cases like "/Word/Another/Word" that should be "/Word Another Word"
+  decoded = decoded.replace(/\/([A-Z][a-z]+)\/([A-Z][a-z]+)\/([A-Z][a-z]+)($|\/)/g, '/$1 $2 $3$4');
+  decoded = decoded.replace(/\/([A-Z][a-z]+)\/([A-Z][a-z]+)($|\/)/g, '/$1 $2$3');
+  
+  console.log(`🔍 After smart decoding: ${decoded}`);
+  return decoded;
+}
+
 // Extract the actual project directory from JSONL sessions (with caching)
 async function extractProjectDirectory(projectName) {
   // Check cache first
@@ -85,8 +105,8 @@ async function extractProjectDirectory(projectName) {
     const jsonlFiles = files.filter(file => file.endsWith('.jsonl'));
     
     if (jsonlFiles.length === 0) {
-      // Fall back to decoded project name if no sessions
-      extractedPath = projectName.replace(/-/g, '/');
+      // Fall back to smart decoded project name if no sessions
+      extractedPath = smartDecodeProjectName(projectName);
     } else {
       // Process all JSONL files to collect cwd values
       for (const file of jsonlFiles) {
@@ -122,8 +142,8 @@ async function extractProjectDirectory(projectName) {
       
       // Determine the best cwd to use
       if (cwdCounts.size === 0) {
-        // No cwd found, fall back to decoded project name
-        extractedPath = projectName.replace(/-/g, '/');
+        // No cwd found, fall back to smart decoded project name
+        extractedPath = smartDecodeProjectName(projectName);
       } else if (cwdCounts.size === 1) {
         // Only one cwd, use it
         extractedPath = Array.from(cwdCounts.keys())[0];
@@ -147,7 +167,7 @@ async function extractProjectDirectory(projectName) {
         
         // Fallback (shouldn't reach here)
         if (!extractedPath) {
-          extractedPath = latestCwd || projectName.replace(/-/g, '/');
+          extractedPath = latestCwd || smartDecodeProjectName(projectName);
         }
       }
     }
@@ -160,8 +180,8 @@ async function extractProjectDirectory(projectName) {
     
   } catch (error) {
     console.error(`Error extracting project directory for ${projectName}:`, error);
-    // Fall back to decoded project name
-    extractedPath = projectName.replace(/-/g, '/');
+    // Fall back to smart decoded project name
+    extractedPath = smartDecodeProjectName(projectName);
     
     // Cache the fallback result too
     projectDirectoryCache.set(projectName, extractedPath);
@@ -202,12 +222,12 @@ async function getProjects() {
           sessions: []
         };
         
-        // Try to get sessions for this project (just first 5 for performance)
+        // Get all sessions for this project
         try {
-          const sessionResult = await getSessions(entry.name, 5, 0);
+          const sessionResult = await getSessions(entry.name);
           project.sessions = sessionResult.sessions || [];
           project.sessionMeta = {
-            hasMore: sessionResult.hasMore,
+            hasMore: false,
             total: sessionResult.total
           };
         } catch (e) {
@@ -231,8 +251,8 @@ async function getProjects() {
         try {
           actualProjectDir = await extractProjectDirectory(projectName);
         } catch (error) {
-          // Fall back to decoded project name
-          actualProjectDir = projectName.replace(/-/g, '/');
+          // Fall back to smart decoded project name
+          actualProjectDir = smartDecodeProjectName(projectName);
         }
       }
       
@@ -695,6 +715,55 @@ async function truncateSessionMessages(projectName, sessionId, checkpointId, tar
   }
 }
 
+// Delete all sessions for a project
+async function deleteAllSessions(projectName) {
+  try {
+    console.log(`🗑️ Deleting all sessions for project: ${projectName}`);
+    
+    const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
+    
+    // Check if project directory exists
+    try {
+      await fs.access(projectDir);
+    } catch (error) {
+      throw new Error(`Project directory not found: ${projectName}`);
+    }
+    
+    const files = await fs.readdir(projectDir);
+    const jsonlFiles = files.filter(file => file.endsWith('.jsonl'));
+    
+    let deletedCount = 0;
+    
+    // For each JSONL file, remove all entries or delete the file entirely
+    for (const file of jsonlFiles) {
+      const jsonlFile = path.join(projectDir, file);
+      
+      try {
+        // Simply delete the entire JSONL file
+        await fs.unlink(jsonlFile);
+        deletedCount++;
+        console.log(`🗑️ Deleted session file: ${file}`);
+      } catch (error) {
+        console.warn(`Failed to delete session file ${file}:`, error.message);
+      }
+    }
+    
+    console.log(`✅ Deleted all sessions: ${deletedCount} files removed`);
+    
+    // Clear the project directory cache to force fresh path resolution
+    clearProjectDirectoryCache();
+    
+    return {
+      success: true,
+      deletedCount
+    };
+    
+  } catch (error) {
+    console.error(`Error deleting all sessions for project ${projectName}:`, error);
+    throw new Error(`Failed to delete all sessions: ${error.message}`);
+  }
+}
+
 
 module.exports = {
   getProjects,
@@ -703,6 +772,7 @@ module.exports = {
   parseJsonlSessions,
   renameProject,
   deleteSession,
+  deleteAllSessions,
   isProjectEmpty,
   deleteProject,
   addProjectManually,

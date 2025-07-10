@@ -21,6 +21,8 @@ import GitPanel from './GitPanel';
 function MainContent({ 
   selectedProject, 
   selectedSession, 
+  selectedConversation,
+  targetSessionId,
   activeTab, 
   setActiveTab, 
   ws, 
@@ -35,12 +37,14 @@ function MainContent({
   onSessionActive,        // Mark session as active when user sends message
   onSessionInactive,      // Mark session as inactive when conversation completes/aborts  
   onReplaceTemporarySession, // Replace temporary session ID with real session ID from WebSocket
+  onReplacePlaceholderSession, // Replace placeholder session with real session when created
   onNavigateToSession,    // Navigate to a specific session (for Claude CLI session duplication workaround)
   onShowSettings,         // Show tools settings panel
   autoExpandTools,        // Auto-expand tool accordions
   showRawParameters,      // Show raw parameters in tool accordions
   autoScrollToBottom,     // Auto-scroll to bottom when new messages arrive
-  onProjectUpdate         // Refresh project data after checkpoint restoration
+  onProjectUpdate,        // Refresh project data after checkpoint restoration
+  onUpdateSessionActivity // Immediately update session metadata when new messages are sent
 }) {
   const [editingFile, setEditingFile] = useState(null);
 
@@ -153,7 +157,16 @@ function MainContent({
               </button>
             )}
             <div className="min-w-0">
-              {activeTab === 'chat' && selectedSession ? (
+              {activeTab === 'chat' && selectedConversation ? (
+                <div>
+                  <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white truncate">
+                    {selectedConversation.title} <span className="text-sm text-gray-500 dark:text-gray-400">({selectedConversation.sessions.length} sessions)</span>
+                  </h2>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                    {selectedProject.displayName} • Full conversation history
+                  </div>
+                </div>
+              ) : activeTab === 'chat' && selectedSession ? (
                 <div>
                   <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white truncate">
                     {selectedSession.summary}
@@ -162,7 +175,7 @@ function MainContent({
                     {selectedProject.displayName} <span className="hidden sm:inline">• {selectedSession.id}</span>
                   </div>
                 </div>
-              ) : activeTab === 'chat' && !selectedSession ? (
+              ) : activeTab === 'chat' && !selectedSession && !selectedConversation ? (
                 <div>
                   <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
                     New Session
@@ -273,6 +286,8 @@ function MainContent({
           <ChatInterface
             selectedProject={selectedProject}
             selectedSession={selectedSession}
+            selectedConversation={selectedConversation}
+            targetSessionId={targetSessionId}
             ws={ws}
             sendMessage={sendMessage}
             messages={messages}
@@ -281,12 +296,14 @@ function MainContent({
             onSessionActive={onSessionActive}
             onSessionInactive={onSessionInactive}
             onReplaceTemporarySession={onReplaceTemporarySession}
+            onReplacePlaceholderSession={onReplacePlaceholderSession}
             onNavigateToSession={onNavigateToSession}
             onShowSettings={onShowSettings}
             autoExpandTools={autoExpandTools}
             showRawParameters={showRawParameters}
             autoScrollToBottom={autoScrollToBottom}
             onProjectUpdate={onProjectUpdate}
+            onUpdateSessionActivity={onUpdateSessionActivity}
           />
         </div>
         <div className={`h-full overflow-hidden ${activeTab === 'files' ? 'block' : 'hidden'}`}>
