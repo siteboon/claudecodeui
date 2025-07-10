@@ -21,30 +21,13 @@ export function useWebSocket() {
 
   const connect = async () => {
     try {
-      // Fetch server configuration to get the correct WebSocket URL
-      let wsBaseUrl;
-      try {
-        const configResponse = await fetch('/api/config');
-        const config = await configResponse.json();
-        wsBaseUrl = config.wsUrl;
-        
-        // If the config returns localhost but we're not on localhost, use current host but with API server port
-        if (wsBaseUrl.includes('localhost') && !window.location.hostname.includes('localhost')) {
-          console.warn('Config returned localhost, using current host with API server port instead');
-          const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-          // For development, API server is typically on port 3002 when Vite is on 3001
-          const apiPort = window.location.port === '3001' ? '3002' : window.location.port;
-          wsBaseUrl = `${protocol}//${window.location.hostname}:${apiPort}`;
-        }
-      } catch (error) {
-        console.warn('Could not fetch server config, falling back to current host with API server port');
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        // For development, API server is typically on port 3002 when Vite is on 3001
-        const apiPort = window.location.port === '3001' ? '3002' : window.location.port;
-        wsBaseUrl = `${protocol}//${window.location.hostname}:${apiPort}`;
-      }
+      // Construct WebSocket URL from the current page's location
+      // This ensures it works correctly behind proxies and on different networks
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/ws`;
       
-      const wsUrl = `${wsBaseUrl}/ws`;
+      console.log(`Attempting to connect WebSocket to: ${wsUrl}`);
+
       const websocket = new WebSocket(wsUrl);
 
       websocket.onopen = () => {
