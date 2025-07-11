@@ -71,10 +71,37 @@ cp .env.example .env
 # Development mode (with hot reload)
 npm run dev
 
+# Production mode
+npm start
 ```
 
 5. **Open your browser:**
-   - Development: `http://localhost:3001`
+   - Development: `http://localhost:3009`
+   - Production: `http://localhost:3008`
+
+### Docker Installation (Recommended)
+
+For easier deployment and consistent environment:
+
+1. **Clone and setup:**
+```bash
+git clone https://github.com/siteboon/claudecodeui.git
+cd claudecodeui
+```
+
+2. **Run with Docker Compose:**
+```bash
+docker-compose up -d
+```
+
+3. **Open your browser:**
+   - Application: `http://localhost:3008`
+
+**Docker benefits:**
+- Consistent environment across all platforms
+- No need to install Node.js or manage dependencies
+- Automatic restart on system reboot
+- Persistent data storage for sessions and projects
 
 ## Security & Tools Configuration
 
