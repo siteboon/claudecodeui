@@ -3,15 +3,47 @@ const { exec } = require('child_process');
 const { promisify } = require('util');
 const path = require('path');
 const fs = require('fs').promises;
+const { extractProjectDirectory } = require('../projects');
 
 const router = express.Router();
 const execAsync = promisify(exec);
 
 // Helper function to get the actual project path from the encoded project name
-function getActualProjectPath(projectName) {
-  // Claude stores projects with dashes instead of slashes
-  // Convert "-Users-dmieloch-Dev-experiments-claudecodeui" to "/Users/dmieloch/Dev/experiments/claudecodeui"
-  return projectName.replace(/-/g, '/');
+async function getActualProjectPath(projectName) {
+  try {
+    return await extractProjectDirectory(projectName);
+  } catch (error) {
+    console.error(`Error extracting project directory for ${projectName}:`, error);
+    // Fallback to the old method
+    return projectName.replace(/-/g, '/');
+  }
+}
+
+// Helper function to validate git repository
+async function validateGitRepository(projectPath) {
+  try {
+    // Check if directory exists
+    await fs.access(projectPath);
+  } catch {
+    throw new Error(`Project path not found: ${projectPath}`);
+  }
+
+  try {
+    // Use --show-toplevel to get the root of the git repository
+    const { stdout: gitRoot } = await execAsync('git rev-parse --show-toplevel', { cwd: projectPath });
+    const normalizedGitRoot = path.resolve(gitRoot.trim());
+    const normalizedProjectPath = path.resolve(projectPath);
+    
+    // Ensure the git root matches our project path (prevent using parent git repos)
+    if (normalizedGitRoot !== normalizedProjectPath) {
+      throw new Error(`Project directory is not a git repository. This directory is inside a git repository at ${normalizedGitRoot}, but git operations should be run from the repository root.`);
+    }
+  } catch (error) {
+    if (error.message.includes('Project directory is not a git repository')) {
+      throw error;
+    }
+    throw new Error('Not a git repository. This directory does not contain a .git folder. Initialize a git repository with "git init" to use source control features.');
+  }
 }
 
 // Get git status for a project
@@ -23,24 +55,11 @@ router.get('/status', async (req, res) => {
   }
 
   try {
-    const projectPath = getActualProjectPath(project);
+    const projectPath = await getActualProjectPath(project);
     console.log('Git status for project:', project, '-> path:', projectPath);
     
-    // Check if directory exists
-    try {
-      await fs.access(projectPath);
-    } catch {
-      console.error('Project path not found:', projectPath);
-      return res.json({ error: 'Project not found' });
-    }
-
-    // Check if it's a git repository
-    try {
-      await execAsync('git rev-parse --git-dir', { cwd: projectPath });
-    } catch {
-      console.error('Not a git repository:', projectPath);
-      return res.json({ error: 'Not a git repository' });
-    }
+    // Validate git repository
+    await validateGitRepository(projectPath);
 
     // Get current branch
     const { stdout: branch } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: projectPath });
@@ -79,7 +98,14 @@ router.get('/status', async (req, res) => {
     });
   } catch (error) {
     console.error('Git status error:', error);
-    res.json({ error: error.message });
+    res.json({ 
+      error: error.message.includes('not a git repository') || error.message.includes('Project directory is not a git repository') 
+        ? error.message 
+        : 'Git operation failed',
+      details: error.message.includes('not a git repository') || error.message.includes('Project directory is not a git repository')
+        ? error.message
+        : `Failed to get git status: ${error.message}`
+    });
   }
 });
 
@@ -92,7 +118,10 @@ router.get('/diff', async (req, res) => {
   }
 
   try {
-    const projectPath = getActualProjectPath(project);
+    const projectPath = await getActualProjectPath(project);
+    
+    // Validate git repository
+    await validateGitRepository(projectPath);
     
     // Check if file is untracked
     const { stdout: statusOutput } = await execAsync(`git status --porcelain "${file}"`, { cwd: projectPath });
@@ -133,7 +162,10 @@ router.post('/commit', async (req, res) => {
   }
 
   try {
-    const projectPath = getActualProjectPath(project);
+    const projectPath = await getActualProjectPath(project);
+    
+    // Validate git repository
+    await validateGitRepository(projectPath);
     
     // Stage selected files
     for (const file of files) {
@@ -159,8 +191,11 @@ router.get('/branches', async (req, res) => {
   }
 
   try {
-    const projectPath = getActualProjectPath(project);
+    const projectPath = await getActualProjectPath(project);
     console.log('Git branches for project:', project, '-> path:', projectPath);
+    
+    // Validate git repository
+    await validateGitRepository(projectPath);
     
     // Get all branches
     const { stdout } = await execAsync('git branch -a', { cwd: projectPath });
@@ -199,7 +234,7 @@ router.post('/checkout', async (req, res) => {
   }
 
   try {
-    const projectPath = getActualProjectPath(project);
+    const projectPath = await getActualProjectPath(project);
     
     // Checkout the branch
     const { stdout } = await execAsync(`git checkout "${branch}"`, { cwd: projectPath });
@@ -220,7 +255,7 @@ router.post('/create-branch', async (req, res) => {
   }
 
   try {
-    const projectPath = getActualProjectPath(project);
+    const projectPath = await getActualProjectPath(project);
     
     // Create and checkout new branch
     const { stdout } = await execAsync(`git checkout -b "${branch}"`, { cwd: projectPath });
@@ -241,7 +276,7 @@ router.get('/commits', async (req, res) => {
   }
 
   try {
-    const projectPath = getActualProjectPath(project);
+    const projectPath = await getActualProjectPath(project);
     
     // Get commit log with stats
     const { stdout } = await execAsync(
@@ -292,7 +327,7 @@ router.get('/commit-diff', async (req, res) => {
   }
 
   try {
-    const projectPath = getActualProjectPath(project);
+    const projectPath = await getActualProjectPath(project);
     
     // Get diff for the commit
     const { stdout } = await execAsync(
@@ -316,7 +351,7 @@ router.post('/generate-commit-message', async (req, res) => {
   }
 
   try {
-    const projectPath = getActualProjectPath(project);
+    const projectPath = await getActualProjectPath(project);
     
     // Get diff for selected files
     let combinedDiff = '';

@@ -30,9 +30,12 @@ const os = require('os');
 const pty = require('node-pty');
 const fetch = require('node-fetch');
 
-const { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually } = require('./projects');
+const { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } = require('./projects');
 const { spawnClaude, abortClaudeSession } = require('./claude-cli');
 const gitRoutes = require('./routes/git');
+const authRoutes = require('./routes/auth');
+const { initializeDatabase } = require('./database/db');
+const { validateApiKey, authenticateToken, authenticateWebSocket } = require('./middleware/auth');
 
 // File system watcher for projects folder
 let projectsWatcher = null;
@@ -75,6 +78,9 @@ function setupProjectsWatcher() {
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(async () => {
         try {
+          
+          // Clear project directory cache when files change
+          clearProjectDirectoryCache();
           
           // Get updated projects list
           const updatedProjects = await getProjects();
@@ -139,19 +145,43 @@ const wss = new WebSocketServer({
   server,
   verifyClient: (info) => {
     console.log('WebSocket connection attempt to:', info.req.url);
-    return true; // Accept all connections for now
+    
+    // Extract token from query parameters or headers
+    const url = new URL(info.req.url, 'http://localhost');
+    const token = url.searchParams.get('token') || 
+                  info.req.headers.authorization?.split(' ')[1];
+    
+    // Verify token
+    const user = authenticateWebSocket(token);
+    if (!user) {
+      console.log('❌ WebSocket authentication failed');
+      return false;
+    }
+    
+    // Store user info in the request for later use
+    info.req.user = user;
+    console.log('✅ WebSocket authenticated for user:', user.username);
+    return true;
   }
 });
 
 app.use(cors());
 app.use(express.json());
+
+// Optional API key validation (if configured)
+app.use('/api', validateApiKey);
+
+// Authentication routes (public)
+app.use('/api/auth', authRoutes);
+
+// Git API Routes (protected)
+app.use('/api/git', authenticateToken, gitRoutes);
+
+// Static files served after API routes
 app.use(express.static(path.join(__dirname, '../dist')));
 
-// Git API Routes
-app.use('/api/git', gitRoutes);
-
-// API Routes
-app.get('/api/config', (req, res) => {
+// API Routes (protected)
+app.get('/api/config', authenticateToken, (req, res) => {
   // Always use the server's actual IP and port for WebSocket connections
   const serverIP = getServerIP();
   const host = `${serverIP}:${PORT}`;
@@ -165,7 +195,7 @@ app.get('/api/config', (req, res) => {
   });
 });
 
-app.get('/api/projects', async (req, res) => {
+app.get('/api/projects', authenticateToken, async (req, res) => {
   try {
     const projects = await getProjects();
     res.json(projects);
@@ -174,7 +204,7 @@ app.get('/api/projects', async (req, res) => {
   }
 });
 
-app.get('/api/projects/:projectName/sessions', async (req, res) => {
+app.get('/api/projects/:projectName/sessions', authenticateToken, async (req, res) => {
   try {
     const { limit = 5, offset = 0 } = req.query;
     const result = await getSessions(req.params.projectName, parseInt(limit), parseInt(offset));
@@ -185,7 +215,7 @@ app.get('/api/projects/:projectName/sessions', async (req, res) => {
 });
 
 // Get messages for a specific session
-app.get('/api/projects/:projectName/sessions/:sessionId/messages', async (req, res) => {
+app.get('/api/projects/:projectName/sessions/:sessionId/messages', authenticateToken, async (req, res) => {
   try {
     const { projectName, sessionId } = req.params;
     const messages = await getSessionMessages(projectName, sessionId);
@@ -196,7 +226,7 @@ app.get('/api/projects/:projectName/sessions/:sessionId/messages', async (req, r
 });
 
 // Rename project endpoint
-app.put('/api/projects/:projectName/rename', async (req, res) => {
+app.put('/api/projects/:projectName/rename', authenticateToken, async (req, res) => {
   try {
     const { displayName } = req.body;
     await renameProject(req.params.projectName, displayName);
@@ -207,7 +237,7 @@ app.put('/api/projects/:projectName/rename', async (req, res) => {
 });
 
 // Delete session endpoint
-app.delete('/api/projects/:projectName/sessions/:sessionId', async (req, res) => {
+app.delete('/api/projects/:projectName/sessions/:sessionId', authenticateToken, async (req, res) => {
   try {
     const { projectName, sessionId } = req.params;
     await deleteSession(projectName, sessionId);
@@ -218,7 +248,7 @@ app.delete('/api/projects/:projectName/sessions/:sessionId', async (req, res) =>
 });
 
 // Delete project endpoint (only if empty)
-app.delete('/api/projects/:projectName', async (req, res) => {
+app.delete('/api/projects/:projectName', authenticateToken, async (req, res) => {
   try {
     const { projectName } = req.params;
     await deleteProject(projectName);
@@ -229,7 +259,7 @@ app.delete('/api/projects/:projectName', async (req, res) => {
 });
 
 // Create project endpoint
-app.post('/api/projects/create', async (req, res) => {
+app.post('/api/projects/create', authenticateToken, async (req, res) => {
   try {
     const { path: projectPath } = req.body;
     
@@ -246,7 +276,7 @@ app.post('/api/projects/create', async (req, res) => {
 });
 
 // Read file content endpoint
-app.get('/api/projects/:projectName/file', async (req, res) => {
+app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) => {
   try {
     const { projectName } = req.params;
     const { filePath } = req.query;
@@ -275,7 +305,7 @@ app.get('/api/projects/:projectName/file', async (req, res) => {
 });
 
 // Serve binary file content endpoint (for images, etc.)
-app.get('/api/projects/:projectName/files/content', async (req, res) => {
+app.get('/api/projects/:projectName/files/content', authenticateToken, async (req, res) => {
   try {
     const { projectName } = req.params;
     const { path: filePath } = req.query;
@@ -321,7 +351,7 @@ app.get('/api/projects/:projectName/files/content', async (req, res) => {
 });
 
 // Save file content endpoint
-app.put('/api/projects/:projectName/file', async (req, res) => {
+app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) => {
   try {
     const { projectName } = req.params;
     const { filePath, content } = req.body;
@@ -368,51 +398,19 @@ app.put('/api/projects/:projectName/file', async (req, res) => {
   }
 });
 
-app.get('/api/projects/:projectName/files', async (req, res) => {
+app.get('/api/projects/:projectName/files', authenticateToken, async (req, res) => {
   try {
     
     const fs = require('fs').promises;
-    const projectPath = path.join(process.env.HOME, '.claude', 'projects', req.params.projectName);
     
-    // Try different methods to get the actual project path
-    let actualPath = projectPath;
-    
+    // Use extractProjectDirectory to get the actual project path
+    let actualPath;
     try {
-      // First try to read metadata.json
-      const metadataPath = path.join(projectPath, 'metadata.json');
-      const metadata = JSON.parse(await fs.readFile(metadataPath, 'utf8'));
-      actualPath = metadata.path || metadata.cwd;
-    } catch (e) {
-      // Fallback: try to find the actual path by testing different dash interpretations
-      let testPath = req.params.projectName;
-      if (testPath.startsWith('-')) {
-        testPath = testPath.substring(1);
-      }
-      
-      // Try to intelligently decode the path by testing which directories exist
-      const pathParts = testPath.split('-');
-      actualPath = '/' + pathParts.join('/');
-      
-      // If the simple replacement doesn't work, try to find the correct path
-      // by testing combinations where some dashes might be part of directory names
-      if (!require('fs').existsSync(actualPath)) {
-        // Try different combinations of dash vs slash
-        for (let i = pathParts.length - 1; i >= 0; i--) {
-          let testParts = [...pathParts];
-          // Try joining some parts with dashes instead of slashes
-          for (let j = i; j < testParts.length - 1; j++) {
-            testParts[j] = testParts[j] + '-' + testParts[j + 1];
-            testParts.splice(j + 1, 1);
-            let testActualPath = '/' + testParts.join('/');
-            if (require('fs').existsSync(testActualPath)) {
-              actualPath = testActualPath;
-              break;
-            }
-          }
-          if (require('fs').existsSync(actualPath)) break;
-        }
-      }
-      
+      actualPath = await extractProjectDirectory(req.params.projectName);
+    } catch (error) {
+      console.error('Error extracting project directory:', error);
+      // Fallback to simple dash replacement
+      actualPath = req.params.projectName.replace(/-/g, '/');
     }
     
     // Check if path exists
@@ -438,12 +436,16 @@ wss.on('connection', (ws, request) => {
   const url = request.url;
   console.log('🔗 Client connected to:', url);
   
-  if (url === '/shell') {
+  // Parse URL to get pathname without query parameters
+  const urlObj = new URL(url, 'http://localhost');
+  const pathname = urlObj.pathname;
+  
+  if (pathname === '/shell') {
     handleShellConnection(ws);
-  } else if (url === '/ws') {
+  } else if (pathname === '/ws') {
     handleChatConnection(ws);
   } else {
-    console.log('❌ Unknown WebSocket path:', url);
+    console.log('❌ Unknown WebSocket path:', pathname);
     ws.close();
   }
 });
@@ -658,7 +660,7 @@ function handleShellConnection(ws) {
   });
 }
 // Audio transcription endpoint
-app.post('/api/transcribe', async (req, res) => {
+app.post('/api/transcribe', authenticateToken, async (req, res) => {
   try {
     const multer = require('multer');
     const upload = multer({ storage: multer.memoryStorage() });
@@ -691,7 +693,6 @@ app.post('/api/transcribe', async (req, res) => {
         formData.append('language', 'en');
         
         // Make request to OpenAI
-        const fetch = require('node-fetch');
         const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
           method: 'POST',
           headers: {
@@ -865,9 +866,24 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
 }
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Claude Code UI server running on http://0.0.0.0:${PORT}`);
-  
-  // Start watching the projects folder for changes
-  setupProjectsWatcher();
-});
+
+// Initialize database and start server
+async function startServer() {
+  try {
+    // Initialize authentication database
+    await initializeDatabase();
+    console.log('✅ Database initialized successfully');
+    
+    server.listen(PORT, '0.0.0.0', () => {
+      console.log(`Claude Code UI server running on http://0.0.0.0:${PORT}`);
+      
+      // Start watching the projects folder for changes
+      setupProjectsWatcher();
+    });
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+startServer();

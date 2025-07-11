@@ -142,8 +142,8 @@ const QuickSettingsPanel = ({
               </label>
             </div>
 
-            {/* Whisper Dictation Settings */}
-            <div className="space-y-2">
+            {/* Whisper Dictation Settings - HIDDEN */}
+            <div className="space-y-2" style={{ display: 'none' }}>
               <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Whisper Dictation</h4>
               
               <div className="space-y-2">

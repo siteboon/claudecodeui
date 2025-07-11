@@ -5,13 +5,35 @@ import { transcribeWithWhisper } from '../utils/whisper';
 export function MicButton({ onTranscript, className = '' }) {
   const [state, setState] = useState('idle'); // idle, recording, transcribing, processing
   const [error, setError] = useState(null);
+  const [isSupported, setIsSupported] = useState(true);
   
   const mediaRecorderRef = useRef(null);
   const streamRef = useRef(null);
   const chunksRef = useRef([]);
   const lastTapRef = useRef(0);
   
-  // Version indicator to verify updates
+  // Check microphone support on mount
+  useEffect(() => {
+    const checkSupport = () => {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setIsSupported(false);
+        setError('Microphone not supported. Please use HTTPS or a modern browser.');
+        return;
+      }
+      
+      // Additional check for secure context
+      if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+        setIsSupported(false);
+        setError('Microphone requires HTTPS. Please use a secure connection.');
+        return;
+      }
+      
+      setIsSupported(true);
+      setError(null);
+    };
+    
+    checkSupport();
+  }, []);
 
   // Start recording
   const startRecording = async () => {
@@ -19,6 +41,11 @@ export function MicButton({ onTranscript, className = '' }) {
       console.log('Starting recording...');
       setError(null);
       chunksRef.current = [];
+
+      // Check if getUserMedia is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Microphone access not available. Please use HTTPS or a supported browser.');
+      }
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
@@ -79,7 +106,23 @@ export function MicButton({ onTranscript, className = '' }) {
       console.log('Recording started successfully');
     } catch (err) {
       console.error('Failed to start recording:', err);
-      setError('Microphone access denied');
+      
+      // Provide specific error messages based on error type
+      let errorMessage = 'Microphone access failed';
+      
+      if (err.name === 'NotAllowedError') {
+        errorMessage = 'Microphone access denied. Please allow microphone permissions.';
+      } else if (err.name === 'NotFoundError') {
+        errorMessage = 'No microphone found. Please check your audio devices.';
+      } else if (err.name === 'NotSupportedError') {
+        errorMessage = 'Microphone not supported by this browser.';
+      } else if (err.name === 'NotReadableError') {
+        errorMessage = 'Microphone is being used by another application.';
+      } else if (err.message.includes('HTTPS')) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
       setState('idle');
     }
   };
@@ -107,6 +150,11 @@ export function MicButton({ onTranscript, className = '' }) {
     if (e) {
       e.preventDefault();
       e.stopPropagation();
+    }
+    
+    // Don't proceed if microphone is not supported
+    if (!isSupported) {
+      return;
     }
     
     // Debounce for mobile double-tap issue
@@ -138,6 +186,14 @@ export function MicButton({ onTranscript, className = '' }) {
 
   // Button appearance based on state
   const getButtonAppearance = () => {
+    if (!isSupported) {
+      return {
+        icon: <Mic className="w-5 h-5" />,
+        className: 'bg-gray-400 cursor-not-allowed',
+        disabled: true
+      };
+    }
+    
     switch (state) {
       case 'recording':
         return {

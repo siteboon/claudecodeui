@@ -23,6 +23,7 @@ import ClaudeLogo from './ClaudeLogo.jsx';
 
 import ClaudeStatus from './ClaudeStatus';
 import { MicButton } from './MicButton.jsx';
+import { api } from '../utils/api';
 
 // Memoized message component to prevent unnecessary re-renders
 const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFileOpen, onShowSettings, autoExpandTools, showRawParameters }) => {
@@ -949,7 +950,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     
     setIsLoadingSessionMessages(true);
     try {
-      const response = await fetch(`/api/projects/${projectName}/sessions/${sessionId}/messages`);
+      const response = await api.sessionMessages(projectName, sessionId);
       if (!response.ok) {
         throw new Error('Failed to load session messages');
       }
@@ -1112,15 +1113,15 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const isNearBottom = useCallback(() => {
     if (!scrollContainerRef.current) return false;
     const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
-    // Consider "near bottom" if within 100px of the bottom
-    return scrollHeight - scrollTop - clientHeight < 100;
+    // Consider "near bottom" if within 50px of the bottom
+    return scrollHeight - scrollTop - clientHeight < 50;
   }, []);
 
   // Handle scroll events to detect when user manually scrolls up
   const handleScroll = useCallback(() => {
     if (scrollContainerRef.current) {
-      const wasNearBottom = isNearBottom();
-      setIsUserScrolledUp(!wasNearBottom);
+      const nearBottom = isNearBottom();
+      setIsUserScrolledUp(!nearBottom);
     }
   }, [isNearBottom]);
 
@@ -1451,7 +1452,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
   const fetchProjectFiles = async () => {
     try {
-      const response = await fetch(`/api/projects/${selectedProject.name}/files`);
+      const response = await api.getFiles(selectedProject.name);
       if (response.ok) {
         const files = await response.json();
         // Flatten the file tree to get all file paths
@@ -1540,13 +1541,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   });
 
   useEffect(() => {
-    // Only auto-scroll to bottom when new messages arrive if:
-    // 1. Auto-scroll is enabled in settings
-    // 2. User hasn't manually scrolled up
+    // Auto-scroll to bottom when new messages arrive
     if (scrollContainerRef.current && chatMessages.length > 0) {
       if (autoScrollToBottom) {
+        // If auto-scroll is enabled, always scroll to bottom unless user has manually scrolled up
         if (!isUserScrolledUp) {
-          setTimeout(() => scrollToBottom(), 0);
+          setTimeout(() => scrollToBottom(), 50); // Small delay to ensure DOM is updated
         }
       } else {
         // When auto-scroll is disabled, preserve the visual position
@@ -1564,12 +1564,15 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, [chatMessages.length, isUserScrolledUp, scrollToBottom, autoScrollToBottom]);
 
-  // Scroll to bottom when component mounts with existing messages
+  // Scroll to bottom when component mounts with existing messages or when messages first load
   useEffect(() => {
-    if (scrollContainerRef.current && chatMessages.length > 0 && autoScrollToBottom) {
-      setTimeout(() => scrollToBottom(), 100); // Small delay to ensure rendering
+    if (scrollContainerRef.current && chatMessages.length > 0) {
+      // Always scroll to bottom when messages first load (user expects to see latest)
+      // Also reset scroll state
+      setIsUserScrolledUp(false);
+      setTimeout(() => scrollToBottom(), 200); // Longer delay to ensure full rendering
     }
-  }, [scrollToBottom, autoScrollToBottom]);
+  }, [chatMessages.length > 0, scrollToBottom]); // Trigger when messages first appear
 
   // Add scroll event listener to detect user scrolling
   useEffect(() => {
@@ -1636,8 +1639,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       can_interrupt: true
     });
     
-    // Always scroll to bottom when user sends a message (they're actively participating)
-    setTimeout(() => scrollToBottom(), 0);
+    // Always scroll to bottom when user sends a message and reset scroll state
+    setIsUserScrolledUp(false); // Reset scroll state so auto-scroll works for Claude's response
+    setTimeout(() => scrollToBottom(), 100); // Longer delay to ensure message is rendered
 
     // Session Protection: Mark session as active to prevent automatic project updates during conversation
     // This is crucial for maintaining chat state integrity. We handle two cases:
@@ -1882,20 +1886,20 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         )}
         
         <div ref={messagesEndRef} />
-        
-        {/* Floating scroll to bottom button */}
-        {isUserScrolledUp && chatMessages.length > 0 && (
-          <button
-            onClick={scrollToBottom}
-            className="absolute bottom-4 right-4 w-10 h-10 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center transition-all duration-200 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:ring-offset-gray-800 z-10"
-            title="Scroll to bottom"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-            </svg>
-          </button>
-        )}
       </div>
+
+      {/* Floating scroll to bottom button - positioned outside scrollable container */}
+      {isUserScrolledUp && chatMessages.length > 0 && (
+        <button
+          onClick={scrollToBottom}
+          className="fixed bottom-20 sm:bottom-24 right-4 sm:right-6 w-12 h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center transition-all duration-200 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:ring-offset-gray-800 z-50"
+          title="Scroll to bottom"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+          </svg>
+        </button>
+      )}
 
       {/* Input Area - Fixed Bottom */}
       <div className={`p-2 sm:p-4 md:p-6 flex-shrink-0 ${
@@ -1977,8 +1981,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 </svg>
               </button>
             )}
-            {/* Mic button */}
-            <div className="absolute right-16 sm:right-16 top-1/2 transform -translate-y-1/2">
+            {/* Mic button - HIDDEN */}
+            <div className="absolute right-16 sm:right-16 top-1/2 transform -translate-y-1/2" style={{ display: 'none' }}>
               <MicButton 
                 onTranscript={handleTranscript}
                 className="w-10 h-10 sm:w-10 sm:h-10"

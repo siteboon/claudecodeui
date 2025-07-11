@@ -6,6 +6,7 @@ import { Input } from './ui/input';
 import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2, Star, ChevronUp } from 'lucide-react';
 import { cn } from '../lib/utils';
 import ClaudeLogo from './ClaudeLogo';
+import { api } from '../utils/api';
 
 // Move formatTimeAgo outside component to avoid recreation on every render
 const formatTimeAgo = (dateString, currentTime) => {
@@ -44,7 +45,11 @@ function Sidebar({
   onProjectDelete,
   isLoading,
   onRefresh,
-  onShowSettings
+  onShowSettings,
+  updateAvailable,
+  latestVersion,
+  currentVersion,
+  onShowVersionModal
 }) {
   const [expandedProjects, setExpandedProjects] = useState(new Set());
   const [editingProject, setEditingProject] = useState(null);
@@ -151,13 +156,7 @@ function Sidebar({
 
   const saveProjectName = async (projectName) => {
     try {
-      const response = await fetch(`/api/projects/${projectName}/rename`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ displayName: editingName }),
-      });
+      const response = await api.renameProject(projectName, editingName);
 
       if (response.ok) {
         // Refresh projects to get updated data
@@ -183,9 +182,7 @@ function Sidebar({
     }
 
     try {
-      const response = await fetch(`/api/projects/${projectName}/sessions/${sessionId}`, {
-        method: 'DELETE',
-      });
+      const response = await api.deleteSession(projectName, sessionId);
 
       if (response.ok) {
         // Call parent callback if provided
@@ -208,9 +205,7 @@ function Sidebar({
     }
 
     try {
-      const response = await fetch(`/api/projects/${projectName}`, {
-        method: 'DELETE',
-      });
+      const response = await api.deleteProject(projectName);
 
       if (response.ok) {
         // Call parent callback if provided
@@ -237,15 +232,7 @@ function Sidebar({
     setCreatingProject(true);
     
     try {
-      const response = await fetch('/api/projects/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          path: newProjectPath.trim()
-        }),
-      });
+      const response = await api.createProject(newProjectPath.trim());
 
       if (response.ok) {
         const result = await response.json();
@@ -1707,6 +1694,50 @@ function Sidebar({
           )}
         </div>
       </ScrollArea>
+      
+      {/* Version Update Notification */}
+      {updateAvailable && (
+        <div className="md:p-2 border-t border-border/50 flex-shrink-0">
+          {/* Desktop Version Notification */}
+          <div className="hidden md:block">
+            <Button
+              variant="ghost"
+              className="w-full justify-start gap-3 p-3 h-auto font-normal text-left hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors duration-200 border border-blue-200 dark:border-blue-700 rounded-lg mb-2"
+              onClick={onShowVersionModal}
+            >
+              <div className="relative">
+                <svg className="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                </svg>
+                <div className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium text-blue-700 dark:text-blue-300">Update Available</div>
+                <div className="text-xs text-blue-600 dark:text-blue-400">Version {latestVersion} is ready</div>
+              </div>
+            </Button>
+          </div>
+          
+          {/* Mobile Version Notification */}
+          <div className="md:hidden p-3 pb-2">
+            <button
+              className="w-full h-12 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-xl flex items-center justify-start gap-3 px-4 active:scale-[0.98] transition-all duration-150"
+              onClick={onShowVersionModal}
+            >
+              <div className="relative">
+                <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                </svg>
+                <div className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+              </div>
+              <div className="min-w-0 flex-1 text-left">
+                <div className="text-sm font-medium text-blue-700 dark:text-blue-300">Update Available</div>
+                <div className="text-xs text-blue-600 dark:text-blue-400">Version {latestVersion} is ready</div>
+              </div>
+            </button>
+          </div>
+        </div>
+      )}
       
       {/* Settings Section */}
       <div className="md:p-2 md:border-t md:border-border flex-shrink-0">

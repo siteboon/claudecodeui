@@ -10,6 +10,7 @@ import { oneDark } from '@codemirror/theme-one-dark';
 import { EditorView, Decoration } from '@codemirror/view';
 import { StateField, StateEffect, RangeSetBuilder } from '@codemirror/state';
 import { X, Save, Download, Maximize2, Minimize2, Eye, EyeOff } from 'lucide-react';
+import { api } from '../utils/api';
 
 function CodeEditor({ file, onClose, projectPath }) {
   const [content, setContent] = useState('');
@@ -19,6 +20,7 @@ function CodeEditor({ file, onClose, projectPath }) {
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [showDiff, setShowDiff] = useState(!!file.diffInfo);
+  const [wordWrap, setWordWrap] = useState(false);
 
   // Create diff highlighting
   const diffEffect = StateEffect.define();
@@ -138,7 +140,7 @@ function CodeEditor({ file, onClose, projectPath }) {
       try {
         setLoading(true);
         
-        const response = await fetch(`/api/projects/${file.projectName}/file?filePath=${encodeURIComponent(file.path)}`);
+        const response = await api.readFile(file.projectName, file.path);
         
         if (!response.ok) {
           throw new Error(`Failed to load file: ${response.status} ${response.statusText}`);
@@ -175,16 +177,7 @@ function CodeEditor({ file, onClose, projectPath }) {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const response = await fetch(`/api/projects/${file.projectName}/file`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          filePath: file.path,
-          content: content
-        })
-      });
+      const response = await api.saveFile(file.projectName, file.path, content);
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -265,28 +258,17 @@ function CodeEditor({ file, onClose, projectPath }) {
   }
 
   return (
-    <>
-      <style>
-        {`
-          .code-editor-modal {
-            background-color: ${isDarkMode ? '#111827' : '#ffffff'} !important;
-          }
-          .code-editor-modal:hover {
-            background-color: ${isDarkMode ? '#111827' : '#ffffff'} !important;
-          }
-        `}
-      </style>
-      <div className={`fixed inset-0 z-50 ${
-        // Mobile: native fullscreen, Desktop: modal with backdrop
-        'md:bg-black/50 md:flex md:items-center md:justify-center md:p-4'
-      } ${isFullscreen ? 'md:p-0' : ''}`}>
-        <div className={`code-editor-modal shadow-2xl flex flex-col ${
-          // Mobile: always fullscreen, Desktop: modal sizing
-          'w-full h-full md:rounded-lg md:shadow-2xl' +
-          (isFullscreen ? ' md:w-full md:h-full md:rounded-none' : ' md:w-full md:max-w-6xl md:h-[80vh] md:max-h-[80vh]')
-        }`}>
+    <div className={`fixed inset-0 z-50 ${
+      // Mobile: native fullscreen, Desktop: modal with backdrop
+      'md:bg-black/50 md:flex md:items-center md:justify-center md:p-4'
+    } ${isFullscreen ? 'md:p-0' : ''}`}>
+      <div className={`bg-white shadow-2xl flex flex-col ${
+        // Mobile: always fullscreen, Desktop: modal sizing
+        'w-full h-full md:rounded-lg md:shadow-2xl' +
+        (isFullscreen ? ' md:w-full md:h-full md:rounded-none' : ' md:w-full md:max-w-6xl md:h-[80vh] md:max-h-[80vh]')
+      }`}>
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 min-w-0">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0 min-w-0">
           <div className="flex items-center gap-3 min-w-0 flex-1">
             <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center flex-shrink-0">
               <span className="text-white text-sm font-mono">
@@ -295,14 +277,14 @@ function CodeEditor({ file, onClose, projectPath }) {
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 min-w-0">
-                <h3 className="font-medium text-gray-900 dark:text-white truncate">{file.name}</h3>
+                <h3 className="font-medium text-gray-900 truncate">{file.name}</h3>
                 {file.diffInfo && (
-                  <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-1 rounded whitespace-nowrap">
+                  <span className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded whitespace-nowrap">
                     📝 Has changes
                   </span>
                 )}
               </div>
-              <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{file.path}</p>
+              <p className="text-sm text-gray-500 truncate">{file.path}</p>
             </div>
           </div>
           
@@ -316,6 +298,18 @@ function CodeEditor({ file, onClose, projectPath }) {
                 {showDiff ? <EyeOff className="w-5 h-5 md:w-4 md:h-4" /> : <Eye className="w-5 h-5 md:w-4 md:h-4" />}
               </button>
             )}
+            
+            <button
+              onClick={() => setWordWrap(!wordWrap)}
+              className={`p-2 md:p-2 rounded-md hover:bg-gray-100 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center ${
+                wordWrap 
+                  ? 'text-blue-600 bg-blue-50' 
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+              title={wordWrap ? 'Disable word wrap' : 'Enable word wrap'}
+            >
+              <span className="text-sm md:text-xs font-mono font-bold">↵</span>
+            </button>
             
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
@@ -384,7 +378,8 @@ function CodeEditor({ file, onClose, projectPath }) {
             extensions={[
               ...getLanguageExtension(file.name),
               diffField,
-              diffTheme
+              diffTheme,
+              ...(wordWrap ? [EditorView.lineWrapping] : [])
             ]}
             theme={isDarkMode ? oneDark : undefined}
             height="100%"
@@ -421,7 +416,6 @@ function CodeEditor({ file, onClose, projectPath }) {
         </div>
       </div>
     </div>
-    </>
   );
 }
 

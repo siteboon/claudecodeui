@@ -2,6 +2,17 @@ const fs = require('fs').promises;
 const path = require('path');
 const readline = require('readline');
 
+// Cache for extracted project directories
+const projectDirectoryCache = new Map();
+let cacheTimestamp = Date.now();
+
+// Clear cache when needed (called when project files change)
+function clearProjectDirectoryCache() {
+  projectDirectoryCache.clear();
+  cacheTimestamp = Date.now();
+  console.log('🗑️ Project directory cache cleared');
+}
+
 // Load project configuration file
 async function loadProjectConfig() {
   const configPath = path.join(process.env.HOME, '.claude', 'project-config.json');
@@ -21,9 +32,9 @@ async function saveProjectConfig(config) {
 }
 
 // Generate better display name from path
-async function generateDisplayName(projectName) {
-  // Convert "-home-user-projects-myapp" to a readable format
-  let projectPath = projectName.replace(/-/g, '/');
+async function generateDisplayName(projectName, actualProjectDir = null) {
+  // Use actual project directory if provided, otherwise decode from project name
+  let projectPath = actualProjectDir || projectName.replace(/-/g, '/');
   
   // Try to read package.json from the project path
   try {
@@ -54,6 +65,111 @@ async function generateDisplayName(projectName) {
   return projectPath;
 }
 
+// Extract the actual project directory from JSONL sessions (with caching)
+async function extractProjectDirectory(projectName) {
+  // Check cache first
+  if (projectDirectoryCache.has(projectName)) {
+    return projectDirectoryCache.get(projectName);
+  }
+  
+  console.log(`🔍 Extracting project directory for: ${projectName}`);
+  
+  const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
+  const cwdCounts = new Map();
+  let latestTimestamp = 0;
+  let latestCwd = null;
+  let extractedPath;
+  
+  try {
+    const files = await fs.readdir(projectDir);
+    const jsonlFiles = files.filter(file => file.endsWith('.jsonl'));
+    
+    if (jsonlFiles.length === 0) {
+      // Fall back to decoded project name if no sessions
+      extractedPath = projectName.replace(/-/g, '/');
+    } else {
+      // Process all JSONL files to collect cwd values
+      for (const file of jsonlFiles) {
+        const jsonlFile = path.join(projectDir, file);
+        const fileStream = require('fs').createReadStream(jsonlFile);
+        const rl = readline.createInterface({
+          input: fileStream,
+          crlfDelay: Infinity
+        });
+        
+        for await (const line of rl) {
+          if (line.trim()) {
+            try {
+              const entry = JSON.parse(line);
+              
+              if (entry.cwd) {
+                // Count occurrences of each cwd
+                cwdCounts.set(entry.cwd, (cwdCounts.get(entry.cwd) || 0) + 1);
+                
+                // Track the most recent cwd
+                const timestamp = new Date(entry.timestamp || 0).getTime();
+                if (timestamp > latestTimestamp) {
+                  latestTimestamp = timestamp;
+                  latestCwd = entry.cwd;
+                }
+              }
+            } catch (parseError) {
+              // Skip malformed lines
+            }
+          }
+        }
+      }
+      
+      // Determine the best cwd to use
+      if (cwdCounts.size === 0) {
+        // No cwd found, fall back to decoded project name
+        extractedPath = projectName.replace(/-/g, '/');
+      } else if (cwdCounts.size === 1) {
+        // Only one cwd, use it
+        extractedPath = Array.from(cwdCounts.keys())[0];
+      } else {
+        // Multiple cwd values - prefer the most recent one if it has reasonable usage
+        const mostRecentCount = cwdCounts.get(latestCwd) || 0;
+        const maxCount = Math.max(...cwdCounts.values());
+        
+        // Use most recent if it has at least 25% of the max count
+        if (mostRecentCount >= maxCount * 0.25) {
+          extractedPath = latestCwd;
+        } else {
+          // Otherwise use the most frequently used cwd
+          for (const [cwd, count] of cwdCounts.entries()) {
+            if (count === maxCount) {
+              extractedPath = cwd;
+              break;
+            }
+          }
+        }
+        
+        // Fallback (shouldn't reach here)
+        if (!extractedPath) {
+          extractedPath = latestCwd || projectName.replace(/-/g, '/');
+        }
+      }
+    }
+    
+    // Cache the result
+    projectDirectoryCache.set(projectName, extractedPath);
+    console.log(`💾 Cached project directory: ${projectName} -> ${extractedPath}`);
+    
+    return extractedPath;
+    
+  } catch (error) {
+    console.error(`Error extracting project directory for ${projectName}:`, error);
+    // Fall back to decoded project name
+    extractedPath = projectName.replace(/-/g, '/');
+    
+    // Cache the fallback result too
+    projectDirectoryCache.set(projectName, extractedPath);
+    
+    return extractedPath;
+  }
+}
+
 async function getProjects() {
   const claudeDir = path.join(process.env.HOME, '.claude', 'projects');
   const config = await loadProjectConfig();
@@ -69,14 +185,17 @@ async function getProjects() {
         existingProjects.add(entry.name);
         const projectPath = path.join(claudeDir, entry.name);
         
+        // Extract actual project directory from JSONL sessions
+        const actualProjectDir = await extractProjectDirectory(entry.name);
+        
         // Get display name from config or generate one
         const customName = config[entry.name]?.displayName;
-        const autoDisplayName = await generateDisplayName(entry.name);
-        const fullPath = entry.name.replace(/-/g, '/');
+        const autoDisplayName = await generateDisplayName(entry.name, actualProjectDir);
+        const fullPath = actualProjectDir;
         
         const project = {
           name: entry.name,
-          path: projectPath,
+          path: actualProjectDir,
           displayName: customName || autoDisplayName,
           fullPath: fullPath,
           isCustomName: !!customName,
@@ -105,17 +224,27 @@ async function getProjects() {
   // Add manually configured projects that don't exist as folders yet
   for (const [projectName, projectConfig] of Object.entries(config)) {
     if (!existingProjects.has(projectName) && projectConfig.manuallyAdded) {
-      const fullPath = projectName.replace(/-/g, '/');
+      // Use the original path if available, otherwise extract from potential sessions
+      let actualProjectDir = projectConfig.originalPath;
       
-      const project = {
-        name: projectName,
-        path: null, // No physical path yet
-        displayName: projectConfig.displayName || await generateDisplayName(projectName),
-        fullPath: fullPath,
-        isCustomName: !!projectConfig.displayName,
-        isManuallyAdded: true,
-        sessions: []
-      };
+      if (!actualProjectDir) {
+        try {
+          actualProjectDir = await extractProjectDirectory(projectName);
+        } catch (error) {
+          // Fall back to decoded project name
+          actualProjectDir = projectName.replace(/-/g, '/');
+        }
+      }
+      
+              const project = {
+          name: projectName,
+          path: actualProjectDir,
+          displayName: projectConfig.displayName || await generateDisplayName(projectName, actualProjectDir),
+          fullPath: actualProjectDir,
+          isCustomName: !!projectConfig.displayName,
+          isManuallyAdded: true,
+          sessions: []
+        };
       
       projects.push(project);
     }
@@ -463,9 +592,9 @@ async function addProjectManually(projectPath, displayName = null) {
   
   return {
     name: projectName,
-    path: null,
+    path: absolutePath,
     fullPath: absolutePath,
-    displayName: displayName || await generateDisplayName(projectName),
+    displayName: displayName || await generateDisplayName(projectName, absolutePath),
     isManuallyAdded: true,
     sessions: []
   };
@@ -483,5 +612,7 @@ module.exports = {
   deleteProject,
   addProjectManually,
   loadProjectConfig,
-  saveProjectConfig
+  saveProjectConfig,
+  extractProjectDirectory,
+  clearProjectDirectoryCache
 };

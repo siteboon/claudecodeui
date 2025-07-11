@@ -5,6 +5,7 @@ import { Folder, FolderOpen, File, FileText, FileCode } from 'lucide-react';
 import { cn } from '../lib/utils';
 import CodeEditor from './CodeEditor';
 import ImageViewer from './ImageViewer';
+import { api } from '../utils/api';
 
 function FileTree({ selectedProject }) {
   const [files, setFiles] = useState([]);
@@ -22,7 +23,7 @@ function FileTree({ selectedProject }) {
   const fetchFiles = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/projects/${selectedProject.name}/files`);
+      const response = await api.getFiles(selectedProject.name);
       
       if (!response.ok) {
         const errorText = await response.text();
