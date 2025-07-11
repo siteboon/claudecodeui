@@ -1,0 +1,167 @@
+---
+description: Sistema de verificação automática para aderência ao Protocolo Modo Projeto
+globs: **/*
+alwaysApply: false
+---
+
+# 🔍 PROTOCOLO DE VERIFICAÇÃO AUTOMÁTICA - MODO PROJETO V2.0
+
+## OBJETIVO
+Garantir que o Protocolo Modo Projeto V2.0 seja seguido rigorosamente, evitando falhas como a identificada na análise forense.
+
+---
+
+## CHECKLIST PRÉ-ATIVAÇÃO
+
+### DETECÇÃO DE TRIGGERS
+Quando identificar comandos de ativação do Modo Projeto:
+
+#### ✅ TRIGGERS RECONHECIDOS:
+- [ ] "Ative o Modo Projeto"
+- [ ] "Ativar Modo Projeto" 
+- [ ] "Modo Projeto"
+- [ ] "Entre no Modo Projeto"
+- [ ] "Active Project Mode"
+- [ ] "Activate Project Mode"
+
+#### ✅ AÇÕES IMEDIATAS OBRIGATÓRIAS:
+- [ ] PAROU qualquer outra atividade
+- [ ] CONFIRMOU ativação: "🚀 **MODO PROJETO V2.0 ATIVADO**"
+- [ ] INVOCOU `@claude_rules/modoprojeto.mdc`
+- [ ] CARREGOU `@claude_rules/atualizatasks.mdc`
+- [ ] APLICOU `@claude_rules/regra-diretriz-dev.mdc`
+
+---
+
+## VERIFICAÇÃO DURANTE EXECUÇÃO
+
+### FASE 1: VERIFICAÇÃO DE MCPs
+- [ ] Verificou status do MCP Open Memory
+- [ ] Verificou status do MCP Context7  
+- [ ] Verificou status do MCP Task Master AI
+- [ ] Relatou status corretamente
+- [ ] Solicitou autorização se necessário
+
+### FASE 2: IMPLEMENTAÇÃO
+- [ ] Leu descrição da task 3 vezes consecutivas
+- [ ] Executou `npm run build` antes de começar
+- [ ] Seguiu processo cognitivo Chain of Thought
+- [ ] Aplicou diretrizes do @atualizatasks.mdc
+- [ ] Aplicou diretrizes do @regra-diretriz-dev.mdc
+
+#### VERIFICAÇÃO CONTÍNUA (A CADA SUBTASK):
+- [ ] Pediu autorização para atualizar status
+- [ ] Marcou subtask como "in-progress" antes de implementar
+- [ ] Implementou seguindo diretrizes de qualidade
+- [ ] Verificou warnings antes/depois da modificação
+- [ ] Marcou subtask como "done" após conclusão
+- [ ] Pediu autorização para commit (se aplicável)
+
+### FASE 3: PÓS-IMPLEMENTAÇÃO
+- [ ] Registrou na memória (se MCPs offline)
+- [ ] Executou verificações finais de qualidade
+- [ ] Confirmou conclusão do protocolo
+
+---
+
+## ALERTAS DE FALHA CRÍTICA
+
+### 🚨 FALHA NÍVEL 1 - PROTOCOLO NÃO ATIVADO
+**Sintomas:**
+- Comando "Ative o Modo Projeto" ignorado
+- Implementação iniciada sem confirmação do protocolo
+- Regras críticas não carregadas
+
+**Ação Corretiva:**
+- PARE imediatamente
+- Retorne ao início
+- Execute ativação completa do protocolo
+
+### 🚨 FALHA NÍVEL 2 - REGRAS NÃO APLICADAS  
+**Sintomas:**
+- Status de subtasks não atualizados individualmente
+- Build não executado antes de começar
+- Commits sem autorização
+- Introdução de warnings em código limpo
+
+**Ação Corretiva:**
+- PARE desenvolvimento
+- Aplique regras faltantes
+- Corrija degradações de código
+
+### 🚨 FALHA NÍVEL 3 - PROCESSO INCOMPLETO
+**Sintomas:**
+- Protocolo iniciado mas não finalizado corretamente
+- Memória não registrada (quando necessário)
+- Verificações finais omitidas
+
+**Ação Corretiva:**
+- Complete todas as fases pendentes
+- Execute verificações finais
+- Confirme conclusão do protocolo
+
+---
+
+## TEMPLATE DE VERIFICAÇÃO FINAL
+
+```
+═══════════════════════════════════════════════════════
+VERIFICAÇÃO FINAL - PROTOCOLO MODO PROJETO V2.0
+═══════════════════════════════════════════════════════
+□ Protocolo foi ativado corretamente?
+  └─ Resultado: [SIM - com confirmação / NÃO - falha crítica]
+
+□ Todas as regras foram aplicadas?
+  └─ @modoprojeto.mdc: [APLICADO / NÃO APLICADO]
+  └─ @atualizatasks.mdc: [APLICADO / NÃO APLICADO]  
+  └─ @regra-diretriz-dev.mdc: [APLICADO / NÃO APLICADO]
+
+□ MCPs foram verificados?
+  └─ Resultado: [TODOS VERIFICADOS / VERIFICAÇÃO OMITIDA]
+
+□ Subtasks foram atualizadas individualmente?
+  └─ Resultado: [SIM - com autorização / NÃO - falha protocolo]
+
+□ Build foi executado antes de começar?
+  └─ Resultado: [SIM - estado verificado / NÃO - falha crítica]
+
+□ Código manteve/melhorou qualidade?
+  └─ Warnings ANTES: _____ | DEPOIS: _____
+  └─ Resultado: [MANTEVE/MELHOROU / DEGRADOU - falha grave]
+
+□ Processo foi finalizado corretamente?
+  └─ Resultado: [COMPLETO / INCOMPLETO]
+
+DECISÃO FINAL: [✓ PROTOCOLO SEGUIDO / ✗ FALHAS IDENTIFICADAS]
+═══════════════════════════════════════════════════════
+```
+
+---
+
+## COMPROMISSO DE ADERÊNCIA
+
+### REGRA FUNDAMENTAL:
+> "O Protocolo Modo Projeto V2.0 é INVIOLÁVEL. Não há exceções, não há atalhos, não há 'desta vez pode ser diferente'."
+
+### PROCESSO MENTAL OBRIGATÓRIO:
+```
+"Recebi comando de Modo Projeto..."
+VERIFICANDO: É um dos triggers reconhecidos? 
+DECIDINDO: ATIVAR protocolo V2.0 imediatamente
+CONFIRMANDO: "🚀 MODO PROJETO V2.0 ATIVADO"
+CARREGANDO: Todas as regras críticas
+PROSSEGUINDO: Apenas após verificação completa
+```
+
+### RESULTADO ESPERADO:
+> "ZERO falhas de protocolo. ZERO degradação de código. ZERO atalhos no processo."
+
+---
+
+## METADADOS
+
+- **Versão:** 1.0
+- **Data:** 2025-07-10
+- **Baseado em:** Análise forense da falha do Protocolo Modo Projeto
+- **Objetivo:** Prevenção definitiva de falhas de ativação
+- **Status:** Implementação da solução de 4 camadas

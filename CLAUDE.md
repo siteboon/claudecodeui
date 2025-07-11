@@ -1,3 +1,6 @@
+# Intereção com o Usuario 
+  A Intereção com o usuairo **SEMPRE** será em pt-br 
+
 # Task Master AI - Claude Code Integration Guide
 
 ## Essential Commands
@@ -415,3 +418,97 @@ These commands make AI calls and may take up to a minute:
 ---
 
 _This guide ensures Claude Code has immediate access to Task Master's essential functionality for agentic development workflows._
+
+---
+
+# 🚀 PROTOCOLO MODO PROJETO V2.0
+
+## ATIVAÇÃO DO MODO PROJETO
+
+### DETECÇÃO DE TRIGGERS
+
+Quando identificar qualquer um dos seguintes comandos de ativação:
+
+#### ✅ TRIGGERS RECONHECIDOS:
+- "Ative o Modo Projeto"
+- "Ativar Modo Projeto" 
+- "Modo Projeto"
+- "Entre no Modo Projeto"
+- "Active Project Mode"
+- "Activate Project Mode"
+- "modo projeto ativado"
+
+#### ✅ AÇÕES IMEDIATAS OBRIGATÓRIAS:
+1. **PARAR** qualquer outra atividade
+2. **CONFIRMAR** ativação: "🚀 **MODO PROJETO V2.0 ATIVADO**"
+3. **EXECUTAR** sequência obrigatória de leitura das regras:
+
+### SEQUÊNCIA OBRIGATÓRIA DE LEITURA DAS REGRAS
+
+#### 1. PRIMEIRA LEITURA - PROTOCOLO PRINCIPAL
+- **OBRIGATÓRIO**: Ler completamente `claude_rules/modoprojeto.mdc`
+- **AÇÃO**: Carregar protocolo completo na memória
+- **VERIFICAÇÃO**: Confirmar compreensão das 4 fases
+
+#### 2. SEGUNDA LEITURA - REGRAS DE TASKS
+- **OBRIGATÓRIO**: Ler completamente `claude_rules/atualizatasks.mdc`
+- **AÇÃO**: Carregar regras de atualização de tasks e commits
+- **VERIFICAÇÃO**: Confirmar compreensão dos comandos task-master
+
+#### 3. TERCEIRA LEITURA - DIRETRIZES DE DESENVOLVIMENTO
+- **OBRIGATÓRIO**: Ler completamente `claude_rules/regra-diretriz-dev.mdc`
+- **AÇÃO**: Carregar diretrizes críticas de código limpo
+- **VERIFICAÇÃO**: Confirmar compreensão das proibições absolutas
+
+#### 4. QUARTA LEITURA - PROTOCOLO DE VERIFICAÇÃO
+- **OBRIGATÓRIO**: Ler completamente `claude_rules/protocolo-verificacao.mdc`
+- **AÇÃO**: Carregar sistema de verificação automática
+- **VERIFICAÇÃO**: Confirmar compreensão dos checklists
+
+---
+
+## CONFIRMAÇÃO DE CARREGAMENTO
+
+Após ler todas as regras, confirmar:
+
+```
+✅ PROTOCOLO MODO PROJETO V2.0 CARREGADO
+════════════════════════════════════════════════════
+□ @claude_rules/modoprojeto.mdc - LIDO E CARREGADO
+□ @claude_rules/atualizatasks.mdc - LIDO E CARREGADO  
+□ @claude_rules/regra-diretriz-dev.mdc - LIDO E CARREGADO
+□ @claude_rules/protocolo-verificacao.mdc - LIDO E CARREGADO
+════════════════════════════════════════════════════
+🚀 MODO PROJETO V2.0 ATIVADO - PRONTO PARA EXECUTAR
+```
+
+---
+
+## EXECUÇÃO DO PROTOCOLO
+
+Uma vez carregadas TODAS as regras:
+
+1. **SEGUIR** rigorosamente o protocolo definido em `modoprojeto.mdc`
+2. **APLICAR** as regras de tasks definidas em `atualizatasks.mdc`
+3. **RESPEITAR** as diretrizes de desenvolvimento em `regra-diretriz-dev.mdc`
+4. **VERIFICAR** continuamente usando `protocolo-verificacao.mdc`
+
+---
+
+## COMPROMISSO FINAL
+
+> "As regras foram cuidadosamente elaboradas com engenharia de prompt e DEVEM ser lidas diretamente dos arquivos originais. Não há substitutos ou resumos - apenas a execução fiel do protocolo completo."
+
+---
+
+## METADADOS DO PROTOCOLO
+- **Versão:** 2.0
+- **Data:** 2025-07-11
+- **Baseado em:** Leitura obrigatória dos arquivos em claude_rules/
+- **Objetivo:** Execução rigorosa mediante leitura direta das regras originais
+
+# important-instruction-reminders
+Do what has been asked; nothing more, nothing less.
+NEVER create files unless they're absolutely necessary for achieving your goal.
+ALWAYS prefer editing an existing file to creating a new one.
+NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.

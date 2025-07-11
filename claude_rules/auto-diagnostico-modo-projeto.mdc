@@ -1,0 +1,248 @@
+---
+description: Sistema de auto-diagnóstico para validação do Protocolo Modo Projeto V2.0
+globs: **/*
+alwaysApply: false
+---
+
+# 🩺 AUTO-DIAGNÓSTICO - PROTOCOLO MODO PROJETO V2.0
+
+## FINALIDADE
+Sistema de auto-verificação para garantir que o Protocolo Modo Projeto V2.0 funcione perfeitamente e nunca mais falhe como na análise forense identificada.
+
+---
+
+## DIAGNÓSTICO DE ATIVAÇÃO
+
+### TESTE 1: RECONHECIMENTO DE TRIGGERS
+**Comando de Teste:** "Ative o Modo Projeto"
+
+**Resposta Esperada:**
+```
+🚀 **MODO PROJETO V2.0 ATIVADO** - Protocolo rigoroso em execução.
+
+INVOCAÇÃO AUTOMÁTICA DAS REGRAS:
+- ✅ @claude_rules/modoprojeto.mdc - ATIVO
+- 🔄 Carregando @claude_rules/atualizatasks.mdc...
+- 🔄 Carregando @claude_rules/regra-diretriz-dev.mdc...
+- STATUS: Todas as regras críticas carregadas e aplicadas.
+
+Prosseguindo para FASE 1: Verificação de MCPs...
+```
+
+**Critérios de Aprovação:**
+- [ ] Reconheceu o trigger imediatamente
+- [ ] Confirmou ativação com mensagem específica
+- [ ] Mencionou carregamento das 3 regras críticas
+- [ ] Prosseguiu para verificação de MCPs
+
+### TESTE 2: APLICAÇÃO DAS REGRAS
+**Verificação:** As regras @atualizatasks.mdc e @regra-diretriz-dev.mdc estão sendo aplicadas?
+
+**Indicadores de Sucesso:**
+- [ ] Solicitou autorização antes de atualizar status de tasks
+- [ ] Executou `npm run build` antes de começar desenvolvimento
+- [ ] Seguiu processo Chain of Thought
+- [ ] Verificou warnings antes/depois de modificações
+- [ ] Pediu autorização para commits
+
+### TESTE 3: VERIFICAÇÃO DE MCPs
+**Comando:** Após ativação, deve verificar automaticamente MCPs
+
+**Resposta Esperada:**
+```
+Verificando status dos MCPs:
+- MCP 1: Open Memory - [ONLINE/OFFLINE]
+- MCP 2: Context7 - [ONLINE/OFFLINE]  
+- MCP 3: Task Master AI - [ONLINE/OFFLINE]
+
+[Relatório de status e solicitação de autorização se necessário]
+```
+
+---
+
+## DIAGNÓSTICO DE PROCESSO
+
+### VERIFICAÇÃO CONTÍNUA DE QUALIDADE
+
+#### CHECKPOINT 1: PRÉ-DESENVOLVIMENTO
+```bash
+# O sistema deve executar automaticamente:
+npm run build
+# E reportar o estado inicial do código
+```
+
+#### CHECKPOINT 2: DURANTE DESENVOLVIMENTO
+- [ ] Status de subtasks atualizado individualmente
+- [ ] Autorização solicitada para cada mudança de status
+- [ ] Processo cognitivo documentado
+- [ ] Verificações incrementais executadas
+
+#### CHECKPOINT 3: PÓS-DESENVOLVIMENTO  
+- [ ] Verificação final de warnings
+- [ ] Solicitação de autorização para commits
+- [ ] Registro na memória (se necessário)
+- [ ] Confirmação de conclusão do protocolo
+
+---
+
+## CASOS DE TESTE ESPECÍFICOS
+
+### CASO 1: COMANDO DIRETO
+**Input:** "Ative o Modo Projeto e implemente a task 8"
+
+**Validação:**
+- [ ] Ativou protocolo ANTES de implementar
+- [ ] Confirmou ativação explicitamente
+- [ ] Carregou todas as regras
+- [ ] Verificou MCPs
+- [ ] Seguiu processo completo
+
+### CASO 2: COMANDO VARIANTE
+**Input:** "Entre no Modo Projeto - task 9"
+
+**Validação:**
+- [ ] Reconheceu trigger alternativo
+- [ ] Ativou protocolo corretamente
+- [ ] Não pulou nenhuma etapa
+
+### CASO 3: COMANDO EM INGLÊS
+**Input:** "Activate Project Mode for task 10"
+
+**Validação:**
+- [ ] Reconheceu trigger em inglês
+- [ ] Ativou protocolo normalmente
+- [ ] Manteve qualidade do processo
+
+---
+
+## DIAGNÓSTICO DE FALHAS
+
+### FALHA TIPO A: NÃO RECONHECIMENTO
+**Sintoma:** Comando de ativação ignorado
+
+**Diagnóstico:**
+- [ ] Trigger não está na lista de reconhecimento
+- [ ] CLAUDE.md não tem instruções claras
+- [ ] Conflito com outras regras
+
+**Solução:**
+- Verificar se triggers estão corretos em modoprojeto.mdc
+- Confirmar instruções no CLAUDE.md
+- Resolver conflitos de prioridade
+
+### FALHA TIPO B: ATIVAÇÃO PARCIAL
+**Sintoma:** Protocolo ativado mas regras não aplicadas
+
+**Diagnóstico:**
+- [ ] modoprojeto.mdc não está invocando outras regras
+- [ ] atualizatasks.mdc ou regra-diretriz-dev.mdc não carregaram
+- [ ] Conflito entre regras
+
+**Solução:**
+- Verificar invocação automática das regras
+- Confirmar que alwaysApply está configurado corretamente
+- Testar carregamento individual das regras
+
+### FALHA TIPO C: EXECUÇÃO INCOMPLETA
+**Sintoma:** Protocolo iniciado mas não finalizado
+
+**Diagnóstico:**
+- [ ] Processo interrompido prematuramente
+- [ ] Etapas de verificação puladas
+- [ ] Falta de confirmação final
+
+**Solução:**
+- Implementar checkpoints obrigatórios
+- Adicionar verificações de continuidade
+- Exigir confirmação de cada fase
+
+---
+
+## RELATÓRIO DE VALIDAÇÃO
+
+### TEMPLATE DE AUTO-AVALIAÇÃO
+```
+═══════════════════════════════════════════════════════
+AUTO-DIAGNÓSTICO - PROTOCOLO MODO PROJETO V2.0
+═══════════════════════════════════════════════════════
+Data/Hora: _______________
+Comando Testado: _______________
+
+TESTE DE ATIVAÇÃO:
+□ Reconheceu trigger: [SIM/NÃO]
+□ Confirmou ativação: [SIM/NÃO]  
+□ Carregou regras: [TODAS/PARCIAL/NENHUMA]
+□ Verificou MCPs: [SIM/NÃO]
+
+TESTE DE EXECUÇÃO:
+□ Seguiu atualizatasks.mdc: [SIM/NÃO]
+□ Seguiu regra-diretriz-dev.mdc: [SIM/NÃO]
+□ Executou build inicial: [SIM/NÃO]
+□ Atualizou subtasks individualmente: [SIM/NÃO]
+□ Pediu autorizações: [SIM/NÃO]
+
+TESTE DE QUALIDADE:
+□ Manteve/melhorou código: [SIM/NÃO]
+□ Zero degradação: [SIM/NÃO]
+□ Processo completo: [SIM/NÃO]
+
+RESULTADO FINAL:
+□ ✅ PROTOCOLO FUNCIONANDO PERFEITAMENTE
+□ ⚠️ PROTOCOLO COM FALHAS MENORES - AJUSTAR
+□ ❌ PROTOCOLO FALHANDO - REVISÃO CRÍTICA NECESSÁRIA
+
+OBSERVAÇÕES:
+_______________________________________________
+═══════════════════════════════════════════════════════
+```
+
+---
+
+## COMANDO DE TESTE INTEGRADO
+
+### TESTE COMPLETO DO SISTEMA
+Para validar se a solução definitiva funciona, execute:
+
+**Comando:** "Ative o Modo Projeto e implemente uma task simples de teste"
+
+**Checklist de Validação:**
+1. [ ] Reconheceu "Ative o Modo Projeto" imediatamente
+2. [ ] Confirmou com "🚀 **MODO PROJETO V2.0 ATIVADO**"
+3. [ ] Carregou @atualizatasks.mdc
+4. [ ] Carregou @regra-diretriz-dev.mdc
+5. [ ] Verificou status dos MCPs
+6. [ ] Executou `npm run build` antes de começar
+7. [ ] Seguiu processo Chain of Thought
+8. [ ] Pediu autorização para mudanças de status
+9. [ ] Atualizou subtasks individualmente
+10. [ ] Verificou warnings antes/depois
+11. [ ] Pediu autorização para commits
+12. [ ] Finalizou protocolo corretamente
+
+**Critério de Aprovação:** 12/12 itens verificados = SOLUÇÃO DEFINITIVA IMPLEMENTADA
+
+---
+
+## COMPROMISSO DE MELHORIA CONTÍNUA
+
+### MONITORAMENTO PERMANENTE
+- Executar auto-diagnóstico semanalmente
+- Documentar qualquer falha identificada
+- Implementar correções imediatamente
+- Atualizar protocolos conforme necessário
+
+### REGRA DE TOLERÂNCIA ZERO
+> "Uma única falha do Protocolo Modo Projeto = revisão completa do sistema"
+
+### OBJETIVO FINAL
+> "100% de aderência ao protocolo, 0% de falhas, implementação perfeita em todos os casos"
+
+---
+
+## METADADOS
+
+- **Versão:** 1.0
+- **Data:** 2025-07-10  
+- **Baseado em:** Solução definitiva de 4 camadas
+- **Cobertura:** Todos os aspectos críticos identificados na análise forense
+- **Status:** Pronto para teste e validação em produção

@@ -1,0 +1,45 @@
+{
+	"meta": {
+		"generatedAt": "2025-07-09T22:30:25.558Z",
+		"tasksAnalyzed": 4,
+		"totalTasks": 10,
+		"analysisCount": 4,
+		"thresholdScore": 5,
+		"projectName": "Taskmaster",
+		"usedResearch": true
+	},
+	"complexityAnalysis": [
+		{
+			"taskId": 7,
+			"taskTitle": "Build Comprehensive Error Handling System",
+			"complexityScore": 8,
+			"recommendedSubtasks": 7,
+			"expansionPrompt": "Desenvolva um sistema de classificação de erros robusto, implemente mensagens de erro amigáveis, adicione detalhes técnicos expansíveis, crie fluxos de recuperação de erro, implemente tratamento específico para cada tipo de erro, adicione logging seguro e integre testes automatizados para cada cenário.",
+			"reasoning": "O sistema de tratamento de erros envolve múltiplas camadas de lógica, classificação, mensagens personalizadas, recuperação, logging seguro e testes abrangentes, aumentando significativamente a complexidade e o esforço de implementação[1][2][3]."
+		},
+		{
+			"taskId": 8,
+			"taskTitle": "Optimize Mobile User Experience",
+			"complexityScore": 6,
+			"recommendedSubtasks": 6,
+			"expansionPrompt": "Implemente modal de seleção de diretório em tela cheia, adicione gestos de deslize para navegação, otimize alvos de toque e espaçamento, integre seletores de pasta específicos para iOS e Android, adicione feedback háptico e animações suaves, e teste em diferentes dispositivos e orientações.",
+			"reasoning": "A otimização da experiência móvel requer integração de recursos específicos de plataforma, gestos, feedback háptico, animações e testes em múltiplos dispositivos, mas é menos complexa do que sistemas de tratamento de erros ou otimização de desempenho profunda[1][3]."
+		},
+		{
+			"taskId": 9,
+			"taskTitle": "Implement Performance Optimization and Caching",
+			"complexityScore": 7,
+			"recommendedSubtasks": 6,
+			"expansionPrompt": "Implemente cache para navegação de diretórios, adicione lazy loading para listagens grandes, cacheie progresso de inicialização de projetos, gerencie memória para projetos grandes, pré-carregue diretórios acessados frequentemente e monitore desempenho.",
+			"reasoning": "A otimização de desempenho envolve estratégias avançadas de cache, lazy loading, gerenciamento de memória, pré-carregamento e monitoramento, exigindo atenção a detalhes técnicos e testes rigorosos, mas com escopo mais limitado do que sistemas de tratamento de erros[1][2][3]."
+		},
+		{
+			"taskId": 10,
+			"taskTitle": "Conduct End-to-End Testing and Quality Assurance",
+			"complexityScore": 9,
+			"recommendedSubtasks": 7,
+			"expansionPrompt": "Planeje testes end-to-end, execute testes de compatibilidade multiplataforma, realize testes de aceitação do usuário, teste acessibilidade e segurança, valide benchmarks de desempenho e integre feedback dos usuários.",
+			"reasoning": "Testes end-to-end abrangentes envolvem múltiplas plataformas, cenários de usuário, acessibilidade, segurança e validação de desempenho, exigindo coordenação, automação e análise detalhada, tornando a tarefa altamente complexa[1][3][4]."
+		}
+	]
+}

@@ -497,7 +497,7 @@
           5,
           6
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -505,7 +505,7 @@
             "description": "Design and implement a full-screen modal for directory selection on mobile devices.",
             "dependencies": [],
             "details": "Ensure the modal is touch-friendly and accessible with one-handed use.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test on various mobile screen sizes and orientations."
           },
           {
@@ -514,7 +514,7 @@
             "description": "Integrate swipe gestures to enhance folder navigation on mobile devices.",
             "dependencies": [],
             "details": "Implement swipe gestures for intuitive navigation between folders.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test swipe gestures on different mobile devices."
           },
           {
@@ -523,7 +523,7 @@
             "description": "Ensure touch targets are large enough and well-spaced for mobile devices.",
             "dependencies": [],
             "details": "Use buttons at least 44x44 pixels and provide ample spacing between touch targets.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Conduct usability testing to ensure ease of use."
           },
           {
@@ -535,7 +535,7 @@
               3
             ],
             "details": "Ensure seamless integration with native folder pickers on both platforms.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test integration on both iOS and Android devices."
           },
           {
@@ -547,7 +547,7 @@
               4
             ],
             "details": "Implement haptic feedback for taps and ensure animations are smooth across different device orientations.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test haptic feedback and animations on various mobile devices."
           }
         ]
@@ -700,7 +700,7 @@
     ],
     "metadata": {
       "created": "2025-07-09T13:42:01.940Z",
-      "updated": "2025-07-09T15:58:11.853Z",
+      "updated": "2025-07-11T00:52:46.422Z",
       "description": "Tasks for master context"
     }
   }

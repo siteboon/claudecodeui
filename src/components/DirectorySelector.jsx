@@ -21,7 +21,11 @@ import {
   Monitor,
   Smartphone,
   ArrowUp,
-  RefreshCw
+  RefreshCw,
+  ChevronLeft,
+  ChevronDown,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -43,8 +47,45 @@ const getPlatformInfo = () => {
     isMac: platform.includes('Mac'),
     isWindows: platform.includes('Win'),
     isLinux: platform.includes('Linux'),
-    hasNativeFilePicker: 'showDirectoryPicker' in window
+    isIOS: /iPad|iPhone|iPod/.test(userAgent),
+    isAndroid: /Android/i.test(userAgent),
+    hasNativeFilePicker: 'showDirectoryPicker' in window,
+    hasHapticFeedback: 'vibrate' in navigator || 'webkitVibrate' in navigator,
+    supportsTouch: 'ontouchstart' in window || navigator.maxTouchPoints > 0
   };
+};
+
+// Haptic feedback utility
+const hapticFeedback = (type = 'light') => {
+  const platformInfo = getPlatformInfo();
+  
+  if (platformInfo.hasHapticFeedback) {
+    try {
+      if (navigator.vibrate) {
+        switch (type) {
+          case 'light':
+            navigator.vibrate(10);
+            break;
+          case 'medium':
+            navigator.vibrate(25);
+            break;
+          case 'heavy':
+            navigator.vibrate(50);
+            break;
+          case 'success':
+            navigator.vibrate([10, 50, 10]);
+            break;
+          case 'error':
+            navigator.vibrate([50, 50, 50]);
+            break;
+          default:
+            navigator.vibrate(10);
+        }
+      }
+    } catch (error) {
+      // Silently fail if haptic feedback is not available
+    }
+  }
 };
 
 // Default paths based on platform
@@ -97,6 +138,67 @@ const storage = {
       // Silently fail if storage is not available
     }
   }
+};
+
+// Swipe gesture hook
+const useSwipeGesture = (onSwipeLeft, onSwipeRight, onSwipeUp, onSwipeDown) => {
+  const [touchStart, setTouchStart] = useState(null);
+  const [touchEnd, setTouchEnd] = useState(null);
+  
+  const minSwipeDistance = 50;
+  
+  const onTouchStart = (e) => {
+    setTouchEnd(null);
+    setTouchStart({
+      x: e.targetTouches[0].clientX,
+      y: e.targetTouches[0].clientY
+    });
+  };
+  
+  const onTouchMove = (e) => {
+    setTouchEnd({
+      x: e.targetTouches[0].clientX,
+      y: e.targetTouches[0].clientY
+    });
+  };
+  
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    
+    const distanceX = touchStart.x - touchEnd.x;
+    const distanceY = touchStart.y - touchEnd.y;
+    const isLeftSwipe = distanceX > minSwipeDistance;
+    const isRightSwipe = distanceX < -minSwipeDistance;
+    const isUpSwipe = distanceY > minSwipeDistance;
+    const isDownSwipe = distanceY < -minSwipeDistance;
+    
+    // Determine if it's more horizontal or vertical
+    const isHorizontal = Math.abs(distanceX) > Math.abs(distanceY);
+    
+    if (isHorizontal) {
+      if (isLeftSwipe && onSwipeLeft) {
+        hapticFeedback('light');
+        onSwipeLeft();
+      } else if (isRightSwipe && onSwipeRight) {
+        hapticFeedback('light');
+        onSwipeRight();
+      }
+    } else {
+      if (isUpSwipe && onSwipeUp) {
+        hapticFeedback('light');
+        onSwipeUp();
+      } else if (isDownSwipe && onSwipeDown) {
+        hapticFeedback('light');
+        onSwipeDown();
+      }
+    }
+  };
+  
+  return {
+    onTouchStart,
+    onTouchMove,
+    onTouchEnd
+  };
 };
 
 // Breadcrumb component
@@ -160,9 +262,11 @@ const Breadcrumb = ({ path, onNavigate, className }) => {
 const DirectoryItem = ({ item, onSelect, onToggleFavorite, isFavorite, isSelected, isFocused, itemIndex }) => {
   const [isValidating, setIsValidating] = useState(false);
   const [validationStatus, setValidationStatus] = useState(null);
+  const [isTouchPressed, setIsTouchPressed] = useState(false);
   
   const handleSelect = useCallback(async () => {
     if (item.type === 'directory') {
+      hapticFeedback('light');
       setIsValidating(true);
       try {
         const response = await fetch(`/api/projects/validate?path=${encodeURIComponent(item.path)}`);
@@ -170,10 +274,14 @@ const DirectoryItem = ({ item, onSelect, onToggleFavorite, isFavorite, isSelecte
         setValidationStatus(validation);
         
         if (validation.valid) {
+          hapticFeedback('success');
           onSelect(item);
+        } else {
+          hapticFeedback('error');
         }
       } catch (error) {
         console.error('Validation error:', error);
+        hapticFeedback('error');
         setValidationStatus({ valid: false, issues: ['Failed to validate directory'] });
       } finally {
         setIsValidating(false);
@@ -181,20 +289,38 @@ const DirectoryItem = ({ item, onSelect, onToggleFavorite, isFavorite, isSelecte
     }
   }, [item, onSelect]);
   
+  const handleTouchStart = useCallback(() => {
+    setIsTouchPressed(true);
+    hapticFeedback('light');
+  }, []);
+  
+  const handleTouchEnd = useCallback(() => {
+    setIsTouchPressed(false);
+  }, []);
+  
+  const handleFavoriteToggle = useCallback((e) => {
+    e.stopPropagation();
+    hapticFeedback('medium');
+    onToggleFavorite(item);
+  }, [item, onToggleFavorite]);
+  
   return (
     <div
       className={cn(
         "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all duration-200",
         "hover:bg-accent/50 hover:border-accent active:scale-[0.98] active:bg-accent/70",
         "md:p-3 sm:p-4 sm:gap-4", // Better mobile spacing
+        "min-h-[44px] touch-manipulation", // Minimum touch target size
         "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2",
         isSelected && "bg-accent border-accent-foreground/20",
         isFocused && "ring-2 ring-primary ring-offset-2 bg-accent/30",
+        isTouchPressed && "scale-[0.98] bg-accent/70",
         validationStatus?.valid && "border-green-500/30 bg-green-50/30 dark:bg-green-900/10",
         validationStatus?.valid === false && "border-red-500/30 bg-red-50/30 dark:bg-red-900/10"
       )}
       onClick={handleSelect}
-      onTouchStart={() => {}} // Improve touch responsiveness
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
       role="option"
       aria-selected={isSelected}
       aria-describedby={`item-description-${itemIndex}`}
@@ -251,11 +377,8 @@ const DirectoryItem = ({ item, onSelect, onToggleFavorite, isFavorite, isSelecte
       {/* Actions */}
       <div className="flex items-center gap-2">
         <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleFavorite(item);
-          }}
-          className="p-1 rounded-md hover:bg-accent transition-colors"
+          onClick={handleFavoriteToggle}
+          className="p-1 rounded-md hover:bg-accent transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center touch-manipulation"
         >
           {isFavorite ? (
             <Star className="w-4 h-4 text-yellow-500 fill-current" />
@@ -289,9 +412,17 @@ const DirectorySelector = ({ isOpen, onClose, onSelect }) => {
   const [view, setView] = useState('browser'); // 'browser', 'recent', 'favorites'
   const [isDragOver, setIsDragOver] = useState(false);
   const [focusedItemIndex, setFocusedItemIndex] = useState(-1);
+  const [isFullScreen, setIsFullScreen] = useState(false);
   
   const platformInfo = getPlatformInfo();
   const defaultPaths = getDefaultPaths();
+  
+  // Auto-enable full screen on mobile
+  useEffect(() => {
+    if (platformInfo.isMobile && isOpen) {
+      setIsFullScreen(true);
+    }
+  }, [platformInfo.isMobile, isOpen]);
   
   // Load persisted data
   useEffect(() => {
@@ -342,6 +473,52 @@ const DirectorySelector = ({ isOpen, onClose, onSelect }) => {
     browseDirectory(path);
   }, [browseDirectory]);
   
+  // Swipe navigation handlers
+  const handleSwipeLeft = useCallback(() => {
+    if (view === 'browser') {
+      setView('recent');
+    } else if (view === 'recent') {
+      setView('favorites');
+    }
+  }, [view]);
+  
+  const handleSwipeRight = useCallback(() => {
+    if (view === 'favorites') {
+      setView('recent');
+    } else if (view === 'recent') {
+      setView('browser');
+    } else if (view === 'browser') {
+      // Navigate to parent directory
+      const parent = currentPath.split('/').slice(0, -1).join('/') || '/';
+      if (parent !== currentPath) {
+        navigateToDirectory(parent);
+      }
+    }
+  }, [view, currentPath, navigateToDirectory]);
+  
+  const handleSwipeUp = useCallback(() => {
+    // Toggle full screen on mobile
+    if (platformInfo.isMobile) {
+      setIsFullScreen(prev => !prev);
+    }
+  }, [platformInfo.isMobile]);
+  
+  const handleSwipeDown = useCallback(() => {
+    // Close on mobile
+    if (platformInfo.isMobile) {
+      hapticFeedback('light');
+      onClose();
+    }
+  }, [platformInfo.isMobile, onClose]);
+  
+  // Setup swipe gestures
+  const swipeHandlers = useSwipeGesture(
+    handleSwipeLeft,
+    handleSwipeRight,
+    handleSwipeUp,
+    handleSwipeDown
+  );
+  
   // Toggle favorite
   const toggleFavorite = useCallback((item) => {
     setFavorites(prev => {
@@ -376,6 +553,7 @@ const DirectorySelector = ({ isOpen, onClose, onSelect }) => {
     if (!platformInfo.hasNativeFilePicker) return;
     
     try {
+      hapticFeedback('light');
       const dirHandle = await window.showDirectoryPicker();
       const item = {
         name: dirHandle.name,
@@ -383,13 +561,55 @@ const DirectorySelector = ({ isOpen, onClose, onSelect }) => {
         type: 'directory'
       };
       
+      hapticFeedback('success');
       selectDirectory(item);
     } catch (error) {
       if (error.name !== 'AbortError') {
         console.error('Native file picker error:', error);
+        hapticFeedback('error');
       }
     }
   }, [platformInfo.hasNativeFilePicker, selectDirectory]);
+  
+  // Handle mobile-specific folder picker
+  const handleMobileFolderPicker = useCallback(async () => {
+    if (!platformInfo.isMobile) return;
+    
+    try {
+      hapticFeedback('light');
+      
+      // For iOS/Android, we might need to use platform-specific APIs
+      // This is a fallback using the file input approach
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.webkitdirectory = true;
+      input.multiple = true;
+      
+      input.onchange = (e) => {
+        const files = Array.from(e.target.files);
+        if (files.length > 0) {
+          const firstFile = files[0];
+          const folderPath = firstFile.webkitRelativePath.split('/')[0];
+          
+          if (folderPath) {
+            const item = {
+              name: folderPath,
+              path: folderPath,
+              type: 'directory'
+            };
+            
+            hapticFeedback('success');
+            selectDirectory(item);
+          }
+        }
+      };
+      
+      input.click();
+    } catch (error) {
+      console.error('Mobile folder picker error:', error);
+      hapticFeedback('error');
+    }
+  }, [platformInfo.isMobile, selectDirectory]);
   
   // Confirm selection
   const confirmSelection = useCallback(() => {
@@ -519,7 +739,10 @@ const DirectorySelector = ({ isOpen, onClose, onSelect }) => {
   
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      className={cn(
+        "fixed inset-0 z-50 bg-black/50 backdrop-blur-sm transition-all duration-300",
+        platformInfo.isMobile && isFullScreen ? "bg-card" : "flex items-center justify-center"
+      )}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -527,10 +750,14 @@ const DirectorySelector = ({ isOpen, onClose, onSelect }) => {
       aria-modal="true"
       aria-labelledby="directory-selector-title"
       aria-describedby="directory-selector-description"
+      {...(platformInfo.isMobile ? swipeHandlers : {})}
     >
       <div 
         className={cn(
-          "w-full max-w-4xl max-h-[90vh] mx-4 bg-card rounded-lg border shadow-xl md:max-h-[85vh] md:mx-8 sm:max-h-[95vh] sm:mx-2 transition-all duration-200",
+          "bg-card border shadow-xl transition-all duration-300",
+          platformInfo.isMobile && isFullScreen 
+            ? "w-full h-full rounded-none" 
+            : "w-full max-w-4xl max-h-[90vh] mx-4 rounded-lg md:max-h-[85vh] md:mx-8 sm:max-h-[95vh] sm:mx-2",
           isDragOver && platformInfo.isDesktop && "border-primary border-2 bg-primary/5"
         )}
         onKeyDown={handleKeyDown}
@@ -553,7 +780,18 @@ const DirectorySelector = ({ isOpen, onClose, onSelect }) => {
           </div>
           
           <div className="flex items-center gap-2">
-            {platformInfo.hasNativeFilePicker && (
+            {platformInfo.isMobile && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleMobileFolderPicker}
+                className="flex items-center gap-2"
+              >
+                <FolderOpen className="w-4 h-4" />
+                <span className="hidden sm:inline">Pick Folder</span>
+              </Button>
+            )}
+            {platformInfo.hasNativeFilePicker && !platformInfo.isMobile && (
               <Button
                 variant="outline"
                 size="sm"
@@ -562,6 +800,17 @@ const DirectorySelector = ({ isOpen, onClose, onSelect }) => {
               >
                 <FolderOpen className="w-4 h-4 mr-2" />
                 Native Picker
+              </Button>
+            )}
+            {platformInfo.isMobile && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsFullScreen(!isFullScreen)}
+                className="w-8 h-8 p-0"
+                aria-label={isFullScreen ? "Exit full screen" : "Enter full screen"}
+              >
+                {isFullScreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
               </Button>
             )}
             <Button
@@ -579,7 +828,25 @@ const DirectorySelector = ({ isOpen, onClose, onSelect }) => {
         {/* Hidden description for screen readers */}
         <div id="directory-selector-description" className="sr-only">
           Use arrow keys to navigate through directories, Enter to select, Escape to close, and Tab to switch between views.
+          {platformInfo.isMobile && " On mobile: swipe left/right to change views, swipe up to toggle full screen, swipe down to close."}
         </div>
+        
+        {/* Mobile swipe hints */}
+        {platformInfo.isMobile && !isFullScreen && (
+          <div className="px-4 py-2 border-b bg-muted/30">
+            <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground">
+              <div className="flex items-center gap-1">
+                <ChevronLeft className="w-3 h-3" />
+                <ChevronRight className="w-3 h-3" />
+                <span>Swipe to navigate</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <ChevronDown className="w-3 h-3" />
+                <span>Swipe down to close</span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Navigation */}
         <div className="p-4 border-b space-y-3">
@@ -671,9 +938,15 @@ const DirectorySelector = ({ isOpen, onClose, onSelect }) => {
         
         {/* Content */}
         <div className="flex-1 min-h-0">
-          <ScrollArea className="h-96 md:h-96 sm:h-80">
+          <ScrollArea className={cn(
+            "h-96 md:h-96 sm:h-80",
+            platformInfo.isMobile && isFullScreen && "h-[calc(100vh-200px)]"
+          )}>
             <div 
-              className="p-4 space-y-3 md:space-y-3 sm:space-y-2" 
+              className={cn(
+                "p-4 space-y-3 md:space-y-3 sm:space-y-2",
+                platformInfo.isMobile && "space-y-4 p-6"
+              )} 
               id="directory-content"
               role="tabpanel"
               aria-labelledby={`${view}-tab`}
@@ -681,12 +954,22 @@ const DirectorySelector = ({ isOpen, onClose, onSelect }) => {
               {view === 'browser' && (
                 <>
                   {/* Quick access */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-4" role="list" aria-label="Quick access directories">
+                  <div className={cn(
+                    "grid gap-2 mb-4",
+                    platformInfo.isMobile ? "grid-cols-1 gap-3" : "grid-cols-1 md:grid-cols-2 gap-2"
+                  )} role="list" aria-label="Quick access directories">
                     {defaultPaths.map((item) => (
                       <button
                         key={item.path}
-                        onClick={() => navigateToDirectory(item.path)}
-                        className="flex items-center gap-2 p-2 rounded-md hover:bg-accent transition-colors text-left"
+                        onClick={() => {
+                          hapticFeedback('light');
+                          navigateToDirectory(item.path);
+                        }}
+                        className={cn(
+                          "flex items-center gap-2 p-2 rounded-md hover:bg-accent transition-colors text-left",
+                          platformInfo.isMobile && "min-h-[44px] p-3 gap-3 active:scale-[0.98] active:bg-accent/70"
+                        )}
+                        onTouchStart={() => hapticFeedback('light')}
                       >
                         <item.icon className="w-4 h-4 text-muted-foreground" />
                         <span className="text-sm">{item.name}</span>
@@ -806,15 +1089,29 @@ const DirectorySelector = ({ isOpen, onClose, onSelect }) => {
             <div className="flex gap-2 md:gap-2 sm:gap-3">
               <Button
                 variant="outline"
-                onClick={onClose}
-                className="flex-1 md:flex-none active:scale-[0.98] transition-transform"
+                onClick={() => {
+                  hapticFeedback('light');
+                  onClose();
+                }}
+                className={cn(
+                  "flex-1 md:flex-none active:scale-[0.98] transition-transform",
+                  platformInfo.isMobile && "min-h-[44px] text-base"
+                )}
+                onTouchStart={() => hapticFeedback('light')}
               >
                 Cancel
               </Button>
               <Button
-                onClick={confirmSelection}
+                onClick={() => {
+                  hapticFeedback('success');
+                  confirmSelection();
+                }}
                 disabled={!selectedPath}
-                className="flex-1 md:flex-none active:scale-[0.98] transition-transform"
+                className={cn(
+                  "flex-1 md:flex-none active:scale-[0.98] transition-transform",
+                  platformInfo.isMobile && "min-h-[44px] text-base"
+                )}
+                onTouchStart={() => selectedPath && hapticFeedback('light')}
               >
                 Open Project
               </Button>
