@@ -160,7 +160,7 @@ function MainContent({
               {activeTab === 'chat' && selectedConversation ? (
                 <div>
                   <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white truncate">
-                    {selectedConversation.title} <span className="text-sm text-gray-500 dark:text-gray-400">({selectedConversation.sessions.length} sessions)</span>
+                    {selectedConversation.title} <span className="text-sm text-gray-500 dark:text-gray-400">({selectedConversation.sessions.length} messages)</span>
                   </h2>
                   <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
                     {selectedProject.displayName} • Full conversation history

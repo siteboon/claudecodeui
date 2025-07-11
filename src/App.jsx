@@ -321,7 +321,13 @@ function AppContent() {
     if (isMobile) {
       setSidebarOpen(false);
     }
-    navigate(`/session/${session.id}`);
+    
+    // Handle null session (e.g., when clearing selection after deleting all sessions)
+    if (session === null) {
+      navigate('/');
+    } else {
+      navigate(`/session/${session.id}`);
+    }
   };
 
   const handleConversationSelect = (conversation, targetSessionId = null) => {
@@ -546,6 +552,62 @@ function AppContent() {
         newSet.add(realSessionId);
         return newSet;
       });
+
+      // Update selected session if it's the placeholder session
+      if (selectedSession?.id === placeholderSessionId) {
+        // Instead of navigating (which would reload the component), 
+        // create a new session object with the real ID to maintain continuity
+        const updatedSession = {
+          ...selectedSession,
+          id: realSessionId,
+          isPlaceholder: false
+        };
+        setSelectedSession(updatedSession);
+        
+        // Update URL without navigation to maintain component state
+        window.history.replaceState({}, '', `/session/${realSessionId}`);
+      }
+
+      // Remove placeholder session from projects state and add real session
+      setProjects(prevProjects => 
+        prevProjects.map(project => {
+          if (project.sessions?.some(session => session.id === placeholderSessionId)) {
+            return {
+              ...project,
+              sessions: (project.sessions || []).map(session => {
+                if (session.id === placeholderSessionId) {
+                  // Replace placeholder with real session
+                  return {
+                    ...session,
+                    id: realSessionId,
+                    isPlaceholder: false
+                  };
+                }
+                return session;
+              })
+            };
+          }
+          return project;
+        })
+      );
+
+      // Also update selected project if it contains the placeholder
+      if (selectedProject?.sessions?.some(session => session.id === placeholderSessionId)) {
+        setSelectedProject(prevProject => ({
+          ...prevProject,
+          sessions: (prevProject.sessions || []).map(session => {
+            if (session.id === placeholderSessionId) {
+              // Replace placeholder with real session
+              return {
+                ...session,
+                id: realSessionId,
+                isPlaceholder: false
+              };
+            }
+            return session;
+          })
+        }));
+      }
     }
   };
 

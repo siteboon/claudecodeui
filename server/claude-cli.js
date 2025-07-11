@@ -4,7 +4,7 @@ let activeClaudeProcesses = new Map(); // Track active processes by session ID
 
 async function spawnClaude(command, options = {}, ws) {
   return new Promise(async (resolve, reject) => {
-    const { sessionId, projectPath, cwd, resume, toolsSettings } = options;
+    const { sessionId, projectPath, cwd, resume, toolsSettings, conversationContext } = options;
     let capturedSessionId = sessionId; // Track session ID throughout the process
     let sessionCreatedSent = false; // Track if we've already sent session-created event
     
@@ -23,8 +23,8 @@ async function spawnClaude(command, options = {}, ws) {
       args.push('--print', command);
     }
     
-    // Add resume flag if resuming
-    if (resume && sessionId) {
+    // Add resume flag if resuming (but not for temporary sessions)
+    if (resume && sessionId && !sessionId.startsWith('temp-')) {
       args.push('--resume', sessionId);
     }
     
@@ -66,8 +66,9 @@ async function spawnClaude(command, options = {}, ws) {
       return cleanArg.includes(' ') ? `"${cleanArg}"` : cleanArg;
     }).join(' '));
     console.log('Working directory:', workingDir);
-    console.log('Session info - Input sessionId:', sessionId, 'Resume:', resume);
+    console.log('Session info - Input sessionId:', sessionId, 'Resume:', resume, 'IsTemporary:', sessionId && sessionId.startsWith('temp-'));
     console.log('🔍 Full command args:', args);
+    console.log('🗂️ Conversation context:', conversationContext);
     
     const claudeProcess = spawn('claude', args, {
       cwd: workingDir,
@@ -102,12 +103,14 @@ async function spawnClaude(command, options = {}, ws) {
               activeClaudeProcesses.set(capturedSessionId, claudeProcess);
             }
             
-            // Send session-created event only once for new sessions
-            if (!sessionId && !sessionCreatedSent) {
+            // Send session-created event for new sessions (including temporary ones becoming real)
+            if ((!sessionId || sessionId.startsWith('temp-')) && !sessionCreatedSent) {
               sessionCreatedSent = true;
               ws.send(JSON.stringify({
                 type: 'session-created',
-                sessionId: capturedSessionId
+                sessionId: capturedSessionId,
+                replacesTemporary: sessionId && sessionId.startsWith('temp-') ? sessionId : null,
+                conversationContext: conversationContext // Include conversation context
               }));
             }
           }

@@ -158,11 +158,22 @@ function Sidebar({
   };
 
   const deleteSession = async (projectName, sessionId) => {
-    if (!confirm('Are you sure you want to delete this session? This action cannot be undone.')) {
+    if (!confirm('Are you sure you want to delete this message? This action cannot be undone.')) {
       return;
     }
 
     try {
+      // First, clear placeholder session from localStorage if it's a placeholder
+      if (sessionId.startsWith('temp-')) {
+        const storedPlaceholders = JSON.parse(localStorage.getItem('placeholderSessions') || '{}');
+        if (storedPlaceholders[sessionId]) {
+          delete storedPlaceholders[sessionId];
+          localStorage.setItem('placeholderSessions', JSON.stringify(storedPlaceholders));
+          console.log(`🗑️ Cleared placeholder session: ${sessionId}`);
+        }
+      }
+
+      // Then delete server-side session (will gracefully handle temp sessions)
       const response = await fetch(`/api/projects/${projectName}/sessions/${sessionId}`, {
         method: 'DELETE',
       });
@@ -174,11 +185,11 @@ function Sidebar({
         }
       } else {
         console.error('Failed to delete session');
-        alert('Failed to delete session. Please try again.');
+        alert('Failed to delete message. Please try again.');
       }
     } catch (error) {
-      console.error('Error deleting session:', error);
-      alert('Error deleting session. Please try again.');
+              console.error('Error deleting session:', error);
+        alert('Error deleting message. Please try again.');
     }
   };
 
@@ -202,6 +213,21 @@ function Sidebar({
     }
 
     try {
+      // First, clear placeholder sessions from localStorage for this project
+      const storedPlaceholders = JSON.parse(localStorage.getItem('placeholderSessions') || '{}');
+      const updatedPlaceholders = {};
+      
+      // Keep only placeholder sessions that don't belong to this project
+      Object.entries(storedPlaceholders).forEach(([sessionId, placeholderData]) => {
+        if (placeholderData.projectName !== projectName) {
+          updatedPlaceholders[sessionId] = placeholderData;
+        }
+      });
+      
+      localStorage.setItem('placeholderSessions', JSON.stringify(updatedPlaceholders));
+      console.log(`🗑️ Cleared placeholder sessions for project: ${projectName}`);
+
+      // Then delete server-side sessions
       const response = await fetch(`/api/projects/${projectName}/sessions`, {
         method: 'DELETE',
       });
@@ -281,20 +307,39 @@ function Sidebar({
 
   const deleteConversation = async (projectName, conversation) => {
     const sessionCount = conversation.sessions.length;
-    if (!confirm(`Are you sure you want to delete this conversation with ${sessionCount} session${sessionCount === 1 ? '' : 's'}? This action cannot be undone.`)) {
+    if (!confirm(`Are you sure you want to delete this conversation with ${sessionCount} message${sessionCount === 1 ? '' : 's'}? This action cannot be undone.`)) {
       return;
     }
 
     try {
-      // Delete all sessions in the conversation
+      // First, clear placeholder sessions from localStorage for this conversation
+      const storedPlaceholders = JSON.parse(localStorage.getItem('placeholderSessions') || '{}');
+      const updatedPlaceholders = { ...storedPlaceholders };
+      
+      // Remove placeholder sessions that belong to this conversation
+      conversation.sessions.forEach(session => {
+        if (session.isPlaceholder && updatedPlaceholders[session.id]) {
+          delete updatedPlaceholders[session.id];
+          console.log(`🗑️ Cleared placeholder session: ${session.id}`);
+        }
+      });
+      
+      localStorage.setItem('placeholderSessions', JSON.stringify(updatedPlaceholders));
+
+      // Delete all sessions in the conversation (server-side sessions)
       for (const session of conversation.sessions) {
+        // Skip placeholder sessions as they don't exist on the server
+        if (session.isPlaceholder) {
+          continue;
+        }
+        
         const response = await fetch(`/api/projects/${projectName}/sessions/${session.id}`, {
           method: 'DELETE',
         });
 
         if (!response.ok) {
           console.error(`Failed to delete session ${session.id}`);
-          alert('Failed to delete some sessions. Please try again.');
+          alert('Failed to delete some messages. Please try again.');
           return;
         }
       }
@@ -392,58 +437,153 @@ function Sidebar({
 
   // Helper function to group sessions into conversations
   const groupSessionsIntoConversations = (sessions) => {
-    // Group sessions by day and create conversation groups
     const conversations = [];
-    const sessionsByDate = {};
-    const placeholderSessions = [];
+    const processedSessions = new Set();
+    
+    // Get conversation associations from localStorage
+    const conversationAssociations = JSON.parse(localStorage.getItem('conversationAssociations') || '{}');
+    
+    // First, group sessions that have explicit conversation associations
+    const conversationGroups = new Map();
     
     sessions.forEach(session => {
-      // Placeholder sessions should always be their own individual conversations
+      if (processedSessions.has(session.id)) return;
+      
+      // For placeholder sessions, always create individual conversations
       if (session.isPlaceholder) {
-        placeholderSessions.push(session);
-      return;
-    }
-
-      const date = new Date(session.lastActivity);
-      const dateKey = date.toDateString();
-      
-      if (!sessionsByDate[dateKey]) {
-        sessionsByDate[dateKey] = [];
+        conversations.push({
+          id: `placeholder_${session.id}`,
+          title: session.summary || 'New Conversation',
+          sessions: [session],
+          lastActivity: session.lastActivity,
+          messageCount: session.messageCount || 0,
+          isPlaceholder: true
+        });
+        processedSessions.add(session.id);
+        return;
       }
-      sessionsByDate[dateKey].push(session);
-    });
-    
-    // Create individual conversations for placeholder sessions
-    placeholderSessions.forEach(session => {
-      conversations.push({
-        id: `placeholder_${session.id}`,
-        title: session.summary || 'New Conversation',
-        sessions: [session],
-        lastActivity: session.lastActivity,
-        messageCount: 0,
-        isPlaceholder: true
-      });
-    });
-    
-    // Convert regular sessions to conversations with proper grouping
-    Object.entries(sessionsByDate).forEach(([dateKey, dateSessions]) => {
-      // For now, create one conversation per day
-      // In the future, this could be more sophisticated grouping
-      const conversationId = `conv_${dateKey.replace(/\s/g, '_')}`;
-      const mostRecentSession = dateSessions.reduce((latest, current) => 
-        new Date(current.lastActivity) > new Date(latest.lastActivity) ? current : latest
-      );
+      
+      // Check if this session has a conversation association
+      const conversationContext = conversationAssociations[session.id];
+      if (conversationContext) {
+        const conversationId = conversationContext.conversationId;
+        
+        if (!conversationGroups.has(conversationId)) {
+          conversationGroups.set(conversationId, {
+            id: conversationId,
+            title: conversationContext.conversationTitle,
+            sessions: [],
+            lastActivity: session.lastActivity,
+            messageCount: 0,
+            isPlaceholder: false
+          });
+        }
+        
+        const group = conversationGroups.get(conversationId);
+        group.sessions.push(session);
+        group.messageCount += session.messageCount || 0;
+        
+        // Update last activity to the most recent
+        if (new Date(session.lastActivity) > new Date(group.lastActivity)) {
+          group.lastActivity = session.lastActivity;
+        }
+        
+        processedSessions.add(session.id);
+        return;
+      }
+      
+      // For real sessions without conversation associations, apply legacy grouping logic
+      // (Claude CLI duplication bug workaround)
+      const relatedSessions = [session];
+      processedSessions.add(session.id);
+      
+      const sessionTime = new Date(session.lastActivity);
+      const sessionSummary = (session.summary || '').toLowerCase().trim();
+      
+      // Don't group sessions that were intentionally started as new conversations
+      const isNewConversation = sessionSummary === 'new conversation' || sessionSummary === '';
+      
+      if (!isNewConversation) {
+        // Look for other sessions that might be related (only for Claude CLI duplication bug)
+        sessions.forEach(otherSession => {
+          if (processedSessions.has(otherSession.id) || otherSession.isPlaceholder) return;
+          
+          // Skip sessions that have conversation associations
+          if (conversationAssociations[otherSession.id]) return;
+          
+          const otherTime = new Date(otherSession.lastActivity);
+          const otherSummary = (otherSession.summary || '').toLowerCase().trim();
+          const timeDiff = Math.abs(sessionTime - otherTime);
+          
+          // Don't group with "new conversation" sessions
+          const otherIsNewConversation = otherSummary === 'new conversation' || otherSummary === '';
+          if (otherIsNewConversation) return;
+          
+          let isRelated = false;
+          
+          // VERY restrictive criteria for grouping (only for Claude CLI duplication bug)
+          if (timeDiff < 30000) { // 30 seconds - much tighter window
+            // Both sessions must have meaningful summaries that are very similar
+            if (sessionSummary && otherSummary && sessionSummary.length > 10 && otherSummary.length > 10) {
+              // Calculate similarity percentage
+              const longer = sessionSummary.length > otherSummary.length ? sessionSummary : otherSummary;
+              const shorter = sessionSummary.length <= otherSummary.length ? sessionSummary : otherSummary;
+              
+              // Check for very high similarity (one summary contains most of the other)
+              let matchingChars = 0;
+              for (let i = 0; i < shorter.length; i++) {
+                if (longer.includes(shorter[i])) {
+                  matchingChars++;
+                }
+              }
+              
+              const similarity = matchingChars / longer.length;
+              
+              // Only group if 80%+ similar and very recent
+              if (similarity > 0.8) {
+                isRelated = true;
+              }
+            }
+          }
+          
+          if (isRelated) {
+            relatedSessions.push(otherSession);
+            processedSessions.add(otherSession.id);
+          }
+        });
+      }
+      
+      // Sort related sessions by activity time
+      relatedSessions.sort((a, b) => new Date(a.lastActivity) - new Date(b.lastActivity));
+      
+      // Use the first session's summary as the conversation title
+      const firstSession = relatedSessions[0];
+      const conversationTitle = firstSession.summary || 'Conversation';
       
       conversations.push({
-        id: conversationId,
-        title: dateSessions.length === 1 ? 
-          (mostRecentSession.summary || 'Conversation') : 
-          `${dateSessions.length} messages from ${new Date(dateKey).toLocaleDateString()}`,
-        sessions: dateSessions.sort((a, b) => new Date(b.lastActivity) - new Date(a.lastActivity)),
-        lastActivity: mostRecentSession.lastActivity,
-        messageCount: dateSessions.reduce((sum, session) => sum + (session.messageCount || 0), 0)
+        id: `conv_${firstSession.id}`,
+        title: relatedSessions.length > 1 ? 
+          `${conversationTitle} (${relatedSessions.length} messages)` : 
+          conversationTitle,
+        sessions: relatedSessions,
+        lastActivity: relatedSessions[relatedSessions.length - 1].lastActivity,
+        messageCount: relatedSessions.reduce((sum, s) => sum + (s.messageCount || 0), 0),
+        isPlaceholder: false
       });
     });
+    
+    // Add all conversation groups to the conversations array
+    for (const group of conversationGroups.values()) {
+      // Sort sessions within each conversation by activity time
+      group.sessions.sort((a, b) => new Date(a.lastActivity) - new Date(b.lastActivity));
+      
+      // Update title to show message count if more than 1
+      if (group.sessions.length > 1) {
+        group.title = `${group.title} (${group.sessions.length} messages)`;
+      }
+      
+      conversations.push(group);
+    }
     
     return conversations.sort((a, b) => new Date(b.lastActivity) - new Date(a.lastActivity));
   };
@@ -477,7 +617,7 @@ function Sidebar({
                 }
               }}
               disabled={isRefreshing}
-              title="Refresh projects and sessions (Ctrl+R)"
+              title="Refresh projects and messages (Ctrl+R)"
             >
               <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''} group-hover:rotate-180 transition-transform duration-300`} />
             </Button>
@@ -1353,7 +1493,7 @@ function Sidebar({
                                         e.stopPropagation();
                                         generateSessionSummary(project.name, session.id);
                                       }}
-                                      title="Generate AI summary for this session"
+                                                                              title="Generate AI summary for this message"
                                       disabled={generatingSummary[`${project.name}-${session.id}`]}
                                     >
                                       {generatingSummary[`${project.name}-${session.id}`] ? (
@@ -1370,7 +1510,7 @@ function Sidebar({
                                         e.stopPropagation();
                                         deleteSession(project.name, session.id);
                                       }}
-                                      title="Delete this session permanently"
+                                                                              title="Delete this message permanently"
                                     >
                                       <Trash2 className="w-3 h-3 text-red-600 dark:text-red-400" />
                                     </button>

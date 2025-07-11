@@ -479,6 +479,12 @@ async function renameProject(projectName, newDisplayName) {
 
 // Delete a session from a project
 async function deleteSession(projectName, sessionId) {
+  // Handle temporary/placeholder sessions (these don't exist on disk)
+  if (sessionId.startsWith('temp-')) {
+    console.log(`🗑️ Deleting temporary session: ${sessionId}`);
+    return true; // Just return success - these are client-side placeholders
+  }
+  
   const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
   
   try {

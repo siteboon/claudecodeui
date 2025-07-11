@@ -919,6 +919,14 @@ function ChatInterface({ selectedProject, selectedSession, selectedConversation,
   const [sessionMessages, setSessionMessages] = useState([]);
   const [isLoadingSessionMessages, setIsLoadingSessionMessages] = useState(false);
   const [isSystemSessionChange, setIsSystemSessionChange] = useState(false);
+
+  // Update currentSessionId when selectedSession changes (handles placeholder replacement)
+  useEffect(() => {
+    if (selectedSession?.id !== currentSessionId) {
+      console.log('📄 Updating currentSessionId from selectedSession:', selectedSession?.id);
+      setCurrentSessionId(selectedSession?.id || null);
+    }
+  }, [selectedSession?.id, currentSessionId]);
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const scrollContainerRef = useRef(null);
@@ -1250,24 +1258,46 @@ function ChatInterface({ selectedProject, selectedSession, selectedConversation,
         const mostRecentSession = selectedConversation.sessions.reduce((latest, current) => 
           new Date(current.lastActivity) > new Date(latest.lastActivity) ? current : latest
         );
+        console.log('🗂️ Setting current session ID from conversation:', mostRecentSession.id);
         setCurrentSessionId(mostRecentSession.id);
       } else if (selectedSession && selectedProject) {
-        // Load single session (existing behavior)
-        setCurrentSessionId(selectedSession.id);
-        
-        // Only load messages from API if this is a user-initiated session change
-        // For system-initiated changes, preserve existing messages and rely on WebSocket
-        if (!isSystemSessionChange) {
-          const messages = await loadSessionMessages(selectedProject.name, selectedSession.id);
-          setSessionMessages(messages);
-          // convertedMessages will be automatically updated via useMemo
-          // Scroll to bottom after loading session messages if auto-scroll is enabled
+        // Check if this is a placeholder session (new conversation)
+        if (selectedSession.isPlaceholder) {
+          console.log('📄 New placeholder session - clearing all state:', selectedSession.id);
+          setCurrentSessionId(selectedSession.id);
+          
+          // Clear all message state for new conversations (placeholder sessions)
+          setChatMessages([]);
+          setSessionMessages([]);
+          setInput(''); // Clear input field for new conversation
+          
+          // Also clear localStorage for this project to ensure a truly blank chat
+          localStorage.removeItem(`chat_messages_${selectedProject.name}`);
+          localStorage.removeItem(`draft_input_${selectedProject.name}`);
+          
+          // Scroll to bottom for clean slate
           if (autoScrollToBottom) {
             setTimeout(() => scrollToBottom(), 200);
           }
         } else {
-          // Reset the flag after handling system session change
-          setIsSystemSessionChange(false);
+          // Load single session (existing behavior for real sessions)
+          console.log('📄 Setting current session ID from selected session:', selectedSession.id);
+          setCurrentSessionId(selectedSession.id);
+          
+          // Only load messages from API if this is a user-initiated session change
+          // For system-initiated changes, preserve existing messages and rely on WebSocket
+          if (!isSystemSessionChange) {
+            const messages = await loadSessionMessages(selectedProject.name, selectedSession.id);
+            setSessionMessages(messages);
+            // convertedMessages will be automatically updated via useMemo
+            // Scroll to bottom after loading session messages if auto-scroll is enabled
+            if (autoScrollToBottom) {
+              setTimeout(() => scrollToBottom(), 200);
+            }
+          } else {
+            // Reset the flag after handling system session change
+            setIsSystemSessionChange(false);
+          }
         }
       } else {
         // Clear all message state when no session is selected (new conversation)
@@ -1387,6 +1417,7 @@ function ChatInterface({ selectedProject, selectedSession, selectedConversation,
           // New session created by Claude CLI - we receive the real session ID here
           if (latestMessage.sessionId && !currentSessionId) {
             console.log('🔄 New session created:', latestMessage.sessionId);
+            console.log('🗂️ Conversation context:', latestMessage.conversationContext);
             
             // Immediately set the current session ID
             setCurrentSessionId(latestMessage.sessionId);
@@ -1399,6 +1430,15 @@ function ChatInterface({ selectedProject, selectedSession, selectedConversation,
             // The temporary session is removed and real session is marked as active
             if (onReplaceTemporarySession) {
               onReplaceTemporarySession(latestMessage.sessionId);
+            }
+            
+            // Store conversation context with the session if we have one
+            if (latestMessage.conversationContext) {
+              // Store conversation association in localStorage for immediate use
+              const conversationAssociations = JSON.parse(localStorage.getItem('conversationAssociations') || '{}');
+              conversationAssociations[latestMessage.sessionId] = latestMessage.conversationContext;
+              localStorage.setItem('conversationAssociations', JSON.stringify(conversationAssociations));
+              console.log('🗂️ Stored conversation association:', latestMessage.sessionId, '→', latestMessage.conversationContext);
             }
             
             // Replace placeholder session if we have one
@@ -1617,8 +1657,14 @@ function ChatInterface({ selectedProject, selectedSession, selectedConversation,
           
           // Session Protection: Mark session as inactive to re-enable automatic project updates
           // Conversation is complete, safe to allow project updates again
-          if (currentSessionId && onSessionInactive) {
-            onSessionInactive(currentSessionId);
+          if (onSessionInactive) {
+            if (selectedConversation) {
+              // In conversation mode, deactivate the conversation protection
+              onSessionInactive(`conversation-${selectedConversation.id}`);
+            } else if (currentSessionId) {
+              // In session mode, deactivate the specific session
+              onSessionInactive(currentSessionId);
+            }
           }
           break;
           
@@ -1629,8 +1675,14 @@ function ChatInterface({ selectedProject, selectedSession, selectedConversation,
           
           // Session Protection: Mark session as inactive when aborted
           // User or system aborted the conversation, re-enable project updates
-          if (currentSessionId && onSessionInactive) {
-            onSessionInactive(currentSessionId);
+          if (onSessionInactive) {
+            if (selectedConversation) {
+              // In conversation mode, deactivate the conversation protection
+              onSessionInactive(`conversation-${selectedConversation.id}`);
+            } else if (currentSessionId) {
+              // In session mode, deactivate the specific session
+              onSessionInactive(currentSessionId);
+            }
           }
           
           setChatMessages(prev => [...prev, {
@@ -1927,24 +1979,49 @@ function ChatInterface({ selectedProject, selectedSession, selectedConversation,
     setTimeout(() => scrollToBottom(), 100); // Longer delay to ensure message is rendered
 
     // Session Protection: Mark session as active to prevent automatic project updates during conversation
-    // This is crucial for maintaining chat state integrity. We handle two cases:
-    // 1. Existing sessions: Use the real currentSessionId
-    // 2. New sessions: Generate temporary identifier "new-session-{timestamp}" since real ID comes via WebSocket later
-    // This ensures no gap in protection between message send and session creation
-    const sessionToActivate = currentSessionId || `new-session-${Date.now()}`;
+    // This is crucial for maintaining chat state integrity. We handle different cases:
+    // 1. Conversation mode: Protect the conversation by using a conversation-specific identifier
+    // 2. Individual session mode: Protect the specific session
+    // 3. New sessions: Generate temporary identifier since real ID comes via WebSocket later
+    let sessionToActivate;
+    if (selectedConversation) {
+      // In conversation mode, use the conversation ID to protect the entire conversation
+      sessionToActivate = `conversation-${selectedConversation.id}`;
+    } else if (currentSessionId) {
+      // In session mode with existing session, use the session ID
+      sessionToActivate = currentSessionId;
+    } else {
+      // New session, generate temporary identifier
+      sessionToActivate = `new-session-${Date.now()}`;
+    }
+    
     if (onSessionActive) {
       onSessionActive(sessionToActivate);
     }
 
     // Immediately update sidebar session activity to show new message
     // This bypasses the session protection system for immediate visual feedback
-    if (onUpdateSessionActivity && (currentSessionId || selectedSession)) {
-      onUpdateSessionActivity({
-        sessionId: currentSessionId || selectedSession?.id,
-        lastActivity: new Date().toISOString(),
-        messageContent: input.trim(),
-        increment: true // Increment message count
-      });
+    if (onUpdateSessionActivity) {
+      if (selectedConversation) {
+        // In conversation mode, update the most recent session in the conversation
+        const mostRecentSession = selectedConversation.sessions.reduce((latest, current) => 
+          new Date(current.lastActivity) > new Date(latest.lastActivity) ? current : latest
+        );
+        onUpdateSessionActivity({
+          sessionId: mostRecentSession.id,
+          lastActivity: new Date().toISOString(),
+          messageContent: input.trim(),
+          increment: true // Increment message count
+        });
+      } else if (selectedSession) {
+        // In session mode, update the specific selected session
+        onUpdateSessionActivity({
+          sessionId: currentSessionId || selectedSession.id,
+          lastActivity: new Date().toISOString(),
+          messageContent: input.trim(),
+          increment: true // Increment message count
+        });
+      }
     }
 
     // Create checkpoint before sending the message
@@ -2010,15 +2087,55 @@ function ChatInterface({ selectedProject, selectedSession, selectedConversation,
     const toolsSettings = getToolsSettings();
 
     // Send command to Claude CLI via WebSocket
+    // Handle conversation mode vs individual session mode differently
+    let sessionIdToUse = null;
+    let shouldResume = false;
+    let conversationContext = null;
+    
+    if (selectedConversation) {
+      // Conversation mode: Always create a new session within this conversation
+      // Don't resume any existing session - each message in a conversation gets its own session
+      sessionIdToUse = null;
+      shouldResume = false;
+      conversationContext = {
+        conversationId: selectedConversation.id,
+        conversationTitle: selectedConversation.title
+      };
+      console.log('📝 Conversation mode: Creating new session within conversation:', selectedConversation.title);
+    } else if (selectedSession) {
+      // Individual session mode: Continue the specific selected session
+      sessionIdToUse = currentSessionId || selectedSession.id;
+      // Don't try to resume temporary/placeholder sessions - they're not real Claude sessions
+      shouldResume = sessionIdToUse && !sessionIdToUse.startsWith('temp-');
+      console.log('📝 Session mode: Continuing session:', sessionIdToUse, 'shouldResume:', shouldResume);
+    } else {
+      // No conversation or session selected - create new session
+      sessionIdToUse = null;
+      shouldResume = false;
+      console.log('📝 No conversation or session selected: Creating new session');
+    }
+    
+    console.log('📝 Sending message with session info:', {
+      mode: selectedConversation ? 'conversation' : (selectedSession ? 'session' : 'new'),
+      conversationTitle: selectedConversation?.title,
+      sessionTitle: selectedSession?.summary,
+      currentSessionId,
+      sessionIdToUse,
+      shouldResume,
+      conversationContext,
+      isTemporary: sessionIdToUse && sessionIdToUse.startsWith('temp-')
+    });
+    
     sendMessage({
       type: 'claude-command',
       command: input,
       options: {
         projectPath: selectedProject.path,
         cwd: selectedProject.fullPath,
-        sessionId: currentSessionId,
-        resume: !!currentSessionId,
-        toolsSettings: toolsSettings
+        sessionId: shouldResume ? sessionIdToUse : undefined,
+        resume: shouldResume,
+        toolsSettings: toolsSettings,
+        conversationContext: conversationContext // Pass conversation context to server
       }
     });
 
