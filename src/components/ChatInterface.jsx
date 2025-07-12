@@ -18,6 +18,7 @@
 
 import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
 import ReactMarkdown from 'react-markdown';
+import { useDropzone } from 'react-dropzone';
 import TodoList from './TodoList';
 import ClaudeLogo from './ClaudeLogo.jsx';
 
@@ -72,6 +73,19 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
             <div className="text-sm whitespace-pre-wrap break-words">
               {message.content}
             </div>
+            {message.images && message.images.length > 0 && (
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {message.images.map((img, idx) => (
+                  <img
+                    key={idx}
+                    src={img.data}
+                    alt={img.name}
+                    className="rounded-lg max-w-full h-auto cursor-pointer hover:opacity-90 transition-opacity"
+                    onClick={() => window.open(img.data, '_blank')}
+                  />
+                ))}
+              </div>
+            )}
             <div className="text-xs text-blue-100 mt-1 text-right">
               {new Date(message.timestamp).toLocaleTimeString()}
             </div>
@@ -875,6 +889,43 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
   );
 });
 
+// ImageAttachment component for displaying image previews
+const ImageAttachment = ({ file, onRemove, uploadProgress, error }) => {
+  const [preview, setPreview] = useState(null);
+  
+  useEffect(() => {
+    const url = URL.createObjectURL(file);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+  
+  return (
+    <div className="relative group">
+      <img src={preview} alt={file.name} className="w-20 h-20 object-cover rounded" />
+      {uploadProgress !== undefined && uploadProgress < 100 && (
+        <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+          <div className="text-white text-xs">{uploadProgress}%</div>
+        </div>
+      )}
+      {error && (
+        <div className="absolute inset-0 bg-red-500/50 flex items-center justify-center">
+          <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </div>
+      )}
+      <button
+        onClick={onRemove}
+        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100"
+      >
+        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+  );
+};
+
 // ChatInterface: Main chat component with Session Protection System integration
 // 
 // Session Protection System prevents automatic project updates from interrupting active conversations:
@@ -904,6 +955,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [isLoadingSessionMessages, setIsLoadingSessionMessages] = useState(false);
   const [isSystemSessionChange, setIsSystemSessionChange] = useState(false);
   const [permissionMode, setPermissionMode] = useState('default');
+  const [attachedImages, setAttachedImages] = useState([]);
+  const [uploadingImages, setUploadingImages] = useState(new Map());
+  const [imageErrors, setImageErrors] = useState(new Map());
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const scrollContainerRef = useRef(null);
@@ -1380,6 +1434,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 setCurrentSessionId(pendingSessionId);
             sessionStorage.removeItem('pendingSessionId');
           }
+          
+          // Clear persisted chat messages after successful completion
+          if (selectedProject && latestMessage.exitCode === 0) {
+            localStorage.removeItem(`chat_messages_${selectedProject.name}`);
+          }
           break;
           
         case 'session-aborted':
@@ -1620,13 +1679,105 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, []);
 
-  const handleSubmit = (e) => {
+  // Handle image files from drag & drop or file picker
+  const handleImageFiles = useCallback((files) => {
+    const validFiles = files.filter(file => {
+      if (!file.type.startsWith('image/')) {
+        return false;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        setImageErrors(prev => new Map(prev).set(file.name, 'File too large (max 5MB)'));
+        return false;
+      }
+      return true;
+    });
+
+    if (validFiles.length > 0) {
+      setAttachedImages(prev => [...prev, ...validFiles].slice(0, 5)); // Max 5 images
+    }
+  }, []);
+
+  // Handle clipboard paste for images
+  const handlePaste = useCallback(async (e) => {
+    const items = Array.from(e.clipboardData.items);
+    
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) {
+          handleImageFiles([file]);
+        }
+      }
+    }
+    
+    // Fallback for some browsers/platforms
+    if (items.length === 0 && e.clipboardData.files.length > 0) {
+      const files = Array.from(e.clipboardData.files);
+      const imageFiles = files.filter(f => f.type.startsWith('image/'));
+      if (imageFiles.length > 0) {
+        handleImageFiles(imageFiles);
+      }
+    }
+  }, [handleImageFiles]);
+
+  // Setup dropzone
+  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
+    accept: {
+      'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg']
+    },
+    maxSize: 5 * 1024 * 1024, // 5MB
+    maxFiles: 5,
+    onDrop: handleImageFiles,
+    noClick: true, // We'll use our own button
+    noKeyboard: true
+  });
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!input.trim() || isLoading || !selectedProject) return;
+
+    // Upload images first if any
+    let uploadedImages = [];
+    if (attachedImages.length > 0) {
+      const formData = new FormData();
+      attachedImages.forEach(file => {
+        formData.append('images', file);
+      });
+      
+      try {
+        const token = localStorage.getItem('auth-token');
+        const headers = {};
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+        
+        const response = await fetch(`/api/projects/${selectedProject.name}/upload-images`, {
+          method: 'POST',
+          headers: headers,
+          body: formData
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to upload images');
+        }
+        
+        const result = await response.json();
+        uploadedImages = result.images;
+      } catch (error) {
+        console.error('Image upload failed:', error);
+        setChatMessages(prev => [...prev, {
+          type: 'error',
+          content: `Failed to upload images: ${error.message}`,
+          timestamp: new Date()
+        }]);
+        return;
+      }
+    }
 
     const userMessage = {
       type: 'user',
       content: input,
+      images: uploadedImages,
       timestamp: new Date()
     };
 
@@ -1673,7 +1824,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
     const toolsSettings = getToolsSettings();
 
-    // Send command to Claude CLI via WebSocket
+    // Send command to Claude CLI via WebSocket with images
     sendMessage({
       type: 'claude-command',
       command: input,
@@ -1683,12 +1834,22 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         sessionId: currentSessionId,
         resume: !!currentSessionId,
         toolsSettings: toolsSettings,
-        permissionMode: permissionMode
+        permissionMode: permissionMode,
+        images: uploadedImages // Pass images to backend
       }
     });
 
     setInput('');
+    setAttachedImages([]);
+    setUploadingImages(new Map());
+    setImageErrors(new Map());
     setIsTextareaExpanded(false);
+    
+    // Reset textarea height
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
+    
     // Clear the saved draft since message was sent
     if (selectedProject) {
       localStorage.removeItem(`draft_input_${selectedProject.name}`);
@@ -1971,13 +2132,46 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         </div>
         
         <form onSubmit={handleSubmit} className="relative max-w-4xl mx-auto">
-          <div className={`relative bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-600 focus-within:ring-2 focus-within:ring-blue-500 dark:focus-within:ring-blue-500 focus-within:border-blue-500 transition-all duration-200 ${isTextareaExpanded ? 'chat-input-expanded' : ''}`}>
+          {/* Drag overlay */}
+          {isDragActive && (
+            <div className="absolute inset-0 bg-blue-500/20 border-2 border-dashed border-blue-500 rounded-lg flex items-center justify-center z-50">
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-lg">
+                <svg className="w-8 h-8 text-blue-500 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                <p className="text-sm font-medium">Drop images here</p>
+              </div>
+            </div>
+          )}
+          
+          {/* Image attachments preview */}
+          {attachedImages.length > 0 && (
+            <div className="mb-2 p-2 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <div className="flex flex-wrap gap-2">
+                {attachedImages.map((file, index) => (
+                  <ImageAttachment
+                    key={index}
+                    file={file}
+                    onRemove={() => {
+                      setAttachedImages(prev => prev.filter((_, i) => i !== index));
+                    }}
+                    uploadProgress={uploadingImages.get(file.name)}
+                    error={imageErrors.get(file.name)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+          
+          <div {...getRootProps()} className={`relative bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-600 focus-within:ring-2 focus-within:ring-blue-500 dark:focus-within:ring-blue-500 focus-within:border-blue-500 transition-all duration-200 ${isTextareaExpanded ? 'chat-input-expanded' : ''}`}>
+            <input {...getInputProps()} />
             <textarea
               ref={textareaRef}
               value={input}
               onChange={handleInputChange}
               onClick={handleTextareaClick}
               onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
               onFocus={() => setIsInputFocused(true)}
               onBlur={() => setIsInputFocused(false)}
               onInput={(e) => {
@@ -1994,7 +2188,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               placeholder="Ask Claude to help with your code... (@ to reference files)"
               disabled={isLoading}
               rows={1}
-              className="chat-input-placeholder w-full px-4 sm:px-6 py-3 sm:py-4 pr-28 sm:pr-40 bg-transparent rounded-2xl focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 resize-none min-h-[40px] sm:min-h-[56px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base transition-all duration-200"
+              className="chat-input-placeholder w-full pl-12 pr-28 sm:pr-40 py-3 sm:py-4 bg-transparent rounded-2xl focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 resize-none min-h-[40px] sm:min-h-[56px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base transition-all duration-200"
               style={{ height: 'auto' }}
             />
             {/* Clear button - shown when there's text */}
@@ -2039,6 +2233,18 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 </svg>
               </button>
             )}
+            {/* Image upload button */}
+            <button
+              type="button"
+              onClick={open}
+              className="absolute left-2 bottom-4 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              title="Attach images"
+            >
+              <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </button>
+            
             {/* Mic button - HIDDEN */}
             <div className="absolute right-16 sm:right-16 top-1/2 transform -translate-y-1/2" style={{ display: 'none' }}>
               <MicButton 
