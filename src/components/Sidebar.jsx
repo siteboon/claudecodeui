@@ -3,7 +3,7 @@ import { ScrollArea } from './ui/scroll-area';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
-import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2 } from 'lucide-react';
+import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2, Search } from 'lucide-react';
 import { cn } from '../lib/utils';
 import ClaudeLogo from './ClaudeLogo';
 import { api } from '../utils/api';
@@ -66,6 +66,7 @@ function Sidebar({
   const [editingSession, setEditingSession] = useState(null);
   const [editingSessionName, setEditingSessionName] = useState('');
   const [generatingSummary, setGeneratingSummary] = useState({});
+  const [searchFilter, setSearchFilter] = useState('');
 
   // Touch handler to prevent double-tap issues on iPad (only for buttons, not scroll areas)
   const handleTouchClick = (callback) => {
@@ -360,6 +361,18 @@ function Sidebar({
     }
   });
 
+  // Filter projects based on search input
+  const filteredProjects = sortedProjects.filter(project => {
+    if (!searchFilter.trim()) return true;
+    
+    const searchLower = searchFilter.toLowerCase();
+    const displayName = (project.displayName || project.name).toLowerCase();
+    const projectName = project.name.toLowerCase();
+    
+    // Search in both display name and actual project name/path
+    return displayName.includes(searchLower) || projectName.includes(searchLower);
+  });
+
   return (
     <div className="h-full flex flex-col bg-card md:select-none">
       {/* Header */}
@@ -544,6 +557,30 @@ function Sidebar({
         </div>
       )}
       
+      {/* Search Filter */}
+      {projects.length > 0 && !isLoading && (
+        <div className="px-3 md:px-4 py-2 border-b border-border">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search projects..."
+              value={searchFilter}
+              onChange={(e) => setSearchFilter(e.target.value)}
+              className="pl-9 h-9 text-sm bg-muted/50 border-0 focus:bg-background focus:ring-1 focus:ring-primary/20"
+            />
+            {searchFilter && (
+              <button
+                onClick={() => setSearchFilter('')}
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 hover:bg-accent rounded"
+              >
+                <X className="w-3 h-3 text-muted-foreground" />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+      
       {/* Projects List */}
       <ScrollArea className="flex-1 md:px-2 md:py-3 overflow-y-auto overscroll-contain">
         <div className="md:space-y-1 pb-safe-area-inset-bottom">
@@ -567,8 +604,18 @@ function Sidebar({
                 Run Claude CLI in a project directory to get started
               </p>
             </div>
+          ) : filteredProjects.length === 0 ? (
+            <div className="text-center py-12 md:py-8 px-4">
+              <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-4 md:mb-3">
+                <Search className="w-6 h-6 text-muted-foreground" />
+              </div>
+              <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">No matching projects</h3>
+              <p className="text-sm text-muted-foreground">
+                Try adjusting your search term
+              </p>
+            </div>
           ) : (
-            sortedProjects.map((project) => {
+            filteredProjects.map((project) => {
               const isExpanded = expandedProjects.has(project.name);
               const isSelected = selectedProject?.name === project.name;
               
