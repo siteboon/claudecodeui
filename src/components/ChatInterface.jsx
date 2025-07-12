@@ -24,6 +24,7 @@ import ClaudeLogo from './ClaudeLogo.jsx';
 import ClaudeStatus from './ClaudeStatus';
 import { MicButton } from './MicButton.jsx';
 import { api } from '../utils/api';
+import ThinkingModeSelector, { thinkingModes } from './ThinkingModeSelector.jsx';
 
 // Memoized message component to prevent unnecessary re-renders
 const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFileOpen, onShowSettings, autoExpandTools, showRawParameters }) => {
@@ -924,6 +925,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(-1);
   const [slashPosition, setSlashPosition] = useState(-1);
   const [claudeStatus, setClaudeStatus] = useState(null);
+  const [thinkingMode, setThinkingMode] = useState('none');
 
 
   // Memoized diff calculation to prevent recalculating on every render
@@ -1624,6 +1626,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     e.preventDefault();
     if (!input.trim() || isLoading || !selectedProject) return;
 
+    // Apply thinking mode prefix if selected
+    let messageContent = input;
+    const selectedThinkingMode = thinkingModes.find(mode => mode.id === thinkingMode);
+    if (selectedThinkingMode && selectedThinkingMode.prefix) {
+      messageContent = `${selectedThinkingMode.prefix}: ${input}`;
+    }
+
     const userMessage = {
       type: 'user',
       content: input,
@@ -1676,7 +1685,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     // Send command to Claude CLI via WebSocket
     sendMessage({
       type: 'claude-command',
-      command: input,
+      command: messageContent,
       options: {
         projectPath: selectedProject.path,
         cwd: selectedProject.fullPath,
@@ -1689,6 +1698,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
     setInput('');
     setIsTextareaExpanded(false);
+    setThinkingMode('none'); // Reset thinking mode after sending
     // Clear the saved draft since message was sent
     if (selectedProject) {
       localStorage.removeItem(`draft_input_${selectedProject.name}`);
@@ -1954,6 +1964,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 </span>
               </div>
             </button>
+            
+            {/* Thinking Mode Selector */}
+            <ThinkingModeSelector
+              selectedMode={thinkingMode}
+              onModeChange={setThinkingMode}
+              className=""
+            />
             
             {/* Scroll to bottom button - positioned next to mode indicator */}
             {isUserScrolledUp && chatMessages.length > 0 && (
