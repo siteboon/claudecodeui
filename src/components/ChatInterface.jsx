@@ -1597,6 +1597,14 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, []); // Only run once on mount
 
+  // Reset textarea height when input is cleared programmatically
+  useEffect(() => {
+    if (textareaRef.current && !input.trim()) {
+      textareaRef.current.style.height = 'auto';
+      setIsTextareaExpanded(false);
+    }
+  }, [input]);
+
   const handleTranscript = useCallback((text) => {
     if (text.trim()) {
       setInput(prevInput => {
@@ -1689,6 +1697,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
     setInput('');
     setIsTextareaExpanded(false);
+    
+    // Reset textarea height to minimal state
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
+    
     // Clear the saved draft since message was sent
     if (selectedProject) {
       localStorage.removeItem(`draft_input_${selectedProject.name}`);
@@ -1776,8 +1790,15 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   };
 
   const handleInputChange = (e) => {
-    setInput(e.target.value);
+    const newValue = e.target.value;
+    setInput(newValue);
     setCursorPosition(e.target.selectionStart);
+    
+    // Handle height reset when input becomes empty
+    if (!newValue.trim()) {
+      e.target.style.height = 'auto';
+      setIsTextareaExpanded(false);
+    }
   };
 
   const handleTextareaClick = (e) => {

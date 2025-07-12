@@ -820,6 +820,14 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
 
+// Helper function to convert permissions to rwx format
+function permToRwx(perm) {
+  const r = perm & 4 ? 'r' : '-';
+  const w = perm & 2 ? 'w' : '-';
+  const x = perm & 1 ? 'x' : '-';
+  return r + w + x;
+}
+
 async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden = true) {
   // Using fsPromises from import
   const items = [];
@@ -836,11 +844,33 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
           entry.name === 'dist' || 
           entry.name === 'build') continue;
       
+      const itemPath = path.join(dirPath, entry.name);
       const item = {
         name: entry.name,
-        path: path.join(dirPath, entry.name),
+        path: itemPath,
         type: entry.isDirectory() ? 'directory' : 'file'
       };
+      
+      // Get file stats for additional metadata
+      try {
+        const stats = await fsPromises.stat(itemPath);
+        item.size = stats.size;
+        item.modified = stats.mtime.toISOString();
+        
+        // Convert permissions to rwx format
+        const mode = stats.mode;
+        const ownerPerm = (mode >> 6) & 7;
+        const groupPerm = (mode >> 3) & 7;
+        const otherPerm = mode & 7;
+        item.permissions = ((mode >> 6) & 7).toString() + ((mode >> 3) & 7).toString() + (mode & 7).toString();
+        item.permissionsRwx = permToRwx(ownerPerm) + permToRwx(groupPerm) + permToRwx(otherPerm);
+      } catch (statError) {
+        // If stat fails, provide default values
+        item.size = 0;
+        item.modified = null;
+        item.permissions = '000';
+        item.permissionsRwx = '---------';
+      }
       
       if (entry.isDirectory() && currentDepth < maxDepth) {
         // Recursively get subdirectories but limit depth

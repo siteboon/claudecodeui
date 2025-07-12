@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ScrollArea } from './ui/scroll-area';
 import { Button } from './ui/button';
-import { Folder, FolderOpen, File, FileText, FileCode } from 'lucide-react';
+import { Folder, FolderOpen, File, FileText, FileCode, List, TableProperties, Eye } from 'lucide-react';
 import { cn } from '../lib/utils';
 import CodeEditor from './CodeEditor';
 import ImageViewer from './ImageViewer';
@@ -13,12 +13,21 @@ function FileTree({ selectedProject }) {
   const [expandedDirs, setExpandedDirs] = useState(new Set());
   const [selectedFile, setSelectedFile] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
+  const [viewMode, setViewMode] = useState('detailed'); // 'simple', 'detailed', 'compact'
 
   useEffect(() => {
     if (selectedProject) {
       fetchFiles();
     }
   }, [selectedProject]);
+
+  // Load view mode preference from localStorage
+  useEffect(() => {
+    const savedViewMode = localStorage.getItem('file-tree-view-mode');
+    if (savedViewMode && ['simple', 'detailed', 'compact'].includes(savedViewMode)) {
+      setViewMode(savedViewMode);
+    }
+  }, []);
 
   const fetchFiles = async () => {
     setLoading(true);
@@ -50,6 +59,35 @@ function FileTree({ selectedProject }) {
       newExpanded.add(path);
     }
     setExpandedDirs(newExpanded);
+  };
+
+  // Change view mode and save preference
+  const changeViewMode = (mode) => {
+    setViewMode(mode);
+    localStorage.setItem('file-tree-view-mode', mode);
+  };
+
+  // Format file size
+  const formatFileSize = (bytes) => {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  };
+
+  // Format date as relative time
+  const formatRelativeTime = (date) => {
+    if (!date) return '-';
+    const now = new Date();
+    const past = new Date(date);
+    const diffInSeconds = Math.floor((now - past) / 1000);
+    
+    if (diffInSeconds < 60) return 'just now';
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} min ago`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
+    if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)} days ago`;
+    return past.toLocaleDateString();
   };
 
   const renderFileTree = (items, level = 0) => {
@@ -135,6 +173,129 @@ function FileTree({ selectedProject }) {
     }
   };
 
+  // Render detailed view with table-like layout
+  const renderDetailedView = (items, level = 0) => {
+    return items.map((item) => (
+      <div key={item.path} className="select-none">
+        <div
+          className={cn(
+            "grid grid-cols-12 gap-2 p-2 hover:bg-accent cursor-pointer items-center",
+          )}
+          style={{ paddingLeft: `${level * 16 + 12}px` }}
+          onClick={() => {
+            if (item.type === 'directory') {
+              toggleDirectory(item.path);
+            } else if (isImageFile(item.name)) {
+              setSelectedImage({
+                name: item.name,
+                path: item.path,
+                projectPath: selectedProject.path,
+                projectName: selectedProject.name
+              });
+            } else {
+              setSelectedFile({
+                name: item.name,
+                path: item.path,
+                projectPath: selectedProject.path,
+                projectName: selectedProject.name
+              });
+            }
+          }}
+        >
+          <div className="col-span-5 flex items-center gap-2 min-w-0">
+            {item.type === 'directory' ? (
+              expandedDirs.has(item.path) ? (
+                <FolderOpen className="w-4 h-4 text-blue-500 flex-shrink-0" />
+              ) : (
+                <Folder className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+              )
+            ) : (
+              getFileIcon(item.name)
+            )}
+            <span className="text-sm truncate text-foreground">
+              {item.name}
+            </span>
+          </div>
+          <div className="col-span-2 text-sm text-muted-foreground">
+            {item.type === 'file' ? formatFileSize(item.size) : '-'}
+          </div>
+          <div className="col-span-3 text-sm text-muted-foreground">
+            {formatRelativeTime(item.modified)}
+          </div>
+          <div className="col-span-2 text-sm text-muted-foreground font-mono">
+            {item.permissionsRwx || '-'}
+          </div>
+        </div>
+        
+        {item.type === 'directory' && 
+         expandedDirs.has(item.path) && 
+         item.children && 
+         renderDetailedView(item.children, level + 1)}
+      </div>
+    ));
+  };
+
+  // Render compact view with inline details
+  const renderCompactView = (items, level = 0) => {
+    return items.map((item) => (
+      <div key={item.path} className="select-none">
+        <div
+          className={cn(
+            "flex items-center justify-between p-2 hover:bg-accent cursor-pointer",
+          )}
+          style={{ paddingLeft: `${level * 16 + 12}px` }}
+          onClick={() => {
+            if (item.type === 'directory') {
+              toggleDirectory(item.path);
+            } else if (isImageFile(item.name)) {
+              setSelectedImage({
+                name: item.name,
+                path: item.path,
+                projectPath: selectedProject.path,
+                projectName: selectedProject.name
+              });
+            } else {
+              setSelectedFile({
+                name: item.name,
+                path: item.path,
+                projectPath: selectedProject.path,
+                projectName: selectedProject.name
+              });
+            }
+          }}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            {item.type === 'directory' ? (
+              expandedDirs.has(item.path) ? (
+                <FolderOpen className="w-4 h-4 text-blue-500 flex-shrink-0" />
+              ) : (
+                <Folder className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+              )
+            ) : (
+              getFileIcon(item.name)
+            )}
+            <span className="text-sm truncate text-foreground">
+              {item.name}
+            </span>
+          </div>
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            {item.type === 'file' && (
+              <>
+                <span>{formatFileSize(item.size)}</span>
+                <span className="font-mono">{item.permissionsRwx}</span>
+              </>
+            )}
+          </div>
+        </div>
+        
+        {item.type === 'directory' && 
+         expandedDirs.has(item.path) && 
+         item.children && 
+         renderCompactView(item.children, level + 1)}
+      </div>
+    ));
+  };
+
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -147,6 +308,51 @@ function FileTree({ selectedProject }) {
 
   return (
     <div className="h-full flex flex-col bg-card">
+      {/* View Mode Toggle */}
+      <div className="p-4 border-b border-border flex items-center justify-between">
+        <h3 className="text-sm font-medium text-foreground">Files</h3>
+        <div className="flex gap-1">
+          <Button
+            variant={viewMode === 'simple' ? 'default' : 'ghost'}
+            size="sm"
+            className="h-8 w-8 p-0"
+            onClick={() => changeViewMode('simple')}
+            title="Simple view"
+          >
+            <List className="w-4 h-4" />
+          </Button>
+          <Button
+            variant={viewMode === 'compact' ? 'default' : 'ghost'}
+            size="sm"
+            className="h-8 w-8 p-0"
+            onClick={() => changeViewMode('compact')}
+            title="Compact view"
+          >
+            <Eye className="w-4 h-4" />
+          </Button>
+          <Button
+            variant={viewMode === 'detailed' ? 'default' : 'ghost'}
+            size="sm"
+            className="h-8 w-8 p-0"
+            onClick={() => changeViewMode('detailed')}
+            title="Detailed view"
+          >
+            <TableProperties className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Column Headers for Detailed View */}
+      {viewMode === 'detailed' && files.length > 0 && (
+        <div className="px-4 pt-2 pb-1 border-b border-border">
+          <div className="grid grid-cols-12 gap-2 px-2 text-xs font-medium text-muted-foreground">
+            <div className="col-span-5">Name</div>
+            <div className="col-span-2">Size</div>
+            <div className="col-span-3">Modified</div>
+            <div className="col-span-2">Permissions</div>
+          </div>
+        </div>
+      )}
       
       <ScrollArea className="flex-1 p-4">
         {files.length === 0 ? (
@@ -160,8 +366,10 @@ function FileTree({ selectedProject }) {
             </p>
           </div>
         ) : (
-          <div className="space-y-1">
-            {renderFileTree(files)}
+          <div className={viewMode === 'detailed' ? '' : 'space-y-1'}>
+            {viewMode === 'simple' && renderFileTree(files)}
+            {viewMode === 'compact' && renderCompactView(files)}
+            {viewMode === 'detailed' && renderDetailedView(files)}
           </div>
         )}
       </ScrollArea>
