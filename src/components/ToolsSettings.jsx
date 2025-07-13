@@ -16,6 +16,7 @@ function ToolsSettings({ isOpen, onClose }) {
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null);
   const [projectSortOrder, setProjectSortOrder] = useState('name');
+  const [executablePath, setExecutablePath] = useState('');
 
   // Common tool patterns
   const commonTools = [
@@ -53,12 +54,14 @@ function ToolsSettings({ isOpen, onClose }) {
         setDisallowedTools(settings.disallowedTools || []);
         setSkipPermissions(settings.skipPermissions || false);
         setProjectSortOrder(settings.projectSortOrder || 'name');
+        setExecutablePath(settings.executablePath || '');
       } else {
         // Set defaults
         setAllowedTools([]);
         setDisallowedTools([]);
         setSkipPermissions(false);
         setProjectSortOrder('name');
+        setExecutablePath('');
       }
     } catch (error) {
       console.error('Error loading tool settings:', error);
@@ -67,6 +70,7 @@ function ToolsSettings({ isOpen, onClose }) {
       setDisallowedTools([]);
       setSkipPermissions(false);
       setProjectSortOrder('name');
+      setExecutablePath('');
     }
   };
 
@@ -80,6 +84,7 @@ function ToolsSettings({ isOpen, onClose }) {
         disallowedTools,
         skipPermissions,
         projectSortOrder,
+        executablePath,
         lastUpdated: new Date().toISOString()
       };
       
@@ -206,6 +211,33 @@ function ToolsSettings({ isOpen, onClose }) {
                       <option value="name">Alphabetical</option>
                       <option value="date">Recent Activity</option>
                     </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Executable Path */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <Settings className="w-5 h-5 text-blue-500" />
+                <h3 className="text-lg font-medium text-foreground">
+                  Claude Executable Path
+                </h3>
+              </div>
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                <div className="space-y-2">
+                  <div className="text-sm text-gray-600 dark:text-gray-300">
+                    Specify a custom path to the Claude CLI executable (optional)
+                  </div>
+                  <Input
+                    value={executablePath}
+                    onChange={(e) => setExecutablePath(e.target.value)}
+                    placeholder="e.g., /usr/local/bin/claude or C:\Program Files\claude\claude.exe"
+                    className="w-full h-10 touch-manipulation font-mono text-sm"
+                    style={{ fontSize: '14px' }}
+                  />
+                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                    Leave empty to use the default 'claude' command from PATH
                   </div>
                 </div>
               </div>

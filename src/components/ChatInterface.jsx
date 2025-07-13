@@ -1982,7 +1982,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       return {
         allowedTools: [],
         disallowedTools: [],
-        skipPermissions: false
+        skipPermissions: false,
+        executablePath: ''
       };
     };
 
