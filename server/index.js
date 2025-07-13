@@ -40,6 +40,7 @@ import { getProjects, getSessions, getSessionMessages, renameProject, deleteSess
 import { spawnClaude, abortClaudeSession } from './claude-cli.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
+import mcpRoutes from './routes/mcp.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 
@@ -170,6 +171,9 @@ app.use('/api/auth', authRoutes);
 
 // Git API Routes (protected)
 app.use('/api/git', authenticateToken, gitRoutes);
+
+// MCP API Routes (protected)
+app.use('/api/mcp', authenticateToken, mcpRoutes);
 
 // Static files served after API routes
 app.use(express.static(path.join(__dirname, '../dist')));
@@ -414,8 +418,6 @@ app.get('/api/projects/:projectName/files', authenticateToken, async (req, res) 
     
     const files = await getFileTree(actualPath, 3, 0, true);
     const hiddenFiles = files.filter(f => f.name.startsWith('.'));
-    console.log('📄 Found', files.length, 'files/folders, including', hiddenFiles.length, 'hidden files');
-    console.log('🔍 Hidden files:', hiddenFiles.map(f => f.name));
     res.json(files);
   } catch (error) {
     console.error('❌ File tree error:', error.message);

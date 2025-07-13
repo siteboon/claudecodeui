@@ -1,6 +1,6 @@
 {
   "name": "claude-code-ui",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "A web-based UI for Claude Code CLI",
   "type": "module",
   "main": "server/index.js",

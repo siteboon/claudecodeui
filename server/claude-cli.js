@@ -84,6 +84,84 @@ async function spawnClaude(command, options = {}, ws) {
     // Add basic flags
     args.push('--output-format', 'stream-json', '--verbose');
     
+    // Add MCP config flag only if MCP servers are configured
+    try {
+      console.log('🔍 Starting MCP config check...');
+      // Use already imported modules (fs.promises is imported as fs, path, os)
+      const fsSync = await import('fs'); // Import synchronous fs methods
+      console.log('✅ Successfully imported fs sync methods');
+      
+      // Check for MCP config in ~/.claude.json
+      const claudeConfigPath = path.join(os.homedir(), '.claude.json');
+      
+      console.log(`🔍 Checking for MCP configs in: ${claudeConfigPath}`);
+      console.log(`  Claude config exists: ${fsSync.existsSync(claudeConfigPath)}`);
+      
+      let hasMcpServers = false;
+      
+      // Check Claude config for MCP servers
+      if (fsSync.existsSync(claudeConfigPath)) {
+        try {
+          const claudeConfig = JSON.parse(fsSync.readFileSync(claudeConfigPath, 'utf8'));
+          
+          // Check global MCP servers
+          if (claudeConfig.mcpServers && Object.keys(claudeConfig.mcpServers).length > 0) {
+            console.log(`✅ Found ${Object.keys(claudeConfig.mcpServers).length} global MCP servers`);
+            hasMcpServers = true;
+          }
+          
+          // Check project-specific MCP servers
+          if (!hasMcpServers && claudeConfig.claudeProjects) {
+            const currentProjectPath = process.cwd();
+            const projectConfig = claudeConfig.claudeProjects[currentProjectPath];
+            if (projectConfig && projectConfig.mcpServers && Object.keys(projectConfig.mcpServers).length > 0) {
+              console.log(`✅ Found ${Object.keys(projectConfig.mcpServers).length} project MCP servers`);
+              hasMcpServers = true;
+            }
+          }
+        } catch (e) {
+          console.log(`❌ Failed to parse Claude config:`, e.message);
+        }
+      }
+      
+      console.log(`🔍 hasMcpServers result: ${hasMcpServers}`);
+      
+      if (hasMcpServers) {
+        // Use Claude config file if it has MCP servers
+        let configPath = null;
+        
+        if (fsSync.existsSync(claudeConfigPath)) {
+          try {
+            const claudeConfig = JSON.parse(fsSync.readFileSync(claudeConfigPath, 'utf8'));
+            
+            // Check if we have any MCP servers (global or project-specific)
+            const hasGlobalServers = claudeConfig.mcpServers && Object.keys(claudeConfig.mcpServers).length > 0;
+            const currentProjectPath = process.cwd();
+            const projectConfig = claudeConfig.claudeProjects && claudeConfig.claudeProjects[currentProjectPath];
+            const hasProjectServers = projectConfig && projectConfig.mcpServers && Object.keys(projectConfig.mcpServers).length > 0;
+            
+            if (hasGlobalServers || hasProjectServers) {
+              configPath = claudeConfigPath;
+            }
+          } catch (e) {
+            // No valid config found
+          }
+        }
+        
+        if (configPath) {
+          console.log(`📡 Adding MCP config: ${configPath}`);
+          args.push('--mcp-config', configPath);
+        } else {
+          console.log('⚠️ MCP servers detected but no valid config file found');
+        }
+      }
+    } catch (error) {
+      // If there's any error checking for MCP configs, don't add the flag
+      console.log('❌ MCP config check failed:', error.message);
+      console.log('📍 Error stack:', error.stack);
+      console.log('Note: MCP config check failed, proceeding without MCP support');
+    }
+    
     // Add model for new sessions
     if (!resume) {
       args.push('--model', 'sonnet');
