@@ -98,6 +98,20 @@ DB_PATH=server/database/auth.db
 ANTHROPIC_API_KEY=your_key_here
 ```
 
+### Claude Executable Configuration
+The Claude CLI executable path can be configured through the Tools Settings:
+1. Click **Tools Settings** in the sidebar
+2. Find **Claude Executable Path** section
+3. Enter the full path to your Claude CLI executable
+4. Leave empty to use the default `claude` command from PATH
+5. Click **Save Settings**
+
+This is useful when:
+- Claude is installed in a non-standard location
+- Using multiple versions of Claude CLI
+- Running in containerized environments
+- Windows users with specific installation paths
+
 ### Initial Setup
 1. **Clone and install dependencies:**
    ```bash
@@ -137,6 +151,16 @@ ANTHROPIC_API_KEY=your_key_here
 - **Project sandboxing** - Isolated file system access
 - **Authentication required** - No anonymous access
 - **Session validation** - JWT token verification
+
+### Claude Executable Path Configuration
+- **Custom executable path** - Configure custom path to Claude CLI
+- **Default behavior** - Uses 'claude' command from PATH if not specified
+- **Cross-platform support** - Works with Unix and Windows paths
+- **Settings persistence** - Saved in browser localStorage
+- **Examples**:
+  - Unix/Linux/macOS: `/usr/local/bin/claude`
+  - Windows: `C:\Program Files\Claude\claude.exe`
+  - Custom installation: `/home/user/.npm-global/bin/claude`
 
 ## 🐛 Troubleshooting
 
