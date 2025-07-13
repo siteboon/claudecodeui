@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Development configuration for Claude Code UI
   app-dev:
@@ -7,6 +5,7 @@ services:
       context: .
       dockerfile: Dockerfile.dev
     container_name: claude-code-ui-dev
+    # user: "1000:1000"  # Temporarily disabled for testing
     ports:
       - "2008:2008"  # Backend API
       - "2009:2009"  # Frontend Vite dev server
@@ -15,6 +14,7 @@ services:
       - PORT=2008
       - VITE_PORT=2009
       - DB_PATH=/app/server/database/auth.db
+      - HOME=/home/nick
       
       # Hot reload for development
       - CHOKIDAR_USEPOLLING=true
@@ -36,8 +36,11 @@ services:
       # Persist database
       - ./server/database:/app/server/database
       
-      # Mount project directories for Claude to access
-      - ${HOME}/Desktop:/workspace:ro
+      # Mount entire user home directory for full project access
+      - /home/nick:/home/nick:rw
+      
+      # Mount Claude CLI data directory for project discovery
+      - /home/nick/.claude:/home/nick/.claude:rw
       
     command: npm run dev
     stdin_open: true

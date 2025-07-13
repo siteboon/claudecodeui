@@ -11,7 +11,12 @@ RUN apk add --no-cache \
     make \
     g++ \
     sqlite \
-    bash
+    bash \
+    sudo
+
+# Create user with same UID as host user for proper file permissions
+# Note: UID 1000 and GID 1000 are already used by 'node' user in node:alpine
+RUN echo 'node ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
 WORKDIR /app
 
@@ -25,8 +30,9 @@ RUN npm install && \
 # Copy application files
 COPY . .
 
-# Create data directory
-RUN mkdir -p /app/server/database
+# Create data directory and fix ownership
+RUN mkdir -p /app/server/database && \
+    chown -R node:node /app
 
 # Expose ports
 EXPOSE 2008 2009
