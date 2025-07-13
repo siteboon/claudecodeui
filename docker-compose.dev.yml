@@ -14,7 +14,9 @@ services:
       - PORT=2008
       - VITE_PORT=2009
       - DB_PATH=/app/server/database/auth.db
-      - HOME=/home/nick
+      - HOME=${USER_HOME_DIR:-/home/user}
+      - CLAUDE_PROJECTS_PATH=${CLAUDE_PROJECTS_PATH:-${HOME}/.claude/projects}
+      - CLAUDE_CONFIG_DIR=${CLAUDE_CONFIG_DIR:-${HOME}/.claude}
       
       # Hot reload for development
       - CHOKIDAR_USEPOLLING=true
@@ -37,10 +39,10 @@ services:
       - ./server/database:/app/server/database
       
       # Mount entire user home directory for full project access
-      - /home/nick:/home/nick:rw
+      - ${USER_HOME_DIR:-/home/user}:${USER_HOME_DIR:-/home/user}:rw
       
       # Mount Claude CLI data directory for project discovery
-      - /home/nick/.claude:/home/nick/.claude:rw
+      - ${CLAUDE_CONFIG_DIR:-${HOME}/.claude}:${CLAUDE_CONFIG_DIR:-${HOME}/.claude}:rw
       
     command: npm run dev
     stdin_open: true

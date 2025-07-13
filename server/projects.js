@@ -15,7 +15,8 @@ function clearProjectDirectoryCache() {
 
 // Load project configuration file
 async function loadProjectConfig() {
-  const configPath = path.join(process.env.HOME, '.claude', 'project-config.json');
+  const claudeConfigDir = process.env.CLAUDE_CONFIG_DIR || path.join(process.env.HOME, '.claude');
+  const configPath = path.join(claudeConfigDir, 'project-config.json');
   try {
     const configData = await fs.readFile(configPath, 'utf8');
     return JSON.parse(configData);
@@ -27,7 +28,8 @@ async function loadProjectConfig() {
 
 // Save project configuration file
 async function saveProjectConfig(config) {
-  const configPath = path.join(process.env.HOME, '.claude', 'project-config.json');
+  const claudeConfigDir = process.env.CLAUDE_CONFIG_DIR || path.join(process.env.HOME, '.claude');
+  const configPath = path.join(claudeConfigDir, 'project-config.json');
   await fs.writeFile(configPath, JSON.stringify(config, null, 2), 'utf8');
 }
 
@@ -73,7 +75,8 @@ async function extractProjectDirectory(projectName) {
   }
   
   
-  const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
+  const claudeProjectsPath = process.env.CLAUDE_PROJECTS_PATH || path.join(process.env.HOME, '.claude', 'projects');
+  const projectDir = path.join(claudeProjectsPath, projectName);
   const cwdCounts = new Map();
   let latestTimestamp = 0;
   let latestCwd = null;
@@ -169,7 +172,7 @@ async function extractProjectDirectory(projectName) {
 }
 
 async function getProjects() {
-  const claudeDir = path.join(process.env.HOME, '.claude', 'projects');
+  const claudeDir = process.env.CLAUDE_PROJECTS_PATH || path.join(process.env.HOME, '.claude', 'projects');
   const config = await loadProjectConfig();
   const projects = [];
   const existingProjects = new Set();
@@ -252,7 +255,8 @@ async function getProjects() {
 }
 
 async function getSessions(projectName, limit = 5, offset = 0) {
-  const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
+  const claudeProjectsPath = process.env.CLAUDE_PROJECTS_PATH || path.join(process.env.HOME, '.claude', 'projects');
+  const projectDir = path.join(claudeProjectsPath, projectName);
   
   try {
     const files = await fs.readdir(projectDir);
@@ -392,7 +396,8 @@ async function parseJsonlSessions(filePath) {
 
 // Get messages for a specific session
 async function getSessionMessages(projectName, sessionId) {
-  const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
+  const claudeProjectsPath = process.env.CLAUDE_PROJECTS_PATH || path.join(process.env.HOME, '.claude', 'projects');
+  const projectDir = path.join(claudeProjectsPath, projectName);
   
   try {
     const files = await fs.readdir(projectDir);
@@ -457,7 +462,8 @@ async function renameProject(projectName, newDisplayName) {
 
 // Delete a session from a project
 async function deleteSession(projectName, sessionId) {
-  const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
+  const claudeProjectsPath = process.env.CLAUDE_PROJECTS_PATH || path.join(process.env.HOME, '.claude', 'projects');
+  const projectDir = path.join(claudeProjectsPath, projectName);
   
   try {
     const files = await fs.readdir(projectDir);
@@ -520,7 +526,8 @@ async function isProjectEmpty(projectName) {
 
 // Delete an empty project
 async function deleteProject(projectName) {
-  const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
+  const claudeProjectsPath = process.env.CLAUDE_PROJECTS_PATH || path.join(process.env.HOME, '.claude', 'projects');
+  const projectDir = path.join(claudeProjectsPath, projectName);
   
   try {
     // First check if the project is empty
@@ -560,7 +567,8 @@ async function addProjectManually(projectPath, displayName = null) {
   
   // Check if project already exists in config or as a folder
   const config = await loadProjectConfig();
-  const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
+  const claudeProjectsPath = process.env.CLAUDE_PROJECTS_PATH || path.join(process.env.HOME, '.claude', 'projects');
+  const projectDir = path.join(claudeProjectsPath, projectName);
   
   try {
     await fs.access(projectDir);

@@ -112,6 +112,11 @@ DEFAULT_ADMIN_PASSWORD=your-secure-password
 
 # Optional: Custom workspace path for your projects
 HOST_WORKSPACE_PATH=${HOME}/Desktop
+
+# Optional: Custom user paths (defaults to current user's home)
+CLAUDE_PROJECTS_PATH=${HOME}/.claude/projects
+CLAUDE_CONFIG_DIR=${HOME}/.claude
+USER_HOME_DIR=${HOME}
 ```
 
 4. **Start with Docker Compose:**
@@ -167,8 +172,10 @@ The application supports comprehensive configuration through environment variabl
 |----------|-------------|---------|----------|
 | `HOST_WORKSPACE_PATH` | Host directory for projects (Docker) | `${HOME}/Desktop` | ❌ |
 | `WORKSPACE_PATH` | Internal workspace path | `/workspace` | ❌ |
-| `ALLOWED_DIRECTORIES` | Comma-separated allowed paths | `/workspace,/home/projects` | ❌ |
-| `CLAUDE_PROJECTS_PATH` | Claude CLI projects directory | `/home/nick/.claude/projects` | ❌ |
+| `ALLOWED_DIRECTORIES` | Comma-separated allowed paths | `/workspace,/home/projects,${HOME}/Desktop` | ❌ |
+| `CLAUDE_PROJECTS_PATH` | Claude CLI projects directory | `${HOME}/.claude/projects` | ❌ |
+| `CLAUDE_CONFIG_DIR` | Claude configuration directory | `${HOME}/.claude` | ❌ |
+| `USER_HOME_DIR` | User home directory (Docker) | `${HOME}` | ❌ |
 
 #### Development & Debugging
 

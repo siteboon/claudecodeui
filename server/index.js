@@ -51,7 +51,7 @@ const connectedClients = new Set();
 // Setup file system watcher for Claude projects folder using chokidar
 async function setupProjectsWatcher() {
   const chokidar = (await import('chokidar')).default;
-  const claudeProjectsPath = path.join(process.env.HOME, '.claude', 'projects');
+  const claudeProjectsPath = process.env.CLAUDE_PROJECTS_PATH || path.join(process.env.HOME, '.claude', 'projects');
   
   if (projectsWatcher) {
     projectsWatcher.close();
