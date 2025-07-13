@@ -1,7 +1,7 @@
 // Simple Puppeteer test for Claude Code UI
 import puppeteer from 'puppeteer';
 
-const APP_URL = 'http://localhost:2009';
+const APP_URL = `http://localhost:${process.env.VITE_PORT || 3009}`;
 
 async function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));

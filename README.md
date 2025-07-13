@@ -78,7 +78,7 @@ npm run dev
 The application will start at the port you specified in your .env
 
 5. **Open your browser:**
-   - Development: `http://localhost:2009`
+   - Development: `http://localhost:3009` (or your configured VITE_PORT)
 
 ## 🐳 Docker Deployment (Recommended)
 
@@ -130,38 +130,148 @@ docker-compose up -d
    - Frontend: `http://localhost:2009`
    - Backend API: `http://localhost:2008`
 
-### Docker Environment Variables
+### Environment Variables Reference
 
-The Docker setup supports comprehensive configuration through environment variables:
+The application supports comprehensive configuration through environment variables. Different defaults apply for local development vs Docker deployment:
+
+#### Core Application Settings
+
+| Variable | Description | Local Default | Docker Default | Required |
+|----------|-------------|---------------|----------------|----------|
+| `PORT` | Backend server port | `3008` | `2008` | ❌ |
+| `VITE_PORT` | Frontend dev server port | `3009` | `2009` | ❌ |
+| `NODE_ENV` | Environment mode | `development` | `development` | ❌ |
+| `DB_PATH` | Database file location | `server/database/auth.db` | `/app/server/database/auth.db` | ❌ |
+
+#### Authentication & Security
 
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
 | `ANTHROPIC_API_KEY` | Your Claude API key | - | ✅ |
-| `DEFAULT_ADMIN_USERNAME` | Initial admin username | `admin` | ❌ |
-| `DEFAULT_ADMIN_PASSWORD` | Initial admin password | `change-me` | ❌ |
-| `HOST_WORKSPACE_PATH` | Host directory for projects | `${HOME}/Desktop` | ❌ |
-| `CLAUDE_EXECUTABLE_PATH` | Custom Claude CLI path | `/usr/local/bin/claude` | ❌ |
-| `PORT` | Backend server port | `2008` | ❌ |
-| `VITE_PORT` | Frontend dev server port | `2009` | ❌ |
 | `JWT_SECRET` | JWT signing secret | auto-generated | ❌ |
+| `DEFAULT_ADMIN_USERNAME` | Initial admin username | `admin` | ❌ |
+| `DEFAULT_ADMIN_PASSWORD` | Initial admin password | `change-this-secure-password` | ❌ |
+| `SESSION_TIMEOUT` | Session timeout (milliseconds) | `86400000` (24h) | ❌ |
+
+#### Claude Integration
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `CLAUDE_EXECUTABLE_PATH` | Custom Claude CLI path | `/usr/local/bin/claude` | ❌ |
+| `CLAUDE_DEFAULT_MODEL` | Default Claude model | `sonnet` | ❌ |
+| `CLAUDE_MAX_TOKENS` | Max tokens per request | `4096` | ❌ |
+
+#### Workspace & File System
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `HOST_WORKSPACE_PATH` | Host directory for projects (Docker) | `${HOME}/Desktop` | ❌ |
+| `WORKSPACE_PATH` | Internal workspace path | `/workspace` | ❌ |
+| `ALLOWED_DIRECTORIES` | Comma-separated allowed paths | `/workspace,/home/projects` | ❌ |
+| `CLAUDE_PROJECTS_PATH` | Claude CLI projects directory | `/home/nick/.claude/projects` | ❌ |
+
+#### Development & Debugging
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `CHOKIDAR_USEPOLLING` | Enable file watching polling | `true` | ❌ |
+| `WATCHPACK_POLLING` | Enable webpack polling | `true` | ❌ |
+| `DEBUG` | Debug logging scope | `claude-ui:*` | ❌ |
+| `LOG_LEVEL` | Logging level | `info` | ❌ |
+
+#### Network & CORS
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `CORS_ORIGIN` | CORS allowed origin | `http://localhost:3009` | ❌ |
+| `CORS_CREDENTIALS` | Allow CORS credentials | `true` | ❌ |
+| `RATE_LIMIT_WINDOW` | Rate limit window (ms) | `900000` (15min) | ❌ |
+| `RATE_LIMIT_MAX` | Max requests per window | `100` | ❌ |
+
+#### Production Settings
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `SSL_ENABLED` | Enable SSL/TLS | `false` | ❌ |
+| `SSL_CERT_PATH` | SSL certificate path | `/etc/ssl/certs/cert.pem` | ❌ |
+| `SSL_KEY_PATH` | SSL key path | `/etc/ssl/private/key.pem` | ❌ |
+| `BEHIND_PROXY` | Running behind proxy | `false` | ❌ |
+| `TRUST_PROXY` | Trust proxy headers | `false` | ❌ |
+
+#### Monitoring & Analytics
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `TELEMETRY_ENABLED` | Enable telemetry | `false` | ❌ |
+| `ANALYTICS_ENABLED` | Enable analytics | `false` | ❌ |
+| `SENTRY_DSN` | Sentry error tracking DSN | - | ❌ |
 
 ### Docker Commands Reference
 
+#### Development Commands
 ```bash
-# View logs
+# Start development environment (with hot reload)
+docker-compose -f docker-compose.dev.yml up
+
+# Start in background
+docker-compose -f docker-compose.dev.yml up -d
+
+# View real-time logs
 docker-compose -f docker-compose.dev.yml logs -f
 
-# Stop services
+# View logs for specific service
+docker-compose -f docker-compose.dev.yml logs -f app-dev
+
+# Stop development services
 docker-compose -f docker-compose.dev.yml down
 
 # Rebuild after code changes
-docker-compose -f docker-compose.dev.yml build
+docker-compose -f docker-compose.dev.yml build --no-cache
+
+# Rebuild and restart
+docker-compose -f docker-compose.dev.yml up --build
 
 # Access container shell
 docker-compose -f docker-compose.dev.yml exec app-dev bash
 
 # Check container status
 docker-compose -f docker-compose.dev.yml ps
+```
+
+#### Production Commands
+```bash
+# Start production environment
+docker-compose up -d
+
+# View production logs
+docker-compose logs -f
+
+# Stop production services
+docker-compose down
+
+# Rebuild production containers
+docker-compose build --no-cache
+
+# Scale services (if needed)
+docker-compose up -d --scale app=2
+```
+
+#### Maintenance Commands
+```bash
+# Clean up containers and images
+docker-compose down --rmi all --volumes --remove-orphans
+
+# View container resource usage
+docker stats
+
+# Inspect container configuration
+docker-compose config
+
+# Export container logs
+docker-compose logs > docker-logs.txt
+
+# Backup database
+docker cp claude-code-ui-dev:/app/server/database ./database-backup
 ```
 
 ### Workspace Access in Docker
