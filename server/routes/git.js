@@ -420,4 +420,276 @@ function generateSimpleCommitMessage(files, diff) {
   }
 }
 
+// Get remote status (ahead/behind commits with smart remote detection)
+router.get('/remote-status', async (req, res) => {
+  const { project } = req.query;
+  
+  if (!project) {
+    return res.status(400).json({ error: 'Project name is required' });
+  }
+
+  try {
+    const projectPath = await getActualProjectPath(project);
+    await validateGitRepository(projectPath);
+
+    // Get current branch
+    const { stdout: currentBranch } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: projectPath });
+    const branch = currentBranch.trim();
+
+    // Check if there's a remote tracking branch (smart detection)
+    let trackingBranch;
+    let remoteName;
+    try {
+      const { stdout } = await execAsync(`git rev-parse --abbrev-ref ${branch}@{upstream}`, { cwd: projectPath });
+      trackingBranch = stdout.trim();
+      remoteName = trackingBranch.split('/')[0]; // Extract remote name (e.g., "origin/main" -> "origin")
+    } catch (error) {
+      // No upstream branch configured
+      return res.json({ 
+        hasRemote: false, 
+        branch,
+        message: 'No remote tracking branch configured'
+      });
+    }
+
+    // Get ahead/behind counts
+    const { stdout: countOutput } = await execAsync(
+      `git rev-list --count --left-right ${trackingBranch}...HEAD`,
+      { cwd: projectPath }
+    );
+    
+    const [behind, ahead] = countOutput.trim().split('\t').map(Number);
+
+    res.json({
+      hasRemote: true,
+      branch,
+      remoteBranch: trackingBranch,
+      remoteName,
+      ahead: ahead || 0,
+      behind: behind || 0,
+      isUpToDate: ahead === 0 && behind === 0
+    });
+  } catch (error) {
+    console.error('Git remote status error:', error);
+    res.json({ error: error.message });
+  }
+});
+
+// Fetch from remote (using smart remote detection)
+router.post('/fetch', async (req, res) => {
+  const { project } = req.body;
+  
+  if (!project) {
+    return res.status(400).json({ error: 'Project name is required' });
+  }
+
+  try {
+    const projectPath = await getActualProjectPath(project);
+    await validateGitRepository(projectPath);
+
+    // Get current branch and its upstream remote
+    const { stdout: currentBranch } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: projectPath });
+    const branch = currentBranch.trim();
+
+    let remoteName = 'origin'; // fallback
+    try {
+      const { stdout } = await execAsync(`git rev-parse --abbrev-ref ${branch}@{upstream}`, { cwd: projectPath });
+      remoteName = stdout.trim().split('/')[0]; // Extract remote name
+    } catch (error) {
+      // No upstream, try to fetch from origin anyway
+      console.log('No upstream configured, using origin as fallback');
+    }
+
+    const { stdout } = await execAsync(`git fetch ${remoteName}`, { cwd: projectPath });
+    
+    res.json({ success: true, output: stdout || 'Fetch completed successfully', remoteName });
+  } catch (error) {
+    console.error('Git fetch error:', error);
+    res.status(500).json({ 
+      error: 'Fetch failed', 
+      details: error.message.includes('Could not resolve hostname') 
+        ? 'Unable to connect to remote repository. Check your internet connection.'
+        : error.message.includes('fatal: \'origin\' does not appear to be a git repository')
+        ? 'No remote repository configured. Add a remote with: git remote add origin <url>'
+        : error.message
+    });
+  }
+});
+
+// Pull from remote (fetch + merge using smart remote detection)
+router.post('/pull', async (req, res) => {
+  const { project } = req.body;
+  
+  if (!project) {
+    return res.status(400).json({ error: 'Project name is required' });
+  }
+
+  try {
+    const projectPath = await getActualProjectPath(project);
+    await validateGitRepository(projectPath);
+
+    // Get current branch and its upstream remote
+    const { stdout: currentBranch } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: projectPath });
+    const branch = currentBranch.trim();
+
+    let remoteName = 'origin'; // fallback
+    let remoteBranch = branch; // fallback
+    try {
+      const { stdout } = await execAsync(`git rev-parse --abbrev-ref ${branch}@{upstream}`, { cwd: projectPath });
+      const tracking = stdout.trim();
+      remoteName = tracking.split('/')[0]; // Extract remote name
+      remoteBranch = tracking.split('/').slice(1).join('/'); // Extract branch name
+    } catch (error) {
+      // No upstream, use fallback
+      console.log('No upstream configured, using origin/branch as fallback');
+    }
+
+    const { stdout } = await execAsync(`git pull ${remoteName} ${remoteBranch}`, { cwd: projectPath });
+    
+    res.json({ 
+      success: true, 
+      output: stdout || 'Pull completed successfully', 
+      remoteName,
+      remoteBranch
+    });
+  } catch (error) {
+    console.error('Git pull error:', error);
+    
+    // Enhanced error handling for common pull scenarios
+    let errorMessage = 'Pull failed';
+    let details = error.message;
+    
+    if (error.message.includes('CONFLICT')) {
+      errorMessage = 'Merge conflicts detected';
+      details = 'Pull created merge conflicts. Please resolve conflicts manually in the editor, then commit the changes.';
+    } else if (error.message.includes('Please commit your changes or stash them')) {
+      errorMessage = 'Uncommitted changes detected';  
+      details = 'Please commit or stash your local changes before pulling.';
+    } else if (error.message.includes('Could not resolve hostname')) {
+      errorMessage = 'Network error';
+      details = 'Unable to connect to remote repository. Check your internet connection.';
+    } else if (error.message.includes('fatal: \'origin\' does not appear to be a git repository')) {
+      errorMessage = 'Remote not configured';
+      details = 'No remote repository configured. Add a remote with: git remote add origin <url>';
+    } else if (error.message.includes('diverged')) {
+      errorMessage = 'Branches have diverged';
+      details = 'Your local branch and remote branch have diverged. Consider fetching first to review changes.';
+    }
+    
+    res.status(500).json({ 
+      error: errorMessage, 
+      details: details
+    });
+  }
+});
+
+// Push commits to remote repository
+router.post('/push', async (req, res) => {
+  const { project } = req.body;
+  
+  if (!project) {
+    return res.status(400).json({ error: 'Project name is required' });
+  }
+
+  try {
+    const projectPath = await getActualProjectPath(project);
+    await validateGitRepository(projectPath);
+
+    // Get current branch and its upstream remote
+    const { stdout: currentBranch } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: projectPath });
+    const branch = currentBranch.trim();
+
+    let remoteName = 'origin'; // fallback
+    let remoteBranch = branch; // fallback
+    try {
+      const { stdout } = await execAsync(`git rev-parse --abbrev-ref ${branch}@{upstream}`, { cwd: projectPath });
+      const tracking = stdout.trim();
+      remoteName = tracking.split('/')[0]; // Extract remote name
+      remoteBranch = tracking.split('/').slice(1).join('/'); // Extract branch name
+    } catch (error) {
+      // No upstream, use fallback
+      console.log('No upstream configured, using origin/branch as fallback');
+    }
+
+    const { stdout } = await execAsync(`git push ${remoteName} ${remoteBranch}`, { cwd: projectPath });
+    
+    res.json({ 
+      success: true, 
+      output: stdout || 'Push completed successfully', 
+      remoteName,
+      remoteBranch
+    });
+  } catch (error) {
+    console.error('Git push error:', error);
+    
+    // Enhanced error handling for common push scenarios
+    let errorMessage = 'Push failed';
+    let details = error.message;
+    
+    if (error.message.includes('rejected')) {
+      errorMessage = 'Push rejected';
+      details = 'The remote has newer commits. Pull first to merge changes before pushing.';
+    } else if (error.message.includes('non-fast-forward')) {
+      errorMessage = 'Non-fast-forward push';
+      details = 'Your branch is behind the remote. Pull the latest changes first.';
+    } else if (error.message.includes('Could not resolve hostname')) {
+      errorMessage = 'Network error';
+      details = 'Unable to connect to remote repository. Check your internet connection.';
+    } else if (error.message.includes('fatal: \'origin\' does not appear to be a git repository')) {
+      errorMessage = 'Remote not configured';
+      details = 'No remote repository configured. Add a remote with: git remote add origin <url>';
+    } else if (error.message.includes('Permission denied')) {
+      errorMessage = 'Authentication failed';
+      details = 'Permission denied. Check your credentials or SSH keys.';
+    } else if (error.message.includes('no upstream branch')) {
+      errorMessage = 'No upstream branch';
+      details = 'No upstream branch configured. Use: git push --set-upstream origin <branch>';
+    }
+    
+    res.status(500).json({ 
+      error: errorMessage, 
+      details: details
+    });
+  }
+});
+
+// Discard changes for a specific file
+router.post('/discard', async (req, res) => {
+  const { project, file } = req.body;
+  
+  if (!project || !file) {
+    return res.status(400).json({ error: 'Project name and file path are required' });
+  }
+
+  try {
+    const projectPath = await getActualProjectPath(project);
+    await validateGitRepository(projectPath);
+
+    // Check file status to determine correct discard command
+    const { stdout: statusOutput } = await execAsync(`git status --porcelain "${file}"`, { cwd: projectPath });
+    
+    if (!statusOutput.trim()) {
+      return res.status(400).json({ error: 'No changes to discard for this file' });
+    }
+
+    const status = statusOutput.substring(0, 2);
+    
+    if (status === '??') {
+      // Untracked file - delete it
+      await fs.unlink(path.join(projectPath, file));
+    } else if (status.includes('M') || status.includes('D')) {
+      // Modified or deleted file - restore from HEAD
+      await execAsync(`git restore "${file}"`, { cwd: projectPath });
+    } else if (status.includes('A')) {
+      // Added file - unstage it
+      await execAsync(`git reset HEAD "${file}"`, { cwd: projectPath });
+    }
+    
+    res.json({ success: true, message: `Changes discarded for ${file}` });
+  } catch (error) {
+    console.error('Git discard error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

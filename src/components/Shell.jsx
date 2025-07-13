@@ -5,6 +5,27 @@ import { ClipboardAddon } from '@xterm/addon-clipboard';
 import { WebglAddon } from '@xterm/addon-webgl';
 import 'xterm/css/xterm.css';
 
+// CSS to remove xterm focus outline
+const xtermStyles = `
+  .xterm .xterm-screen {
+    outline: none !important;
+  }
+  .xterm:focus .xterm-screen {
+    outline: none !important;
+  }
+  .xterm-screen:focus {
+    outline: none !important;
+  }
+`;
+
+// Inject styles
+if (typeof document !== 'undefined') {
+  const styleSheet = document.createElement('style');
+  styleSheet.type = 'text/css';
+  styleSheet.innerText = xtermStyles;
+  document.head.appendChild(styleSheet);
+}
+
 // Global store for shell sessions to persist across tab switches
 const shellSessions = new Map();
 
@@ -138,6 +159,14 @@ function Shell({ selectedProject, selectedSession, isActive }) {
         setTimeout(() => {
           if (fitAddon.current) {
             fitAddon.current.fit();
+            // Send terminal size to backend after reattaching
+            if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+              ws.current.send(JSON.stringify({
+                type: 'resize',
+                cols: terminal.current.cols,
+                rows: terminal.current.rows
+              }));
+            }
           }
         }, 100);
         
@@ -226,6 +255,13 @@ function Shell({ selectedProject, selectedSession, isActive }) {
     
     terminal.current.open(terminalRef.current);
 
+    // Wait for terminal to be fully rendered, then fit
+    setTimeout(() => {
+      if (fitAddon.current) {
+        fitAddon.current.fit();
+      }
+    }, 50);
+
     // Add keyboard shortcuts for copy/paste
     terminal.current.attachCustomKeyEventHandler((event) => {
       // Ctrl+C or Cmd+C for copy (when text is selected)
@@ -252,10 +288,18 @@ function Shell({ selectedProject, selectedSession, isActive }) {
       return true;
     });
     
-    // Ensure terminal takes full space
+    // Ensure terminal takes full space and notify backend of size
     setTimeout(() => {
       if (fitAddon.current) {
         fitAddon.current.fit();
+        // Send terminal size to backend after fitting
+        if (terminal.current && ws.current && ws.current.readyState === WebSocket.OPEN) {
+          ws.current.send(JSON.stringify({
+            type: 'resize',
+            cols: terminal.current.cols,
+            rows: terminal.current.rows
+          }));
+        }
       }
     }, 100);
     
@@ -276,6 +320,14 @@ function Shell({ selectedProject, selectedSession, isActive }) {
       if (fitAddon.current && terminal.current) {
         setTimeout(() => {
           fitAddon.current.fit();
+          // Send updated terminal size to backend after resize
+          if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+            ws.current.send(JSON.stringify({
+              type: 'resize',
+              cols: terminal.current.cols,
+              rows: terminal.current.rows
+            }));
+          }
         }, 50);
       }
     });
@@ -309,10 +361,18 @@ function Shell({ selectedProject, selectedSession, isActive }) {
   useEffect(() => {
     if (!isActive || !isInitialized) return;
 
-    // Fit terminal when tab becomes active
+    // Fit terminal when tab becomes active and notify backend
     setTimeout(() => {
       if (fitAddon.current) {
         fitAddon.current.fit();
+        // Send terminal size to backend after tab activation
+        if (terminal.current && ws.current && ws.current.readyState === WebSocket.OPEN) {
+          ws.current.send(JSON.stringify({
+            type: 'resize',
+            cols: terminal.current.cols,
+            rows: terminal.current.rows
+          }));
+        }
       }
     }, 100);
   }, [isActive, isInitialized]);
@@ -363,16 +423,38 @@ function Shell({ selectedProject, selectedSession, isActive }) {
         setIsConnected(true);
         setIsConnecting(false);
         
-        // Send initial setup with project path and session info
-        const initPayload = {
-          type: 'init',
-          projectPath: selectedProject.fullPath || selectedProject.path,
-          sessionId: selectedSession?.id,
-          hasSession: !!selectedSession
-        };
-        
-        
-        ws.current.send(JSON.stringify(initPayload));
+        // Wait for terminal to be ready, then fit and send dimensions
+        setTimeout(() => {
+          if (fitAddon.current && terminal.current) {
+            // Force a fit to ensure proper dimensions
+            fitAddon.current.fit();
+            
+            // Wait a bit more for fit to complete, then send dimensions
+            setTimeout(() => {
+              const initPayload = {
+                type: 'init',
+                projectPath: selectedProject.fullPath || selectedProject.path,
+                sessionId: selectedSession?.id,
+                hasSession: !!selectedSession,
+                cols: terminal.current.cols,
+                rows: terminal.current.rows
+              };
+              
+              ws.current.send(JSON.stringify(initPayload));
+              
+              // Also send resize message immediately after init
+              setTimeout(() => {
+                if (terminal.current && ws.current && ws.current.readyState === WebSocket.OPEN) {
+                  ws.current.send(JSON.stringify({
+                    type: 'resize',
+                    cols: terminal.current.cols,
+                    rows: terminal.current.rows
+                  }));
+                }
+              }, 100);
+            }, 50);
+          }
+        }, 200);
       };
 
       ws.current.onmessage = (event) => {
@@ -442,7 +524,7 @@ function Shell({ selectedProject, selectedSession, isActive }) {
   }
 
   return (
-    <div className="h-full flex flex-col bg-gray-900">
+    <div className="h-full flex flex-col bg-gray-900 w-full">
       {/* Header */}
       <div className="flex-shrink-0 bg-gray-800 border-b border-gray-700 px-4 py-2">
         <div className="flex items-center justify-between">
@@ -494,7 +576,7 @@ function Shell({ selectedProject, selectedSession, isActive }) {
 
       {/* Terminal */}
       <div className="flex-1 p-2 overflow-hidden relative">
-        <div ref={terminalRef} className="h-full w-full" />
+        <div ref={terminalRef} className="h-full w-full focus:outline-none" style={{ outline: 'none' }} />
         
         {/* Loading state */}
         {!isInitialized && (

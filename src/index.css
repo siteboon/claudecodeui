@@ -64,7 +64,7 @@
     --destructive-foreground: 210 40% 98%;
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --ring: 217.2 91.2% 59.8%;
   }
 }
 
@@ -99,8 +99,12 @@
     transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
   }
   
-  /* Color transitions for theme switching */
-  * {
+  /* Color transitions for theme switching - exclude interactive elements */
+  body, div, section, article, aside, header, footer, nav, main,
+  h1, h2, h3, h4, h5, h6, p, span, blockquote,
+  ul, ol, li, dl, dt, dd,
+  table, thead, tbody, tfoot, tr, td, th,
+  form, fieldset, legend, label {
     transition: background-color 200ms ease-in-out, 
                 border-color 200ms ease-in-out,
                 color 200ms ease-in-out;

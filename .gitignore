@@ -90,6 +90,7 @@ jspm_packages/
 # Temporary folders
 tmp/
 temp/
+.tmp/
 
 # Vite
 .vite/

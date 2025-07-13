@@ -32,9 +32,31 @@ export const ThemeProvider = ({ children }) => {
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
       localStorage.setItem('theme', 'dark');
+      
+      // Update iOS status bar style and theme color for dark mode
+      const statusBarMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+      if (statusBarMeta) {
+        statusBarMeta.setAttribute('content', 'black-translucent');
+      }
+      
+      const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+      if (themeColorMeta) {
+        themeColorMeta.setAttribute('content', '#0c1117'); // Dark background color (hsl(222.2 84% 4.9%))
+      }
     } else {
       document.documentElement.classList.remove('dark');
       localStorage.setItem('theme', 'light');
+      
+      // Update iOS status bar style and theme color for light mode
+      const statusBarMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+      if (statusBarMeta) {
+        statusBarMeta.setAttribute('content', 'default');
+      }
+      
+      const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+      if (themeColorMeta) {
+        themeColorMeta.setAttribute('content', '#ffffff'); // Light background color
+      }
     }
   }, [isDarkMode]);
 

@@ -3,7 +3,8 @@ import { ScrollArea } from './ui/scroll-area';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
-import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2 } from 'lucide-react';
+
+import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2, Star, Search } from 'lucide-react';
 import { cn } from '../lib/utils';
 import ClaudeLogo from './ClaudeLogo';
 import { api } from '../utils/api';
@@ -61,10 +62,24 @@ function Sidebar({
   const [additionalSessions, setAdditionalSessions] = useState({});
   const [initialSessionsLoaded, setInitialSessionsLoaded] = useState(new Set());
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [projectSortOrder, setProjectSortOrder] = useState('name');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [editingSession, setEditingSession] = useState(null);
   const [editingSessionName, setEditingSessionName] = useState('');
   const [generatingSummary, setGeneratingSummary] = useState({});
+  const [searchFilter, setSearchFilter] = useState('');
+
+  
+  // Starred projects state - persisted in localStorage
+  const [starredProjects, setStarredProjects] = useState(() => {
+    try {
+      const saved = localStorage.getItem('starredProjects');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch (error) {
+      console.error('Error loading starred projects:', error);
+      return new Set();
+    }
+  });
 
   // Touch handler to prevent double-tap issues on iPad (only for buttons, not scroll areas)
   const handleTouchClick = (callback) => {
@@ -114,6 +129,45 @@ function Sidebar({
     }
   }, [projects, isLoading]);
 
+  // Load project sort order from settings
+  useEffect(() => {
+    const loadSortOrder = () => {
+      try {
+        const savedSettings = localStorage.getItem('claude-tools-settings');
+        if (savedSettings) {
+          const settings = JSON.parse(savedSettings);
+          setProjectSortOrder(settings.projectSortOrder || 'name');
+        }
+      } catch (error) {
+        console.error('Error loading sort order:', error);
+      }
+    };
+
+    // Load initially
+    loadSortOrder();
+
+    // Listen for storage changes
+    const handleStorageChange = (e) => {
+      if (e.key === 'claude-tools-settings') {
+        loadSortOrder();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Also check periodically when component is focused (for same-tab changes)
+    const checkInterval = setInterval(() => {
+      if (document.hasFocus()) {
+        loadSortOrder();
+      }
+    }, 1000);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(checkInterval);
+    };
+  }, []);
+
   const toggleProject = (projectName) => {
     const newExpanded = new Set(expandedProjects);
     if (newExpanded.has(projectName)) {
@@ -124,6 +178,71 @@ function Sidebar({
     setExpandedProjects(newExpanded);
   };
 
+  // Starred projects utility functions
+  const toggleStarProject = (projectName) => {
+    const newStarred = new Set(starredProjects);
+    if (newStarred.has(projectName)) {
+      newStarred.delete(projectName);
+    } else {
+      newStarred.add(projectName);
+    }
+    setStarredProjects(newStarred);
+    
+    // Persist to localStorage
+    try {
+      localStorage.setItem('starredProjects', JSON.stringify([...newStarred]));
+    } catch (error) {
+      console.error('Error saving starred projects:', error);
+    }
+  };
+
+  const isProjectStarred = (projectName) => {
+    return starredProjects.has(projectName);
+  };
+
+  // Helper function to get all sessions for a project (initial + additional)
+  const getAllSessions = (project) => {
+    const initialSessions = project.sessions || [];
+    const additional = additionalSessions[project.name] || [];
+    return [...initialSessions, ...additional];
+  };
+
+  // Helper function to get the last activity date for a project
+  const getProjectLastActivity = (project) => {
+    const allSessions = getAllSessions(project);
+    if (allSessions.length === 0) {
+      return new Date(0); // Return epoch date for projects with no sessions
+    }
+    
+    // Find the most recent session activity
+    const mostRecentDate = allSessions.reduce((latest, session) => {
+      const sessionDate = new Date(session.lastActivity);
+      return sessionDate > latest ? sessionDate : latest;
+    }, new Date(0));
+    
+    return mostRecentDate;
+  };
+
+  // Combined sorting: starred projects first, then by selected order
+  const sortedProjects = [...projects].sort((a, b) => {
+    const aStarred = isProjectStarred(a.name);
+    const bStarred = isProjectStarred(b.name);
+    
+    // First, sort by starred status
+    if (aStarred && !bStarred) return -1;
+    if (!aStarred && bStarred) return 1;
+    
+    // For projects with same starred status, sort by selected order
+    if (projectSortOrder === 'date') {
+      // Sort by most recent activity (descending)
+      return getProjectLastActivity(b) - getProjectLastActivity(a);
+    } else {
+      // Sort by display name (user-defined) or fallback to name (ascending)
+      const nameA = a.displayName || a.name;
+      const nameB = b.displayName || b.name;
+      return nameA.localeCompare(nameB);
+    }
+  });
 
   const startEditing = (project) => {
     setEditingProject(project.name);
@@ -284,12 +403,17 @@ function Sidebar({
     }
   };
 
-  // Helper function to get all sessions for a project (initial + additional)
-  const getAllSessions = (project) => {
-    const initialSessions = project.sessions || [];
-    const additional = additionalSessions[project.name] || [];
-    return [...initialSessions, ...additional];
-  };
+  // Filter projects based on search input
+  const filteredProjects = sortedProjects.filter(project => {
+    if (!searchFilter.trim()) return true;
+    
+    const searchLower = searchFilter.toLowerCase();
+    const displayName = (project.displayName || project.name).toLowerCase();
+    const projectName = project.name.toLowerCase();
+    
+    // Search in both display name and actual project name/path
+    return displayName.includes(searchLower) || projectName.includes(searchLower);
+  });
 
   return (
     <div className="h-full flex flex-col bg-card md:select-none">
@@ -475,6 +599,30 @@ function Sidebar({
         </div>
       )}
       
+      {/* Search Filter */}
+      {projects.length > 0 && !isLoading && (
+        <div className="px-3 md:px-4 py-2 border-b border-border">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search projects..."
+              value={searchFilter}
+              onChange={(e) => setSearchFilter(e.target.value)}
+              className="pl-9 h-9 text-sm bg-muted/50 border-0 focus:bg-background focus:ring-1 focus:ring-primary/20"
+            />
+            {searchFilter && (
+              <button
+                onClick={() => setSearchFilter('')}
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 hover:bg-accent rounded"
+              >
+                <X className="w-3 h-3 text-muted-foreground" />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+      
       {/* Projects List */}
       <ScrollArea className="flex-1 md:px-2 md:py-3 overflow-y-auto overscroll-contain">
         <div className="md:space-y-1 pb-safe-area-inset-bottom">
@@ -498,10 +646,21 @@ function Sidebar({
                 Run Claude CLI in a project directory to get started
               </p>
             </div>
+          ) : filteredProjects.length === 0 ? (
+            <div className="text-center py-12 md:py-8 px-4">
+              <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-4 md:mb-3">
+                <Search className="w-6 h-6 text-muted-foreground" />
+              </div>
+              <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">No matching projects</h3>
+              <p className="text-sm text-muted-foreground">
+                Try adjusting your search term
+              </p>
+            </div>
           ) : (
-            projects.map((project) => {
+            filteredProjects.map((project) => {
               const isExpanded = expandedProjects.has(project.name);
               const isSelected = selectedProject?.name === project.name;
+              const isStarred = isProjectStarred(project.name);
               
               return (
                 <div key={project.name} className="md:space-y-1">
@@ -512,7 +671,8 @@ function Sidebar({
                       <div
                         className={cn(
                           "p-3 mx-3 my-1 rounded-lg bg-card border border-border/50 active:scale-[0.98] transition-all duration-150",
-                          isSelected && "bg-primary/5 border-primary/20"
+                          isSelected && "bg-primary/5 border-primary/20",
+                          isStarred && !isSelected && "bg-yellow-50/50 dark:bg-yellow-900/5 border-yellow-200/30 dark:border-yellow-800/30"
                         )}
                         onClick={() => {
                           // On mobile, just toggle the folder - don't select the project
@@ -594,6 +754,28 @@ function Sidebar({
                               </>
                             ) : (
                               <>
+                                {/* Star button */}
+                                <button
+                                  className={cn(
+                                    "w-8 h-8 rounded-lg flex items-center justify-center active:scale-90 transition-all duration-150 border",
+                                    isStarred 
+                                      ? "bg-yellow-500/10 dark:bg-yellow-900/30 border-yellow-200 dark:border-yellow-800" 
+                                      : "bg-gray-500/10 dark:bg-gray-900/30 border-gray-200 dark:border-gray-800"
+                                  )}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleStarProject(project.name);
+                                  }}
+                                  onTouchEnd={handleTouchClick(() => toggleStarProject(project.name))}
+                                  title={isStarred ? "Remove from favorites" : "Add to favorites"}
+                                >
+                                  <Star className={cn(
+                                    "w-4 h-4 transition-colors",
+                                    isStarred 
+                                      ? "text-yellow-600 dark:text-yellow-400 fill-current" 
+                                      : "text-gray-600 dark:text-gray-400"
+                                  )} />
+                                </button>
                                 {getAllSessions(project).length === 0 && (
                                   <button
                                     className="w-8 h-8 rounded-lg bg-red-500/10 dark:bg-red-900/30 flex items-center justify-center active:scale-90 border border-red-200 dark:border-red-800"
@@ -635,7 +817,8 @@ function Sidebar({
                       variant="ghost"
                       className={cn(
                         "hidden md:flex w-full justify-between p-2 h-auto font-normal hover:bg-accent/50",
-                        isSelected && "bg-accent text-accent-foreground"
+                        isSelected && "bg-accent text-accent-foreground",
+                        isStarred && !isSelected && "bg-yellow-50/50 dark:bg-yellow-900/10 hover:bg-yellow-100/50 dark:hover:bg-yellow-900/20"
                       )}
                       onClick={() => {
                         // Desktop behavior: select project and toggle
@@ -722,6 +905,27 @@ function Sidebar({
                           </>
                         ) : (
                           <>
+                            {/* Star button */}
+                            <div
+                              className={cn(
+                                "w-6 h-6 opacity-0 group-hover:opacity-100 transition-all duration-200 flex items-center justify-center rounded cursor-pointer touch:opacity-100",
+                                isStarred 
+                                  ? "hover:bg-yellow-50 dark:hover:bg-yellow-900/20 opacity-100" 
+                                  : "hover:bg-accent"
+                              )}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleStarProject(project.name);
+                              }}
+                              title={isStarred ? "Remove from favorites" : "Add to favorites"}
+                            >
+                              <Star className={cn(
+                                "w-3 h-3 transition-colors",
+                                isStarred 
+                                  ? "text-yellow-600 dark:text-yellow-400 fill-current" 
+                                  : "text-muted-foreground"
+                              )} />
+                            </div>
                             <div
                               className="w-6 h-6 opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-accent flex items-center justify-center rounded cursor-pointer touch:opacity-100"
                               onClick={(e) => {

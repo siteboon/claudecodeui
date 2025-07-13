@@ -1,10 +1,13 @@
 import { spawn } from 'child_process';
+import { promises as fs } from 'fs';
+import path from 'path';
+import os from 'os';
 
 let activeClaudeProcesses = new Map(); // Track active processes by session ID
 
 async function spawnClaude(command, options = {}, ws) {
   return new Promise(async (resolve, reject) => {
-    const { sessionId, projectPath, cwd, resume, toolsSettings, permissionMode } = options;
+    const { sessionId, projectPath, cwd, resume, toolsSettings, permissionMode, images } = options;
     let capturedSessionId = sessionId; // Track session ID throughout the process
     let sessionCreatedSent = false; // Track if we've already sent session-created event
     
@@ -14,13 +17,63 @@ async function spawnClaude(command, options = {}, ws) {
       disallowedTools: [],
       skipPermissions: false
     };
-  
+    
     // Build Claude CLI command - start with print/resume flags first
     const args = [];
     
     // Add print flag with command if we have a command
     if (command && command.trim()) {
       args.push('--print', command);
+    }
+    
+    // Use cwd (actual project directory) instead of projectPath (Claude's metadata directory)
+    const workingDir = cwd || process.cwd();
+    
+    // Handle images by saving them to temporary files and passing paths to Claude
+    const tempImagePaths = [];
+    let tempDir = null;
+    if (images && images.length > 0) {
+      try {
+        // Create temp directory in the project directory so Claude can access it
+        tempDir = path.join(workingDir, '.tmp', 'images', Date.now().toString());
+        await fs.mkdir(tempDir, { recursive: true });
+        
+        // Save each image to a temp file
+        for (const [index, image] of images.entries()) {
+          // Extract base64 data and mime type
+          const matches = image.data.match(/^data:([^;]+);base64,(.+)$/);
+          if (!matches) {
+            console.error('Invalid image data format');
+            continue;
+          }
+          
+          const [, mimeType, base64Data] = matches;
+          const extension = mimeType.split('/')[1] || 'png';
+          const filename = `image_${index}.${extension}`;
+          const filepath = path.join(tempDir, filename);
+          
+          // Write base64 data to file
+          await fs.writeFile(filepath, Buffer.from(base64Data, 'base64'));
+          tempImagePaths.push(filepath);
+        }
+        
+        // Include the full image paths in the prompt for Claude to reference
+        // Only modify the command if we actually have images and a command
+        if (tempImagePaths.length > 0 && command && command.trim()) {
+          const imageNote = `\n\n[Images provided at the following paths:]\n${tempImagePaths.map((p, i) => `${i + 1}. ${p}`).join('\n')}`;
+          const modifiedCommand = command + imageNote;
+          
+          // Update the command in args
+          const printIndex = args.indexOf('--print');
+          if (printIndex !== -1 && args[printIndex + 1] === command) {
+            args[printIndex + 1] = modifiedCommand;
+          }
+        }
+        
+        
+      } catch (error) {
+        console.error('Error processing images for Claude:', error);
+      }
     }
     
     // Add resume flag if resuming
@@ -30,6 +83,84 @@ async function spawnClaude(command, options = {}, ws) {
     
     // Add basic flags
     args.push('--output-format', 'stream-json', '--verbose');
+    
+    // Add MCP config flag only if MCP servers are configured
+    try {
+      console.log('🔍 Starting MCP config check...');
+      // Use already imported modules (fs.promises is imported as fs, path, os)
+      const fsSync = await import('fs'); // Import synchronous fs methods
+      console.log('✅ Successfully imported fs sync methods');
+      
+      // Check for MCP config in ~/.claude.json
+      const claudeConfigPath = path.join(os.homedir(), '.claude.json');
+      
+      console.log(`🔍 Checking for MCP configs in: ${claudeConfigPath}`);
+      console.log(`  Claude config exists: ${fsSync.existsSync(claudeConfigPath)}`);
+      
+      let hasMcpServers = false;
+      
+      // Check Claude config for MCP servers
+      if (fsSync.existsSync(claudeConfigPath)) {
+        try {
+          const claudeConfig = JSON.parse(fsSync.readFileSync(claudeConfigPath, 'utf8'));
+          
+          // Check global MCP servers
+          if (claudeConfig.mcpServers && Object.keys(claudeConfig.mcpServers).length > 0) {
+            console.log(`✅ Found ${Object.keys(claudeConfig.mcpServers).length} global MCP servers`);
+            hasMcpServers = true;
+          }
+          
+          // Check project-specific MCP servers
+          if (!hasMcpServers && claudeConfig.claudeProjects) {
+            const currentProjectPath = process.cwd();
+            const projectConfig = claudeConfig.claudeProjects[currentProjectPath];
+            if (projectConfig && projectConfig.mcpServers && Object.keys(projectConfig.mcpServers).length > 0) {
+              console.log(`✅ Found ${Object.keys(projectConfig.mcpServers).length} project MCP servers`);
+              hasMcpServers = true;
+            }
+          }
+        } catch (e) {
+          console.log(`❌ Failed to parse Claude config:`, e.message);
+        }
+      }
+      
+      console.log(`🔍 hasMcpServers result: ${hasMcpServers}`);
+      
+      if (hasMcpServers) {
+        // Use Claude config file if it has MCP servers
+        let configPath = null;
+        
+        if (fsSync.existsSync(claudeConfigPath)) {
+          try {
+            const claudeConfig = JSON.parse(fsSync.readFileSync(claudeConfigPath, 'utf8'));
+            
+            // Check if we have any MCP servers (global or project-specific)
+            const hasGlobalServers = claudeConfig.mcpServers && Object.keys(claudeConfig.mcpServers).length > 0;
+            const currentProjectPath = process.cwd();
+            const projectConfig = claudeConfig.claudeProjects && claudeConfig.claudeProjects[currentProjectPath];
+            const hasProjectServers = projectConfig && projectConfig.mcpServers && Object.keys(projectConfig.mcpServers).length > 0;
+            
+            if (hasGlobalServers || hasProjectServers) {
+              configPath = claudeConfigPath;
+            }
+          } catch (e) {
+            // No valid config found
+          }
+        }
+        
+        if (configPath) {
+          console.log(`📡 Adding MCP config: ${configPath}`);
+          args.push('--mcp-config', configPath);
+        } else {
+          console.log('⚠️ MCP servers detected but no valid config file found');
+        }
+      }
+    } catch (error) {
+      // If there's any error checking for MCP configs, don't add the flag
+      console.log('❌ MCP config check failed:', error.message);
+      console.log('📍 Error stack:', error.stack);
+      console.log('Note: MCP config check failed, proceeding without MCP support');
+    }
     
     // Add model for new sessions
     if (!resume) {
@@ -87,21 +218,24 @@ async function spawnClaude(command, options = {}, ws) {
       }
     }
     
-    // Use cwd (actual project directory) instead of projectPath (Claude's metadata directory)
-    const workingDir = cwd || process.cwd();
     console.log('Spawning Claude CLI:', 'claude', args.map(arg => {
       const cleanArg = arg.replace(/\n/g, '\\n').replace(/\r/g, '\\r');
       return cleanArg.includes(' ') ? `"${cleanArg}"` : cleanArg;
     }).join(' '));
     console.log('Working directory:', workingDir);
     console.log('Session info - Input sessionId:', sessionId, 'Resume:', resume);
-    console.log('🔍 Full command args:', args);
+    console.log('🔍 Full command args:', JSON.stringify(args, null, 2));
+    console.log('🔍 Final Claude command will be: claude ' + args.join(' '));
     
     const claudeProcess = spawn('claude', args, {
       cwd: workingDir,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env } // Inherit all environment variables
     });
+    
+    // Attach temp file info to process for cleanup later
+    claudeProcess.tempImagePaths = tempImagePaths;
+    claudeProcess.tempDir = tempDir;
     
     // Store process reference for potential abort
     const processKey = capturedSessionId || sessionId || Date.now().toString();
@@ -166,7 +300,7 @@ async function spawnClaude(command, options = {}, ws) {
     });
     
     // Handle process completion
-    claudeProcess.on('close', (code) => {
+    claudeProcess.on('close', async (code) => {
       console.log(`Claude CLI process exited with code ${code}`);
       
       // Clean up process reference
@@ -178,6 +312,20 @@ async function spawnClaude(command, options = {}, ws) {
         exitCode: code,
         isNewSession: !sessionId && !!command // Flag to indicate this was a new session
       }));
+      
+      // Clean up temporary image files if any
+      if (claudeProcess.tempImagePaths && claudeProcess.tempImagePaths.length > 0) {
+        for (const imagePath of claudeProcess.tempImagePaths) {
+          await fs.unlink(imagePath).catch(err => 
+            console.error(`Failed to delete temp image ${imagePath}:`, err)
+          );
+        }
+        if (claudeProcess.tempDir) {
+          await fs.rm(claudeProcess.tempDir, { recursive: true, force: true }).catch(err => 
+            console.error(`Failed to delete temp directory ${claudeProcess.tempDir}:`, err)
+          );
+        }
+      }
       
       if (code === 0) {
         resolve();

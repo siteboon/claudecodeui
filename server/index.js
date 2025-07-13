@@ -40,6 +40,7 @@ import { getProjects, getSessions, getSessionMessages, renameProject, deleteSess
 import { spawnClaude, abortClaudeSession } from './claude-cli.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
+import mcpRoutes from './routes/mcp.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 
@@ -130,18 +131,6 @@ async function setupProjectsWatcher() {
   }
 }
 
-// Get the first non-localhost IP address
-function getServerIP() {
-  const interfaces = os.networkInterfaces();
-  for (const name of Object.keys(interfaces)) {
-    for (const iface of interfaces[name]) {
-      if (iface.family === 'IPv4' && !iface.internal) {
-        return iface.address;
-      }
-    }
-  }
-  return 'localhost';
-}
 
 const app = express();
 const server = http.createServer(app);
@@ -183,14 +172,15 @@ app.use('/api/auth', authRoutes);
 // Git API Routes (protected)
 app.use('/api/git', authenticateToken, gitRoutes);
 
+// MCP API Routes (protected)
+app.use('/api/mcp', authenticateToken, mcpRoutes);
+
 // Static files served after API routes
 app.use(express.static(path.join(__dirname, '../dist')));
 
 // API Routes (protected)
 app.get('/api/config', authenticateToken, (req, res) => {
-  // Always use the server's actual IP and port for WebSocket connections
-  const serverIP = getServerIP();
-  const host = `${serverIP}:${PORT}`;
+  const host = req.headers.host || `${req.hostname}:${PORT}`;
   const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'wss' : 'ws';
   
   console.log('Config API called - Returning host:', host, 'Protocol:', protocol);
@@ -428,8 +418,6 @@ app.get('/api/projects/:projectName/files', authenticateToken, async (req, res) 
     
     const files = await getFileTree(actualPath, 3, 0, true);
     const hiddenFiles = files.filter(f => f.name.startsWith('.'));
-    console.log('📄 Found', files.length, 'files/folders, including', hiddenFiles.length, 'hidden files');
-    console.log('🔍 Hidden files:', hiddenFiles.map(f => f.name));
     res.json(files);
   } catch (error) {
     console.error('❌ File tree error:', error.message);
@@ -814,11 +802,103 @@ Agent instructions:`;
   }
 });
 
+// Image upload endpoint
+app.post('/api/projects/:projectName/upload-images', authenticateToken, async (req, res) => {
+  try {
+    const multer = (await import('multer')).default;
+    const path = (await import('path')).default;
+    const fs = (await import('fs')).promises;
+    const os = (await import('os')).default;
+    
+    // Configure multer for image uploads
+    const storage = multer.diskStorage({
+      destination: async (req, file, cb) => {
+        const uploadDir = path.join(os.tmpdir(), 'claude-ui-uploads', String(req.user.id));
+        await fs.mkdir(uploadDir, { recursive: true });
+        cb(null, uploadDir);
+      },
+      filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        const sanitizedName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+        cb(null, uniqueSuffix + '-' + sanitizedName);
+      }
+    });
+    
+    const fileFilter = (req, file, cb) => {
+      const allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
+      if (allowedMimes.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new Error('Invalid file type. Only JPEG, PNG, GIF, WebP, and SVG are allowed.'));
+      }
+    };
+    
+    const upload = multer({
+      storage,
+      fileFilter,
+      limits: {
+        fileSize: 5 * 1024 * 1024, // 5MB
+        files: 5
+      }
+    });
+    
+    // Handle multipart form data
+    upload.array('images', 5)(req, res, async (err) => {
+      if (err) {
+        return res.status(400).json({ error: err.message });
+      }
+      
+      if (!req.files || req.files.length === 0) {
+        return res.status(400).json({ error: 'No image files provided' });
+      }
+      
+      try {
+        // Process uploaded images
+        const processedImages = await Promise.all(
+          req.files.map(async (file) => {
+            // Read file and convert to base64
+            const buffer = await fs.readFile(file.path);
+            const base64 = buffer.toString('base64');
+            const mimeType = file.mimetype;
+            
+            // Clean up temp file immediately
+            await fs.unlink(file.path);
+            
+            return {
+              name: file.originalname,
+              data: `data:${mimeType};base64,${base64}`,
+              size: file.size,
+              mimeType: mimeType
+            };
+          })
+        );
+        
+        res.json({ images: processedImages });
+      } catch (error) {
+        console.error('Error processing images:', error);
+        // Clean up any remaining files
+        await Promise.all(req.files.map(f => fs.unlink(f.path).catch(() => {})));
+        res.status(500).json({ error: 'Failed to process images' });
+      }
+    });
+  } catch (error) {
+    console.error('Error in image upload endpoint:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // Serve React app for all other routes
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
+
+// Helper function to convert permissions to rwx format
+function permToRwx(perm) {
+  const r = perm & 4 ? 'r' : '-';
+  const w = perm & 2 ? 'w' : '-';
+  const x = perm & 1 ? 'x' : '-';
+  return r + w + x;
+}
 
 async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden = true) {
   // Using fsPromises from import
@@ -836,11 +916,33 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
           entry.name === 'dist' || 
           entry.name === 'build') continue;
       
+      const itemPath = path.join(dirPath, entry.name);
       const item = {
         name: entry.name,
-        path: path.join(dirPath, entry.name),
+        path: itemPath,
         type: entry.isDirectory() ? 'directory' : 'file'
       };
+      
+      // Get file stats for additional metadata
+      try {
+        const stats = await fsPromises.stat(itemPath);
+        item.size = stats.size;
+        item.modified = stats.mtime.toISOString();
+        
+        // Convert permissions to rwx format
+        const mode = stats.mode;
+        const ownerPerm = (mode >> 6) & 7;
+        const groupPerm = (mode >> 3) & 7;
+        const otherPerm = mode & 7;
+        item.permissions = ((mode >> 6) & 7).toString() + ((mode >> 3) & 7).toString() + (mode & 7).toString();
+        item.permissionsRwx = permToRwx(ownerPerm) + permToRwx(groupPerm) + permToRwx(otherPerm);
+      } catch (statError) {
+        // If stat fails, provide default values
+        item.size = 0;
+        item.modified = null;
+        item.permissions = '000';
+        item.permissionsRwx = '---------';
+      }
       
       if (entry.isDirectory() && currentDepth < maxDepth) {
         // Recursively get subdirectories but limit depth
