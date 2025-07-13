@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  # Claude Code UI Application
+  app:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: claude-code-ui
+    ports:
+      - "2008:2008"  # Backend API
+      - "2009:2009"  # Frontend Vite dev server
+    environment:
+      # Server configuration
+      - NODE_ENV=production
+      - PORT=2008
+      - VITE_PORT=2009
+      - DB_PATH=/app/data/auth.db
+      
+      # Optional Claude API configuration (user can override)
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      
+      # WebSocket configuration
+      - WS_PORT=2008
+      
+    volumes:
+      # Persist database
+      - ./data:/app/data
+      
+      # Mount project directories for Claude to access
+      - ${HOME}/Desktop:/workspace:ro
+      
+      # Mount claude executable if custom path is needed
+      - ${CLAUDE_PATH:-/usr/local/bin/claude}:/usr/local/bin/claude:ro
+      
+    networks:
+      - claude-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:2008/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  # Optional: Nginx reverse proxy for production
+  nginx:
+    image: nginx:alpine
+    container_name: claude-code-ui-proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - app
+    networks:
+      - claude-network
+    profiles:
+      - production
+
+networks:
+  claude-network:
+    driver: bridge
+
+volumes:
+  data:
+    driver: local

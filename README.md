@@ -45,8 +45,10 @@ A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/cla
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) v20 or higher
+- [Node.js](https://nodejs.org/) v20 or higher (for local development)
+- [Docker](https://www.docker.com/) and Docker Compose (for containerized deployment)
 - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and configured
+- [Anthropic API Key](https://console.anthropic.com/) for Claude functionality
 
 ### Installation
 
@@ -76,7 +78,125 @@ npm run dev
 The application will start at the port you specified in your .env
 
 5. **Open your browser:**
-   - Development: `http://localhost:3001`
+   - Development: `http://localhost:2009`
+
+## 🐳 Docker Deployment (Recommended)
+
+Docker provides the easiest and most reliable way to run Claude Code UI with all dependencies properly configured.
+
+### Quick Docker Start
+
+1. **Clone the repository:**
+```bash
+git clone https://github.com/siteboon/claudecodeui.git
+cd claudecodeui
+```
+
+2. **Setup environment:**
+```bash
+# Copy the Docker environment template
+cp .env.docker .env
+
+# Edit the environment file with your settings
+nano .env
+```
+
+3. **Configure your environment variables:**
+```bash
+# Required: Your Anthropic API key
+ANTHROPIC_API_KEY=sk-ant-your-api-key-here
+
+# Optional: Default admin credentials (created on first startup)
+DEFAULT_ADMIN_USERNAME=admin
+DEFAULT_ADMIN_PASSWORD=your-secure-password
+
+# Optional: Custom workspace path for your projects
+HOST_WORKSPACE_PATH=${HOME}/Desktop
+```
+
+4. **Start with Docker Compose:**
+```bash
+# Development mode (with hot reload)
+docker-compose -f docker-compose.dev.yml up
+
+# Or run in background
+docker-compose -f docker-compose.dev.yml up -d
+
+# Production mode
+docker-compose up -d
+```
+
+5. **Access the application:**
+   - Frontend: `http://localhost:2009`
+   - Backend API: `http://localhost:2008`
+
+### Docker Environment Variables
+
+The Docker setup supports comprehensive configuration through environment variables:
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `ANTHROPIC_API_KEY` | Your Claude API key | - | ✅ |
+| `DEFAULT_ADMIN_USERNAME` | Initial admin username | `admin` | ❌ |
+| `DEFAULT_ADMIN_PASSWORD` | Initial admin password | `change-me` | ❌ |
+| `HOST_WORKSPACE_PATH` | Host directory for projects | `${HOME}/Desktop` | ❌ |
+| `CLAUDE_EXECUTABLE_PATH` | Custom Claude CLI path | `/usr/local/bin/claude` | ❌ |
+| `PORT` | Backend server port | `2008` | ❌ |
+| `VITE_PORT` | Frontend dev server port | `2009` | ❌ |
+| `JWT_SECRET` | JWT signing secret | auto-generated | ❌ |
+
+### Docker Commands Reference
+
+```bash
+# View logs
+docker-compose -f docker-compose.dev.yml logs -f
+
+# Stop services
+docker-compose -f docker-compose.dev.yml down
+
+# Rebuild after code changes
+docker-compose -f docker-compose.dev.yml build
+
+# Access container shell
+docker-compose -f docker-compose.dev.yml exec app-dev bash
+
+# Check container status
+docker-compose -f docker-compose.dev.yml ps
+```
+
+### Workspace Access in Docker
+
+The Docker setup automatically mounts your projects directory for Claude to access:
+
+```bash
+# Default mounting
+${HOME}/Desktop → /workspace (read-only)
+
+# Custom mounting (in .env)
+HOST_WORKSPACE_PATH=/path/to/your/projects
+```
+
+**Important**: Ensure your Claude projects are within the mounted directory for proper access.
+
+### Docker Troubleshooting
+
+**Port conflicts:**
+```bash
+# Check what's using the ports
+lsof -i :2008 -i :2009
+
+# Stop conflicting services
+docker-compose down
+pkill -f "npm run dev"
+```
+
+**Permission issues:**
+```bash
+# Fix database directory permissions
+sudo chown -R 1001:1001 ./data
+```
+
+**For complete Docker documentation, see [DOCKER.md](DOCKER.md)**
 
 ## Security & Tools Configuration
 
@@ -202,7 +322,8 @@ We welcome contributions! Please follow these guidelines:
 - Ensure [Claude CLI](https://docs.anthropic.com/en/docs/claude-code) is properly installed
 - Run `claude` command in at least one project directory to initialize
 - Verify `~/.claude/projects/` directory exists and has proper permissions
-d
+- **For Docker**: Ensure your projects are within the mounted workspace directory
+- **For Docker**: Check that `HOST_WORKSPACE_PATH` in `.env` points to the correct directory
 
 #### File Explorer Issues
 **Problem**: Files not loading, permission errors, empty directories

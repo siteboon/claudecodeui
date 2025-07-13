@@ -1,0 +1,35 @@
+# Development Dockerfile for Claude Code UI
+
+FROM node:20-alpine
+
+# Install system dependencies
+RUN apk add --no-cache \
+    curl \
+    git \
+    openssh-client \
+    python3 \
+    make \
+    g++ \
+    sqlite \
+    bash
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install all dependencies (including devDependencies)
+RUN npm install && \
+    npm cache clean --force
+
+# Copy application files
+COPY . .
+
+# Create data directory
+RUN mkdir -p /app/server/database
+
+# Expose ports
+EXPOSE 2008 2009
+
+# Development command (will be overridden by docker-compose.dev.yml)
+CMD ["npm", "run", "dev"]

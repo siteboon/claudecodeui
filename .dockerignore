@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Build outputs
+dist/
+build/
+
+# Development files
+*.log
+.DS_Store
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Editor directories
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Testing
+coverage/
+.nyc_output/
+test-screenshots/
+screenshots/
+
+# Documentation
+*.md
+docs/
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+
+# Database (will be created in container)
+server/database/*.db
+
+# Test files
+test-*.js
+*.test.js
+*.spec.js

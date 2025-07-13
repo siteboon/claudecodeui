@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  # Development configuration for Claude Code UI
+  app-dev:
+    build: 
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: claude-code-ui-dev
+    ports:
+      - "2008:2008"  # Backend API
+      - "2009:2009"  # Frontend Vite dev server
+    environment:
+      - NODE_ENV=development
+      - PORT=2008
+      - VITE_PORT=2009
+      - DB_PATH=/app/server/database/auth.db
+      
+      # Hot reload for development
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+      
+    volumes:
+      # Mount source code for hot reload
+      - ./src:/app/src:delegated
+      - ./server:/app/server:delegated
+      - ./public:/app/public:delegated
+      - ./index.html:/app/index.html:delegated
+      - ./vite.config.js:/app/vite.config.js:delegated
+      - ./tailwind.config.js:/app/tailwind.config.js:delegated
+      - ./postcss.config.js:/app/postcss.config.js:delegated
+      
+      # Persist node_modules
+      - node_modules:/app/node_modules
+      
+      # Persist database
+      - ./server/database:/app/server/database
+      
+      # Mount project directories for Claude to access
+      - ${HOME}/Desktop:/workspace:ro
+      
+    command: npm run dev
+    stdin_open: true
+    tty: true
+    networks:
+      - claude-network-dev
+
+networks:
+  claude-network-dev:
+    driver: bridge
+
+volumes:
+  node_modules:
+    driver: local

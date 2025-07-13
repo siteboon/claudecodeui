@@ -3,6 +3,8 @@
 ## 🚀 Quick Start Commands
 
 ### Development
+
+**Local Development:**
 ```bash
 # Start development server (frontend + backend)
 npm run dev
@@ -15,6 +17,21 @@ npm run client
 
 # Build for production
 npm run build
+```
+
+**Docker Development:**
+```bash
+# Start with Docker Compose (recommended)
+docker-compose -f docker-compose.dev.yml up
+
+# Build and start in background
+docker-compose -f docker-compose.dev.yml up -d
+
+# View logs
+docker-compose -f docker-compose.dev.yml logs -f
+
+# Stop services
+docker-compose -f docker-compose.dev.yml down
 ```
 
 ### Testing & Quality
@@ -33,6 +50,35 @@ npm run typecheck
 - **Backend:** http://0.0.0.0:2008
 - **Frontend:** http://localhost:2009
 - **WebSocket:** ws://localhost:2008/ws
+
+## 🐳 Docker Setup
+
+This project includes complete Docker support for both development and production environments.
+
+### Quick Docker Start
+```bash
+# Copy environment template
+cp .env.docker .env
+
+# Edit .env and add your Anthropic API key
+# ANTHROPIC_API_KEY=sk-ant-your-api-key-here
+
+# Start development environment
+docker-compose -f docker-compose.dev.yml up
+```
+
+### Environment Variables
+Key environment variables for Docker deployment:
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `ANTHROPIC_API_KEY` | Your Claude API key | `sk-ant-xxxxx` |
+| `DEFAULT_ADMIN_USERNAME` | Initial admin user | `admin` |
+| `DEFAULT_ADMIN_PASSWORD` | Initial admin password | `secure-password` |
+| `HOST_WORKSPACE_PATH` | Projects directory to mount | `${HOME}/Desktop` |
+| `CLAUDE_EXECUTABLE_PATH` | Custom Claude CLI path | `/usr/local/bin/claude` |
+
+See `DOCKER.md` for complete documentation and advanced configuration.
 
 ## 🏗️ High-Level Architecture
 
