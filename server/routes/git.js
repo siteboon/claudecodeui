@@ -692,4 +692,39 @@ router.post('/discard', async (req, res) => {
   }
 });
 
+// Delete untracked file
+router.post('/delete-untracked', async (req, res) => {
+  const { project, file } = req.body;
+  
+  if (!project || !file) {
+    return res.status(400).json({ error: 'Project name and file path are required' });
+  }
+
+  try {
+    const projectPath = await getActualProjectPath(project);
+    await validateGitRepository(projectPath);
+
+    // Check if file is actually untracked
+    const { stdout: statusOutput } = await execAsync(`git status --porcelain "${file}"`, { cwd: projectPath });
+    
+    if (!statusOutput.trim()) {
+      return res.status(400).json({ error: 'File is not untracked or does not exist' });
+    }
+
+    const status = statusOutput.substring(0, 2);
+    
+    if (status !== '??') {
+      return res.status(400).json({ error: 'File is not untracked. Use discard for tracked files.' });
+    }
+
+    // Delete the untracked file
+    await fs.unlink(path.join(projectPath, file));
+    
+    res.json({ success: true, message: `Untracked file ${file} deleted successfully` });
+  } catch (error) {
+    console.error('Git delete untracked error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
