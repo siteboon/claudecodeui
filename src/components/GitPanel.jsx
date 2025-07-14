@@ -294,6 +294,34 @@ function GitPanel({ selectedProject, isMobile }) {
     }
   };
 
+  const deleteUntrackedFile = async (filePath) => {
+    try {
+      const response = await authenticatedFetch('/api/git/delete-untracked', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project: selectedProject.name,
+          file: filePath
+        })
+      });
+      
+      const data = await response.json();
+      if (data.success) {
+        // Remove from selected files and refresh status
+        setSelectedFiles(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(filePath);
+          return newSet;
+        });
+        fetchGitStatus();
+      } else {
+        console.error('Delete failed:', data.error);
+      }
+    } catch (error) {
+      console.error('Error deleting untracked file:', error);
+    }
+  };
+
   const confirmAndExecute = async () => {
     if (!confirmAction) return;
 
@@ -304,6 +332,9 @@ function GitPanel({ selectedProject, isMobile }) {
       switch (type) {
         case 'discard':
           await discardChanges(file);
+          break;
+        case 'delete':
+          await deleteUntrackedFile(file);
           break;
         case 'commit':
           await handleCommit();
@@ -576,6 +607,23 @@ function GitPanel({ selectedProject, isMobile }) {
                 >
                   <Trash2 className={`${isMobile ? 'w-3 h-3' : 'w-3 h-3'}`} />
                   {isMobile && <span>Discard</span>}
+                </button>
+              )}
+              {status === 'U' && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setConfirmAction({ 
+                      type: 'delete', 
+                      file: filePath,
+                      message: `Delete untracked file "${filePath}"? This action cannot be undone.` 
+                    });
+                  }}
+                  className={`${isMobile ? 'px-2 py-1 text-xs' : 'p-1'} hover:bg-red-100 dark:hover:bg-red-900 rounded text-red-600 dark:text-red-400 font-medium flex items-center gap-1`}
+                  title="Delete untracked file"
+                >
+                  <Trash2 className={`${isMobile ? 'w-3 h-3' : 'w-3 h-3'}`} />
+                  {isMobile && <span>Delete</span>}
                 </button>
               )}
               <span 
@@ -1120,14 +1168,15 @@ function GitPanel({ selectedProject, isMobile }) {
             <div className="p-6">
               <div className="flex items-center mb-4">
                 <div className={`p-2 rounded-full mr-3 ${
-                  confirmAction.type === 'discard' ? 'bg-red-100 dark:bg-red-900' : 'bg-yellow-100 dark:bg-yellow-900'
+                  (confirmAction.type === 'discard' || confirmAction.type === 'delete') ? 'bg-red-100 dark:bg-red-900' : 'bg-yellow-100 dark:bg-yellow-900'
                 }`}>
                   <AlertTriangle className={`w-5 h-5 ${
-                    confirmAction.type === 'discard' ? 'text-red-600 dark:text-red-400' : 'text-yellow-600 dark:text-yellow-400'
+                    (confirmAction.type === 'discard' || confirmAction.type === 'delete') ? 'text-red-600 dark:text-red-400' : 'text-yellow-600 dark:text-yellow-400'
                   }`} />
                 </div>
                 <h3 className="text-lg font-semibold">
                   {confirmAction.type === 'discard' ? 'Discard Changes' : 
+                   confirmAction.type === 'delete' ? 'Delete File' :
                    confirmAction.type === 'commit' ? 'Confirm Commit' : 
                    confirmAction.type === 'pull' ? 'Confirm Pull' : 'Confirm Push'}
                 </h3>
@@ -1147,7 +1196,7 @@ function GitPanel({ selectedProject, isMobile }) {
                 <button
                   onClick={confirmAndExecute}
                   className={`px-4 py-2 text-sm text-white rounded-md ${
-                    confirmAction.type === 'discard' 
+                    (confirmAction.type === 'discard' || confirmAction.type === 'delete')
                       ? 'bg-red-600 hover:bg-red-700' 
                       : confirmAction.type === 'commit'
                       ? 'bg-blue-600 hover:bg-blue-700'
@@ -1160,6 +1209,11 @@ function GitPanel({ selectedProject, isMobile }) {
                     <>
                       <Trash2 className="w-4 h-4" />
                       <span>Discard</span>
+                    </>
+                  ) : confirmAction.type === 'delete' ? (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      <span>Delete</span>
                     </>
                   ) : confirmAction.type === 'commit' ? (
                     <>
