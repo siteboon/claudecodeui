@@ -135,6 +135,86 @@ router.get('/servers', async (req, res) => {
   }
 });
 
+// POST /api/mcp/servers - Add MCP server directly to configuration
+router.post('/servers', async (req, res) => {
+  try {
+    const { name, type = 'stdio', scope = 'user', config } = req.body;
+    console.log('➕ Adding MCP server to configuration:', name);
+    
+    // Get the Claude configuration path
+    const claudeConfigPath = '/home/user/.claude.json';
+    
+    // Read current configuration
+    const configContent = await fs.readFile(claudeConfigPath, 'utf8');
+    const claudeConfig = JSON.parse(configContent);
+    
+    // Initialize mcpServers if it doesn't exist
+    if (!claudeConfig.mcpServers) {
+      claudeConfig.mcpServers = {};
+    }
+    
+    // Add the new server
+    claudeConfig.mcpServers[name] = {
+      command: config.command || '',
+      args: config.args || [],
+      env: config.env || {},
+      ...config
+    };
+    
+    // Write back the configuration
+    await fs.writeFile(claudeConfigPath, JSON.stringify(claudeConfig, null, 2));
+    
+    console.log('✅ MCP server added successfully:', name);
+    res.json({ success: true, message: 'MCP server added successfully' });
+    
+  } catch (error) {
+    console.error('Error adding MCP server:', error);
+    res.status(500).json({ 
+      error: 'Failed to add MCP server', 
+      details: error.message 
+    });
+  }
+});
+
+// DELETE /api/mcp/servers/:name - Remove MCP server from configuration
+router.delete('/servers/:name', async (req, res) => {
+  try {
+    const { name } = req.params;
+    console.log('🗑️ Removing MCP server from configuration:', name);
+    
+    // Get the Claude configuration path
+    const claudeConfigPath = '/home/user/.claude.json';
+    
+    // Read current configuration
+    const configContent = await fs.readFile(claudeConfigPath, 'utf8');
+    const claudeConfig = JSON.parse(configContent);
+    
+    // Check if server exists
+    if (!claudeConfig.mcpServers || !claudeConfig.mcpServers[name]) {
+      return res.status(404).json({ 
+        error: 'MCP server not found', 
+        details: `Server '${name}' does not exist` 
+      });
+    }
+    
+    // Remove the server
+    delete claudeConfig.mcpServers[name];
+    
+    // Write back the configuration
+    await fs.writeFile(claudeConfigPath, JSON.stringify(claudeConfig, null, 2));
+    
+    console.log('✅ MCP server removed successfully:', name);
+    res.json({ success: true, message: 'MCP server removed successfully' });
+    
+  } catch (error) {
+    console.error('Error removing MCP server:', error);
+    res.status(500).json({ 
+      error: 'Failed to remove MCP server', 
+      details: error.message 
+    });
+  }
+});
+
 // Claude CLI command routes
 
 // GET /api/mcp/cli/list - List MCP servers using Claude CLI

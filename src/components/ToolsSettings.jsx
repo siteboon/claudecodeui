@@ -128,8 +128,8 @@ function ToolsSettings({ isOpen, onClose }) {
         await deleteMcpServer(editingMcpServer.id, 'user');
       }
       
-      // Use Claude CLI to add the server
-      const response = await fetch('/api/mcp/cli/add', {
+      // Use direct configuration API to add the server
+      const response = await fetch('/api/mcp/servers', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -138,11 +138,14 @@ function ToolsSettings({ isOpen, onClose }) {
         body: JSON.stringify({
           name: serverData.name,
           type: serverData.type,
-          command: serverData.config?.command,
-          args: serverData.config?.args || [],
-          url: serverData.config?.url,
-          headers: serverData.config?.headers || {},
-          env: serverData.config?.env || {}
+          scope: 'user',
+          config: {
+            command: serverData.config?.command,
+            args: serverData.config?.args || [],
+            url: serverData.config?.url,
+            headers: serverData.config?.headers || {},
+            env: serverData.config?.env || {}
+          }
         })
       });
       
@@ -168,8 +171,8 @@ function ToolsSettings({ isOpen, onClose }) {
     try {
       const token = localStorage.getItem('auth-token');
       
-      // Use Claude CLI to remove the server
-      const response = await fetch(`/api/mcp/cli/remove/${serverId}`, {
+      // Use direct configuration API to remove the server
+      const response = await fetch(`/api/mcp/servers/${serverId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
