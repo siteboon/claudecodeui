@@ -10,6 +10,17 @@ export default defineConfig(({ command, mode }) => {
     plugins: [react()],
     server: {
       port: parseInt(env.VITE_PORT) || 3001,
+      host: '0.0.0.0', // Listen on all network interfaces
+      // Allow all hosts - required for Tunnelmole access
+      allowedHosts: true,
+      hmr: {
+        clientPort: parseInt(env.VITE_PORT) || 3001,
+        host: 'localhost'
+      },
+      // Disable host check
+      fs: {
+        strict: false
+      },
       proxy: {
         '/api': `http://localhost:${env.PORT || 3002}`,
         '/ws': {
@@ -17,6 +28,10 @@ export default defineConfig(({ command, mode }) => {
           ws: true
         }
       }
+    },
+    preview: {
+      port: parseInt(env.VITE_PORT) || 3001,
+      host: true
     },
     build: {
       outDir: 'dist'
