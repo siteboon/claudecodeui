@@ -1,0 +1,31 @@
+services:
+  claude-code-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${PORT:-3008}:${PORT:-3008}"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - PORT=${PORT:-3008} 
+      - HOME=/root
+      - CLAUDE_HOME=${HOME}
+      - CLAUDE_OUTPUT_DIR=/root/.claude/logs
+      - CLAUDE_PROJECT_ROOT=${HOME}
+    volumes:
+      - ~/.claude:/root/.claude
+      - ~/.config/claude:/root/.config/claude
+      - ./server/database:/app/server/database
+      - type: bind
+        source: ${HOME}
+        target: ${HOME}
+        read_only: false
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:${PORT:-3008}/api/config"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

@@ -1,0 +1,54 @@
+# Dependencies
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build output (will be created during Docker build)
+dist
+build
+
+# Environment files (except .env which is needed by the app)
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Version control
+.git
+.gitignore
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Test coverage
+coverage
+.nyc_output
+
+# Documentation
+README.md
+docs
+*.md
+
+# Docker files (except entrypoint script)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Temporary files
+*.tmp
+*.temp
+.cache
+
+# Database files (will be mounted as volume)
+*.db
+*.sqlite
+*.sqlite3
