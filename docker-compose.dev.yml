@@ -18,6 +18,11 @@ services:
       - CLAUDE_PROJECTS_PATH=${CLAUDE_PROJECTS_PATH:-${HOME}/.claude/projects}
       - CLAUDE_CONFIG_DIR=${CLAUDE_CONFIG_DIR:-${HOME}/.claude}
       
+      # Authentication
+      - DEFAULT_ADMIN_USERNAME=${DEFAULT_ADMIN_USERNAME:-admin}
+      - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD:-change-this-secure-password}
+      - JWT_SECRET=${JWT_SECRET:-your-super-secure-jwt-secret-key-here}
+      
       # Hot reload for development
       - CHOKIDAR_USEPOLLING=true
       - WATCHPACK_POLLING=true
@@ -43,6 +48,9 @@ services:
       
       # Mount Claude CLI data directory for project discovery
       - ${CLAUDE_CONFIG_DIR:-${HOME}/.claude}:${CLAUDE_CONFIG_DIR:-${HOME}/.claude}:rw
+      
+      # Mount Claude configuration file if it exists
+      - /home/nick/.claude.json:/home/user/.claude.json:ro
       
     command: npm run dev
     stdin_open: true

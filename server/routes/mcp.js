@@ -10,6 +10,131 @@ const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Direct configuration reading routes
+
+// GET /api/mcp/servers - Get MCP servers from Claude configuration file
+router.get('/servers', async (req, res) => {
+  try {
+    const { scope = 'user' } = req.query;
+    console.log('📋 Reading MCP servers from Claude configuration');
+    
+    // Get the Claude configuration path
+    // Try multiple locations for better Docker compatibility
+    const possiblePaths = [
+      // Direct file mount in Docker
+      '/home/user/.claude.json',
+      // Environment variable based path
+      path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude'), '..', '.claude.json'),
+      // Home directory based path
+      path.join(os.homedir(), '.claude.json'),
+      // Fallback to standard location
+      path.join(process.env.HOME || os.homedir(), '.claude.json')
+    ];
+    
+    let claudeConfigPath = null;
+    for (const testPath of possiblePaths) {
+      const exists = await fs.access(testPath).then(() => true).catch(() => false);
+      if (exists) {
+        claudeConfigPath = testPath;
+        break;
+      }
+    }
+    
+    console.log(`🔍 Found Claude config at: ${claudeConfigPath}`);
+    
+    // Check if the config file exists
+    if (!claudeConfigPath) {
+      console.log('⚠️ Claude configuration file not found in any of the expected locations');
+      console.log('🔍 Searched paths:', possiblePaths);
+      return res.json({ success: true, servers: [] });
+    }
+    
+    // Read and parse the configuration
+    const configContent = await fs.readFile(claudeConfigPath, 'utf8');
+    const claudeConfig = JSON.parse(configContent);
+    
+    const servers = [];
+    
+    // Extract global MCP servers
+    if (claudeConfig.mcpServers && scope === 'user') {
+      console.log(`✅ Found ${Object.keys(claudeConfig.mcpServers).length} global MCP servers`);
+      
+      for (const [name, config] of Object.entries(claudeConfig.mcpServers)) {
+        // Determine server type based on configuration
+        let type = 'stdio';
+        if (config.url) {
+          type = config.transport || 'http';
+        }
+        
+        servers.push({
+          id: name,
+          name: name,
+          type: type,
+          scope: 'user',
+          config: {
+            command: config.command || '',
+            args: config.args || [],
+            env: config.env || {},
+            url: config.url || '',
+            headers: config.headers || {},
+            timeout: config.timeout || 30000,
+            transport: config.transport || type
+          },
+          created: new Date().toISOString(),
+          updated: new Date().toISOString()
+        });
+      }
+    }
+    
+    // Extract project-specific MCP servers if requested
+    if (scope === 'project' && claudeConfig.claudeProjects) {
+      const projectPath = req.query.projectPath || process.cwd();
+      const projectConfig = claudeConfig.claudeProjects[projectPath];
+      
+      if (projectConfig && projectConfig.mcpServers) {
+        console.log(`✅ Found ${Object.keys(projectConfig.mcpServers).length} project MCP servers`);
+        
+        for (const [name, config] of Object.entries(projectConfig.mcpServers)) {
+          // Determine server type based on configuration
+          let type = 'stdio';
+          if (config.url) {
+            type = config.transport || 'http';
+          }
+          
+          servers.push({
+            id: name,
+            name: name,
+            type: type,
+            scope: 'project',
+            config: {
+              command: config.command || '',
+              args: config.args || [],
+              env: config.env || {},
+              url: config.url || '',
+              headers: config.headers || {},
+              timeout: config.timeout || 30000,
+              transport: config.transport || type
+            },
+            created: new Date().toISOString(),
+            updated: new Date().toISOString()
+          });
+        }
+      }
+    }
+    
+    console.log(`🔍 Returning ${servers.length} MCP servers`);
+    res.json({ success: true, servers });
+    
+  } catch (error) {
+    console.error('Error reading MCP servers from config:', error);
+    res.status(500).json({ 
+      error: 'Failed to read MCP servers', 
+      details: error.message,
+      servers: [] 
+    });
+  }
+});
+
 // Claude CLI command routes
 
 // GET /api/mcp/cli/list - List MCP servers using Claude CLI
