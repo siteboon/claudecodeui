@@ -36,7 +36,7 @@ HOST_WORKSPACE_PATH=/Users/yourusername/Projects
 
 **Development mode (with hot reload):**
 ```bash
-docker compose -f docker compose.dev.yml up
+docker compose -f docker-compose.dev.yml up
 ```
 
 **Production mode:**
@@ -52,8 +52,8 @@ docker compose up -d
 
 ```
 claudecodeui/
-├── docker compose.yml          # Production configuration
-├── docker compose.dev.yml      # Development configuration
+├── docker-compose.yml          # Production configuration
+├── docker-compose.dev.yml      # Development configuration
 ├── Dockerfile                  # Production image
 ├── Dockerfile.dev             # Development image
 ├── .dockerignore              # Files to exclude from build
@@ -90,13 +90,13 @@ claudecodeui/
 
 ```bash
 # Start development environment
-docker compose -f docker compose.dev.yml up
+docker compose -f docker-compose.dev.yml up
 
 # View logs
-docker compose -f docker compose.dev.yml logs -f
+docker compose -f docker-compose.dev.yml logs -f
 
 # Rebuild after dependency changes
-docker compose -f docker compose.dev.yml build
+docker compose -f docker-compose.dev.yml build
 ```
 
 ### Development Features
@@ -110,10 +110,10 @@ docker compose -f docker compose.dev.yml build
 
 ```bash
 # Enter the container
-docker compose -f docker compose.dev.yml exec app-dev bash
+docker compose -f docker-compose.dev.yml exec app-dev bash
 
 # Check application logs
-docker compose -f docker compose.dev.yml logs app-dev
+docker compose -f docker-compose.dev.yml logs app-dev
 
 # Monitor container stats
 docker stats claude-code-ui-dev
@@ -225,7 +225,7 @@ cp .env.docker .env
 nano .env
 
 # 3. Start development environment
-docker compose -f docker compose.dev.yml up
+docker compose -f docker-compose.dev.yml up
 
 # 4. Access application at http://localhost:2009
 ```
@@ -272,9 +272,9 @@ docker compose run -v /home/user/projects:/workspace/projects:ro \\
 lsof -i :2008 -i :2009
 
 # Use different ports
-docker compose -f docker compose.dev.yml down
+docker compose -f docker-compose.dev.yml down
 # Edit .env to change PORT and VITE_PORT
-docker compose -f docker compose.dev.yml up
+docker compose -f docker-compose.dev.yml up
 ```
 
 **Permission issues:**
@@ -292,7 +292,7 @@ docker compose run --rm app-dev
 docker compose exec app-dev npm install -g @anthropic-ai/claude-cli
 
 # Or mount from host
-# Add to docker compose.yml volumes:
+# Add to docker-compose.yml volumes:
 # - /usr/local/bin/claude:/usr/local/bin/claude:ro
 ```
 
@@ -332,9 +332,9 @@ docker stats --no-stream
 git pull origin main
 
 # Rebuild and restart
-docker compose -f docker compose.dev.yml down
-docker compose -f docker compose.dev.yml build
-docker compose -f docker compose.dev.yml up -d
+docker compose -f docker-compose.dev.yml down
+docker compose -f docker-compose.dev.yml build
+docker compose -f docker-compose.dev.yml up -d
 ```
 
 ### Database Backups
@@ -363,9 +363,9 @@ docker compose exec app-dev sqlite3 /app/server/database/auth.db ".restore backu
 
 ```bash
 # Development
-docker compose -f docker compose.dev.yml up -d     # Start dev environment
-docker compose -f docker compose.dev.yml logs -f   # View logs
-docker compose -f docker compose.dev.yml restart   # Restart services
+docker compose -f docker-compose.dev.yml up -d     # Start dev environment
+docker compose -f docker-compose.dev.yml logs -f   # View logs
+docker compose -f docker-compose.dev.yml restart   # Restart services
 
 # Production  
 docker compose up -d                                # Start production
