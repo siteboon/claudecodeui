@@ -3,6 +3,12 @@
 # Stage 1: Build frontend
 FROM node:20-alpine AS frontend-builder
 
+# Install build dependencies for native modules
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++
+
 WORKDIR /app
 
 # Copy package files
@@ -45,7 +51,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install production dependencies only
-RUN npm ci --only=production && \
+RUN npm ci --omit=dev && \
     npm cache clean --force
 
 # Copy server files

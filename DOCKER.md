@@ -36,12 +36,12 @@ HOST_WORKSPACE_PATH=/Users/yourusername/Projects
 
 **Development mode (with hot reload):**
 ```bash
-docker-compose -f docker-compose.dev.yml up
+docker compose -f docker compose.dev.yml up
 ```
 
 **Production mode:**
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 **Access the application:**
@@ -52,8 +52,8 @@ docker-compose up -d
 
 ```
 claudecodeui/
-├── docker-compose.yml          # Production configuration
-├── docker-compose.dev.yml      # Development configuration
+├── docker compose.yml          # Production configuration
+├── docker compose.dev.yml      # Development configuration
 ├── Dockerfile                  # Production image
 ├── Dockerfile.dev             # Development image
 ├── .dockerignore              # Files to exclude from build
@@ -90,13 +90,13 @@ claudecodeui/
 
 ```bash
 # Start development environment
-docker-compose -f docker-compose.dev.yml up
+docker compose -f docker compose.dev.yml up
 
 # View logs
-docker-compose -f docker-compose.dev.yml logs -f
+docker compose -f docker compose.dev.yml logs -f
 
 # Rebuild after dependency changes
-docker-compose -f docker-compose.dev.yml build
+docker compose -f docker compose.dev.yml build
 ```
 
 ### Development Features
@@ -110,10 +110,10 @@ docker-compose -f docker-compose.dev.yml build
 
 ```bash
 # Enter the container
-docker-compose -f docker-compose.dev.yml exec app-dev bash
+docker compose -f docker compose.dev.yml exec app-dev bash
 
 # Check application logs
-docker-compose -f docker-compose.dev.yml logs app-dev
+docker compose -f docker compose.dev.yml logs app-dev
 
 # Monitor container stats
 docker stats claude-code-ui-dev
@@ -125,10 +125,10 @@ docker stats claude-code-ui-dev
 
 ```bash
 # Build and start production services
-docker-compose up -d
+docker compose up -d
 
 # With Nginx reverse proxy
-docker-compose --profile production up -d
+docker compose --profile production up -d
 ```
 
 ### Production Features
@@ -162,7 +162,7 @@ SSL_KEY_PATH=/etc/nginx/ssl/key.pem
 
 ```bash
 # Check service health
-docker-compose ps
+docker compose ps
 
 # Health check endpoint
 curl http://localhost:2008/api/health
@@ -175,7 +175,7 @@ curl http://localhost:2008/api/health
 docker stats
 
 # Application logs
-docker-compose logs -f app
+docker compose logs -f app
 
 # System resource usage
 docker system df
@@ -225,7 +225,7 @@ cp .env.docker .env
 nano .env
 
 # 3. Start development environment
-docker-compose -f docker-compose.dev.yml up
+docker compose -f docker compose.dev.yml up
 
 # 4. Access application at http://localhost:2009
 ```
@@ -238,7 +238,7 @@ cp .env.docker .env
 # Edit .env with production settings
 
 # 2. Deploy with all services
-docker-compose --profile production up -d
+docker compose --profile production up -d
 
 # 3. Verify deployment
 curl -f http://localhost/api/health
@@ -257,7 +257,7 @@ docker run -v /path/to/claude:/usr/local/bin/claude:ro \\
 
 ```bash
 # Mount multiple project directories
-docker-compose run -v /home/user/projects:/workspace/projects:ro \\
+docker compose run -v /home/user/projects:/workspace/projects:ro \\
   -v /opt/repos:/workspace/repos:ro \\
   app-dev
 ```
@@ -272,9 +272,9 @@ docker-compose run -v /home/user/projects:/workspace/projects:ro \\
 lsof -i :2008 -i :2009
 
 # Use different ports
-docker-compose -f docker-compose.dev.yml down
+docker compose -f docker compose.dev.yml down
 # Edit .env to change PORT and VITE_PORT
-docker-compose -f docker-compose.dev.yml up
+docker compose -f docker compose.dev.yml up
 ```
 
 **Permission issues:**
@@ -283,16 +283,16 @@ docker-compose -f docker-compose.dev.yml up
 sudo chown -R 1001:1001 ./data
 
 # Or run without volume mount
-docker-compose run --rm app-dev
+docker compose run --rm app-dev
 ```
 
 **Claude CLI not found:**
 ```bash
 # Install Claude CLI in container
-docker-compose exec app-dev npm install -g @anthropic-ai/claude-cli
+docker compose exec app-dev npm install -g @anthropic-ai/claude-cli
 
 # Or mount from host
-# Add to docker-compose.yml volumes:
+# Add to docker compose.yml volumes:
 # - /usr/local/bin/claude:/usr/local/bin/claude:ro
 ```
 
@@ -300,7 +300,7 @@ docker-compose exec app-dev npm install -g @anthropic-ai/claude-cli
 
 ```bash
 # Application logs
-docker-compose logs -f app-dev
+docker compose logs -f app-dev
 
 # Container inspection
 docker inspect claude-code-ui-dev
@@ -317,7 +317,7 @@ docker network inspect claudecodeui_claude-network-dev
 docker image prune -a
 
 # Optimize build cache
-docker-compose build --no-cache
+docker compose build --no-cache
 
 # Monitor resource usage
 docker stats --no-stream
@@ -332,21 +332,21 @@ docker stats --no-stream
 git pull origin main
 
 # Rebuild and restart
-docker-compose -f docker-compose.dev.yml down
-docker-compose -f docker-compose.dev.yml build
-docker-compose -f docker-compose.dev.yml up -d
+docker compose -f docker compose.dev.yml down
+docker compose -f docker compose.dev.yml build
+docker compose -f docker compose.dev.yml up -d
 ```
 
 ### Database Backups
 
 ```bash
 # Backup SQLite database
-docker-compose exec app-dev sqlite3 /app/server/database/auth.db ".backup backup.db"
+docker compose exec app-dev sqlite3 /app/server/database/auth.db ".backup backup.db"
 docker cp claude-code-ui-dev:/app/backup.db ./backup-$(date +%Y%m%d).db
 
 # Restore database
 docker cp ./backup.db claude-code-ui-dev:/app/backup.db
-docker-compose exec app-dev sqlite3 /app/server/database/auth.db ".restore backup.db"
+docker compose exec app-dev sqlite3 /app/server/database/auth.db ".restore backup.db"
 ```
 
 ## 🤝 Support
@@ -363,20 +363,20 @@ docker-compose exec app-dev sqlite3 /app/server/database/auth.db ".restore backu
 
 ```bash
 # Development
-docker-compose -f docker-compose.dev.yml up -d     # Start dev environment
-docker-compose -f docker-compose.dev.yml logs -f   # View logs
-docker-compose -f docker-compose.dev.yml restart   # Restart services
+docker compose -f docker compose.dev.yml up -d     # Start dev environment
+docker compose -f docker compose.dev.yml logs -f   # View logs
+docker compose -f docker compose.dev.yml restart   # Restart services
 
 # Production  
-docker-compose up -d                                # Start production
-docker-compose --profile production up -d          # With nginx
-docker-compose ps                                   # Check status
-docker-compose down                                 # Stop all services
+docker compose up -d                                # Start production
+docker compose --profile production up -d          # With nginx
+docker compose ps                                   # Check status
+docker compose down                                 # Stop all services
 
 # Maintenance
-docker-compose pull                                 # Update base images
+docker compose pull                                 # Update base images
 docker system prune -a                             # Clean up space
-docker-compose build --no-cache                    # Force rebuild
+docker compose build --no-cache                    # Force rebuild
 ```
 
 ### Health Check URLs

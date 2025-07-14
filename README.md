@@ -122,13 +122,13 @@ USER_HOME_DIR=${HOME}
 4. **Start with Docker Compose:**
 ```bash
 # Development mode (with hot reload)
-docker-compose -f docker-compose.dev.yml up
+docker compose -f docker compose.dev.yml up
 
 # Or run in background
-docker-compose -f docker-compose.dev.yml up -d
+docker compose -f docker compose.dev.yml up -d
 
 # Production mode
-docker-compose up -d
+docker compose up -d
 ```
 
 5. **Access the application:**
@@ -218,64 +218,64 @@ The application supports comprehensive configuration through environment variabl
 #### Development Commands
 ```bash
 # Start development environment (with hot reload)
-docker-compose -f docker-compose.dev.yml up
+docker compose -f docker compose.dev.yml up
 
 # Start in background
-docker-compose -f docker-compose.dev.yml up -d
+docker compose -f docker compose.dev.yml up -d
 
 # View real-time logs
-docker-compose -f docker-compose.dev.yml logs -f
+docker compose -f docker compose.dev.yml logs -f
 
 # View logs for specific service
-docker-compose -f docker-compose.dev.yml logs -f app-dev
+docker compose -f docker compose.dev.yml logs -f app-dev
 
 # Stop development services
-docker-compose -f docker-compose.dev.yml down
+docker compose -f docker compose.dev.yml down
 
 # Rebuild after code changes
-docker-compose -f docker-compose.dev.yml build --no-cache
+docker compose -f docker compose.dev.yml build --no-cache
 
 # Rebuild and restart
-docker-compose -f docker-compose.dev.yml up --build
+docker compose -f docker compose.dev.yml up --build
 
 # Access container shell
-docker-compose -f docker-compose.dev.yml exec app-dev bash
+docker compose -f docker compose.dev.yml exec app-dev bash
 
 # Check container status
-docker-compose -f docker-compose.dev.yml ps
+docker compose -f docker compose.dev.yml ps
 ```
 
 #### Production Commands
 ```bash
 # Start production environment
-docker-compose up -d
+docker compose up -d
 
 # View production logs
-docker-compose logs -f
+docker compose logs -f
 
 # Stop production services
-docker-compose down
+docker compose down
 
 # Rebuild production containers
-docker-compose build --no-cache
+docker compose build --no-cache
 
 # Scale services (if needed)
-docker-compose up -d --scale app=2
+docker compose up -d --scale app=2
 ```
 
 #### Maintenance Commands
 ```bash
 # Clean up containers and images
-docker-compose down --rmi all --volumes --remove-orphans
+docker compose down --rmi all --volumes --remove-orphans
 
 # View container resource usage
 docker stats
 
 # Inspect container configuration
-docker-compose config
+docker compose config
 
 # Export container logs
-docker-compose logs > docker-logs.txt
+docker compose logs > docker-logs.txt
 
 # Backup database
 docker cp claude-code-ui-dev:/app/server/database ./database-backup
@@ -303,7 +303,7 @@ HOST_WORKSPACE_PATH=/path/to/your/projects
 lsof -i :2008 -i :2009
 
 # Stop conflicting services
-docker-compose down
+docker compose down
 pkill -f "npm run dev"
 ```
 

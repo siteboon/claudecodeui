@@ -22,16 +22,16 @@ npm run build
 **Docker Development:**
 ```bash
 # Start with Docker Compose (recommended)
-docker-compose -f docker-compose.dev.yml up
+docker compose -f docker-compose.dev.yml up
 
 # Build and start in background
-docker-compose -f docker-compose.dev.yml up -d
+docker compose -f docker-compose.dev.yml up -d
 
 # View logs
-docker-compose -f docker-compose.dev.yml logs -f
+docker compose -f docker-compose.dev.yml logs -f
 
 # Stop services
-docker-compose -f docker-compose.dev.yml down
+docker compose -f docker-compose.dev.yml down
 ```
 
 ### Testing & Quality
@@ -64,7 +64,7 @@ cp .env.docker .env
 # ANTHROPIC_API_KEY=sk-ant-your-api-key-here
 
 # Start development environment
-docker-compose -f docker-compose.dev.yml up
+docker compose -f docker-compose.dev.yml up
 ```
 
 ### Environment Variables
