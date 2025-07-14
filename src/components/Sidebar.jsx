@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 
-import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2, Star, Search } from 'lucide-react';
+import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2, Star, Search, Info } from 'lucide-react';
 import { cn } from '../lib/utils';
 import ClaudeLogo from './ClaudeLogo';
 import { api } from '../utils/api';
@@ -682,6 +682,11 @@ function Sidebar({
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3 min-w-0 flex-1">
+                            {!project.hasClaudeFile && (
+                              <div className="w-8 h-8 rounded-lg bg-blue-500/10 dark:bg-blue-900/30 flex items-center justify-center border border-blue-200 dark:border-blue-800" title="CLAUDE.md not found. Run /init to create it">
+                                <Info className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                              </div>
+                            )}
                             <div className={cn(
                               "w-8 h-8 rounded-lg flex items-center justify-center transition-colors",
                               isExpanded ? "bg-primary/10" : "bg-muted"
@@ -835,6 +840,12 @@ function Sidebar({
                       })}
                     >
                       <div className="flex items-center gap-3 min-w-0 flex-1">
+                        {!project.hasClaudeFile && (
+                          <Info 
+                            className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" 
+                            title="CLAUDE.md not found. Run /init to create it"
+                          />
+                        )}
                         {isExpanded ? (
                           <FolderOpen className="w-4 h-4 text-primary flex-shrink-0" />
                         ) : (
