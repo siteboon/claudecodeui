@@ -28,6 +28,7 @@ function GitPanel({ selectedProject, isMobile }) {
   const [isFetching, setIsFetching] = useState(false);
   const [isPulling, setIsPulling] = useState(false);
   const [isPushing, setIsPushing] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
   const [isCommitAreaCollapsed, setIsCommitAreaCollapsed] = useState(isMobile); // Collapsed by default on mobile
   const [confirmAction, setConfirmAction] = useState(null); // { type: 'discard|commit|pull|push', file?: string, message?: string }
   const textareaRef = useRef(null);
@@ -266,6 +267,34 @@ function GitPanel({ selectedProject, isMobile }) {
     }
   };
 
+  const handlePublish = async () => {
+    setIsPublishing(true);
+    try {
+      const response = await authenticatedFetch('/api/git/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project: selectedProject.name,
+          branch: currentBranch
+        })
+      });
+      
+      const data = await response.json();
+      if (data.success) {
+        // Refresh status after successful publish
+        fetchGitStatus();
+        fetchRemoteStatus();
+      } else {
+        console.error('Publish failed:', data.error);
+        // TODO: Show user-friendly error message
+      }
+    } catch (error) {
+      console.error('Error publishing branch:', error);
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
   const discardChanges = async (filePath) => {
     try {
       const response = await authenticatedFetch('/api/git/discard', {
@@ -344,6 +373,9 @@ function GitPanel({ selectedProject, isMobile }) {
           break;
         case 'push':
           await handlePush();
+          break;
+        case 'publish':
+          await handlePublish();
           break;
       }
     } catch (error) {
@@ -764,51 +796,72 @@ function GitPanel({ selectedProject, isMobile }) {
         
         <div className={`flex items-center ${isMobile ? 'gap-1' : 'gap-2'}`}>
           {/* Remote action buttons - smart logic based on ahead/behind status */}
-          {remoteStatus?.hasRemote && !remoteStatus?.isUpToDate && (
+          {remoteStatus?.hasRemote && (
             <>
-              {/* Pull button - show when behind (primary action) */}
-              {remoteStatus.behind > 0 && (
+              {/* Publish button - show when branch doesn't exist on remote */}
+              {!remoteStatus?.hasUpstream && (
                 <button
                   onClick={() => setConfirmAction({ 
-                    type: 'pull', 
-                    message: `Pull ${remoteStatus.behind} commit${remoteStatus.behind !== 1 ? 's' : ''} from ${remoteStatus.remoteName}?` 
+                    type: 'publish', 
+                    message: `Publish branch "${currentBranch}" to ${remoteStatus.remoteName}?` 
                   })}
-                  disabled={isPulling}
-                  className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 flex items-center gap-1"
-                  title={`Pull ${remoteStatus.behind} commit${remoteStatus.behind !== 1 ? 's' : ''} from ${remoteStatus.remoteName}`}
+                  disabled={isPublishing}
+                  className="px-2 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1"
+                  title={`Publish branch "${currentBranch}" to ${remoteStatus.remoteName}`}
                 >
-                  <Download className={`w-3 h-3 ${isPulling ? 'animate-pulse' : ''}`} />
-                  <span>{isPulling ? 'Pulling...' : `Pull ${remoteStatus.behind}`}</span>
+                  <Upload className={`w-3 h-3 ${isPublishing ? 'animate-pulse' : ''}`} />
+                  <span>{isPublishing ? 'Publishing...' : 'Publish'}</span>
                 </button>
               )}
               
-              {/* Push button - show when ahead (primary action when ahead only) */}
-              {remoteStatus.ahead > 0 && (
-                <button
-                  onClick={() => setConfirmAction({ 
-                    type: 'push', 
-                    message: `Push ${remoteStatus.ahead} commit${remoteStatus.ahead !== 1 ? 's' : ''} to ${remoteStatus.remoteName}?` 
-                  })}
-                  disabled={isPushing}
-                  className="px-2 py-1 text-xs bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50 flex items-center gap-1"
-                  title={`Push ${remoteStatus.ahead} commit${remoteStatus.ahead !== 1 ? 's' : ''} to ${remoteStatus.remoteName}`}
-                >
-                  <Upload className={`w-3 h-3 ${isPushing ? 'animate-pulse' : ''}`} />
-                  <span>{isPushing ? 'Pushing...' : `Push ${remoteStatus.ahead}`}</span>
-                </button>
-              )}
-              
-              {/* Fetch button - show when ahead only or when diverged (secondary action) */}
-              {(remoteStatus.ahead > 0 || (remoteStatus.behind > 0 && remoteStatus.ahead > 0)) && (
-                <button
-                  onClick={handleFetch}
-                  disabled={isFetching}
-                  className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
-                  title={`Fetch from ${remoteStatus.remoteName}`}
-                >
-                  <RefreshCw className={`w-3 h-3 ${isFetching ? 'animate-spin' : ''}`} />
-                  <span>{isFetching ? 'Fetching...' : 'Fetch'}</span>
-                </button>
+              {/* Show normal push/pull buttons only if branch has upstream */}
+              {remoteStatus?.hasUpstream && !remoteStatus?.isUpToDate && (
+                <>
+                  {/* Pull button - show when behind (primary action) */}
+                  {remoteStatus.behind > 0 && (
+                    <button
+                      onClick={() => setConfirmAction({ 
+                        type: 'pull', 
+                        message: `Pull ${remoteStatus.behind} commit${remoteStatus.behind !== 1 ? 's' : ''} from ${remoteStatus.remoteName}?` 
+                      })}
+                      disabled={isPulling}
+                      className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 flex items-center gap-1"
+                      title={`Pull ${remoteStatus.behind} commit${remoteStatus.behind !== 1 ? 's' : ''} from ${remoteStatus.remoteName}`}
+                    >
+                      <Download className={`w-3 h-3 ${isPulling ? 'animate-pulse' : ''}`} />
+                      <span>{isPulling ? 'Pulling...' : `Pull ${remoteStatus.behind}`}</span>
+                    </button>
+                  )}
+                  
+                  {/* Push button - show when ahead (primary action when ahead only) */}
+                  {remoteStatus.ahead > 0 && (
+                    <button
+                      onClick={() => setConfirmAction({ 
+                        type: 'push', 
+                        message: `Push ${remoteStatus.ahead} commit${remoteStatus.ahead !== 1 ? 's' : ''} to ${remoteStatus.remoteName}?` 
+                      })}
+                      disabled={isPushing}
+                      className="px-2 py-1 text-xs bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50 flex items-center gap-1"
+                      title={`Push ${remoteStatus.ahead} commit${remoteStatus.ahead !== 1 ? 's' : ''} to ${remoteStatus.remoteName}`}
+                    >
+                      <Upload className={`w-3 h-3 ${isPushing ? 'animate-pulse' : ''}`} />
+                      <span>{isPushing ? 'Pushing...' : `Push ${remoteStatus.ahead}`}</span>
+                    </button>
+                  )}
+                  
+                  {/* Fetch button - show when ahead only or when diverged (secondary action) */}
+                  {(remoteStatus.ahead > 0 || (remoteStatus.behind > 0 && remoteStatus.ahead > 0)) && (
+                    <button
+                      onClick={handleFetch}
+                      disabled={isFetching}
+                      className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
+                      title={`Fetch from ${remoteStatus.remoteName}`}
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isFetching ? 'animate-spin' : ''}`} />
+                      <span>{isFetching ? 'Fetching...' : 'Fetch'}</span>
+                    </button>
+                  )}
+                </>
               )}
             </>
           )}
@@ -1178,7 +1231,8 @@ function GitPanel({ selectedProject, isMobile }) {
                   {confirmAction.type === 'discard' ? 'Discard Changes' : 
                    confirmAction.type === 'delete' ? 'Delete File' :
                    confirmAction.type === 'commit' ? 'Confirm Commit' : 
-                   confirmAction.type === 'pull' ? 'Confirm Pull' : 'Confirm Push'}
+                   confirmAction.type === 'pull' ? 'Confirm Pull' : 
+                   confirmAction.type === 'publish' ? 'Publish Branch' : 'Confirm Push'}
                 </h3>
               </div>
               
@@ -1202,6 +1256,8 @@ function GitPanel({ selectedProject, isMobile }) {
                       ? 'bg-blue-600 hover:bg-blue-700'
                       : confirmAction.type === 'pull'
                       ? 'bg-green-600 hover:bg-green-700'
+                      : confirmAction.type === 'publish'
+                      ? 'bg-purple-600 hover:bg-purple-700'
                       : 'bg-orange-600 hover:bg-orange-700'
                   } flex items-center space-x-2`}
                 >
@@ -1224,6 +1280,11 @@ function GitPanel({ selectedProject, isMobile }) {
                     <>
                       <Download className="w-4 h-4" />
                       <span>Pull</span>
+                    </>
+                  ) : confirmAction.type === 'publish' ? (
+                    <>
+                      <Upload className="w-4 h-4" />
+                      <span>Publish</span>
                     </>
                   ) : (
                     <>
