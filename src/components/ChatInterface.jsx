@@ -118,7 +118,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
           
           <div className="w-full">
             
-            {message.isToolUse ? (
+            {message.isToolUse && !['Read', 'TodoWrite', 'TodoRead'].includes(message.toolName) ? (
               <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-2 sm:p-3 mb-2">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
@@ -423,41 +423,18 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     try {
                       const input = JSON.parse(message.toolInput);
                       if (input.file_path) {
-                        // Extract filename
                         const filename = input.file_path.split('/').pop();
-                        const pathParts = input.file_path.split('/');
-                        const directoryPath = pathParts.slice(0, -1).join('/');
-                        
-                        // Simple heuristic to show only relevant path parts
-                        // Show the last 2-3 directory parts before the filename
-                        const relevantParts = pathParts.slice(-4, -1); // Get up to 3 directories before filename
-                        const relativePath = relevantParts.length > 0 ? relevantParts.join('/') + '/' : '';
                         
                         return (
-                          <details className="mt-2" open={autoExpandTools}>
-                            <summary className="text-sm text-blue-700 dark:text-blue-300 cursor-pointer hover:text-blue-800 dark:hover:text-blue-200 flex items-center gap-1">
-                              <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                              </svg>
-                              <svg className="w-4 h-4 text-blue-600 dark:text-blue-400 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                              </svg>
-                              <span className="text-gray-600 dark:text-gray-400 font-mono text-xs">{relativePath}</span>
-                              <span className="font-semibold text-blue-700 dark:text-blue-300 font-mono">{filename}</span>
-                            </summary>
-                            {showRawParameters && (
-                              <div className="mt-3">
-                                <details className="mt-2">
-                                  <summary className="text-xs text-blue-600 dark:text-blue-400 cursor-pointer hover:text-blue-700 dark:hover:text-blue-300">
-                                    View raw parameters
-                                  </summary>
-                                  <pre className="mt-2 text-xs bg-blue-100 dark:bg-blue-800/30 p-2 rounded whitespace-pre-wrap break-words overflow-hidden text-blue-900 dark:text-blue-100">
-                                    {message.toolInput}
-                                  </pre>
-                                </details>
-                              </div>
-                            )}
-                          </details>
+                          <div className="mt-2 text-sm text-blue-700 dark:text-blue-300">
+                            Read{' '}
+                            <button 
+                              onClick={() => onFileOpen && onFileOpen(input.file_path)}
+                              className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline font-mono"
+                            >
+                              {filename}
+                            </button>
+                          </div>
                         );
                       }
                     } catch (e) {
@@ -881,6 +858,61 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     })()}
                   </div>
                 </div>
+              </div>
+            ) : message.isToolUse && message.toolName === 'Read' ? (
+              // Simple Read tool indicator
+              (() => {
+                try {
+                  const input = JSON.parse(message.toolInput);
+                  if (input.file_path) {
+                    const filename = input.file_path.split('/').pop();
+                    return (
+                      <div className="bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-300 dark:border-blue-600 pl-3 py-1 mb-2 text-sm text-blue-700 dark:text-blue-300">
+                        📖 Read{' '}
+                        <button 
+                          onClick={() => onFileOpen && onFileOpen(input.file_path)}
+                          className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline font-mono"
+                        >
+                          {filename}
+                        </button>
+                      </div>
+                    );
+                  }
+                } catch (e) {
+                  return (
+                    <div className="bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-300 dark:border-blue-600 pl-3 py-1 mb-2 text-sm text-blue-700 dark:text-blue-300">
+                      📖 Read file
+                    </div>
+                  );
+                }
+              })()
+            ) : message.isToolUse && message.toolName === 'TodoWrite' ? (
+              // Simple TodoWrite tool indicator with tasks
+              (() => {
+                try {
+                  const input = JSON.parse(message.toolInput);
+                  if (input.todos && Array.isArray(input.todos)) {
+                    return (
+                      <div className="bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-300 dark:border-blue-600 pl-3 py-1 mb-2">
+                        <div className="text-sm text-blue-700 dark:text-blue-300 mb-2">
+                          📝 Update todo list
+                        </div>
+                        <TodoList todos={input.todos} />
+                      </div>
+                    );
+                  }
+                } catch (e) {
+                  return (
+                    <div className="bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-300 dark:border-blue-600 pl-3 py-1 mb-2 text-sm text-blue-700 dark:text-blue-300">
+                      📝 Update todo list
+                    </div>
+                  );
+                }
+              })()
+            ) : message.isToolUse && message.toolName === 'TodoRead' ? (
+              // Simple TodoRead tool indicator
+              <div className="bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-300 dark:border-blue-600 pl-3 py-1 mb-2 text-sm text-blue-700 dark:text-blue-300">
+                📋 Read todo list
               </div>
             ) : (
               <div className="text-sm text-gray-700 dark:text-gray-300">
@@ -1400,19 +1432,45 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   toolResult: null // Will be updated when result comes in
                 }]);
               } else if (part.type === 'text' && part.text?.trim()) {
+                // Check for usage limit message and format it user-friendly
+                let content = part.text;
+                if (content.includes('Claude AI usage limit reached|')) {
+                  const parts = content.split('|');
+                  if (parts.length === 2) {
+                    const timestamp = parseInt(parts[1]);
+                    if (!isNaN(timestamp)) {
+                      const resetTime = new Date(timestamp * 1000);
+                      content = `Claude AI usage limit reached. The limit will reset on ${resetTime.toLocaleDateString()} at ${resetTime.toLocaleTimeString()}.`;
+                    }
+                  }
+                }
+                
                 // Add regular text message
                 setChatMessages(prev => [...prev, {
                   type: 'assistant',
-                  content: part.text,
+                  content: content,
                   timestamp: new Date()
                 }]);
               }
             }
           } else if (typeof messageData.content === 'string' && messageData.content.trim()) {
+            // Check for usage limit message and format it user-friendly
+            let content = messageData.content;
+            if (content.includes('Claude AI usage limit reached|')) {
+              const parts = content.split('|');
+              if (parts.length === 2) {
+                const timestamp = parseInt(parts[1]);
+                if (!isNaN(timestamp)) {
+                  const resetTime = new Date(timestamp * 1000);
+                  content = `Claude AI usage limit reached. The limit will reset on ${resetTime.toLocaleDateString()} at ${resetTime.toLocaleTimeString()}.`;
+                }
+              }
+            }
+            
             // Add regular text message
             setChatMessages(prev => [...prev, {
               type: 'assistant',
-              content: messageData.content,
+              content: content,
               timestamp: new Date()
             }]);
           }
