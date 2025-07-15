@@ -41,8 +41,10 @@ import { spawnClaude, abortClaudeSession } from './claude-cli.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
 import mcpRoutes from './routes/mcp.js';
+import tunnelRoutes from './routes/tunnel.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
+import tunnelService from './services/tunnelService.js';
 
 // File system watcher for projects folder
 let projectsWatcher = null;
@@ -175,6 +177,9 @@ app.use('/api/git', authenticateToken, gitRoutes);
 // MCP API Routes (protected)
 app.use('/api/mcp', authenticateToken, mcpRoutes);
 
+// Tunnel API Routes (protected)
+app.use('/api/tunnel', authenticateToken, tunnelRoutes);
+
 // Static files served after API routes
 app.use(express.static(path.join(__dirname, '../dist')));
 
@@ -185,9 +190,13 @@ app.get('/api/config', authenticateToken, (req, res) => {
   
   console.log('Config API called - Returning host:', host, 'Protocol:', protocol);
   
+  // Get tunnel status
+  const tunnelStatus = tunnelService.getStatus();
+  
   res.json({
     serverPort: PORT,
-    wsUrl: `${protocol}://${host}`
+    wsUrl: `${protocol}://${host}`,
+    tunnel: tunnelStatus
   });
 });
 
@@ -889,7 +898,14 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
 
 // Serve React app for all other routes
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../dist/index.html'));
+  if (process.env.NODE_ENV === 'development') {
+    // In development, redirect to Vite dev server
+    const vitePort = process.env.VITE_PORT || 3001;
+    res.redirect(`http://localhost:${vitePort}${req.url}`);
+  } else {
+    // In production, serve the built index.html
+    res.sendFile(path.join(__dirname, '../dist/index.html'));
+  }
 });
 
 // Helper function to convert permissions to rwx format

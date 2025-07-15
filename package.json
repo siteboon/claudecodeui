@@ -53,6 +53,8 @@
     "react-markdown": "^10.1.0",
     "react-router-dom": "^6.8.1",
     "tailwind-merge": "^3.3.1",
+    "tunnelmole": "^2.4.0",
+    "qrcode": "^1.5.3",
     "ws": "^8.14.2",
     "xterm": "^5.3.0",
     "xterm-addon-fit": "^0.8.0"
