@@ -16,6 +16,7 @@ function ToolsSettings({ isOpen, onClose }) {
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null);
   const [projectSortOrder, setProjectSortOrder] = useState('name');
+  const [executablePath, setExecutablePath] = useState('');
 
   // MCP server management state
   const [mcpServers, setMcpServers] = useState([]);
@@ -127,8 +128,8 @@ function ToolsSettings({ isOpen, onClose }) {
         await deleteMcpServer(editingMcpServer.id, 'user');
       }
       
-      // Use Claude CLI to add the server
-      const response = await fetch('/api/mcp/cli/add', {
+      // Use direct configuration API to add the server
+      const response = await fetch('/api/mcp/servers', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -137,11 +138,14 @@ function ToolsSettings({ isOpen, onClose }) {
         body: JSON.stringify({
           name: serverData.name,
           type: serverData.type,
-          command: serverData.config?.command,
-          args: serverData.config?.args || [],
-          url: serverData.config?.url,
-          headers: serverData.config?.headers || {},
-          env: serverData.config?.env || {}
+          scope: 'user',
+          config: {
+            command: serverData.config?.command,
+            args: serverData.config?.args || [],
+            url: serverData.config?.url,
+            headers: serverData.config?.headers || {},
+            env: serverData.config?.env || {}
+          }
         })
       });
       
@@ -167,8 +171,8 @@ function ToolsSettings({ isOpen, onClose }) {
     try {
       const token = localStorage.getItem('auth-token');
       
-      // Use Claude CLI to remove the server
-      const response = await fetch(`/api/mcp/cli/remove/${serverId}`, {
+      // Use direct configuration API to remove the server
+      const response = await fetch(`/api/mcp/servers/${serverId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -285,12 +289,14 @@ function ToolsSettings({ isOpen, onClose }) {
         setDisallowedTools(settings.disallowedTools || []);
         setSkipPermissions(settings.skipPermissions || false);
         setProjectSortOrder(settings.projectSortOrder || 'name');
+        setExecutablePath(settings.executablePath || '');
       } else {
         // Set defaults
         setAllowedTools([]);
         setDisallowedTools([]);
         setSkipPermissions(false);
         setProjectSortOrder('name');
+        setExecutablePath('');
       }
 
       // Load MCP servers from API
@@ -302,6 +308,7 @@ function ToolsSettings({ isOpen, onClose }) {
       setDisallowedTools([]);
       setSkipPermissions(false);
       setProjectSortOrder('name');
+      setExecutablePath('');
     }
   };
 
@@ -315,6 +322,7 @@ function ToolsSettings({ isOpen, onClose }) {
         disallowedTools,
         skipPermissions,
         projectSortOrder,
+        executablePath,
         lastUpdated: new Date().toISOString()
       };
       
@@ -624,6 +632,33 @@ function ToolsSettings({ isOpen, onClose }) {
             {/* Tools Tab */}
             {activeTab === 'tools' && (
               <div className="space-y-6 md:space-y-8">
+            
+            {/* Executable Path */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <Settings className="w-5 h-5 text-blue-500" />
+                <h3 className="text-lg font-medium text-foreground">
+                  Claude Executable Path
+                </h3>
+              </div>
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                <div className="space-y-2">
+                  <div className="text-sm text-gray-600 dark:text-gray-300">
+                    Specify a custom path to the Claude CLI executable (optional)
+                  </div>
+                  <Input
+                    value={executablePath}
+                    onChange={(e) => setExecutablePath(e.target.value)}
+                    placeholder="e.g., /usr/local/bin/claude or C:\Program Files\claude\claude.exe"
+                    className="w-full h-10 touch-manipulation font-mono text-sm"
+                    style={{ fontSize: '14px' }}
+                  />
+                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                    Leave empty to use the default 'claude' command from PATH
+                  </div>
+                </div>
+              </div>
+            </div>
             
             {/* Skip Permissions */}
             <div className="space-y-4">

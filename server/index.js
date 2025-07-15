@@ -51,7 +51,7 @@ const connectedClients = new Set();
 // Setup file system watcher for Claude projects folder using chokidar
 async function setupProjectsWatcher() {
   const chokidar = (await import('chokidar')).default;
-  const claudeProjectsPath = path.join(process.env.HOME, '.claude', 'projects');
+  const claudeProjectsPath = process.env.CLAUDE_PROJECTS_PATH || path.join(process.env.HOME, '.claude', 'projects');
   
   if (projectsWatcher) {
     projectsWatcher.close();
@@ -175,8 +175,10 @@ app.use('/api/git', authenticateToken, gitRoutes);
 // MCP API Routes (protected)
 app.use('/api/mcp', authenticateToken, mcpRoutes);
 
-// Static files served after API routes
-app.use(express.static(path.join(__dirname, '../dist')));
+// Static files served after API routes (only in production)
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, '../dist')));
+}
 
 // API Routes (protected)
 app.get('/api/config', authenticateToken, (req, res) => {
@@ -887,10 +889,23 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
   }
 });
 
-// Serve React app for all other routes
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../dist/index.html'));
-});
+// Serve React app for all other routes (only in production)
+if (process.env.NODE_ENV === 'production') {
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../dist/index.html'));
+  });
+} else {
+  // In development, return a message indicating frontend is served by Vite
+  app.get('*', (req, res) => {
+    res.json({
+      message: 'Claude Code UI Backend API',
+      environment: 'development',
+      frontend: `http://localhost:${process.env.VITE_PORT || 3009}`,
+      backend: `http://localhost:${PORT}`,
+      version: '1.5.0'
+    });
+  });
+}
 
 // Helper function to convert permissions to rwx format
 function permToRwx(perm) {
@@ -973,7 +988,7 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
   });
 }
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3008;
 
 // Initialize database and start server
 async function startServer() {

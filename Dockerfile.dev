@@ -1,0 +1,41 @@
+# Development Dockerfile for Claude Code UI
+
+FROM node:20-alpine
+
+# Install system dependencies
+RUN apk add --no-cache \
+    curl \
+    git \
+    openssh-client \
+    python3 \
+    make \
+    g++ \
+    sqlite \
+    bash \
+    sudo
+
+# Create user with same UID as host user for proper file permissions
+# Note: UID 1000 and GID 1000 are already used by 'node' user in node:alpine
+RUN echo 'node ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install all dependencies (including devDependencies)
+RUN npm install && \
+    npm cache clean --force
+
+# Copy application files
+COPY . .
+
+# Create data directory and fix ownership
+RUN mkdir -p /app/server/database && \
+    chown -R node:node /app
+
+# Expose ports
+EXPOSE 2008 2009
+
+# Development command (will be overridden by docker-compose.dev.yml)
+CMD ["npm", "run", "dev"]

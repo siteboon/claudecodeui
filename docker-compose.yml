@@ -1,0 +1,80 @@
+services:
+  # Claude Code UI Application
+  app:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: claude-code-ui
+    ports:
+      - "2008:2008"  # Backend API
+      - "2009:2009"  # Frontend Vite dev server
+    environment:
+      # Server configuration
+      - NODE_ENV=production
+      - PORT=2008
+      - VITE_PORT=2009
+      - DB_PATH=/app/data/auth.db
+      
+      # Container's internal home directory
+      - HOME=/home/nodejs
+      
+      # Authentication configuration
+      - DEFAULT_ADMIN_USERNAME=${DEFAULT_ADMIN_USERNAME:-admin}
+      - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD:-change-this-secure-password}
+      - JWT_SECRET=${JWT_SECRET:-your-super-secure-jwt-secret-key-here}
+      
+      # Optional Claude API configuration (user can override)
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      
+      # WebSocket configuration
+      - WS_PORT=2008
+      
+    volumes:
+      # Persist database
+      - ./data:/app/data
+      
+      # Mount project directories for Claude to access
+      # Use HOST_WORKSPACE_PATH for platform-agnostic configuration
+      - ${HOST_WORKSPACE_PATH:-${HOME}/Desktop}:/workspace:ro
+      
+      # Mount user's home directory to container's nodejs user home
+      # This ensures Claude can find its configuration files
+      - ${USER_HOME_DIR:-${HOME}}:/home/nodejs:ro
+      
+      # Mount claude executable if custom path is needed
+      - ${CLAUDE_EXECUTABLE_PATH:-/usr/local/bin/claude}:/usr/local/bin/claude:ro
+      
+    networks:
+      - claude-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:2008/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  # Optional: Nginx reverse proxy for production
+  nginx:
+    image: nginx:alpine
+    container_name: claude-code-ui-proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - app
+    networks:
+      - claude-network
+    profiles:
+      - production
+
+networks:
+  claude-network:
+    driver: bridge
+
+volumes:
+  data:
+    driver: local

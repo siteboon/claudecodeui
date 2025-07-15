@@ -1,0 +1,73 @@
+services:
+  # Development configuration for Claude Code UI
+  app-dev:
+    build: 
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: claude-code-ui-dev
+    # user: "1000:1000"  # Temporarily disabled for testing
+    ports:
+      - "2008:2008"  # Backend API
+      - "2009:2009"  # Frontend Vite dev server
+    environment:
+      - NODE_ENV=development
+      - PORT=2008
+      - VITE_PORT=2009
+      - DB_PATH=/app/server/database/auth.db
+      # Container's internal home directory
+      - HOME=/home/user
+      # Map host paths to container paths
+      - CLAUDE_PROJECTS_PATH=/home/user/.claude/projects
+      - CLAUDE_CONFIG_DIR=/home/user/.claude
+      
+      # Authentication
+      - DEFAULT_ADMIN_USERNAME=${DEFAULT_ADMIN_USERNAME:-admin}
+      - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD:-change-this-secure-password}
+      - JWT_SECRET=${JWT_SECRET:-your-super-secure-jwt-secret-key-here}
+      
+      # Hot reload for development
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+      
+    volumes:
+      # Mount source code for hot reload
+      - ./src:/app/src:delegated
+      - ./server:/app/server:delegated
+      - ./public:/app/public:delegated
+      - ./index.html:/app/index.html:delegated
+      - ./vite.config.js:/app/vite.config.js:delegated
+      - ./tailwind.config.js:/app/tailwind.config.js:delegated
+      - ./postcss.config.js:/app/postcss.config.js:delegated
+      
+      # Persist node_modules
+      - node_modules:/app/node_modules
+      
+      # Persist database
+      - ./server/database:/app/server/database
+      
+      # Mount entire user home directory for full project access
+      # Maps host home directory to container's /home/user
+      - ${USER_HOME_DIR:-${HOME}}:/home/user:rw
+      
+      # Mount Claude CLI data directory for project discovery
+      # This is already covered by mounting the entire home directory above
+      # but included for clarity and potential custom configurations
+      - ${CLAUDE_CONFIG_DIR:-${HOME}/.claude}:/home/user/.claude:rw
+      
+      # Mount Claude configuration file if it exists
+      # Supports custom location or default to user's home
+      - ${CLAUDE_CONFIG_FILE:-${HOME}/.claude.json}:/home/user/.claude.json:ro
+      
+    command: npm run dev
+    stdin_open: true
+    tty: true
+    networks:
+      - claude-network-dev
+
+networks:
+  claude-network-dev:
+    driver: bridge
+
+volumes:
+  node_modules:
+    driver: local
