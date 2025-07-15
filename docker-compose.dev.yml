@@ -14,9 +14,11 @@ services:
       - PORT=2008
       - VITE_PORT=2009
       - DB_PATH=/app/server/database/auth.db
-      - HOME=${USER_HOME_DIR:-/home/user}
-      - CLAUDE_PROJECTS_PATH=${CLAUDE_PROJECTS_PATH:-${HOME}/.claude/projects}
-      - CLAUDE_CONFIG_DIR=${CLAUDE_CONFIG_DIR:-${HOME}/.claude}
+      # Container's internal home directory
+      - HOME=/home/user
+      # Map host paths to container paths
+      - CLAUDE_PROJECTS_PATH=/home/user/.claude/projects
+      - CLAUDE_CONFIG_DIR=/home/user/.claude
       
       # Authentication
       - DEFAULT_ADMIN_USERNAME=${DEFAULT_ADMIN_USERNAME:-admin}
@@ -44,12 +46,16 @@ services:
       - ./server/database:/app/server/database
       
       # Mount entire user home directory for full project access
-      - ${USER_HOME_DIR:-/home/user}:${USER_HOME_DIR:-/home/user}:rw
+      # Maps host home directory to container's /home/user
+      - ${USER_HOME_DIR:-${HOME}}:/home/user:rw
       
       # Mount Claude CLI data directory for project discovery
-      - ${CLAUDE_CONFIG_DIR:-${HOME}/.claude}:${CLAUDE_CONFIG_DIR:-${HOME}/.claude}:rw
+      # This is already covered by mounting the entire home directory above
+      # but included for clarity and potential custom configurations
+      - ${CLAUDE_CONFIG_DIR:-${HOME}/.claude}:/home/user/.claude:rw
       
       # Mount Claude configuration file if it exists
+      # Supports custom location or default to user's home
       - ${CLAUDE_CONFIG_FILE:-${HOME}/.claude.json}:/home/user/.claude.json:ro
       
     command: npm run dev

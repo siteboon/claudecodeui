@@ -28,9 +28,21 @@ ANTHROPIC_API_KEY=sk-ant-your-api-key-here
 DEFAULT_ADMIN_USERNAME=admin
 DEFAULT_ADMIN_PASSWORD=your-secure-password
 
-# Optional: Custom workspace path
-HOST_WORKSPACE_PATH=/Users/yourusername/Projects
+# Platform-specific paths (examples)
+# macOS:
+USER_HOME_DIR=/Users/yourusername
+HOST_WORKSPACE_PATH=/Users/yourusername/Desktop
+
+# Linux:
+USER_HOME_DIR=/home/yourusername
+HOST_WORKSPACE_PATH=/home/yourusername/Desktop
+
+# Windows (use forward slashes):
+USER_HOME_DIR=C:/Users/yourusername
+HOST_WORKSPACE_PATH=C:/Users/yourusername/Desktop
 ```
+
+**Note**: The `${HOME}` environment variable works automatically on macOS and Linux. Windows users should explicitly set paths.
 
 ### 3. Run with Docker Compose
 
@@ -74,9 +86,12 @@ claudecodeui/
 | `PORT` | Backend server port | `2008` | ❌ |
 | `VITE_PORT` | Frontend dev server port | `2009` | ❌ |
 | `JWT_SECRET` | JWT signing secret | auto-generated | ❌ |
+| `USER_HOME_DIR` | Host user's home directory | `${HOME}` | ❌ |
 | `WORKSPACE_PATH` | Internal workspace path | `/workspace` | ❌ |
 | `HOST_WORKSPACE_PATH` | Host directory to mount | `${HOME}/Desktop` | ❌ |
 | `CLAUDE_EXECUTABLE_PATH` | Custom Claude CLI path | `/usr/local/bin/claude` | ❌ |
+| `CLAUDE_CONFIG_DIR` | Claude config directory | `${HOME}/.claude` | ❌ |
+| `CLAUDE_CONFIG_FILE` | Claude config file | `${HOME}/.claude.json` | ❌ |
 
 ### Volume Mounts
 
@@ -261,6 +276,58 @@ docker compose run -v /home/user/projects:/workspace/projects:ro \\
   -v /opt/repos:/workspace/repos:ro \\
   app-dev
 ```
+
+## 🌍 Cross-Platform Configuration
+
+### Platform-Specific Paths
+
+The Docker setup supports macOS, Linux, and Windows. Here's how to configure paths for each platform:
+
+#### macOS
+```bash
+# Home directories typically start with /Users
+USER_HOME_DIR=/Users/yourusername
+HOST_WORKSPACE_PATH=/Users/yourusername/Desktop
+CLAUDE_CONFIG_DIR=/Users/yourusername/.claude
+```
+
+#### Linux
+```bash
+# Home directories typically start with /home
+USER_HOME_DIR=/home/yourusername
+HOST_WORKSPACE_PATH=/home/yourusername/Desktop
+CLAUDE_CONFIG_DIR=/home/yourusername/.claude
+```
+
+#### Windows
+```bash
+# Use forward slashes for Windows paths in Docker
+USER_HOME_DIR=C:/Users/yourusername
+HOST_WORKSPACE_PATH=C:/Users/yourusername/Desktop
+CLAUDE_CONFIG_DIR=C:/Users/yourusername/.claude
+```
+
+### Automatic Path Detection
+
+On macOS and Linux, you can use the `${HOME}` environment variable which automatically expands to your home directory:
+
+```bash
+# Works on macOS and Linux
+USER_HOME_DIR=${HOME}
+HOST_WORKSPACE_PATH=${HOME}/Desktop
+CLAUDE_CONFIG_DIR=${HOME}/.claude
+```
+
+### Important Notes
+
+1. **Volume Mounts**: The Docker containers map your host directories to standardized paths inside the container:
+   - Your home directory → `/home/user` (development) or `/home/nodejs` (production)
+   - Your workspace → `/workspace`
+   - Claude config → `/home/user/.claude`
+
+2. **Windows Users**: Always use forward slashes (`/`) instead of backslashes (`\`) in paths
+
+3. **Custom Paths**: If your Claude configuration or projects are in non-standard locations, update the respective environment variables
 
 ## 🔧 Troubleshooting
 

@@ -15,6 +15,14 @@ services:
       - VITE_PORT=2009
       - DB_PATH=/app/data/auth.db
       
+      # Container's internal home directory
+      - HOME=/home/nodejs
+      
+      # Authentication configuration
+      - DEFAULT_ADMIN_USERNAME=${DEFAULT_ADMIN_USERNAME:-admin}
+      - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD:-change-this-secure-password}
+      - JWT_SECRET=${JWT_SECRET:-your-super-secure-jwt-secret-key-here}
+      
       # Optional Claude API configuration (user can override)
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       
@@ -26,10 +34,15 @@ services:
       - ./data:/app/data
       
       # Mount project directories for Claude to access
-      - ${HOME}/Desktop:/workspace:ro
+      # Use HOST_WORKSPACE_PATH for platform-agnostic configuration
+      - ${HOST_WORKSPACE_PATH:-${HOME}/Desktop}:/workspace:ro
+      
+      # Mount user's home directory to container's nodejs user home
+      # This ensures Claude can find its configuration files
+      - ${USER_HOME_DIR:-${HOME}}:/home/nodejs:ro
       
       # Mount claude executable if custom path is needed
-      - ${CLAUDE_PATH:-/usr/local/bin/claude}:/usr/local/bin/claude:ro
+      - ${CLAUDE_EXECUTABLE_PATH:-/usr/local/bin/claude}:/usr/local/bin/claude:ro
       
     networks:
       - claude-network
