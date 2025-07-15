@@ -19,17 +19,17 @@ router.get('/servers', async (req, res) => {
     console.log('📋 Reading MCP servers from Claude configuration');
     
     // Get the Claude configuration path
-    // Try multiple locations for better Docker compatibility
+    // Try multiple locations for better Docker and cross-platform compatibility
     const possiblePaths = [
-      // Direct file mount in Docker
-      '/home/user/.claude.json',
+      // Direct file mount in Docker (when using environment variable)
+      process.env.CLAUDE_CONFIG_FILE,
       // Environment variable based path
       path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude'), '..', '.claude.json'),
       // Home directory based path
       path.join(os.homedir(), '.claude.json'),
       // Fallback to standard location
       path.join(process.env.HOME || os.homedir(), '.claude.json')
-    ];
+    ].filter(Boolean); // Remove any undefined/null values
     
     let claudeConfigPath = null;
     for (const testPath of possiblePaths) {
@@ -141,8 +141,10 @@ router.post('/servers', async (req, res) => {
     const { name, type = 'stdio', scope = 'user', config } = req.body;
     console.log('➕ Adding MCP server to configuration:', name);
     
-    // Get the Claude configuration path
-    const claudeConfigPath = '/home/user/.claude.json';
+    // Get the Claude configuration path using platform-agnostic approach
+    const claudeConfigPath = process.env.CLAUDE_CONFIG_FILE || 
+      path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude'), '..', '.claude.json') ||
+      path.join(os.homedir(), '.claude.json');
     
     // Read current configuration
     const configContent = await fs.readFile(claudeConfigPath, 'utf8');
@@ -182,8 +184,10 @@ router.delete('/servers/:name', async (req, res) => {
     const { name } = req.params;
     console.log('🗑️ Removing MCP server from configuration:', name);
     
-    // Get the Claude configuration path
-    const claudeConfigPath = '/home/user/.claude.json';
+    // Get the Claude configuration path using platform-agnostic approach
+    const claudeConfigPath = process.env.CLAUDE_CONFIG_FILE || 
+      path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude'), '..', '.claude.json') ||
+      path.join(os.homedir(), '.claude.json');
     
     // Read current configuration
     const configContent = await fs.readFile(claudeConfigPath, 'utf8');
