@@ -631,8 +631,12 @@ function AppContent() {
           autoExpandTools={autoExpandTools}
           showRawParameters={showRawParameters}
           autoScrollToBottom={autoScrollToBottom}
+          isStopping={isStopping}
+          handleStop={handleStop}
+          controllerRef={controllerRef}
           sendByCtrlEnter={sendByCtrlEnter}
         />
+            
       </div>
 
       {/* Mobile Bottom Navigation */}
@@ -704,3 +708,15 @@ function App() {
 }
 
 export default App;
+
+// ========== Custom Stop Button Logic ==========
+import { useRef } from 'react';
+const [isStopping, setIsStopping] = useState(false);
+const controllerRef = useRef(null);
+
+const handleStop = () => {
+  if (controllerRef.current) {
+    controllerRef.current.abort();
+    setIsStopping(true);
+  }
+};

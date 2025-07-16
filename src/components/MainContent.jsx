@@ -359,3 +359,34 @@ function MainContent({
 }
 
 export default React.memo(MainContent);
+
+// ========== Custom Claude generation logic ==========
+import { useState } from 'react';
+const [generationResponse, setGenerationResponse] = useState(null);
+
+const startClaudeGeneration = async () => {
+  setGenerationResponse(null);
+  controllerRef.current = new AbortController();
+
+  try {
+    const res = await fetch('/api/generate', {
+      method: 'POST',
+      signal: controllerRef.current.signal,
+      body: JSON.stringify({ prompt: 'Hello Claude' }),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const data = await res.json();
+    setGenerationResponse(data.output);
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      console.log('Claude generation aborted.');
+    } else {
+      console.error('Error:', error);
+    }
+  } finally {
+    controllerRef.current = null;
+  }
+};
