@@ -41,12 +41,39 @@ import { spawnClaude, abortClaudeSession } from './claude-cli.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
 import mcpRoutes from './routes/mcp.js';
+import webhookRoutes, { setConnectedClients } from './routes/webhooks.js';
+import audioRoutes, { setConnectedClients as setAudioConnectedClients } from './routes/audio.js';
+import settingsRoutes from './routes/settings.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
+import { createAudioNotification, isTTSEnabled } from './utils/audioNotifications.js';
+
+// Broadcast audio notification to all connected chat clients
+function broadcastAudioNotification(messageType, customMessage = '', metadata = {}) {
+  if (!isTTSEnabled()) return;
+  
+  const notification = createAudioNotification(messageType, customMessage, metadata);
+  
+  console.log(`🔊 Broadcasting audio notification: ${notification.message}`);
+  
+  connectedClients.forEach(client => {
+    if (client.readyState === 1) { // WebSocket.OPEN
+      try {
+        client.send(JSON.stringify(notification));
+      } catch (error) {
+        console.error('❌ Error sending audio notification:', error.message);
+      }
+    }
+  });
+}
 
 // File system watcher for projects folder
 let projectsWatcher = null;
 const connectedClients = new Set();
+
+// Setup webhook integration with connected clients
+setConnectedClients(connectedClients);
+setAudioConnectedClients(connectedClients);
 
 // Setup file system watcher for Claude projects folder using chokidar
 async function setupProjectsWatcher() {
@@ -174,6 +201,15 @@ app.use('/api/git', authenticateToken, gitRoutes);
 
 // MCP API Routes (protected)
 app.use('/api/mcp', authenticateToken, mcpRoutes);
+
+// Webhook API Routes (unprotected for external integrations)
+app.use('/api/webhooks', webhookRoutes);
+
+// Audio API Routes (unprotected for TTS integration)
+app.use('/api/audio', audioRoutes);
+
+// Settings API Routes (mixed protection) - specific routes first
+app.use('/api/settings', settingsRoutes); // All settings routes (will handle auth internally)
 
 // Static files served after API routes
 app.use(express.static(path.join(__dirname, '../dist')));
@@ -459,6 +495,13 @@ function handleChatConnection(ws) {
         console.log('💬 User message:', data.command || '[Continue/Resume]');
         console.log('📁 Project:', data.options?.projectPath || 'Unknown');
         console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
+        
+        // Send session start notification
+        broadcastAudioNotification('session_start', '', { 
+          projectPath: data.options?.projectPath,
+          sessionId: data.options?.sessionId 
+        });
+        
         await spawnClaude(data.command, data.options, ws);
       } else if (data.type === 'abort-session') {
         console.log('🛑 Abort session request:', data.sessionId);
@@ -467,6 +510,22 @@ function handleChatConnection(ws) {
           type: 'session-aborted',
           sessionId: data.sessionId,
           success
+        }));
+        
+        // Send session end notification
+        broadcastAudioNotification('session_end', '', { sessionId: data.sessionId });
+      } else if (data.type === 'trigger-audio-notification') {
+        // Allow manual audio notification triggering for testing/hooks integration
+        console.log('🔊 Manual audio notification trigger:', data.messageType);
+        broadcastAudioNotification(
+          data.messageType || 'input', 
+          data.customMessage || '', 
+          data.metadata || {}
+        );
+        ws.send(JSON.stringify({
+          type: 'audio-notification-sent',
+          messageType: data.messageType,
+          success: true
         }));
       }
     } catch (error) {
