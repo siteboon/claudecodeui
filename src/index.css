@@ -434,7 +434,9 @@
 /* Mobile optimizations and components */
 @layer components {
   /* Mobile touch optimization and safe areas */
-  @media (max-width: 768px) {
+}
+
+@media (max-width: 768px) {
     * {
       touch-action: manipulation;
       -webkit-tap-highlight-color: transparent;
@@ -512,107 +514,104 @@
       opacity: 1 !important;
     }
     
-    @media (hover: none) and (pointer: coarse) {
-      .group-hover\:opacity-100 {
-        opacity: 1 !important;
-      }
-      
-      .hover\:bg-gray-50:hover,
-      .hover\:bg-gray-100:hover,
-      .hover\:bg-red-200:hover,
-      .dark\:hover\:bg-gray-700:hover,
-      .dark\:hover\:bg-red-900\/50:hover {
-        background-color: inherit;
-      }
-    }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .group-hover\:opacity-100 {
+    opacity: 1 !important;
   }
   
-  /* Touch device optimizations for all screen sizes */
-  @media (hover: none) and (pointer: coarse) {
-    .touch\:opacity-100 {
-      opacity: 1 !important;
-    }
-    
-    /* Completely disable hover states on touch devices */
-    * {
-      -webkit-tap-highlight-color: transparent !important;
-    }
-    
-    /* Preserve checkbox visibility on touch devices */
-    input[type="checkbox"] {
-      -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1) !important;
-      opacity: 1 !important;
-    }
-    
-    /* Only disable hover states for interactive elements, not containers */
-    button:hover,
-    [role="button"]:hover,
-    .cursor-pointer:hover,
-    a:hover,
-    .hover\:bg-gray-50:hover,
-    .hover\:bg-gray-100:hover,
-    .hover\:text-gray-900:hover,
-    .hover\:opacity-100:hover {
-      background-color: inherit !important;
-      color: inherit !important;
-      opacity: inherit !important;
-      transform: inherit !important;
-    }
-    
-    /* Preserve backgrounds for containers and modals */
-    .fixed:hover,
-    .modal:hover,
-    .bg-white:hover,
-    .bg-gray-800:hover,
-    .bg-gray-900:hover,
-    [class*="bg-"]:hover {
-      background-color: revert !important;
-    }
-    
-    /* Force buttons to be immediately clickable */
-    button, [role="button"], .cursor-pointer {
-      cursor: pointer !important;
-      pointer-events: auto !important;
-    }
-    
-    /* Keep active states for immediate feedback */
-    .active\:scale-\[0\.98\]:active,
-    .active\:scale-95:active {
-      transform: scale(0.98) !important;
-    }
+  .hover\:bg-gray-50:hover,
+  .hover\:bg-gray-100:hover,
+  .hover\:bg-red-200:hover,
+  .dark\:hover\:bg-gray-700:hover,
+  .dark\:hover\:bg-red-900\/50:hover {
+    background-color: inherit;
   }
   
-  /* Safe area support for iOS devices */
-  .ios-bottom-safe {
-    padding-bottom: max(env(safe-area-inset-bottom), 12px);
+  .touch\:opacity-100 {
+    opacity: 1 !important;
   }
   
-  @media screen and (max-width: 768px) {
-    .chat-input-mobile {
-      padding-bottom: calc(60px + max(env(safe-area-inset-bottom), 12px));
-    }
+  /* Completely disable hover states on touch devices */
+  * {
+    -webkit-tap-highlight-color: transparent !important;
   }
+  
+  /* Preserve checkbox visibility on touch devices */
+  input[type="checkbox"] {
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1) !important;
+    opacity: 1 !important;
+  }
+  
+  /* Only disable hover states for interactive elements, not containers */
+  button:hover,
+  [role="button"]:hover,
+  .cursor-pointer:hover,
+  a:hover,
+  .hover\:bg-gray-50:hover,
+  .hover\:bg-gray-100:hover,
+  .hover\:text-gray-900:hover,
+  .hover\:opacity-100:hover {
+    background-color: inherit !important;
+    color: inherit !important;
+    opacity: inherit !important;
+    transform: inherit !important;
+  }
+  
+  /* Preserve backgrounds for containers and modals */
+  .fixed:hover,
+  .modal:hover,
+  .bg-white:hover,
+  .bg-gray-800:hover,
+  .bg-gray-900:hover,
+  [class*="bg-"]:hover {
+    background-color: revert !important;
+  }
+  
+  /* Force buttons to be immediately clickable */
+  button, [role="button"], .cursor-pointer {
+    cursor: pointer !important;
+    pointer-events: auto !important;
+  }
+  
+  /* Keep active states for immediate feedback */
+  .active\:scale-\[0\.98\]:active,
+  .active\:scale-95:active {
+    transform: scale(0.98) !important;
+  }
+}
 
-  /* Text wrapping improvements */
-  .chat-message {
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-    hyphens: auto;
-  }
+/* Safe area support for iOS devices */
+.ios-bottom-safe {
+  padding-bottom: max(env(safe-area-inset-bottom), 12px);
+}
 
-  /* Force wrap long URLs and code */
-  .chat-message pre,
-  .chat-message code {
-    white-space: pre-wrap !important;
-    word-break: break-all;
-    overflow-wrap: break-word;
+@media screen and (max-width: 768px) {
+  .chat-input-mobile {
+    padding-bottom: calc(60px + max(env(safe-area-inset-bottom), 12px));
   }
+}
 
-  /* Prevent horizontal scroll in chat area */
-  .chat-message * {
-    max-width: 100%;
-    box-sizing: border-box;
-  }
+/* Text wrapping improvements */
+.chat-message {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+
+/* Force wrap long URLs and code */
+.chat-message pre,
+.chat-message code {
+  white-space: pre-wrap !important;
+  word-break: break-all;
+  overflow-wrap: break-word;
+}
+
+/* Prevent horizontal scroll in chat area */
+.chat-message * {
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 /* Hide markdown backticks in prose content */

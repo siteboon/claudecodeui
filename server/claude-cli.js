@@ -2,6 +2,7 @@ import { spawn } from 'child_process';
 import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
+import { createAudioNotification, isTTSEnabled } from './utils/audioNotifications.js';
 
 let activeClaudeProcesses = new Map(); // Track active processes by session ID
 
@@ -312,6 +313,15 @@ async function spawnClaude(command, options = {}, ws) {
         exitCode: code,
         isNewSession: !sessionId && !!command // Flag to indicate this was a new session
       }));
+      
+      // Send completion audio notification if enabled
+      if (isTTSEnabled()) {
+        const completionNotification = createAudioNotification('complete', '', {
+          exitCode: code,
+          sessionId: finalSessionId
+        });
+        ws.send(JSON.stringify(completionNotification));
+      }
       
       // Clean up temporary image files if any
       if (claudeProcess.tempImagePaths && claudeProcess.tempImagePaths.length > 0) {

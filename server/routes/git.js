@@ -56,7 +56,6 @@ router.get('/status', async (req, res) => {
 
   try {
     const projectPath = await getActualProjectPath(project);
-    console.log('Git status for project:', project, '-> path:', projectPath);
     
     // Validate git repository
     await validateGitRepository(projectPath);
@@ -192,7 +191,6 @@ router.get('/branches', async (req, res) => {
 
   try {
     const projectPath = await getActualProjectPath(project);
-    console.log('Git branches for project:', project, '-> path:', projectPath);
     
     // Validate git repository
     await validateGitRepository(projectPath);

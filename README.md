@@ -39,6 +39,8 @@ A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/cla
 - **File Explorer** - Interactive file tree with syntax highlighting and live editing
 - **Git Explorer** - View, stage and commit your changes. You can also switch branches 
 - **Session Management** - Resume conversations, manage multiple sessions, and track history
+- **TTS Voice Notifications** - Audio notifications with high-quality neural voices (ElevenLabs, Deepgram, OpenAI)
+- **Claude Code Hooks Integration** - Comprehensive lifecycle hooks system for enhanced automation
 
 
 ## Quick Start
@@ -64,7 +66,7 @@ npm install
 3. **Configure environment:**
 ```bash
 cp .env.example .env
-# Edit .env with your preferred settings
+# Edit .env with your preferred settings and TTS API keys (optional)
 ```
 
 4. **Start the application:**
@@ -99,6 +101,86 @@ To use Claude Code's full functionality, you'll need to manually enable tools:
 
 **Recommended approach**: Start with basic tools enabled and add more as needed. You can always adjust these settings later.
 
+## Advanced Configuration
+
+### TTS Voice Notifications Setup
+
+ClaudeCodeUI supports multiple TTS providers for high-quality voice notifications. Configure your preferred provider:
+
+#### Environment Variables
+```bash
+# ElevenLabs (Premium Neural TTS)
+ELEVENLABS_API_KEY=your_elevenlabs_key
+ELEVENLABS_VOICE_ID=WejK3H1m7MI9CHnIjW9K  # Default: Alice
+ELEVENLABS_MODEL=eleven_turbo_v2_5
+
+# Deepgram Aura (Fast, High-Quality)
+DEEPGRAM_API_KEY=your_deepgram_key
+DEEPGRAM_VOICE_MODEL=aura-helios-en  # Options: aura-helios-en, aura-luna-en, etc.
+
+# OpenAI TTS
+OPENAI_API_KEY=your_openai_key
+OPENAI_TTS_VOICE=nova  # Options: nova, alloy, echo, fable, onyx, shimmer
+OPENAI_TTS_MODEL=gpt-4o-mini-tts
+OPENAI_TTS_INSTRUCTIONS="Speak with a professional, friendly tone"
+
+# Personalization
+ENGINEER_NAME=YourName
+TTS_NAME_CHANCE=0.3  # 30% chance to include your name in notifications
+
+# ClaudeCodeUI Integration
+ENABLE_CLAUDECODEUI_NOTIFICATIONS=true
+CLAUDECODEUI_URL=http://localhost:3000
+```
+
+#### Provider Priority
+1. **ElevenLabs** - Highest quality neural voices
+2. **Deepgram Aura** - Fast generation with natural voices  
+3. **OpenAI TTS** - High quality with voice instructions
+4. **pyttsx3** - Offline fallback (no API key required)
+5. **Browser TTS** - Final fallback using Web Speech API
+
+### Claude Code Hooks Configuration
+
+ClaudeCodeUI includes a complete hooks system in the `.claude/hooks/` directory:
+
+#### Hook Types
+- **`notification.py`** - TTS notifications when Claude needs input
+- **`pre_tool_use.py`** - Security validation before tool execution
+- **`post_tool_use.py`** - Event logging after tool completion  
+- **`stop.py`** - AI-generated completion messages
+- **`subagent_stop.py`** - Subagent completion notifications
+
+#### Hooks Configuration (.claude/settings.json)
+```json
+{
+  "hooks": {
+    "notification": ".claude/hooks/notification.py --notify",
+    "pre_tool_use": ".claude/hooks/pre_tool_use.py",
+    "post_tool_use": ".claude/hooks/post_tool_use.py",
+    "stop": ".claude/hooks/stop.py",
+    "subagent_stop": ".claude/hooks/subagent_stop.py"
+  },
+  "tools": {
+    "bash": "enabled",
+    "read": "enabled"
+  }
+}
+```
+
+#### Testing Hooks
+```bash
+# Test notification hook
+uv run .claude/hooks/notification.py --notify
+
+# Test TTS integration
+echo '{"message": "Test notification"}' | uv run .claude/hooks/notification.py --notify
+
+# Check hook logs
+tail -f logs/notification_hook.log
+tail -f logs/claudecodeui_debug.log
+```
+
 ## Usage Guide
 
 ### Core Features
@@ -123,7 +205,38 @@ The UI automatically discovers Claude Code projects from `~/.claude/projects/` a
 - **File Operations** - Create, rename, delete files and directories
 
 #### Git Explorer
+- **Git Status** - View modified, staged, and untracked files with clear indicators
+- **Branch Management** - Switch branches, view commit history, and track changes
+- **Commit Operations** - Stage changes and create commits directly from the interface
+- **Visual Diff** - Compare file changes with syntax-highlighted diff viewer
 
+#### TTS Voice Notifications
+ClaudeCodeUI features an advanced Text-to-Speech system that provides audio notifications when Claude needs your input or completes tasks:
+
+- **Multiple TTS Providers**: Support for ElevenLabs, Deepgram Aura, OpenAI TTS, and offline pyttsx3
+- **High-Quality Neural Voices**: Professional-grade speech synthesis with natural-sounding voices
+- **Backend Audio Streaming**: Server-side audio generation with seamless browser playback
+- **Personalized Notifications**: Configurable engineer name integration with customizable frequency
+- **Automatic Provider Selection**: Intelligent fallback from premium services to local synthesis
+- **Real-time Configuration**: Update TTS settings and API keys through the web interface
+
+**Setup**: Navigate to Settings → Audio Notifications to configure your preferred TTS provider and voice settings.
+
+#### Claude Code Hooks Integration
+ClaudeCodeUI includes a comprehensive hooks system that extends Claude Code's capabilities:
+
+- **Pre-Tool Use Hooks**: Security validation and command blocking before tool execution
+- **Post-Tool Use Hooks**: Event logging and transcript processing after tool completion
+- **Notification Hooks**: TTS audio alerts when Claude requests user input
+- **Stop Hooks**: AI-generated completion messages with continuation control
+- **Subagent Hooks**: Notifications when background tasks complete
+
+**Key Features**:
+- **Security Layer**: Automatically blocks dangerous commands (`rm -rf`, sensitive file access)
+- **Comprehensive Logging**: JSON-formatted event logs for debugging and audit trails
+- **UV Single-File Scripts**: Self-contained Python scripts with embedded dependencies
+- **Environment Integration**: Seamless .env configuration sharing between hooks and UI
+- **Audio Streaming Pipeline**: Backend TTS generation with WebSocket delivery to browser
 
 #### Session Management
 - **Session Persistence** - All conversations automatically saved
@@ -151,14 +264,18 @@ The UI automatically discovers Claude Code projects from `~/.claude/projects/` a
 
 ### Backend (Node.js + Express)
 - **Express Server** - RESTful API with static file serving
-- **WebSocket Server** - Communication for chats and project refresh
-- **Claude CLI Integration** - Process spawning and management
+- **WebSocket Server** - Real-time communication for chats, notifications, and project updates
+- **Claude CLI Integration** - Process spawning and PTY management  
 - **Session Management** - JSONL parsing and conversation persistence
-- **File System API** - Exposing file browser for projects
+- **File System API** - Secure file browser for projects with path validation
+- **TTS Audio Streaming** - Server-side audio generation and streaming endpoints
+- **Hooks Integration** - UV script execution and environment synchronization
 
 ### Frontend (React + Vite)
 - **React 18** - Modern component architecture with hooks
 - **CodeMirror** - Advanced code editor with syntax highlighting
+- **Audio Service** - WebSocket-based audio notification system with fallbacks
+- **Real-time Updates** - Live project file monitoring and session synchronization
 
 
 
@@ -191,6 +308,9 @@ We welcome contributions! Please follow these guidelines:
 - **Documentation** - Improve guides and API docs
 - **UI/UX improvements** - Better user experience
 - **Performance optimizations** - Make it faster
+- **TTS Provider Integration** - Add support for new voice services
+- **Hook Enhancements** - Extend the Claude Code hooks system
+- **Audio/Voice Features** - Improve notification and accessibility features
 
 ## Troubleshooting
 
@@ -211,6 +331,26 @@ d
 - Verify the project path exists and is accessible
 - Review server console logs for detailed error messages
 - Ensure you're not trying to access system directories outside project scope
+
+#### TTS Notifications Not Working
+**Problem**: Audio notifications not playing or voice generation failing
+**Solutions**:
+- **Check API Keys**: Verify TTS provider API keys in `.env` file
+- **Test Provider**: Use Settings → Audio Notifications → Test button to verify configuration
+- **Check Browser Audio**: Ensure browser allows audio playback (check for blocked autoplay)
+- **Review Logs**: Check `logs/claudecodeui_debug.log` for TTS generation errors
+- **Provider Fallback**: If premium provider fails, ensure pyttsx3 or browser TTS works
+- **Network Issues**: Verify internet connection for cloud TTS providers
+
+#### Claude Code Hooks Issues
+**Problem**: Hooks not executing or notification hooks failing
+**Solutions**:
+- **UV Installation**: Ensure `uv` is installed and available in PATH
+- **Hook Permissions**: Check that hook scripts are executable (`chmod +x .claude/hooks/*.py`)
+- **Environment Variables**: Verify `.env` file is properly loaded by hooks
+- **Test Manually**: Run `uv run .claude/hooks/notification.py --notify` to test
+- **Check Logs**: Review `logs/notification_hook.log` for hook execution details
+- **Dependencies**: Ensure Python dependencies are available via UV script headers
 
 
 ## License

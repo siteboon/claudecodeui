@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { audioService } from '../services/audioService';
 
 export function useWebSocket() {
   const [ws, setWs] = useState(null);
@@ -67,6 +68,12 @@ export function useWebSocket() {
       websocket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          
+          // Handle audio notifications
+          if (data.type === 'audio-notification') {
+            audioService.handleAudioNotification(data);
+          }
+          
           setMessages(prev => [...prev, data]);
         } catch (error) {
           console.error('Error parsing WebSocket message:', error);

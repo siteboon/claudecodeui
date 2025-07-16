@@ -11,10 +11,12 @@ import {
   Mic,
   Brain,
   Sparkles,
-  FileText
+  FileText,
+  Volume2
 } from 'lucide-react';
 import DarkModeToggle from './DarkModeToggle';
 import { useTheme } from '../contexts/ThemeContext';
+import AudioNotificationSettings from './AudioNotificationSettings';
 
 const QuickSettingsPanel = ({ 
   isOpen, 
@@ -140,6 +142,12 @@ const QuickSettingsPanel = ({
                   className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 dark:focus:ring-blue-400 dark:bg-gray-800 dark:checked:bg-blue-600"
                 />
               </label>
+            </div>
+
+            {/* Audio Notifications */}
+            <div className="space-y-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Audio Notifications</h4>
+              <AudioNotificationSettings className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800" />
             </div>
 
             {/* Whisper Dictation Settings - HIDDEN */}

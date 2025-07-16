@@ -242,12 +242,12 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                   );
                 })()}
                 {message.toolInput && message.toolName !== 'Edit' && (() => {
-                  // Debug log to see what we're dealing with
-                  console.log('Tool display - name:', message.toolName, 'input type:', typeof message.toolInput);
+                  // Debug log to see what we're dealing with (commented out to reduce console noise)
+                  // console.log('Tool display - name:', message.toolName, 'input type:', typeof message.toolInput);
                   
                   // Special handling for Write tool
                   if (message.toolName === 'Write') {
-                    console.log('Write tool detected, toolInput:', message.toolInput);
+                    // console.log('Write tool detected, toolInput:', message.toolInput);
                     try {
                       let input;
                       // Handle both JSON string and already parsed object
@@ -257,7 +257,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                         input = message.toolInput;
                       }
                       
-                      console.log('Parsed Write input:', input);
+                      // console.log('Parsed Write input:', input);
                       
                       if (input.file_path && input.content !== undefined) {
                         return (
@@ -1570,7 +1570,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
         case 'claude-status':
           // Handle Claude working status messages
-          console.log('🔔 Received claude-status message:', latestMessage);
+          // console.log('🔔 Received claude-status message:', latestMessage);
           const statusData = latestMessage.data;
           if (statusData) {
             // Parse the status message to extract relevant information
@@ -1601,7 +1601,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               statusInfo.can_interrupt = statusData.can_interrupt;
             }
             
-            console.log('📊 Setting claude status:', statusInfo);
+            // console.log('📊 Setting claude status:', statusInfo);
             setClaudeStatus(statusInfo);
             setIsLoading(true);
             setCanAbortSession(statusInfo.can_interrupt);
