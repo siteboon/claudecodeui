@@ -25,6 +25,7 @@ import ClaudeLogo from './ClaudeLogo.jsx';
 import ClaudeStatus from './ClaudeStatus';
 import { MicButton } from './MicButton.jsx';
 import { api } from '../utils/api';
+import { fetchWithBasePath } from '../utils/baseUrl.js';
 
 // Memoized message component to prevent unnecessary re-renders
 const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFileOpen, onShowSettings, autoExpandTools, showRawParameters }) => {
@@ -1872,7 +1873,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           headers['Authorization'] = `Bearer ${token}`;
         }
         
-        const response = await fetch(`/api/projects/${selectedProject.name}/upload-images`, {
+        const response = await fetchWithBasePath(`/api/projects/${selectedProject.name}/upload-images`, {
           method: 'POST',
           headers: headers,
           body: formData

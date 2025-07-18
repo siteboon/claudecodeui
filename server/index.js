@@ -24,6 +24,8 @@ try {
 }
 
 console.log('PORT from env:', process.env.PORT);
+const BASE_PATH = process.env.BASE_PATH || '';
+console.log('BASE_PATH from env:', BASE_PATH);
 
 import express from 'express';
 import { WebSocketServer } from 'ws';
@@ -164,22 +166,22 @@ app.use(cors());
 app.use(express.json());
 
 // Optional API key validation (if configured)
-app.use('/api', validateApiKey);
+app.use(`${BASE_PATH}/api`, validateApiKey);
 
 // Authentication routes (public)
-app.use('/api/auth', authRoutes);
+app.use(`${BASE_PATH}/api/auth`, authRoutes);
 
 // Git API Routes (protected)
-app.use('/api/git', authenticateToken, gitRoutes);
+app.use(`${BASE_PATH}/api/git`, authenticateToken, gitRoutes);
 
 // MCP API Routes (protected)
-app.use('/api/mcp', authenticateToken, mcpRoutes);
+app.use(`${BASE_PATH}/api/mcp`, authenticateToken, mcpRoutes);
 
 // Static files served after API routes
-app.use(express.static(path.join(__dirname, '../dist')));
+app.use(BASE_PATH, express.static(path.join(__dirname, '../dist')));
 
 // API Routes (protected)
-app.get('/api/config', authenticateToken, (req, res) => {
+app.get(`${BASE_PATH}/api/config`, authenticateToken, (req, res) => {
   const host = req.headers.host || `${req.hostname}:${PORT}`;
   const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'wss' : 'ws';
   
@@ -187,11 +189,12 @@ app.get('/api/config', authenticateToken, (req, res) => {
   
   res.json({
     serverPort: PORT,
-    wsUrl: `${protocol}://${host}`
+    wsUrl: `${protocol}://${host}${BASE_PATH}`,
+    basePath: BASE_PATH
   });
 });
 
-app.get('/api/projects', authenticateToken, async (req, res) => {
+app.get(`${BASE_PATH}/api/projects`, authenticateToken, async (req, res) => {
   try {
     const projects = await getProjects();
     res.json(projects);
@@ -200,7 +203,7 @@ app.get('/api/projects', authenticateToken, async (req, res) => {
   }
 });
 
-app.get('/api/projects/:projectName/sessions', authenticateToken, async (req, res) => {
+app.get(`${BASE_PATH}/api/projects/:projectName/sessions`, authenticateToken, async (req, res) => {
   try {
     const { limit = 5, offset = 0 } = req.query;
     const result = await getSessions(req.params.projectName, parseInt(limit), parseInt(offset));
@@ -211,7 +214,7 @@ app.get('/api/projects/:projectName/sessions', authenticateToken, async (req, re
 });
 
 // Get messages for a specific session
-app.get('/api/projects/:projectName/sessions/:sessionId/messages', authenticateToken, async (req, res) => {
+app.get(`${BASE_PATH}/api/projects/:projectName/sessions/:sessionId/messages`, authenticateToken, async (req, res) => {
   try {
     const { projectName, sessionId } = req.params;
     const messages = await getSessionMessages(projectName, sessionId);
@@ -222,7 +225,7 @@ app.get('/api/projects/:projectName/sessions/:sessionId/messages', authenticateT
 });
 
 // Rename project endpoint
-app.put('/api/projects/:projectName/rename', authenticateToken, async (req, res) => {
+app.put(`${BASE_PATH}/api/projects/:projectName/rename`, authenticateToken, async (req, res) => {
   try {
     const { displayName } = req.body;
     await renameProject(req.params.projectName, displayName);
@@ -233,7 +236,7 @@ app.put('/api/projects/:projectName/rename', authenticateToken, async (req, res)
 });
 
 // Delete session endpoint
-app.delete('/api/projects/:projectName/sessions/:sessionId', authenticateToken, async (req, res) => {
+app.delete(`${BASE_PATH}/api/projects/:projectName/sessions/:sessionId`, authenticateToken, async (req, res) => {
   try {
     const { projectName, sessionId } = req.params;
     await deleteSession(projectName, sessionId);
@@ -244,7 +247,7 @@ app.delete('/api/projects/:projectName/sessions/:sessionId', authenticateToken, 
 });
 
 // Delete project endpoint (only if empty)
-app.delete('/api/projects/:projectName', authenticateToken, async (req, res) => {
+app.delete(`${BASE_PATH}/api/projects/:projectName`, authenticateToken, async (req, res) => {
   try {
     const { projectName } = req.params;
     await deleteProject(projectName);
@@ -255,7 +258,7 @@ app.delete('/api/projects/:projectName', authenticateToken, async (req, res) => 
 });
 
 // Create project endpoint
-app.post('/api/projects/create', authenticateToken, async (req, res) => {
+app.post(`${BASE_PATH}/api/projects/create`, authenticateToken, async (req, res) => {
   try {
     const { path: projectPath } = req.body;
     
@@ -272,7 +275,7 @@ app.post('/api/projects/create', authenticateToken, async (req, res) => {
 });
 
 // Read file content endpoint
-app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) => {
+app.get(`${BASE_PATH}/api/projects/:projectName/file`, authenticateToken, async (req, res) => {
   try {
     const { projectName } = req.params;
     const { filePath } = req.query;
@@ -301,7 +304,7 @@ app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) =
 });
 
 // Serve binary file content endpoint (for images, etc.)
-app.get('/api/projects/:projectName/files/content', authenticateToken, async (req, res) => {
+app.get(`${BASE_PATH}/api/projects/:projectName/files/content`, authenticateToken, async (req, res) => {
   try {
     const { projectName } = req.params;
     const { path: filePath } = req.query;
@@ -347,7 +350,7 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
 });
 
 // Save file content endpoint
-app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) => {
+app.put(`${BASE_PATH}/api/projects/:projectName/file`, authenticateToken, async (req, res) => {
   try {
     const { projectName } = req.params;
     const { filePath, content } = req.body;
@@ -394,7 +397,7 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
   }
 });
 
-app.get('/api/projects/:projectName/files', authenticateToken, async (req, res) => {
+app.get(`${BASE_PATH}/api/projects/:projectName/files`, authenticateToken, async (req, res) => {
   try {
     
     // Using fsPromises from import
@@ -434,9 +437,17 @@ wss.on('connection', (ws, request) => {
   const urlObj = new URL(url, 'http://localhost');
   const pathname = urlObj.pathname;
   
-  if (pathname === '/shell') {
+  const expectedShellPath = BASE_PATH ? `${BASE_PATH}/shell` : '/shell';
+  const expectedWsPath = BASE_PATH ? `${BASE_PATH}/ws` : '/ws';
+  
+  console.log('Debug: pathname =', pathname);
+  console.log('Debug: BASE_PATH =', `"${BASE_PATH}"`);
+  console.log('Debug: Expected shell path =', expectedShellPath);
+  console.log('Debug: Expected ws path =', expectedWsPath);
+  
+  if (pathname === expectedShellPath) {
     handleShellConnection(ws);
-  } else if (pathname === '/ws') {
+  } else if (pathname === expectedWsPath) {
     handleChatConnection(ws);
   } else {
     console.log('❌ Unknown WebSocket path:', pathname);
@@ -654,7 +665,7 @@ function handleShellConnection(ws) {
   });
 }
 // Audio transcription endpoint
-app.post('/api/transcribe', authenticateToken, async (req, res) => {
+app.post(`${BASE_PATH}/api/transcribe`, authenticateToken, async (req, res) => {
   try {
     const multer = (await import('multer')).default;
     const upload = multer({ storage: multer.memoryStorage() });
@@ -803,7 +814,7 @@ Agent instructions:`;
 });
 
 // Image upload endpoint
-app.post('/api/projects/:projectName/upload-images', authenticateToken, async (req, res) => {
+app.post(`${BASE_PATH}/api/projects/:projectName/upload-images`, authenticateToken, async (req, res) => {
   try {
     const multer = (await import('multer')).default;
     const path = (await import('path')).default;

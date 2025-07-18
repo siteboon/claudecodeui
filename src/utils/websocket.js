@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { fetchWithBasePath, createApiUrl } from './baseUrl.js';
 
 export function useWebSocket() {
   const [ws, setWs] = useState(null);
@@ -31,7 +32,7 @@ export function useWebSocket() {
       // Fetch server configuration to get the correct WebSocket URL
       let wsBaseUrl;
       try {
-        const configResponse = await fetch('/api/config', {
+        const configResponse = await fetchWithBasePath('/api/config', {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -56,6 +57,7 @@ export function useWebSocket() {
       }
       
       // Include token in WebSocket URL as query parameter
+      // Don't add BASE_PATH here - it should be handled by the proxy or server config
       const wsUrl = `${wsBaseUrl}/ws?token=${encodeURIComponent(token)}`;
       const websocket = new WebSocket(wsUrl);
 

@@ -5,6 +5,7 @@ import { ScrollArea } from './ui/scroll-area';
 import { Badge } from './ui/badge';
 import { X, Plus, Settings, Shield, AlertTriangle, Moon, Sun, Server, Edit3, Trash2, Play, Globe, Terminal, Zap } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+import { fetchWithBasePath, authenticatedFetchWithBasePath } from '../utils/baseUrl.js';
 
 function ToolsSettings({ isOpen, onClose }) {
   const { isDarkMode, toggleDarkMode } = useTheme();
@@ -67,12 +68,7 @@ function ToolsSettings({ isOpen, onClose }) {
       const token = localStorage.getItem('auth-token');
       
       // First try to get servers using Claude CLI
-      const cliResponse = await fetch('/api/mcp/cli/list', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const cliResponse = await authenticatedFetchWithBasePath('/api/mcp/cli/list');
       
       if (cliResponse.ok) {
         const cliData = await cliResponse.json();
@@ -100,12 +96,7 @@ function ToolsSettings({ isOpen, onClose }) {
       }
       
       // Fallback to direct config reading
-      const response = await fetch('/api/mcp/servers?scope=user', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await authenticatedFetchWithBasePath('/api/mcp/servers?scope=user');
       
       if (response.ok) {
         const data = await response.json();
@@ -128,12 +119,8 @@ function ToolsSettings({ isOpen, onClose }) {
       }
       
       // Use Claude CLI to add the server
-      const response = await fetch('/api/mcp/cli/add', {
+      const response = await authenticatedFetchWithBasePath('/api/mcp/cli/add', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify({
           name: serverData.name,
           type: serverData.type,
@@ -168,12 +155,8 @@ function ToolsSettings({ isOpen, onClose }) {
       const token = localStorage.getItem('auth-token');
       
       // Use Claude CLI to remove the server
-      const response = await fetch(`/api/mcp/cli/remove/${serverId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
+      const response = await authenticatedFetchWithBasePath(`/api/mcp/cli/remove/${serverId}`, {
+        method: 'DELETE'
       });
       
       if (response.ok) {
@@ -197,12 +180,8 @@ function ToolsSettings({ isOpen, onClose }) {
   const testMcpServer = async (serverId, scope = 'user') => {
     try {
       const token = localStorage.getItem('auth-token');
-      const response = await fetch(`/api/mcp/servers/${serverId}/test?scope=${scope}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
+      const response = await authenticatedFetchWithBasePath(`/api/mcp/servers/${serverId}/test?scope=${scope}`, {
+        method: 'POST'
       });
       
       if (response.ok) {
@@ -221,12 +200,8 @@ function ToolsSettings({ isOpen, onClose }) {
   const testMcpConfiguration = async (formData) => {
     try {
       const token = localStorage.getItem('auth-token');
-      const response = await fetch('/api/mcp/servers/test', {
+      const response = await authenticatedFetchWithBasePath('/api/mcp/servers/test', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify(formData)
       });
       
@@ -246,12 +221,8 @@ function ToolsSettings({ isOpen, onClose }) {
   const discoverMcpTools = async (serverId, scope = 'user') => {
     try {
       const token = localStorage.getItem('auth-token');
-      const response = await fetch(`/api/mcp/servers/${serverId}/tools?scope=${scope}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
+      const response = await authenticatedFetchWithBasePath(`/api/mcp/servers/${serverId}/tools?scope=${scope}`, {
+        method: 'POST'
       });
       
       if (response.ok) {

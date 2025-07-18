@@ -635,11 +635,14 @@ function AppContent() {
 
 // Root App component with router
 function App() {
+  // Get the base path from Vite's import.meta.env for router basename
+  const basename = import.meta.env.BASE_URL || '';
+  
   return (
     <ThemeProvider>
       <AuthProvider>
         <ProtectedRoute>
-          <Router>
+          <Router basename={basename}>
             <Routes>
               <Route path="/" element={<AppContent />} />
               <Route path="/session/:sessionId" element={<AppContent />} />

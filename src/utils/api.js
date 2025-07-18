@@ -1,35 +1,19 @@
+import { createApiUrl, fetchWithBasePath, authenticatedFetchWithBasePath } from './baseUrl.js';
+
 // Utility function for authenticated API calls
-export const authenticatedFetch = (url, options = {}) => {
-  const token = localStorage.getItem('auth-token');
-  
-  const defaultHeaders = {
-    'Content-Type': 'application/json',
-  };
-  
-  if (token) {
-    defaultHeaders['Authorization'] = `Bearer ${token}`;
-  }
-  
-  return fetch(url, {
-    ...options,
-    headers: {
-      ...defaultHeaders,
-      ...options.headers,
-    },
-  });
-};
+export const authenticatedFetch = authenticatedFetchWithBasePath;
 
 // API endpoints
 export const api = {
   // Auth endpoints (no token required)
   auth: {
-    status: () => fetch('/api/auth/status'),
-    login: (username, password) => fetch('/api/auth/login', {
+    status: () => fetchWithBasePath('/api/auth/status'),
+    login: (username, password) => fetchWithBasePath('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
     }),
-    register: (username, password) => fetch('/api/auth/register', {
+    register: (username, password) => fetchWithBasePath('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),

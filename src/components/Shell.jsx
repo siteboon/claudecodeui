@@ -4,6 +4,7 @@ import { FitAddon } from 'xterm-addon-fit';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
 import { WebglAddon } from '@xterm/addon-webgl';
 import 'xterm/css/xterm.css';
+import { fetchWithBasePath } from '../utils/baseUrl.js';
 
 // CSS to remove xterm focus outline
 const xtermStyles = `
@@ -392,7 +393,7 @@ function Shell({ selectedProject, selectedSession, isActive }) {
       // Fetch server configuration to get the correct WebSocket URL
       let wsBaseUrl;
       try {
-        const configResponse = await fetch('/api/config', {
+        const configResponse = await fetchWithBasePath('/api/config', {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -415,6 +416,7 @@ function Shell({ selectedProject, selectedSession, isActive }) {
       }
       
       // Include token in WebSocket URL as query parameter
+      // Don't add BASE_PATH here - it should be handled by the proxy or server config
       const wsUrl = `${wsBaseUrl}/shell?token=${encodeURIComponent(token)}`;
       
       ws.current = new WebSocket(wsUrl);
