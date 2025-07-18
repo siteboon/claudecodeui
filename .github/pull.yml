@@ -2,4 +2,4 @@ version: "1"
 rules:
   - base: main
     upstream: siteboon:main
-    mergeMethod: hardreset
+    mergeMethod: rebase
