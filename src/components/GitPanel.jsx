@@ -28,6 +28,7 @@ function GitPanel({ selectedProject, isMobile }) {
   const [isFetching, setIsFetching] = useState(false);
   const [isPulling, setIsPulling] = useState(false);
   const [isPushing, setIsPushing] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
   const [isCommitAreaCollapsed, setIsCommitAreaCollapsed] = useState(isMobile); // Collapsed by default on mobile
   const [confirmAction, setConfirmAction] = useState(null); // { type: 'discard|commit|pull|push', file?: string, message?: string }
   const textareaRef = useRef(null);
@@ -266,6 +267,34 @@ function GitPanel({ selectedProject, isMobile }) {
     }
   };
 
+  const handlePublish = async () => {
+    setIsPublishing(true);
+    try {
+      const response = await authenticatedFetch('/api/git/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project: selectedProject.name,
+          branch: currentBranch
+        })
+      });
+      
+      const data = await response.json();
+      if (data.success) {
+        // Refresh status after successful publish
+        fetchGitStatus();
+        fetchRemoteStatus();
+      } else {
+        console.error('Publish failed:', data.error);
+        // TODO: Show user-friendly error message
+      }
+    } catch (error) {
+      console.error('Error publishing branch:', error);
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
   const discardChanges = async (filePath) => {
     try {
       const response = await authenticatedFetch('/api/git/discard', {
@@ -294,6 +323,34 @@ function GitPanel({ selectedProject, isMobile }) {
     }
   };
 
+  const deleteUntrackedFile = async (filePath) => {
+    try {
+      const response = await authenticatedFetch('/api/git/delete-untracked', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project: selectedProject.name,
+          file: filePath
+        })
+      });
+      
+      const data = await response.json();
+      if (data.success) {
+        // Remove from selected files and refresh status
+        setSelectedFiles(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(filePath);
+          return newSet;
+        });
+        fetchGitStatus();
+      } else {
+        console.error('Delete failed:', data.error);
+      }
+    } catch (error) {
+      console.error('Error deleting untracked file:', error);
+    }
+  };
+
   const confirmAndExecute = async () => {
     if (!confirmAction) return;
 
@@ -305,6 +362,9 @@ function GitPanel({ selectedProject, isMobile }) {
         case 'discard':
           await discardChanges(file);
           break;
+        case 'delete':
+          await deleteUntrackedFile(file);
+          break;
         case 'commit':
           await handleCommit();
           break;
@@ -313,6 +373,9 @@ function GitPanel({ selectedProject, isMobile }) {
           break;
         case 'push':
           await handlePush();
+          break;
+        case 'publish':
+          await handlePublish();
           break;
       }
     } catch (error) {
@@ -578,6 +641,23 @@ function GitPanel({ selectedProject, isMobile }) {
                   {isMobile && <span>Discard</span>}
                 </button>
               )}
+              {status === 'U' && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setConfirmAction({ 
+                      type: 'delete', 
+                      file: filePath,
+                      message: `Delete untracked file "${filePath}"? This action cannot be undone.` 
+                    });
+                  }}
+                  className={`${isMobile ? 'px-2 py-1 text-xs' : 'p-1'} hover:bg-red-100 dark:hover:bg-red-900 rounded text-red-600 dark:text-red-400 font-medium flex items-center gap-1`}
+                  title="Delete untracked file"
+                >
+                  <Trash2 className={`${isMobile ? 'w-3 h-3' : 'w-3 h-3'}`} />
+                  {isMobile && <span>Delete</span>}
+                </button>
+              )}
               <span 
                 className={`inline-flex items-center justify-center w-5 h-5 rounded text-xs font-bold border ${
                   status === 'M' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800' :
@@ -716,51 +796,72 @@ function GitPanel({ selectedProject, isMobile }) {
         
         <div className={`flex items-center ${isMobile ? 'gap-1' : 'gap-2'}`}>
           {/* Remote action buttons - smart logic based on ahead/behind status */}
-          {remoteStatus?.hasRemote && !remoteStatus?.isUpToDate && (
+          {remoteStatus?.hasRemote && (
             <>
-              {/* Pull button - show when behind (primary action) */}
-              {remoteStatus.behind > 0 && (
+              {/* Publish button - show when branch doesn't exist on remote */}
+              {!remoteStatus?.hasUpstream && (
                 <button
                   onClick={() => setConfirmAction({ 
-                    type: 'pull', 
-                    message: `Pull ${remoteStatus.behind} commit${remoteStatus.behind !== 1 ? 's' : ''} from ${remoteStatus.remoteName}?` 
+                    type: 'publish', 
+                    message: `Publish branch "${currentBranch}" to ${remoteStatus.remoteName}?` 
                   })}
-                  disabled={isPulling}
-                  className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 flex items-center gap-1"
-                  title={`Pull ${remoteStatus.behind} commit${remoteStatus.behind !== 1 ? 's' : ''} from ${remoteStatus.remoteName}`}
+                  disabled={isPublishing}
+                  className="px-2 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1"
+                  title={`Publish branch "${currentBranch}" to ${remoteStatus.remoteName}`}
                 >
-                  <Download className={`w-3 h-3 ${isPulling ? 'animate-pulse' : ''}`} />
-                  <span>{isPulling ? 'Pulling...' : `Pull ${remoteStatus.behind}`}</span>
+                  <Upload className={`w-3 h-3 ${isPublishing ? 'animate-pulse' : ''}`} />
+                  <span>{isPublishing ? 'Publishing...' : 'Publish'}</span>
                 </button>
               )}
               
-              {/* Push button - show when ahead (primary action when ahead only) */}
-              {remoteStatus.ahead > 0 && (
-                <button
-                  onClick={() => setConfirmAction({ 
-                    type: 'push', 
-                    message: `Push ${remoteStatus.ahead} commit${remoteStatus.ahead !== 1 ? 's' : ''} to ${remoteStatus.remoteName}?` 
-                  })}
-                  disabled={isPushing}
-                  className="px-2 py-1 text-xs bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50 flex items-center gap-1"
-                  title={`Push ${remoteStatus.ahead} commit${remoteStatus.ahead !== 1 ? 's' : ''} to ${remoteStatus.remoteName}`}
-                >
-                  <Upload className={`w-3 h-3 ${isPushing ? 'animate-pulse' : ''}`} />
-                  <span>{isPushing ? 'Pushing...' : `Push ${remoteStatus.ahead}`}</span>
-                </button>
-              )}
-              
-              {/* Fetch button - show when ahead only or when diverged (secondary action) */}
-              {(remoteStatus.ahead > 0 || (remoteStatus.behind > 0 && remoteStatus.ahead > 0)) && (
-                <button
-                  onClick={handleFetch}
-                  disabled={isFetching}
-                  className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
-                  title={`Fetch from ${remoteStatus.remoteName}`}
-                >
-                  <RefreshCw className={`w-3 h-3 ${isFetching ? 'animate-spin' : ''}`} />
-                  <span>{isFetching ? 'Fetching...' : 'Fetch'}</span>
-                </button>
+              {/* Show normal push/pull buttons only if branch has upstream */}
+              {remoteStatus?.hasUpstream && !remoteStatus?.isUpToDate && (
+                <>
+                  {/* Pull button - show when behind (primary action) */}
+                  {remoteStatus.behind > 0 && (
+                    <button
+                      onClick={() => setConfirmAction({ 
+                        type: 'pull', 
+                        message: `Pull ${remoteStatus.behind} commit${remoteStatus.behind !== 1 ? 's' : ''} from ${remoteStatus.remoteName}?` 
+                      })}
+                      disabled={isPulling}
+                      className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 flex items-center gap-1"
+                      title={`Pull ${remoteStatus.behind} commit${remoteStatus.behind !== 1 ? 's' : ''} from ${remoteStatus.remoteName}`}
+                    >
+                      <Download className={`w-3 h-3 ${isPulling ? 'animate-pulse' : ''}`} />
+                      <span>{isPulling ? 'Pulling...' : `Pull ${remoteStatus.behind}`}</span>
+                    </button>
+                  )}
+                  
+                  {/* Push button - show when ahead (primary action when ahead only) */}
+                  {remoteStatus.ahead > 0 && (
+                    <button
+                      onClick={() => setConfirmAction({ 
+                        type: 'push', 
+                        message: `Push ${remoteStatus.ahead} commit${remoteStatus.ahead !== 1 ? 's' : ''} to ${remoteStatus.remoteName}?` 
+                      })}
+                      disabled={isPushing}
+                      className="px-2 py-1 text-xs bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50 flex items-center gap-1"
+                      title={`Push ${remoteStatus.ahead} commit${remoteStatus.ahead !== 1 ? 's' : ''} to ${remoteStatus.remoteName}`}
+                    >
+                      <Upload className={`w-3 h-3 ${isPushing ? 'animate-pulse' : ''}`} />
+                      <span>{isPushing ? 'Pushing...' : `Push ${remoteStatus.ahead}`}</span>
+                    </button>
+                  )}
+                  
+                  {/* Fetch button - show when ahead only or when diverged (secondary action) */}
+                  {(remoteStatus.ahead > 0 || (remoteStatus.behind > 0 && remoteStatus.ahead > 0)) && (
+                    <button
+                      onClick={handleFetch}
+                      disabled={isFetching}
+                      className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
+                      title={`Fetch from ${remoteStatus.remoteName}`}
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isFetching ? 'animate-spin' : ''}`} />
+                      <span>{isFetching ? 'Fetching...' : 'Fetch'}</span>
+                    </button>
+                  )}
+                </>
               )}
             </>
           )}
@@ -1120,16 +1221,18 @@ function GitPanel({ selectedProject, isMobile }) {
             <div className="p-6">
               <div className="flex items-center mb-4">
                 <div className={`p-2 rounded-full mr-3 ${
-                  confirmAction.type === 'discard' ? 'bg-red-100 dark:bg-red-900' : 'bg-yellow-100 dark:bg-yellow-900'
+                  (confirmAction.type === 'discard' || confirmAction.type === 'delete') ? 'bg-red-100 dark:bg-red-900' : 'bg-yellow-100 dark:bg-yellow-900'
                 }`}>
                   <AlertTriangle className={`w-5 h-5 ${
-                    confirmAction.type === 'discard' ? 'text-red-600 dark:text-red-400' : 'text-yellow-600 dark:text-yellow-400'
+                    (confirmAction.type === 'discard' || confirmAction.type === 'delete') ? 'text-red-600 dark:text-red-400' : 'text-yellow-600 dark:text-yellow-400'
                   }`} />
                 </div>
                 <h3 className="text-lg font-semibold">
                   {confirmAction.type === 'discard' ? 'Discard Changes' : 
+                   confirmAction.type === 'delete' ? 'Delete File' :
                    confirmAction.type === 'commit' ? 'Confirm Commit' : 
-                   confirmAction.type === 'pull' ? 'Confirm Pull' : 'Confirm Push'}
+                   confirmAction.type === 'pull' ? 'Confirm Pull' : 
+                   confirmAction.type === 'publish' ? 'Publish Branch' : 'Confirm Push'}
                 </h3>
               </div>
               
@@ -1147,12 +1250,14 @@ function GitPanel({ selectedProject, isMobile }) {
                 <button
                   onClick={confirmAndExecute}
                   className={`px-4 py-2 text-sm text-white rounded-md ${
-                    confirmAction.type === 'discard' 
+                    (confirmAction.type === 'discard' || confirmAction.type === 'delete')
                       ? 'bg-red-600 hover:bg-red-700' 
                       : confirmAction.type === 'commit'
                       ? 'bg-blue-600 hover:bg-blue-700'
                       : confirmAction.type === 'pull'
                       ? 'bg-green-600 hover:bg-green-700'
+                      : confirmAction.type === 'publish'
+                      ? 'bg-purple-600 hover:bg-purple-700'
                       : 'bg-orange-600 hover:bg-orange-700'
                   } flex items-center space-x-2`}
                 >
@@ -1160,6 +1265,11 @@ function GitPanel({ selectedProject, isMobile }) {
                     <>
                       <Trash2 className="w-4 h-4" />
                       <span>Discard</span>
+                    </>
+                  ) : confirmAction.type === 'delete' ? (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      <span>Delete</span>
                     </>
                   ) : confirmAction.type === 'commit' ? (
                     <>
@@ -1170,6 +1280,11 @@ function GitPanel({ selectedProject, isMobile }) {
                     <>
                       <Download className="w-4 h-4" />
                       <span>Pull</span>
+                    </>
+                  ) : confirmAction.type === 'publish' ? (
+                    <>
+                      <Upload className="w-4 h-4" />
+                      <span>Publish</span>
                     </>
                   ) : (
                     <>

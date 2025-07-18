@@ -1432,19 +1432,45 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   toolResult: null // Will be updated when result comes in
                 }]);
               } else if (part.type === 'text' && part.text?.trim()) {
+                // Check for usage limit message and format it user-friendly
+                let content = part.text;
+                if (content.includes('Claude AI usage limit reached|')) {
+                  const parts = content.split('|');
+                  if (parts.length === 2) {
+                    const timestamp = parseInt(parts[1]);
+                    if (!isNaN(timestamp)) {
+                      const resetTime = new Date(timestamp * 1000);
+                      content = `Claude AI usage limit reached. The limit will reset on ${resetTime.toLocaleDateString()} at ${resetTime.toLocaleTimeString()}.`;
+                    }
+                  }
+                }
+                
                 // Add regular text message
                 setChatMessages(prev => [...prev, {
                   type: 'assistant',
-                  content: part.text,
+                  content: content,
                   timestamp: new Date()
                 }]);
               }
             }
           } else if (typeof messageData.content === 'string' && messageData.content.trim()) {
+            // Check for usage limit message and format it user-friendly
+            let content = messageData.content;
+            if (content.includes('Claude AI usage limit reached|')) {
+              const parts = content.split('|');
+              if (parts.length === 2) {
+                const timestamp = parseInt(parts[1]);
+                if (!isNaN(timestamp)) {
+                  const resetTime = new Date(timestamp * 1000);
+                  content = `Claude AI usage limit reached. The limit will reset on ${resetTime.toLocaleDateString()} at ${resetTime.toLocaleTimeString()}.`;
+                }
+              }
+            }
+            
             // Add regular text message
             setChatMessages(prev => [...prev, {
               type: 'assistant',
-              content: messageData.content,
+              content: content,
               timestamp: new Date()
             }]);
           }
