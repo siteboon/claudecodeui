@@ -25,7 +25,9 @@ try {
 
 console.log('PORT from env:', process.env.PORT);
 const BASE_PATH = process.env.BASE_PATH || '';
-console.log('BASE_PATH from env:', BASE_PATH);
+if (BASE_PATH) {
+  console.log('BASE_PATH configured:', BASE_PATH);
+}
 
 import express from 'express';
 import { WebSocketServer } from 'ws';
@@ -439,11 +441,6 @@ wss.on('connection', (ws, request) => {
   
   const expectedShellPath = BASE_PATH ? `${BASE_PATH}/shell` : '/shell';
   const expectedWsPath = BASE_PATH ? `${BASE_PATH}/ws` : '/ws';
-  
-  console.log('Debug: pathname =', pathname);
-  console.log('Debug: BASE_PATH =', `"${BASE_PATH}"`);
-  console.log('Debug: Expected shell path =', expectedShellPath);
-  console.log('Debug: Expected ws path =', expectedWsPath);
   
   if (pathname === expectedShellPath) {
     handleShellConnection(ws);
