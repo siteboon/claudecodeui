@@ -1061,7 +1061,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [slashPosition, setSlashPosition] = useState(-1);
   const [visibleMessageCount, setVisibleMessageCount] = useState(100);
   const [claudeStatus, setClaudeStatus] = useState(null);
-  const [isComposing, setIsComposing] = useState(false);
 
 
   // Memoized diff calculation to prevent recalculating on every render
@@ -2000,7 +1999,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     // Handle Enter key: Ctrl+Enter (Cmd+Enter on Mac) sends, Shift+Enter creates new line
     if (e.key === 'Enter') {
       // If we're in composition, don't send message
-      if (isComposing) {
+      if (e.nativeEvent.isComposing) {
         return; // Let IME handle the Enter key
       }
       
@@ -2335,8 +2334,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               onPaste={handlePaste}
               onFocus={() => setIsInputFocused(true)}
               onBlur={() => setIsInputFocused(false)}
-              onCompositionStart={() => setIsComposing(true)}
-              onCompositionEnd={() => setIsComposing(false)}
               onInput={(e) => {
                 // Immediate resize on input for better UX
                 e.target.style.height = 'auto';
