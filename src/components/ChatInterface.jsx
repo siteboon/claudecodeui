@@ -940,16 +940,49 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                             {children}
                           </blockquote>
                         ),
-                        a: ({href, children}) => (
-                          <a href={href} className="text-blue-600 dark:text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">
-                            {children}
-                          </a>
-                        ),
-                        p: ({children}) => (
-                          <div className="mb-2 last:mb-0">
-                            {children}
-                          </div>
-                        )
+                        a: ({href, children, ...props}) => {
+                          // Check if this link looks like a button (contains specific button-like text)
+                          const buttonTexts = ['在終端中繼續', 'Continue in terminal', 'Continue in Terminal'];
+                          const isButton = buttonTexts.some(text => 
+                            children && children.toString().includes(text)
+                          );
+                          
+                          if (isButton) {
+                            return (
+                              <div className="flex justify-center my-4">
+                                <a href={href} className="inline-block px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors" {...props}>
+                                  {children}
+                                </a>
+                              </div>
+                            );
+                          }
+                          
+                          return (
+                            <a href={href} className="text-blue-600 dark:text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer" {...props}>
+                              {children}
+                            </a>
+                          );
+                        },
+                        p: ({children}) => {
+                          // Check if paragraph contains only a button-like element
+                          const hasButtonLink = React.Children.toArray(children).some(child => 
+                            React.isValidElement(child) && 
+                            child.type === 'a' && 
+                            ['在終端中繼續', 'Continue in terminal', 'Continue in Terminal'].some(text => 
+                              child.props?.children?.toString().includes(text)
+                            )
+                          );
+                          
+                          if (hasButtonLink) {
+                            return <>{children}</>;
+                          }
+                          
+                          return (
+                            <div className="mb-2 last:mb-0">
+                              {children}
+                            </div>
+                          );
+                        }
                       }}
                     >
                       {String(message.content || '')}
