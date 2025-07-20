@@ -1,0 +1,78 @@
+{
+  "statuses": {
+    "error": "錯誤",
+    "claude": "Claude",
+    "processing": "處理中",
+    "thinking": "思考中...",
+    "thinkingStatus": {
+      "thinking": "思考中",
+      "processing": "處理中",
+      "analyzing": "分析中",
+      "working": "工作中",
+      "computing": "計算中",
+      "reasoning": "推理中"
+    },
+    "escToInterrupt": "按 esc 中斷",
+    "tokens": "文字令牌",
+    "stop": "停止"
+  },
+  "messages": {
+    "selectProject": "選擇一個專案以開始與 Claude 對話",
+    "loadingSession": "載入工作階段訊息中...",
+    "startConversation": "開始與 Claude 對話",
+    "askQuestionsDescription": "詢問有關您程式碼的問題、請求變更，或取得開發任務的協助",
+    "dropImagesHere": "將圖片拖放到這裡",
+    "askClaude": "請 Claude 協助您的程式碼... (@ 以引用檔案)",
+    "clearInput": "清除輸入",
+    "attachImages": "附加圖片",
+    "scrollToBottom": "捲動至底部",
+    "enterToSend": "按 Enter 傳送 • Shift+Enter 換行 • Tab 切換模式 • @ 引用檔案",
+    "enterToSendShort": "Enter 傳送 • Tab 切換模式 • @ 引用檔案",
+    "send": "傳送"
+  },
+  "tools": {
+    "using": "使用 {{tool}}",
+    "terminal": "終端機",
+    "fileUpdated": "檔案更新成功",
+    "fileCreated": "檔案建立成功",
+    "fileWritten": "檔案寫入成功",
+    "todoListUpdated": "待辦事項清單已成功更新",
+    "currentTodoList": "目前待辦事項清單",
+    "implementationPlan": "實施計畫",
+    "toolError": "工具錯誤",
+    "toolResult": "工具結果",
+    "toolSettings": "工具設定",
+    "viewEditDiff": "檢視編輯差異",
+    "diff": "差異",
+    "viewInputParameters": "檢視輸入參數",
+    "viewRawParameters": "檢視原始參數",
+    "creatingNewFile": "建立新檔案：",
+    "newFile": "新檔案",
+    "updatingTodoList": "更新待辦事項清單",
+    "runningCommand": "執行指令",
+    "read": "讀取",
+    "readIcon": "📖 讀取",
+    "updateTodoList": "📝 更新待辦事項清單",
+    "readTodoList": "📋 讀取待辦事項清單",
+    "viewImplementationPlan": "檢視實施計畫",
+    "interactivePrompt": "互動式提示",
+    "claudeSelectedOption": "✓ Claude 已選擇選項",
+    "cliInteractiveNote": "在 CLI 中，您可以使用方向鍵或輸入數字來互動式選擇此選項。",
+    "fileContentDisplayed": "檔案內容顯示在上方的差異檢視中",
+    "viewFileContent": "檢視檔案內容",
+    "viewFullOutput": "檢視完整輸出",
+    "waitingForResponse": "⏳ 等待您在 CLI 中的回應",
+    "selectInTerminal": "請在執行 Claude 的終端機中選擇一個選項。"
+  },
+  "modes": {
+    "defaultMode": "預設模式",
+    "acceptEdits": "接受編輯",
+    "bypassPermissions": "略過權限",
+    "planMode": "計畫模式"
+  },
+  "errors": {
+    "failedToLoadSession": "載入工作階段訊息失敗",
+    "failedToUploadImages": "上傳圖片失敗",
+    "fileTooLarge": "檔案太大 (最大 5MB)"
+  }
+}

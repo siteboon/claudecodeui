@@ -1,0 +1,40 @@
+{
+  "generic": {
+    "error": "An error occurred. Please try again.",
+    "networkError": "Network error. Please check your connection.",
+    "unauthorized": "Unauthorized. Please log in again.",
+    "forbidden": "Access denied. You don't have permission to perform this action.",
+    "notFound": "Resource not found.",
+    "serverError": "Server error. Please try again later.",
+    "timeout": "Request timed out. Please try again."
+  },
+  "validation": {
+    "required": "This field is required",
+    "invalidFormat": "Invalid format",
+    "tooShort": "Too short",
+    "tooLong": "Too long",
+    "invalidEmail": "Invalid email address",
+    "invalidUrl": "Invalid URL"
+  },
+  "file": {
+    "readError": "Failed to read file",
+    "writeError": "Failed to write file",
+    "deleteError": "Failed to delete file",
+    "createError": "Failed to create file",
+    "notFound": "File not found",
+    "accessDenied": "Access denied to file",
+    "tooLarge": "File is too large"
+  },
+  "project": {
+    "createError": "Failed to create project",
+    "loadError": "Failed to load project",
+    "notFound": "Project not found",
+    "alreadyExists": "Project already exists"
+  },
+  "session": {
+    "loadError": "Failed to load session",
+    "saveError": "Failed to save session",
+    "deleteError": "Failed to delete session",
+    "notFound": "Session not found"
+  }
+}

@@ -1,0 +1,101 @@
+{
+  "header": {
+    "selectProject": "Select a project to view source control"
+  },
+  "tabs": {
+    "changes": "Changes",
+    "history": "History"
+  },
+  "branches": {
+    "createNewBranch": "Create new branch",
+    "createNewBranchTitle": "Create New Branch",
+    "branchName": "Branch Name",
+    "placeholder": "feature/new-feature",
+    "createFromCurrent": "This will create a new branch from the current branch",
+    "creating": "Creating...",
+    "createBranch": "Create Branch",
+    "cancel": "Cancel",
+    "upToDateWithRemote": "Up to date with remote",
+    "ahead": "ahead",
+    "behind": "behind"
+  },
+  "remoteActions": {
+    "publish": "Publish",
+    "publishing": "Publishing...",
+    "pull": "Pull {{n}}",
+    "pulling": "Pulling...",
+    "push": "Push {{n}}",
+    "pushing": "Pushing...",
+    "fetch": "Fetch",
+    "fetching": "Fetching..."
+  },
+  "changes": {
+    "commitChanges": "Commit Changes",
+    "commit": "Commit",
+    "commitNFiles": "Commit {{n}} file{{s}}",
+    "committing": "Committing...",
+    "messagePlaceholder": "Message (Ctrl+Enter to commit)",
+    "filesSelected": "{{n}} file{{s}} selected",
+    "selectAll": "Select All",
+    "deselectAll": "Deselect All",
+    "all": "All",
+    "none": "None",
+    "noChangesDetected": "No changes detected",
+    "generateCommitMessage": "Generate commit message",
+    "switchToHorizontalScroll": "Switch to horizontal scroll",
+    "switchToTextWrap": "Switch to text wrap"
+  },
+  "fileStatus": {
+    "modified": "Modified",
+    "added": "Added",
+    "deleted": "Deleted",
+    "untracked": "Untracked",
+    "discard": "Discard",
+    "delete": "Delete",
+    "fileStatusGuide": "File Status Guide"
+  },
+  "history": {
+    "noCommitsFound": "No commits found"
+  },
+  "confirmations": {
+    "discardChanges": "Discard Changes",
+    "deleteFile": "Delete File",
+    "confirmCommit": "Confirm Commit",
+    "confirmPull": "Confirm Pull",
+    "confirmPush": "Confirm Push",
+    "publishBranch": "Publish Branch",
+    "discardMessage": "Discard all changes to \"{{file}}\"? This action cannot be undone.",
+    "deleteMessage": "Delete untracked file \"{{file}}\"? This action cannot be undone.",
+    "commitMessage": "Commit {{n}} file{{s}} with message: \"{{message}}\"?",
+    "pullMessage": "Pull {{n}} commit{{s}} from {{remote}}?",
+    "pushMessage": "Push {{n}} commit{{s}} to {{remote}}?",
+    "publishMessage": "Publish branch \"{{branch}}\" to {{remote}}?"
+  },
+  "errors": {
+    "notGitRepo": "Not a Git repository",
+    "gitInitTip": "Tip: Run {{command}} in your project directory to initialize git source control.",
+    "gitInitCommand": "git init"
+  },
+  "textOptions": {
+    "scroll": "↔️ Scroll",
+    "wrap": "↩️ Wrap"
+  },
+  "connection": {
+    "disconnect": "Disconnect",
+    "restart": "Restart",
+    "disconnectFromGit": "Disconnect from git",
+    "restartGit": "Restart Git (disconnect first)"
+  },
+  "time": {
+    "justNow": "just now",
+    "minAgo": "{{n}} min ago",
+    "hoursAgo": "{{n}} hours ago",
+    "daysAgo": "{{n}} days ago"
+  },
+  "gitErrors": {
+    "notAGitRepository": "Not a git repository",
+    "projectNotGitRepo": "Project directory is not a git repository",
+    "insideGitRepo": "This directory is inside a git repository at {{path}}, but git operations should be run from the repository root.",
+    "initializeRepo": "This directory does not contain a .git folder. Initialize a git repository with \"git init\" to use source control features."
+  }
+}

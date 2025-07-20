@@ -1,0 +1,17 @@
+{
+  "list": {
+    "title": "待辦清單",
+    "item": "項",
+    "items": "項"
+  },
+  "status": {
+    "completed": "已完成",
+    "in_progress": "進行中",
+    "pending": "待處理"
+  },
+  "priority": {
+    "high": "高",
+    "medium": "中",
+    "low": "低"
+  }
+}

@@ -1,0 +1,138 @@
+{
+  "buttons": {
+    "ok": "OK",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "close": "Close",
+    "refresh": "Refresh",
+    "create": "Create",
+    "add": "Add",
+    "remove": "Remove",
+    "back": "Back",
+    "next": "Next",
+    "continue": "Continue",
+    "retry": "Retry"
+  },
+  "states": {
+    "loading": "Loading...",
+    "saving": "Saving...",
+    "deleting": "Deleting...",
+    "processing": "Processing...",
+    "connecting": "Connecting..."
+  },
+  "messages": {
+    "success": "Success",
+    "error": "Error",
+    "warning": "Warning",
+    "info": "Info"
+  },
+  "app": {
+    "title": "Claude Code UI",
+    "subtitle": "AI coding assistant interface",
+    "updateAvailable": {
+      "title": "Update Available",
+      "subtitle": "A new version is ready",
+      "currentVersion": "Current Version",
+      "latestVersion": "Latest Version",
+      "howToUpgrade": "How to upgrade:",
+      "upgradeCommand": "git checkout main && git pull && npm install",
+      "upgradeInstructions": "Run this command in your Claude Code UI directory to update to the latest version.",
+      "later": "Later",
+      "copyCommand": "Copy Command"
+    }
+  },
+  "sidebar": {
+    "projects": "Projects",
+    "refresh": "Refresh projects and sessions (Ctrl+R)",
+    "newProject": "Create new project (Ctrl+N)",
+    "settings": "Settings",
+    "toolsSettings": "Tools Settings",
+    "search": {
+      "placeholder": "Search projects..."
+    },
+    "empty": {
+      "noProjects": "No projects found",
+      "runClaude": "Run Claude CLI in a project directory to get started",
+      "noMatchingProjects": "No matching projects",
+      "tryAdjustingSearch": "Try adjusting your search term"
+    },
+    "loading": {
+      "loadingProjects": "Loading projects...",
+      "fetchingProjects": "Fetching your Claude projects and sessions"
+    },
+    "projectNamePlaceholder": "Project name"
+  },
+  "language": {
+    "switcher": "Language",
+    "english": "English",
+    "traditionalChinese": "繁體中文"
+  },
+  "time": {
+    "justNow": "Just now",
+    "minAgo": "1 min ago",
+    "minsAgo": "{{n}} mins ago",
+    "hourAgo": "1 hour ago",
+    "hoursAgo": "{{n}} hours ago",
+    "dayAgo": "1 day ago",
+    "daysAgo": "{{n}} days ago",
+    "unknown": "Unknown"
+  },
+  "loading": {
+    "title": "Loading Claude Code UI",
+    "workspace": "Setting up your workspace..."
+  },
+  "main": {
+    "chooseProject": "Choose Your Project",
+    "selectProjectDescription": "Select a project from the sidebar to start coding with Claude. Each project contains your chat sessions and file history.",
+    "tip": "Tip",
+    "mobileTip": "Tap the menu button above to access projects",
+    "desktopTip": "Create a new project by clicking the folder icon in the sidebar"
+  },
+  "session": {
+    "new": "New Session"
+  },
+  "tabs": {
+    "chat": "Chat",
+    "shell": "Shell",
+    "files": "Files",
+    "sourceControl": "Source Control",
+    "projectFiles": "Project Files",
+    "project": "Project"
+  },
+  "image": {
+    "unableToLoad": "Unable to load image"
+  },
+  "microphone": {
+    "notSupported": "Microphone not supported. Please use HTTPS or a modern browser.",
+    "requiresHttps": "Microphone requires HTTPS. Please use a secure connection.",
+    "accessNotAvailable": "Microphone access not available. Please use HTTPS or a supported browser.",
+    "accessFailed": "Microphone access failed",
+    "accessDenied": "Microphone access denied. Please allow microphone permissions.",
+    "notFound": "No microphone found. Please check your audio devices.",
+    "notSupportedByBrowser": "Microphone not supported by this browser.",
+    "inUse": "Microphone is being used by another application.",
+    "startRecording": "Start recording",
+    "stopRecording": "Stop recording",
+    "transcribing": "Transcribing...",
+    "processing": "Processing..."
+  },
+  "darkMode": {
+    "toggle": "Toggle dark mode"
+  },
+  "errors": {
+    "failedToDeleteSession": "Failed to delete session. Please try again.",
+    "errorDeletingSession": "Error deleting session. Please try again.",
+    "failedToDeleteProject": "Failed to delete project. Please try again.",
+    "errorDeletingProject": "Error deleting project. Please try again.",
+    "pleaseEnterProjectPath": "Please enter a project path",
+    "failedToCreateProject": "Failed to create project. Please try again.",
+    "errorCreatingProject": "Error creating project. Please try again.",
+    "failedToRenameProject": "Failed to rename project"
+  },
+  "confirmations": {
+    "deleteSession": "Are you sure you want to delete this session? This action cannot be undone.",
+    "deleteEmptyProject": "Are you sure you want to delete this empty project? This action cannot be undone."
+  }
+}
