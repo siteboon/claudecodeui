@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { python } from '@codemirror/lang-python';
@@ -11,8 +12,18 @@ import { EditorView, Decoration } from '@codemirror/view';
 import { StateField, StateEffect, RangeSetBuilder } from '@codemirror/state';
 import { X, Save, Download, Maximize2, Minimize2, Eye, EyeOff } from 'lucide-react';
 import { api } from '../utils/api';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogAction,
+} from './ui/alert-dialog';
 
 function CodeEditor({ file, onClose, projectPath }) {
+  const { t } = useTranslation('editor');
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -21,6 +32,7 @@ function CodeEditor({ file, onClose, projectPath }) {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [showDiff, setShowDiff] = useState(!!file.diffInfo);
   const [wordWrap, setWordWrap] = useState(false);
+  const [errorDialog, setErrorDialog] = useState({ open: false, title: '', message: '' });
 
   // Create diff highlighting
   const diffEffect = StateEffect.define();
@@ -181,7 +193,7 @@ function CodeEditor({ file, onClose, projectPath }) {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || `Save failed: ${response.status}`);
+        throw new Error(errorData.error || t('errors.saveFailed', { error: response.status }));
       }
 
       const result = await response.json();
@@ -192,7 +204,11 @@ function CodeEditor({ file, onClose, projectPath }) {
       
     } catch (error) {
       console.error('Error saving file:', error);
-      alert(`Error saving file: ${error.message}`);
+      setErrorDialog({
+        open: true,
+        title: t('messages.error'),
+        message: `${t('errors.saveError')}: ${error.message}`
+      });
     } finally {
       setSaving(false);
     }
@@ -293,7 +309,7 @@ function CodeEditor({ file, onClose, projectPath }) {
               <button
                 onClick={() => setShowDiff(!showDiff)}
                 className="p-2 md:p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
-                title={showDiff ? "Hide diff highlighting" : "Show diff highlighting"}
+                title={showDiff ? t('actions.hideDiff') : t('actions.showDiff')}
               >
                 {showDiff ? <EyeOff className="w-5 h-5 md:w-4 md:h-4" /> : <Eye className="w-5 h-5 md:w-4 md:h-4" />}
               </button>
@@ -306,7 +322,7 @@ function CodeEditor({ file, onClose, projectPath }) {
                   ? 'text-blue-600 bg-blue-50' 
                   : 'text-gray-600 hover:text-gray-900'
               }`}
-              title={wordWrap ? 'Disable word wrap' : 'Enable word wrap'}
+              title={wordWrap ? t('actions.disableWordWrap') : t('actions.enableWordWrap')}
             >
               <span className="text-sm md:text-xs font-mono font-bold">↵</span>
             </button>
@@ -314,7 +330,7 @@ function CodeEditor({ file, onClose, projectPath }) {
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
               className="p-2 md:p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
-              title="Toggle theme"
+              title={t('actions.toggleTheme')}
             >
               <span className="text-lg md:text-base">{isDarkMode ? '☀️' : '🌙'}</span>
             </button>
@@ -322,7 +338,7 @@ function CodeEditor({ file, onClose, projectPath }) {
             <button
               onClick={handleDownload}
               className="p-2 md:p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
-              title="Download file"
+              title={t('actions.download')}
             >
               <Download className="w-5 h-5 md:w-4 md:h-4" />
             </button>
@@ -341,12 +357,12 @@ function CodeEditor({ file, onClose, projectPath }) {
                   <svg className="w-5 h-5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  <span className="hidden sm:inline">Saved!</span>
+                  <span className="hidden sm:inline">{t('actions.saved')}</span>
                 </>
               ) : (
                 <>
                   <Save className="w-5 h-5 md:w-4 md:h-4" />
-                  <span className="hidden sm:inline">{saving ? 'Saving...' : 'Save'}</span>
+                  <span className="hidden sm:inline">{saving ? t('actions.saving') : t('actions.save')}</span>
                 </>
               )}
             </button>
@@ -354,7 +370,7 @@ function CodeEditor({ file, onClose, projectPath }) {
             <button
               onClick={toggleFullscreen}
               className="hidden md:flex p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 items-center justify-center"
-              title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+              title={isFullscreen ? t('actions.exitFullscreen') : t('actions.fullscreen')}
             >
               {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
             </button>
@@ -362,7 +378,7 @@ function CodeEditor({ file, onClose, projectPath }) {
             <button
               onClick={onClose}
               className="p-2 md:p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
-              title="Close"
+              title={t('actions.close')}
             >
               <X className="w-6 h-6 md:w-4 md:h-4" />
             </button>
@@ -415,6 +431,21 @@ function CodeEditor({ file, onClose, projectPath }) {
           </div>
         </div>
       </div>
+      
+      {/* Error Dialog */}
+      <AlertDialog open={errorDialog.open} onOpenChange={(open) => setErrorDialog({ ...errorDialog, open })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{errorDialog.title}</AlertDialogTitle>
+            <AlertDialogDescription>{errorDialog.message}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setErrorDialog({ ...errorDialog, open: false })}>
+              {t('buttons.ok', { ns: 'common' })}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
