@@ -1,7 +1,9 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../contexts/ThemeContext';
 
 function DarkModeToggle() {
+  const { t } = useTranslation('common');
   const { isDarkMode, toggleDarkMode } = useTheme();
 
   return (
@@ -10,9 +12,9 @@ function DarkModeToggle() {
       className="relative inline-flex h-8 w-14 items-center rounded-full bg-gray-200 dark:bg-gray-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
       role="switch"
       aria-checked={isDarkMode}
-      aria-label="Toggle dark mode"
+      aria-label={t('darkMode.toggle')}
     >
-      <span className="sr-only">Toggle dark mode</span>
+      <span className="sr-only">{t('darkMode.toggle')}</span>
       <span
         className={`${
           isDarkMode ? 'translate-x-7' : 'translate-x-1'

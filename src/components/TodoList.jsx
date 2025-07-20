@@ -1,8 +1,11 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Badge } from './ui/badge';
 import { CheckCircle2, Clock, Circle } from 'lucide-react';
 
 const TodoList = ({ todos, isResult = false }) => {
+  const { t } = useTranslation('todo');
+  
   if (!todos || !Array.isArray(todos)) {
     return null;
   }
@@ -47,7 +50,7 @@ const TodoList = ({ todos, isResult = false }) => {
     <div className="space-y-3">
       {isResult && (
         <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-          Todo List ({todos.length} {todos.length === 1 ? 'item' : 'items'})
+          {t('list.title')} ({todos.length} {todos.length === 1 ? t('list.item') : t('list.items')})
         </div>
       )}
       
@@ -71,13 +74,13 @@ const TodoList = ({ todos, isResult = false }) => {
                   variant="outline"
                   className={`text-xs px-2 py-0.5 ${getPriorityColor(todo.priority)}`}
                 >
-                  {todo.priority}
+                  {t(`priority.${todo.priority}`)}
                 </Badge>
                 <Badge
                   variant="outline"
                   className={`text-xs px-2 py-0.5 ${getStatusColor(todo.status)}`}
                 >
-                  {todo.status.replace('_', ' ')}
+                  {t(`status.${todo.status}`)}
                 </Badge>
               </div>
             </div>

@@ -1,8 +1,10 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from './ui/button';
 import { X } from 'lucide-react';
 
 function ImageViewer({ file, onClose }) {
+  const { t } = useTranslation('common');
   const imagePath = `/api/projects/${file.projectName}/files/content?path=${encodeURIComponent(file.path)}`;
 
   return (
@@ -36,7 +38,7 @@ function ImageViewer({ file, onClose }) {
             className="text-center text-gray-500 dark:text-gray-400"
             style={{ display: 'none' }}
           >
-            <p>Unable to load image</p>
+            <p>{t('image.unableToLoad')}</p>
             <p className="text-sm mt-2">{file.path}</p>
           </div>
         </div>

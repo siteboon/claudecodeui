@@ -1,22 +1,35 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ScrollArea } from './ui/scroll-area';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
+import { LanguageSwitcher } from './LanguageSwitcher';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from './ui/alert-dialog';
 
 import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2, Star, Search } from 'lucide-react';
 import { cn } from '../lib/utils';
 import ClaudeLogo from './ClaudeLogo';
 import { api } from '../utils/api';
+// import { formatTimeDistance } from '../i18n/utils/dateFormatter';
 
 // Move formatTimeAgo outside component to avoid recreation on every render
-const formatTimeAgo = (dateString, currentTime) => {
+const formatTimeAgo = (dateString, currentTime, t, i18n) => {
   const date = new Date(dateString);
   const now = currentTime;
   
   // Check if date is valid
   if (isNaN(date.getTime())) {
-    return 'Unknown';
+    return t('common:time.unknown');
   }
   
   const diffInMs = now - date;
@@ -25,14 +38,16 @@ const formatTimeAgo = (dateString, currentTime) => {
   const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60));
   const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
   
-  if (diffInSeconds < 60) return 'Just now';
-  if (diffInMinutes === 1) return '1 min ago';
-  if (diffInMinutes < 60) return `${diffInMinutes} mins ago`;
-  if (diffInHours === 1) return '1 hour ago';
-  if (diffInHours < 24) return `${diffInHours} hours ago`;
-  if (diffInDays === 1) return '1 day ago';
-  if (diffInDays < 7) return `${diffInDays} days ago`;
-  return date.toLocaleDateString();
+  if (diffInSeconds < 60) return t('common:time.justNow');
+  if (diffInMinutes === 1) return t('common:time.minAgo');
+  if (diffInMinutes < 60) return t('common:time.minsAgo', { n: diffInMinutes });
+  if (diffInHours === 1) return t('common:time.hourAgo');
+  if (diffInHours < 24) return t('common:time.hoursAgo', { n: diffInHours });
+  if (diffInDays === 1) return t('common:time.dayAgo');
+  if (diffInDays < 7) return t('common:time.daysAgo', { n: diffInDays });
+  
+  // For older dates, just show days
+  return t('common:time.daysAgo', { n: diffInDays });
 };
 
 function Sidebar({ 
@@ -52,6 +67,7 @@ function Sidebar({
   currentVersion,
   onShowVersionModal
 }) {
+  const { t, i18n } = useTranslation(['common', 'settings']);
   const [expandedProjects, setExpandedProjects] = useState(new Set());
   const [editingProject, setEditingProject] = useState(null);
   const [showNewProject, setShowNewProject] = useState(false);
@@ -68,6 +84,13 @@ function Sidebar({
   const [editingSessionName, setEditingSessionName] = useState('');
   const [generatingSummary, setGeneratingSummary] = useState({});
   const [searchFilter, setSearchFilter] = useState('');
+  const [errorDialog, setErrorDialog] = useState({ open: false, title: '', message: '' });
+  const [confirmDialog, setConfirmDialog] = useState({ 
+    open: false, 
+    title: '', 
+    message: '', 
+    onConfirm: null 
+  });
 
   
   // Starred projects state - persisted in localStorage
@@ -267,6 +290,11 @@ function Sidebar({
         }
       } else {
         console.error('Failed to rename project');
+        setErrorDialog({
+          open: true,
+          title: t('messages.error'),
+          message: t('errors.failedToRenameProject')
+        });
       }
     } catch (error) {
       console.error('Error renaming project:', error);
@@ -277,9 +305,17 @@ function Sidebar({
   };
 
   const deleteSession = async (projectName, sessionId) => {
-    if (!confirm('Are you sure you want to delete this session? This action cannot be undone.')) {
-      return;
-    }
+    setConfirmDialog({
+      open: true,
+      title: t('messages.warning'),
+      message: t('confirmations.deleteSession'),
+      onConfirm: async () => {
+        await performDeleteSession(projectName, sessionId);
+      }
+    });
+  };
+
+  const performDeleteSession = async (projectName, sessionId) => {
 
     try {
       const response = await api.deleteSession(projectName, sessionId);
@@ -291,18 +327,34 @@ function Sidebar({
         }
       } else {
         console.error('Failed to delete session');
-        alert('Failed to delete session. Please try again.');
+        setErrorDialog({
+          open: true,
+          title: t('messages.error'),
+          message: t('errors.failedToDeleteSession')
+        });
       }
     } catch (error) {
       console.error('Error deleting session:', error);
-      alert('Error deleting session. Please try again.');
+      setErrorDialog({
+        open: true,
+        title: t('messages.error'),
+        message: t('errors.errorDeletingSession')
+      });
     }
   };
 
   const deleteProject = async (projectName) => {
-    if (!confirm('Are you sure you want to delete this empty project? This action cannot be undone.')) {
-      return;
-    }
+    setConfirmDialog({
+      open: true,
+      title: t('messages.warning'),
+      message: t('confirmations.deleteEmptyProject'),
+      onConfirm: async () => {
+        await performDeleteProject(projectName);
+      }
+    });
+  };
+
+  const performDeleteProject = async (projectName) => {
 
     try {
       const response = await api.deleteProject(projectName);
@@ -315,17 +367,29 @@ function Sidebar({
       } else {
         const error = await response.json();
         console.error('Failed to delete project');
-        alert(error.error || 'Failed to delete project. Please try again.');
+        setErrorDialog({
+          open: true,
+          title: t('messages.error'),
+          message: error.error || t('errors.failedToDeleteProject')
+        });
       }
     } catch (error) {
       console.error('Error deleting project:', error);
-      alert('Error deleting project. Please try again.');
+      setErrorDialog({
+        open: true,
+        title: t('messages.error'),
+        message: t('errors.errorDeletingProject')
+      });
     }
   };
 
   const createNewProject = async () => {
     if (!newProjectPath.trim()) {
-      alert('Please enter a project path');
+      setErrorDialog({
+        open: true,
+        title: t('messages.error'),
+        message: t('errors.pleaseEnterProjectPath')
+      });
       return;
     }
 
@@ -347,11 +411,19 @@ function Sidebar({
         }
       } else {
         const error = await response.json();
-        alert(error.error || 'Failed to create project. Please try again.');
+        setErrorDialog({
+          open: true,
+          title: t('messages.error'),
+          message: error.error || t('errors.failedToCreateProject')
+        });
       }
     } catch (error) {
       console.error('Error creating project:', error);
-      alert('Error creating project. Please try again.');
+      setErrorDialog({
+        open: true,
+        title: t('messages.error'),
+        message: t('errors.errorCreatingProject')
+      });
     } finally {
       setCreatingProject(false);
     }
@@ -424,8 +496,8 @@ function Sidebar({
               <MessageSquare className="w-4 h-4 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-foreground">Claude Code UI</h1>
-              <p className="text-sm text-muted-foreground">AI coding assistant interface</p>
+              <h1 className="text-lg font-bold text-foreground">{t('app.title')}</h1>
+              <p className="text-sm text-muted-foreground">{t('app.subtitle')}</p>
             </div>
           </div>
           <div className="flex gap-2">
@@ -442,7 +514,7 @@ function Sidebar({
                 }
               }}
               disabled={isRefreshing}
-              title="Refresh projects and sessions (Ctrl+R)"
+              title={t('common:sidebar.refresh')}
             >
               <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''} group-hover:rotate-180 transition-transform duration-300`} />
             </Button>
@@ -451,7 +523,7 @@ function Sidebar({
               size="sm"
               className="h-9 w-9 px-0 bg-primary hover:bg-primary/90 transition-all duration-200 shadow-sm hover:shadow-md"
               onClick={() => setShowNewProject(true)}
-              title="Create new project (Ctrl+N)"
+              title={t('common:sidebar.newProject')}
             >
               <FolderPlus className="w-4 h-4" />
             </Button>
@@ -466,8 +538,8 @@ function Sidebar({
                 <MessageSquare className="w-4 h-4 text-primary-foreground" />
               </div>
               <div>
-                <h1 className="text-lg font-semibold text-foreground">Claude Code UI</h1>
-                <p className="text-sm text-muted-foreground">Projects</p>
+                <h1 className="text-lg font-semibold text-foreground">{t('common:app.title')}</h1>
+                <p className="text-sm text-muted-foreground">{t('common:sidebar.projects')}</p>
               </div>
             </div>
             <div className="flex gap-2">
@@ -503,12 +575,12 @@ function Sidebar({
           <div className="hidden md:block space-y-2">
             <div className="flex items-center gap-2 text-sm font-medium text-foreground">
               <FolderPlus className="w-4 h-4" />
-              Create New Project
+              {t('settings:sidebar.newProject.title')}
             </div>
             <Input
               value={newProjectPath}
               onChange={(e) => setNewProjectPath(e.target.value)}
-              placeholder="/path/to/project or relative/path"
+              placeholder={t('settings:sidebar.newProject.placeholder')}
               className="text-sm focus:ring-2 focus:ring-primary/20"
               autoFocus
               onKeyDown={(e) => {
@@ -523,7 +595,7 @@ function Sidebar({
                 disabled={!newProjectPath.trim() || creatingProject}
                 className="flex-1 h-8 text-xs hover:bg-primary/90 transition-colors"
               >
-                {creatingProject ? 'Creating...' : 'Create Project'}
+                {creatingProject ? t('settings:sidebar.newProject.creating') : t('settings:sidebar.newProject.createProject')}
               </Button>
               <Button
                 size="sm"
@@ -532,7 +604,7 @@ function Sidebar({
                 disabled={creatingProject}
                 className="h-8 text-xs hover:bg-accent transition-colors"
               >
-                Cancel
+                {t('settings:sidebar.newProject.cancel')}
               </Button>
             </div>
           </div>
@@ -546,7 +618,7 @@ function Sidebar({
                     <FolderPlus className="w-3 h-3 text-primary" />
                   </div>
                   <div>
-                    <h2 className="text-base font-semibold text-foreground">New Project</h2>
+                    <h2 className="text-base font-semibold text-foreground">{t('settings:sidebar.newProject.title')}</h2>
                   </div>
                 </div>
                 <button
@@ -562,7 +634,7 @@ function Sidebar({
                 <Input
                   value={newProjectPath}
                   onChange={(e) => setNewProjectPath(e.target.value)}
-                  placeholder="/path/to/project or relative/path"
+                  placeholder={t('settings:sidebar.newProject.placeholder')}
                   className="text-sm h-10 rounded-md focus:border-primary transition-colors"
                   autoFocus
                   onKeyDown={(e) => {
@@ -578,14 +650,14 @@ function Sidebar({
                     variant="outline"
                     className="flex-1 h-9 text-sm rounded-md active:scale-95 transition-transform"
                   >
-                    Cancel
+                    {t('settings:sidebar.newProject.cancel')}
                   </Button>
                   <Button
                     onClick={createNewProject}
                     disabled={!newProjectPath.trim() || creatingProject}
                     className="flex-1 h-9 text-sm rounded-md bg-primary hover:bg-primary/90 active:scale-95 transition-all"
                   >
-                    {creatingProject ? 'Creating...' : 'Create'}
+                    {creatingProject ? t('settings:sidebar.newProject.creating') : t('settings:sidebar.newProject.create')}
                   </Button>
                 </div>
               </div>
@@ -604,7 +676,7 @@ function Sidebar({
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               type="text"
-              placeholder="Search projects..."
+              placeholder={t('common:sidebar.search.placeholder')}
               value={searchFilter}
               onChange={(e) => setSearchFilter(e.target.value)}
               className="pl-9 h-9 text-sm bg-muted/50 border-0 focus:bg-background focus:ring-1 focus:ring-primary/20"
@@ -697,7 +769,7 @@ function Sidebar({
                                   value={editingName}
                                   onChange={(e) => setEditingName(e.target.value)}
                                   className="w-full px-3 py-2 text-sm border-2 border-primary/40 focus:border-primary rounded-lg bg-background text-foreground shadow-sm focus:shadow-md transition-all duration-200 focus:outline-none"
-                                  placeholder="Project name"
+                                  placeholder={t('settings:sidebar.newProject.placeholder')}
                                   autoFocus
                                   autoComplete="off"
                                   onClick={(e) => e.stopPropagation()}
@@ -765,7 +837,7 @@ function Sidebar({
                                     toggleStarProject(project.name);
                                   }}
                                   onTouchEnd={handleTouchClick(() => toggleStarProject(project.name))}
-                                  title={isStarred ? "Remove from favorites" : "Add to favorites"}
+                                  title={isStarred ? t('settings:tooltips.starRemove') : t('settings:tooltips.starAdd')}
                                 >
                                   <Star className={cn(
                                     "w-4 h-4 transition-colors",
@@ -846,7 +918,7 @@ function Sidebar({
                                 value={editingName}
                                 onChange={(e) => setEditingName(e.target.value)}
                                 className="w-full px-2 py-1 text-sm border border-border rounded bg-background text-foreground focus:ring-2 focus:ring-primary/20"
-                                placeholder="Project name"
+                                placeholder={t('sidebar.projectNamePlaceholder')}
                                 autoFocus
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter') saveProjectName(project.name);
@@ -915,7 +987,7 @@ function Sidebar({
                                 e.stopPropagation();
                                 toggleStarProject(project.name);
                               }}
-                              title={isStarred ? "Remove from favorites" : "Add to favorites"}
+                              title={isStarred ? t('settings:tooltips.starRemove') : t('settings:tooltips.starAdd')}
                             >
                               <Star className={cn(
                                 "w-3 h-3 transition-colors",
@@ -930,7 +1002,7 @@ function Sidebar({
                                 e.stopPropagation();
                                 startEditing(project);
                               }}
-                              title="Rename project (F2)"
+                              title={t('settings:tooltips.rename')}
                             >
                               <Edit3 className="w-3 h-3" />
                             </div>
@@ -941,7 +1013,7 @@ function Sidebar({
                                   e.stopPropagation();
                                   deleteProject(project.name);
                                 }}
-                                title="Delete empty project (Delete)"
+                                title={t('settings:tooltips.deleteEmpty')}
                               >
                                 <Trash2 className="w-3 h-3 text-red-600 dark:text-red-400" />
                               </div>
@@ -1021,12 +1093,12 @@ function Sidebar({
                                   </div>
                                   <div className="min-w-0 flex-1">
                                     <div className="text-xs font-medium truncate text-foreground">
-                                      {session.summary || 'New Session'}
+                                      {session.summary || t('settings:session.newSession')}
                                     </div>
                                     <div className="flex items-center gap-1 mt-0.5">
                                       <Clock className="w-2.5 h-2.5 text-muted-foreground" />
                                       <span className="text-xs text-muted-foreground">
-                                        {formatTimeAgo(session.lastActivity, currentTime)}
+                                        {formatTimeAgo(session.lastActivity, currentTime, t, i18n)}
                                       </span>
                                       {session.messageCount > 0 && (
                                         <Badge variant="secondary" className="text-xs px-1 py-0 ml-auto">
@@ -1065,12 +1137,12 @@ function Sidebar({
                                   <MessageSquare className="w-3 h-3 text-muted-foreground mt-0.5 flex-shrink-0" />
                                   <div className="min-w-0 flex-1">
                                     <div className="text-xs font-medium truncate text-foreground">
-                                      {session.summary || 'New Session'}
+                                      {session.summary || t('settings:session.newSession')}
                                     </div>
                                     <div className="flex items-center gap-1 mt-0.5">
                                       <Clock className="w-2.5 h-2.5 text-muted-foreground" />
                                       <span className="text-xs text-muted-foreground">
-                                        {formatTimeAgo(session.lastActivity, currentTime)}
+                                        {formatTimeAgo(session.lastActivity, currentTime, t, i18n)}
                                       </span>
                                       {session.messageCount > 0 && (
                                         <Badge variant="secondary" className="text-xs px-1 py-0 ml-auto">
@@ -1108,7 +1180,7 @@ function Sidebar({
                                         e.stopPropagation();
                                         updateSessionSummary(project.name, session.id, editingSessionName);
                                       }}
-                                      title="Save"
+                                      title={t('settings:tooltips.save')}
                                     >
                                       <Check className="w-3 h-3 text-green-600 dark:text-green-400" />
                                     </button>
@@ -1119,7 +1191,7 @@ function Sidebar({
                                         setEditingSession(null);
                                         setEditingSessionName('');
                                       }}
-                                      title="Cancel"
+                                      title={t('settings:tooltips.cancel')}
                                     >
                                       <X className="w-3 h-3 text-gray-600 dark:text-gray-400" />
                                     </button>
@@ -1133,7 +1205,7 @@ function Sidebar({
                                         e.stopPropagation();
                                         generateSessionSummary(project.name, session.id);
                                       }}
-                                      title="Generate AI summary for this session"
+                                      title={t('settings:tooltips.generateSummary')}
                                       disabled={generatingSummary[`${project.name}-${session.id}`]}
                                     >
                                       {generatingSummary[`${project.name}-${session.id}`] ? (
@@ -1148,9 +1220,9 @@ function Sidebar({
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         setEditingSession(session.id);
-                                        setEditingSessionName(session.summary || 'New Session');
+                                        setEditingSessionName(session.summary || t('settings:session.newSession'));
                                       }}
-                                      title="Manually edit session name"
+                                      title={t('settings:tooltips.editSession')}
                                     >
                                       <Edit2 className="w-3 h-3 text-gray-600 dark:text-gray-400" />
                                     </button>
@@ -1161,7 +1233,7 @@ function Sidebar({
                                         e.stopPropagation();
                                         deleteSession(project.name, session.id);
                                       }}
-                                      title="Delete this session permanently"
+                                      title={t('settings:tooltips.deleteSession')}
                                     >
                                       <Trash2 className="w-3 h-3 text-red-600 dark:text-red-400" />
                                     </button>
@@ -1207,7 +1279,7 @@ function Sidebar({
                           }}
                         >
                           <Plus className="w-3 h-3" />
-                          New Session
+                          {t('settings:session.newSession')}
                         </button>
                       </div>
                       
@@ -1218,7 +1290,7 @@ function Sidebar({
                         onClick={() => onNewSession(project)}
                       >
                         <Plus className="w-3 h-3" />
-                        New Session
+                        {t('settings:session.newSession')}
                       </Button>
                     </div>
                   )}
@@ -1276,7 +1348,7 @@ function Sidebar({
       {/* Settings Section */}
       <div className="md:p-2 md:border-t md:border-border flex-shrink-0">
         {/* Mobile Settings */}
-        <div className="md:hidden p-4 pb-20 border-t border-border/50">
+        <div className="md:hidden p-4 pb-20 border-t border-border/50 space-y-3">
           <button
             className="w-full h-14 bg-muted/50 hover:bg-muted/70 rounded-2xl flex items-center justify-start gap-4 px-4 active:scale-[0.98] transition-all duration-150"
             onClick={onShowSettings}
@@ -1286,18 +1358,71 @@ function Sidebar({
             </div>
             <span className="text-lg font-medium text-foreground">Settings</span>
           </button>
+          <div className="flex justify-center">
+            <LanguageSwitcher size="default" showLabel={true} />
+          </div>
         </div>
         
-        {/* Desktop Settings */}
-        <Button
-          variant="ghost"
-          className="hidden md:flex w-full justify-start gap-2 p-2 h-auto font-normal text-muted-foreground hover:text-foreground hover:bg-accent transition-colors duration-200"
-          onClick={onShowSettings}
-        >
-          <Settings className="w-3 h-3" />
-          <span className="text-xs">Tools Settings</span>
-        </Button>
+        {/* Desktop Settings and Language Switcher */}
+        <div className="hidden md:flex items-center gap-2">
+          <Button
+            variant="ghost"
+            className="flex-1 justify-start gap-2 p-2 h-auto font-normal text-muted-foreground hover:text-foreground hover:bg-accent transition-colors duration-200"
+            onClick={onShowSettings}
+          >
+            <Settings className="w-3 h-3" />
+            <span className="text-xs">{t('sidebar.toolsSettings')}</span>
+          </Button>
+          <LanguageSwitcher size="sm" />
+        </div>
       </div>
+      
+      {/* Error Dialog */}
+      <AlertDialog open={errorDialog.open} onOpenChange={(open) => setErrorDialog({ ...errorDialog, open })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{errorDialog.title}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {errorDialog.message}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction>{t('buttons.ok')}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Confirm Dialog */}
+      <AlertDialog 
+        open={confirmDialog.open} 
+        onOpenChange={(open) => {
+          if (!open) {
+            setConfirmDialog({ ...confirmDialog, open: false });
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirmDialog.title}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmDialog.message}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('buttons.cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (confirmDialog.onConfirm) {
+                  confirmDialog.onConfirm();
+                }
+                setConfirmDialog({ ...confirmDialog, open: false });
+              }}
+            >
+              {t('buttons.ok')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
