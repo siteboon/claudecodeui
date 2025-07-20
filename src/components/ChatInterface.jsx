@@ -2153,7 +2153,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           </div>
         ) : chatMessages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
-            <div className="text-center text-gray-500 dark:text-gray-400 px-6 sm:px-4">
+            <div className="text-center text-gray-500 dark:text-gray-400 px-6 sm:px-4 max-w-lg mx-auto">
               <p className="font-bold text-lg sm:text-xl mb-3">{t('messages.startConversation')}</p>
               <p className="text-sm sm:text-base leading-relaxed">
                 {t('messages.askQuestionsDescription')}
