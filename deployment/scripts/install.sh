@@ -33,7 +33,7 @@ print_message "Starting Claude Code UI installation..." "$GREEN"
 # 1. Create service user
 print_message "Creating service user..." "$YELLOW"
 if ! id "$SERVICE_USER" &>/dev/null; then
-    useradd --system --no-create-home --shell /bin/false "$SERVICE_USER"
+    useradd --system --create-home --shell /bin/false "$SERVICE_USER"
     print_message "User $SERVICE_USER created" "$GREEN"
 else
     print_message "User $SERVICE_USER already exists" "$YELLOW"
@@ -42,7 +42,8 @@ fi
 # 2. Create directories
 print_message "Creating directories..." "$YELLOW"
 mkdir -p "$INSTALL_DIR" "$CONFIG_DIR" "$LOG_DIR"
-mkdir -p "$INSTALL_DIR/database"
+mkdir -p "$INSTALL_DIR/server/database"
+mkdir -p "/home/$SERVICE_USER/.claude/projects"
 
 # 3. Copy application files
 print_message "Copying application files..." "$YELLOW"
@@ -50,6 +51,7 @@ if [ -d "./dist" ]; then
     cp -r ./dist "$INSTALL_DIR/"
     cp -r ./server "$INSTALL_DIR/"
     cp -r ./node_modules "$INSTALL_DIR/"
+    cp -r ./deployment "$INSTALL_DIR/"
     cp ./package.json "$INSTALL_DIR/"
 else
     print_message "Error: Build files not found. Please run 'npm run build' first." "$RED"
@@ -64,17 +66,25 @@ if [ ! -f "$CONFIG_DIR/claudecodeui.conf" ]; then
 PORT=3002
 NODE_ENV=production
 JWT_SECRET=$(openssl rand -base64 32)
-DATABASE_PATH=$INSTALL_DIR/database/claudecodeui.db
+DATABASE_PATH=$INSTALL_DIR/server/database/auth.db
 LOG_LEVEL=info
 EOF
     chmod 600 "$CONFIG_DIR/claudecodeui.conf"
 fi
+
+# Create .env file for the application
+cat > "$INSTALL_DIR/.env" << EOF
+PORT=3002
+NODE_ENV=production
+EOF
 
 # 5. Set permissions
 print_message "Setting permissions..." "$YELLOW"
 chown -R "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR"
 chown -R "$SERVICE_USER:$SERVICE_GROUP" "$LOG_DIR"
 chown -R "$SERVICE_USER:$SERVICE_GROUP" "$CONFIG_DIR"
+chown -R "$SERVICE_USER:$SERVICE_GROUP" "/home/$SERVICE_USER"
+chmod 755 "$INSTALL_DIR/server/database"
 
 # 6. Install systemd service
 print_message "Installing systemd service..." "$YELLOW"

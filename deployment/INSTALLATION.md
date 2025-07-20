@@ -77,11 +77,70 @@ curl http://localhost:3002/api/health
 
 ### 2. Initial Configuration
 
-1. Open your browser and navigate to `http://localhost:3002`
-2. Create your first admin account
-3. Configure your Claude CLI path (if not auto-detected)
+**Important**: There is no default username/password. You must create the first user account when you access the system for the first time.
 
-### 3. Security Setup
+1. Open your browser and navigate to `http://localhost:3002`
+2. You will be prompted to create the first admin account:
+   - Choose a username (minimum 3 characters)
+   - Choose a password (minimum 6 characters)
+3. After creating the account, login with your credentials
+4. Configure your Claude CLI path (if not auto-detected)
+
+### 3. Reset Account/Password (if needed)
+
+#### Method 1: Use the Password Reset Script (Recommended)
+
+```bash
+# Run the password reset script
+sudo /opt/claudecodeui/deployment/scripts/reset-password.sh
+
+# Follow the prompts to:
+# 1. Select the username
+# 2. Enter and confirm new password
+# The script will automatically hash the password and restart the service
+```
+
+#### Method 2: Complete Database Reset
+
+```bash
+# Stop the service
+sudo systemctl stop claudecodeui
+
+# Remove the database file
+sudo rm /opt/claudecodeui/server/database/auth.db
+
+# Start the service (a new database will be created)
+sudo systemctl start claudecodeui
+
+# Navigate to http://localhost:3002 and create a new account
+```
+
+#### Method 3: Manual Password Reset
+
+```bash
+# First, generate a bcrypt hash for your new password
+cd /opt/claudecodeui
+node -e "const bcrypt = require('bcrypt'); bcrypt.hash('your-new-password', 12).then(hash => console.log(hash));"
+
+# Connect to the database
+sudo sqlite3 /opt/claudecodeui/server/database/auth.db
+
+# View existing users
+SELECT id, username FROM users;
+
+# Update the password (replace 'admin' with your username and use the hash from above)
+UPDATE users SET password_hash = '$2b$12$YourGeneratedHashHere' WHERE username = 'admin';
+
+# Exit sqlite
+.quit
+
+# Restart the service
+sudo systemctl restart claudecodeui
+```
+
+**Note**: The database column is `password_hash`, not `password`.
+
+### 4. Security Setup
 
 For production use:
 
@@ -158,28 +217,75 @@ This will:
 # Check logs
 sudo journalctl -u claudecodeui -n 100
 
+# Check error log
+sudo tail -50 /var/log/claudecodeui/error.log
+
 # Common fixes:
 # 1. Port already in use
 sudo lsof -i :3002
 
 # 2. Permission issues
 sudo chown -R claudecodeui:claudecodeui /opt/claudecodeui
+sudo chown -R claudecodeui:claudecodeui /home/claudecodeui
+sudo chmod 755 /opt/claudecodeui/server/database
+
+# 3. Missing .env file
+sudo bash -c 'cat > /opt/claudecodeui/.env << EOF
+PORT=3002
+NODE_ENV=production
+EOF'
+sudo chown claudecodeui:claudecodeui /opt/claudecodeui/.env
 ```
 
 ### Cannot access web interface
 
 1. Check firewall settings
-2. Verify service is running
-3. Check nginx/apache proxy configuration (if used)
+2. Verify service is running: `sudo systemctl status claudecodeui`
+3. Check if port is listening: `sudo netstat -tlnp | grep 3002`
+4. Clear browser cache or try incognito mode
+5. Check nginx/apache proxy configuration (if used)
 
 ### Database errors
 
 ```bash
-# Backup and reset database
-sudo cp /opt/claudecodeui/database/claudecodeui.db /tmp/backup.db
-sudo rm /opt/claudecodeui/database/claudecodeui.db
+# Database is read-only
+sudo chmod 664 /opt/claudecodeui/server/database/auth.db
+sudo chown claudecodeui:claudecodeui /opt/claudecodeui/server/database/auth.db
+sudo systemctl restart claudecodeui
+
+# Database cannot be created
+sudo mkdir -p /opt/claudecodeui/server/database
+sudo chown -R claudecodeui:claudecodeui /opt/claudecodeui/server/database
+sudo chmod 755 /opt/claudecodeui/server/database
+
+# Complete database reset
+sudo systemctl stop claudecodeui
+sudo rm -f /opt/claudecodeui/server/database/auth.db
+sudo systemctl start claudecodeui
+```
+
+### Registration fails with 500 error
+
+This usually means database permission issues:
+
+```bash
+# Fix database permissions
+sudo chown -R claudecodeui:claudecodeui /opt/claudecodeui/server/database
+sudo chmod 755 /opt/claudecodeui/server/database
+sudo chmod 664 /opt/claudecodeui/server/database/auth.db
+
+# Restart service
 sudo systemctl restart claudecodeui
 ```
+
+### Static resources not loading
+
+If CSS/JS files fail to load:
+
+1. Clear browser cache completely
+2. Try incognito/private browsing mode
+3. Check service worker: Open DevTools → Application → Service Workers → Unregister
+4. Force refresh: Ctrl+F5 (Windows/Linux) or Cmd+Shift+R (Mac)
 
 ## Support
 

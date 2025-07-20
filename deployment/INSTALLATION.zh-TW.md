@@ -77,11 +77,70 @@ curl http://localhost:3002/api/health
 
 ### 2. 初始設定
 
-1. 開啟瀏覽器並前往 `http://localhost:3002`
-2. 建立您的第一個管理員帳號
-3. 設定您的 Claude CLI 路徑（如果未自動偵測）
+**重要**：系統沒有預設的使用者名稱/密碼。您必須在第一次訪問系統時建立第一個使用者帳號。
 
-### 3. 安全性設定
+1. 開啟瀏覽器並前往 `http://localhost:3002`
+2. 系統將提示您建立第一個管理員帳號：
+   - 選擇使用者名稱（最少 3 個字元）
+   - 選擇密碼（最少 6 個字元）
+3. 建立帳號後，使用您的憑證登入
+4. 設定您的 Claude CLI 路徑（如果未自動偵測）
+
+### 3. 重設帳號/密碼（如有需要）
+
+#### 方法 1：使用密碼重設腳本（建議使用）
+
+```bash
+# 執行密碼重設腳本
+sudo /opt/claudecodeui/deployment/scripts/reset-password.sh
+
+# 依照提示進行：
+# 1. 選擇使用者名稱
+# 2. 輸入並確認新密碼
+# 腳本將自動雜湊密碼並重新啟動服務
+```
+
+#### 方法 2：完整資料庫重設
+
+```bash
+# 停止服務
+sudo systemctl stop claudecodeui
+
+# 移除資料庫檔案
+sudo rm /opt/claudecodeui/server/database/auth.db
+
+# 啟動服務（將建立新的資料庫）
+sudo systemctl start claudecodeui
+
+# 前往 http://localhost:3002 並建立新帳號
+```
+
+#### 方法 3：手動重設密碼
+
+```bash
+# 首先，為您的新密碼產生 bcrypt 雜湊值
+cd /opt/claudecodeui
+node -e "const bcrypt = require('bcrypt'); bcrypt.hash('your-new-password', 12).then(hash => console.log(hash));"
+
+# 連接到資料庫
+sudo sqlite3 /opt/claudecodeui/server/database/auth.db
+
+# 查看現有使用者
+SELECT id, username FROM users;
+
+# 更新密碼（將 'admin' 替換為您的使用者名稱，並使用上面產生的雜湊值）
+UPDATE users SET password_hash = '$2b$12$YourGeneratedHashHere' WHERE username = 'admin';
+
+# 離開 sqlite
+.quit
+
+# 重新啟動服務
+sudo systemctl restart claudecodeui
+```
+
+**注意**：資料庫欄位名稱是 `password_hash`，而非 `password`。
+
+### 4. 安全性設定
 
 生產環境使用：
 
@@ -158,28 +217,75 @@ sudo /opt/claudecodeui/deployment/scripts/uninstall.sh
 # 檢查日誌
 sudo journalctl -u claudecodeui -n 100
 
+# 檢查錯誤日誌
+sudo tail -50 /var/log/claudecodeui/error.log
+
 # 常見修復方法：
 # 1. 連接埠已在使用中
 sudo lsof -i :3002
 
 # 2. 權限問題
 sudo chown -R claudecodeui:claudecodeui /opt/claudecodeui
+sudo chown -R claudecodeui:claudecodeui /home/claudecodeui
+sudo chmod 755 /opt/claudecodeui/server/database
+
+# 3. 缺少 .env 檔案
+sudo bash -c 'cat > /opt/claudecodeui/.env << EOF
+PORT=3002
+NODE_ENV=production
+EOF'
+sudo chown claudecodeui:claudecodeui /opt/claudecodeui/.env
 ```
 
 ### 無法存取網頁介面
 
 1. 檢查防火牆設定
-2. 確認服務正在執行
-3. 檢查 nginx/apache 代理設定（如果使用）
+2. 確認服務正在執行：`sudo systemctl status claudecodeui`
+3. 檢查連接埠是否監聽中：`sudo netstat -tlnp | grep 3002`
+4. 清除瀏覽器快取或嘗試無痕模式
+5. 檢查 nginx/apache 代理設定（如果使用）
 
 ### 資料庫錯誤
 
 ```bash
-# 備份並重設資料庫
-sudo cp /opt/claudecodeui/database/claudecodeui.db /tmp/backup.db
-sudo rm /opt/claudecodeui/database/claudecodeui.db
+# 資料庫是唯讀的
+sudo chmod 664 /opt/claudecodeui/server/database/auth.db
+sudo chown claudecodeui:claudecodeui /opt/claudecodeui/server/database/auth.db
+sudo systemctl restart claudecodeui
+
+# 無法建立資料庫
+sudo mkdir -p /opt/claudecodeui/server/database
+sudo chown -R claudecodeui:claudecodeui /opt/claudecodeui/server/database
+sudo chmod 755 /opt/claudecodeui/server/database
+
+# 完整資料庫重設
+sudo systemctl stop claudecodeui
+sudo rm -f /opt/claudecodeui/server/database/auth.db
+sudo systemctl start claudecodeui
+```
+
+### 註冊失敗並出現 500 錯誤
+
+這通常表示資料庫權限問題：
+
+```bash
+# 修復資料庫權限
+sudo chown -R claudecodeui:claudecodeui /opt/claudecodeui/server/database
+sudo chmod 755 /opt/claudecodeui/server/database
+sudo chmod 664 /opt/claudecodeui/server/database/auth.db
+
+# 重新啟動服務
 sudo systemctl restart claudecodeui
 ```
+
+### 靜態資源無法載入
+
+如果 CSS/JS 檔案無法載入：
+
+1. 完全清除瀏覽器快取
+2. 嘗試無痕/私密瀏覽模式
+3. 檢查 Service Worker：開啟 DevTools → Application → Service Workers → Unregister
+4. 強制重新整理：Ctrl+F5（Windows/Linux）或 Cmd+Shift+R（Mac）
 
 ## 支援
 

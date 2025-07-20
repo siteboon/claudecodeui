@@ -53,8 +53,8 @@ if [ -d "$CONFIG_DIR" ]; then
     cp -r "$CONFIG_DIR" "$BACKUP_DIR/"
 fi
 
-if [ -f "$INSTALL_DIR/database/claudecodeui.db" ]; then
-    cp "$INSTALL_DIR/database/claudecodeui.db" "$BACKUP_DIR/"
+if [ -f "$INSTALL_DIR/server/database/auth.db" ]; then
+    cp "$INSTALL_DIR/server/database/auth.db" "$BACKUP_DIR/"
 fi
 
 print_message "Backup created at: $BACKUP_DIR" "$GREEN"

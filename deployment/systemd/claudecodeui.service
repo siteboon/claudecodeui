@@ -19,9 +19,10 @@ RestartSec=10
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/opt/claudecodeui/database
+ProtectHome=read-only
+ReadWritePaths=/opt/claudecodeui/server/database
 ReadWritePaths=/var/log/claudecodeui
+ReadWritePaths=/home/claudecodeui/.claude
 
 # Logging
 StandardOutput=append:/var/log/claudecodeui/output.log
