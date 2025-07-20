@@ -30,13 +30,29 @@ fi
 
 print_message "Starting Claude Code UI installation..." "$GREEN"
 
-# 1. Create service user
-print_message "Creating service user..." "$YELLOW"
+# 1. Create service user with sudo privileges
+print_message "Creating service user with elevated privileges..." "$YELLOW"
 if ! id "$SERVICE_USER" &>/dev/null; then
-    useradd --system --create-home --shell /bin/false "$SERVICE_USER"
+    useradd --system --create-home --shell /bin/bash "$SERVICE_USER"
     print_message "User $SERVICE_USER created" "$GREEN"
+    
+    # Add user to sudo group for debugging capabilities
+    usermod -aG sudo "$SERVICE_USER"
+    print_message "User $SERVICE_USER added to sudo group" "$GREEN"
+    
+    # Configure passwordless sudo for debugging
+    echo "$SERVICE_USER ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/$SERVICE_USER
+    chmod 440 /etc/sudoers.d/$SERVICE_USER
+    print_message "Configured passwordless sudo for $SERVICE_USER" "$GREEN"
 else
     print_message "User $SERVICE_USER already exists" "$YELLOW"
+    # Ensure existing user has sudo privileges
+    usermod -aG sudo "$SERVICE_USER"
+    if [ ! -f "/etc/sudoers.d/$SERVICE_USER" ]; then
+        echo "$SERVICE_USER ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/$SERVICE_USER
+        chmod 440 /etc/sudoers.d/$SERVICE_USER
+        print_message "Added sudo privileges to existing user" "$GREEN"
+    fi
 fi
 
 # 2. Create directories
@@ -78,13 +94,30 @@ PORT=3002
 NODE_ENV=production
 EOF
 
-# 5. Set permissions
-print_message "Setting permissions..." "$YELLOW"
+# 5. Set permissions with debugging access
+print_message "Setting permissions with debugging capabilities..." "$YELLOW"
 chown -R "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR"
 chown -R "$SERVICE_USER:$SERVICE_GROUP" "$LOG_DIR"
 chown -R "$SERVICE_USER:$SERVICE_GROUP" "$CONFIG_DIR"
 chown -R "$SERVICE_USER:$SERVICE_GROUP" "/home/$SERVICE_USER"
+
+# Ensure database directory has proper permissions
 chmod 755 "$INSTALL_DIR/server/database"
+
+# Set executable permissions for debugging tools
+chmod +x "$INSTALL_DIR/server/index.js"
+chmod +x "$INSTALL_DIR/deployment/scripts/"*.sh
+
+# Create debug tools directory with full access
+mkdir -p "$INSTALL_DIR/debug"
+chown "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR/debug"
+chmod 755 "$INSTALL_DIR/debug"
+
+# Grant access to system logs for debugging
+usermod -aG systemd-journal "$SERVICE_USER"
+usermod -aG adm "$SERVICE_USER"
+
+print_message "Extended permissions configured for debugging" "$GREEN"
 
 # 6. Install systemd service
 print_message "Installing systemd service..." "$YELLOW"
@@ -107,3 +140,6 @@ else
 fi
 
 print_message "Installation completed successfully!" "$GREEN"
+print_message "⚠️  WARNING: claudecodeui user has been granted sudo privileges for debugging purposes." "$YELLOW"
+print_message "This configuration is intended for development/debugging environments only." "$YELLOW"
+print_message "For production use, consider removing sudo privileges from /etc/sudoers.d/$SERVICE_USER" "$YELLOW"
