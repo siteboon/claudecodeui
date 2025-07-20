@@ -1,3 +1,34 @@
+
+<div align="right">
+  <details>
+    <summary >🌐 Language</summary>
+    <div>
+      <div align="center">
+        <a href="https://openaitx.github.io/view.html?user=siteboon&project=claudecodeui&lang=en">English</a>
+        | <a href="https://openaitx.github.io/view.html?user=siteboon&project=claudecodeui&lang=zh-CN">简体中文</a>
+        | <a href="https://openaitx.github.io/view.html?user=siteboon&project=claudecodeui&lang=zh-TW">繁體中文</a>
+        | <a href="https://openaitx.github.io/view.html?user=siteboon&project=claudecodeui&lang=ja">日本語</a>
+        | <a href="https://openaitx.github.io/view.html?user=siteboon&project=claudecodeui&lang=ko">한국어</a>
+        | <a href="https://openaitx.github.io/view.html?user=siteboon&project=claudecodeui&lang=hi">हिन्दी</a>
+        | <a href="https://openaitx.github.io/view.html?user=siteboon&project=claudecodeui&lang=th">ไทย</a>
+        | <a href="https://openaitx.github.io/view.html?user=siteboon&project=claudecodeui&lang=fr">Français</a>
+        | <a href="https://openaitx.github.io/view.html?user=siteboon&project=claudecodeui&lang=de">Deutsch</a>
+        | <a href="https://openaitx.github.io/view.html?user=siteboon&project=claudecodeui&lang=es">Español</a>
+        | <a href="https://openaitx.github.io/view.html?user=siteboon&project=claudecodeui&lang=it">Italiano</a>
+        | <a href="https://openaitx.github.io/view.html?user=siteboon&project=claudecodeui&lang=ru">Русский</a>
+        | <a href="https://openaitx.github.io/view.html?user=siteboon&project=claudecodeui&lang=pt">Português</a>
+        | <a href="https://openaitx.github.io/view.html?user=siteboon&project=claudecodeui&lang=nl">Nederlands</a>
+        | <a href="https://openaitx.github.io/view.html?user=siteboon&project=claudecodeui&lang=pl">Polski</a>
+        | <a href="https://openaitx.github.io/view.html?user=siteboon&project=claudecodeui&lang=ar">العربية</a>
+        | <a href="https://openaitx.github.io/view.html?user=siteboon&project=claudecodeui&lang=fa">فارسی</a>
+        | <a href="https://openaitx.github.io/view.html?user=siteboon&project=claudecodeui&lang=tr">Türkçe</a>
+        | <a href="https://openaitx.github.io/view.html?user=siteboon&project=claudecodeui&lang=vi">Tiếng Việt</a>
+        | <a href="https://openaitx.github.io/view.html?user=siteboon&project=claudecodeui&lang=id">Bahasa Indonesia</a>
+      </div>
+    </div>
+  </details>
+</div>
+
 <div align="center">
   <img src="public/logo.svg" alt="Claude Code UI" width="64" height="64">
   <h1>Claude Code UI</h1>
