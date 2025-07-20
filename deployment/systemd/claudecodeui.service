@@ -22,7 +22,7 @@ ProtectSystem=strict
 ProtectHome=read-only
 ReadWritePaths=/opt/claudecodeui/server/database
 ReadWritePaths=/var/log/claudecodeui
-ReadWritePaths=/home/claudecodeui/.claude
+ReadWritePaths=/home/claudecodeui
 
 # Logging
 StandardOutput=append:/var/log/claudecodeui/output.log
