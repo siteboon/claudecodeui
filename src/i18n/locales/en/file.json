@@ -1,0 +1,48 @@
+{
+  "title": "Files",
+  "viewModes": {
+    "simple": "Simple view",
+    "compact": "Compact view",
+    "detailed": "Detailed view"
+  },
+  "columns": {
+    "name": "Name",
+    "size": "Size",
+    "modified": "Modified",
+    "permissions": "Permissions"
+  },
+  "empty": {
+    "noFilesFound": "No files found",
+    "checkProjectPath": "Check if the project path is accessible"
+  },
+  "loading": {
+    "loadingFiles": "Loading files..."
+  },
+  "actions": {
+    "newFile": "New file",
+    "newFolder": "New folder",
+    "rename": "Rename",
+    "delete": "Delete",
+    "open": "Open",
+    "openInEditor": "Open in editor",
+    "copyPath": "Copy path",
+    "refresh": "Refresh"
+  },
+  "confirmations": {
+    "deleteFile": "Are you sure you want to delete \"{{name}}\"?",
+    "deleteFolder": "Are you sure you want to delete \"{{name}}\" and all its contents?",
+    "overwriteFile": "File \"{{name}}\" already exists. Overwrite?"
+  },
+  "tooltips": {
+    "folder": "Folder",
+    "file": "File",
+    "expandFolder": "Expand folder",
+    "collapseFolder": "Collapse folder"
+  },
+  "relativeTime": {
+    "justNow": "just now",
+    "minutesAgo": "{{n}} min ago",
+    "hoursAgo": "{{n}} hours ago",
+    "daysAgo": "{{n}} days ago"
+  }
+}

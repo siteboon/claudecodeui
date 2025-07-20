@@ -1,0 +1,17 @@
+{
+  "list": {
+    "title": "Todo List",
+    "item": "item",
+    "items": "items"
+  },
+  "status": {
+    "completed": "completed",
+    "in_progress": "in progress",
+    "pending": "pending"
+  },
+  "priority": {
+    "high": "high",
+    "medium": "medium",
+    "low": "low"
+  }
+}

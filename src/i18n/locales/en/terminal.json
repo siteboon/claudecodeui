@@ -1,0 +1,32 @@
+{
+  "empty": {
+    "selectProject": "Select a Project",
+    "chooseProject": "Choose a project to open an interactive shell in that directory"
+  },
+  "status": {
+    "newSession": "(New Session)",
+    "initializing": "(Initializing...)",
+    "restarting": "(Restarting...)",
+    "connected": "Connected",
+    "disconnected": "Disconnected"
+  },
+  "actions": {
+    "disconnect": "Disconnect",
+    "restart": "Restart",
+    "continueInShell": "Continue in Shell",
+    "connectingToShell": "Connecting to shell...",
+    "clear": "Clear",
+    "copy": "Copy",
+    "paste": "Paste",
+    "disconnectFromShell": "Disconnect from shell",
+    "restartShell": "Restart Shell (disconnect first)"
+  },
+  "messages": {
+    "resumeSession": "Resume session:",
+    "startNewSession": "Start a new Claude session",
+    "startingClaude": "Starting Claude CLI in",
+    "loadingTerminal": "Loading terminal...",
+    "connectionLost": "Connection lost. Click restart to reconnect.",
+    "sessionEnded": "Session ended."
+  }
+}
