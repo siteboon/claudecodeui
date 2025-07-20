@@ -1,0 +1,40 @@
+{
+  "generic": {
+    "error": "發生錯誤。請再試一次。",
+    "networkError": "網路錯誤。請檢查您的連線。",
+    "unauthorized": "未授權。請重新登入。",
+    "forbidden": "存取被拒。您沒有執行此動作的權限。",
+    "notFound": "找不到資源。",
+    "serverError": "伺服器錯誤。請稍後再試。",
+    "timeout": "請求逾時。請再試一次。"
+  },
+  "validation": {
+    "required": "此欄位為必填",
+    "invalidFormat": "格式無效",
+    "tooShort": "太短",
+    "tooLong": "太長",
+    "invalidEmail": "無效的電子郵件地址",
+    "invalidUrl": "無效的網址"
+  },
+  "file": {
+    "readError": "無法讀取檔案",
+    "writeError": "無法寫入檔案",
+    "deleteError": "無法刪除檔案",
+    "createError": "無法建立檔案",
+    "notFound": "找不到檔案",
+    "accessDenied": "檔案存取被拒",
+    "tooLarge": "檔案太大"
+  },
+  "project": {
+    "createError": "無法建立專案",
+    "loadError": "無法載入專案",
+    "notFound": "找不到專案",
+    "alreadyExists": "專案已存在"
+  },
+  "session": {
+    "loadError": "無法載入工作階段",
+    "saveError": "無法儲存工作階段",
+    "deleteError": "無法刪除工作階段",
+    "notFound": "找不到工作階段"
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "statuses": {
+    "error": "Error",
+    "claude": "Claude",
+    "processing": "Processing",
+    "thinking": "Thinking...",
+    "thinkingStatus": {
+      "thinking": "Thinking",
+      "processing": "Processing",
+      "analyzing": "Analyzing",
+      "working": "Working",
+      "computing": "Computing",
+      "reasoning": "Reasoning"
+    },
+    "escToInterrupt": "esc to interrupt",
+    "tokens": "tokens",
+    "stop": "Stop"
+  },
+  "messages": {
+    "selectProject": "Select a project to start chatting with Claude",
+    "loadingSession": "Loading session messages...",
+    "startConversation": "Start a conversation with Claude",
+    "askQuestionsDescription": "Ask questions about your code, request changes, or get help with development tasks",
+    "dropImagesHere": "Drop images here",
+    "askClaude": "Ask Claude to help with your code... (@ to reference files)",
+    "clearInput": "Clear input",
+    "attachImages": "Attach images",
+    "scrollToBottom": "Scroll to bottom",
+    "enterToSend": "Press Enter to send • Shift+Enter for new line • Tab to change modes • @ to reference files",
+    "enterToSendShort": "Enter to send • Tab for modes • @ for files",
+    "send": "Send"
+  },
+  "tools": {
+    "using": "Using {{tool}}",
+    "terminal": "Terminal",
+    "fileUpdated": "File updated successfully",
+    "fileCreated": "File created successfully",
+    "fileWritten": "File written successfully",
+    "todoListUpdated": "Todo list has been updated successfully",
+    "currentTodoList": "Current Todo List",
+    "implementationPlan": "Implementation Plan",
+    "toolError": "Tool Error",
+    "toolResult": "Tool Result",
+    "toolSettings": "Tool Settings",
+    "viewEditDiff": "View edit diff for",
+    "diff": "Diff",
+    "viewInputParameters": "View input parameters",
+    "viewRawParameters": "View raw parameters",
+    "creatingNewFile": "Creating new file:",
+    "newFile": "New File",
+    "updatingTodoList": "Updating Todo List",
+    "runningCommand": "Running command",
+    "read": "Read",
+    "readIcon": "📖 Read",
+    "updateTodoList": "📝 Update todo list",
+    "readTodoList": "📋 Read todo list",
+    "viewImplementationPlan": "View implementation plan",
+    "interactivePrompt": "Interactive Prompt",
+    "claudeSelectedOption": "✓ Claude selected option",
+    "cliInteractiveNote": "In the CLI, you would select this option interactively using arrow keys or by typing the number.",
+    "fileContentDisplayed": "The file content is displayed in the diff view above",
+    "viewFileContent": "View file content",
+    "viewFullOutput": "View full output",
+    "waitingForResponse": "⏳ Waiting for your response in the CLI",
+    "selectInTerminal": "Please select an option in your terminal where Claude is running."
+  },
+  "modes": {
+    "defaultMode": "Default Mode",
+    "acceptEdits": "Accept Edits",
+    "bypassPermissions": "Bypass Permissions",
+    "planMode": "Plan Mode"
+  },
+  "errors": {
+    "failedToLoadSession": "Failed to load session messages",
+    "failedToUploadImages": "Failed to upload images",
+    "fileTooLarge": "File too large (max 5MB)"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "empty": {
+    "selectProject": "選擇專案",
+    "chooseProject": "選擇一個專案以在該目錄中開啟互動式終端"
+  },
+  "status": {
+    "newSession": "(新工作階段)",
+    "initializing": "(初始化中...)",
+    "restarting": "(重新啟動中...)",
+    "connected": "已連線",
+    "disconnected": "已斷線"
+  },
+  "actions": {
+    "disconnect": "斷線",
+    "restart": "重新啟動",
+    "continueInShell": "在終端中繼續",
+    "connectingToShell": "連線至終端中...",
+    "clear": "清除",
+    "copy": "複製",
+    "paste": "貼上",
+    "disconnectFromShell": "中斷終端連線",
+    "restartShell": "重新啟動終端 (請先中斷連線)"
+  },
+  "messages": {
+    "resumeSession": "恢復工作階段：",
+    "startNewSession": "開始新的 Claude 工作階段",
+    "startingClaude": "正在啟動 Claude CLI 於",
+    "loadingTerminal": "載入終端機中...",
+    "connectionLost": "連線中斷。點擊重新啟動以重新連線。",
+    "sessionEnded": "工作階段已結束。"
+  }
+}
