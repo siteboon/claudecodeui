@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '../lib/utils';
 
 function ClaudeStatus({ status, onAbort, isLoading }) {
+  const { t } = useTranslation('chat');
   const [elapsedTime, setElapsedTime] = useState(0);
   const [animationPhase, setAnimationPhase] = useState(0);
   const [fakeTokens, setFakeTokens] = useState(0);
@@ -39,11 +41,11 @@ function ClaudeStatus({ status, onAbort, isLoading }) {
   if (!isLoading) return null;
   
   // Clever action words that cycle
-  const actionWords = ['Thinking', 'Processing', 'Analyzing', 'Working', 'Computing', 'Reasoning'];
-  const actionIndex = Math.floor(elapsedTime / 3) % actionWords.length;
+  const actionWordKeys = ['thinking', 'processing', 'analyzing', 'working', 'computing', 'reasoning'];
+  const actionIndex = Math.floor(elapsedTime / 3) % actionWordKeys.length;
   
   // Parse status data
-  const statusText = status?.text || actionWords[actionIndex];
+  const statusText = status?.text || t(`statuses.thinkingStatus.${actionWordKeys[actionIndex]}`);
   const tokens = status?.tokens || fakeTokens;
   const canInterrupt = status?.can_interrupt !== false;
   
@@ -72,16 +74,16 @@ function ClaudeStatus({ status, onAbort, isLoading }) {
                 {tokens > 0 && (
                   <>
                     <span className="text-gray-400">·</span>
-                    <span className="text-gray-300 text-sm hidden sm:inline">⚒ {tokens.toLocaleString()} tokens</span>
+                    <span className="text-gray-300 text-sm hidden sm:inline">⚒ {tokens.toLocaleString()} {t('statuses.tokens')}</span>
                     <span className="text-gray-300 text-sm sm:hidden">⚒ {tokens.toLocaleString()}</span>
                   </>
                 )}
                 <span className="text-gray-400 hidden sm:inline">·</span>
-                <span className="text-gray-300 text-sm hidden sm:inline">esc to interrupt</span>
+                <span className="text-gray-300 text-sm hidden sm:inline">{t('statuses.escToInterrupt')}</span>
               </div>
               {/* Second line for mobile */}
               <div className="text-xs text-gray-400 sm:hidden mt-1">
-                esc to interrupt
+                {t('statuses.escToInterrupt')}
               </div>
             </div>
           </div>
@@ -96,7 +98,7 @@ function ClaudeStatus({ status, onAbort, isLoading }) {
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
-            <span className="hidden sm:inline">Stop</span>
+            <span className="hidden sm:inline">{t('statuses.stop')}</span>
           </button>
         )}
       </div>

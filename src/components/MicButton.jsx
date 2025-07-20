@@ -108,16 +108,16 @@ export function MicButton({ onTranscript, className = '' }) {
       console.error('Failed to start recording:', err);
       
       // Provide specific error messages based on error type
-      let errorMessage = 'Microphone access failed';
+      let errorMessage = t('microphone.accessFailed');
       
       if (err.name === 'NotAllowedError') {
-        errorMessage = 'Microphone access denied. Please allow microphone permissions.';
+        errorMessage = t('microphone.accessDenied');
       } else if (err.name === 'NotFoundError') {
-        errorMessage = 'No microphone found. Please check your audio devices.';
+        errorMessage = t('microphone.notFound');
       } else if (err.name === 'NotSupportedError') {
-        errorMessage = 'Microphone not supported by this browser.';
+        errorMessage = t('microphone.notSupportedByBrowser');
       } else if (err.name === 'NotReadableError') {
-        errorMessage = 'Microphone is being used by another application.';
+        errorMessage = t('microphone.inUse');
       } else if (err.message.includes('HTTPS')) {
         errorMessage = err.message;
       }

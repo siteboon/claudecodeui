@@ -12,6 +12,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import ChatInterface from './ChatInterface';
 import FileTree from './FileTree';
 import CodeEditor from './CodeEditor';
@@ -41,6 +42,7 @@ function MainContent({
   showRawParameters,      // Show raw parameters in tool accordions
   autoScrollToBottom      // Auto-scroll to bottom when new messages arrive
 }) {
+  const { t } = useTranslation('common');
   const [editingFile, setEditingFile] = useState(null);
 
   const handleFileOpen = (filePath, diffInfo = null) => {
@@ -85,8 +87,8 @@ function MainContent({
                 }} 
               />
             </div>
-            <h2 className="text-xl font-semibold mb-2">Loading Claude Code UI</h2>
-            <p>Setting up your workspace...</p>
+            <h2 className="text-xl font-semibold mb-2">{t('loading.title')}</h2>
+            <p>{t('loading.workspace')}</p>
           </div>
         </div>
       </div>
@@ -116,13 +118,13 @@ function MainContent({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-5l-2-2H5a2 2 0 00-2 2z" />
               </svg>
             </div>
-            <h2 className="text-2xl font-semibold mb-3 text-gray-900 dark:text-white">Choose Your Project</h2>
+            <h2 className="text-2xl font-semibold mb-3 text-gray-900 dark:text-white">{t('main.chooseProject')}</h2>
             <p className="text-gray-600 dark:text-gray-300 mb-6 leading-relaxed">
-              Select a project from the sidebar to start coding with Claude. Each project contains your chat sessions and file history.
+              {t('main.selectProjectDescription')}
             </p>
             <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
               <p className="text-sm text-blue-700 dark:text-blue-300">
-                💡 <strong>Tip:</strong> {isMobile ? 'Tap the menu button above to access projects' : 'Create a new project by clicking the folder icon in the sidebar'}
+                💡 <strong>{t('main.tip')}:</strong> {isMobile ? t('main.mobileTip') : t('main.desktopTip')}
               </p>
             </div>
           </div>
@@ -164,7 +166,7 @@ function MainContent({
               ) : activeTab === 'chat' && !selectedSession ? (
                 <div>
                   <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
-                    New Session
+                    {t('session.new')}
                   </h2>
                   <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
                     {selectedProject.displayName}
@@ -173,7 +175,7 @@ function MainContent({
               ) : (
                 <div>
                   <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
-                    {activeTab === 'files' ? 'Project Files' : activeTab === 'git' ? 'Source Control' : 'Project'}
+                    {activeTab === 'files' ? t('tabs.projectFiles') : activeTab === 'git' ? t('tabs.sourceControl') : t('tabs.project')}
                   </h2>
                   <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
                     {selectedProject.displayName}
@@ -198,7 +200,7 @@ function MainContent({
                   <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                   </svg>
-                  <span className="hidden sm:inline">Chat</span>
+                  <span className="hidden sm:inline">{t('tabs.chat')}</span>
                 </span>
               </button>
               <button
@@ -213,7 +215,7 @@ function MainContent({
                   <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z" />
                   </svg>
-                  <span className="hidden sm:inline">Shell</span>
+                  <span className="hidden sm:inline">{t('tabs.shell')}</span>
                 </span>
               </button>
               <button
@@ -228,7 +230,7 @@ function MainContent({
                   <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-5l-2-2H5a2 2 0 00-2 2z" />
                   </svg>
-                  <span className="hidden sm:inline">Files</span>
+                  <span className="hidden sm:inline">{t('tabs.files')}</span>
                 </span>
               </button>
               <button
@@ -243,7 +245,7 @@ function MainContent({
                   <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
-                  <span className="hidden sm:inline">Source Control</span>
+                  <span className="hidden sm:inline">{t('tabs.sourceControl')}</span>
                 </span>
               </button>
                {/* <button

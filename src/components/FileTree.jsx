@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ScrollArea } from './ui/scroll-area';
 import { Button } from './ui/button';
 import { Folder, FolderOpen, File, FileText, FileCode, List, TableProperties, Eye } from 'lucide-react';
@@ -8,6 +9,7 @@ import ImageViewer from './ImageViewer';
 import { api } from '../utils/api';
 
 function FileTree({ selectedProject }) {
+  const { t } = useTranslation('file');
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [expandedDirs, setExpandedDirs] = useState(new Set());
@@ -83,10 +85,10 @@ function FileTree({ selectedProject }) {
     const past = new Date(date);
     const diffInSeconds = Math.floor((now - past) / 1000);
     
-    if (diffInSeconds < 60) return 'just now';
-    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} min ago`;
-    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
-    if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)} days ago`;
+    if (diffInSeconds < 60) return t('relativeTime.justNow');
+    if (diffInSeconds < 3600) return t('relativeTime.minutesAgo', { n: Math.floor(diffInSeconds / 60) });
+    if (diffInSeconds < 86400) return t('relativeTime.hoursAgo', { n: Math.floor(diffInSeconds / 3600) });
+    if (diffInSeconds < 2592000) return t('relativeTime.daysAgo', { n: Math.floor(diffInSeconds / 86400) });
     return past.toLocaleDateString();
   };
 
@@ -300,7 +302,7 @@ function FileTree({ selectedProject }) {
     return (
       <div className="h-full flex items-center justify-center">
         <div className="text-gray-500 dark:text-gray-400">
-          Loading files...
+          {t('loading.loadingFiles')}
         </div>
       </div>
     );
@@ -310,14 +312,14 @@ function FileTree({ selectedProject }) {
     <div className="h-full flex flex-col bg-card">
       {/* View Mode Toggle */}
       <div className="p-4 border-b border-border flex items-center justify-between">
-        <h3 className="text-sm font-medium text-foreground">Files</h3>
+        <h3 className="text-sm font-medium text-foreground">{t('title')}</h3>
         <div className="flex gap-1">
           <Button
             variant={viewMode === 'simple' ? 'default' : 'ghost'}
             size="sm"
             className="h-8 w-8 p-0"
             onClick={() => changeViewMode('simple')}
-            title="Simple view"
+            title={t('viewModes.simple')}
           >
             <List className="w-4 h-4" />
           </Button>
@@ -326,7 +328,7 @@ function FileTree({ selectedProject }) {
             size="sm"
             className="h-8 w-8 p-0"
             onClick={() => changeViewMode('compact')}
-            title="Compact view"
+            title={t('viewModes.compact')}
           >
             <Eye className="w-4 h-4" />
           </Button>
@@ -335,7 +337,7 @@ function FileTree({ selectedProject }) {
             size="sm"
             className="h-8 w-8 p-0"
             onClick={() => changeViewMode('detailed')}
-            title="Detailed view"
+            title={t('viewModes.detailed')}
           >
             <TableProperties className="w-4 h-4" />
           </Button>
@@ -346,10 +348,10 @@ function FileTree({ selectedProject }) {
       {viewMode === 'detailed' && files.length > 0 && (
         <div className="px-4 pt-2 pb-1 border-b border-border">
           <div className="grid grid-cols-12 gap-2 px-2 text-xs font-medium text-muted-foreground">
-            <div className="col-span-5">Name</div>
-            <div className="col-span-2">Size</div>
-            <div className="col-span-3">Modified</div>
-            <div className="col-span-2">Permissions</div>
+            <div className="col-span-5">{t('columns.name')}</div>
+            <div className="col-span-2">{t('columns.size')}</div>
+            <div className="col-span-3">{t('columns.modified')}</div>
+            <div className="col-span-2">{t('columns.permissions')}</div>
           </div>
         </div>
       )}
@@ -360,9 +362,9 @@ function FileTree({ selectedProject }) {
             <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-3">
               <Folder className="w-6 h-6 text-muted-foreground" />
             </div>
-            <h4 className="font-medium text-foreground mb-1">No files found</h4>
+            <h4 className="font-medium text-foreground mb-1">{t('empty.noFilesFound')}</h4>
             <p className="text-sm text-muted-foreground">
-              Check if the project path is accessible
+              {t('empty.checkProjectPath')}
             </p>
           </div>
         ) : (
