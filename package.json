@@ -10,7 +10,10 @@
     "client": "vite --host",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "npm run build && npm run server"
+    "start": "npm run build && npm run server",
+    "package": "bash deployment/build-package.sh",
+    "package:docker": "docker build -f deployment/Dockerfile.production -t claudecodeui:latest .",
+    "package:compose": "docker-compose -f deployment/docker-compose.production.yml up -d"
   },
   "keywords": [
     "claude",
