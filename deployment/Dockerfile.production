@@ -1,0 +1,56 @@
+# Production Dockerfile for Claude Code UI
+FROM node:18-alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache python3 make g++
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+RUN npm ci
+
+# Copy source code
+COPY . .
+
+# Build the application
+RUN npm run build
+
+# Production stage
+FROM node:18-alpine
+
+# Install runtime dependencies
+RUN apk add --no-cache tini
+
+# Create app user
+RUN addgroup -g 1001 -S claudecodeui && \
+    adduser -S claudecodeui -u 1001
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install production dependencies only
+RUN npm ci --production && \
+    npm cache clean --force
+
+# Copy built application
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/server ./server
+
+# Create necessary directories
+RUN mkdir -p /app/database /app/logs && \
+    chown -R claudecodeui:claudecodeui /app
+
+# Switch to non-root user
+USER claudecodeui
+
+# Expose port
+EXPOSE 3002
+
+# Use tini for proper signal handling
+ENTRYPOINT ["/sbin/tini", "--"]
+
+# Start the application
+CMD ["node", "server/index.js"]

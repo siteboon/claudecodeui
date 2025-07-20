@@ -169,6 +169,16 @@ app.use('/api', validateApiKey);
 // Authentication routes (public)
 app.use('/api/auth', authRoutes);
 
+// Health check endpoint (public)
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    version: process.env.npm_package_version || '1.0.0',
+    uptime: process.uptime()
+  });
+});
+
 // Git API Routes (protected)
 app.use('/api/git', authenticateToken, gitRoutes);
 

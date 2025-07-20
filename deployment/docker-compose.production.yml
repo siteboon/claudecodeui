@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  claudecodeui:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile.production
+    image: claudecodeui:latest
+    container_name: claudecodeui
+    restart: unless-stopped
+    ports:
+      - "3002:3002"
+    environment:
+      - NODE_ENV=production
+      - PORT=3002
+      - JWT_SECRET=${JWT_SECRET:-changeme}
+      - DATABASE_PATH=/app/database/claudecodeui.db
+    volumes:
+      # Persist database
+      - claudecodeui-db:/app/database
+      # Persist logs
+      - claudecodeui-logs:/app/logs
+      # Mount Claude CLI projects (read-only for security)
+      - ~/.claude/projects:/home/claudecodeui/.claude/projects:ro
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3002/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  claudecodeui-db:
+    driver: local
+  claudecodeui-logs:
+    driver: local
