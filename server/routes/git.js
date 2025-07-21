@@ -444,10 +444,25 @@ router.get('/remote-status', async (req, res) => {
       trackingBranch = stdout.trim();
       remoteName = trackingBranch.split('/')[0]; // Extract remote name (e.g., "origin/main" -> "origin")
     } catch (error) {
-      // No upstream branch configured
+      // No upstream branch configured - but check if we have remotes
+      let hasRemote = false;
+      let remoteName = null;
+      try {
+        const { stdout } = await execAsync('git remote', { cwd: projectPath });
+        const remotes = stdout.trim().split('\n').filter(r => r.trim());
+        if (remotes.length > 0) {
+          hasRemote = true;
+          remoteName = remotes.includes('origin') ? 'origin' : remotes[0];
+        }
+      } catch (remoteError) {
+        // No remotes configured
+      }
+      
       return res.json({ 
-        hasRemote: false, 
+        hasRemote,
+        hasUpstream: false,
         branch,
+        remoteName,
         message: 'No remote tracking branch configured'
       });
     }
@@ -462,6 +477,7 @@ router.get('/remote-status', async (req, res) => {
 
     res.json({
       hasRemote: true,
+      hasUpstream: true,
       branch,
       remoteBranch: trackingBranch,
       remoteName,
@@ -653,6 +669,82 @@ router.post('/push', async (req, res) => {
   }
 });
 
+// Publish branch to remote (set upstream and push)
+router.post('/publish', async (req, res) => {
+  const { project, branch } = req.body;
+  
+  if (!project || !branch) {
+    return res.status(400).json({ error: 'Project name and branch are required' });
+  }
+
+  try {
+    const projectPath = await getActualProjectPath(project);
+    await validateGitRepository(projectPath);
+
+    // Get current branch to verify it matches the requested branch
+    const { stdout: currentBranch } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: projectPath });
+    const currentBranchName = currentBranch.trim();
+    
+    if (currentBranchName !== branch) {
+      return res.status(400).json({ 
+        error: `Branch mismatch. Current branch is ${currentBranchName}, but trying to publish ${branch}` 
+      });
+    }
+
+    // Check if remote exists
+    let remoteName = 'origin';
+    try {
+      const { stdout } = await execAsync('git remote', { cwd: projectPath });
+      const remotes = stdout.trim().split('\n').filter(r => r.trim());
+      if (remotes.length === 0) {
+        return res.status(400).json({ 
+          error: 'No remote repository configured. Add a remote with: git remote add origin <url>' 
+        });
+      }
+      remoteName = remotes.includes('origin') ? 'origin' : remotes[0];
+    } catch (error) {
+      return res.status(400).json({ 
+        error: 'No remote repository configured. Add a remote with: git remote add origin <url>' 
+      });
+    }
+
+    // Publish the branch (set upstream and push)
+    const { stdout } = await execAsync(`git push --set-upstream ${remoteName} ${branch}`, { cwd: projectPath });
+    
+    res.json({ 
+      success: true, 
+      output: stdout || 'Branch published successfully', 
+      remoteName,
+      branch
+    });
+  } catch (error) {
+    console.error('Git publish error:', error);
+    
+    // Enhanced error handling for common publish scenarios
+    let errorMessage = 'Publish failed';
+    let details = error.message;
+    
+    if (error.message.includes('rejected')) {
+      errorMessage = 'Publish rejected';
+      details = 'The remote branch already exists and has different commits. Use push instead.';
+    } else if (error.message.includes('Could not resolve hostname')) {
+      errorMessage = 'Network error';
+      details = 'Unable to connect to remote repository. Check your internet connection.';
+    } else if (error.message.includes('Permission denied')) {
+      errorMessage = 'Authentication failed';
+      details = 'Permission denied. Check your credentials or SSH keys.';
+    } else if (error.message.includes('fatal:') && error.message.includes('does not appear to be a git repository')) {
+      errorMessage = 'Remote not configured';
+      details = 'Remote repository not properly configured. Check your remote URL.';
+    }
+    
+    res.status(500).json({ 
+      error: errorMessage, 
+      details: details
+    });
+  }
+});
+
 // Discard changes for a specific file
 router.post('/discard', async (req, res) => {
   const { project, file } = req.body;
@@ -688,6 +780,41 @@ router.post('/discard', async (req, res) => {
     res.json({ success: true, message: `Changes discarded for ${file}` });
   } catch (error) {
     console.error('Git discard error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete untracked file
+router.post('/delete-untracked', async (req, res) => {
+  const { project, file } = req.body;
+  
+  if (!project || !file) {
+    return res.status(400).json({ error: 'Project name and file path are required' });
+  }
+
+  try {
+    const projectPath = await getActualProjectPath(project);
+    await validateGitRepository(projectPath);
+
+    // Check if file is actually untracked
+    const { stdout: statusOutput } = await execAsync(`git status --porcelain "${file}"`, { cwd: projectPath });
+    
+    if (!statusOutput.trim()) {
+      return res.status(400).json({ error: 'File is not untracked or does not exist' });
+    }
+
+    const status = statusOutput.substring(0, 2);
+    
+    if (status !== '??') {
+      return res.status(400).json({ error: 'File is not untracked. Use discard for tracked files.' });
+    }
+
+    // Delete the untracked file
+    await fs.unlink(path.join(projectPath, file));
+    
+    res.json({ success: true, message: `Untracked file ${file} deleted successfully` });
+  } catch (error) {
+    console.error('Git delete untracked error:', error);
     res.status(500).json({ error: error.message });
   }
 });

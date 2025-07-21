@@ -374,9 +374,7 @@ function Sidebar({
 
     try {
       const currentSessionCount = (project.sessions?.length || 0) + (additionalSessions[project.name]?.length || 0);
-      const response = await fetch(
-        `/api/projects/${project.name}/sessions?limit=5&offset=${currentSessionCount}`
-      );
+      const response = await api.sessions(project.name, 5, currentSessionCount);
       
       if (response.ok) {
         const result = await response.json();
