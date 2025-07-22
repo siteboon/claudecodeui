@@ -13,6 +13,226 @@ function clearProjectDirectoryCache() {
   cacheTimestamp = Date.now();
 }
 
+/**
+ * Load global settings file from ~/.claude/settings.json
+ * @returns {Promise<Object>} Global settings object
+ */
+async function loadGlobalSettings() {
+  const settingsPath = path.join(process.env.HOME, '.claude', 'settings.json');
+  try {
+    const settingsData = await fs.readFile(settingsPath, 'utf8');
+    const rawSettings = JSON.parse(settingsData);
+    
+    // Convert from Claude CLI format to claudecodeui format
+    return convertSettingsFormat(rawSettings);
+  } catch (error) {
+    // Return empty settings if file doesn't exist
+    return {};
+  }
+}
+
+/**
+ * Load project-specific settings file from {projectPath}/.claude/settings.json
+ * @param {string|null} projectPath - Path to the project directory
+ * @returns {Promise<Object>} Project settings object
+ */
+async function loadProjectSettings(projectPath) {
+  if (!projectPath) return {};
+  
+  const settingsPath = path.join(projectPath, '.claude', 'settings.json');
+  try {
+    const settingsData = await fs.readFile(settingsPath, 'utf8');
+    const rawSettings = JSON.parse(settingsData);
+    
+    // Convert from Claude CLI format to claudecodeui format
+    return convertSettingsFormat(rawSettings);
+  } catch (error) {
+    // Return empty settings if file doesn't exist
+    return {};
+  }
+}
+
+/**
+ * Convert Claude CLI format settings to claudecodeui format
+ * @param {Object} rawSettings - Raw settings in Claude CLI format
+ * @returns {Object} Settings in claudecodeui format
+ */
+function convertSettingsFormat(rawSettings) {
+  // Validate input
+  if (!rawSettings || typeof rawSettings !== 'object') {
+    return {};
+  }
+  
+  // Return as-is if already in claudecodeui format
+  if (rawSettings.allowedTools !== undefined || rawSettings.disallowedTools !== undefined) {
+    return rawSettings;
+  }
+  
+  // Convert if in Claude CLI format
+  const converted = { ...rawSettings };
+  
+  if (rawSettings.permissions) {
+    // permissions.allow -> allowedTools
+    if (Array.isArray(rawSettings.permissions.allow)) {
+      converted.allowedTools = rawSettings.permissions.allow;
+    }
+    
+    // permissions.deny -> disallowedTools
+    if (Array.isArray(rawSettings.permissions.deny)) {
+      converted.disallowedTools = rawSettings.permissions.deny;
+    }
+    
+    // permissions.defaultMode -> skipPermissions
+    // dangerous-type values are treated as permission skip
+    const dangerousModes = ['dangerous', 'dangerously-skip-permissions', 'skip', 'bypass', 'bypasspermissions'];
+    const defaultMode = rawSettings.permissions.defaultMode || 'default';
+    converted.skipPermissions = dangerousModes.includes(defaultMode.toLowerCase());
+    
+    // Remove permissions section
+    delete converted.permissions;
+  }
+  
+  return converted;
+}
+
+/**
+ * Save global settings to ~/.claude/settings.json
+ * @param {Object} settings - Settings object to save
+ * @throws {Error} If save operation fails
+ */
+async function saveGlobalSettings(settings) {
+  const settingsPath = path.join(process.env.HOME, '.claude', 'settings.json');
+  const claudeDir = path.dirname(settingsPath);
+  
+  try {
+    await fs.mkdir(claudeDir, { recursive: true });
+    await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf8');
+  } catch (error) {
+    console.error('Error saving global settings:', error);
+    throw error;
+  }
+}
+
+/**
+ * Save project-specific settings to {projectPath}/.claude/settings.json
+ * @param {string} projectPath - Path to the project directory
+ * @param {Object} settings - Settings object to save
+ * @throws {Error} If project path is not provided or save fails
+ */
+async function saveProjectSettings(projectPath, settings) {
+  if (!projectPath) throw new Error('Project path is required');
+  
+  const claudeDir = path.join(projectPath, '.claude');
+  const settingsPath = path.join(claudeDir, 'settings.json');
+  
+  try {
+    await fs.mkdir(claudeDir, { recursive: true });
+    await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf8');
+  } catch (error) {
+    console.error('Error saving project settings:', error);
+    throw error;
+  }
+}
+
+/**
+ * Merge settings with priority: project > global > defaults
+ * @param {Object} globalSettings - Global settings from ~/.claude/settings.json
+ * @param {Object} projectSettings - Project-specific settings
+ * @param {Object} [defaults={}] - Default settings
+ * @returns {Object} Merged settings object
+ */
+function mergeSettings(globalSettings, projectSettings, defaults = {}) {
+  const mergeStrategies = {
+    // Objects: deep merge
+    ui: 'deepMerge',
+    editor: 'deepMerge',
+    whisper: 'deepMerge',
+    
+    // Arrays: complete replacement if project settings exist
+    allowedTools: 'replace',
+    disallowedTools: 'replace',
+    customTools: 'replace',
+    
+    // Primitives: override
+    skipPermissions: 'override',
+    projectSortOrder: 'override',
+    autoExpandTools: 'override',
+    showRawParameters: 'override',
+    autoScrollToBottom: 'override',
+    sendByCtrlEnter: 'override',
+    whisperMode: 'override',
+    theme: 'override'
+  };
+  
+  function isObject(item) {
+    return item && typeof item === 'object' && !Array.isArray(item);
+  }
+  
+  function deepMergeWithStrategy(target, source) {
+    const result = { ...target };
+    
+    for (const key in source) {
+      if (source[key] === null || source[key] === undefined) continue;
+      
+      const strategy = mergeStrategies[key] || 'deepMerge';
+      
+      switch (strategy) {
+        case 'replace':
+          result[key] = source[key];
+          break;
+        case 'override':
+          result[key] = source[key];
+          break;
+        case 'deepMerge':
+          if (isObject(target[key]) && isObject(source[key])) {
+            result[key] = deepMergeWithStrategy(target[key], source[key]);
+          } else {
+            result[key] = source[key];
+          }
+          break;
+      }
+    }
+    
+    return result;
+  }
+  
+  // Apply settings in order: defaults -> global -> project
+  let merged = { ...defaults };
+  merged = deepMergeWithStrategy(merged, globalSettings);
+  merged = deepMergeWithStrategy(merged, projectSettings);
+  
+  return merged;
+}
+
+/**
+ * Get merged settings for a specific project
+ * @param {string|null} [projectPath=null] - Project path for project-specific settings
+ * @returns {Promise<Object>} Merged settings with applied hierarchy
+ */
+async function getMergedSettings(projectPath = null) {
+  const defaults = {
+    ui: {
+      theme: 'system',
+      autoExpandTools: false,
+      showRawParameters: false,
+      autoScrollToBottom: true,
+      sendByCtrlEnter: false
+    },
+    whisper: {
+      mode: 'default'
+    },
+    allowedTools: [],
+    disallowedTools: [],
+    skipPermissions: false,
+    projectSortOrder: 'name'
+  };
+  
+  const globalSettings = await loadGlobalSettings();
+  const projectSettings = projectPath ? await loadProjectSettings(projectPath) : {};
+  
+  return mergeSettings(globalSettings, projectSettings, defaults);
+}
+
 // Load project configuration file
 async function loadProjectConfig() {
   const configPath = path.join(process.env.HOME, '.claude', 'project-config.json');
@@ -612,5 +832,11 @@ export {
   loadProjectConfig,
   saveProjectConfig,
   extractProjectDirectory,
-  clearProjectDirectoryCache
+  clearProjectDirectoryCache,
+  loadGlobalSettings,
+  loadProjectSettings,
+  saveGlobalSettings,
+  saveProjectSettings,
+  mergeSettings,
+  getMergedSettings
 };

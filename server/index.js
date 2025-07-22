@@ -36,7 +36,7 @@ import pty from 'node-pty';
 import fetch from 'node-fetch';
 import mime from 'mime-types';
 
-import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
+import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache, loadGlobalSettings, saveGlobalSettings, getMergedSettings, saveProjectSettings } from './projects.js';
 import { spawnClaude, abortClaudeSession } from './claude-cli.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
@@ -251,6 +251,80 @@ app.delete('/api/projects/:projectName', authenticateToken, async (req, res) => 
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Settings API endpoints
+
+/**
+ * GET /api/settings/global - Get global settings from ~/.claude/settings.json
+ * @route GET /api/settings/global
+ * @returns {Object} Global settings object
+ */
+app.get('/api/settings/global', authenticateToken, async (req, res) => {
+  try {
+    const globalSettings = await loadGlobalSettings();
+    res.json(globalSettings);
+  } catch (error) {
+    console.error('Error loading global settings:', error);
+    res.status(500).json({ error: 'Failed to load global settings' });
+  }
+});
+
+/**
+ * POST /api/settings/global - Save global settings to ~/.claude/settings.json
+ * @route POST /api/settings/global
+ * @body {Object} settings - Settings object to save
+ * @returns {Object} Success response
+ */
+app.post('/api/settings/global', authenticateToken, async (req, res) => {
+  try {
+    const settings = req.body;
+    await saveGlobalSettings(settings);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error saving global settings:', error);
+    res.status(500).json({ error: 'Failed to save global settings' });
+  }
+});
+
+/**
+ * GET /api/settings/merged - Get merged settings with hierarchy applied
+ * @route GET /api/settings/merged
+ * @query {string} [projectPath] - Optional project path for project-specific settings
+ * @returns {Object} Merged settings object
+ */
+app.get('/api/settings/merged', authenticateToken, async (req, res) => {
+  try {
+    const { projectPath } = req.query;
+    const mergedSettings = await getMergedSettings(projectPath || null);
+    res.json(mergedSettings);
+  } catch (error) {
+    console.error('Error getting merged settings:', error);
+    res.status(500).json({ error: 'Failed to get merged settings' });
+  }
+});
+
+/**
+ * POST /api/settings/project - Save project-specific settings
+ * @route POST /api/settings/project
+ * @body {string} projectPath - Project directory path
+ * @body {Object} settings - Settings object to save
+ * @returns {Object} Success response
+ */
+app.post('/api/settings/project', authenticateToken, async (req, res) => {
+  try {
+    const { projectPath, settings } = req.body;
+    
+    if (!projectPath) {
+      return res.status(400).json({ error: 'Project path is required' });
+    }
+    
+    await saveProjectSettings(projectPath, settings);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error saving project settings:', error);
+    res.status(500).json({ error: 'Failed to save project settings' });
   }
 });
 

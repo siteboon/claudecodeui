@@ -28,13 +28,25 @@ const QuickSettingsPanel = ({
   onAutoScrollChange,
   sendByCtrlEnter,
   onSendByCtrlEnterChange,
-  isMobile
+  isMobile,
+  settings,
+  onSettingsChange
 }) => {
   const [localIsOpen, setLocalIsOpen] = useState(isOpen);
-  const [whisperMode, setWhisperMode] = useState(() => {
-    return localStorage.getItem('whisperMode') || 'default';
-  });
   const { isDarkMode } = useTheme();
+  
+  // Get from settings with fallback
+  const whisperMode = settings?.whisper?.mode || 'default';
+  
+  // WhisperMode change function
+  const handleWhisperModeChange = (mode) => {
+    if (onSettingsChange) {
+      onSettingsChange({ whisper: { mode } });
+    }
+    // Also emit localStorage and event for legacy support
+    localStorage.setItem('whisperMode', mode);
+    window.dispatchEvent(new Event('whisperModeChanged'));
+  };
 
   useEffect(() => {
     setLocalIsOpen(isOpen);
@@ -177,11 +189,7 @@ const QuickSettingsPanel = ({
                     name="whisperMode"
                     value="default"
                     checked={whisperMode === 'default'}
-                    onChange={() => {
-                      setWhisperMode('default');
-                      localStorage.setItem('whisperMode', 'default');
-                      window.dispatchEvent(new Event('whisperModeChanged'));
-                    }}
+                    onChange={() => handleWhisperModeChange('default')}
                     className="mt-0.5 h-4 w-4 border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 dark:focus:ring-blue-400 dark:bg-gray-800 dark:checked:bg-blue-600"
                   />
                   <div className="ml-3 flex-1">
@@ -201,11 +209,7 @@ const QuickSettingsPanel = ({
                     name="whisperMode"
                     value="prompt"
                     checked={whisperMode === 'prompt'}
-                    onChange={() => {
-                      setWhisperMode('prompt');
-                      localStorage.setItem('whisperMode', 'prompt');
-                      window.dispatchEvent(new Event('whisperModeChanged'));
-                    }}
+                    onChange={() => handleWhisperModeChange('prompt')}
                     className="mt-0.5 h-4 w-4 border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 dark:focus:ring-blue-400 dark:bg-gray-800 dark:checked:bg-blue-600"
                   />
                   <div className="ml-3 flex-1">
@@ -225,11 +229,7 @@ const QuickSettingsPanel = ({
                     name="whisperMode"
                     value="vibe"
                     checked={whisperMode === 'vibe' || whisperMode === 'instructions' || whisperMode === 'architect'}
-                    onChange={() => {
-                      setWhisperMode('vibe');
-                      localStorage.setItem('whisperMode', 'vibe');
-                      window.dispatchEvent(new Event('whisperModeChanged'));
-                    }}
+                    onChange={() => handleWhisperModeChange('vibe')}
                     className="mt-0.5 h-4 w-4 border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 dark:focus:ring-blue-400 dark:bg-gray-800 dark:checked:bg-blue-600"
                   />
                   <div className="ml-3 flex-1">
