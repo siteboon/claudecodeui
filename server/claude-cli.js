@@ -1,7 +1,11 @@
 import { spawn } from 'child_process';
+import crossSpawn from 'cross-spawn';
 import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
+
+// Use cross-spawn on Windows for better command execution
+const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
 
 let activeClaudeProcesses = new Map(); // Track active processes by session ID
 
@@ -227,10 +231,11 @@ async function spawnClaude(command, options = {}, ws) {
     console.log('🔍 Full command args:', JSON.stringify(args, null, 2));
     console.log('🔍 Final Claude command will be: claude ' + args.join(' '));
     
-    const claudeProcess = spawn('claude', args, {
+    const claudeProcess = spawnFunction('claude', args, {
       cwd: workingDir,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env } // Inherit all environment variables
+      env: { ...process.env }, // Inherit all environment variables
+      shell: process.platform === 'win32' // Use shell on Windows for .cmd files
     });
     
     // Attach temp file info to process for cleanup later

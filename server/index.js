@@ -32,7 +32,16 @@ import cors from 'cors';
 import { promises as fsPromises } from 'fs';
 import { spawn } from 'child_process';
 import os from 'os';
-import pty from 'node-pty';
+// Conditionally import node-pty (optional dependency for non-Windows systems)
+let pty;
+try {
+  pty = await import('node-pty');
+  pty = pty.default || pty;
+  console.log('node-pty available, full terminal support enabled');
+} catch (e) {
+  console.log('node-pty not available - this is normal on Windows. Shell functionality will use fallback mode.');
+  pty = null;
+}
 import fetch from 'node-fetch';
 import mime from 'mime-types';
 
@@ -528,21 +537,31 @@ function handleShellConnection(ws) {
           
           console.log('🔧 Executing shell command:', shellCommand);
           
-          // Start shell using PTY for proper terminal emulation
-          shellProcess = pty.spawn('bash', ['-c', shellCommand], {
-            name: 'xterm-256color',
-            cols: 80,
-            rows: 24,
-            cwd: process.env.HOME || '/', // Start from home directory
-            env: { 
-              ...process.env,
-              TERM: 'xterm-256color',
-              COLORTERM: 'truecolor',
-              FORCE_COLOR: '3',
-              // Override browser opening commands to echo URL for detection
-              BROWSER: 'echo "OPEN_URL:"'
-            }
-          });
+          // Start shell using PTY for proper terminal emulation (if available)
+          if (pty) {
+            shellProcess = pty.spawn('bash', ['-c', shellCommand], {
+              name: 'xterm-256color',
+              cols: 80,
+              rows: 24,
+              cwd: process.env.HOME || '/', // Start from home directory
+              env: { 
+                ...process.env,
+                TERM: 'xterm-256color',
+                COLORTERM: 'truecolor',
+                FORCE_COLOR: '3',
+                // Override browser opening commands to echo URL for detection
+                BROWSER: 'echo "OPEN_URL:"'
+              }
+            });
+          } else {
+            // On Windows, shell terminal is not supported without node-pty
+            console.error('Shell terminal not supported on Windows without node-pty');
+            ws.send(JSON.stringify({
+              type: 'output',
+              data: '\r\n\x1b[31mError: Shell terminal is not supported on Windows. Please use the chat interface instead.\x1b[0m\r\n'
+            }));
+            return;
+          }
           
           console.log('🟢 Shell process started with PTY, PID:', shellProcess.pid);
           
@@ -973,7 +992,7 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
   });
 }
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3002;
 
 // Initialize database and start server
 async function startServer() {
