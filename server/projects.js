@@ -53,13 +53,8 @@ async function generateDisplayName(projectName, actualProjectDir = null) {
   // If it starts with /, it's an absolute path
   if (projectPath.startsWith('/')) {
     const parts = projectPath.split('/').filter(Boolean);
-    if (parts.length > 3) {
-      // Show last 2 folders with ellipsis: "...projects/myapp"
-      return `.../${parts.slice(-2).join('/')}`;
-    } else {
-      // Show full path if short: "/home/user"
-      return projectPath;
-    }
+    // Return only the last folder name
+    return parts[parts.length - 1] || projectPath;
   }
   
   return projectPath;
