@@ -36,7 +36,7 @@ import pty from 'node-pty';
 import fetch from 'node-fetch';
 import mime from 'mime-types';
 
-import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
+import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache, resolveProjectPath } from './projects.js';
 import { spawnClaude, abortClaudeSession } from './claude-cli.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
@@ -405,8 +405,8 @@ app.get('/api/projects/:projectName/files', authenticateToken, async (req, res) 
       actualPath = await extractProjectDirectory(req.params.projectName);
     } catch (error) {
       console.error('Error extracting project directory:', error);
-      // Fallback to simple dash replacement
-      actualPath = req.params.projectName.replace(/-/g, '/');
+      // Fallbaxck to smart path resolution
+      actualPath = await resolveProjectPath(req.params.projectName);
     }
     
     // Check if path exists
@@ -497,9 +497,17 @@ function handleShellConnection(ws) {
       
       if (data.type === 'init') {
         // Initialize shell with project path and session info
-        const projectPath = data.projectPath || process.cwd();
+        let projectPath = data.projectPath || process.cwd();
         const sessionId = data.sessionId;
         const hasSession = data.hasSession;
+        try {
+          const { resolveProjectPath } = await import('./projects.js');
+          const resolvedPath = await resolveProjectPath(projectPath);
+          console.log('🔍 Resolved project path:', projectPath, '->', resolvedPath);
+          projectPath = resolvedPath
+        } catch (error) {
+          console.error('❌ Error resolving project path:', error);
+        }
         
         console.log('🚀 Starting shell in:', projectPath);
         console.log('📋 Session info:', hasSession ? `Resume session ${sessionId}` : 'New session');

@@ -3,6 +3,71 @@ import fsSync from 'fs';
 import path from 'path';
 import readline from 'readline';
 
+// Decode dashes back to forward slashes
+function decodePath(encodedPath) {
+  return encodedPath.replace(/-/g, '/');
+}
+
+// Smart path resolution that tries multiple decoding strategies
+export async function resolveProjectPath(projectName) {
+  // Strategy 1: Simple dash-to-slash replacement
+  let decodedPath = decodePath(projectName);
+  
+  // Check if the decoded path exists
+  try {
+    await fs.access(decodedPath);
+    return decodedPath;
+  } catch (error) {
+    // Path doesn't exist, try alternative strategies
+  }
+  
+  // Strategy 2: Try with different hyphen handling
+  // This handles cases where the original path had hyphens
+  const parts = projectName.split('-');
+  
+  // Remove empty first part if it exists
+  if (parts[0] === '') {
+    parts.shift();
+  }
+  
+  // Try different combinations of parts
+  const possiblePaths = [];
+  
+  // Strategy 2a: Try combining adjacent parts with hyphens
+  for (let i = 0; i < parts.length - 1; i++) {
+    const pathParts = [...parts];
+    // Combine parts[i] and parts[i+1] with a hyphen
+    pathParts[i] = pathParts[i] + '-' + pathParts[i + 1];
+    pathParts.splice(i + 1, 1);
+    const possiblePath = '/' + pathParts.join('/');
+    possiblePaths.push(possiblePath);
+  }
+  // Strategy 2b: Try the most likely combination for common patterns
+  // For paths like "Project-Sandbox", try combining "Project" and "Sandbox"
+  if (parts.length >= 4) {
+    // Try combining the middle parts (like "Project" and "Sandbox")
+    const middleIndex = Math.floor(parts.length / 2);
+    const pathParts = [...parts];
+    if (middleIndex > 0 && middleIndex < parts.length - 1) {
+      pathParts[middleIndex - 1] = pathParts[middleIndex - 1] + '-' + pathParts[middleIndex];
+      pathParts.splice(middleIndex, 1);
+      const possiblePath = '/' + pathParts.join('/');
+      possiblePaths.push(possiblePath);
+    }
+  }
+  // Test each possible path
+  for (const possiblePath of possiblePaths) {
+    try {
+      await fs.access(possiblePath);
+      return possiblePath;
+    } catch (error) {
+      // Continue to next possibility
+    }
+  }
+  // If no path exists, return the original decoded path as fallback
+  return decodedPath;
+}
+
 // Cache for extracted project directories
 const projectDirectoryCache = new Map();
 let cacheTimestamp = Date.now();
@@ -34,7 +99,7 @@ async function saveProjectConfig(config) {
 // Generate better display name from path
 async function generateDisplayName(projectName, actualProjectDir = null) {
   // Use actual project directory if provided, otherwise decode from project name
-  let projectPath = actualProjectDir || projectName.replace(/-/g, '/');
+  let projectPath = actualProjectDir || await resolveProjectPath(projectName);
   
   // Try to read package.json from the project path
   try {
@@ -85,7 +150,7 @@ async function extractProjectDirectory(projectName) {
     
     if (jsonlFiles.length === 0) {
       // Fall back to decoded project name if no sessions
-      extractedPath = projectName.replace(/-/g, '/');
+      extractedPath = await resolveProjectPath(projectName);
     } else {
       // Process all JSONL files to collect cwd values
       for (const file of jsonlFiles) {
@@ -122,7 +187,7 @@ async function extractProjectDirectory(projectName) {
       // Determine the best cwd to use
       if (cwdCounts.size === 0) {
         // No cwd found, fall back to decoded project name
-        extractedPath = projectName.replace(/-/g, '/');
+        extractedPath = await resolveProjectPath(projectName);
       } else if (cwdCounts.size === 1) {
         // Only one cwd, use it
         extractedPath = Array.from(cwdCounts.keys())[0];
@@ -146,7 +211,7 @@ async function extractProjectDirectory(projectName) {
         
         // Fallback (shouldn't reach here)
         if (!extractedPath) {
-          extractedPath = latestCwd || projectName.replace(/-/g, '/');
+          extractedPath = latestCwd || await resolveProjectPath(projectName);
         }
       }
     }
@@ -159,7 +224,7 @@ async function extractProjectDirectory(projectName) {
   } catch (error) {
     console.error(`Error extracting project directory for ${projectName}:`, error);
     // Fall back to decoded project name
-    extractedPath = projectName.replace(/-/g, '/');
+    extractedPath = await resolveProjectPath(projectName);
     
     // Cache the fallback result too
     projectDirectoryCache.set(projectName, extractedPath);
@@ -230,7 +295,7 @@ async function getProjects() {
           actualProjectDir = await extractProjectDirectory(projectName);
         } catch (error) {
           // Fall back to decoded project name
-          actualProjectDir = projectName.replace(/-/g, '/');
+          actualProjectDir = await resolveProjectPath(projectName);
         }
       }
       
