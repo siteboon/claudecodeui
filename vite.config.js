@@ -15,6 +15,10 @@ export default defineConfig(({ command, mode }) => {
         '/ws': {
           target: `ws://localhost:${env.PORT || 3002}`,
           ws: true
+        },
+        '/shell': {
+          target: `ws://localhost:${env.PORT || 3002}`,
+          ws: true
         }
       }
     },
