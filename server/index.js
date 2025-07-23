@@ -396,16 +396,13 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
 
 app.get('/api/projects/:projectName/files', authenticateToken, async (req, res) => {
   try {
-    
-    // Using fsPromises from import
-    
     // Use extractProjectDirectory to get the actual project path
     let actualPath;
     try {
       actualPath = await extractProjectDirectory(req.params.projectName);
     } catch (error) {
       console.error('Error extracting project directory:', error);
-      // Fallbaxck to smart path resolution
+      // Fallback to smart path resolution
       actualPath = await resolveProjectPath(req.params.projectName);
     }
     
