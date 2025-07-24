@@ -186,6 +186,17 @@ async function getProjects() {
         // Extract actual project directory from JSONL sessions
         const actualProjectDir = await extractProjectDirectory(entry.name);
         
+        // Check if CLAUDE.md exists in the project directory
+        let hasClaudeFile = false;
+        try {
+          const claudeMdPath = path.join(actualProjectDir, 'CLAUDE.md');
+          await fs.access(claudeMdPath);
+          hasClaudeFile = true;
+        } catch (error) {
+          // File doesn't exist or can't be accessed
+          hasClaudeFile = false;
+        }
+        
         // Get display name from config or generate one
         const customName = config[entry.name]?.displayName;
         const autoDisplayName = await generateDisplayName(entry.name, actualProjectDir);
@@ -197,6 +208,7 @@ async function getProjects() {
           displayName: customName || autoDisplayName,
           fullPath: fullPath,
           isCustomName: !!customName,
+          hasClaudeFile: hasClaudeFile,
           sessions: []
         };
         
@@ -234,15 +246,27 @@ async function getProjects() {
         }
       }
       
-              const project = {
-          name: projectName,
-          path: actualProjectDir,
-          displayName: projectConfig.displayName || await generateDisplayName(projectName, actualProjectDir),
-          fullPath: actualProjectDir,
-          isCustomName: !!projectConfig.displayName,
-          isManuallyAdded: true,
-          sessions: []
-        };
+      // Check if CLAUDE.md exists in the project directory
+      let hasClaudeFile = false;
+      try {
+        const claudeMdPath = path.join(actualProjectDir, 'CLAUDE.md');
+        await fs.access(claudeMdPath);
+        hasClaudeFile = true;
+      } catch (error) {
+        // File doesn't exist or can't be accessed
+        hasClaudeFile = false;
+      }
+      
+      const project = {
+        name: projectName,
+        path: actualProjectDir,
+        displayName: projectConfig.displayName || await generateDisplayName(projectName, actualProjectDir),
+        fullPath: actualProjectDir,
+        isCustomName: !!projectConfig.displayName,
+        hasClaudeFile: hasClaudeFile,
+        isManuallyAdded: true,
+        sessions: []
+      };
       
       projects.push(project);
     }
