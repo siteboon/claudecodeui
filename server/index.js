@@ -3,6 +3,8 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { findAvailablePort } from '../utils/portFinder.js';
+import { savePortConfig } from '../utils/portConfig.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -22,8 +24,6 @@ try {
 } catch (e) {
   console.log('No .env file found or error reading it:', e.message);
 }
-
-console.log('PORT from env:', process.env.PORT);
 
 import express from 'express';
 import { WebSocketServer } from 'ws';
@@ -180,13 +180,13 @@ app.use(express.static(path.join(__dirname, '../dist')));
 
 // API Routes (protected)
 app.get('/api/config', authenticateToken, (req, res) => {
-  const host = req.headers.host || `${req.hostname}:${PORT}`;
+  const host = req.headers.host || `${req.hostname}:${process.env.ACTUAL_PORT || DEFAULT_PORT}`;
   const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'wss' : 'ws';
   
   console.log('Config API called - Returning host:', host, 'Protocol:', protocol);
   
   res.json({
-    serverPort: PORT,
+    serverPort: process.env.ACTUAL_PORT || DEFAULT_PORT,
     wsUrl: `${protocol}://${host}`
   });
 });
@@ -978,7 +978,7 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
   });
 }
 
-const PORT = process.env.PORT || 3000;
+const DEFAULT_PORT = process.env.PORT || 3000;
 
 // Initialize database and start server
 async function startServer() {
@@ -986,6 +986,15 @@ async function startServer() {
     // Initialize authentication database
     await initializeDatabase();
     console.log('✅ Database initialization skipped (testing)');
+    
+    // Find an available port
+    const PORT = await findAvailablePort(parseInt(DEFAULT_PORT));
+    
+    // Export the port for other modules to use
+    process.env.ACTUAL_PORT = PORT.toString();
+    
+    // Save port configuration for Vite to use
+    savePortConfig({ backend: PORT });
     
     server.listen(PORT, '0.0.0.0', async () => {
       console.log(`Claude Code UI server running on http://0.0.0.0:${PORT}`);
