@@ -889,7 +889,12 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
 
 // Serve React app for all other routes
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../dist/index.html'));
+  if (process.env.NODE_ENV === 'production') {
+    res.sendFile(path.join(__dirname, '../dist/index.html'));
+  } else {
+    // In development, redirect to Vite dev server
+    res.redirect(`http://localhost:${process.env.VITE_PORT || 3001}`);
+  }
 });
 
 // Helper function to convert permissions to rwx format
