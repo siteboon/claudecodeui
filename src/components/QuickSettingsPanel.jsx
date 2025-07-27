@@ -12,10 +12,13 @@ import {
   Brain,
   Sparkles,
   FileText,
-  Languages
+  Languages,
+  LogOut,
+  Github
 } from 'lucide-react';
 import DarkModeToggle from './DarkModeToggle';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
 
 const QuickSettingsPanel = ({ 
   isOpen, 
@@ -35,6 +38,7 @@ const QuickSettingsPanel = ({
     return localStorage.getItem('whisperMode') || 'default';
   });
   const { isDarkMode } = useTheme();
+  const { user, logout } = useAuth();
 
   useEffect(() => {
     setLocalIsOpen(isOpen);
@@ -84,6 +88,47 @@ const QuickSettingsPanel = ({
 
           {/* Settings Content */}
           <div className={`flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-6 bg-white dark:bg-gray-900 ${isMobile ? 'pb-20' : ''}`}>
+            {/* User Info */}
+            {user && (
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Account</h4>
+                <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      {user.avatar_url ? (
+                        <img 
+                          src={user.avatar_url} 
+                          alt={user.username} 
+                          className="w-8 h-8 rounded-full"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center">
+                          <Github className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                        </div>
+                      )}
+                      <div>
+                        <div className="text-sm font-medium text-gray-900 dark:text-white">
+                          {user.github_username || user.username}
+                        </div>
+                        {user.email && (
+                          <div className="text-xs text-gray-500 dark:text-gray-400">
+                            {user.email}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={logout}
+                      className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                      title="Sign out"
+                    >
+                      <LogOut className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             {/* Appearance Settings */}
             <div className="space-y-2">
               <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Appearance</h4>
