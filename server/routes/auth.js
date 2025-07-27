@@ -80,12 +80,18 @@ router.post('/login', async (req, res) => {
     
     // Get user from database
     const user = userDb.getUserByUsername(username);
+    console.log('🔐 Login attempt for username:', username);
+    console.log('🔐 User found:', !!user);
+    
     if (!user) {
       return res.status(401).json({ error: 'Invalid username or password' });
     }
     
     // Verify password
+    console.log('🔐 Comparing passwords...');
     const isValidPassword = await bcrypt.compare(password, user.password_hash);
+    console.log('🔐 Password valid:', isValidPassword);
+    
     if (!isValidPassword) {
       return res.status(401).json({ error: 'Invalid username or password' });
     }
