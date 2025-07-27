@@ -1052,7 +1052,6 @@ const ImageAttachment = ({ file, onRemove, uploadProgress, error }) => {
 //
 // This ensures uninterrupted chat experience by pausing sidebar refreshes during conversations.
 function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, messages, onFileOpen, onInputFocusChange, onSessionActive, onSessionInactive, onReplaceTemporarySession, onNavigateToSession, onShowSettings, autoExpandTools, showRawParameters, autoScrollToBottom }) {
-  const { t } = useTranslation('chat');
   const [input, setInput] = useState(() => {
     if (typeof window !== 'undefined' && selectedProject) {
       return localStorage.getItem(`draft_input_${selectedProject.name}`) || '';
@@ -2060,14 +2059,21 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     
     // Handle Enter key: Ctrl+Enter (Cmd+Enter on Mac) sends, Shift+Enter creates new line
     if (e.key === 'Enter') {
+      // If we're in composition, don't send message
+      if (e.nativeEvent.isComposing) {
+        return; // Let IME handle the Enter key
+      }
+      
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
         // Ctrl+Enter or Cmd+Enter: Send message
         e.preventDefault();
         handleSubmit(e);
       } else if (!e.shiftKey && !e.ctrlKey && !e.metaKey) {
-        // Plain Enter: Also send message (keeping original behavior)
-        e.preventDefault();
-        handleSubmit(e);
+        // Plain Enter: Send message only if not in IME composition
+        if (!sendByCtrlEnter) {
+          e.preventDefault();
+          handleSubmit(e);
+        }
       }
       // Shift+Enter: Allow default behavior (new line)
     }
@@ -2498,12 +2504,14 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           </div>
           {/* Hint text */}
           <div className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2 hidden sm:block">
-            {t('messages.enterToSend')}
+            {sendByCtrlEnter 
+              ? "Ctrl+Enter to send (IME safe) • Shift+Enter for new line • Tab to change modes • @ to reference files" 
+              : "Press Enter to send • Shift+Enter for new line • Tab to change modes • @ to reference files"}
           </div>
           <div className={`text-xs text-gray-500 dark:text-gray-400 text-center mt-2 sm:hidden transition-opacity duration-200 ${
             isInputFocused ? 'opacity-100' : 'opacity-0'
           }`}>
-            {t('messages.enterToSendShort')}
+            Enter to send • Tab for modes • @ for files
           </div>
         </form>
       </div>
