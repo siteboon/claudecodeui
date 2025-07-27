@@ -1,0 +1,138 @@
+{
+  "buttons": {
+    "ok": "確定",
+    "cancel": "取消",
+    "save": "儲存",
+    "delete": "刪除",
+    "edit": "編輯",
+    "close": "關閉",
+    "refresh": "重新整理",
+    "create": "建立",
+    "add": "新增",
+    "remove": "移除",
+    "back": "返回",
+    "next": "下一步",
+    "continue": "繼續",
+    "retry": "重試"
+  },
+  "states": {
+    "loading": "載入中...",
+    "saving": "儲存中...",
+    "deleting": "刪除中...",
+    "processing": "處理中...",
+    "connecting": "連線中..."
+  },
+  "messages": {
+    "success": "成功",
+    "error": "錯誤",
+    "warning": "警告",
+    "info": "資訊"
+  },
+  "app": {
+    "title": "Claude Code UI",
+    "subtitle": "AI 程式碼助理介面",
+    "updateAvailable": {
+      "title": "有可用更新",
+      "subtitle": "新版本已準備就緒",
+      "currentVersion": "目前版本",
+      "latestVersion": "最新版本",
+      "howToUpgrade": "如何升級：",
+      "upgradeCommand": "git checkout main && git pull && npm install",
+      "upgradeInstructions": "在您的 Claude Code UI 目錄中執行此指令以更新到最新版本。",
+      "later": "稍後",
+      "copyCommand": "複製指令"
+    }
+  },
+  "sidebar": {
+    "projects": "專案",
+    "refresh": "重新整理專案與工作階段 (Ctrl+R)",
+    "newProject": "建立新專案 (Ctrl+N)",
+    "settings": "設定",
+    "toolsSettings": "工具設定",
+    "search": {
+      "placeholder": "搜尋專案..."
+    },
+    "empty": {
+      "noProjects": "找不到專案",
+      "runClaude": "在專案目錄中執行 Claude CLI 以開始使用",
+      "noMatchingProjects": "沒有符合的專案",
+      "tryAdjustingSearch": "試著調整您的搜尋詞"
+    },
+    "loading": {
+      "loadingProjects": "載入專案中...",
+      "fetchingProjects": "正在取得您的 Claude 專案與工作階段"
+    },
+    "projectNamePlaceholder": "專案名稱"
+  },
+  "language": {
+    "switcher": "語言",
+    "english": "English",
+    "traditionalChinese": "繁體中文"
+  },
+  "time": {
+    "justNow": "剛剛",
+    "minAgo": "1 分鐘前",
+    "minsAgo": "{{n}} 分鐘前",
+    "hourAgo": "1 小時前",
+    "hoursAgo": "{{n}} 小時前",
+    "dayAgo": "1 天前",
+    "daysAgo": "{{n}} 天前",
+    "unknown": "未知"
+  },
+  "loading": {
+    "title": "載入 Claude Code UI",
+    "workspace": "正在設定您的工作區..."
+  },
+  "main": {
+    "chooseProject": "選擇您的專案",
+    "selectProjectDescription": "從側邊欄選擇一個專案以開始與 Claude 編寫程式碼。每個專案都包含您的聊天工作階段和檔案歷史。",
+    "tip": "提示",
+    "mobileTip": "點擊上方的選單按鈕以存取專案",
+    "desktopTip": "點擊側邊欄中的資料夾圖示以建立新專案"
+  },
+  "session": {
+    "new": "新工作階段"
+  },
+  "tabs": {
+    "chat": "聊天",
+    "shell": "終端機",
+    "files": "檔案",
+    "sourceControl": "原始碼控制",
+    "projectFiles": "專案檔案",
+    "project": "專案"
+  },
+  "image": {
+    "unableToLoad": "無法載入圖片"
+  },
+  "microphone": {
+    "notSupported": "不支援麥克風。請使用 HTTPS 或現代瀏覽器。",
+    "requiresHttps": "麥克風需要 HTTPS。請使用安全連線。",
+    "accessNotAvailable": "無法存取麥克風。請使用 HTTPS 或支援的瀏覽器。",
+    "accessFailed": "麥克風存取失敗",
+    "accessDenied": "麥克風存取被拒絕。請允許麥克風權限。",
+    "notFound": "找不到麥克風。請檢查您的音訊裝置。",
+    "notSupportedByBrowser": "此瀏覽器不支援麥克風。",
+    "inUse": "麥克風正被其他應用程式使用。",
+    "startRecording": "開始錄音",
+    "stopRecording": "停止錄音",
+    "transcribing": "轉錄中...",
+    "processing": "處理中..."
+  },
+  "darkMode": {
+    "toggle": "切換深色模式"
+  },
+  "errors": {
+    "failedToDeleteSession": "刪除工作階段失敗。請再試一次。",
+    "errorDeletingSession": "刪除工作階段時發生錯誤。請再試一次。",
+    "failedToDeleteProject": "刪除專案失敗。請再試一次。",
+    "errorDeletingProject": "刪除專案時發生錯誤。請再試一次。",
+    "pleaseEnterProjectPath": "請輸入專案路徑",
+    "failedToCreateProject": "建立專案失敗。請再試一次。",
+    "errorCreatingProject": "建立專案時發生錯誤。請再試一次。",
+    "failedToRenameProject": "重新命名專案失敗"
+  },
+  "confirmations": {
+    "deleteSession": "確定要刪除此工作階段嗎？此動作無法復原。",
+    "deleteEmptyProject": "確定要刪除此空專案嗎？此動作無法復原。"
+  }
+}

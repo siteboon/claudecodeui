@@ -1,0 +1,101 @@
+{
+  "header": {
+    "selectProject": "選擇一個專案以檢視原始碼控制"
+  },
+  "tabs": {
+    "changes": "變更",
+    "history": "歷史記錄"
+  },
+  "branches": {
+    "createNewBranch": "建立新分支",
+    "createNewBranchTitle": "建立新分支",
+    "branchName": "分支名稱",
+    "placeholder": "feature/new-feature",
+    "createFromCurrent": "這將從目前分支建立新分支",
+    "creating": "建立中...",
+    "createBranch": "建立分支",
+    "cancel": "取消",
+    "upToDateWithRemote": "與遠端同步",
+    "ahead": "領先",
+    "behind": "落後"
+  },
+  "remoteActions": {
+    "publish": "發布",
+    "publishing": "發布中...",
+    "pull": "拉取 {{n}}",
+    "pulling": "拉取中...",
+    "push": "推送 {{n}}",
+    "pushing": "推送中...",
+    "fetch": "取得",
+    "fetching": "取得中..."
+  },
+  "changes": {
+    "commitChanges": "提交變更",
+    "commit": "提交",
+    "commitNFiles": "提交 {{n}} 個檔案",
+    "committing": "提交中...",
+    "messagePlaceholder": "訊息 (Ctrl+Enter 提交)",
+    "filesSelected": "已選擇 {{n}} 個檔案",
+    "selectAll": "全選",
+    "deselectAll": "取消全選",
+    "all": "全部",
+    "none": "無",
+    "noChangesDetected": "未偵測到變更",
+    "generateCommitMessage": "產生提交訊息",
+    "switchToHorizontalScroll": "切換至水平捲動",
+    "switchToTextWrap": "切換至文字換行"
+  },
+  "fileStatus": {
+    "modified": "已修改",
+    "added": "已新增",
+    "deleted": "已刪除",
+    "untracked": "未追蹤",
+    "discard": "捨棄",
+    "delete": "刪除",
+    "fileStatusGuide": "檔案狀態指南"
+  },
+  "history": {
+    "noCommitsFound": "找不到提交記錄"
+  },
+  "confirmations": {
+    "discardChanges": "捨棄變更",
+    "deleteFile": "刪除檔案",
+    "confirmCommit": "確認提交",
+    "confirmPull": "確認拉取",
+    "confirmPush": "確認推送",
+    "publishBranch": "發布分支",
+    "discardMessage": "捨棄 \"{{file}}\" 的所有變更？此動作無法復原。",
+    "deleteMessage": "刪除未追蹤的檔案 \"{{file}}\"？此動作無法復原。",
+    "commitMessage": "使用訊息 \"{{message}}\" 提交 {{n}} 個檔案？",
+    "pullMessage": "從 {{remote}} 拉取 {{n}} 個提交？",
+    "pushMessage": "推送 {{n}} 個提交到 {{remote}}？",
+    "publishMessage": "發布分支 \"{{branch}}\" 到 {{remote}}？"
+  },
+  "errors": {
+    "notGitRepo": "不是 Git 儲存庫",
+    "gitInitTip": "提示：在您的專案目錄中執行 {{command}} 以初始化 git 原始碼控制。",
+    "gitInitCommand": "git init"
+  },
+  "textOptions": {
+    "scroll": "↔️ 捲動",
+    "wrap": "↩️ 換行"
+  },
+  "connection": {
+    "disconnect": "中斷連線",
+    "restart": "重新啟動",
+    "disconnectFromGit": "中斷 git 連線",
+    "restartGit": "重新啟動 Git (請先中斷連線)"
+  },
+  "time": {
+    "justNow": "剛剛",
+    "minAgo": "{{n}} 分鐘前",
+    "hoursAgo": "{{n}} 小時前",
+    "daysAgo": "{{n}} 天前"
+  },
+  "gitErrors": {
+    "notAGitRepository": "不是 git 倉庫",
+    "projectNotGitRepo": "專案目錄不是 git 倉庫",
+    "insideGitRepo": "此目錄位於 {{path}} 的 git 倉庫內，但 git 操作應從倉庫根目錄執行。",
+    "initializeRepo": "此目錄不包含 .git 資料夾。使用 \"git init\" 初始化 git 倉庫以使用原始碼控制功能。"
+  }
+}

@@ -1,10 +1,14 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import SetupForm from './SetupForm';
 import LoginForm from './LoginForm';
 import { MessageSquare } from 'lucide-react';
 
-const LoadingScreen = () => (
+const LoadingScreen = () => {
+  const { t } = useTranslation('common');
+  
+  return (
   <div className="min-h-screen bg-background flex items-center justify-center p-4">
     <div className="text-center">
       <div className="flex justify-center mb-4">
@@ -12,16 +16,17 @@ const LoadingScreen = () => (
           <MessageSquare className="w-8 h-8 text-primary-foreground" />
         </div>
       </div>
-      <h1 className="text-2xl font-bold text-foreground mb-2">Claude Code UI</h1>
+      <h1 className="text-2xl font-bold text-foreground mb-2">{t('app.title')}</h1>
       <div className="flex items-center justify-center space-x-2">
         <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
         <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
         <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
       </div>
-      <p className="text-muted-foreground mt-2">Loading...</p>
+      <p className="text-muted-foreground mt-2">{t('states.loading')}</p>
     </div>
   </div>
-);
+  );
+};
 
 const ProtectedRoute = ({ children }) => {
   const { user, isLoading, needsSetup } = useAuth();
