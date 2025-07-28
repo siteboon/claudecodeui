@@ -77,11 +77,6 @@ const SetupForm = () => {
             </div>
           )}
 
-          <div className="text-center">
-            <p className="text-sm text-muted-foreground">
-              Authentication is managed through GitHub OAuth.
-            </p>
-          </div>
         </div>
       </div>
     </div>
