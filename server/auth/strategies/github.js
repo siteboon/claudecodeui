@@ -2,16 +2,14 @@ import passport from 'passport';
 import { Strategy as GitHubStrategy } from 'passport-github2';
 import { userDb } from '../../database/db.js';
 
-// Helper function to check if user is allowed
 const isAllowedUser = (githubUsername) => {
-  const allowedUsers = process.env.GITHUB_ALLOWED_USERS 
+  const allowedUsers = process.env.GITHUB_ALLOWED_USERS
     ? process.env.GITHUB_ALLOWED_USERS.split(',').map(u => u.trim())
     : [];
-  
+
   return allowedUsers.includes(githubUsername);
 };
 
-// Only initialize GitHub strategy if credentials are provided
 if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
   console.log('🔐 Registering GitHub OAuth strategy');
   passport.use(new GitHubStrategy({
@@ -21,23 +19,19 @@ if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
   },
   async (accessToken, refreshToken, profile, done) => {
     try {
-      // Check if user is allowed
       if (!isAllowedUser(profile.username)) {
-        return done(null, false, { 
-          message: `GitHub user @${profile.username} is not authorized to access this application` 
+        return done(null, false, {
+          message: `GitHub user @${profile.username} is not authorized to access this application`
         });
       }
 
-      // Check if user already exists
       const existingUser = await userDb.getUserByGithubId(profile.id);
       
       if (existingUser) {
-        // Update last login
         await userDb.updateUserLastLogin(existingUser.id);
         return done(null, existingUser);
       }
 
-      // Create new user
       const newUser = await userDb.createGithubUser({
         username: profile.username,
         github_id: profile.id,

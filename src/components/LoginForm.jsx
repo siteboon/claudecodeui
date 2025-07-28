@@ -8,9 +8,8 @@ const LoginForm = () => {
   const [error, setError] = useState('');
   const [authStatus, setAuthStatus] = useState({});
   const { error: authError } = useAuth();
-  
+
   useEffect(() => {
-    // Get auth status including GitHub configuration
     const checkAuthStatus = async () => {
       try {
         const response = await api.auth.status();
@@ -25,7 +24,6 @@ const LoginForm = () => {
 
   const handleGithubLogin = () => {
     setIsLoading(true);
-    // Redirect to GitHub OAuth endpoint
     window.location.href = `${window.location.origin}/api/auth/github`;
   };
 
@@ -33,7 +31,6 @@ const LoginForm = () => {
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="bg-card rounded-lg shadow-lg border border-border p-8 space-y-6">
-          {/* Logo and Title */}
           <div className="text-center">
             <div className="flex justify-center mb-4">
               <div className="w-16 h-16 bg-primary rounded-lg flex items-center justify-center shadow-sm">
@@ -46,7 +43,6 @@ const LoginForm = () => {
             </p>
           </div>
 
-          {/* GitHub Login Button */}
           {authStatus.githubConfigured ? (
             <div className="space-y-4">
               <button
@@ -58,13 +54,13 @@ const LoginForm = () => {
                 <Github className="w-5 h-5" />
                 {isLoading ? 'Redirecting...' : 'Sign in with GitHub'}
               </button>
-              
+
               {authStatus.githubAllowedUsers && authStatus.githubAllowedUsers.length > 0 && (
                 <div className="text-xs text-center text-muted-foreground">
                   Allowed users: {authStatus.githubAllowedUsers.join(', ')}
                 </div>
               )}
-              
+
               {(error || authError) && (
                 <div className="p-3 bg-red-100 dark:bg-red-900/20 border border-red-300 dark:border-red-800 rounded-md">
                   <p className="text-sm text-red-700 dark:text-red-400">{error || authError}</p>
