@@ -1061,6 +1061,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [slashPosition, setSlashPosition] = useState(-1);
   const [visibleMessageCount, setVisibleMessageCount] = useState(100);
   const [claudeStatus, setClaudeStatus] = useState(null);
+  const [isComposing, setIsComposing] = useState(false);
 
 
   // Memoized diff calculation to prevent recalculating on every render
@@ -1979,6 +1980,16 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   };
 
+  // Handle IME composition start
+  const handleCompositionStart = () => {
+    setIsComposing(true);
+  };
+
+  // Handle IME composition end
+  const handleCompositionEnd = () => {
+    setIsComposing(false);
+  };
+
   const handleKeyDown = (e) => {
     // Handle file dropdown navigation
     if (showFileDropdown && filteredFiles.length > 0) {
@@ -2023,7 +2034,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
     
     // Handle Enter key: Ctrl+Enter (Cmd+Enter on Mac) sends, Shift+Enter creates new line
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && !isComposing) {
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
         // Ctrl+Enter or Cmd+Enter: Send message
         e.preventDefault();
@@ -2350,6 +2361,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               onChange={handleInputChange}
               onClick={handleTextareaClick}
               onKeyDown={handleKeyDown}
+              onCompositionStart={handleCompositionStart}
+              onCompositionEnd={handleCompositionEnd}
               onPaste={handlePaste}
               onFocus={() => setIsInputFocused(true)}
               onBlur={() => setIsInputFocused(false)}
