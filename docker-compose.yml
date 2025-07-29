@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  claudecodeui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: claudecodeui
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3008}:3008"
+      - "${VITE_PORT:-3009}:3009"
+    environment:
+      - NODE_ENV=production
+      - PORT=${PORT:-3008}
+      - VITE_PORT=${VITE_PORT:-3009}
+      - SESSION_SECRET=${SESSION_SECRET}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+      - GITHUB_CALLBACK_URL=${GITHUB_CALLBACK_URL}
+      - GITHUB_ALLOWED_USERS=${GITHUB_ALLOWED_USERS}
+    volumes:
+      # Persist Claude data
+      - claude-data:/home/nodejs/.claude
+      # Optional: Mount host's Claude directory (comment out if not needed)
+      # - ${HOME}/.claude:/home/nodejs/.claude:rw
+    networks:
+      - claudecodeui-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Optional: Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: claudecodeui-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx-cache:/var/cache/nginx
+    depends_on:
+      - claudecodeui
+    networks:
+      - claudecodeui-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  claude-data:
+    driver: local
+  nginx-cache:
+    driver: local
+
+networks:
+  claudecodeui-network:
+    driver: bridge

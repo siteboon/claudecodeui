@@ -1,0 +1,63 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Development files
+.git/
+.gitignore
+.github/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build artifacts (we'll build in Docker)
+dist/
+build/
+
+# Environment files
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Test files
+coverage/
+.nyc_output/
+*.test.js
+*.spec.js
+__tests__/
+
+# Documentation
+*.md
+LICENSE
+docs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# AWS deployment files (except what we need)
+aws-deployment/terraform/.terraform/
+aws-deployment/terraform/*.tfstate*
+aws-deployment/terraform/.terraform.lock.hcl
+
+# Database files
+*.db
+*.sqlite
+
+# Log files
+logs/
+*.log
+
+# Temporary files
+tmp/
+temp/
+.cache/
+
+# Claude specific
+.claude/

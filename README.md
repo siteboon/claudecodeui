@@ -78,6 +78,17 @@ The application will start at the port you specified in your .env
 5. **Open your browser:**
    - Development: `http://localhost:3001`
 
+### AWS Spot Instance Deployment
+
+For cost-effective cloud deployment using AWS Spot Instances:
+
+```bash
+cd aws-deployment/scripts
+./deploy.sh
+```
+
+See [aws-deployment/README.md](aws-deployment/README.md) for detailed instructions.
+
 ## Security & Tools Configuration
 
 **🔒 Important Notice**: All Claude Code tools are **disabled by default**. This prevents potentially harmful operations from running automatically.
