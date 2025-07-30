@@ -38,6 +38,7 @@ import mime from 'mime-types';
 
 import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
 import { spawnClaude, abortClaudeSession } from './claude-cli.js';
+import { spawnClaude as spawnClaudeEnhanced, abortClaudeSession as abortClaudeEnhancedSession } from './claude-cli-enhanced.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
 import mcpRoutes from './routes/mcp.js';
@@ -459,10 +460,17 @@ function handleChatConnection(ws) {
         console.log('💬 User message:', data.command || '[Continue/Resume]');
         console.log('📁 Project:', data.options?.projectPath || 'Unknown');
         console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
-        await spawnClaude(data.command, data.options, ws);
+        // Use enhanced mode if enabled
+        if (process.env.ENHANCED_MODE === 'true') {
+          await spawnClaudeEnhanced(data.command, data.options, ws);
+        } else {
+          await spawnClaude(data.command, data.options, ws);
+        }
       } else if (data.type === 'abort-session') {
         console.log('🛑 Abort session request:', data.sessionId);
-        const success = abortClaudeSession(data.sessionId);
+        const success = process.env.ENHANCED_MODE === 'true' 
+          ? abortClaudeEnhancedSession(data.sessionId)
+          : abortClaudeSession(data.sessionId);
         ws.send(JSON.stringify({
           type: 'session-aborted',
           sessionId: data.sessionId,

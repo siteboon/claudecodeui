@@ -6,7 +6,9 @@
   "main": "server/index.js",
   "scripts": {
     "dev": "concurrently --kill-others \"npm run server\" \"npm run client\"",
+    "dev:enhanced": "ENHANCED_MODE=true concurrently --kill-others \"npm run server:enhanced\" \"npm run client\"",
     "server": "node server/index.js",
+    "server:enhanced": "ENHANCED_MODE=true node server/index.js",
     "client": "vite --host",
     "build": "vite build",
     "preview": "vite preview",
