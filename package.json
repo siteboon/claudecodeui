@@ -55,6 +55,7 @@
     "react-dropzone": "^14.2.3",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^6.8.1",
+    "react-syntax-highlighter": "^15.6.1",
     "tailwind-merge": "^3.3.1",
     "ws": "^8.14.2",
     "xterm": "^5.3.0",
