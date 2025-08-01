@@ -1,0 +1,48 @@
+{
+  "title": "檔案",
+  "viewModes": {
+    "simple": "簡單檢視",
+    "compact": "精簡檢視",
+    "detailed": "詳細檢視"
+  },
+  "columns": {
+    "name": "名稱",
+    "size": "大小",
+    "modified": "修改時間",
+    "permissions": "權限"
+  },
+  "empty": {
+    "noFilesFound": "找不到檔案",
+    "checkProjectPath": "檢查專案路徑是否可存取"
+  },
+  "loading": {
+    "loadingFiles": "載入檔案中..."
+  },
+  "actions": {
+    "newFile": "新增檔案",
+    "newFolder": "新增資料夾",
+    "rename": "重新命名",
+    "delete": "刪除",
+    "open": "開啟",
+    "openInEditor": "在編輯器中開啟",
+    "copyPath": "複製路徑",
+    "refresh": "重新整理"
+  },
+  "confirmations": {
+    "deleteFile": "確定要刪除 \"{{name}}\" 嗎？",
+    "deleteFolder": "確定要刪除 \"{{name}}\" 及其所有內容嗎？",
+    "overwriteFile": "檔案 \"{{name}}\" 已存在。要覆寫嗎？"
+  },
+  "tooltips": {
+    "folder": "資料夾",
+    "file": "檔案",
+    "expandFolder": "展開資料夾",
+    "collapseFolder": "收合資料夾"
+  },
+  "relativeTime": {
+    "justNow": "剛剛",
+    "minutesAgo": "{{n}} 分鐘前",
+    "hoursAgo": "{{n}} 小時前",
+    "daysAgo": "{{n}} 天前"
+  }
+}
