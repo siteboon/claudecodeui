@@ -45,6 +45,13 @@ RUN apk add --no-cache \
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
 
+# Install Claude CLI globally
+RUN npm install -g @anthropic-ai/claude-cli
+
+# Create directory for Claude configuration
+RUN mkdir -p /home/nodejs/.claude && \
+    chown -R nodejs:nodejs /home/nodejs/.claude
+
 WORKDIR /app
 
 # Copy package files

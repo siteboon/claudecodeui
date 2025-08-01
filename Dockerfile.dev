@@ -14,6 +14,9 @@ RUN apk add --no-cache \
     bash \
     sudo
 
+# Install Claude CLI globally
+RUN npm install -g @anthropic-ai/claude-cli
+
 # Create user with same UID as host user for proper file permissions
 # Note: UID 1000 and GID 1000 are already used by 'node' user in node:alpine
 RUN echo 'node ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers

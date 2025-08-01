@@ -8,7 +8,7 @@ This guide covers how to run Claude Code UI using Docker and Docker Compose for 
 
 - Docker and Docker Compose installed
 - Git (to clone the repository)
-- Anthropic API key (for Claude functionality)
+- Claude CLI configured on your host system (the container will use your host configuration)
 
 ### 2. Environment Setup
 
@@ -21,12 +21,12 @@ cp .env.docker .env
 Edit `.env` and set your configuration:
 
 ```bash
-# Required: Your Anthropic API key
-ANTHROPIC_API_KEY=sk-ant-your-api-key-here
-
-# Optional: Default admin credentials (created on first startup)
+# Required: Default admin credentials (created on first startup)
 DEFAULT_ADMIN_USERNAME=admin
 DEFAULT_ADMIN_PASSWORD=your-secure-password
+
+# Optional: If you need to use a different Claude CLI path
+# CLAUDE_EXECUTABLE_PATH=/usr/local/bin/claude
 
 # Platform-specific paths (examples)
 # macOS:
@@ -80,7 +80,6 @@ claudecodeui/
 
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
-| `ANTHROPIC_API_KEY` | Your Claude API key | - | ✅ |
 | `DEFAULT_ADMIN_USERNAME` | Initial admin user | `admin` | ❌ |
 | `DEFAULT_ADMIN_PASSWORD` | Initial admin password | `change-me` | ❌ |
 | `PORT` | Backend server port | `2008` | ❌ |
@@ -355,12 +354,12 @@ docker compose run --rm app-dev
 
 **Claude CLI not found:**
 ```bash
-# Install Claude CLI in container
-docker compose exec app-dev npm install -g @anthropic-ai/claude-cli
+# The Claude CLI is now automatically installed in the Docker image
+# If you still have issues, check the Claude CLI path:
+docker compose exec app-dev which claude
 
-# Or mount from host
-# Add to docker-compose.yml volumes:
-# - /usr/local/bin/claude:/usr/local/bin/claude:ro
+# If using a custom Claude CLI location on host, set in .env:
+# CLAUDE_EXECUTABLE_PATH=/path/to/your/claude
 ```
 
 ### Logs & Debugging

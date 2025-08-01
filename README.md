@@ -103,12 +103,12 @@ nano .env
 
 3. **Configure your environment variables:**
 ```bash
-# Required: Your Anthropic API key
-ANTHROPIC_API_KEY=sk-ant-your-api-key-here
-
-# Optional: Default admin credentials (created on first startup)
+# Required: Default admin credentials (created on first startup)
 DEFAULT_ADMIN_USERNAME=admin
 DEFAULT_ADMIN_PASSWORD=your-secure-password
+
+# Note: Claude CLI should already be configured on your host system
+# The Docker container will install and use Claude CLI automatically
 
 # Optional: Custom workspace path for your projects
 HOST_WORKSPACE_PATH=${HOME}/Desktop
@@ -152,7 +152,6 @@ The application supports comprehensive configuration through environment variabl
 
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
-| `ANTHROPIC_API_KEY` | Your Claude API key | - | ✅ |
 | `JWT_SECRET` | JWT signing secret | auto-generated | ❌ |
 | `DEFAULT_ADMIN_USERNAME` | Initial admin username | `admin` | ❌ |
 | `DEFAULT_ADMIN_PASSWORD` | Initial admin password | `change-this-secure-password` | ❌ |
