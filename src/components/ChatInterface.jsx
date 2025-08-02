@@ -1,18 +1,18 @@
 /*
  * ChatInterface.jsx - Chat Component with Session Protection Integration
- * 
+ *
  * SESSION PROTECTION INTEGRATION:
  * ===============================
- * 
+ *
  * This component integrates with the Session Protection System to prevent project updates
  * from interrupting active conversations:
- * 
+ *
  * Key Integration Points:
  * 1. handleSubmit() - Marks session as active when user sends message (including temp ID for new sessions)
- * 2. session-created handler - Replaces temporary session ID with real WebSocket session ID  
+ * 2. session-created handler - Replaces temporary session ID with real WebSocket session ID
  * 3. claude-complete handler - Marks session as inactive when conversation finishes
  * 4. session-aborted handler - Marks session as inactive when conversation is aborted
- * 
+ *
  * This ensures uninterrupted chat experience by coordinating with App.jsx to pause sidebar updates.
  */
 
@@ -21,6 +21,8 @@ import ReactMarkdown from 'react-markdown';
 import { useDropzone } from 'react-dropzone';
 import TodoList from './TodoList';
 import ClaudeLogo from './ClaudeLogo.jsx';
+import ToolResultRenderer from './ToolResultRenderer';
+import { MarkdownCodeBlock } from './CodeBlockLazy';
 
 import ClaudeStatus from './ClaudeStatus';
 import { MicButton } from './MicButton.jsx';
@@ -44,7 +46,7 @@ const safeLocalStorage = {
           console.warn('Could not parse chat messages for truncation:', parseError);
         }
       }
-      
+
       localStorage.setItem(key, value);
     } catch (error) {
       if (error.name === 'QuotaExceededError') {
@@ -52,7 +54,7 @@ const safeLocalStorage = {
         // Clear old chat messages to free up space
         const keys = Object.keys(localStorage);
         const chatKeys = keys.filter(k => k.startsWith('chat_messages_')).sort();
-        
+
         // Remove oldest chat data first, keeping only the 3 most recent projects
         if (chatKeys.length > 3) {
           chatKeys.slice(0, chatKeys.length - 3).forEach(k => {
@@ -60,13 +62,13 @@ const safeLocalStorage = {
             console.log(`Removed old chat data: ${k}`);
           });
         }
-        
+
         // If still failing, clear draft inputs too
         const draftKeys = keys.filter(k => k.startsWith('draft_input_'));
         draftKeys.forEach(k => {
           localStorage.removeItem(k);
         });
-        
+
         // Try again with reduced data
         try {
           localStorage.setItem(key, value);
@@ -110,14 +112,14 @@ const safeLocalStorage = {
 
 // Memoized message component to prevent unnecessary re-renders
 const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFileOpen, onShowSettings, autoExpandTools, showRawParameters }) => {
-  const isGrouped = prevMessage && prevMessage.type === message.type && 
-                   prevMessage.type === 'assistant' && 
+  const isGrouped = prevMessage && prevMessage.type === message.type &&
+                   prevMessage.type === 'assistant' &&
                    !prevMessage.isToolUse && !message.isToolUse;
   const messageRef = React.useRef(null);
   const [isExpanded, setIsExpanded] = React.useState(false);
   React.useEffect(() => {
     if (!autoExpandTools || !messageRef.current || !message.isToolUse) return;
-    
+
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
@@ -133,9 +135,9 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
       },
       { threshold: 0.1 }
     );
-    
+
     observer.observe(messageRef.current);
-    
+
     return () => {
       if (messageRef.current) {
         observer.unobserve(messageRef.current);
@@ -197,9 +199,9 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
               </div>
             </div>
           )}
-          
+
           <div className="w-full">
-            
+
             {message.isToolUse && !['Read', 'TodoWrite', 'TodoRead'].includes(message.toolName) ? (
               <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-2 sm:p-3 mb-2">
                 <div className="flex items-center justify-between mb-2">
@@ -243,8 +245,8 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                             <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                             </svg>
-                            📝 View edit diff for 
-                            <button 
+                            📝 View edit diff for
+                            <button
                               onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
@@ -261,7 +263,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                           <div className="mt-3">
                             <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
                               <div className="flex items-center justify-between px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-                                <button 
+                                <button
                                   onClick={() => onFileOpen && onFileOpen(input.file_path, {
                                     old_string: input.old_string,
                                     new_string: input.new_string
@@ -278,7 +280,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                                 {createDiff(input.old_string, input.new_string).map((diffLine, i) => (
                                   <div key={i} className="flex">
                                     <span className={`w-8 text-center border-r ${
-                                      diffLine.type === 'removed' 
+                                      diffLine.type === 'removed'
                                         ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800'
                                         : 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800'
                                     }`}>
@@ -326,7 +328,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 {message.toolInput && message.toolName !== 'Edit' && (() => {
                   // Debug log to see what we're dealing with
                   console.log('Tool display - name:', message.toolName, 'input type:', typeof message.toolInput);
-                  
+
                   // Special handling for Write tool
                   if (message.toolName === 'Write') {
                     console.log('Write tool detected, toolInput:', message.toolInput);
@@ -338,9 +340,9 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                       } else {
                         input = message.toolInput;
                       }
-                      
+
                       console.log('Parsed Write input:', input);
-                      
+
                       if (input.file_path && input.content !== undefined) {
                         return (
                           <details className="mt-2" open={autoExpandTools}>
@@ -348,8 +350,8 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                               <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                               </svg>
-                              📄 Creating new file: 
-                              <button 
+                              📄 Creating new file:
+                              <button
                                 onClick={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
@@ -366,7 +368,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                             <div className="mt-3">
                               <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
                                 <div className="flex items-center justify-between px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-                                  <button 
+                                  <button
                                     onClick={() => onFileOpen && onFileOpen(input.file_path, {
                                       old_string: '',
                                       new_string: input.content
@@ -383,7 +385,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                                   {createDiff('', input.content).map((diffLine, i) => (
                                     <div key={i} className="flex">
                                       <span className={`w-8 text-center border-r ${
-                                        diffLine.type === 'removed' 
+                                        diffLine.type === 'removed'
                                           ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800'
                                           : 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800'
                                       }`}>
@@ -418,7 +420,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                       // Fall back to regular display
                     }
                   }
-                  
+
                   // Special handling for TodoWrite tool
                   if (message.toolName === 'TodoWrite') {
                     try {
@@ -452,7 +454,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                       // Fall back to regular display
                     }
                   }
-                  
+
                   // Special handling for Bash tool
                   if (message.toolName === 'Bash') {
                     try {
@@ -499,18 +501,18 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                       // Fall back to regular display
                     }
                   }
-                  
+
                   // Special handling for Read tool
                   if (message.toolName === 'Read') {
                     try {
                       const input = JSON.parse(message.toolInput);
                       if (input.file_path) {
                         const filename = input.file_path.split('/').pop();
-                        
+
                         return (
                           <div className="mt-2 text-sm text-blue-700 dark:text-blue-300">
                             Read{' '}
-                            <button 
+                            <button
                               onClick={() => onFileOpen && onFileOpen(input.file_path)}
                               className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline font-mono"
                             >
@@ -523,7 +525,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                       // Fall back to regular display
                     }
                   }
-                  
+
                   // Special handling for exit_plan_mode tool
                   if (message.toolName === 'exit_plan_mode') {
                     try {
@@ -540,7 +542,14 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                               📋 View implementation plan
                             </summary>
                             <div className="mt-3 prose prose-sm max-w-none dark:prose-invert">
-                              <ReactMarkdown>{planContent}</ReactMarkdown>
+                              <ReactMarkdown
+                                components={{
+                                  code: MarkdownCodeBlock,
+                                  pre: ({children}) => <>{children}</>
+                                }}
+                              >
+                                {planContent}
+                              </ReactMarkdown>
                             </div>
                           </details>
                         );
@@ -549,7 +558,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                       // Fall back to regular display
                     }
                   }
-                  
+
                   // Regular tool input display for other tools
                   return (
                     <details className="mt-2" open={autoExpandTools}>
@@ -565,297 +574,16 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     </details>
                   );
                 })()}
-                
+
                 {/* Tool Result Section */}
                 {message.toolResult && (
-                  <div className="mt-3 border-t border-blue-200 dark:border-blue-700 pt-3">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className={`w-4 h-4 rounded flex items-center justify-center ${
-                        message.toolResult.isError 
-                          ? 'bg-red-500' 
-                          : 'bg-green-500'
-                      }`}>
-                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          {message.toolResult.isError ? (
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          ) : (
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          )}
-                        </svg>
-                      </div>
-                      <span className={`text-sm font-medium ${
-                        message.toolResult.isError 
-                          ? 'text-red-700 dark:text-red-300' 
-                          : 'text-green-700 dark:text-green-300'
-                      }`}>
-                        {message.toolResult.isError ? 'Tool Error' : 'Tool Result'}
-                      </span>
-                    </div>
-                    
-                    <div className={`text-sm ${
-                      message.toolResult.isError 
-                        ? 'text-red-800 dark:text-red-200' 
-                        : 'text-green-800 dark:text-green-200'
-                    }`}>
-                      {(() => {
-                        const content = String(message.toolResult.content || '');
-                        
-                        // Special handling for TodoWrite/TodoRead results
-                        if ((message.toolName === 'TodoWrite' || message.toolName === 'TodoRead') &&
-                            (content.includes('Todos have been modified successfully') || 
-                             content.includes('Todo list') || 
-                             (content.startsWith('[') && content.includes('"content"') && content.includes('"status"')))) {
-                          try {
-                            // Try to parse if it looks like todo JSON data
-                            let todos = null;
-                            if (content.startsWith('[')) {
-                              todos = JSON.parse(content);
-                            } else if (content.includes('Todos have been modified successfully')) {
-                              // For TodoWrite success messages, we don't have the data in the result
-                              return (
-                                <div>
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <span className="font-medium">Todo list has been updated successfully</span>
-                                  </div>
-                                </div>
-                              );
-                            }
-                            
-                            if (todos && Array.isArray(todos)) {
-                              return (
-                                <div>
-                                  <div className="flex items-center gap-2 mb-3">
-                                    <span className="font-medium">Current Todo List</span>
-                                  </div>
-                                  <TodoList todos={todos} isResult={true} />
-                                </div>
-                              );
-                            }
-                          } catch (e) {
-                            // Fall through to regular handling
-                          }
-                        }
-
-                        // Special handling for exit_plan_mode tool results
-                        if (message.toolName === 'exit_plan_mode') {
-                          try {
-                            // The content should be JSON with a "plan" field
-                            const parsed = JSON.parse(content);
-                            if (parsed.plan) {
-                              // Replace escaped newlines with actual newlines
-                              const planContent = parsed.plan.replace(/\\n/g, '\n');
-                              return (
-                                <div>
-                                  <div className="flex items-center gap-2 mb-3">
-                                    <span className="font-medium">Implementation Plan</span>
-                                  </div>
-                                  <div className="prose prose-sm max-w-none dark:prose-invert">
-                                    <ReactMarkdown>{planContent}</ReactMarkdown>
-                                  </div>
-                                </div>
-                              );
-                            }
-                          } catch (e) {
-                            // Fall through to regular handling
-                          }
-                        }
-
-                        // Special handling for interactive prompts
-                        if (content.includes('Do you want to proceed?') && message.toolName === 'Bash') {
-                          const lines = content.split('\n');
-                          const promptIndex = lines.findIndex(line => line.includes('Do you want to proceed?'));
-                          const beforePrompt = lines.slice(0, promptIndex).join('\n');
-                          const promptLines = lines.slice(promptIndex);
-                          
-                          // Extract the question and options
-                          const questionLine = promptLines.find(line => line.includes('Do you want to proceed?')) || '';
-                          const options = [];
-                          
-                          // Parse numbered options (1. Yes, 2. No, etc.)
-                          promptLines.forEach(line => {
-                            const optionMatch = line.match(/^\s*(\d+)\.\s+(.+)$/);
-                            if (optionMatch) {
-                              options.push({
-                                number: optionMatch[1],
-                                text: optionMatch[2].trim()
-                              });
-                            }
-                          });
-                          
-                          // Find which option was selected (usually indicated by "> 1" or similar)
-                          const selectedMatch = content.match(/>\s*(\d+)/);
-                          const selectedOption = selectedMatch ? selectedMatch[1] : null;
-                          
-                          return (
-                            <div className="space-y-3">
-                              {beforePrompt && (
-                                <div className="bg-gray-900 dark:bg-gray-950 text-gray-100 rounded-lg p-3 font-mono text-xs overflow-x-auto">
-                                  <pre className="whitespace-pre-wrap break-words">{beforePrompt}</pre>
-                                </div>
-                              )}
-                              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
-                                <div className="flex items-start gap-3">
-                                  <div className="w-8 h-8 bg-amber-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                  </div>
-                                  <div className="flex-1">
-                                    <h4 className="font-semibold text-amber-900 dark:text-amber-100 text-base mb-2">
-                                      Interactive Prompt
-                                    </h4>
-                                    <p className="text-sm text-amber-800 dark:text-amber-200 mb-4">
-                                      {questionLine}
-                                    </p>
-                                    
-                                    {/* Option buttons */}
-                                    <div className="space-y-2 mb-4">
-                                      {options.map((option) => (
-                                        <button
-                                          key={option.number}
-                                          className={`w-full text-left px-4 py-3 rounded-lg border-2 transition-all ${
-                                            selectedOption === option.number
-                                              ? 'bg-amber-600 dark:bg-amber-700 text-white border-amber-600 dark:border-amber-700 shadow-md'
-                                              : 'bg-white dark:bg-gray-800 text-amber-900 dark:text-amber-100 border-amber-300 dark:border-amber-700 hover:border-amber-400 dark:hover:border-amber-600 hover:shadow-sm'
-                                          } ${
-                                            selectedOption ? 'cursor-default' : 'cursor-not-allowed opacity-75'
-                                          }`}
-                                          disabled
-                                        >
-                                          <div className="flex items-center gap-3">
-                                            <span className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                                              selectedOption === option.number
-                                                ? 'bg-white/20'
-                                                : 'bg-amber-100 dark:bg-amber-800/50'
-                                            }`}>
-                                              {option.number}
-                                            </span>
-                                            <span className="text-sm sm:text-base font-medium flex-1">
-                                              {option.text}
-                                            </span>
-                                            {selectedOption === option.number && (
-                                              <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                              </svg>
-                                            )}
-                                          </div>
-                                        </button>
-                                      ))}
-                                    </div>
-                                    
-                                    {selectedOption && (
-                                      <div className="bg-amber-100 dark:bg-amber-800/30 rounded-lg p-3">
-                                        <p className="text-amber-900 dark:text-amber-100 text-sm font-medium mb-1">
-                                          ✓ Claude selected option {selectedOption}
-                                        </p>
-                                        <p className="text-amber-800 dark:text-amber-200 text-xs">
-                                          In the CLI, you would select this option interactively using arrow keys or by typing the number.
-                                        </p>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        }
-                        
-                        const fileEditMatch = content.match(/The file (.+?) has been updated\./);
-                        if (fileEditMatch) {
-                          return (
-                            <div>
-                              <div className="flex items-center gap-2 mb-2">
-                                <span className="font-medium">File updated successfully</span>
-                              </div>
-                              <button 
-                                onClick={() => onFileOpen && onFileOpen(fileEditMatch[1])}
-                                className="text-xs font-mono bg-green-100 dark:bg-green-800/30 px-2 py-1 rounded text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline cursor-pointer"
-                              >
-                                {fileEditMatch[1]}
-                              </button>
-                            </div>
-                          );
-                        }
-                        
-                        // Handle Write tool output for file creation
-                        const fileCreateMatch = content.match(/(?:The file|File) (.+?) has been (?:created|written)(?: successfully)?\.?/);
-                        if (fileCreateMatch) {
-                          return (
-                            <div>
-                              <div className="flex items-center gap-2 mb-2">
-                                <span className="font-medium">File created successfully</span>
-                              </div>
-                              <button 
-                                onClick={() => onFileOpen && onFileOpen(fileCreateMatch[1])}
-                                className="text-xs font-mono bg-green-100 dark:bg-green-800/30 px-2 py-1 rounded text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline cursor-pointer"
-                              >
-                                {fileCreateMatch[1]}
-                              </button>
-                            </div>
-                          );
-                        }
-                        
-                        // Special handling for Write tool - hide content if it's just the file content
-                        if (message.toolName === 'Write' && !message.toolResult.isError) {
-                          // For Write tool, the diff is already shown in the tool input section
-                          // So we just show a success message here
-                          return (
-                            <div className="text-green-700 dark:text-green-300">
-                              <div className="flex items-center gap-2">
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                                <span className="font-medium">File written successfully</span>
-                              </div>
-                              <p className="text-xs mt-1 text-green-600 dark:text-green-400">
-                                The file content is displayed in the diff view above
-                              </p>
-                            </div>
-                          );
-                        }
-                        
-                        if (content.includes('cat -n') && content.includes('→')) {
-                          return (
-                            <details open={autoExpandTools}>
-                              <summary className="text-sm text-green-700 dark:text-green-300 cursor-pointer hover:text-green-800 dark:hover:text-green-200 mb-2 flex items-center gap-2">
-                                <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                </svg>
-                                View file content
-                              </summary>
-                              <div className="mt-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-                                <div className="text-xs font-mono p-3 whitespace-pre-wrap break-words overflow-hidden">
-                                  {content}
-                                </div>
-                              </div>
-                            </details>
-                          );
-                        }
-                        
-                        if (content.length > 300) {
-                          return (
-                            <details open={autoExpandTools}>
-                              <summary className="text-sm text-green-700 dark:text-green-300 cursor-pointer hover:text-green-800 dark:hover:text-green-200 mb-2 flex items-center gap-2">
-                                <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                </svg>
-                                View full output ({content.length} chars)
-                              </summary>
-                              <div className="mt-2 prose prose-sm max-w-none prose-green dark:prose-invert">
-                                <ReactMarkdown>{content}</ReactMarkdown>
-                              </div>
-                            </details>
-                          );
-                        }
-                        
-                        return (
-                          <div className="prose prose-sm max-w-none prose-green dark:prose-invert">
-                            <ReactMarkdown>{content}</ReactMarkdown>
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  </div>
+                  <ToolResultRenderer
+                    toolName={message.toolName}
+                    toolInput={message.toolInput}
+                    toolResult={message.toolResult.content}
+                    autoExpandTools={autoExpandTools}
+                    className="mt-3"
+                  />
                 )}
               </div>
             ) : message.isInteractivePrompt ? (
@@ -875,7 +603,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                       const lines = message.content.split('\n').filter(line => line.trim());
                       const questionLine = lines.find(line => line.includes('?')) || lines[0] || '';
                       const options = [];
-                      
+
                       // Parse the menu options
                       lines.forEach(line => {
                         // Match lines like "❯ 1. Yes" or "  2. No"
@@ -889,13 +617,13 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                           });
                         }
                       });
-                      
+
                       return (
                         <>
                           <p className="text-sm text-amber-800 dark:text-amber-200 mb-4">
                             {questionLine}
                           </p>
-                          
+
                           {/* Option buttons */}
                           <div className="space-y-2 mb-4">
                             {options.map((option) => (
@@ -926,7 +654,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                               </button>
                             ))}
                           </div>
-                          
+
                           <div className="bg-amber-100 dark:bg-amber-800/30 rounded-lg p-3">
                             <p className="text-amber-900 dark:text-amber-100 text-sm font-medium mb-1">
                               ⏳ Waiting for your response in the CLI
@@ -951,7 +679,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     return (
                       <div className="bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-300 dark:border-blue-600 pl-3 py-1 mb-2 text-sm text-blue-700 dark:text-blue-300">
                         📖 Read{' '}
-                        <button 
+                        <button
                           onClick={() => onFileOpen && onFileOpen(input.file_path)}
                           className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline font-mono"
                         >
@@ -999,22 +727,11 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
             ) : (
               <div className="text-sm text-gray-700 dark:text-gray-300">
                 {message.type === 'assistant' ? (
-                  <div className="prose prose-sm max-w-none dark:prose-invert prose-gray [&_code]:!bg-transparent [&_code]:!p-0">
+                  <div className="prose prose-sm max-w-none dark:prose-invert prose-gray">
                     <ReactMarkdown
                       components={{
-                        code: ({node, inline, className, children, ...props}) => {
-                          return inline ? (
-                            <strong className="text-blue-600 dark:text-blue-400 font-bold not-prose" {...props}>
-                              {children}
-                            </strong>
-                          ) : (
-                            <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg overflow-hidden my-2">
-                              <code className="text-gray-800 dark:text-gray-200 text-sm font-mono block whitespace-pre-wrap break-words" {...props}>
-                                {children}
-                              </code>
-                            </div>
-                          );
-                        },
+                        code: MarkdownCodeBlock,
+                        pre: ({children}) => <>{children}</>,
                         blockquote: ({children}) => (
                           <blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-4 italic text-gray-600 dark:text-gray-400 my-2">
                             {children}
@@ -1042,7 +759,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 )}
               </div>
             )}
-            
+
             <div className={`text-xs text-gray-500 dark:text-gray-400 mt-1 ${isGrouped ? 'opacity-0 group-hover:opacity-100' : ''}`}>
               {new Date(message.timestamp).toLocaleTimeString()}
             </div>
@@ -1056,13 +773,13 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
 // ImageAttachment component for displaying image previews
 const ImageAttachment = ({ file, onRemove, uploadProgress, error }) => {
   const [preview, setPreview] = useState(null);
-  
+
   useEffect(() => {
     const url = URL.createObjectURL(file);
     setPreview(url);
     return () => URL.revokeObjectURL(url);
   }, [file]);
-  
+
   return (
     <div className="relative group">
       <img src={preview} alt={file.name} className="w-20 h-20 object-cover rounded" />
@@ -1091,7 +808,7 @@ const ImageAttachment = ({ file, onRemove, uploadProgress, error }) => {
 };
 
 // ChatInterface: Main chat component with Session Protection System integration
-// 
+//
 // Session Protection System prevents automatic project updates from interrupting active conversations:
 // - onSessionActive: Called when user sends message to mark session as protected
 // - onSessionInactive: Called when conversation completes/aborts to re-enable updates
@@ -1153,7 +870,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       if (cache.has(key)) {
         return cache.get(key);
       }
-      
+
       const result = calculateDiff(oldStr, newStr);
       cache.set(key, result);
       if (cache.size > 100) {
@@ -1167,7 +884,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   // Load session messages from API
   const loadSessionMessages = useCallback(async (projectName, sessionId) => {
     if (!projectName || !sessionId) return [];
-    
+
     setIsLoadingSessionMessages(true);
     try {
       const response = await api.sessionMessages(projectName, sessionId);
@@ -1188,16 +905,16 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const calculateDiff = (oldStr, newStr) => {
     const oldLines = oldStr.split('\n');
     const newLines = newStr.split('\n');
-    
+
     // Simple diff algorithm - find common lines and differences
     const diffLines = [];
     let oldIndex = 0;
     let newIndex = 0;
-    
+
     while (oldIndex < oldLines.length || newIndex < newLines.length) {
       const oldLine = oldLines[oldIndex];
       const newLine = newLines[newIndex];
-      
+
       if (oldIndex >= oldLines.length) {
         // Only new lines remaining
         diffLines.push({ type: 'added', content: newLine, lineNum: newIndex + 1 });
@@ -1218,14 +935,14 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         newIndex++;
       }
     }
-    
+
     return diffLines;
   };
 
   const convertSessionMessages = (rawMessages) => {
     const converted = [];
     const toolResults = new Map(); // Map tool_use_id to tool result
-    
+
     // First pass: collect all tool results
     for (const msg of rawMessages) {
       if (msg.message?.role === 'user' && Array.isArray(msg.message?.content)) {
@@ -1240,32 +957,32 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         }
       }
     }
-    
+
     // Second pass: process messages and attach tool results to tool uses
     for (const msg of rawMessages) {
       // Handle user messages
       if (msg.message?.role === 'user' && msg.message?.content) {
         let content = '';
         let messageType = 'user';
-        
+
         if (Array.isArray(msg.message.content)) {
           // Handle array content, but skip tool results (they're attached to tool uses)
           const textParts = [];
-          
+
           for (const part of msg.message.content) {
             if (part.type === 'text') {
               textParts.push(part.text);
             }
             // Skip tool_result parts - they're handled in the first pass
           }
-          
+
           content = textParts.join('\n');
         } else if (typeof msg.message.content === 'string') {
           content = msg.message.content;
         } else {
           content = String(msg.message.content);
         }
-        
+
         // Skip command messages and empty content
         if (content && !content.startsWith('<command-name>') && !content.startsWith('[Request interrupted')) {
           converted.push({
@@ -1275,7 +992,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           });
         }
       }
-      
+
       // Handle assistant messages
       else if (msg.message?.role === 'assistant' && msg.message?.content) {
         if (Array.isArray(msg.message.content)) {
@@ -1289,7 +1006,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             } else if (part.type === 'tool_use') {
               // Get the corresponding tool result
               const toolResult = toolResults.get(part.id);
-              
+
               converted.push({
                 type: 'assistant',
                 content: '',
@@ -1312,7 +1029,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         }
       }
     }
-    
+
     return converted;
   };
 
@@ -1350,7 +1067,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     const loadMessages = async () => {
       if (selectedSession && selectedProject) {
         setCurrentSessionId(selectedSession.id);
-        
+
         // Only load messages from API if this is a user-initiated session change
         // For system-initiated changes, preserve existing messages and rely on WebSocket
         if (!isSystemSessionChange) {
@@ -1371,7 +1088,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         setCurrentSessionId(null);
       }
     };
-    
+
     loadMessages();
   }, [selectedSession, selectedProject, loadSessionMessages, scrollToBottom, isSystemSessionChange]);
 
@@ -1421,14 +1138,14 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     // Handle WebSocket messages
     if (messages.length > 0) {
       const latestMessage = messages[messages.length - 1];
-      
+
       switch (latestMessage.type) {
         case 'session-created':
           // New session created by Claude CLI - we receive the real session ID here
           // Store it temporarily until conversation completes (prevents premature session association)
           if (latestMessage.sessionId && !currentSessionId) {
             sessionStorage.setItem('pendingSessionId', latestMessage.sessionId);
-            
+
             // Session Protection: Replace temporary "new-session-*" identifier with real session ID
             // This maintains protection continuity - no gap between temp ID and real ID
             // The temporary session is removed and real session is marked as active
@@ -1437,28 +1154,28 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             }
           }
           break;
-          
+
         case 'claude-response':
           const messageData = latestMessage.data.message || latestMessage.data;
-          
+
           // Handle Claude CLI session duplication bug workaround:
           // When resuming a session, Claude CLI creates a new session instead of resuming.
           // We detect this by checking for system/init messages with session_id that differs
           // from our current session. When found, we need to switch the user to the new session.
-          if (latestMessage.data.type === 'system' && 
-              latestMessage.data.subtype === 'init' && 
-              latestMessage.data.session_id && 
-              currentSessionId && 
+          if (latestMessage.data.type === 'system' &&
+              latestMessage.data.subtype === 'init' &&
+              latestMessage.data.session_id &&
+              currentSessionId &&
               latestMessage.data.session_id !== currentSessionId) {
-            
+
             console.log('🔄 Claude CLI session duplication detected:', {
               originalSession: currentSessionId,
               newSession: latestMessage.data.session_id
             });
-            
+
             // Mark this as a system-initiated session change to preserve messages
             setIsSystemSessionChange(true);
-            
+
             // Switch to the new session using React Router navigation
             // This triggers the session loading logic in App.jsx without a page reload
             if (onNavigateToSession) {
@@ -1466,37 +1183,37 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             }
             return; // Don't process the message further, let the navigation handle it
           }
-          
+
           // Handle system/init for new sessions (when currentSessionId is null)
-          if (latestMessage.data.type === 'system' && 
-              latestMessage.data.subtype === 'init' && 
-              latestMessage.data.session_id && 
+          if (latestMessage.data.type === 'system' &&
+              latestMessage.data.subtype === 'init' &&
+              latestMessage.data.session_id &&
               !currentSessionId) {
-            
+
             console.log('🔄 New session init detected:', {
               newSession: latestMessage.data.session_id
             });
-            
+
             // Mark this as a system-initiated session change to preserve messages
             setIsSystemSessionChange(true);
-            
+
             // Switch to the new session
             if (onNavigateToSession) {
               onNavigateToSession(latestMessage.data.session_id);
             }
             return; // Don't process the message further, let the navigation handle it
           }
-          
+
           // For system/init messages that match current session, just ignore them
-          if (latestMessage.data.type === 'system' && 
-              latestMessage.data.subtype === 'init' && 
-              latestMessage.data.session_id && 
-              currentSessionId && 
+          if (latestMessage.data.type === 'system' &&
+              latestMessage.data.subtype === 'init' &&
+              latestMessage.data.session_id &&
+              currentSessionId &&
               latestMessage.data.session_id === currentSessionId) {
             console.log('🔄 System init message for current session, ignoring');
             return; // Don't process the message further
           }
-          
+
           // Handle different types of content in the response
           if (Array.isArray(messageData.content)) {
             for (const part of messageData.content) {
@@ -1526,7 +1243,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                     }
                   }
                 }
-                
+
                 // Add regular text message
                 setChatMessages(prev => [...prev, {
                   type: 'assistant',
@@ -1548,7 +1265,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 }
               }
             }
-            
+
             // Add regular text message
             setChatMessages(prev => [...prev, {
               type: 'assistant',
@@ -1556,7 +1273,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               timestamp: new Date()
             }]);
           }
-          
+
           // Handle tool results from user messages (these come separately)
           if (messageData.role === 'user' && Array.isArray(messageData.content)) {
             for (const part of messageData.content) {
@@ -1579,7 +1296,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             }
           }
           break;
-          
+
         case 'claude-output':
           setChatMessages(prev => [...prev, {
             type: 'assistant',
@@ -1604,13 +1321,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             timestamp: new Date()
           }]);
           break;
-          
+
         case 'claude-complete':
           setIsLoading(false);
           setCanAbortSession(false);
           setClaudeStatus(null);
 
-          
+
           // Session Protection: Mark session as inactive to re-enable automatic project updates
           // Conversation is complete, safe to allow project updates again
           // Use real session ID if available, otherwise use pending session ID
@@ -1618,31 +1335,31 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           if (activeSessionId && onSessionInactive) {
             onSessionInactive(activeSessionId);
           }
-          
+
           // If we have a pending session ID and the conversation completed successfully, use it
           const pendingSessionId = sessionStorage.getItem('pendingSessionId');
           if (pendingSessionId && !currentSessionId && latestMessage.exitCode === 0) {
                 setCurrentSessionId(pendingSessionId);
             sessionStorage.removeItem('pendingSessionId');
           }
-          
+
           // Clear persisted chat messages after successful completion
           if (selectedProject && latestMessage.exitCode === 0) {
             safeLocalStorage.removeItem(`chat_messages_${selectedProject.name}`);
           }
           break;
-          
+
         case 'session-aborted':
           setIsLoading(false);
           setCanAbortSession(false);
           setClaudeStatus(null);
-          
+
           // Session Protection: Mark session as inactive when aborted
           // User or system aborted the conversation, re-enable project updates
           if (currentSessionId && onSessionInactive) {
             onSessionInactive(currentSessionId);
           }
-          
+
           setChatMessages(prev => [...prev, {
             type: 'assistant',
             content: 'Session interrupted by user.',
@@ -1661,7 +1378,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               tokens: 0,
               can_interrupt: true
             };
-            
+
             // Check for different status message formats
             if (statusData.message) {
               statusInfo.text = statusData.message;
@@ -1670,26 +1387,26 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             } else if (typeof statusData === 'string') {
               statusInfo.text = statusData;
             }
-            
+
             // Extract token count
             if (statusData.tokens) {
               statusInfo.tokens = statusData.tokens;
             } else if (statusData.token_count) {
               statusInfo.tokens = statusData.token_count;
             }
-            
+
             // Check if can interrupt
             if (statusData.can_interrupt !== undefined) {
               statusInfo.can_interrupt = statusData.can_interrupt;
             }
-            
+
             console.log('📊 Setting claude status:', statusInfo);
             setClaudeStatus(statusInfo);
             setIsLoading(true);
             setCanAbortSession(statusInfo.can_interrupt);
           }
           break;
-  
+
       }
     }
   }, [messages]);
@@ -1736,20 +1453,20 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   useEffect(() => {
     const textBeforeCursor = input.slice(0, cursorPosition);
     const lastAtIndex = textBeforeCursor.lastIndexOf('@');
-    
+
     if (lastAtIndex !== -1) {
       const textAfterAt = textBeforeCursor.slice(lastAtIndex + 1);
       // Check if there's a space after the @ symbol (which would end the file reference)
       if (!textAfterAt.includes(' ')) {
         setAtSymbolPosition(lastAtIndex);
         setShowFileDropdown(true);
-        
+
         // Filter files based on the text after @
-        const filtered = fileList.filter(file => 
+        const filtered = fileList.filter(file =>
           file.name.toLowerCase().includes(textAfterAt.toLowerCase()) ||
           file.path.toLowerCase().includes(textAfterAt.toLowerCase())
         ).slice(0, 10); // Limit to 10 results
-        
+
         setFilteredFiles(filtered);
         setSelectedFileIndex(-1);
       } else {
@@ -1767,7 +1484,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     const timer = setTimeout(() => {
       setDebouncedInput(input);
     }, 150); // 150ms debounce
-    
+
     return () => clearTimeout(timer);
   }, [input]);
 
@@ -1805,7 +1522,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         const prevTop = scrollPositionRef.current.top;
         const newHeight = container.scrollHeight;
         const heightDiff = newHeight - prevHeight;
-        
+
         // If content was added above the current view, adjust scroll position
         if (heightDiff > 0 && prevTop > 0) {
           container.scrollTop = prevTop + heightDiff;
@@ -1858,20 +1575,20 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     if (text.trim()) {
       setInput(prevInput => {
         const newInput = prevInput.trim() ? `${prevInput} ${text}` : text;
-        
+
         // Update textarea height after setting new content
         setTimeout(() => {
           if (textareaRef.current) {
             textareaRef.current.style.height = 'auto';
             textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px';
-            
+
             // Check if expanded after transcript
             const lineHeight = parseInt(window.getComputedStyle(textareaRef.current).lineHeight);
             const isExpanded = textareaRef.current.scrollHeight > lineHeight * 2;
             setIsTextareaExpanded(isExpanded);
           }
         }, 0);
-        
+
         return newInput;
       });
     }
@@ -1922,7 +1639,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   // Handle clipboard paste for images
   const handlePaste = useCallback(async (e) => {
     const items = Array.from(e.clipboardData.items);
-    
+
     for (const item of items) {
       if (item.type.startsWith('image/')) {
         const file = item.getAsFile();
@@ -1931,7 +1648,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         }
       }
     }
-    
+
     // Fallback for some browsers/platforms
     if (items.length === 0 && e.clipboardData.files.length > 0) {
       const files = Array.from(e.clipboardData.files);
@@ -1965,24 +1682,24 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       attachedImages.forEach(file => {
         formData.append('images', file);
       });
-      
+
       try {
         const token = safeLocalStorage.getItem('auth-token');
         const headers = {};
         if (token) {
           headers['Authorization'] = `Bearer ${token}`;
         }
-        
+
         const response = await fetch(`/api/projects/${selectedProject.name}/upload-images`, {
           method: 'POST',
           headers: headers,
           body: formData
         });
-        
+
         if (!response.ok) {
           throw new Error('Failed to upload images');
         }
-        
+
         const result = await response.json();
         uploadedImages = result.images;
       } catch (error) {
@@ -2012,7 +1729,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       tokens: 0,
       can_interrupt: true
     });
-    
+
     // Always scroll to bottom when user sends a message and reset scroll state
     setIsUserScrolledUp(false); // Reset scroll state so auto-scroll works for Claude's response
     setTimeout(() => scrollToBottom(), 100); // Longer delay to ensure message is rendered
@@ -2066,14 +1783,14 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     setUploadingImages(new Map());
     setImageErrors(new Map());
     setIsTextareaExpanded(false);
-    
+
     // Reset textarea height
 
 
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-    
+
     // Clear the saved draft since message was sent
     if (selectedProject) {
       safeLocalStorage.removeItem(`draft_input_${selectedProject.name}`);
@@ -2085,14 +1802,14 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     if (showFileDropdown && filteredFiles.length > 0) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setSelectedFileIndex(prev => 
+        setSelectedFileIndex(prev =>
           prev < filteredFiles.length - 1 ? prev + 1 : 0
         );
         return;
       }
       if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setSelectedFileIndex(prev => 
+        setSelectedFileIndex(prev =>
           prev > 0 ? prev - 1 : filteredFiles.length - 1
         );
         return;
@@ -2112,7 +1829,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         return;
       }
     }
-    
+
     // Handle Tab key for mode switching (only when file dropdown is not showing)
     if (e.key === 'Tab' && !showFileDropdown) {
       e.preventDefault();
@@ -2122,14 +1839,14 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       setPermissionMode(modes[nextIndex]);
       return;
     }
-    
+
     // Handle Enter key: Ctrl+Enter (Cmd+Enter on Mac) sends, Shift+Enter creates new line
     if (e.key === 'Enter') {
       // If we're in composition, don't send message
       if (e.nativeEvent.isComposing) {
         return; // Let IME handle the Enter key
       }
-      
+
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
         // Ctrl+Enter or Cmd+Enter: Send message
         e.preventDefault();
@@ -2150,24 +1867,24 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     const textAfterAtQuery = input.slice(atSymbolPosition);
     const spaceIndex = textAfterAtQuery.indexOf(' ');
     const textAfterQuery = spaceIndex !== -1 ? textAfterAtQuery.slice(spaceIndex) : '';
-    
+
     const newInput = textBeforeAt + '@' + file.path + ' ' + textAfterQuery;
     const newCursorPos = textBeforeAt.length + 1 + file.path.length + 1;
-    
+
     // Immediately ensure focus is maintained
     if (textareaRef.current && !textareaRef.current.matches(':focus')) {
       textareaRef.current.focus();
     }
-    
+
     // Update input and cursor position
     setInput(newInput);
     setCursorPosition(newCursorPos);
-    
+
     // Hide dropdown
     setShowFileDropdown(false);
     setAtSymbolPosition(-1);
-    
-    // Set cursor position synchronously 
+
+    // Set cursor position synchronously
     if (textareaRef.current) {
       // Use requestAnimationFrame for smoother updates
       requestAnimationFrame(() => {
@@ -2186,7 +1903,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     const newValue = e.target.value;
     setInput(newValue);
     setCursorPosition(e.target.selectionStart);
-    
+
     // Handle height reset when input becomes empty
     if (!newValue.trim()) {
       e.target.style.height = 'auto';
@@ -2206,7 +1923,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     setIsLoading(false);
     setCanAbortSession(false);
   };
-  
+
   const handleAbortSession = () => {
     if (currentSessionId && canAbortSession) {
       sendMessage({
@@ -2245,7 +1962,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       </style>
       <div className="h-full flex flex-col">
         {/* Messages Area - Scrollable Middle Section */}
-      <div 
+      <div
         ref={scrollContainerRef}
         className="flex-1 overflow-y-auto overflow-x-hidden px-0 py-3 sm:p-4 space-y-3 sm:space-y-4 relative"
       >
@@ -2269,8 +1986,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           <>
             {chatMessages.length > visibleMessageCount && (
               <div className="text-center text-gray-500 dark:text-gray-400 text-sm py-2 border-b border-gray-200 dark:border-gray-700">
-                Showing last {visibleMessageCount} messages ({chatMessages.length} total) • 
-                <button 
+                Showing last {visibleMessageCount} messages ({chatMessages.length} total) •
+                <button
                   className="ml-1 text-blue-600 hover:text-blue-700 underline"
                   onClick={loadEarlierMessages}
                 >
@@ -2278,10 +1995,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 </button>
               </div>
             )}
-            
+
             {visibleMessages.map((message, index) => {
               const prevMessage = index > 0 ? visibleMessages[index - 1] : null;
-              
+
               return (
                 <MessageComponent
                   key={index}
@@ -2298,7 +2015,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             })}
           </>
         )}
-        
+
         {isLoading && (
           <div className="chat-message assistant">
             <div className="w-full">
@@ -2320,7 +2037,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             </div>
           </div>
         )}
-        
+
         <div ref={messagesEndRef} />
       </div>
 
@@ -2330,12 +2047,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         isInputFocused ? 'pb-2 sm:pb-4 md:pb-6' : 'pb-16 sm:pb-4 md:pb-6'
       }`}>
         {/* Claude Working Status - positioned above the input form */}
-        <ClaudeStatus 
+        <ClaudeStatus
           status={claudeStatus}
           isLoading={isLoading}
           onAbort={handleAbortSession}
         />
-        
+
         {/* Permission Mode Selector with scroll to bottom button - Above input, clickable for mobile */}
         <div className="max-w-4xl mx-auto mb-3">
           <div className="flex items-center justify-center gap-3">
@@ -2343,7 +2060,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               type="button"
               onClick={handleModeSwitch}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all duration-200 ${
-                permissionMode === 'default' 
+                permissionMode === 'default'
                   ? 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600'
                   : permissionMode === 'acceptEdits'
                   ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border-green-300 dark:border-green-600 hover:bg-green-100 dark:hover:bg-green-900/30'
@@ -2355,7 +2072,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             >
               <div className="flex items-center gap-2">
                 <div className={`w-2 h-2 rounded-full ${
-                  permissionMode === 'default' 
+                  permissionMode === 'default'
                     ? 'bg-gray-500'
                     : permissionMode === 'acceptEdits'
                     ? 'bg-green-500'
@@ -2371,7 +2088,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 </span>
               </div>
             </button>
-            
+
             {/* Scroll to bottom button - positioned next to mode indicator */}
             {isUserScrolledUp && chatMessages.length > 0 && (
               <button
@@ -2386,7 +2103,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             )}
           </div>
         </div>
-        
+
         <form onSubmit={handleSubmit} className="relative max-w-4xl mx-auto">
           {/* Drag overlay */}
           {isDragActive && (
@@ -2399,7 +2116,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               </div>
             </div>
           )}
-          
+
           {/* Image attachments preview */}
           {attachedImages.length > 0 && (
             <div className="mb-2 p-2 bg-gray-50 dark:bg-gray-800 rounded-lg">
@@ -2418,7 +2135,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               </div>
             </div>
           )}
-          
+
           {/* File dropdown - positioned outside dropzone to avoid conflicts */}
           {showFileDropdown && filteredFiles.length > 0 && (
             <div className="absolute bottom-full left-0 right-0 mb-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg max-h-48 overflow-y-auto z-50 backdrop-blur-sm">
@@ -2449,7 +2166,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               ))}
             </div>
           )}
-          
+
           <div {...getRootProps()} className={`relative bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-600 focus-within:ring-2 focus-within:ring-blue-500 dark:focus-within:ring-blue-500 focus-within:border-blue-500 transition-all duration-200 ${isTextareaExpanded ? 'chat-input-expanded' : ''}`}>
             <input {...getInputProps()} />
             <textarea
@@ -2466,7 +2183,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 e.target.style.height = 'auto';
                 e.target.style.height = e.target.scrollHeight + 'px';
                 setCursorPosition(e.target.selectionStart);
-                
+
                 // Check if textarea is expanded (more than 2 lines worth of height)
                 const lineHeight = parseInt(window.getComputedStyle(e.target).lineHeight);
                 const isExpanded = e.target.scrollHeight > lineHeight * 2;
@@ -2505,17 +2222,17 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 className="absolute -left-0.5 -top-3 sm:right-28 sm:left-auto sm:top-1/2 sm:-translate-y-1/2 w-6 h-6 sm:w-8 sm:h-8 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 border border-gray-300 dark:border-gray-600 rounded-full flex items-center justify-center transition-all duration-200 group z-10 shadow-sm"
                 title="Clear input"
               >
-                <svg 
-                  className="w-3 h-3 sm:w-4 sm:h-4 text-gray-600 dark:text-gray-300 group-hover:text-gray-800 dark:group-hover:text-gray-100 transition-colors" 
-                  fill="none" 
-                  stroke="currentColor" 
+                <svg
+                  className="w-3 h-3 sm:w-4 sm:h-4 text-gray-600 dark:text-gray-300 group-hover:text-gray-800 dark:group-hover:text-gray-100 transition-colors"
+                  fill="none"
+                  stroke="currentColor"
                   viewBox="0 0 24 24"
                 >
-                  <path 
-                    strokeLinecap="round" 
-                    strokeLinejoin="round" 
-                    strokeWidth={2} 
-                    d="M6 18L18 6M6 6l12 12" 
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
                   />
                 </svg>
               </button>
@@ -2531,10 +2248,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
             </button>
-            
+
             {/* Mic button - HIDDEN */}
             <div className="absolute right-16 sm:right-16 top-1/2 transform -translate-y-1/2" style={{ display: 'none' }}>
-              <MicButton 
+              <MicButton
                 onTranscript={handleTranscript}
                 className="w-10 h-10 sm:w-10 sm:h-10"
               />
@@ -2553,32 +2270,32 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               }}
               className="absolute right-2 top-1/2 transform -translate-y-1/2 w-12 h-12 sm:w-12 sm:h-12 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed rounded-full flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:ring-offset-gray-800"
             >
-              <svg 
-                className="w-4 h-4 sm:w-5 sm:h-5 text-white transform rotate-90" 
-                fill="none" 
-                stroke="currentColor" 
+              <svg
+                className="w-4 h-4 sm:w-5 sm:h-5 text-white transform rotate-90"
+                fill="none"
+                stroke="currentColor"
                 viewBox="0 0 24 24"
               >
-                <path 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round" 
-                  strokeWidth={2} 
-                  d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" 
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
                 />
               </svg>
             </button>
           </div>
           {/* Hint text */}
           <div className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2 hidden sm:block">
-            {sendByCtrlEnter 
-              ? "Ctrl+Enter to send (IME safe) • Shift+Enter for new line • Tab to change modes • @ to reference files" 
+            {sendByCtrlEnter
+              ? "Ctrl+Enter to send (IME safe) • Shift+Enter for new line • Tab to change modes • @ to reference files"
               : "Press Enter to send • Shift+Enter for new line • Tab to change modes • @ to reference files"}
           </div>
           <div className={`text-xs text-gray-500 dark:text-gray-400 text-center mt-2 sm:hidden transition-opacity duration-200 ${
             isInputFocused ? 'opacity-100' : 'opacity-0'
           }`}>
-            {sendByCtrlEnter 
-              ? "Ctrl+Enter to send (IME safe) • Tab for modes • @ for files" 
+            {sendByCtrlEnter
+              ? "Ctrl+Enter to send (IME safe) • Tab for modes • @ for files"
               : "Enter to send • Tab for modes • @ for files"}
           </div>
         </form>

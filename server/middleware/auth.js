@@ -71,10 +71,42 @@ const authenticateWebSocket = (token) => {
   }
 };
 
+// Middleware to require GitHub authentication
+const requireGithubAuth = async (req, res, next) => {
+  // First check if user is authenticated
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'GitHub authentication required' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    
+    // Verify user exists and is GitHub authenticated
+    const user = userDb.getUserById(decoded.userId);
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid token. User not found.' });
+    }
+    
+    if (user.auth_provider !== 'github') {
+      return res.status(403).json({ error: 'GitHub authentication required. Please sign in with GitHub.' });
+    }
+    
+    req.user = user;
+    next();
+  } catch (error) {
+    console.error('Token verification error:', error);
+    return res.status(403).json({ error: 'Invalid token' });
+  }
+};
+
 export {
   validateApiKey,
   authenticateToken,
   generateToken,
   authenticateWebSocket,
+  requireGithubAuth,
   JWT_SECRET
 };

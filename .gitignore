@@ -104,4 +104,7 @@ temp/
 # Database files
 *.db
 *.sqlite
-*.sqlite3 
+*.sqlite3
+
+# Runtime configuration
+.port-config.json

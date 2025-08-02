@@ -4,8 +4,6 @@ import { api } from '../utils/api';
 const AuthContext = createContext({
   user: null,
   token: null,
-  login: () => {},
-  register: () => {},
   logout: () => {},
   isLoading: true,
   needsSetup: false,
@@ -27,28 +25,51 @@ export const AuthProvider = ({ children }) => {
   const [needsSetup, setNeedsSetup] = useState(false);
   const [error, setError] = useState(null);
 
-  // Check authentication status on mount
   useEffect(() => {
-    checkAuthStatus();
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlToken = urlParams.get('token');
+    const urlError = urlParams.get('error');
+
+    if (urlError) {
+      setError(urlError === 'github_auth_failed' ? 'GitHub authentication failed. Please try again.' : 'Authentication failed.');
+      window.history.replaceState({}, document.title, window.location.pathname);
+      setIsLoading(false);
+      return;
+    }
+
+    if (urlToken) {
+      localStorage.setItem('auth-token', urlToken);
+      setToken(urlToken);
+
+      window.history.replaceState({}, document.title, window.location.pathname);
+
+      checkAuthStatus(urlToken);
+
+      setTimeout(() => {
+        window.location.reload();
+      }, 100);
+    } else {
+      checkAuthStatus();
+    }
   }, []);
 
-  const checkAuthStatus = async () => {
+  const checkAuthStatus = async (providedToken = null) => {
     try {
       setIsLoading(true);
       setError(null);
       
-      // Check if system needs setup
       const statusResponse = await api.auth.status();
       const statusData = await statusResponse.json();
-      
+
       if (statusData.needsSetup) {
         setNeedsSetup(true);
         setIsLoading(false);
         return;
       }
-      
-      // If we have a token, verify it
-      if (token) {
+
+      const authToken = providedToken || token;
+
+      if (authToken) {
         try {
           const userResponse = await api.auth.user();
           
@@ -57,7 +78,6 @@ export const AuthProvider = ({ children }) => {
             setUser(userData.user);
             setNeedsSetup(false);
           } else {
-            // Token is invalid
             localStorage.removeItem('auth-token');
             setToken(null);
             setUser(null);
@@ -77,61 +97,12 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const login = async (username, password) => {
-    try {
-      setError(null);
-      const response = await api.auth.login(username, password);
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setToken(data.token);
-        setUser(data.user);
-        localStorage.setItem('auth-token', data.token);
-        return { success: true };
-      } else {
-        setError(data.error || 'Login failed');
-        return { success: false, error: data.error || 'Login failed' };
-      }
-    } catch (error) {
-      console.error('Login error:', error);
-      const errorMessage = 'Network error. Please try again.';
-      setError(errorMessage);
-      return { success: false, error: errorMessage };
-    }
-  };
-
-  const register = async (username, password) => {
-    try {
-      setError(null);
-      const response = await api.auth.register(username, password);
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setToken(data.token);
-        setUser(data.user);
-        setNeedsSetup(false);
-        localStorage.setItem('auth-token', data.token);
-        return { success: true };
-      } else {
-        setError(data.error || 'Registration failed');
-        return { success: false, error: data.error || 'Registration failed' };
-      }
-    } catch (error) {
-      console.error('Registration error:', error);
-      const errorMessage = 'Network error. Please try again.';
-      setError(errorMessage);
-      return { success: false, error: errorMessage };
-    }
-  };
 
   const logout = () => {
     setToken(null);
     setUser(null);
     localStorage.removeItem('auth-token');
-    
-    // Optional: Call logout endpoint for logging
+
     if (token) {
       api.auth.logout().catch(error => {
         console.error('Logout endpoint error:', error);
@@ -142,8 +113,6 @@ export const AuthProvider = ({ children }) => {
   const value = {
     user,
     token,
-    login,
-    register,
     logout,
     isLoading,
     needsSetup,

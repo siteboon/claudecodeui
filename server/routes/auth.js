@@ -2,16 +2,24 @@ import express from 'express';
 import bcrypt from 'bcrypt';
 import { userDb, db } from '../database/db.js';
 import { generateToken, authenticateToken } from '../middleware/auth.js';
+import passport from '../auth/passport.js';
+import { isAllowedUser } from '../auth/strategies/github.js';
 
 const router = express.Router();
 
-// Check auth status and setup requirements
 router.get('/status', async (req, res) => {
   try {
     const hasUsers = await userDb.hasUsers();
+    const githubConfigured = !!(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET);
+    const allowedUsers = process.env.GITHUB_ALLOWED_USERS
+      ? process.env.GITHUB_ALLOWED_USERS.split(',').map(u => u.trim())
+      : [];
+
     res.json({ 
       needsSetup: !hasUsers,
-      isAuthenticated: false // Will be overridden by frontend if token exists
+      isAuthenticated: false,
+      githubConfigured,
+      githubAllowedUsers: allowedUsers
     });
   } catch (error) {
     console.error('Auth status error:', error);
@@ -19,117 +27,53 @@ router.get('/status', async (req, res) => {
   }
 });
 
-// User registration (setup) - only allowed if no users exist
-router.post('/register', async (req, res) => {
-  try {
-    const { username, password } = req.body;
-    
-    // Validate input
-    if (!username || !password) {
-      return res.status(400).json({ error: 'Username and password are required' });
-    }
-    
-    if (username.length < 3 || password.length < 6) {
-      return res.status(400).json({ error: 'Username must be at least 3 characters, password at least 6 characters' });
-    }
-    
-    // Use a transaction to prevent race conditions
-    db.prepare('BEGIN').run();
-    try {
-      // Check if users already exist (only allow one user)
-      const hasUsers = userDb.hasUsers();
-      if (hasUsers) {
-        db.prepare('ROLLBACK').run();
-        return res.status(403).json({ error: 'User already exists. This is a single-user system.' });
-      }
-      
-      // Hash password
-      const saltRounds = 12;
-      const passwordHash = await bcrypt.hash(password, saltRounds);
-      
-      // Create user
-      const user = userDb.createUser(username, passwordHash);
-      
-      // Generate token
-      const token = generateToken(user);
-      
-      // Update last login
-      userDb.updateLastLogin(user.id);
-
-      db.prepare('COMMIT').run();
-      
-      res.json({
-        success: true,
-        user: { id: user.id, username: user.username },
-        token
-      });
-    } catch (error) {
-      db.prepare('ROLLBACK').run();
-      throw error;
-    }
-    
-  } catch (error) {
-    console.error('Registration error:', error);
-    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
-      res.status(409).json({ error: 'Username already exists' });
-    } else {
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  }
-});
-
-// User login
-router.post('/login', async (req, res) => {
-  try {
-    const { username, password } = req.body;
-    
-    // Validate input
-    if (!username || !password) {
-      return res.status(400).json({ error: 'Username and password are required' });
-    }
-    
-    // Get user from database
-    const user = userDb.getUserByUsername(username);
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid username or password' });
-    }
-    
-    // Verify password
-    const isValidPassword = await bcrypt.compare(password, user.password_hash);
-    if (!isValidPassword) {
-      return res.status(401).json({ error: 'Invalid username or password' });
-    }
-    
-    // Generate token
-    const token = generateToken(user);
-    
-    // Update last login
-    userDb.updateLastLogin(user.id);
-    
-    res.json({
-      success: true,
-      user: { id: user.id, username: user.username },
-      token
-    });
-    
-  } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Get current user (protected route)
 router.get('/user', authenticateToken, (req, res) => {
   res.json({
     user: req.user
   });
 });
 
-// Logout (client-side token removal, but this endpoint can be used for logging)
 router.post('/logout', authenticateToken, (req, res) => {
-  // In a simple JWT system, logout is mainly client-side
-  // This endpoint exists for consistency and potential future logging
   res.json({ success: true, message: 'Logged out successfully' });
+});
+
+router.get('/github', (req, res, next) => {
+  if (req.query.returnUrl) {
+    req.session.returnUrl = req.query.returnUrl;
+  }
+  passport.authenticate('github', { scope: ['user:email'] })(req, res, next);
+});
+
+router.get('/github/callback',
+  passport.authenticate('github', { failureRedirect: '/login?error=github_auth_failed' }),
+  async (req, res) => {
+    try {
+      const token = generateToken(req.user);
+
+      userDb.updateUserLastLogin(req.user.id);
+
+      const returnUrl = req.session.returnUrl || '/';
+      delete req.session.returnUrl;
+
+      res.redirect(`${process.env.CLIENT_URL || 'http://localhost:3009'}${returnUrl}?token=${token}`);
+    } catch (error) {
+      console.error('GitHub callback error:', error);
+      res.redirect(`${process.env.CLIENT_URL || 'http://localhost:3009'}/login?error=auth_failed`);
+    }
+  }
+);
+
+router.get('/github/check/:username', (req, res) => {
+  const { username } = req.params;
+  const allowed = isAllowedUser(username);
+  res.json({ allowed });
+});
+
+router.get('/github/status', authenticateToken, (req, res) => {
+  res.json({
+    isGithubAuthenticated: req.user.auth_provider === 'github',
+    githubUsername: req.user.github_username || null
+  });
 });
 
 export default router;

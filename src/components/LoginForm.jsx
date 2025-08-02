@@ -1,106 +1,80 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare, Github } from 'lucide-react';
+import { api } from '../utils/api';
 
 const LoginForm = () => {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  
-  const { login } = useAuth();
+  const [authStatus, setAuthStatus] = useState({});
+  const { error: authError } = useAuth();
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    
-    if (!username || !password) {
-      setError('Please enter both username and password');
-      return;
-    }
-    
+  useEffect(() => {
+    const checkAuthStatus = async () => {
+      try {
+        const response = await api.auth.status();
+        const data = await response.json();
+        setAuthStatus(data);
+      } catch (err) {
+        console.error('Failed to check auth status:', err);
+      }
+    };
+    checkAuthStatus();
+  }, []);
+
+  const handleGithubLogin = () => {
     setIsLoading(true);
-    
-    const result = await login(username, password);
-    
-    if (!result.success) {
-      setError(result.error);
-    }
-    
-    setIsLoading(false);
+    window.location.href = `${window.location.origin}/api/auth/github`;
   };
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="bg-card rounded-lg shadow-lg border border-border p-8 space-y-6">
-          {/* Logo and Title */}
           <div className="text-center">
             <div className="flex justify-center mb-4">
               <div className="w-16 h-16 bg-primary rounded-lg flex items-center justify-center shadow-sm">
                 <MessageSquare className="w-8 h-8 text-primary-foreground" />
               </div>
             </div>
-            <h1 className="text-2xl font-bold text-foreground">Welcome Back</h1>
+            <h1 className="text-2xl font-bold text-foreground">Welcome to Claude Code UI</h1>
             <p className="text-muted-foreground mt-2">
-              Sign in to your Claude Code UI account
+              {authStatus.githubConfigured ? 'Sign in with GitHub to continue' : 'GitHub authentication not configured'}
             </p>
           </div>
 
-          {/* Login Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label htmlFor="username" className="block text-sm font-medium text-foreground mb-1">
-                Username
-              </label>
-              <input
-                type="text"
-                id="username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Enter your username"
-                required
+          {authStatus.githubConfigured ? (
+            <div className="space-y-4">
+              <button
+                type="button"
+                onClick={handleGithubLogin}
                 disabled={isLoading}
-              />
+                className="w-full bg-gray-800 hover:bg-gray-900 disabled:bg-gray-600 text-white font-medium py-2 px-4 rounded-md transition-colors duration-200 flex items-center justify-center gap-2"
+              >
+                <Github className="w-5 h-5" />
+                {isLoading ? 'Redirecting...' : 'Sign in with GitHub'}
+              </button>
+
+              {authStatus.githubAllowedUsers && authStatus.githubAllowedUsers.length > 0 && (
+                <div className="text-xs text-center text-muted-foreground">
+                  Allowed users: {authStatus.githubAllowedUsers.join(', ')}
+                </div>
+              )}
+
+              {(error || authError) && (
+                <div className="p-3 bg-red-100 dark:bg-red-900/20 border border-red-300 dark:border-red-800 rounded-md">
+                  <p className="text-sm text-red-700 dark:text-red-400">{error || authError}</p>
+                </div>
+              )}
             </div>
-
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-foreground mb-1">
-                Password
-              </label>
-              <input
-                type="password"
-                id="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Enter your password"
-                required
-                disabled={isLoading}
-              />
+          ) : (
+            <div className="p-4 bg-yellow-100 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-800 rounded-md">
+              <p className="text-sm text-yellow-700 dark:text-yellow-400 text-center">
+                GitHub authentication is not configured. Please check your environment variables.
+              </p>
             </div>
+          )}
 
-            {error && (
-              <div className="p-3 bg-red-100 dark:bg-red-900/20 border border-red-300 dark:border-red-800 rounded-md">
-                <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium py-2 px-4 rounded-md transition-colors duration-200"
-            >
-              {isLoading ? 'Signing in...' : 'Sign In'}
-            </button>
-          </form>
-
-          <div className="text-center">
-            <p className="text-sm text-muted-foreground">
-              Enter your credentials to access Claude Code UI
-            </p>
-          </div>
         </div>
       </div>
     </div>

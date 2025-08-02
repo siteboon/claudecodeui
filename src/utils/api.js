@@ -36,6 +36,8 @@ export const api = {
     }),
     user: () => authenticatedFetch('/api/auth/user'),
     logout: () => authenticatedFetch('/api/auth/logout', { method: 'POST' }),
+    githubStatus: () => authenticatedFetch('/api/auth/github/status'),
+    checkGithubUser: (username) => fetch(`/api/auth/github/check/${username}`),
   },
   
   // Protected endpoints
