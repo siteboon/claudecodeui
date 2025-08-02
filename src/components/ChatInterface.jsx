@@ -21,6 +21,8 @@ import ReactMarkdown from 'react-markdown';
 import { useDropzone } from 'react-dropzone';
 import TodoList from './TodoList';
 import ClaudeLogo from './ClaudeLogo.jsx';
+import ToolResultRenderer from './ToolResultRenderer';
+import { MarkdownCodeBlock } from './CodeBlockLazy';
 
 import ClaudeStatus from './ClaudeStatus';
 import { MicButton } from './MicButton.jsx';
@@ -540,7 +542,14 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                               📋 View implementation plan
                             </summary>
                             <div className="mt-3 prose prose-sm max-w-none dark:prose-invert">
-                              <ReactMarkdown>{planContent}</ReactMarkdown>
+                              <ReactMarkdown
+                                components={{
+                                  code: MarkdownCodeBlock,
+                                  pre: ({children}) => <>{children}</>
+                                }}
+                              >
+                                {planContent}
+                              </ReactMarkdown>
                             </div>
                           </details>
                         );
@@ -568,294 +577,13 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 
                 {/* Tool Result Section */}
                 {message.toolResult && (
-                  <div className="mt-3 border-t border-blue-200 dark:border-blue-700 pt-3">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className={`w-4 h-4 rounded flex items-center justify-center ${
-                        message.toolResult.isError 
-                          ? 'bg-red-500' 
-                          : 'bg-green-500'
-                      }`}>
-                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          {message.toolResult.isError ? (
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          ) : (
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          )}
-                        </svg>
-                      </div>
-                      <span className={`text-sm font-medium ${
-                        message.toolResult.isError 
-                          ? 'text-red-700 dark:text-red-300' 
-                          : 'text-green-700 dark:text-green-300'
-                      }`}>
-                        {message.toolResult.isError ? 'Tool Error' : 'Tool Result'}
-                      </span>
-                    </div>
-                    
-                    <div className={`text-sm ${
-                      message.toolResult.isError 
-                        ? 'text-red-800 dark:text-red-200' 
-                        : 'text-green-800 dark:text-green-200'
-                    }`}>
-                      {(() => {
-                        const content = String(message.toolResult.content || '');
-                        
-                        // Special handling for TodoWrite/TodoRead results
-                        if ((message.toolName === 'TodoWrite' || message.toolName === 'TodoRead') &&
-                            (content.includes('Todos have been modified successfully') || 
-                             content.includes('Todo list') || 
-                             (content.startsWith('[') && content.includes('"content"') && content.includes('"status"')))) {
-                          try {
-                            // Try to parse if it looks like todo JSON data
-                            let todos = null;
-                            if (content.startsWith('[')) {
-                              todos = JSON.parse(content);
-                            } else if (content.includes('Todos have been modified successfully')) {
-                              // For TodoWrite success messages, we don't have the data in the result
-                              return (
-                                <div>
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <span className="font-medium">Todo list has been updated successfully</span>
-                                  </div>
-                                </div>
-                              );
-                            }
-                            
-                            if (todos && Array.isArray(todos)) {
-                              return (
-                                <div>
-                                  <div className="flex items-center gap-2 mb-3">
-                                    <span className="font-medium">Current Todo List</span>
-                                  </div>
-                                  <TodoList todos={todos} isResult={true} />
-                                </div>
-                              );
-                            }
-                          } catch (e) {
-                            // Fall through to regular handling
-                          }
-                        }
-
-                        // Special handling for exit_plan_mode tool results
-                        if (message.toolName === 'exit_plan_mode') {
-                          try {
-                            // The content should be JSON with a "plan" field
-                            const parsed = JSON.parse(content);
-                            if (parsed.plan) {
-                              // Replace escaped newlines with actual newlines
-                              const planContent = parsed.plan.replace(/\\n/g, '\n');
-                              return (
-                                <div>
-                                  <div className="flex items-center gap-2 mb-3">
-                                    <span className="font-medium">Implementation Plan</span>
-                                  </div>
-                                  <div className="prose prose-sm max-w-none dark:prose-invert">
-                                    <ReactMarkdown>{planContent}</ReactMarkdown>
-                                  </div>
-                                </div>
-                              );
-                            }
-                          } catch (e) {
-                            // Fall through to regular handling
-                          }
-                        }
-
-                        // Special handling for interactive prompts
-                        if (content.includes('Do you want to proceed?') && message.toolName === 'Bash') {
-                          const lines = content.split('\n');
-                          const promptIndex = lines.findIndex(line => line.includes('Do you want to proceed?'));
-                          const beforePrompt = lines.slice(0, promptIndex).join('\n');
-                          const promptLines = lines.slice(promptIndex);
-                          
-                          // Extract the question and options
-                          const questionLine = promptLines.find(line => line.includes('Do you want to proceed?')) || '';
-                          const options = [];
-                          
-                          // Parse numbered options (1. Yes, 2. No, etc.)
-                          promptLines.forEach(line => {
-                            const optionMatch = line.match(/^\s*(\d+)\.\s+(.+)$/);
-                            if (optionMatch) {
-                              options.push({
-                                number: optionMatch[1],
-                                text: optionMatch[2].trim()
-                              });
-                            }
-                          });
-                          
-                          // Find which option was selected (usually indicated by "> 1" or similar)
-                          const selectedMatch = content.match(/>\s*(\d+)/);
-                          const selectedOption = selectedMatch ? selectedMatch[1] : null;
-                          
-                          return (
-                            <div className="space-y-3">
-                              {beforePrompt && (
-                                <div className="bg-gray-900 dark:bg-gray-950 text-gray-100 rounded-lg p-3 font-mono text-xs overflow-x-auto">
-                                  <pre className="whitespace-pre-wrap break-words">{beforePrompt}</pre>
-                                </div>
-                              )}
-                              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
-                                <div className="flex items-start gap-3">
-                                  <div className="w-8 h-8 bg-amber-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                  </div>
-                                  <div className="flex-1">
-                                    <h4 className="font-semibold text-amber-900 dark:text-amber-100 text-base mb-2">
-                                      Interactive Prompt
-                                    </h4>
-                                    <p className="text-sm text-amber-800 dark:text-amber-200 mb-4">
-                                      {questionLine}
-                                    </p>
-                                    
-                                    {/* Option buttons */}
-                                    <div className="space-y-2 mb-4">
-                                      {options.map((option) => (
-                                        <button
-                                          key={option.number}
-                                          className={`w-full text-left px-4 py-3 rounded-lg border-2 transition-all ${
-                                            selectedOption === option.number
-                                              ? 'bg-amber-600 dark:bg-amber-700 text-white border-amber-600 dark:border-amber-700 shadow-md'
-                                              : 'bg-white dark:bg-gray-800 text-amber-900 dark:text-amber-100 border-amber-300 dark:border-amber-700 hover:border-amber-400 dark:hover:border-amber-600 hover:shadow-sm'
-                                          } ${
-                                            selectedOption ? 'cursor-default' : 'cursor-not-allowed opacity-75'
-                                          }`}
-                                          disabled
-                                        >
-                                          <div className="flex items-center gap-3">
-                                            <span className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                                              selectedOption === option.number
-                                                ? 'bg-white/20'
-                                                : 'bg-amber-100 dark:bg-amber-800/50'
-                                            }`}>
-                                              {option.number}
-                                            </span>
-                                            <span className="text-sm sm:text-base font-medium flex-1">
-                                              {option.text}
-                                            </span>
-                                            {selectedOption === option.number && (
-                                              <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                              </svg>
-                                            )}
-                                          </div>
-                                        </button>
-                                      ))}
-                                    </div>
-                                    
-                                    {selectedOption && (
-                                      <div className="bg-amber-100 dark:bg-amber-800/30 rounded-lg p-3">
-                                        <p className="text-amber-900 dark:text-amber-100 text-sm font-medium mb-1">
-                                          ✓ Claude selected option {selectedOption}
-                                        </p>
-                                        <p className="text-amber-800 dark:text-amber-200 text-xs">
-                                          In the CLI, you would select this option interactively using arrow keys or by typing the number.
-                                        </p>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        }
-                        
-                        const fileEditMatch = content.match(/The file (.+?) has been updated\./);
-                        if (fileEditMatch) {
-                          return (
-                            <div>
-                              <div className="flex items-center gap-2 mb-2">
-                                <span className="font-medium">File updated successfully</span>
-                              </div>
-                              <button 
-                                onClick={() => onFileOpen && onFileOpen(fileEditMatch[1])}
-                                className="text-xs font-mono bg-green-100 dark:bg-green-800/30 px-2 py-1 rounded text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline cursor-pointer"
-                              >
-                                {fileEditMatch[1]}
-                              </button>
-                            </div>
-                          );
-                        }
-                        
-                        // Handle Write tool output for file creation
-                        const fileCreateMatch = content.match(/(?:The file|File) (.+?) has been (?:created|written)(?: successfully)?\.?/);
-                        if (fileCreateMatch) {
-                          return (
-                            <div>
-                              <div className="flex items-center gap-2 mb-2">
-                                <span className="font-medium">File created successfully</span>
-                              </div>
-                              <button 
-                                onClick={() => onFileOpen && onFileOpen(fileCreateMatch[1])}
-                                className="text-xs font-mono bg-green-100 dark:bg-green-800/30 px-2 py-1 rounded text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline cursor-pointer"
-                              >
-                                {fileCreateMatch[1]}
-                              </button>
-                            </div>
-                          );
-                        }
-                        
-                        // Special handling for Write tool - hide content if it's just the file content
-                        if (message.toolName === 'Write' && !message.toolResult.isError) {
-                          // For Write tool, the diff is already shown in the tool input section
-                          // So we just show a success message here
-                          return (
-                            <div className="text-green-700 dark:text-green-300">
-                              <div className="flex items-center gap-2">
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                                <span className="font-medium">File written successfully</span>
-                              </div>
-                              <p className="text-xs mt-1 text-green-600 dark:text-green-400">
-                                The file content is displayed in the diff view above
-                              </p>
-                            </div>
-                          );
-                        }
-                        
-                        if (content.includes('cat -n') && content.includes('→')) {
-                          return (
-                            <details open={autoExpandTools}>
-                              <summary className="text-sm text-green-700 dark:text-green-300 cursor-pointer hover:text-green-800 dark:hover:text-green-200 mb-2 flex items-center gap-2">
-                                <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                </svg>
-                                View file content
-                              </summary>
-                              <div className="mt-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-                                <div className="text-xs font-mono p-3 whitespace-pre-wrap break-words overflow-hidden">
-                                  {content}
-                                </div>
-                              </div>
-                            </details>
-                          );
-                        }
-                        
-                        if (content.length > 300) {
-                          return (
-                            <details open={autoExpandTools}>
-                              <summary className="text-sm text-green-700 dark:text-green-300 cursor-pointer hover:text-green-800 dark:hover:text-green-200 mb-2 flex items-center gap-2">
-                                <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                </svg>
-                                View full output ({content.length} chars)
-                              </summary>
-                              <div className="mt-2 prose prose-sm max-w-none prose-green dark:prose-invert">
-                                <ReactMarkdown>{content}</ReactMarkdown>
-                              </div>
-                            </details>
-                          );
-                        }
-                        
-                        return (
-                          <div className="prose prose-sm max-w-none prose-green dark:prose-invert">
-                            <ReactMarkdown>{content}</ReactMarkdown>
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  </div>
+                  <ToolResultRenderer
+                    toolName={message.toolName}
+                    toolInput={message.toolInput}
+                    toolResult={message.toolResult.content}
+                    autoExpandTools={autoExpandTools}
+                    className="mt-3"
+                  />
                 )}
               </div>
             ) : message.isInteractivePrompt ? (
@@ -1002,19 +730,8 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                   <div className="prose prose-sm max-w-none dark:prose-invert prose-gray [&_code]:!bg-transparent [&_code]:!p-0">
                     <ReactMarkdown
                       components={{
-                        code: ({node, inline, className, children, ...props}) => {
-                          return inline ? (
-                            <strong className="text-blue-600 dark:text-blue-400 font-bold not-prose" {...props}>
-                              {children}
-                            </strong>
-                          ) : (
-                            <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg overflow-hidden my-2">
-                              <code className="text-gray-800 dark:text-gray-200 text-sm font-mono block whitespace-pre-wrap break-words" {...props}>
-                                {children}
-                              </code>
-                            </div>
-                          );
-                        },
+                        code: MarkdownCodeBlock,
+                        pre: ({children}) => <>{children}</>,
                         blockquote: ({children}) => (
                           <blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-4 italic text-gray-600 dark:text-gray-400 my-2">
                             {children}
