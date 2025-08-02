@@ -12,10 +12,12 @@ import {
   Brain,
   Sparkles,
   FileText,
+  Volume2
   Languages
 } from 'lucide-react';
 import DarkModeToggle from './DarkModeToggle';
 import { useTheme } from '../contexts/ThemeContext';
+import AudioNotificationSettings from './AudioNotificationSettings';
 
 const QuickSettingsPanel = ({ 
   isOpen, 
@@ -144,8 +146,7 @@ const QuickSettingsPanel = ({
                 />
               </label>
             </div>
-
-            {/* Input Settings */}
+{/* Input Settings */}
             <div className="space-y-2">
               <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Input Settings</h4>
               
@@ -164,6 +165,13 @@ const QuickSettingsPanel = ({
               <p className="text-xs text-gray-500 dark:text-gray-400 ml-3">
                 When enabled, pressing Ctrl+Enter will send the message instead of just Enter. This is useful for IME users to avoid accidental sends.
               </p>
+            </div>
+            {/* Audio Notifications */}
+            <div className="space-y-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Audio Notifications</h4>
+              <AudioNotificationSettings className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800" />
+
+
             </div>
 
             {/* Whisper Dictation Settings - HIDDEN */}

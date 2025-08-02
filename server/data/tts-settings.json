@@ -1,0 +1,36 @@
+{
+  "enabled": true,
+  "provider": "deepgram",
+  "elevenlabs": {
+    "apiKey": "",
+    "voiceId": "WejK3H1m7MI9CHnIjW9K",
+    "model": "eleven_turbo_v2_5"
+  },
+  "deepgram": {
+    "apiKey": "",
+    "voiceModel": "aura-stella-en"
+  },
+  "openai": {
+    "apiKey": "",
+    "voice": "nova",
+    "model": "gpt-4o-mini-tts",
+    "instructions": "Speak in a cheerful, positive yet professional tone."
+  },
+  "ibm_watson": {
+    "apiKey": "",
+    "apiUrl": "https://api.us-south.text-to-speech.watson.cloud.ibm.com/instances/77de050e-305c-4fff-8a7e-57023427ccf9",
+    "voice": "en-GB_CharlotteV3Voice"
+  },
+  "pyttsx3": {
+    "rate": 180,
+    "volume": 0.8
+  },
+  "general": {
+    "engineerName": "Alysson",
+    "nameChance": 0.3,
+    "claudecodeui": {
+      "enabled": true,
+      "url": "https://3000-firebase-studio-1750510535256.cluster-hf4yr35cmnbd4vhbxvfvc6cp5q.cloudworkstations.dev"
+    }
+  }
+}
