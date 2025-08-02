@@ -32,6 +32,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import { useVersionCheck } from './hooks/useVersionCheck';
 import { api } from './utils/api';
+import { useSettings } from './hooks/useSettings';
 
 
 // Main App component with routing
@@ -52,22 +53,29 @@ function AppContent() {
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [showToolsSettings, setShowToolsSettings] = useState(false);
   const [showQuickSettings, setShowQuickSettings] = useState(false);
-  const [autoExpandTools, setAutoExpandTools] = useState(() => {
-    const saved = localStorage.getItem('autoExpandTools');
-    return saved !== null ? JSON.parse(saved) : false;
-  });
-  const [showRawParameters, setShowRawParameters] = useState(() => {
-    const saved = localStorage.getItem('showRawParameters');
-    return saved !== null ? JSON.parse(saved) : false;
-  });
-  const [autoScrollToBottom, setAutoScrollToBottom] = useState(() => {
-    const saved = localStorage.getItem('autoScrollToBottom');
-    return saved !== null ? JSON.parse(saved) : true;
-  });
-  const [sendByCtrlEnter, setSendByCtrlEnter] = useState(() => {
-    const saved = localStorage.getItem('sendByCtrlEnter');
-    return saved !== null ? JSON.parse(saved) : false;
-  });
+  // Use unified settings management system
+  const currentProjectPath = selectedProject?.path;
+  const { settings, loading: settingsLoading, updateSettings } = useSettings(currentProjectPath);
+  
+  // Get each value from settings
+  const autoExpandTools = settings.ui?.autoExpandTools ?? false;
+  const showRawParameters = settings.ui?.showRawParameters ?? false;
+  const autoScrollToBottom = settings.ui?.autoScrollToBottom ?? true;
+  const sendByCtrlEnter = settings.ui?.sendByCtrlEnter ?? false;
+  
+  // Create settings change functions
+  const setAutoExpandTools = (value) => {
+    updateSettings({ ui: { autoExpandTools: value } });
+  };
+  const setShowRawParameters = (value) => {
+    updateSettings({ ui: { showRawParameters: value } });
+  };
+  const setAutoScrollToBottom = (value) => {
+    updateSettings({ ui: { autoScrollToBottom: value } });
+  };
+  const setSendByCtrlEnter = (value) => {
+    updateSettings({ ui: { sendByCtrlEnter: value } });
+  };
   // Session Protection System: Track sessions with active conversations to prevent
   // automatic project updates from interrupting ongoing chats. When a user sends
   // a message, the session is marked as "active" and project updates are paused
@@ -608,26 +616,16 @@ function AppContent() {
           isOpen={showQuickSettings}
           onToggle={setShowQuickSettings}
           autoExpandTools={autoExpandTools}
-          onAutoExpandChange={(value) => {
-            setAutoExpandTools(value);
-            localStorage.setItem('autoExpandTools', JSON.stringify(value));
-          }}
+          onAutoExpandChange={setAutoExpandTools}
           showRawParameters={showRawParameters}
-          onShowRawParametersChange={(value) => {
-            setShowRawParameters(value);
-            localStorage.setItem('showRawParameters', JSON.stringify(value));
-          }}
+          onShowRawParametersChange={setShowRawParameters}
           autoScrollToBottom={autoScrollToBottom}
-          onAutoScrollChange={(value) => {
-            setAutoScrollToBottom(value);
-            localStorage.setItem('autoScrollToBottom', JSON.stringify(value));
-          }}
+          onAutoScrollChange={setAutoScrollToBottom}
           sendByCtrlEnter={sendByCtrlEnter}
-          onSendByCtrlEnterChange={(value) => {
-            setSendByCtrlEnter(value);
-            localStorage.setItem('sendByCtrlEnter', JSON.stringify(value));
-          }}
+          onSendByCtrlEnterChange={setSendByCtrlEnter}
           isMobile={isMobile}
+          settings={settings}
+          onSettingsChange={updateSettings}
         />
       )}
 
@@ -635,6 +633,9 @@ function AppContent() {
       <ToolsSettings
         isOpen={showToolsSettings}
         onClose={() => setShowToolsSettings(false)}
+        settings={settings}
+        onSettingsChange={updateSettings}
+        currentProjectPath={currentProjectPath}
       />
 
       {/* Version Upgrade Modal */}
