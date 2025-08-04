@@ -1,12 +1,24 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { ScrollArea } from './ui/scroll-area';
 import { Badge } from './ui/badge';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from './ui/alert-dialog';
 import { X, Plus, Settings, Shield, AlertTriangle, Moon, Sun, Server, Edit3, Trash2, Play, Globe, Terminal, Zap } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
 function ToolsSettings({ isOpen, onClose }) {
+  const { t } = useTranslation('settings');
   const { isDarkMode, toggleDarkMode } = useTheme();
   const [allowedTools, setAllowedTools] = useState([]);
   const [disallowedTools, setDisallowedTools] = useState([]);
@@ -16,6 +28,13 @@ function ToolsSettings({ isOpen, onClose }) {
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null);
   const [projectSortOrder, setProjectSortOrder] = useState('name');
+  const [errorDialog, setErrorDialog] = useState({ open: false, title: '', message: '' });
+  const [confirmDialog, setConfirmDialog] = useState({ 
+    open: false, 
+    title: '', 
+    message: '', 
+    onConfirm: null 
+  });
 
   // MCP server management state
   const [mcpServers, setMcpServers] = useState([]);
@@ -404,7 +423,11 @@ function ToolsSettings({ isOpen, onClose }) {
       resetMcpForm();
       setSaveStatus('success');
     } catch (error) {
-      alert(`Error: ${error.message}`);
+      setErrorDialog({
+        open: true,
+        title: t('messages.error', { ns: 'common' }),
+        message: error.message
+      });
       setSaveStatus('error');
     } finally {
       setMcpLoading(false);
@@ -412,15 +435,24 @@ function ToolsSettings({ isOpen, onClose }) {
   };
 
   const handleMcpDelete = async (serverId, scope) => {
-    if (confirm('Are you sure you want to delete this MCP server?')) {
-      try {
-        await deleteMcpServer(serverId, scope);
-        setSaveStatus('success');
-      } catch (error) {
-        alert(`Error: ${error.message}`);
-        setSaveStatus('error');
+    setConfirmDialog({
+      open: true,
+      title: t('buttons.delete', { ns: 'common' }),
+      message: t('mcpServers.confirmDelete'),
+      onConfirm: async () => {
+        try {
+          await deleteMcpServer(serverId, scope);
+          setSaveStatus('success');
+        } catch (error) {
+          setErrorDialog({
+            open: true,
+            title: t('messages.error', { ns: 'common' }),
+            message: error.message
+          });
+          setSaveStatus('error');
+        }
       }
-    }
+    });
   };
 
   const handleMcpTest = async (serverId, scope) => {
@@ -509,7 +541,7 @@ function ToolsSettings({ isOpen, onClose }) {
           <div className="flex items-center gap-3">
             <Settings className="w-5 h-5 md:w-6 md:h-6 text-blue-600" />
             <h2 className="text-lg md:text-xl font-semibold text-foreground">
-              Settings
+              {t('title')}
             </h2>
           </div>
           <Button
@@ -534,7 +566,7 @@ function ToolsSettings({ isOpen, onClose }) {
                     : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
               >
-                Tools
+                {t('tabs.tools')}
               </button>
               <button
                 onClick={() => setActiveTab('appearance')}
@@ -544,7 +576,7 @@ function ToolsSettings({ isOpen, onClose }) {
                     : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
               >
-                Appearance
+                {t('tabs.appearance')}
               </button>
             </div>
           </div>
@@ -562,10 +594,10 @@ function ToolsSettings({ isOpen, onClose }) {
         <div className="flex items-center justify-between">
           <div>
             <div className="font-medium text-foreground">
-              Dark Mode
+              {t('appearance.darkMode')}
             </div>
             <div className="text-sm text-muted-foreground">
-              Toggle between light and dark themes
+              {t('appearance.darkModeDescription')}
             </div>
           </div>
           <button
@@ -598,10 +630,10 @@ function ToolsSettings({ isOpen, onClose }) {
         <div className="flex items-center justify-between">
           <div>
             <div className="font-medium text-foreground">
-              Project Sorting
+              {t('appearance.projectSorting')}
             </div>
             <div className="text-sm text-muted-foreground">
-              How projects are ordered in the sidebar
+              {t('appearance.projectSortingDescription')}
             </div>
           </div>
           <select
@@ -609,8 +641,8 @@ function ToolsSettings({ isOpen, onClose }) {
             onChange={(e) => setProjectSortOrder(e.target.value)}
             className="text-sm bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 w-32"
           >
-            <option value="name">Alphabetical</option>
-            <option value="date">Recent Activity</option>
+            <option value="name">{t('appearance.alphabetical')}</option>
+            <option value="date">{t('appearance.recentActivity')}</option>
           </select>
         </div>
       </div>
@@ -630,7 +662,7 @@ function ToolsSettings({ isOpen, onClose }) {
               <div className="flex items-center gap-3">
                 <AlertTriangle className="w-5 h-5 text-orange-500" />
                 <h3 className="text-lg font-medium text-foreground">
-                  Permission Settings
+                  {t('tools.permissionSettings', 'Permission Settings')}
                 </h3>
               </div>
               <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
@@ -643,10 +675,10 @@ function ToolsSettings({ isOpen, onClose }) {
                   />
                   <div>
                     <div className="font-medium text-orange-900 dark:text-orange-100">
-                      Skip permission prompts (use with caution)
+                      {t('tools.skipPermissions')}
                     </div>
                     <div className="text-sm text-orange-700 dark:text-orange-300">
-                      Equivalent to --dangerously-skip-permissions flag
+                      {t('tools.skipPermissionsDescription', 'Equivalent to --dangerously-skip-permissions flag')}
                     </div>
                   </div>
                 </label>
@@ -658,11 +690,11 @@ function ToolsSettings({ isOpen, onClose }) {
               <div className="flex items-center gap-3">
                 <Shield className="w-5 h-5 text-green-500" />
                 <h3 className="text-lg font-medium text-foreground">
-                  Allowed Tools
+                  {t('tools.allowedTools')}
                 </h3>
               </div>
               <p className="text-sm text-muted-foreground">
-                Tools that are automatically allowed without prompting for permission
+                {t('tools.allowedToolsDescription')}
               </p>
               
               <div className="flex flex-col sm:flex-row gap-2">
@@ -685,14 +717,14 @@ function ToolsSettings({ isOpen, onClose }) {
                   className="h-10 px-4 touch-manipulation"
                 >
                   <Plus className="w-4 h-4 mr-2 sm:mr-0" />
-                  <span className="sm:hidden">Add Tool</span>
+                  <span className="sm:hidden">{t('tools.addToolButton')}</span>
                 </Button>
               </div>
 
               {/* Common tools quick add */}
               <div className="space-y-2">
                 <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Quick add common tools:
+                  {t('tools.quickAddCommonTools')}
                 </p>
                 <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
                   {commonTools.map(tool => (
@@ -728,7 +760,7 @@ function ToolsSettings({ isOpen, onClose }) {
                 ))}
                 {allowedTools.length === 0 && (
                   <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                    No allowed tools configured
+                    {t('tools.noAllowedTools')}
                   </div>
                 )}
               </div>
@@ -739,11 +771,11 @@ function ToolsSettings({ isOpen, onClose }) {
               <div className="flex items-center gap-3">
                 <AlertTriangle className="w-5 h-5 text-red-500" />
                 <h3 className="text-lg font-medium text-foreground">
-                  Disallowed Tools
+                  {t('tools.disallowedTools')}
                 </h3>
               </div>
               <p className="text-sm text-muted-foreground">
-                Tools that are automatically blocked without prompting for permission
+                {t('tools.disallowedToolsDescription')}
               </p>
               
               <div className="flex flex-col sm:flex-row gap-2">
@@ -766,7 +798,7 @@ function ToolsSettings({ isOpen, onClose }) {
                   className="h-10 px-4 touch-manipulation"
                 >
                   <Plus className="w-4 h-4 mr-2 sm:mr-0" />
-                  <span className="sm:hidden">Add Tool</span>
+                  <span className="sm:hidden">{t('tools.addToolButton')}</span>
                 </Button>
               </div>
 
@@ -788,7 +820,7 @@ function ToolsSettings({ isOpen, onClose }) {
                 ))}
                 {disallowedTools.length === 0 && (
                   <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                    No disallowed tools configured
+                    {t('tools.noDisallowedTools')}
                   </div>
                 )}
               </div>
@@ -797,7 +829,7 @@ function ToolsSettings({ isOpen, onClose }) {
             {/* Help Section */}
             <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
               <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">
-                Tool Pattern Examples:
+                {t('tools.toolPatternExamples')}
               </h4>
               <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
                 <li><code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">"Bash(git log:*)"</code> - Allow all git log commands</li>
@@ -813,12 +845,12 @@ function ToolsSettings({ isOpen, onClose }) {
               <div className="flex items-center gap-3">
                 <Server className="w-5 h-5 text-purple-500" />
                 <h3 className="text-lg font-medium text-foreground">
-                  MCP Servers
+                  {t('mcpServers.title')}
                 </h3>
               </div>
               <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">
-                  Model Context Protocol servers provide additional tools and data sources to Claude
+                  {t('mcpServers.description')}
                 </p>
               </div>
               
@@ -829,7 +861,7 @@ function ToolsSettings({ isOpen, onClose }) {
                   size="sm"
                 >
                   <Plus className="w-4 h-4 mr-2" />
-                  Add MCP Server
+                  {t('mcpServers.addServer')}
                 </Button>
               </div>
 
@@ -883,11 +915,11 @@ function ToolsSettings({ isOpen, onClose }) {
                         {/* Tools Discovery Results */}
                         {mcpServerTools[server.id] && (
                           <div className="mt-2 p-2 rounded text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200 border border-blue-200 dark:border-blue-800">
-                            <div className="font-medium mb-2">Available Tools & Resources</div>
+                            <div className="font-medium mb-2">{t('mcpServers.availableToolsResources')}</div>
                             
                             {mcpServerTools[server.id].tools && mcpServerTools[server.id].tools.length > 0 && (
                               <div className="mb-2">
-                                <div className="font-medium text-xs mb-1">Tools ({mcpServerTools[server.id].tools.length}):</div>
+                                <div className="font-medium text-xs mb-1">{t('mcpServers.tools')} ({mcpServerTools[server.id].tools.length}):</div>
                                 <ul className="space-y-0.5">
                                   {mcpServerTools[server.id].tools.map((tool, i) => (
                                     <li key={i} className="flex items-start gap-1">
@@ -906,7 +938,7 @@ function ToolsSettings({ isOpen, onClose }) {
 
                             {mcpServerTools[server.id].resources && mcpServerTools[server.id].resources.length > 0 && (
                               <div className="mb-2">
-                                <div className="font-medium text-xs mb-1">Resources ({mcpServerTools[server.id].resources.length}):</div>
+                                <div className="font-medium text-xs mb-1">{t('mcpServers.resources')} ({mcpServerTools[server.id].resources.length}):</div>
                                 <ul className="space-y-0.5">
                                   {mcpServerTools[server.id].resources.map((resource, i) => (
                                     <li key={i} className="flex items-start gap-1">
@@ -925,7 +957,7 @@ function ToolsSettings({ isOpen, onClose }) {
 
                             {mcpServerTools[server.id].prompts && mcpServerTools[server.id].prompts.length > 0 && (
                               <div>
-                                <div className="font-medium text-xs mb-1">Prompts ({mcpServerTools[server.id].prompts.length}):</div>
+                                <div className="font-medium text-xs mb-1">{t('mcpServers.prompts')} ({mcpServerTools[server.id].prompts.length}):</div>
                                 <ul className="space-y-0.5">
                                   {mcpServerTools[server.id].prompts.map((prompt, i) => (
                                     <li key={i} className="flex items-start gap-1">
@@ -945,7 +977,7 @@ function ToolsSettings({ isOpen, onClose }) {
                             {(!mcpServerTools[server.id].tools || mcpServerTools[server.id].tools.length === 0) &&
                              (!mcpServerTools[server.id].resources || mcpServerTools[server.id].resources.length === 0) &&
                              (!mcpServerTools[server.id].prompts || mcpServerTools[server.id].prompts.length === 0) && (
-                              <div className="text-xs opacity-75">No tools, resources, or prompts discovered</div>
+                              <div className="text-xs opacity-75">{t('mcpServers.noToolsResourcesPrompts')}</div>
                             )}
                           </div>
                         )}
@@ -1002,7 +1034,7 @@ function ToolsSettings({ isOpen, onClose }) {
                 ))}
                 {mcpServers.length === 0 && (
                   <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                    No MCP servers configured
+                    {t('mcpServers.noServers')}
                   </div>
                 )}
               </div>
@@ -1014,7 +1046,7 @@ function ToolsSettings({ isOpen, onClose }) {
                 <div className="bg-background border border-border rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
                   <div className="flex items-center justify-between p-4 border-b border-border">
                     <h3 className="text-lg font-medium text-foreground">
-                      {editingMcpServer ? 'Edit MCP Server' : 'Add MCP Server'}
+                      {editingMcpServer ? t('mcpServers.editServer') : t('mcpServers.addServer')}
                     </h3>
                     <Button variant="ghost" size="sm" onClick={resetMcpForm}>
                       <X className="w-4 h-4" />
@@ -1026,7 +1058,7 @@ function ToolsSettings({ isOpen, onClose }) {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-foreground mb-2">
-                          Server Name *
+                          {t('mcpServers.serverNameRequired')}
                         </label>
                         <Input
                           value={mcpFormData.name}
@@ -1042,7 +1074,7 @@ function ToolsSettings({ isOpen, onClose }) {
                       
                       <div>
                         <label className="block text-sm font-medium text-foreground mb-2">
-                          Transport Type *
+                          {t('mcpServers.transportType')}
                         </label>
                         <select
                           value={mcpFormData.type}
@@ -1067,7 +1099,7 @@ function ToolsSettings({ isOpen, onClose }) {
                       <div className="space-y-4">
                         <div>
                           <label className="block text-sm font-medium text-foreground mb-2">
-                            Command *
+                            {t('mcpServers.commandRequired')}
                           </label>
                           <Input
                             value={mcpFormData.config.command}
@@ -1079,7 +1111,7 @@ function ToolsSettings({ isOpen, onClose }) {
                         
                         <div>
                           <label className="block text-sm font-medium text-foreground mb-2">
-                            Arguments (one per line)
+                            {t('mcpServers.arguments')}
                           </label>
                           <textarea
                             value={Array.isArray(mcpFormData.config.args) ? mcpFormData.config.args.join('\n') : ''}
@@ -1095,7 +1127,7 @@ function ToolsSettings({ isOpen, onClose }) {
                     {(mcpFormData.type === 'sse' || mcpFormData.type === 'http') && (
                       <div>
                         <label className="block text-sm font-medium text-foreground mb-2">
-                          URL *
+                          {t('mcpServers.urlRequired')}
                         </label>
                         <Input
                           value={mcpFormData.config.url}
@@ -1110,7 +1142,7 @@ function ToolsSettings({ isOpen, onClose }) {
                     {/* Environment Variables */}
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-2">
-                        Environment Variables (KEY=value, one per line)
+                        {t('mcpServers.environmentDescription')}
                       </label>
                       <textarea
                         value={Object.entries(mcpFormData.config.env || {}).map(([k, v]) => `${k}=${v}`).join('\n')}
@@ -1133,7 +1165,7 @@ function ToolsSettings({ isOpen, onClose }) {
                     {(mcpFormData.type === 'sse' || mcpFormData.type === 'http') && (
                       <div>
                         <label className="block text-sm font-medium text-foreground mb-2">
-                          Headers (KEY=value, one per line)
+                          {t('mcpServers.headersDescription')}
                         </label>
                         <textarea
                           value={Object.entries(mcpFormData.config.headers || {}).map(([k, v]) => `${k}=${v}`).join('\n')}
@@ -1157,7 +1189,7 @@ function ToolsSettings({ isOpen, onClose }) {
                     {/* Test Configuration Section */}
                     <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
                       <div className="flex items-center justify-between mb-3">
-                        <h4 className="font-medium text-foreground">Configuration Test</h4>
+                        <h4 className="font-medium text-foreground">{t('mcpServers.configurationTest')}</h4>
                         <Button
                           type="button"
                           onClick={handleTestConfiguration}
@@ -1169,19 +1201,19 @@ function ToolsSettings({ isOpen, onClose }) {
                           {mcpConfigTesting ? (
                             <>
                               <div className="w-4 h-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent mr-2" />
-                              Testing...
+                              {t('mcpServers.testing')}
                             </>
                           ) : (
                             <>
                               <Play className="w-4 h-4 mr-2" />
-                              Test Configuration
+                              {t('mcpServers.testConfiguration')}
                             </>
                           )}
                         </Button>
                       </div>
                       
                       <p className="text-sm text-muted-foreground mb-3">
-                        You can test your configuration to verify it's working correctly.
+                        {t('mcpServers.configurationTestDescription')}
                       </p>
                       
                       {mcpConfigTestResult && (
@@ -1218,14 +1250,14 @@ function ToolsSettings({ isOpen, onClose }) {
 
                     <div className="flex justify-end gap-2 pt-4">
                       <Button type="button" variant="outline" onClick={resetMcpForm}>
-                        Cancel
+                        {t('buttons.cancel')}
                       </Button>
                       <Button 
                         type="submit" 
                         disabled={mcpLoading} 
                         className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50"
                       >
-                        {mcpLoading ? 'Saving...' : (editingMcpServer ? 'Update Server' : 'Add Server')}
+                        {mcpLoading ? t('buttons.saving') : (editingMcpServer ? t('mcpServers.updateServer') : t('mcpServers.addServerButton'))}
                       </Button>
                     </div>
                   </form>
@@ -1244,7 +1276,7 @@ function ToolsSettings({ isOpen, onClose }) {
                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
-                Settings saved successfully!
+                {t('buttons.saved')}
               </div>
             )}
             {saveStatus === 'error' && (
@@ -1252,7 +1284,7 @@ function ToolsSettings({ isOpen, onClose }) {
                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                 </svg>
-                Failed to save settings
+                {t('buttons.saveFailed') || 'Failed to save settings'}
               </div>
             )}
           </div>
@@ -1263,7 +1295,7 @@ function ToolsSettings({ isOpen, onClose }) {
               disabled={isSaving}
               className="flex-1 sm:flex-none h-10 touch-manipulation"
             >
-              Cancel
+              {t('buttons.cancel')}
             </Button>
             <Button 
               onClick={saveSettings} 
@@ -1273,15 +1305,53 @@ function ToolsSettings({ isOpen, onClose }) {
               {isSaving ? (
                 <div className="flex items-center gap-2">
                   <div className="w-4 h-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  Saving...
+                  {t('buttons.saving')}
                 </div>
               ) : (
-                'Save Settings'
+                t('buttons.save')
               )}
             </Button>
           </div>
         </div>
       </div>
+      
+      {/* Error Dialog */}
+      <AlertDialog open={errorDialog.open} onOpenChange={(open) => setErrorDialog({ ...errorDialog, open })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{errorDialog.title}</AlertDialogTitle>
+            <AlertDialogDescription>{errorDialog.message}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setErrorDialog({ ...errorDialog, open: false })}>
+              {t('buttons.ok', { ns: 'common' })}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      
+      {/* Confirm Dialog */}
+      <AlertDialog open={confirmDialog.open} onOpenChange={(open) => setConfirmDialog({ ...confirmDialog, open })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirmDialog.title}</AlertDialogTitle>
+            <AlertDialogDescription>{confirmDialog.message}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setConfirmDialog({ ...confirmDialog, open: false })}>
+              {t('buttons.cancel', { ns: 'common' })}
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={() => {
+              if (confirmDialog.onConfirm) {
+                confirmDialog.onConfirm();
+              }
+              setConfirmDialog({ ...confirmDialog, open: false });
+            }}>
+              {t('buttons.ok', { ns: 'common' })}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

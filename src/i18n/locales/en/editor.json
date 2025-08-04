@@ -1,0 +1,22 @@
+{
+  "title": "Code Editor",
+  "actions": {
+    "save": "Save",
+    "saving": "Saving...",
+    "saved": "Saved!",
+    "close": "Close",
+    "fullscreen": "Fullscreen",
+    "exitFullscreen": "Exit fullscreen",
+    "download": "Download file",
+    "showDiff": "Show diff highlighting",
+    "hideDiff": "Hide diff highlighting",
+    "enableWordWrap": "Enable word wrap",
+    "disableWordWrap": "Disable word wrap",
+    "toggleTheme": "Toggle theme"
+  },
+  "errors": {
+    "loadFailed": "Failed to load file",
+    "saveFailed": "Save failed: {{error}}",
+    "saveError": "Error saving file"
+  }
+}
