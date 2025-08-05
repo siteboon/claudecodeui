@@ -2,11 +2,47 @@ import { spawn } from 'child_process';
 import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
+import { getBestClaudeBinary, loadClaudeConfig } from './utils/claude-detector.js';
 
 let activeClaudeProcesses = new Map(); // Track active processes by session ID
 
 async function spawnClaude(command, options = {}, ws) {
   return new Promise(async (resolve, reject) => {
+    // Detect and validate Claude CLI binary
+    const config = await loadClaudeConfig();
+    const claudeInfo = await getBestClaudeBinary(config.claudeBinaryPath);
+    
+    if (!claudeInfo.path) {
+      // No Claude CLI found
+      ws.send(JSON.stringify({
+        type: 'claude-error',
+        error: claudeInfo.error || 'Claude CLI not found. Please install Claude CLI first.'
+      }));
+      reject(new Error(claudeInfo.error || 'Claude CLI not found'));
+      return;
+    }
+    
+    if (claudeInfo.error) {
+      // Claude CLI found but has issues (e.g., version too old)
+      console.warn('⚠️ Claude CLI warning:', claudeInfo.error);
+      ws.send(JSON.stringify({
+        type: 'claude-warning',
+        warning: claudeInfo.error,
+        claudePath: claudeInfo.path,
+        claudeVersion: claudeInfo.version,
+        allInstallations: claudeInfo.allInstallations
+      }));
+      // Continue with warning, don't reject
+    }
+    
+    console.log(`🚀 Using Claude CLI: ${claudeInfo.path} (version ${claudeInfo.version})`);
+    if (claudeInfo.allInstallations && claudeInfo.allInstallations.length > 1) {
+      console.log('📍 Multiple Claude installations detected:');
+      claudeInfo.allInstallations.forEach(inst => {
+        console.log(`  - ${inst.path} (v${inst.version}) ${inst.isValid ? '✅' : '❌ outdated'}`);
+      });
+    }
+
     const { sessionId, projectPath, cwd, resume, toolsSettings, permissionMode, images } = options;
     let capturedSessionId = sessionId; // Track session ID throughout the process
     let sessionCreatedSent = false; // Track if we've already sent session-created event
@@ -227,7 +263,7 @@ async function spawnClaude(command, options = {}, ws) {
     console.log('🔍 Full command args:', JSON.stringify(args, null, 2));
     console.log('🔍 Final Claude command will be: claude ' + args.join(' '));
     
-    const claudeProcess = spawn('claude', args, {
+    const claudeProcess = spawn(claudeInfo.path, args, {
       cwd: workingDir,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env } // Inherit all environment variables
@@ -337,6 +373,18 @@ async function spawnClaude(command, options = {}, ws) {
     // Handle process errors
     claudeProcess.on('error', (error) => {
       console.error('Claude CLI process error:', error);
+      
+      // Enhanced error message for spawn errors
+      if (error.code === 'ENOENT') {
+        const enhancedError = `Claude CLI not found at ${claudeInfo.path}. ` +
+          `Please ensure Claude CLI is properly installed. ` +
+          `Visit https://github.com/anthropics/claude-cli for installation instructions.`;
+        ws.send(JSON.stringify({
+          type: 'claude-error',
+          error: enhancedError,
+          originalError: error.message
+        }));
+      }
       
       // Clean up process reference on error
       const finalSessionId = capturedSessionId || sessionId || processKey;

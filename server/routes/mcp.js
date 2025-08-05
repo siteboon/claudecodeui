@@ -5,6 +5,7 @@ import os from 'os';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { spawn } from 'child_process';
+import { getBestClaudeBinary, loadClaudeConfig } from '../utils/claude-detector.js';
 
 const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
@@ -17,11 +18,22 @@ router.get('/cli/list', async (req, res) => {
   try {
     console.log('📋 Listing MCP servers using Claude CLI');
     
+    // Get best Claude binary
+    const config = await loadClaudeConfig();
+    const claudeInfo = await getBestClaudeBinary(config.claudeBinaryPath);
+    
+    if (!claudeInfo.path) {
+      return res.status(500).json({ 
+        error: claudeInfo.error || 'Claude CLI not found',
+        details: 'Please install Claude CLI to use MCP features'
+      });
+    }
+    
     const { spawn } = await import('child_process');
     const { promisify } = await import('util');
     const exec = promisify(spawn);
     
-    const process = spawn('claude', ['mcp', 'list', '-s', 'user'], {
+    const process = spawn(claudeInfo.path, ['mcp', 'list', '-s', 'user'], {
       stdio: ['pipe', 'pipe', 'pipe']
     });
     
@@ -91,9 +103,20 @@ router.post('/cli/add', async (req, res) => {
       }
     }
     
-    console.log('🔧 Running Claude CLI command:', 'claude', cliArgs.join(' '));
+    // Get best Claude binary
+    const config = await loadClaudeConfig();
+    const claudeInfo = await getBestClaudeBinary(config.claudeBinaryPath);
     
-    const process = spawn('claude', cliArgs, {
+    if (!claudeInfo.path) {
+      return res.status(500).json({ 
+        error: claudeInfo.error || 'Claude CLI not found',
+        details: 'Please install Claude CLI to use MCP features'
+      });
+    }
+    
+    console.log('🔧 Running Claude CLI command:', claudeInfo.path, cliArgs.join(' '));
+    
+    const process = spawn(claudeInfo.path, cliArgs, {
       stdio: ['pipe', 'pipe', 'pipe']
     });
     
@@ -136,7 +159,18 @@ router.delete('/cli/remove/:name', async (req, res) => {
     
     const { spawn } = await import('child_process');
     
-    const process = spawn('claude', ['mcp', 'remove', '-s', 'user', name], {
+    // Get best Claude binary
+    const config = await loadClaudeConfig();
+    const claudeInfo = await getBestClaudeBinary(config.claudeBinaryPath);
+    
+    if (!claudeInfo.path) {
+      return res.status(500).json({ 
+        error: claudeInfo.error || 'Claude CLI not found',
+        details: 'Please install Claude CLI to use MCP features'
+      });
+    }
+    
+    const process = spawn(claudeInfo.path, ['mcp', 'remove', '-s', 'user', name], {
       stdio: ['pipe', 'pipe', 'pipe']
     });
     
@@ -179,7 +213,18 @@ router.get('/cli/get/:name', async (req, res) => {
     
     const { spawn } = await import('child_process');
     
-    const process = spawn('claude', ['mcp', 'get', '-s', 'user', name], {
+    // Get best Claude binary
+    const config = await loadClaudeConfig();
+    const claudeInfo = await getBestClaudeBinary(config.claudeBinaryPath);
+    
+    if (!claudeInfo.path) {
+      return res.status(500).json({ 
+        error: claudeInfo.error || 'Claude CLI not found',
+        details: 'Please install Claude CLI to use MCP features'
+      });
+    }
+    
+    const process = spawn(claudeInfo.path, ['mcp', 'get', '-s', 'user', name], {
       stdio: ['pipe', 'pipe', 'pipe']
     });
     

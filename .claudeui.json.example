@@ -1,0 +1,4 @@
+{
+  "claudeBinaryPath": null,
+  "__comment": "Set claudeBinaryPath to use a specific Claude CLI installation, e.g., '/home/user/.claude/local/claude'"
+}

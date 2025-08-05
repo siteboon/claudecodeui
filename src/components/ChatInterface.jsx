@@ -187,13 +187,17 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 <div className="w-8 h-8 bg-red-600 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0">
                   !
                 </div>
+              ) : message.type === 'warning' ? (
+                <div className="w-8 h-8 bg-yellow-600 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0">
+                  ⚠
+                </div>
               ) : (
                 <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0 p-1">
                   <ClaudeLogo className="w-full h-full" />
                 </div>
               )}
               <div className="text-sm font-medium text-gray-900 dark:text-white">
-                {message.type === 'error' ? 'Error' : 'Claude'}
+                {message.type === 'error' ? 'Error' : message.type === 'warning' ? 'Warning' : 'Claude'}
               </div>
             </div>
           )}
@@ -1601,6 +1605,19 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           setChatMessages(prev => [...prev, {
             type: 'error',
             content: `Error: ${latestMessage.error}`,
+            timestamp: new Date()
+          }]);
+          break;
+          
+        case 'claude-warning':
+          // Handle version warnings
+          console.warn('Claude CLI Warning:', latestMessage.warning);
+          if (latestMessage.allInstallations && latestMessage.allInstallations.length > 1) {
+            console.warn('Multiple Claude installations detected:', latestMessage.allInstallations);
+          }
+          setChatMessages(prev => [...prev, {
+            type: 'warning',
+            content: `⚠️ ${latestMessage.warning}\n\nUsing: ${latestMessage.claudePath} (v${latestMessage.claudeVersion})`,
             timestamp: new Date()
           }]);
           break;
