@@ -18,6 +18,7 @@ export async function detectClaudeInstallations() {
   const pathsToCheck = [
     // User-specific paths
     path.join(os.homedir(), '.claude', 'local', 'claude'),
+    path.join(os.homedir(), '.claude', 'local', 'node_modules', '.bin', 'claude'),
     path.join(os.homedir(), '.local', 'bin', 'claude'),
     path.join(os.homedir(), 'bin', 'claude'),
     
@@ -103,8 +104,8 @@ async function getClaudeVersion(claudePath) {
         return;
       }
 
-      // Parse version from output (e.g., "claude 1.0.69")
-      const versionMatch = stdout.match(/claude\s+(\d+\.\d+\.\d+)/i);
+      // Parse version from output (e.g., "claude 1.0.69" or "1.0.69 (Claude Code)")
+      const versionMatch = stdout.match(/(\d+\.\d+\.\d+)/);
       if (versionMatch) {
         resolve(versionMatch[1]);
       } else {
