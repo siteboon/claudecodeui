@@ -51,7 +51,7 @@ const connectedClients = new Set();
 // Setup file system watcher for Claude projects folder using chokidar
 async function setupProjectsWatcher() {
   const chokidar = (await import('chokidar')).default;
-  const claudeProjectsPath = path.join(process.env.HOME, '.claude', 'projects');
+  const claudeProjectsPath = process.env.CLAUDE_PROJECTS_PATH || path.join(process.env.HOME, '.claude', 'projects');
   
   if (projectsWatcher) {
     projectsWatcher.close();
@@ -175,8 +175,10 @@ app.use('/api/git', authenticateToken, gitRoutes);
 // MCP API Routes (protected)
 app.use('/api/mcp', authenticateToken, mcpRoutes);
 
-// Static files served after API routes
-app.use(express.static(path.join(__dirname, '../dist')));
+// Static files served after API routes (only in production)
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, '../dist')));
+}
 
 // API Routes (protected)
 app.get('/api/config', authenticateToken, (req, res) => {
@@ -892,8 +894,14 @@ app.get('*', (req, res) => {
   if (process.env.NODE_ENV === 'production') {
     res.sendFile(path.join(__dirname, '../dist/index.html'));
   } else {
-    // In development, redirect to Vite dev server
-    res.redirect(`http://localhost:${process.env.VITE_PORT || 3001}`);
+    // In development, return a message indicating frontend is served by Vite
+    res.json({
+      message: 'Claude Code UI Backend API',
+      environment: 'development',
+      frontend: `http://localhost:${process.env.VITE_PORT || 3009}`,
+      backend: `http://localhost:${PORT}`,
+      version: '1.5.0'
+    });
   }
 });
 
@@ -978,7 +986,7 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
   });
 }
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3008;
 
 // Initialize database and start server
 async function startServer() {
