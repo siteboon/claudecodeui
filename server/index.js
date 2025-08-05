@@ -889,14 +889,12 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
   }
 });
 
-// Serve React app for all other routes (only in production)
-if (process.env.NODE_ENV === 'production') {
-  app.get('*', (req, res) => {
+// Serve React app for all other routes
+app.get('*', (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
     res.sendFile(path.join(__dirname, '../dist/index.html'));
-  });
-} else {
-  // In development, return a message indicating frontend is served by Vite
-  app.get('*', (req, res) => {
+  } else {
+    // In development, return a message indicating frontend is served by Vite
     res.json({
       message: 'Claude Code UI Backend API',
       environment: 'development',
@@ -904,8 +902,8 @@ if (process.env.NODE_ENV === 'production') {
       backend: `http://localhost:${PORT}`,
       version: '1.5.0'
     });
-  });
-}
+  }
+});
 
 // Helper function to convert permissions to rwx format
 function permToRwx(perm) {
