@@ -17,6 +17,7 @@ import FileTree from './FileTree';
 import CodeEditor from './CodeEditor';
 import Shell from './Shell';
 import GitPanel from './GitPanel';
+import ErrorBoundary from './ErrorBoundary';
 
 function MainContent({ 
   selectedProject, 
@@ -270,24 +271,26 @@ function MainContent({
       {/* Content Area */}
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         <div className={`h-full ${activeTab === 'chat' ? 'block' : 'hidden'}`}>
-          <ChatInterface
-            selectedProject={selectedProject}
-            selectedSession={selectedSession}
-            ws={ws}
-            sendMessage={sendMessage}
-            messages={messages}
-            onFileOpen={handleFileOpen}
-            onInputFocusChange={onInputFocusChange}
-            onSessionActive={onSessionActive}
-            onSessionInactive={onSessionInactive}
-            onReplaceTemporarySession={onReplaceTemporarySession}
-            onNavigateToSession={onNavigateToSession}
-            onShowSettings={onShowSettings}
-            autoExpandTools={autoExpandTools}
-            showRawParameters={showRawParameters}
-            autoScrollToBottom={autoScrollToBottom}
-            sendByCtrlEnter={sendByCtrlEnter}
-          />
+          <ErrorBoundary showDetails={true}>
+            <ChatInterface
+              selectedProject={selectedProject}
+              selectedSession={selectedSession}
+              ws={ws}
+              sendMessage={sendMessage}
+              messages={messages}
+              onFileOpen={handleFileOpen}
+              onInputFocusChange={onInputFocusChange}
+              onSessionActive={onSessionActive}
+              onSessionInactive={onSessionInactive}
+              onReplaceTemporarySession={onReplaceTemporarySession}
+              onNavigateToSession={onNavigateToSession}
+              onShowSettings={onShowSettings}
+              autoExpandTools={autoExpandTools}
+              showRawParameters={showRawParameters}
+              autoScrollToBottom={autoScrollToBottom}
+              sendByCtrlEnter={sendByCtrlEnter}
+            />
+          </ErrorBoundary>
         </div>
         <div className={`h-full overflow-hidden ${activeTab === 'files' ? 'block' : 'hidden'}`}>
           <FileTree selectedProject={selectedProject} />

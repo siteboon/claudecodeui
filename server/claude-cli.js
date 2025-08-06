@@ -1,7 +1,11 @@
 import { spawn } from 'child_process';
+import crossSpawn from 'cross-spawn';
 import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
+
+// Use cross-spawn on Windows for better command execution
+const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
 
 let activeClaudeProcesses = new Map(); // Track active processes by session ID
 
@@ -23,7 +27,11 @@ async function spawnClaude(command, options = {}, ws) {
     
     // Add print flag with command if we have a command
     if (command && command.trim()) {
-      args.push('--print', command);
+
+      // Separate arguments for better cross-platform compatibility
+      // This prevents issues with spaces and quotes on Windows
+      args.push('--print');
+      args.push(command);
     }
     
     // Use cwd (actual project directory) instead of projectPath (Claude's metadata directory)
@@ -63,9 +71,9 @@ async function spawnClaude(command, options = {}, ws) {
           const imageNote = `\n\n[Images provided at the following paths:]\n${tempImagePaths.map((p, i) => `${i + 1}. ${p}`).join('\n')}`;
           const modifiedCommand = command + imageNote;
           
-          // Update the command in args
+          // Update the command in args - now that --print and command are separate
           const printIndex = args.indexOf('--print');
-          if (printIndex !== -1 && args[printIndex + 1] === command) {
+          if (printIndex !== -1 && printIndex + 1 < args.length && args[printIndex + 1] === command) {
             args[printIndex + 1] = modifiedCommand;
           }
         }
@@ -227,7 +235,7 @@ async function spawnClaude(command, options = {}, ws) {
     console.log('🔍 Full command args:', JSON.stringify(args, null, 2));
     console.log('🔍 Final Claude command will be: claude ' + args.join(' '));
     
-    const claudeProcess = spawn('claude', args, {
+    const claudeProcess = spawnFunction('claude', args, {
       cwd: workingDir,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env } // Inherit all environment variables
