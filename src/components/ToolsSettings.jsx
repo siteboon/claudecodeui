@@ -6,7 +6,7 @@ import { Badge } from './ui/badge';
 import { X, Plus, Settings, Shield, AlertTriangle, Moon, Sun, Server, Edit3, Trash2, Play, Globe, Terminal, Zap } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
-function ToolsSettings({ isOpen, onClose }) {
+function ToolsSettings({ isOpen, onClose, settings, onSettingsChange, currentProjectPath }) {
   const { isDarkMode, toggleDarkMode } = useTheme();
   const [allowedTools, setAllowedTools] = useState([]);
   const [disallowedTools, setDisallowedTools] = useState([]);
@@ -271,26 +271,34 @@ function ToolsSettings({ isOpen, onClose }) {
     if (isOpen) {
       loadSettings();
     }
-  }, [isOpen]);
+  }, [isOpen, settings]);
 
   const loadSettings = async () => {
     try {
       
-      // Load from localStorage
-      const savedSettings = localStorage.getItem('claude-tools-settings');
-      
-      if (savedSettings) {
-        const settings = JSON.parse(savedSettings);
+      // Load from unified settings system
+      if (settings) {
         setAllowedTools(settings.allowedTools || []);
         setDisallowedTools(settings.disallowedTools || []);
         setSkipPermissions(settings.skipPermissions || false);
         setProjectSortOrder(settings.projectSortOrder || 'name');
       } else {
-        // Set defaults
-        setAllowedTools([]);
-        setDisallowedTools([]);
-        setSkipPermissions(false);
-        setProjectSortOrder('name');
+        // Fallback: load from localStorage
+        const savedSettings = localStorage.getItem('claude-tools-settings');
+        
+        if (savedSettings) {
+          const localSettings = JSON.parse(savedSettings);
+          setAllowedTools(localSettings.allowedTools || []);
+          setDisallowedTools(localSettings.disallowedTools || []);
+          setSkipPermissions(localSettings.skipPermissions || false);
+          setProjectSortOrder(localSettings.projectSortOrder || 'name');
+        } else {
+          // Default values
+          setAllowedTools([]);
+          setDisallowedTools([]);
+          setSkipPermissions(false);
+          setProjectSortOrder('name');
+        }
       }
 
       // Load MCP servers from API
@@ -305,22 +313,29 @@ function ToolsSettings({ isOpen, onClose }) {
     }
   };
 
-  const saveSettings = () => {
+  const saveSettings = async () => {
     setIsSaving(true);
     setSaveStatus(null);
     
     try {
-      const settings = {
+      const newSettings = {
         allowedTools,
         disallowedTools,
         skipPermissions,
-        projectSortOrder,
-        lastUpdated: new Date().toISOString()
+        projectSortOrder
       };
       
-      
-      // Save to localStorage
-      localStorage.setItem('claude-tools-settings', JSON.stringify(settings));
+      // Save to unified settings system
+      if (onSettingsChange) {
+        await onSettingsChange(newSettings);
+      } else {
+        // Fallback: save to localStorage
+        const localSettings = {
+          ...newSettings,
+          lastUpdated: new Date().toISOString()
+        };
+        localStorage.setItem('claude-tools-settings', JSON.stringify(localSettings));
+      }
       
       setSaveStatus('success');
       
@@ -624,6 +639,77 @@ function ToolsSettings({ isOpen, onClose }) {
             {/* Tools Tab */}
             {activeTab === 'tools' && (
               <div className="space-y-6 md:space-y-8">
+            
+            {/* Current Applied Rules */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <Shield className="w-5 h-5 text-blue-500" />
+                <h3 className="text-lg font-medium text-foreground">
+                  Currently Applied Rules
+                </h3>
+              </div>
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                <div className="space-y-3">
+                  <div className="text-sm text-blue-700 dark:text-blue-300">
+                    {currentProjectPath ? `Project: ${currentProjectPath}` : 'Global Settings'}
+                  </div>
+                  
+                  {/* Allowed Tools */}
+                  <div>
+                    <div className="font-medium text-blue-900 dark:text-blue-100 mb-2">
+                      Allowed Tools ({allowedTools.length})
+                    </div>
+                    {allowedTools.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {allowedTools.map((tool, index) => (
+                          <Badge key={index} variant="secondary" className="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                            {tool}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-blue-600 dark:text-blue-400 italic">
+                        No restrictions (all tools allowed)
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Disallowed Tools */}
+                  <div>
+                    <div className="font-medium text-blue-900 dark:text-blue-100 mb-2">
+                      Disallowed Tools ({disallowedTools.length})
+                    </div>
+                    {disallowedTools.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {disallowedTools.map((tool, index) => (
+                          <Badge key={index} variant="secondary" className="text-xs bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                            {tool}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-blue-600 dark:text-blue-400 italic">
+                        None
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Permission Skip */}
+                  <div>
+                    <div className="font-medium text-blue-900 dark:text-blue-100 mb-1">
+                      Skip Permission Prompts
+                    </div>
+                    <div className={`text-sm ${
+                      skipPermissions 
+                        ? 'text-orange-600 dark:text-orange-400 font-medium' 
+                        : 'text-blue-600 dark:text-blue-400'
+                    }`}>
+                      {skipPermissions ? 'Enabled (Caution: Dangerous setting)' : 'Disabled (Recommended)'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
             
             {/* Skip Permissions */}
             <div className="space-y-4">
