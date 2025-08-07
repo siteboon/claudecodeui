@@ -1,0 +1,29 @@
+services:
+  claude-code-ui:
+    build: .
+    ports:
+      - "3008:3008"
+    environment:
+      - PORT=3008
+      - VITE_PORT=3009
+      - NODE_ENV=production
+    volumes:
+      # Mount a volume for the SQLite database to persist data
+      - claude_data:/app/server/database
+      # Mount Claude Code directories and projects from host
+      - ~/.claude:/home/nextjs/.claude:ro
+      - ~/:/home/nextjs/host_home:ro
+      # Mount common project directories (adjust paths as needed)
+      - ~/Projects:/home/nextjs/Projects
+      - ~/Documents:/home/nextjs/Documents
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3008/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  claude_data:
+    driver: local
