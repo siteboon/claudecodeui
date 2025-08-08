@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../utils/api';
+import { Switch } from './ui/switch';
 
 const PreTaskPanel = ({ selectedProject, selectedSession, onClose, isVisible }) => {
   const [pretasks, setPretasks] = useState([]);
@@ -93,13 +94,13 @@ const PreTaskPanel = ({ selectedProject, selectedSession, onClose, isVisible }) 
   };
 
   // Toggle auto-execute
-  const handleToggleAutoExecute = async () => {
+  const handleToggleAutoExecute = async (newValue) => {
     if (!selectedSession?.id) return;
 
     try {
-      const response = await api.pretasks.toggleAutoExecute(selectedSession.id, !autoExecute);
+      const response = await api.pretasks.toggleAutoExecute(selectedSession.id, newValue);
       if (response.ok) {
-        setAutoExecute(!autoExecute);
+        setAutoExecute(newValue);
       } else {
         console.error('Failed to toggle auto-execute');
         // TODO: Show error message to user
@@ -238,32 +239,27 @@ const PreTaskPanel = ({ selectedProject, selectedSession, onClose, isVisible }) 
         {/* Auto-execute toggle and manual execution */}
         <div className="p-4 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between gap-4">
-            <label className="flex items-center gap-3 cursor-pointer flex-1">
-              <div className="relative">
-                <input
-                  type="checkbox"
-                  checked={autoExecute}
-                  onChange={handleToggleAutoExecute}
-                  disabled={loading || !selectedSession}
-                  className="sr-only"
-                />
-                <div className={`w-12 h-6 rounded-full transition-colors ${
-                  autoExecute 
-                    ? 'bg-blue-600' 
-                    : 'bg-gray-300 dark:bg-gray-600'
-                }`}>
-                  <div className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform ${
-                    autoExecute ? 'translate-x-6' : 'translate-x-0.5'
-                  } mt-0.5`} />
-                </div>
-              </div>
-              <div>
-                <div className="font-medium text-gray-900 dark:text-white">Auto-execute PRETASKs</div>
-                <div className="text-sm text-gray-500 dark:text-gray-400">
+            <div className="flex items-center gap-3 flex-1">
+              <Switch
+                checked={autoExecute}
+                onCheckedChange={handleToggleAutoExecute}
+                disabled={loading || !selectedSession}
+                aria-labelledby="auto-execute-label"
+                aria-describedby="auto-execute-description"
+              />
+              <div className="flex flex-col">
+                <label 
+                  id="auto-execute-label"
+                  htmlFor="auto-execute-switch"
+                  className="font-medium text-gray-900 dark:text-white cursor-pointer"
+                >
+                  Auto-execute PRETASKs
+                </label>
+                <div id="auto-execute-description" className="text-sm text-gray-500 dark:text-gray-400">
                   Automatically run pretasks when conversations complete
                 </div>
               </div>
-            </label>
+            </div>
 
             {/* Start Execution Button */}
             <button
