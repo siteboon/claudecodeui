@@ -2395,23 +2395,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           onAbort={handleAbortSession}
         />
         
-        {/* PreTask Management Button */}
-        {selectedSession && (
-          <div className="max-w-4xl mx-auto mb-3 flex justify-center">
-            <button
-              onClick={() => setShowPreTaskPanel(true)}
-              className="px-4 py-2 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-700 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors flex items-center gap-2"
-              title="Manage PRETASKs for this session"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-              Manage PRETASKs
-            </button>
-          </div>
-        )}
+
         
-        {/* Permission Mode Selector with scroll to bottom button - Above input, clickable for mobile */}
+        {/* Permission Mode Selector with PRETASK Manager and scroll to bottom button - Above input, clickable for mobile */}
         <div className="max-w-4xl mx-auto mb-3">
           <div className="flex items-center justify-center gap-3">
             <button
@@ -2446,6 +2432,20 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 </span>
               </div>
             </button>
+
+            {/* PRETASK Manager Button - positioned next to DefaultMode */}
+            {selectedSession && (
+              <button
+                onClick={() => setShowPreTaskPanel(true)}
+                className="px-3 py-1.5 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-700 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors flex items-center gap-2 text-sm font-medium"
+                title="Manage PRETASKs for this session"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                PRETASK Manager
+              </button>
+            )}
             
             {/* Scroll to bottom button - positioned next to mode indicator */}
             {isUserScrolledUp && chatMessages.length > 0 && (

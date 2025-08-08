@@ -8,6 +8,7 @@ const PreTaskPanel = ({ selectedProject, selectedSession, onClose, isVisible }) 
   const [newTaskContent, setNewTaskContent] = useState('');
   const [addingTask, setAddingTask] = useState(false);
   const [draggedItem, setDraggedItem] = useState(null);
+  const [executing, setExecuting] = useState(false);
 
   // Load pretasks when session changes
   const loadPretasks = useCallback(async () => {
@@ -109,6 +110,44 @@ const PreTaskPanel = ({ selectedProject, selectedSession, onClose, isVisible }) 
     }
   };
 
+  // Manual execution of PRETASKs
+  const handleStartExecution = async () => {
+    if (!selectedSession?.id || !selectedProject) return;
+
+    // Check if there are incomplete pretasks
+    const incompletePretasks = pretasks.filter(p => !p.is_completed);
+    if (incompletePretasks.length === 0) {
+      // TODO: Show message to user that there are no tasks to execute
+      console.log('No incomplete PRETASKs to execute');
+      return;
+    }
+
+    setExecuting(true);
+    try {
+      const response = await api.pretasks.execute(
+        selectedSession.id,
+        selectedProject.fullPath || selectedProject.path,
+        selectedProject.fullPath || selectedProject.path
+      );
+      
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ Manual PRETASK execution started:', result);
+        // TODO: Show success message to user
+        // The execution will be tracked through WebSocket events
+      } else {
+        const error = await response.json();
+        console.error('Failed to start PRETASK execution:', error);
+        // TODO: Show error message to user
+      }
+    } catch (error) {
+      console.error('Error starting PRETASK execution:', error);
+      // TODO: Show error message to user
+    } finally {
+      setExecuting(false);
+    }
+  };
+
   // Handle drag and drop for reordering
   const handleDragStart = (e, pretask, index) => {
     setDraggedItem({ pretask, index });
@@ -196,34 +235,66 @@ const PreTaskPanel = ({ selectedProject, selectedSession, onClose, isVisible }) 
           </button>
         </div>
 
-        {/* Auto-execute toggle */}
+        {/* Auto-execute toggle and manual execution */}
         <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-          <label className="flex items-center gap-3 cursor-pointer">
-            <div className="relative">
-              <input
-                type="checkbox"
-                checked={autoExecute}
-                onChange={handleToggleAutoExecute}
-                disabled={loading || !selectedSession}
-                className="sr-only"
-              />
-              <div className={`w-12 h-6 rounded-full transition-colors ${
-                autoExecute 
-                  ? 'bg-blue-600' 
-                  : 'bg-gray-300 dark:bg-gray-600'
-              }`}>
-                <div className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform ${
-                  autoExecute ? 'translate-x-6' : 'translate-x-0.5'
-                } mt-0.5`} />
+          <div className="flex items-center justify-between gap-4">
+            <label className="flex items-center gap-3 cursor-pointer flex-1">
+              <div className="relative">
+                <input
+                  type="checkbox"
+                  checked={autoExecute}
+                  onChange={handleToggleAutoExecute}
+                  disabled={loading || !selectedSession}
+                  className="sr-only"
+                />
+                <div className={`w-12 h-6 rounded-full transition-colors ${
+                  autoExecute 
+                    ? 'bg-blue-600' 
+                    : 'bg-gray-300 dark:bg-gray-600'
+                }`}>
+                  <div className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform ${
+                    autoExecute ? 'translate-x-6' : 'translate-x-0.5'
+                  } mt-0.5`} />
+                </div>
               </div>
-            </div>
-            <div>
-              <div className="font-medium text-gray-900 dark:text-white">Auto-execute PRETASKs</div>
-              <div className="text-sm text-gray-500 dark:text-gray-400">
-                Automatically run pretasks when conversations complete
+              <div>
+                <div className="font-medium text-gray-900 dark:text-white">Auto-execute PRETASKs</div>
+                <div className="text-sm text-gray-500 dark:text-gray-400">
+                  Automatically run pretasks when conversations complete
+                </div>
               </div>
-            </div>
-          </label>
+            </label>
+
+            {/* Start Execution Button */}
+            <button
+              onClick={handleStartExecution}
+              disabled={executing || !selectedSession || pretasks.filter(p => !p.is_completed).length === 0 || loading}
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg transition-colors flex items-center gap-2 text-sm font-medium"
+              title={
+                !selectedSession 
+                  ? 'No session selected' 
+                  : pretasks.filter(p => !p.is_completed).length === 0 
+                  ? 'No incomplete PRETASKs to execute'
+                  : executing 
+                  ? 'Execution in progress...'
+                  : 'Start executing PRETASKs now'
+              }
+            >
+              {executing ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  Executing...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h8M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M9 16v-4a2 2 0 012-2h2a2 2 0 012 2v4" />
+                  </svg>
+                  Start Execution
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Content */}

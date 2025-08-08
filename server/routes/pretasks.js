@@ -3,6 +3,16 @@ import { sessionDb, pretaskDb } from '../database/db.js';
 
 const router = express.Router();
 
+// Global references to be set by the main server
+let pretaskManagerInstance = null;
+let webSocketServer = null;
+
+// Function to set the pretaskManager and WebSocket server instance
+export function setPretaskDependencies(pretaskManager, wss) {
+  pretaskManagerInstance = pretaskManager;
+  webSocketServer = wss;
+}
+
 // Helper function to validate session exists and get project info
 async function validateSession(sessionId) {
   // For now, we'll create sessions on-demand since they come from Claude CLI
@@ -234,6 +244,118 @@ router.put('/sessions/:sessionId/pretasks/:pretaskId/complete', async (req, res)
     res.json({ success: true });
   } catch (error) {
     console.error('Error completing pretask:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Manual execution endpoint - Start executing PRETASKs for a session
+router.post('/sessions/:sessionId/pretasks/execute', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    
+    if (!await validateSession(sessionId)) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    // Check if pretaskManager is available
+    if (!pretaskManagerInstance) {
+      return res.status(500).json({ error: 'PRETASK manager not available' });
+    }
+
+    // Check if there are any pretasks to execute
+    const nextPretask = pretaskDb.getNextPretask(sessionId);
+    if (!nextPretask) {
+      return res.status(400).json({ 
+        error: 'No pending pretasks to execute',
+        message: 'All PRETASKs are already completed or queue is empty'
+      });
+    }
+
+    // Check if session is currently executing pretasks
+    if (pretaskManagerInstance.executingPretasks && pretaskManagerInstance.executingPretasks.has(sessionId)) {
+      return res.status(409).json({ 
+        error: 'PRETASKs are already executing for this session',
+        message: 'Please wait for current execution to complete'
+      });
+    }
+
+    // Get project info from the session (we'll use the database project info)
+    const sessionRecord = sessionDb.getSession(sessionId);
+    if (!sessionRecord || !sessionRecord.project_name) {
+      return res.status(400).json({ 
+        error: 'Session project information not found',
+        message: 'Cannot execute PRETASKs without project context'
+      });
+    }
+
+    // Find the WebSocket connection for this session
+    let targetWs = null;
+    if (webSocketServer && webSocketServer.clients) {
+      for (const client of webSocketServer.clients) {
+        if (client.readyState === 1) { // WebSocket.OPEN
+          // Try to find the client that matches this session
+          // For now, we'll use the first available client
+          // In a production setup, you'd want to track which client belongs to which session
+          targetWs = client;
+          break;
+        }
+      }
+    }
+
+    if (!targetWs) {
+      return res.status(503).json({ 
+        error: 'No active WebSocket connection found',
+        message: 'Cannot execute PRETASKs without active session connection'
+      });
+    }
+
+    // We need project path info - let's get it from the request or use a default
+    const { projectPath, cwd } = req.body || {};
+    
+    // Default paths if not provided
+    const defaultProjectPath = sessionRecord.project_name;
+    const defaultCwd = process.cwd(); // We'll use current working directory as fallback
+
+    const execProjectPath = projectPath || defaultProjectPath;
+    const execCwd = cwd || defaultCwd;
+
+    // Trigger manual execution asynchronously
+    setImmediate(async () => {
+      try {
+        console.log('🚀 Manual PRETASK execution triggered for session:', sessionId);
+        await pretaskManagerInstance.checkAndExecuteNext(
+          sessionId,
+          execProjectPath,
+          execCwd,
+          targetWs
+        );
+      } catch (error) {
+        console.error('❌ Error in manual PRETASK execution:', error);
+        // Send error message to WebSocket if still connected
+        if (targetWs && targetWs.readyState === 1) {
+          targetWs.send(JSON.stringify({
+            type: 'pretask-error',
+            sessionId: sessionId,
+            error: error.message,
+            pretask: { content: 'Manual execution failed' }
+          }));
+        }
+      }
+    });
+
+    res.json({ 
+      success: true,
+      message: 'PRETASK execution started',
+      sessionId: sessionId,
+      nextPretask: {
+        id: nextPretask.id,
+        content: nextPretask.content,
+        order_index: nextPretask.order_index
+      }
+    });
+
+  } catch (error) {
+    console.error('Error starting manual pretask execution:', error);
     res.status(500).json({ error: error.message });
   }
 });
