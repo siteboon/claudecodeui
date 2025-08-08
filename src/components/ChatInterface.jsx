@@ -24,6 +24,7 @@ import ClaudeLogo from './ClaudeLogo.jsx';
 
 import ClaudeStatus from './ClaudeStatus';
 import { MicButton } from './MicButton.jsx';
+import PreTaskPanel from './PreTaskPanel.jsx';
 import { api } from '../utils/api';
 
 // Safe localStorage utility to handle quota exceeded errors
@@ -996,6 +997,19 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
               <div className="bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-300 dark:border-blue-600 pl-3 py-1 mb-2 text-sm text-blue-700 dark:text-blue-300">
                 📋 Read todo list
               </div>
+            ) : message.isPretaskStatus ? (
+              // PRETASK status message styling
+              <div className={`border-l-4 pl-3 py-2 mb-2 text-sm font-medium ${
+                message.type === 'error' 
+                  ? 'border-red-400 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'
+                  : message.content.includes('Started')
+                  ? 'border-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300'
+                  : message.content.includes('Completed') || message.content.includes('All PRETASKs')
+                  ? 'border-green-400 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300'
+                  : 'border-blue-400 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
+              }`}>
+                {message.content}
+              </div>
             ) : (
               <div className="text-sm text-gray-700 dark:text-gray-300">
                 {message.type === 'assistant' ? (
@@ -1143,6 +1157,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [slashPosition, setSlashPosition] = useState(-1);
   const [visibleMessageCount, setVisibleMessageCount] = useState(100);
   const [claudeStatus, setClaudeStatus] = useState(null);
+  const [showPreTaskPanel, setShowPreTaskPanel] = useState(false);
 
 
   // Memoized diff calculation to prevent recalculating on every render
@@ -1688,6 +1703,50 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             setIsLoading(true);
             setCanAbortSession(statusInfo.can_interrupt);
           }
+          break;
+
+        case 'pretask-start':
+          // Handle pretask execution start
+          console.log('🔔 PRETASK started:', latestMessage);
+          setChatMessages(prev => [...prev, {
+            type: 'assistant',
+            content: `🔄 **PRETASK Started**: ${latestMessage.pretask?.content || 'Unknown task'}`,
+            timestamp: new Date(),
+            isPretaskStatus: true
+          }]);
+          break;
+
+        case 'pretask-complete':
+          // Handle pretask execution completion
+          console.log('🔔 PRETASK completed:', latestMessage);
+          setChatMessages(prev => [...prev, {
+            type: 'assistant',
+            content: `✅ **PRETASK Completed**: ${latestMessage.pretask?.content || 'Unknown task'}`,
+            timestamp: new Date(),
+            isPretaskStatus: true
+          }]);
+          break;
+
+        case 'pretask-error':
+          // Handle pretask execution error
+          console.log('🔔 PRETASK error:', latestMessage);
+          setChatMessages(prev => [...prev, {
+            type: 'error',
+            content: `❌ **PRETASK Failed**: ${latestMessage.pretask?.content || 'Unknown task'}\nError: ${latestMessage.error || 'Unknown error'}`,
+            timestamp: new Date(),
+            isPretaskStatus: true
+          }]);
+          break;
+
+        case 'pretask-queue-empty':
+          // Handle pretask queue completion
+          console.log('🔔 PRETASK queue empty:', latestMessage);
+          setChatMessages(prev => [...prev, {
+            type: 'assistant',
+            content: '🎉 **All PRETASKs completed** - Queue is empty',
+            timestamp: new Date(),
+            isPretaskStatus: true
+          }]);
           break;
   
       }
@@ -2336,6 +2395,22 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           onAbort={handleAbortSession}
         />
         
+        {/* PreTask Management Button */}
+        {selectedSession && (
+          <div className="max-w-4xl mx-auto mb-3 flex justify-center">
+            <button
+              onClick={() => setShowPreTaskPanel(true)}
+              className="px-4 py-2 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-700 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors flex items-center gap-2"
+              title="Manage PRETASKs for this session"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+              Manage PRETASKs
+            </button>
+          </div>
+        )}
+        
         {/* Permission Mode Selector with scroll to bottom button - Above input, clickable for mobile */}
         <div className="max-w-4xl mx-auto mb-3">
           <div className="flex items-center justify-center gap-3">
@@ -2583,6 +2658,14 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           </div>
         </form>
       </div>
+      
+      {/* PreTask Panel */}
+      <PreTaskPanel
+        selectedProject={selectedProject}
+        selectedSession={selectedSession}
+        isVisible={showPreTaskPanel}
+        onClose={() => setShowPreTaskPanel(false)}
+      />
     </div>
     </>
   );

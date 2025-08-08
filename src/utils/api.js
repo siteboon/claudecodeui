@@ -78,4 +78,51 @@ export const api = {
       body: formData,
       headers: {}, // Let browser set Content-Type for FormData
     }),
+
+  // PRETASK management endpoints
+  pretasks: {
+    // Get all pretasks for a session
+    list: (sessionId) =>
+      authenticatedFetch(`/api/sessions/${sessionId}/pretasks`),
+    
+    // Add a new pretask
+    add: (sessionId, content, projectName) =>
+      authenticatedFetch(`/api/sessions/${sessionId}/pretasks`, {
+        method: 'POST',
+        body: JSON.stringify({ 
+          content, 
+          project_name: projectName 
+        }),
+      }),
+    
+    // Delete a pretask
+    delete: (sessionId, pretaskId) =>
+      authenticatedFetch(`/api/sessions/${sessionId}/pretasks/${pretaskId}`, {
+        method: 'DELETE',
+      }),
+    
+    // Update pretask order
+    updateOrder: (sessionId, pretasks) =>
+      authenticatedFetch(`/api/sessions/${sessionId}/pretasks/order`, {
+        method: 'PUT',
+        body: JSON.stringify({ pretasks }),
+      }),
+    
+    // Toggle auto-execute setting
+    toggleAutoExecute: (sessionId, autoExecute) =>
+      authenticatedFetch(`/api/sessions/${sessionId}/auto-execute`, {
+        method: 'PUT',
+        body: JSON.stringify({ auto_execute: autoExecute }),
+      }),
+    
+    // Get next pretask (internal use)
+    getNext: (sessionId) =>
+      authenticatedFetch(`/api/sessions/${sessionId}/pretasks/next`),
+    
+    // Mark pretask as completed (internal use)
+    complete: (sessionId, pretaskId) =>
+      authenticatedFetch(`/api/sessions/${sessionId}/pretasks/${pretaskId}/complete`, {
+        method: 'PUT',
+      }),
+  },
 };
