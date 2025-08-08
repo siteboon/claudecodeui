@@ -134,12 +134,16 @@ const pretaskDb = {
   // Add a new pretask
   addPretask: (sessionId, content) => {
     try {
+      if (!content || content.trim().length === 0) {
+        throw new Error('Content is required and must be a non-empty string');
+      }
+
       // Get the next order index
       const maxOrderResult = db.prepare('SELECT MAX(order_index) as max_order FROM pretasks WHERE session_id = ?').get(sessionId);
       const nextOrder = (maxOrderResult.max_order || 0) + 1;
 
       const stmt = db.prepare('INSERT INTO pretasks (session_id, content, order_index) VALUES (?, ?, ?)');
-      const result = stmt.run(sessionId, content, nextOrder);
+      const result = stmt.run(sessionId, content.trim(), nextOrder);
       
       // Return the created pretask
       return db.prepare('SELECT * FROM pretasks WHERE id = ?').get(result.lastInsertRowid);
