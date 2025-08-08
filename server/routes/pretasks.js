@@ -279,13 +279,37 @@ router.post('/sessions/:sessionId/pretasks/execute', async (req, res) => {
       });
     }
 
-    // Get project info from the session (we'll use the database project info)
+    // Get project info from the session or request body
     const sessionRecord = sessionDb.getSession(sessionId);
-    if (!sessionRecord || !sessionRecord.project_name) {
+    const { projectPath, cwd } = req.body || {};
+    
+    // Check if we have project information from either session or request
+    if (!sessionRecord) {
+      return res.status(400).json({ 
+        error: 'Session not found',
+        message: 'Cannot execute PRETASKs without valid session'
+      });
+    }
+    
+    // Use session project_name if available, otherwise use projectPath from request
+    if (!sessionRecord.project_name && !projectPath) {
       return res.status(400).json({ 
         error: 'Session project information not found',
-        message: 'Cannot execute PRETASKs without project context'
+        message: 'Cannot execute PRETASKs without project context. Please provide projectPath in request.'
       });
+    }
+    
+    // Update session with project info if it's missing but provided in request
+    if (!sessionRecord.project_name && projectPath) {
+      try {
+        // Extract project name from path (get last directory name)
+        const projectName = projectPath.split('/').pop() || 'unknown-project';
+        sessionDb.getOrCreateSession(sessionId, projectName);
+        console.log(`Updated session ${sessionId} with project name: ${projectName}`);
+      } catch (error) {
+        console.warn(`Failed to update session project name: ${error.message}`);
+        // Continue execution even if update fails
+      }
     }
 
     // Find the WebSocket connection for this session
@@ -309,15 +333,9 @@ router.post('/sessions/:sessionId/pretasks/execute', async (req, res) => {
       });
     }
 
-    // We need project path info - let's get it from the request or use a default
-    const { projectPath, cwd } = req.body || {};
-    
-    // Default paths if not provided
-    const defaultProjectPath = sessionRecord.project_name;
-    const defaultCwd = process.cwd(); // We'll use current working directory as fallback
-
-    const execProjectPath = projectPath || defaultProjectPath;
-    const execCwd = cwd || defaultCwd;
+    // We need project path info - use from request or session
+    const execProjectPath = projectPath || sessionRecord.project_name;
+    const execCwd = cwd || projectPath || process.cwd(); // Use cwd, then projectPath, then fallback to current dir
 
     // Trigger manual execution asynchronously
     setImmediate(async () => {
