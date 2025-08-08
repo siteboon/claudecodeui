@@ -241,6 +241,7 @@ const PreTaskPanel = ({ selectedProject, selectedSession, onClose, isVisible }) 
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3 flex-1">
               <Switch
+                id="auto-execute-switch"
                 checked={autoExecute}
                 onCheckedChange={handleToggleAutoExecute}
                 disabled={loading || !selectedSession}
