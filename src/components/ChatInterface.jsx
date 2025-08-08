@@ -1365,8 +1365,15 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     // Load session messages when session changes
     const loadMessages = async () => {
       if (selectedSession && selectedProject) {
+        const isNewSession = selectedSession.id !== currentSessionId;
+        
         setCurrentSessionId(selectedSession.id);
-        setHasRealtimeMessages(false); // Reset flag when loading a session
+        
+        // Only reset the realtime messages flag when actually switching to a different session
+        if (isNewSession) {
+          console.log('🔄 Switching to new session, resetting realtime messages flag');
+          setHasRealtimeMessages(false); // Reset flag only when loading a different session
+        }
         
         // Only load messages from API if this is a user-initiated session change
         // For system-initiated changes, preserve existing messages and rely on WebSocket
@@ -1397,7 +1404,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   // This prevents historical session messages from overwriting live conversation messages
   useEffect(() => {
     if (sessionMessages.length > 0 && !hasRealtimeMessages) {
+      console.log('📨 Syncing session messages to chat messages (no active realtime messages)');
       setChatMessages(convertedMessages);
+    } else if (sessionMessages.length > 0 && hasRealtimeMessages) {
+      console.log('🔒 Blocking session message sync - realtime messages active');
     }
   }, [convertedMessages, sessionMessages, hasRealtimeMessages]);
 
@@ -2067,6 +2077,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     };
 
     setChatMessages(prev => [...prev, userMessage]);
+    console.log('💬 User sent message, setting realtime messages flag to prevent session sync');
     setHasRealtimeMessages(true); // Mark that we now have real-time messages to prevent session sync overwrite
     setIsLoading(true);
     setCanAbortSession(true);
