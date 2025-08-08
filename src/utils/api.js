@@ -124,5 +124,15 @@ export const api = {
       authenticatedFetch(`/api/sessions/${sessionId}/pretasks/${pretaskId}/complete`, {
         method: 'PUT',
       }),
+
+    // Manual execution - Start executing PRETASKs for a session
+    execute: (sessionId, projectPath, cwd) =>
+      authenticatedFetch(`/api/sessions/${sessionId}/pretasks/execute`, {
+        method: 'POST',
+        body: JSON.stringify({ 
+          projectPath: projectPath,
+          cwd: cwd 
+        }),
+      }),
   },
 };

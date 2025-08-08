@@ -52,7 +52,7 @@ import { pretaskManager } from "./pretask-manager.js";
 import gitRoutes from "./routes/git.js";
 import authRoutes from "./routes/auth.js";
 import mcpRoutes from "./routes/mcp.js";
-import pretaskRoutes from "./routes/pretasks.js";
+import pretaskRoutes, { setPretaskDependencies } from "./routes/pretasks.js";
 import { initializeDatabase } from "./database/db.js";
 import {
   validateApiKey,
@@ -171,6 +171,9 @@ const wss = new WebSocketServer({
     return true;
   },
 });
+
+// Set dependencies for pretask routes
+setPretaskDependencies(pretaskManager, wss);
 
 app.use(cors());
 app.use(express.json());
