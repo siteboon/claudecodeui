@@ -38,9 +38,11 @@ import mime from 'mime-types';
 
 import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
 import { spawnClaude, abortClaudeSession } from './claude-cli.js';
+import { pretaskManager } from './pretask-manager.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
 import mcpRoutes from './routes/mcp.js';
+import pretaskRoutes from './routes/pretasks.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 
@@ -174,6 +176,9 @@ app.use('/api/git', authenticateToken, gitRoutes);
 
 // MCP API Routes (protected)
 app.use('/api/mcp', authenticateToken, mcpRoutes);
+
+// PRETASK API Routes (protected)
+app.use('/api', authenticateToken, pretaskRoutes);
 
 // Static files served after API routes
 app.use(express.static(path.join(__dirname, '../dist')));
@@ -451,6 +456,45 @@ function handleChatConnection(ws) {
     // Add to connected clients for project updates
     connectedClients.add(ws);
 
+    // Create a wrapper to intercept messages and handle PRETASK auto-execution
+    const originalSend = ws.send.bind(ws);
+    let lastCommandOptions = null; // Store last command options for pretask execution
+    
+    ws.send = function(data) {
+        try {
+            const parsed = JSON.parse(data);
+            
+            // Intercept claude-complete messages for PRETASK auto-execution
+            if (parsed.type === 'claude-complete' && parsed.exitCode === 0) {
+                console.log('✅ Task completed successfully, checking for pretasks...');
+                
+                // Extract session info for pretask execution
+                if (lastCommandOptions && lastCommandOptions.sessionId) {
+                    const sessionId = lastCommandOptions.sessionId;
+                    const projectPath = lastCommandOptions.projectPath;
+                    const cwd = lastCommandOptions.cwd;
+                    
+                    console.log('🔄 Triggering pretask check for session:', sessionId);
+                    
+                    // Trigger pretask execution asynchronously (don't block the response)
+                    setImmediate(async () => {
+                        try {
+                            await pretaskManager.checkAndExecuteNext(sessionId, projectPath, cwd, ws);
+                        } catch (error) {
+                            console.error('❌ Error in pretask auto-execution:', error);
+                        }
+                    });
+                }
+            }
+        } catch (error) {
+            // If parsing fails, just send the original data
+            console.error('Error parsing WebSocket message for pretask handling:', error);
+        }
+        
+        // Always call the original send method
+        return originalSend.call(this, data);
+    };
+
     ws.on('message', async (message) => {
         try {
             const data = JSON.parse(message);
@@ -459,9 +503,22 @@ function handleChatConnection(ws) {
                 console.log('💬 User message:', data.command || '[Continue/Resume]');
                 console.log('📁 Project:', data.options?.projectPath || 'Unknown');
                 console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
+                
+                // Store command options for potential pretask execution
+                lastCommandOptions = data.options;
+                
+                // Stop any ongoing pretask auto-execution since user is manually interacting
+                if (data.options?.sessionId && data.command) {
+                    pretaskManager.stopAutoExecution(data.options.sessionId);
+                }
+                
                 await spawnClaude(data.command, data.options, ws);
             } else if (data.type === 'abort-session') {
                 console.log('🛑 Abort session request:', data.sessionId);
+                
+                // Stop pretask auto-execution
+                pretaskManager.stopAutoExecution(data.sessionId);
+                
                 const success = abortClaudeSession(data.sessionId);
                 ws.send(JSON.stringify({
                     type: 'session-aborted',
