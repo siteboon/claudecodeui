@@ -1,0 +1,74 @@
+services:
+  claudecodeui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      # Add API key via environment variable or Docker secrets
+      - CLAUDE_API_KEY=${CLAUDE_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    volumes:
+      # Mount Claude configuration directory
+      - claude-config:/home/nodejs/.claude:rw
+      # Mount projects directory (adjust path as needed)
+      - ${PROJECTS_PATH:-./projects}:/home/nodejs/Projects:rw
+      # Persistent data volumes
+      - claudecodeui-uploads:/app/uploads:rw
+      - claudecodeui-db:/app/data:rw
+    networks:
+      - claudecodeui-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/config"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Optional: Nginx reverse proxy for production
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - claudecodeui
+    networks:
+      - claudecodeui-network
+    restart: unless-stopped
+    profiles:
+      - nginx
+
+networks:
+  claudecodeui-network:
+    driver: bridge
+
+volumes:
+  # Named volumes for data persistence
+  claudecodeui-uploads:
+    driver: local
+  claudecodeui-db:
+    driver: local
+  claude-config:
+    driver: local
