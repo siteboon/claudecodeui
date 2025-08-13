@@ -1,6 +1,5 @@
 import React from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import SetupForm from './SetupForm';
 import LoginForm from './LoginForm';
 import { MessageSquare } from 'lucide-react';
 
@@ -24,14 +23,10 @@ const LoadingScreen = () => (
 );
 
 const ProtectedRoute = ({ children }) => {
-  const { user, isLoading, needsSetup } = useAuth();
+  const { user, isLoading } = useAuth();
 
   if (isLoading) {
     return <LoadingScreen />;
-  }
-
-  if (needsSetup) {
-    return <SetupForm />;
   }
 
   if (!user) {

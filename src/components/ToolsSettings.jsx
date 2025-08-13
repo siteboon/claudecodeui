@@ -62,12 +62,12 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
   // MCP API functions
   const fetchMcpServers = async () => {
     try {
-      const token = localStorage.getItem('auth-token');
+      // Authentication now handled by session cookies
       
       // Try to read directly from config files for complete details
       const configResponse = await fetch('/api/mcp/config/read', {
+        credentials: 'include',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
@@ -82,8 +82,8 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
       
       // Fallback to Claude CLI
       const cliResponse = await fetch('/api/mcp/cli/list', {
+        credentials: 'include',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
@@ -115,8 +115,8 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
       
       // Final fallback to direct config reading
       const response = await fetch('/api/mcp/servers?scope=user', {
+        credentials: 'include',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
@@ -134,7 +134,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
 
   const saveMcpServer = async (serverData) => {
     try {
-      const token = localStorage.getItem('auth-token');
+      // Authentication now handled by session cookies
       
       if (editingMcpServer) {
         // For editing, remove old server and add new one
@@ -144,8 +144,8 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
       // Use Claude CLI to add the server
       const response = await fetch('/api/mcp/cli/add', {
         method: 'POST',
+        credentials: 'include',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -181,13 +181,13 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
 
   const deleteMcpServer = async (serverId, scope = 'user') => {
     try {
-      const token = localStorage.getItem('auth-token');
+      // Authentication now handled by session cookies
       
       // Use Claude CLI to remove the server with proper scope
       const response = await fetch(`/api/mcp/cli/remove/${serverId}?scope=${scope}`, {
         method: 'DELETE',
+        credentials: 'include',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
@@ -212,11 +212,11 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
 
   const testMcpServer = async (serverId, scope = 'user') => {
     try {
-      const token = localStorage.getItem('auth-token');
+      // Authentication now handled by session cookies
       const response = await fetch(`/api/mcp/servers/${serverId}/test?scope=${scope}`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
@@ -237,11 +237,11 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
 
   const discoverMcpTools = async (serverId, scope = 'user') => {
     try {
-      const token = localStorage.getItem('auth-token');
+      // Authentication now handled by session cookies
       const response = await fetch(`/api/mcp/servers/${serverId}/tools?scope=${scope}`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
@@ -399,12 +399,12 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
     try {
       if (mcpFormData.importMode === 'json') {
         // Use JSON import endpoint
-        const token = localStorage.getItem('auth-token');
+        // Authentication now handled by session cookies
         const response = await fetch('/api/mcp/cli/add-json', {
           method: 'POST',
+          credentials: 'include',
           headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
+              'Content-Type': 'application/json'
           },
           body: JSON.stringify({
             name: mcpFormData.name,

@@ -1,14 +1,10 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { api } from '../utils/api';
 
 const AuthContext = createContext({
   user: null,
-  token: null,
   login: () => {},
-  register: () => {},
   logout: () => {},
   isLoading: true,
-  needsSetup: false,
   error: null
 });
 
@@ -22,9 +18,7 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('auth-token'));
   const [isLoading, setIsLoading] = useState(true);
-  const [needsSetup, setNeedsSetup] = useState(false);
   const [error, setError] = useState(null);
 
   // Check authentication status on mount
@@ -37,116 +31,97 @@ export const AuthProvider = ({ children }) => {
       setIsLoading(true);
       setError(null);
       
-      // Check if system needs setup
-      const statusResponse = await api.auth.status();
-      const statusData = await statusResponse.json();
+      // Check authentication status with Authentik
+      const response = await fetch('/auth/status', {
+        credentials: 'include'
+      });
       
-      if (statusData.needsSetup) {
-        setNeedsSetup(true);
-        setIsLoading(false);
-        return;
-      }
-      
-      // If we have a token, verify it
-      if (token) {
-        try {
-          const userResponse = await api.auth.user();
-          
-          if (userResponse.ok) {
-            const userData = await userResponse.json();
-            setUser(userData.user);
-            setNeedsSetup(false);
-          } else {
-            // Token is invalid
-            localStorage.removeItem('auth-token');
-            setToken(null);
-            setUser(null);
-          }
-        } catch (error) {
-          console.error('Token verification failed:', error);
-          localStorage.removeItem('auth-token');
-          setToken(null);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.isAuthenticated && data.user) {
+          setUser(data.user);
+        } else {
           setUser(null);
         }
+      } else {
+        setUser(null);
       }
     } catch (error) {
       console.error('Auth status check failed:', error);
       setError('Failed to check authentication status');
+      setUser(null);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const login = async (username, password) => {
+  const login = async () => {
     try {
       setError(null);
-      const response = await api.auth.login(username, password);
-
-      const data = await response.json();
-
+      
+      // Get Authentik authorization URL
+      const response = await fetch('/auth/login', {
+        credentials: 'include'
+      });
+      
       if (response.ok) {
-        setToken(data.token);
-        setUser(data.user);
-        localStorage.setItem('auth-token', data.token);
+        const data = await response.json();
+        
+        // Redirect to Authentik login page
+        window.location.href = data.authorizationUrl;
         return { success: true };
       } else {
-        setError(data.error || 'Login failed');
-        return { success: false, error: data.error || 'Login failed' };
+        const data = await response.json();
+        setError(data.error || 'Login initialization failed');
+        return { success: false, error: data.error || 'Login initialization failed' };
       }
     } catch (error) {
       console.error('Login error:', error);
-      const errorMessage = 'Network error. Please try again.';
+      const errorMessage = 'Failed to initialize login. Please try again.';
       setError(errorMessage);
       return { success: false, error: errorMessage };
     }
   };
 
-  const register = async (username, password) => {
+
+  const logout = async () => {
     try {
-      setError(null);
-      const response = await api.auth.register(username, password);
-
-      const data = await response.json();
-
+      const response = await fetch('/auth/logout', {
+        method: 'POST',
+        credentials: 'include'
+      });
+      
       if (response.ok) {
-        setToken(data.token);
-        setUser(data.user);
-        setNeedsSetup(false);
-        localStorage.setItem('auth-token', data.token);
-        return { success: true };
+        const data = await response.json();
+        
+        // Clear user state
+        setUser(null);
+        
+        // If Authentik provides a logout URL, redirect to it
+        if (data.logoutUrl) {
+          window.location.href = data.logoutUrl;
+        } else {
+          // Otherwise just reload the page
+          window.location.reload();
+        }
       } else {
-        setError(data.error || 'Registration failed');
-        return { success: false, error: data.error || 'Registration failed' };
+        // Even if logout fails on server, clear local state
+        setUser(null);
+        window.location.reload();
       }
     } catch (error) {
-      console.error('Registration error:', error);
-      const errorMessage = 'Network error. Please try again.';
-      setError(errorMessage);
-      return { success: false, error: errorMessage };
-    }
-  };
-
-  const logout = () => {
-    setToken(null);
-    setUser(null);
-    localStorage.removeItem('auth-token');
-    
-    // Optional: Call logout endpoint for logging
-    if (token) {
-      api.auth.logout().catch(error => {
-        console.error('Logout endpoint error:', error);
-      });
+      console.error('Logout error:', error);
+      // Clear local state regardless
+      setUser(null);
+      window.location.reload();
     }
   };
 
   const value = {
     user,
-    token,
     login,
-    register,
     logout,
     isLoading,
-    needsSetup,
     error
   };
 

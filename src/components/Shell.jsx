@@ -415,7 +415,8 @@ function Shell({ selectedProject, selectedSession, isActive }) {
       }
       
       // Include token in WebSocket URL as query parameter
-      const wsUrl = `${wsBaseUrl}/shell?token=${encodeURIComponent(token)}`;
+      // Authentication handled by session cookies
+      const wsUrl = `${wsBaseUrl}/shell`;
       
       ws.current = new WebSocket(wsUrl);
 

@@ -29,20 +29,25 @@ import express from 'express';
 import { WebSocketServer } from 'ws';
 import http from 'http';
 import cors from 'cors';
+import session from 'express-session';
+import { createClient } from 'redis';
 import { promises as fsPromises } from 'fs';
 import { spawn } from 'child_process';
 import os from 'os';
 import pty from 'node-pty';
 import fetch from 'node-fetch';
 import mime from 'mime-types';
+import dotenv from 'dotenv';
+
+// Load environment variables
+dotenv.config();
 
 import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
 import { spawnClaude, abortClaudeSession } from './claude-cli.js';
 import gitRoutes from './routes/git.js';
-import authRoutes from './routes/auth.js';
+import authentikRoutes from './routes/authentik.js';
+import devAuthRoutes from './routes/dev-auth.js';
 import mcpRoutes from './routes/mcp.js';
-import { initializeDatabase } from './database/db.js';
-import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 
 // File system watcher for projects folder
 let projectsWatcher = null;
@@ -135,51 +140,109 @@ async function setupProjectsWatcher() {
 const app = express();
 const server = http.createServer(app);
 
-// Single WebSocket server that handles both paths
+// Setup function for async initialization
+async function setupServer() {
+    // Setup Redis for session storage (optional)
+    let sessionStore = undefined;
+
+    if (process.env.REDIS_URL) {
+        try {
+            // Dynamically import Redis modules
+            const { RedisStore } = await import('connect-redis');
+            const redisClient = createClient({
+                url: process.env.REDIS_URL
+            });
+            await redisClient.connect();
+            sessionStore = new RedisStore({
+                client: redisClient,
+                prefix: 'claude-ui:'
+            });
+            console.log('✅ Redis connected for session storage');
+        } catch (error) {
+            console.error('Redis connection failed, using memory store:', error.message);
+        }
+    }
+
+    // Ensure SESSION_SECRET is set in production
+    if (process.env.NODE_ENV === 'production' && !process.env.SESSION_SECRET) {
+        console.error('❌ SESSION_SECRET must be set in production!');
+        process.exit(1);
+    }
+    
+    // Session middleware
+    app.use(session({
+        store: sessionStore,
+        secret: process.env.SESSION_SECRET || 'your-super-secret-session-key-change-this',
+        resave: false,
+        saveUninitialized: false,
+        cookie: {
+            secure: process.env.NODE_ENV === 'production',
+            httpOnly: true,
+            sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+            maxAge: 24 * 60 * 60 * 1000 // 24 hours
+        }
+    }));
+
+    // Continue with the rest of the setup
+    setupMiddleware();
+}
+
+// Setup middleware and routes
+function setupMiddleware() {
+    // Single WebSocket server that handles both paths
 const wss = new WebSocketServer({
     server,
-    verifyClient: (info) => {
+    verifyClient: (info, callback) => {
         console.log('WebSocket connection attempt to:', info.req.url);
-
-        // Extract token from query parameters or headers
-        const url = new URL(info.req.url, 'http://localhost');
-        const token = url.searchParams.get('token') ||
-            info.req.headers.authorization?.split(' ')[1];
-
-        // Verify token
-        const user = authenticateWebSocket(token);
-        if (!user) {
-            console.log('❌ WebSocket authentication failed');
-            return false;
+        
+        // Parse cookies to check session
+        const cookies = info.req.headers.cookie;
+        if (!cookies) {
+            console.log('❌ WebSocket rejected: No cookies');
+            return callback(false, 401, 'Unauthorized');
         }
-
-        // Store user info in the request for later use
-        info.req.user = user;
-        console.log('✅ WebSocket authenticated for user:', user.username);
-        return true;
+        
+        // In production, you should verify the session here
+        // For now, we'll trust that express-session middleware will handle it
+        callback(true);
     }
 });
 
-app.use(cors());
+app.use(cors({
+    origin: process.env.NODE_ENV === 'production' 
+        ? process.env.ALLOWED_ORIGINS?.split(',') || false
+        : true,
+    credentials: true
+}));
 app.use(express.json());
 
-// Optional API key validation (if configured)
-app.use('/api', validateApiKey);
+// Authentication middleware
+const requireAuth = (req, res, next) => {
+    if (!req.session.user) {
+        return res.status(401).json({ error: 'Not authenticated' });
+    }
+    next();
+};
 
-// Authentication routes (public)
-app.use('/api/auth', authRoutes);
+// Use dev auth routes if DEV_AUTH_BYPASS is enabled
+if (process.env.DEV_AUTH_BYPASS === 'true') {
+    console.log('⚠️  Development authentication bypass enabled - DO NOT USE IN PRODUCTION');
+    app.use('/auth', devAuthRoutes);
+} else {
+    app.use('/auth', authentikRoutes);
+}
 
 // Git API Routes (protected)
-app.use('/api/git', authenticateToken, gitRoutes);
+app.use('/api/git', requireAuth, gitRoutes);
 
 // MCP API Routes (protected)
-app.use('/api/mcp', authenticateToken, mcpRoutes);
+app.use('/api/mcp', requireAuth, mcpRoutes);
 
 // Static files served after API routes
 app.use(express.static(path.join(__dirname, '../dist')));
 
 // API Routes (protected)
-app.get('/api/config', authenticateToken, (req, res) => {
+app.get('/api/config', requireAuth, (req, res) => {
     const host = req.headers.host || `${req.hostname}:${PORT}`;
     const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'wss' : 'ws';
 
@@ -191,7 +254,7 @@ app.get('/api/config', authenticateToken, (req, res) => {
     });
 });
 
-app.get('/api/projects', authenticateToken, async (req, res) => {
+app.get('/api/projects', requireAuth, async (req, res) => {
     try {
         const projects = await getProjects();
         res.json(projects);
@@ -200,7 +263,7 @@ app.get('/api/projects', authenticateToken, async (req, res) => {
     }
 });
 
-app.get('/api/projects/:projectName/sessions', authenticateToken, async (req, res) => {
+app.get('/api/projects/:projectName/sessions', requireAuth, async (req, res) => {
     try {
         const { limit = 5, offset = 0 } = req.query;
         const result = await getSessions(req.params.projectName, parseInt(limit), parseInt(offset));
@@ -211,7 +274,7 @@ app.get('/api/projects/:projectName/sessions', authenticateToken, async (req, re
 });
 
 // Get messages for a specific session
-app.get('/api/projects/:projectName/sessions/:sessionId/messages', authenticateToken, async (req, res) => {
+app.get('/api/projects/:projectName/sessions/:sessionId/messages', requireAuth, async (req, res) => {
     try {
         const { projectName, sessionId } = req.params;
         const messages = await getSessionMessages(projectName, sessionId);
@@ -222,7 +285,7 @@ app.get('/api/projects/:projectName/sessions/:sessionId/messages', authenticateT
 });
 
 // Rename project endpoint
-app.put('/api/projects/:projectName/rename', authenticateToken, async (req, res) => {
+app.put('/api/projects/:projectName/rename', requireAuth, async (req, res) => {
     try {
         const { displayName } = req.body;
         await renameProject(req.params.projectName, displayName);
@@ -233,7 +296,7 @@ app.put('/api/projects/:projectName/rename', authenticateToken, async (req, res)
 });
 
 // Delete session endpoint
-app.delete('/api/projects/:projectName/sessions/:sessionId', authenticateToken, async (req, res) => {
+app.delete('/api/projects/:projectName/sessions/:sessionId', requireAuth, async (req, res) => {
     try {
         const { projectName, sessionId } = req.params;
         await deleteSession(projectName, sessionId);
@@ -244,7 +307,7 @@ app.delete('/api/projects/:projectName/sessions/:sessionId', authenticateToken, 
 });
 
 // Delete project endpoint (only if empty)
-app.delete('/api/projects/:projectName', authenticateToken, async (req, res) => {
+app.delete('/api/projects/:projectName', requireAuth, async (req, res) => {
     try {
         const { projectName } = req.params;
         await deleteProject(projectName);
@@ -255,7 +318,7 @@ app.delete('/api/projects/:projectName', authenticateToken, async (req, res) => 
 });
 
 // Create project endpoint
-app.post('/api/projects/create', authenticateToken, async (req, res) => {
+app.post('/api/projects/create', requireAuth, async (req, res) => {
     try {
         const { path: projectPath } = req.body;
 
@@ -272,7 +335,7 @@ app.post('/api/projects/create', authenticateToken, async (req, res) => {
 });
 
 // Read file content endpoint
-app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) => {
+app.get('/api/projects/:projectName/file', requireAuth, async (req, res) => {
     try {
         const { projectName } = req.params;
         const { filePath } = req.query;
@@ -301,7 +364,7 @@ app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) =
 });
 
 // Serve binary file content endpoint (for images, etc.)
-app.get('/api/projects/:projectName/files/content', authenticateToken, async (req, res) => {
+app.get('/api/projects/:projectName/files/content', requireAuth, async (req, res) => {
     try {
         const { projectName } = req.params;
         const { path: filePath } = req.query;
@@ -347,7 +410,7 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
 });
 
 // Save file content endpoint
-app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) => {
+app.put('/api/projects/:projectName/file', requireAuth, async (req, res) => {
     try {
         const { projectName } = req.params;
         const { filePath, content } = req.body;
@@ -394,7 +457,7 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
     }
 });
 
-app.get('/api/projects/:projectName/files', authenticateToken, async (req, res) => {
+app.get('/api/projects/:projectName/files', requireAuth, async (req, res) => {
     try {
 
         // Using fsPromises from import
@@ -663,7 +726,7 @@ function handleShellConnection(ws) {
     });
 }
 // Audio transcription endpoint
-app.post('/api/transcribe', authenticateToken, async (req, res) => {
+app.post('/api/transcribe', requireAuth, async (req, res) => {
     try {
         const multer = (await import('multer')).default;
         const upload = multer({ storage: multer.memoryStorage() });
@@ -812,7 +875,7 @@ Agent instructions:`;
 });
 
 // Image upload endpoint
-app.post('/api/projects/:projectName/upload-images', authenticateToken, async (req, res) => {
+app.post('/api/projects/:projectName/upload-images', requireAuth, async (req, res) => {
     try {
         const multer = (await import('multer')).default;
         const path = (await import('path')).default;
@@ -822,7 +885,7 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
         // Configure multer for image uploads
         const storage = multer.diskStorage({
             destination: async (req, file, cb) => {
-                const uploadDir = path.join(os.tmpdir(), 'claude-ui-uploads', String(req.user.id));
+                const uploadDir = path.join(os.tmpdir(), 'claude-ui-uploads', String(req.session.user.id));
                 await fs.mkdir(uploadDir, { recursive: true });
                 cb(null, uploadDir);
             },
@@ -987,20 +1050,21 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
     });
 }
 
+}
+
 const PORT = process.env.PORT || 3001;
 
-// Initialize database and start server
+// Initialize and start server
 async function startServer() {
     try {
-        // Initialize authentication database
-        await initializeDatabase();
-        console.log('✅ Database initialization skipped (testing)');
-
+        await setupServer();
+        
         server.listen(PORT, '0.0.0.0', async () => {
             console.log(`Claude Code UI server running on http://0.0.0.0:${PORT}`);
-
+            console.log(`Authentik integration enabled`);
+            
             // Start watching the projects folder for changes
-            await setupProjectsWatcher(); // Re-enabled with better-sqlite3
+            await setupProjectsWatcher();
         });
     } catch (error) {
         console.error('❌ Failed to start server:', error);

@@ -1,17 +1,12 @@
-// Utility function for authenticated API calls
+// Utility function for authenticated API calls with session
 export const authenticatedFetch = (url, options = {}) => {
-  const token = localStorage.getItem('auth-token');
-  
   const defaultHeaders = {
     'Content-Type': 'application/json',
   };
   
-  if (token) {
-    defaultHeaders['Authorization'] = `Bearer ${token}`;
-  }
-  
   return fetch(url, {
     ...options,
+    credentials: 'include', // Include cookies for session
     headers: {
       ...defaultHeaders,
       ...options.headers,
@@ -21,23 +16,6 @@ export const authenticatedFetch = (url, options = {}) => {
 
 // API endpoints
 export const api = {
-  // Auth endpoints (no token required)
-  auth: {
-    status: () => fetch('/api/auth/status'),
-    login: (username, password) => fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    }),
-    register: (username, password) => fetch('/api/auth/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    }),
-    user: () => authenticatedFetch('/api/auth/user'),
-    logout: () => authenticatedFetch('/api/auth/logout', { method: 'POST' }),
-  },
-  
   // Protected endpoints
   config: () => authenticatedFetch('/api/config'),
   projects: () => authenticatedFetch('/api/projects'),
