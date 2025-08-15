@@ -347,7 +347,37 @@ function AppContent() {
     );
   };
 
-
+  const handleUpdateSessionSummary = async (projectName, sessionId, newSummary) => {
+    try {
+      const response = await api.updateSessionSummary(projectName, sessionId, newSummary);
+      if (response.ok) {
+        // Update the session summary in local state
+        setProjects(prevProjects => 
+          prevProjects.map(project => 
+            project.name === projectName 
+              ? {
+                  ...project,
+                  sessions: project.sessions?.map(session => 
+                    session.id === sessionId 
+                      ? { ...session, summary: newSummary }
+                      : session
+                  ) || []
+                }
+              : project
+          )
+        );
+        
+        // Update selected session if it's the one being renamed
+        if (selectedSession?.id === sessionId) {
+          setSelectedSession(prev => ({ ...prev, summary: newSummary }));
+        }
+      } else {
+        console.error('Failed to update session summary');
+      }
+    } catch (error) {
+      console.error('Error updating session summary:', error);
+    }
+  };
 
   const handleSidebarRefresh = async () => {
     // Refresh only the sessions for all projects, don't change selected state
@@ -551,6 +581,7 @@ function AppContent() {
               onSessionSelect={handleSessionSelect}
               onNewSession={handleNewSession}
               onSessionDelete={handleSessionDelete}
+              onUpdateSessionSummary={handleUpdateSessionSummary}
               onProjectDelete={handleProjectDelete}
               isLoading={isLoadingProjects}
               onRefresh={handleSidebarRefresh}
@@ -596,6 +627,7 @@ function AppContent() {
               onSessionSelect={handleSessionSelect}
               onNewSession={handleNewSession}
               onSessionDelete={handleSessionDelete}
+              onUpdateSessionSummary={handleUpdateSessionSummary}
               onProjectDelete={handleProjectDelete}
               isLoading={isLoadingProjects}
               onRefresh={handleSidebarRefresh}

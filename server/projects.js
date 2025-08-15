@@ -635,6 +635,76 @@ async function addProjectManually(projectPath, displayName = null) {
   };
 }
 
+async function updateSessionSummary(projectName, sessionId, newSummary) {
+  const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
+  
+  try {
+    const files = await fs.readdir(projectDir);
+    const jsonlFiles = files.filter(file => file.endsWith('.jsonl'));
+    
+    if (jsonlFiles.length === 0) {
+      throw new Error('No session files found for this project');
+    }
+    
+    // Find the file containing the session
+    for (const file of jsonlFiles) {
+      const jsonlFile = path.join(projectDir, file);
+      const content = await fs.readFile(jsonlFile, 'utf8');
+      const lines = content.split('\n').filter(line => line.trim());
+      
+      // Check if this file contains the session
+      const hasSession = lines.some(line => {
+        try {
+          const data = JSON.parse(line);
+          return data.sessionId === sessionId;
+        } catch (e) {
+          return false;
+        }
+      });
+      
+      if (hasSession) {
+        // Check if summary entry already exists
+        let summaryEntryExists = false;
+        const updatedLines = lines.map(line => {
+          try {
+            const data = JSON.parse(line);
+            if (data.sessionId === sessionId && data.type === 'summary') {
+              summaryEntryExists = true;
+              return JSON.stringify({
+                ...data,
+                summary: newSummary,
+                timestamp: new Date().toISOString()
+              });
+            }
+            return line;
+          } catch (e) {
+            return line;
+          }
+        });
+        
+        // If no summary entry exists, create one
+        if (!summaryEntryExists) {
+          const summaryEntry = {
+            sessionId: sessionId,
+            type: 'summary',
+            summary: newSummary,
+            timestamp: new Date().toISOString()
+          };
+          updatedLines.unshift(JSON.stringify(summaryEntry));
+        }
+        
+        // Write back to file
+        await fs.writeFile(jsonlFile, updatedLines.join('\n') + '\n', 'utf8');
+        return;
+      }
+    }
+    
+    throw new Error('Session not found');
+  } catch (error) {
+    throw new Error(`Failed to update session summary: ${error.message}`);
+  }
+}
+
 // Fetch Cursor sessions for a given project path
 async function getCursorSessions(projectPath) {
   try {
@@ -754,6 +824,7 @@ export {
   parseJsonlSessions,
   renameProject,
   deleteSession,
+  updateSessionSummary,
   isProjectEmpty,
   deleteProject,
   addProjectManually,
