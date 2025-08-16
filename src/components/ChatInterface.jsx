@@ -1177,6 +1177,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     return [];
   });
   const [isLoading, setIsLoading] = useState(false);
+  // Guard: ensure we navigate to a new session at most once per created session
+  const navigatedToSessionRef = useRef(null);
   const [currentSessionId, setCurrentSessionId] = useState(selectedSession?.id || null);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [sessionMessages, setSessionMessages] = useState([]);
@@ -2045,14 +2047,19 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             cursorStreamingStartSessionIdRef.current = latestMessage.sessionId;
           }
 
-          // Simple stabilization: if we are still on the root ("new session" view),
-          // immediately navigate to the newly created session to stop flicker.
+          // Simple stabilization: simulate manual click on the new session
           try {
             const atRoot = typeof window !== 'undefined' && window.location && window.location.pathname === '/';
-            if (atRoot && latestMessage.sessionId && onNavigateToSession) {
+            const sid = latestMessage.sessionId;
+            if (atRoot && sid && onNavigateToSession) {
+              // Deduplicate: ensure we only navigate once for this session id
+              if (navigatedToSessionRef.current === sid) {
+                break;
+              }
+              navigatedToSessionRef.current = sid;
               // Preserve current chat content during system-driven navigation
               setIsSystemSessionChange(true);
-              onNavigateToSession(latestMessage.sessionId);
+              onNavigateToSession(sid);
               return;
             }
           } catch {}
