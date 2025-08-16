@@ -2044,6 +2044,18 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             activeCursorStreamSessionIdRef.current = latestMessage.sessionId;
             cursorStreamingStartSessionIdRef.current = latestMessage.sessionId;
           }
+
+          // Simple stabilization: if we are still on the root ("new session" view),
+          // immediately navigate to the newly created session to stop flicker.
+          try {
+            const atRoot = typeof window !== 'undefined' && window.location && window.location.pathname === '/';
+            if (atRoot && latestMessage.sessionId && onNavigateToSession) {
+              // Preserve current chat content during system-driven navigation
+              setIsSystemSessionChange(true);
+              onNavigateToSession(latestMessage.sessionId);
+              return;
+            }
+          } catch {}
           break;
           
         case 'claude-response':
