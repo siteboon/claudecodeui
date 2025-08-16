@@ -305,19 +305,25 @@ function MainContent({
             />
           </ErrorBoundary>
         </div>
-        <div className={`h-full overflow-hidden ${activeTab === 'files' ? 'block' : 'hidden'}`}>
-          <FileTree selectedProject={selectedProject} />
-        </div>
-        <div className={`h-full overflow-hidden ${activeTab === 'shell' ? 'block' : 'hidden'}`}>
-          <Shell 
-            selectedProject={selectedProject} 
-            selectedSession={selectedSession}
-            isActive={activeTab === 'shell'}
-          />
-        </div>
-        <div className={`h-full overflow-hidden ${activeTab === 'git' ? 'block' : 'hidden'}`}>
-          <GitPanel selectedProject={selectedProject} isMobile={isMobile} />
-        </div>
+        {activeTab === 'files' && (
+          <div className="h-full overflow-hidden">
+            <FileTree selectedProject={selectedProject} />
+          </div>
+        )}
+        {activeTab === 'shell' && (
+          <div className="h-full overflow-hidden">
+            <Shell 
+              selectedProject={selectedProject} 
+              selectedSession={selectedSession}
+              isActive
+            />
+          </div>
+        )}
+        {activeTab === 'git' && (
+          <div className="h-full overflow-hidden">
+            <GitPanel selectedProject={selectedProject} isMobile={isMobile} />
+          </div>
+        )}
         <div className={`h-full overflow-hidden ${activeTab === 'preview' ? 'block' : 'hidden'}`}>
           {/* <LivePreviewPanel
             selectedProject={selectedProject}

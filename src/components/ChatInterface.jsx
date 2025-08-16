@@ -2368,10 +2368,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             setCurrentSessionId(cursorSessionId);
             sessionStorage.removeItem('pendingSessionId');
             
-            // Trigger a project refresh to update the sidebar with the new session
-            if (window.refreshProjects) {
-              setTimeout(() => window.refreshProjects(), 500);
-            }
+            // Avoid auto project refresh here to prevent extra fetches; sidebar can be refreshed manually if needed
           }
 
           // Silent refresh (Cursor only): after completion, reload authoritative history and replace if richer
@@ -2453,10 +2450,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 setCurrentSessionId(pendingSessionId);
             sessionStorage.removeItem('pendingSessionId');
             
-            // Trigger a project refresh to update the sidebar with the new session
-            if (window.refreshProjects) {
-              setTimeout(() => window.refreshProjects(), 500);
-            }
+            // Avoid auto project refresh here to prevent extra fetches; sidebar can be refreshed manually if needed
           }
           
           // Clear persisted chat messages after successful completion
