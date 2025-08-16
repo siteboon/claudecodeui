@@ -2108,11 +2108,14 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             // Mark this as a system-initiated session change to preserve messages
             setIsSystemSessionChange(true);
             
-            // Switch to the new session using React Router navigation
-            // This triggers the session loading logic in App.jsx without a page reload
-            if (onNavigateToSession) {
-              onNavigateToSession(latestMessage.data.session_id);
-            }
+            // Guard: If user has already navigated to a concrete session route, avoid toggling back to '/'
+            // Only navigate when current route is still '/' (the temporary "New Session" page)
+            try {
+              const isAtRoot = window?.location?.pathname === '/';
+              if (isAtRoot && onNavigateToSession) {
+                onNavigateToSession(latestMessage.data.session_id);
+              }
+            } catch {}
             return; // Don't process the message further, let the navigation handle it
           }
           
@@ -2129,10 +2132,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             // Mark this as a system-initiated session change to preserve messages
             setIsSystemSessionChange(true);
             
-            // Switch to the new session
-            if (onNavigateToSession) {
-              onNavigateToSession(latestMessage.data.session_id);
-            }
+            // Only navigate when currently at '/'
+            try {
+              const isAtRoot = window?.location?.pathname === '/';
+              if (isAtRoot && onNavigateToSession) {
+                onNavigateToSession(latestMessage.data.session_id);
+              }
+            } catch {}
             return; // Don't process the message further, let the navigation handle it
           }
           

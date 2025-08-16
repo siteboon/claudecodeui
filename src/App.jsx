@@ -173,9 +173,15 @@ function AppContent() {
             
             // Update selected session only if it was deleted - avoid unnecessary reloads
             if (selectedSession) {
-              const updatedSelectedSession = updatedSelectedProject.sessions?.find(s => s.id === selectedSession.id);
-              if (!updatedSelectedSession) {
-                // Session was deleted
+              // For Cursor sessions, the WS payload does not include cursorSessions.
+              // Avoid incorrectly clearing the selected session in that case.
+              const isCursorSession = selectedSession.__provider === 'cursor';
+              const updatedSelectedSession =
+                updatedSelectedProject.sessions?.find(s => s.id === selectedSession.id) ||
+                updatedSelectedProject.cursorSessions?.find?.(s => s.id === selectedSession.id);
+
+              if (!updatedSelectedSession && !isCursorSession) {
+                // Session was deleted (Claude-managed sessions). For Cursor, do not clear here.
                 setSelectedSession(null);
               }
               // Don't update if session still exists with same ID - prevents reload
@@ -350,44 +356,57 @@ function AppContent() {
 
 
   const handleSidebarRefresh = async () => {
-    // Refresh only the sessions for all projects, don't change selected state
+    // Refresh projects and include Cursor sessions to ensure sidebar reflects full state
     try {
       const response = await api.projects();
-      const freshProjects = await response.json();
-      
+      const baseProjects = await response.json();
+
+      // Attach Cursor sessions per project (same as initial fetch)
+      for (let project of baseProjects) {
+        try {
+          const url = `/api/cursor/sessions?projectPath=${encodeURIComponent(project.fullPath || project.path)}`;
+          const cursorResponse = await authenticatedFetch(url);
+          if (cursorResponse.ok) {
+            const cursorData = await cursorResponse.json();
+            project.cursorSessions = cursorData.success && cursorData.sessions ? cursorData.sessions : [];
+          } else {
+            project.cursorSessions = [];
+          }
+        } catch (error) {
+          console.error(`Error refreshing Cursor sessions for project ${project.name}:`, error);
+          project.cursorSessions = [];
+        }
+      }
+
       // Optimize to preserve object references and minimize re-renders
       setProjects(prevProjects => {
-        // Check if projects data has actually changed
-        const hasChanges = freshProjects.some((newProject, index) => {
+        const hasChanges = baseProjects.some((newProject, index) => {
           const prevProject = prevProjects[index];
           if (!prevProject) return true;
-          
           return (
             newProject.name !== prevProject.name ||
             newProject.displayName !== prevProject.displayName ||
             newProject.fullPath !== prevProject.fullPath ||
             JSON.stringify(newProject.sessionMeta) !== JSON.stringify(prevProject.sessionMeta) ||
-            JSON.stringify(newProject.sessions) !== JSON.stringify(prevProject.sessions)
+            JSON.stringify(newProject.sessions) !== JSON.stringify(prevProject.sessions) ||
+            JSON.stringify(newProject.cursorSessions) !== JSON.stringify(prevProject.cursorSessions)
           );
-        }) || freshProjects.length !== prevProjects.length;
-        
-        return hasChanges ? freshProjects : prevProjects;
+        }) || baseProjects.length !== prevProjects.length;
+        return hasChanges ? baseProjects : prevProjects;
       });
-      
-      // If we have a selected project, make sure it's still selected after refresh
+
+      // Keep selected project and session if present in refreshed data
       if (selectedProject) {
-        const refreshedProject = freshProjects.find(p => p.name === selectedProject.name);
+        const refreshedProject = baseProjects.find(p => p.name === selectedProject.name);
         if (refreshedProject) {
-          // Only update selected project if it actually changed
           if (JSON.stringify(refreshedProject) !== JSON.stringify(selectedProject)) {
             setSelectedProject(refreshedProject);
           }
-          
-          // If we have a selected session, try to find it in the refreshed project
           if (selectedSession) {
-            const refreshedSession = refreshedProject.sessions?.find(s => s.id === selectedSession.id);
+            const refreshedSession = (refreshedProject.sessions || []).concat(refreshedProject.cursorSessions || [])
+              .find(s => s.id === selectedSession.id);
             if (refreshedSession && JSON.stringify(refreshedSession) !== JSON.stringify(selectedSession)) {
-              setSelectedSession(refreshedSession);
+              setSelectedSession({ ...refreshedSession, __provider: refreshedSession.__provider || selectedSession.__provider });
             }
           }
         }
