@@ -4,7 +4,7 @@
 </div>
 
 
-Claude Code 的桌面和行動裝置 UI，以及 Cursor CLI。您可以在本機或遠端使用它來檢視 Claude Code 或 Cursor 中的作用中專案和工作階段以及bigmodel的大模型，並且隨時隨地（透過行動裝置或桌面）對它們進行修改。這為您提供了一個可在任何地方運作的合適介面。支援的模型包括 Claude Sonnet 4、Opus 4.1 和 GPT-5以及bigmodel GLM4.5。
+简体中文翻译中，Claude Code 的桌面和行動裝置 UI，以及 Cursor CLI。您可以在本機或遠端使用它來檢視 Claude Code 或 Cursor 中的作用中專案和工作階段以及bigmodel的大模型，並且隨時隨地（透過行動裝置或桌面）對它們進行修改。這為您提供了一個可在任何地方運作的合適介面。支援的模型包括 Claude Sonnet 4、Opus 4.1 和 GPT-5以及bigmodel GLM4.5。
 
 ## Screenshots
 
