@@ -52,7 +52,7 @@ const QuickSettingsPanel = ({
       <div
         className={`fixed ${isMobile ? 'bottom-44' : 'top-1/2 -translate-y-1/2'} ${
           localIsOpen ? 'right-64' : 'right-0'
-        } z-50 transition-all duration-150 ease-out`}
+        } z-40 transition-all duration-150 ease-out`}
       >
         <button
           onClick={handleToggle}
