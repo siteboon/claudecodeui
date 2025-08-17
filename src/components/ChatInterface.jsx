@@ -1177,6 +1177,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     return [];
   });
   const [isLoading, setIsLoading] = useState(false);
+  // Guard: ensure we navigate to a new session at most once per created session
+  const navigatedToSessionRef = useRef(null);
   const [currentSessionId, setCurrentSessionId] = useState(selectedSession?.id || null);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [sessionMessages, setSessionMessages] = useState([]);
@@ -1197,6 +1199,66 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   // Streaming throttle buffers
   const streamBufferRef = useRef('');
   const streamTimerRef = useRef(null);
+  // Track how many backend messages we've processed to avoid dropping events
+  const lastProcessedIndexRef = useRef(0);
+  // Generate stable message ids for React keys and updates
+  const messageIdCounterRef = useRef(0);
+  const nextMessageId = useCallback(() => `${Date.now()}-${messageIdCounterRef.current++}`, []);
+  // Track whether current assistant answer contained streaming deltas (to avoid duplicating with final result)
+  const hadStreamingSinceLastResultRef = useRef(false);
+  // Track last rendered assistant text to avoid duplicates across sources
+  const lastAssistantTextRef = useRef('');
+  const normalizeText = useCallback((t) => (typeof t === 'string' ? t.replace(/\s+/g, ' ').trim() : ''), []);
+  // Cursor silent refresh timer
+  const cursorSilentRefreshTimerRef = useRef(null);
+  // Track the session id currently streaming for Cursor to prevent cross-session contamination
+  const activeCursorStreamSessionIdRef = useRef(null);
+  // Track the session id at streaming start (for new sessions before session-created arrives)
+  const cursorStreamingStartSessionIdRef = useRef(null);
+  // Track the viewed session at send-time for Cursor when no session id yet
+  const pendingCursorViewingSessionIdRef = useRef(null);
+
+  // Helper: find the most recent streaming assistant message index
+  const findLastStreamingIndex = useCallback((messagesArray) => {
+    for (let idx = messagesArray.length - 1; idx >= 0; idx--) {
+      const msg = messagesArray[idx];
+      if (msg && msg.type === 'assistant' && !msg.isToolUse && msg.isStreaming) {
+        return idx;
+      }
+    }
+    return -1;
+  }, []);
+
+  // Helper: append a streaming chunk immutably to the last assistant message (or create one)
+  const appendStreamingChunk = useCallback((chunk) => {
+    if (!chunk) return;
+    setChatMessages(prev => {
+      const updated = [...prev];
+      const streamIdx = findLastStreamingIndex(updated);
+      if (streamIdx >= 0) {
+        const last = updated[streamIdx];
+        updated[streamIdx] = { ...last, content: (last.content || '') + chunk };
+      } else {
+        updated.push({ id: nextMessageId(), type: 'assistant', content: chunk, timestamp: new Date(), isStreaming: true });
+      }
+      return updated;
+    });
+  }, [nextMessageId, findLastStreamingIndex]);
+
+  // Helper: finalize the current streaming assistant message immutably
+  const finalizeStreaming = useCallback((finalAppend = '') => {
+    setChatMessages(prev => {
+      const updated = [...prev];
+      const streamIdx = findLastStreamingIndex(updated);
+      if (streamIdx >= 0) {
+        const last = updated[streamIdx];
+        const finalText = (last.content || '') + (finalAppend || '');
+        updated[streamIdx] = { ...last, content: finalText, isStreaming: false };
+        lastAssistantTextRef.current = normalizeText(finalText);
+      }
+      return updated;
+    });
+  }, [findLastStreamingIndex, normalizeText]);
   const [debouncedInput, setDebouncedInput] = useState('');
   const [showFileDropdown, setShowFileDropdown] = useState(false);
   const [fileList, setFileList] = useState([]);
@@ -1881,6 +1943,14 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         setMessagesOffset(0);
         setHasMoreMessages(false);
         setTotalMessages(0);
+        // Clear any pending cursor silent refresh on session change
+        if (cursorSilentRefreshTimerRef.current) {
+          clearTimeout(cursorSilentRefreshTimerRef.current);
+          cursorSilentRefreshTimerRef.current = null;
+        }
+        // Reset active streaming session when session is cleared
+        activeCursorStreamSessionIdRef.current = null;
+        pendingCursorViewingSessionIdRef.current = null;
       }
     };
     
@@ -1930,10 +2000,33 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
 
   useEffect(() => {
-    // Handle WebSocket messages
-    if (messages.length > 0) {
-      const latestMessage = messages[messages.length - 1];
-      
+    // Incrementally process all new WebSocket messages in order
+    const startIndex = lastProcessedIndexRef.current || 0;
+    if (messages.length <= startIndex) return;
+
+    for (let i = startIndex; i < messages.length; i++) {
+      const latestMessage = messages[i];
+      // Guard: prevent cross-session updates for Cursor streams (provider-agnostic)
+      // Establish streaming ownership if not yet set
+      if (!activeCursorStreamSessionIdRef.current) {
+        if (latestMessage.type === 'session-created' && latestMessage.sessionId) {
+          activeCursorStreamSessionIdRef.current = latestMessage.sessionId;
+          cursorStreamingStartSessionIdRef.current = latestMessage.sessionId;
+        }
+      }
+      // If we have an active cursor streaming session, skip increments that don't belong to the viewed session
+      const viewingSessionId = selectedSession?.id || currentSessionId || sessionStorage.getItem('cursorSessionId');
+      const isCursorIncremental = latestMessage.type === 'claude-response' || latestMessage.type === 'claude-output' || latestMessage.type === 'cursor-output';
+      if (isCursorIncremental) {
+        // Allow increments to render if session-created not yet arrived but we have a pending viewing id from send-time
+        const allowedSessionId = activeCursorStreamSessionIdRef.current || pendingCursorViewingSessionIdRef.current;
+        if (!allowedSessionId) {
+          continue;
+        }
+        if (!viewingSessionId || viewingSessionId !== allowedSessionId) {
+          continue;
+        }
+      }
       switch (latestMessage.type) {
         case 'session-created':
           // New session created by Claude CLI - we receive the real session ID here
@@ -1948,15 +2041,42 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               onReplaceTemporarySession(latestMessage.sessionId);
             }
           }
+          // Also set active cursor streaming session id when session is created
+          if (latestMessage.sessionId) {
+            activeCursorStreamSessionIdRef.current = latestMessage.sessionId;
+            cursorStreamingStartSessionIdRef.current = latestMessage.sessionId;
+          }
+
+          // Simple stabilization: simulate manual click on the new session
+          try {
+            const atRoot = typeof window !== 'undefined' && window.location && window.location.pathname === '/';
+            const sid = latestMessage.sessionId;
+            if (atRoot && sid && onNavigateToSession) {
+              // Deduplicate: ensure we only navigate once for this session id
+              if (navigatedToSessionRef.current === sid) {
+                break;
+              }
+              navigatedToSessionRef.current = sid;
+              // Preserve current chat content during system-driven navigation
+              setIsSystemSessionChange(true);
+              onNavigateToSession(sid);
+              // Advance processed index before early exit to avoid reprocessing same message
+              try { lastProcessedIndexRef.current = i + 1; } catch {}
+              return;
+            }
+          } catch {}
           break;
           
         case 'claude-response':
           const messageData = latestMessage.data.message || latestMessage.data;
           
-          // Handle Cursor streaming format (content_block_delta / content_block_stop)
+          // Handle Claude streaming format (content_block_delta / content_block_stop)
           if (messageData && typeof messageData === 'object' && messageData.type) {
             if (messageData.type === 'content_block_delta' && messageData.delta?.text) {
-              // Buffer deltas and flush periodically to reduce rerenders
+              if ((localStorage.getItem('selected-provider') || 'claude') === 'cursor') {
+                hadStreamingSinceLastResultRef.current = true;
+              }
+              // Buffer deltas and flush periodically to reduce rerenders, then append immutably
               streamBufferRef.current += messageData.delta.text;
               if (!streamTimerRef.current) {
                 streamTimerRef.current = setTimeout(() => {
@@ -1964,19 +2084,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   streamBufferRef.current = '';
                   streamTimerRef.current = null;
                   if (!chunk) return;
-                  setChatMessages(prev => {
-                    const updated = [...prev];
-                    const last = updated[updated.length - 1];
-                    if (last && last.type === 'assistant' && !last.isToolUse && last.isStreaming) {
-                      last.content = (last.content || '') + chunk;
-                    } else {
-                      updated.push({ type: 'assistant', content: chunk, timestamp: new Date(), isStreaming: true });
-                    }
-                    return updated;
-                  });
+                  appendStreamingChunk(chunk);
                 }, 100);
               }
-              return;
+              break;
             }
             if (messageData.type === 'content_block_stop') {
               // Flush any buffered text and mark streaming message complete
@@ -1987,26 +2098,16 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               const chunk = streamBufferRef.current;
               streamBufferRef.current = '';
               if (chunk) {
-                setChatMessages(prev => {
-                  const updated = [...prev];
-                  const last = updated[updated.length - 1];
-                  if (last && last.type === 'assistant' && !last.isToolUse && last.isStreaming) {
-                    last.content = (last.content || '') + chunk;
-                  } else {
-                    updated.push({ type: 'assistant', content: chunk, timestamp: new Date(), isStreaming: true });
-                  }
-                  return updated;
-                });
+                appendStreamingChunk(chunk);
               }
-              setChatMessages(prev => {
-                const updated = [...prev];
-                const last = updated[updated.length - 1];
-                if (last && last.type === 'assistant' && last.isStreaming) {
-                  last.isStreaming = false;
-                }
-                return updated;
-              });
-              return;
+              // Only treat as finalize-with-tracking for Cursor flows
+              if ((localStorage.getItem('selected-provider') || 'claude') === 'cursor') {
+                finalizeStreaming();
+              } else {
+                // For Claude, just mark the streaming message complete without using cursor-specific trackers
+                finalizeStreaming();
+              }
+              break;
             }
           }
 
@@ -2028,11 +2129,14 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             // Mark this as a system-initiated session change to preserve messages
             setIsSystemSessionChange(true);
             
-            // Switch to the new session using React Router navigation
-            // This triggers the session loading logic in App.jsx without a page reload
-            if (onNavigateToSession) {
-              onNavigateToSession(latestMessage.data.session_id);
-            }
+            // Guard: If user has already navigated to a concrete session route, avoid toggling back to '/'
+            // Only navigate when current route is still '/' (the temporary "New Session" page)
+            try {
+              const isAtRoot = window?.location?.pathname === '/';
+              if (isAtRoot && onNavigateToSession) {
+                onNavigateToSession(latestMessage.data.session_id);
+              }
+            } catch {}
             return; // Don't process the message further, let the navigation handle it
           }
           
@@ -2049,10 +2153,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             // Mark this as a system-initiated session change to preserve messages
             setIsSystemSessionChange(true);
             
-            // Switch to the new session
-            if (onNavigateToSession) {
-              onNavigateToSession(latestMessage.data.session_id);
-            }
+            // Only navigate when currently at '/'
+            try {
+              const isAtRoot = window?.location?.pathname === '/';
+              if (isAtRoot && onNavigateToSession) {
+                onNavigateToSession(latestMessage.data.session_id);
+              }
+            } catch {}
             return; // Don't process the message further, let the navigation handle it
           }
           
@@ -2067,12 +2174,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           }
           
           // Handle different types of content in the response
-          if (Array.isArray(messageData.content)) {
+            if (Array.isArray(messageData.content)) {
             for (const part of messageData.content) {
               if (part.type === 'tool_use') {
                 // Add tool use message
                 const toolInput = part.input ? JSON.stringify(part.input, null, 2) : '';
                 setChatMessages(prev => [...prev, {
+                  id: nextMessageId(),
                   type: 'assistant',
                   content: '',
                   timestamp: new Date(),
@@ -2083,11 +2191,19 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   toolResult: null // Will be updated when result comes in
                 }]);
               } else if (part.type === 'text' && part.text?.trim()) {
+                // For Cursor: if text arrives after streaming, finalize instead of duplicating
+                if ((localStorage.getItem('selected-provider') || 'claude') === 'cursor' && hadStreamingSinceLastResultRef.current) {
+                    appendStreamingChunk(part.text);
+                    finalizeStreaming();
+                    hadStreamingSinceLastResultRef.current = false;
+                    continue;
+                  }
                 // Normalize usage limit message to local time
                 let content = formatUsageLimitText(part.text);
                 
                 // Add regular text message
                 setChatMessages(prev => [...prev, {
+                  id: nextMessageId(),
                   type: 'assistant',
                   content: content,
                   timestamp: new Date()
@@ -2095,15 +2211,21 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               }
             }
           } else if (typeof messageData.content === 'string' && messageData.content.trim()) {
-            // Normalize usage limit message to local time
-            let content = formatUsageLimitText(messageData.content);
-            
-            // Add regular text message
-            setChatMessages(prev => [...prev, {
-              type: 'assistant',
-              content: content,
-              timestamp: new Date()
-            }]);
+            // Cursor-specific: avoid duplicating final string after streaming
+            if ((localStorage.getItem('selected-provider') || 'claude') === 'cursor' && hadStreamingSinceLastResultRef.current) {
+              appendStreamingChunk(messageData.content);
+              finalizeStreaming();
+              hadStreamingSinceLastResultRef.current = false;
+            } else {
+              // Claude or non-stream cursor fallback: normal append
+              let content = formatUsageLimitText(messageData.content);
+              setChatMessages(prev => [...prev, {
+                id: nextMessageId(),
+                type: 'assistant',
+                content: content,
+                timestamp: new Date()
+              }]);
+            }
           }
           
           // Handle tool results from user messages (these come separately)
@@ -2140,16 +2262,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   streamBufferRef.current = '';
                   streamTimerRef.current = null;
                   if (!chunk) return;
-                  setChatMessages(prev => {
-                    const updated = [...prev];
-                    const last = updated[updated.length - 1];
-                    if (last && last.type === 'assistant' && !last.isToolUse && last.isStreaming) {
-                      last.content = last.content ? `${last.content}\n${chunk}` : chunk;
-                    } else {
-                      updated.push({ type: 'assistant', content: chunk, timestamp: new Date(), isStreaming: true });
-                    }
-                    return updated;
-                  });
+                  appendStreamingChunk(chunk);
                 }, 100);
               }
             }
@@ -2174,33 +2287,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           break;
           
         case 'cursor-system':
-          // Handle Cursor system/init messages similar to Claude
-          try {
-            const cdata = latestMessage.data;
-            if (cdata && cdata.type === 'system' && cdata.subtype === 'init' && cdata.session_id) {
-              // If we already have a session and this differs, switch (duplication/redirect)
-              if (currentSessionId && cdata.session_id !== currentSessionId) {
-                console.log('🔄 Cursor session switch detected:', { originalSession: currentSessionId, newSession: cdata.session_id });
-                setIsSystemSessionChange(true);
-                if (onNavigateToSession) {
-                  onNavigateToSession(cdata.session_id);
-                }
-                return;
-              }
-              // If we don't yet have a session, adopt this one
-              if (!currentSessionId) {
-                console.log('🔄 Cursor new session init detected:', { newSession: cdata.session_id });
-                setIsSystemSessionChange(true);
-                if (onNavigateToSession) {
-                  onNavigateToSession(cdata.session_id);
-                }
-                return;
-              }
-            }
-            // For other cursor-system messages, avoid dumping raw objects to chat
-          } catch (e) {
-            console.warn('Error handling cursor-system message:', e);
-          }
+          // Do not auto-navigate on Cursor system messages to avoid session jumps
+          // Intentionally ignore navigation; rely on explicit user actions
           break;
           
         case 'cursor-user':
@@ -2244,21 +2332,29 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             }
             const pendingChunk = streamBufferRef.current;
             streamBufferRef.current = '';
-
+            if (pendingChunk) {
+              appendStreamingChunk(pendingChunk);
+            }
+            // Replace streaming content with the final content, if provided
             setChatMessages(prev => {
               const updated = [...prev];
-              // Try to consolidate into the last streaming assistant message
-              const last = updated[updated.length - 1];
-              if (last && last.type === 'assistant' && !last.isToolUse && last.isStreaming) {
-                // Replace streaming content with the final content so deltas don't remain
-                const finalContent = textResult && textResult.trim() ? textResult : (last.content || '') + (pendingChunk || '');
-                last.content = finalContent;
-                last.isStreaming = false;
-              } else if (textResult && textResult.trim()) {
-                updated.push({ type: r.is_error ? 'error' : 'assistant', content: textResult, timestamp: new Date(), isStreaming: false });
+              const streamIdx = findLastStreamingIndex(updated);
+              if (streamIdx >= 0) {
+                const last = updated[streamIdx];
+                const finalContent = textResult && textResult.trim() ? textResult : (last.content || '');
+                updated[streamIdx] = { ...last, content: finalContent, isStreaming: false };
+                return updated;
+              }
+              // Only create a new final message when没有流式增量，且不与上一次 assistant 文本重复
+              const normalizedFinal = normalizeText(textResult);
+              if (!hadStreamingSinceLastResultRef.current && normalizedFinal && normalizedFinal !== lastAssistantTextRef.current) {
+                updated.push({ id: nextMessageId(), type: r.is_error ? 'error' : 'assistant', content: textResult, timestamp: new Date(), isStreaming: false });
+                lastAssistantTextRef.current = normalizedFinal;
               }
               return updated;
             });
+            // Reset streaming tracker for next answer
+            hadStreamingSinceLastResultRef.current = false;
           } catch (e) {
             console.warn('Error handling cursor-result message:', e);
           }
@@ -2274,10 +2370,43 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             setCurrentSessionId(cursorSessionId);
             sessionStorage.removeItem('pendingSessionId');
             
-            // Trigger a project refresh to update the sidebar with the new session
-            if (window.refreshProjects) {
-              setTimeout(() => window.refreshProjects(), 500);
+            // Avoid auto project refresh here to prevent extra fetches; sidebar can be refreshed manually if needed
+          }
+
+          // Silent refresh (Cursor only): after completion, reload authoritative history and replace if richer
+          try {
+            const providerNow = localStorage.getItem('selected-provider') || 'claude';
+            if (providerNow === 'cursor') {
+              const projectPath = selectedProject?.fullPath || selectedProject?.path;
+              const sessionToReload = currentSessionId || cursorSessionId;
+              if (projectPath && sessionToReload) {
+                // Clear any pending refresh for previous session
+                if (cursorSilentRefreshTimerRef.current) {
+                  clearTimeout(cursorSilentRefreshTimerRef.current);
+                }
+                cursorSilentRefreshTimerRef.current = setTimeout(async () => {
+                  try {
+                    // Guard: only refresh if user is still viewing the same cursor session
+                    const stillCursor = (localStorage.getItem('selected-provider') || 'claude') === 'cursor';
+                    const stillSameSession = selectedSession?.id === sessionToReload;
+                    if (!stillCursor || !stillSameSession) return;
+                    const fetched = await loadCursorSessionMessages(projectPath, sessionToReload);
+                    if (Array.isArray(fetched) && fetched.length) {
+                      setChatMessages(prev => {
+                        const lastFetched = fetched[fetched.length - 1] || {};
+                        const lastPrev = prev[prev.length - 1] || {};
+                        const shouldReplace = fetched.length > prev.length || normalizeText(JSON.stringify(lastFetched)) !== normalizeText(JSON.stringify(lastPrev));
+                        return shouldReplace ? fetched : prev;
+                      });
+                    }
+                  } catch (err) {
+                    console.warn('Silent reload of cursor session failed:', err);
+                  }
+                }, 250);
+              }
             }
+          } catch (e) {
+            console.warn('Error scheduling cursor silent refresh:', e);
           }
           break;
 
@@ -2294,16 +2423,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   streamBufferRef.current = '';
                   streamTimerRef.current = null;
                   if (!chunk) return;
-                  setChatMessages(prev => {
-                    const updated = [...prev];
-                    const last = updated[updated.length - 1];
-                    if (last && last.type === 'assistant' && !last.isToolUse && last.isStreaming) {
-                      last.content = last.content ? `${last.content}\n${chunk}` : chunk;
-                    } else {
-                      updated.push({ type: 'assistant', content: chunk, timestamp: new Date(), isStreaming: true });
-                    }
-                    return updated;
-                  });
+                  appendStreamingChunk(chunk);
                 }, 100);
               }
             }
@@ -2332,16 +2452,17 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 setCurrentSessionId(pendingSessionId);
             sessionStorage.removeItem('pendingSessionId');
             
-            // Trigger a project refresh to update the sidebar with the new session
-            if (window.refreshProjects) {
-              setTimeout(() => window.refreshProjects(), 500);
-            }
+            // Avoid auto project refresh here to prevent extra fetches; sidebar can be refreshed manually if needed
           }
           
           // Clear persisted chat messages after successful completion
           if (selectedProject && latestMessage.exitCode === 0) {
             safeLocalStorage.removeItem(`chat_messages_${selectedProject.name}`);
           }
+          // Reset active cursor streaming session on completion
+          activeCursorStreamSessionIdRef.current = null;
+          cursorStreamingStartSessionIdRef.current = null;
+          pendingCursorViewingSessionIdRef.current = null;
           break;
           
         case 'session-aborted':
@@ -2354,6 +2475,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           if (currentSessionId && onSessionInactive) {
             onSessionInactive(currentSessionId);
           }
+          // Reset active cursor streaming session on abort
+          activeCursorStreamSessionIdRef.current = null;
+          cursorStreamingStartSessionIdRef.current = null;
+          pendingCursorViewingSessionIdRef.current = null;
           
           setChatMessages(prev => [...prev, {
             type: 'assistant',
@@ -2402,7 +2527,25 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   
       }
     }
-  }, [messages]);
+
+    // Special safeguard: if a completion arrives without prior content_block_stop, flush and finalize
+    if (messages.length > startIndex) {
+      const lastMsg = messages[messages.length - 1];
+      if (lastMsg?.type === 'claude-complete') {
+        if (streamTimerRef.current) {
+          clearTimeout(streamTimerRef.current);
+          streamTimerRef.current = null;
+        }
+        const pending = streamBufferRef.current;
+        streamBufferRef.current = '';
+        if (pending) appendStreamingChunk(pending);
+        finalizeStreaming();
+        hadStreamingSinceLastResultRef.current = false;
+      }
+    }
+
+    lastProcessedIndexRef.current = messages.length;
+  }, [messages, appendStreamingChunk, finalizeStreaming, nextMessageId]);
 
   // Load file list when project changes
   useEffect(() => {
@@ -2760,6 +2903,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     // Send command based on provider
     if (provider === 'cursor') {
       // Send Cursor command (always use cursor-command; include resume/sessionId when replying)
+      // Latch the viewing session at send-time to allow increments before session-created to render in correct view
+      pendingCursorViewingSessionIdRef.current = effectiveSessionId || selectedSession?.id || sessionStorage.getItem('cursorSessionId') || null;
       sendMessage({
         type: 'cursor-command',
         command: input,
@@ -3145,7 +3290,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               
               return (
                 <MessageComponent
-                  key={index}
+                  key={message.id || index}
                   message={message}
                   index={index}
                   prevMessage={prevMessage}
