@@ -14,7 +14,7 @@ export const useVersionCheck = (owner, repo) => {
         
         // Handle the case where there might not be any releases
         if (data.tag_name) {
-          const latest = data.tag_name.replace(/^v/, '');
+          const latest = data.tag_name.replace(/^[v|V]/, '');
           setLatestVersion(latest);
           setUpdateAvailable(version !== latest);
         } else {
