@@ -225,17 +225,40 @@ async function spawnClaude(command, options = {}, ws) {
         console.log('📝 Skip permissions disabled due to plan mode');
       }
     }
-    
-    console.log('Spawning Claude CLI:', 'claude', args.map(arg => {
-      const cleanArg = arg.replace(/\n/g, '\\n').replace(/\r/g, '\\r');
-      return cleanArg.includes(' ') ? `"${cleanArg}"` : cleanArg;
-    }).join(' '));
-    console.log('Working directory:', workingDir);
-    console.log('Session info - Input sessionId:', sessionId, 'Resume:', resume);
-    console.log('🔍 Full command args:', JSON.stringify(args, null, 2));
-    console.log('🔍 Final Claude command will be: claude ' + args.join(' '));
-    
-    const claudeProcess = spawnFunction('claude', args, {
+
+    // Resolve alias at runtime so .env changes are picked up
+    const CLAUDE_SPAWN_ALIAS = (
+      process.env.CLAUDE_CODE_UI_CLAUDE_SPAWN_ALIAS || "claude"
+    ).trim();
+    const [CLAUDE_CMD, ...CLAUDE_PREFIX_ARGS] =
+      CLAUDE_SPAWN_ALIAS.split(/\s+/).filter(Boolean);
+
+    console.log(
+      "Spawning Claude CLI:",
+      CLAUDE_SPAWN_ALIAS,
+      args
+        .map((arg) => {
+          const cleanArg = arg.replace(/\n/g, "\\n").replace(/\r/g, "\\r");
+          return cleanArg.includes(" ") ? `"${cleanArg}"` : cleanArg;
+        })
+        .join(" "),
+    );
+    console.log("Working directory:", workingDir);
+    console.log(
+      "Session info - Input sessionId:",
+      sessionId,
+      "Resume:",
+      resume,
+    );
+    console.log("🔍 Full command args:", JSON.stringify(args, null, 2));
+    console.log(
+      "🔍 Final Claude command will be:",
+      CLAUDE_SPAWN_ALIAS + " " + args.join(" "),
+    );
+
+    // Prepend any alias prefix args (e.g., when alias is "ccr code")
+    const finalArgs = [...CLAUDE_PREFIX_ARGS, ...args];
+    const claudeProcess = spawnFunction(CLAUDE_CMD, finalArgs, {
       cwd: workingDir,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env } // Inherit all environment variables
