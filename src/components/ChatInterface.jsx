@@ -2060,6 +2060,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               // Preserve current chat content during system-driven navigation
               setIsSystemSessionChange(true);
               onNavigateToSession(sid);
+              // Advance processed index before early exit to avoid reprocessing same message
+              try { lastProcessedIndexRef.current = i + 1; } catch {}
               return;
             }
           } catch {}

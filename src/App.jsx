@@ -43,6 +43,8 @@ function AppContent() {
   const [showVersionModal, setShowVersionModal] = useState(false);
   
   const [projects, setProjects] = useState([]);
+  const projectsRef = React.useRef(projects);
+  useEffect(() => { projectsRef.current = projects; }, [projects]);
   const [selectedProject, setSelectedProject] = useState(null);
   const [selectedSession, setSelectedSession] = useState(null);
   const [activeTab, setActiveTab] = useState('chat'); // 'chat' or 'files'
@@ -100,6 +102,12 @@ function AppContent() {
       return true;
     }
 
+    // If the selected session is a Cursor session, treat updates as additive
+    // because WS payload does not include cursorSessions; safe to let Sidebar update
+    if (selectedSession.__provider === 'cursor') {
+      return true;
+    }
+
     // Find the selected project in both current and updated data
     const currentSelectedProject = currentProjects?.find(p => p.name === selectedProject.name);
     const updatedSelectedProject = updatedProjects?.find(p => p.name === selectedProject.name);
@@ -114,29 +122,64 @@ function AppContent() {
     const updatedSelectedSession = updatedSelectedProject.sessions?.find(s => s.id === selectedSession.id);
 
     if (!currentSelectedSession || !updatedSelectedSession) {
-      // Selected session was deleted or significantly changed, not purely additive
+      // Selected session was deleted or not present; treat as non-additive
       return false;
     }
 
-    // Check if the selected session's content has changed (modification vs addition)
-    // Compare key fields that would affect the loaded chat interface
-    const sessionUnchanged = 
-      currentSelectedSession.id === updatedSelectedSession.id &&
-      currentSelectedSession.title === updatedSelectedSession.title &&
-      currentSelectedSession.created_at === updatedSelectedSession.created_at &&
-      currentSelectedSession.updated_at === updatedSelectedSession.updated_at;
-
-    // This is considered additive if the selected session is unchanged
-    // (new sessions may have been added elsewhere, but active session is protected)
-    return sessionUnchanged;
+    // Consider additive if the selected session still exists with same id
+    // We do not deep-compare content to avoid false negatives due to differing shapes
+    return currentSelectedSession.id === updatedSelectedSession.id;
   };
 
   // Handle WebSocket messages for real-time project updates
+  const appLastProcessedIndexRef = React.useRef(0);
   useEffect(() => {
     if (messages.length > 0) {
-      const latestMessage = messages[messages.length - 1];
+      // Incrementally process new messages to avoid missing mid-batch events
+      const startIndex = appLastProcessedIndexRef.current || 0;
+      for (let i = startIndex; i < messages.length; i++) {
+        const latestMessage = messages[i];
       
+      // One-time background Sidebar refresh when a new session is created
+      // Schedule a single refresh (same as clicking Sidebar refresh button),
+      // and cancel it if a projects_updated arrives that already includes this session
+      if (latestMessage.type === 'session-created' && latestMessage.sessionId) {
+        if (!window.__ensureTimers) window.__ensureTimers = new Map();
+        const sid = latestMessage.sessionId;
+        if (!window.__ensureTimers.has(sid)) {
+          // If it already exists in current state, no need to refresh
+          const existsNow = (projectsRef.current || []).some(p =>
+            (p.sessions || []).some(s => s.id === sid) ||
+            (p.cursorSessions || []).some?.(s => s.id === sid)
+          );
+          if (!existsNow) {
+            const t = setTimeout(() => {
+              try { handleSidebarRefresh(); } finally { window.__ensureTimers.delete(sid); }
+            }, 800);
+            window.__ensureTimers.set(sid, t);
+          }
+        }
+      }
+
       if (latestMessage.type === 'projects_updated') {
+        // Cancel any pending scheduled refresh if this update already contains the session
+        if (window.__ensureTimers && window.__ensureTimers.size) {
+          const pendingSids = Array.from(window.__ensureTimers.keys());
+          for (const sid of pendingSids) {
+            const existsInUpdate = (latestMessage.projects || []).some(p =>
+              (p.sessions || []).some(s => s.id === sid)
+            );
+            const existsInState = (projectsRef.current || []).some(p =>
+              (p.sessions || []).some(s => s.id === sid) ||
+              (p.cursorSessions || []).some?.(s => s.id === sid)
+            );
+            if (existsInUpdate || existsInState) {
+              const t = window.__ensureTimers.get(sid);
+              if (t) clearTimeout(t);
+              window.__ensureTimers.delete(sid);
+            }
+          }
+        }
         
         // Session Protection Logic: Allow additions but prevent changes during active conversations
         // This allows new sessions/projects to appear in sidebar while protecting active chat messages
@@ -189,6 +232,8 @@ function AppContent() {
           }
         }
       }
+      }
+      appLastProcessedIndexRef.current = messages.length;
     }
   }, [messages, selectedProject, selectedSession, activeSessions]);
 
