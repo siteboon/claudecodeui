@@ -258,7 +258,7 @@ function CodeEditor({ file, onClose, projectPath }) {
   }
 
   return (
-    <div className={`ios-top-safe fixed inset-0 z-50 ${
+    <div className={`ios-top-safe ios-bottom-safe fixed inset-0 z-50 ${
       // Mobile: native fullscreen, Desktop: modal with backdrop
       'md:bg-black/50 md:flex md:items-center md:justify-center md:p-4'
     } ${isFullscreen ? 'md:p-0' : ''}`}>
