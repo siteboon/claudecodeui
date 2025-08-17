@@ -113,6 +113,16 @@ To use Claude Code's full functionality, you'll need to manually enable tools:
 
 ### Core Features
 
+#### Claude CLI alias
+
+If you use an alternative launcher like claude-code-router, you can set a custom alias for the Claude CLI that this server will spawn.
+
+- Env var: `CLAUDE_CODE_UI_CLAUDE_SPAWN_ALIAS`
+- Default: `claude`
+- Example: `CLAUDE_CODE_UI_CLAUDE_SPAWN_ALIAS=ccr code`
+
+This is honored across all Claude CLI spawns, including MCP routes.
+
 #### Project Management
 The UI automatically discovers Claude Code projects from `~/.claude/projects/` and provides:
 - **Visual Project Browser** - All available projects with metadata and session counts
