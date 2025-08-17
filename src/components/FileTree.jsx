@@ -307,7 +307,7 @@ function FileTree({ selectedProject }) {
   }
 
   return (
-    <div className="h-full flex flex-col bg-card">
+    <div className="ios-bottom-safe h-full flex flex-col bg-card">
       {/* View Mode Toggle */}
       <div className="p-4 border-b border-border flex items-center justify-between">
         <h3 className="text-sm font-medium text-foreground">Files</h3>
@@ -372,6 +372,7 @@ function FileTree({ selectedProject }) {
             {viewMode === 'detailed' && renderDetailedView(files)}
           </div>
         )}
+				<div className='h-12 py-6'></div>
       </ScrollArea>
       
       {/* Code Editor Modal */}
