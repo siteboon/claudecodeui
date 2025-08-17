@@ -52,7 +52,7 @@ const QuickSettingsPanel = ({
       <div
         className={`fixed ${isMobile ? 'bottom-44' : 'top-1/2 -translate-y-1/2'} ${
           localIsOpen ? 'right-64' : 'right-0'
-        } z-50 transition-all duration-150 ease-out`}
+        } z-40 transition-all duration-150 ease-out`}
       >
         <button
           onClick={handleToggle}
@@ -69,7 +69,7 @@ const QuickSettingsPanel = ({
 
       {/* Panel */}
       <div
-        className={`fixed top-0 right-0 h-full w-64 bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-700 shadow-xl transform transition-transform duration-150 ease-out z-40 ${
+        className={`fixed top-0 right-0 ios-top-safe h-full w-64 bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-700 shadow-xl transform transition-transform duration-150 ease-out z-40 ${
           localIsOpen ? 'translate-x-0' : 'translate-x-full'
         } ${isMobile ? 'h-screen' : ''}`}
       >

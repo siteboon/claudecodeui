@@ -66,7 +66,7 @@ function MainContent({
       <div className="h-full flex flex-col">
         {/* Header with menu button for mobile */}
         {isMobile && (
-          <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-3 sm:p-4 flex-shrink-0">
+          <div className="ios-top-safe bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 pb-3 px-3 flex-shrink-0">
             <button
               onClick={onMenuClick}
               className="p-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -102,7 +102,7 @@ function MainContent({
       <div className="h-full flex flex-col">
         {/* Header with menu button for mobile */}
         {isMobile && (
-          <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-3 sm:p-4 flex-shrink-0">
+          <div className="ios-top-safe bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 pb-3 px-3 flex-shrink-0">
             <button
               onClick={onMenuClick}
               className="p-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -138,7 +138,7 @@ function MainContent({
   return (
     <div className="h-full flex flex-col">
       {/* Header with tabs */}
-      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-3 sm:p-4 flex-shrink-0">
+      <div className="ios-top-safe bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 pb-3 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2 sm:space-x-3">
             {isMobile && (
