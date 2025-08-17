@@ -583,6 +583,10 @@
   .ios-bottom-safe {
     padding-bottom: max(env(safe-area-inset-bottom), 12px);
   }
+
+	.ios-bottom-safe-position {
+		bottom: env(safe-area-inset-bottom);
+	}
   
   @media screen and (max-width: 768px) {
     .chat-input-mobile {

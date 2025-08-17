@@ -543,7 +543,7 @@ function Sidebar({
           
           {/* Mobile Form - Simple Overlay */}
           <div className="md:hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-sm">
-            <div className="absolute bottom-0 left-0 right-0 bg-card rounded-t-lg border-t border-border p-4 space-y-4 animate-in slide-in-from-bottom duration-300">
+            <div className="absolute ios-bottom-safe-position pb-8 left-0 right-0 bg-card rounded-t-lg border-t border-border p-4 space-y-4 animate-in slide-in-from-bottom duration-300">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="w-6 h-6 bg-primary/10 rounded-md flex items-center justify-center">
