@@ -418,7 +418,7 @@ function Sidebar({
   });
 
   return (
-    <div className="h-full flex flex-col bg-card md:select-none">
+    <div className="ios-top-safe ios-bottom-safe h-full flex flex-col bg-card md:select-none">
       {/* Header */}
       <div className="md:p-4 md:border-b md:border-border">
         {/* Desktop Header */}
