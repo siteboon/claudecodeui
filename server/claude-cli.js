@@ -1,4 +1,4 @@
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
 import crossSpawn from 'cross-spawn';
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -8,6 +8,29 @@ import os from 'os';
 const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
 
 let activeClaudeProcesses = new Map(); // Track active processes by session ID
+
+// Function to resolve the claude executable path
+function resolveClaudePath() {
+  try {
+    // Use bash to resolve the command (handles aliases, functions, and PATH)
+    const result = execSync('bash -c "command -v claude"', { 
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore'] // Suppress stderr
+    }).trim();
+    
+    if (result && require('fs').existsSync(result)) {
+      return result;
+    }
+  } catch (error) {
+    // Fallback to common location
+    const fallbackPath = path.join(os.homedir(), '.claude', 'local', 'claude');
+    if (require('fs').existsSync(fallbackPath)) {
+      return fallbackPath;
+    }
+  }
+
+  return 'claude'; // Final fallback
+}
 
 async function spawnClaude(command, options = {}, ws) {
   return new Promise(async (resolve, reject) => {
@@ -233,9 +256,12 @@ async function spawnClaude(command, options = {}, ws) {
     console.log('Working directory:', workingDir);
     console.log('Session info - Input sessionId:', sessionId, 'Resume:', resume);
     console.log('🔍 Full command args:', JSON.stringify(args, null, 2));
-    console.log('🔍 Final Claude command will be: claude ' + args.join(' '));
+    // Resolve the claude executable path dynamically
+    const claudePath = resolveClaudePath();
+    console.log('🔍 Resolved Claude path:', claudePath);
+    console.log('🔍 Final Claude command will be:', claudePath, args.join(' '));
     
-    const claudeProcess = spawnFunction('claude', args, {
+    const claudeProcess = spawnFunction(claudePath, args, {
       cwd: workingDir,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env } // Inherit all environment variables
