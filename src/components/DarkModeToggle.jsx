@@ -7,7 +7,7 @@ function DarkModeToggle() {
   return (
     <button
       onClick={toggleDarkMode}
-      className="relative inline-flex h-8 w-14 items-center rounded-full bg-gray-200 dark:bg-gray-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
+      className="relative inline-flex h-8 w-14 items-center rounded-full bg-muted transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
       role="switch"
       aria-checked={isDarkMode}
       aria-label="Toggle dark mode"

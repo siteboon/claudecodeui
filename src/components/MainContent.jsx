@@ -11,7 +11,7 @@
  * No session protection logic is implemented here - it's purely a props bridge.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import ChatInterface from './ChatInterface';
 import FileTree from './FileTree';
 import CodeEditor from './CodeEditor';
@@ -136,7 +136,7 @@ function MainContent({
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col overflow-hidden">
       {/* Header with tabs */}
       <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-3 sm:p-4 flex-shrink-0">
         <div className="flex items-center justify-between">

@@ -22,11 +22,100 @@ import { useDropzone } from 'react-dropzone';
 import TodoList from './TodoList';
 import ClaudeLogo from './ClaudeLogo.jsx';
 import CursorLogo from './CursorLogo.jsx';
+import { 
+  Eye, 
+  Terminal, 
+  FileText, 
+  Edit, 
+  Check, 
+  X, 
+  Search,
+  Globe,
+  FolderOpen,
+  CheckSquare,
+  FileCode
+} from 'lucide-react';
 
 import ClaudeStatus from './ClaudeStatus';
 import { MicButton } from './MicButton.jsx';
 import { api, authenticatedFetch } from '../utils/api';
 
+
+// Tool icon mapping
+const getToolIcon = (toolName) => {
+  const icons = {
+    'Read': Eye,
+    'Edit': Edit,
+    'Write': FileText,
+    'Bash': Terminal,
+    'TodoWrite': CheckSquare,
+    'TodoRead': CheckSquare,
+    'Grep': Search,
+    'Glob': FolderOpen,
+    'WebSearch': Globe,
+    'WebFetch': Globe,
+    'MultiEdit': Edit,
+    'exit_plan_mode': FileCode
+  };
+  return icons[toolName] || Terminal;
+};
+
+// Generate minimal tool summary
+const getToolSummary = (toolName, toolInput) => {
+  try {
+    const input = typeof toolInput === 'string' ? JSON.parse(toolInput) : toolInput;
+    
+    switch(toolName) {
+      case 'Read':
+        if (input?.file_path) {
+          const fileName = input.file_path.split('/').pop();
+          const lineInfo = (input.offset && input.limit) 
+            ? ` L${input.offset}-${input.offset + input.limit}`
+            : '';
+          return `Read ${fileName}${lineInfo}`;
+        }
+        return 'Read file';
+        
+      case 'Edit':
+        if (input?.file_path) {
+          const fileName = input.file_path.split('/').pop();
+          return `Edit ${fileName}`;
+        }
+        return 'Edit file';
+        
+      case 'Write':
+        if (input?.file_path) {
+          const fileName = input.file_path.split('/').pop();
+          return `Write ${fileName}`;
+        }
+        return 'Write file';
+        
+      case 'Bash':
+        return input?.command || 'Run command';
+        
+      case 'TodoWrite':
+        const todoCount = input?.todos?.length || 0;
+        return `Update todos (${todoCount} items)`;
+        
+      case 'TodoRead':
+        return 'Read todos';
+        
+      case 'Grep':
+        return input?.pattern ? `Search "${input.pattern}"` : 'Search';
+        
+      case 'Glob':
+        return input?.pattern || 'Find files';
+        
+      case 'exit_plan_mode':
+        return 'Exit plan mode';
+        
+      default:
+        return toolName;
+    }
+  } catch {
+    return toolName;
+  }
+};
 
 // Format "Claude AI usage limit reached|<epoch>" into a local time string
 function formatUsageLimitText(text) {
@@ -253,49 +342,60 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
           
           <div className="w-full">
             
-            {message.isToolUse && !['Read', 'TodoWrite', 'TodoRead'].includes(message.toolName) ? (
-              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-2 sm:p-3 mb-2">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 bg-blue-600 rounded flex items-center justify-center">
-                      <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                    </div>
-                    <span className="font-medium text-blue-900 dark:text-blue-100">
-                      Using {message.toolName}
-                    </span>
-                    <span className="text-xs text-blue-600 dark:text-blue-400 font-mono">
-                      {message.toolId}
-                    </span>
-                  </div>
-                  {onShowSettings && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onShowSettings();
-                      }}
-                      className="p-1 rounded hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
-                      title="Tool Settings"
-                    >
-                      <svg className="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
-                {message.toolInput && message.toolName === 'Edit' && (() => {
-                  try {
-                    const input = JSON.parse(message.toolInput);
-                    if (input.file_path && input.old_string && input.new_string) {
+            {message.isToolUse ? (
+              // Minimal inline tool display
+              <div className="text-sm text-gray-500 dark:text-gray-400 my-1">
+                {(() => {
+                  const ToolIcon = getToolIcon(message.toolName);
+                  const toolSummary = getToolSummary(message.toolName, message.toolInput);
+                  
+                  // Special handling for Bash commands - show with $ prefix
+                  if (message.toolName === 'Bash') {
+                    try {
+                      const input = JSON.parse(message.toolInput);
                       return (
-                        <details className="mt-2" open={autoExpandTools}>
-                          <summary className="text-sm text-blue-700 dark:text-blue-300 cursor-pointer hover:text-blue-800 dark:hover:text-blue-200 flex items-center gap-2">
-                            <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
+                        <span className="font-mono">
+                          <Terminal className="inline w-3 h-3 mr-1" />
+                          $ {input.command}
+                        </span>
+                      );
+                    } catch {
+                      return (
+                        <span>
+                          <ToolIcon className="inline w-3 h-3 mr-1" />
+                          {toolSummary}
+                        </span>
+                      );
+                    }
+                  }
+                  
+                  return (
+                    <span>
+                      <ToolIcon className="inline w-3 h-3 mr-1" />
+                      {toolSummary}
+                    </span>
+                  );
+                })()}
+                
+                {/* Tool result display - keep minimal */}
+                {message.toolResult && (
+                  <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                    {message.toolResult.isError ? (
+                      <span className="text-red-500 dark:text-red-400">
+                        <X className="inline w-3 h-3 mr-1" />
+                        Error: {message.toolResult.content}
+                      </span>
+                    ) : (
+                      // Only show success indicator for non-error results, no content
+                      <span className="text-green-600 dark:text-green-400">
+                        <Check className="inline w-3 h-3" />
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-sm text-gray-700 dark:text-gray-300">
                             📝 View edit diff for 
                             <button 
                               onClick={(e) => {
