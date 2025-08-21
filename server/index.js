@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { execSync } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -24,6 +25,29 @@ try {
 }
 
 console.log('PORT from env:', process.env.PORT);
+
+// Function to resolve the claude executable path
+function resolveClaudePath() {
+  try {
+    // Use bash to resolve the command (handles aliases, functions, and PATH)
+    const result = execSync('bash -c "command -v claude"', { 
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore'] // Suppress stderr
+    }).trim();
+    
+    if (result && fs.existsSync(result)) {
+      return result;
+    }
+  } catch (error) {
+    // Fallback to common location
+    const fallbackPath = path.join(os.homedir(), '.claude', 'local', 'claude');
+    if (fs.existsSync(fallbackPath)) {
+      return fallbackPath;
+    }
+  }
+
+  return 'claude'; // Final fallback
+}
 
 import express from 'express';
 import { WebSocketServer } from 'ws';
@@ -582,19 +606,20 @@ function handleShellConnection(ws) {
                             }
                         }
                     } else {
-                        // Use claude command (default)
+                        // Use claude command (default) with resolved path
+                        const claudePath = resolveClaudePath();
                         if (os.platform() === 'win32') {
                             if (hasSession && sessionId) {
                                 // Try to resume session, but with fallback to new session if it fails
-                                shellCommand = `Set-Location -Path "${projectPath}"; claude --resume ${sessionId}; if ($LASTEXITCODE -ne 0) { claude }`;
+                                shellCommand = `Set-Location -Path "${projectPath}"; "${claudePath}" --resume ${sessionId}; if ($LASTEXITCODE -ne 0) { "${claudePath}" }`;
                             } else {
-                                shellCommand = `Set-Location -Path "${projectPath}"; claude`;
+                                shellCommand = `Set-Location -Path "${projectPath}"; "${claudePath}"`;
                             }
                         } else {
                             if (hasSession && sessionId) {
-                                shellCommand = `cd "${projectPath}" && claude --resume ${sessionId} || claude`;
+                                shellCommand = `cd "${projectPath}" && "${claudePath}" --resume ${sessionId} || "${claudePath}"`;
                             } else {
-                                shellCommand = `cd "${projectPath}" && claude`;
+                                shellCommand = `cd "${projectPath}" && "${claudePath}"`;
                             }
                         }
                     }

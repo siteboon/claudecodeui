@@ -20,7 +20,13 @@
 
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useParams } from 'react-router-dom';
-import Sidebar from './components/Sidebar';
+import { AppSidebar } from '@/components/app-sidebar';
+import { Separator } from '@/components/ui/separator';
+import {
+  SidebarInset,
+  SidebarProvider,
+  SidebarTrigger,
+} from '@/components/ui/sidebar';
 import MainContent from './components/MainContent';
 import MobileNav from './components/MobileNav';
 import ToolsSettings from './components/ToolsSettings';
@@ -295,7 +301,23 @@ function AppContent() {
     }
   };
 
-  const handleSessionSelect = (session) => {
+  const handleSessionSelect = (project, session) => {
+    // Handle both new format (project, session) and old format (session only)
+    if (!session && project && project.id) {
+      // Old format - only session passed
+      session = project;
+      // Find the project that contains this session
+      const foundProject = projects.find(p => 
+        p.sessions?.some(s => s.id === session.id)
+      );
+      if (foundProject) {
+        project = foundProject;
+      } else {
+        project = selectedProject;
+      }
+    }
+    
+    setSelectedProject(project);
     setSelectedSession(session);
     // Only switch to chat tab when user explicitly selects a session
     // This prevents tab switching during automatic updates
@@ -468,8 +490,8 @@ function AppContent() {
           {/* Header */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
-                <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
                 </svg>
               </div>
@@ -494,9 +516,9 @@ function AppContent() {
               <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Current Version</span>
               <span className="text-sm text-gray-900 dark:text-white font-mono">{currentVersion}</span>
             </div>
-            <div className="flex justify-between items-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
-              <span className="text-sm font-medium text-blue-700 dark:text-blue-300">Latest Version</span>
-              <span className="text-sm text-blue-900 dark:text-blue-100 font-mono">{latestVersion}</span>
+            <div className="flex justify-between items-center p-3 bg-accent rounded-lg border border-accent-foreground/20">
+              <span className="text-sm font-medium text-accent-foreground">Latest Version</span>
+              <span className="text-sm text-accent-foreground font-mono">{latestVersion}</span>
             </div>
           </div>
 
@@ -527,7 +549,7 @@ function AppContent() {
                 navigator.clipboard.writeText('git checkout main && git pull && npm install');
                 setShowVersionModal(false);
               }}
-              className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
+              className="flex-1 px-4 py-2 text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 rounded-md transition-colors"
             >
               Copy Command
             </button>
@@ -538,111 +560,79 @@ function AppContent() {
   };
 
   return (
-    <div className="fixed inset-0 flex bg-background">
-      {/* Fixed Desktop Sidebar */}
-      {!isMobile && (
-        <div className="w-80 flex-shrink-0 border-r border-border bg-card">
-          <div className="h-full overflow-hidden">
-            <Sidebar
-              projects={projects}
-              selectedProject={selectedProject}
-              selectedSession={selectedSession}
-              onProjectSelect={handleProjectSelect}
-              onSessionSelect={handleSessionSelect}
-              onNewSession={handleNewSession}
-              onSessionDelete={handleSessionDelete}
-              onProjectDelete={handleProjectDelete}
-              isLoading={isLoadingProjects}
-              onRefresh={handleSidebarRefresh}
-              onShowSettings={() => setShowToolsSettings(true)}
-              updateAvailable={updateAvailable}
-              latestVersion={latestVersion}
-              currentVersion={currentVersion}
-              onShowVersionModal={() => setShowVersionModal(true)}
-            />
+    <SidebarProvider>
+      <AppSidebar 
+        projects={projects}
+        selectedProject={selectedProject}
+        selectedSession={selectedSession}
+        onProjectSelect={handleProjectSelect}
+        onSessionSelect={handleSessionSelect}
+        onNewSession={handleNewSession}
+        onSessionDelete={handleSessionDelete}
+        onProjectDelete={handleProjectDelete}
+        isLoading={isLoadingProjects}
+        onRefresh={handleSidebarRefresh}
+        onShowSettings={() => setShowToolsSettings(true)}
+        updateAvailable={updateAvailable}
+        latestVersion={latestVersion}
+        currentVersion={currentVersion}
+        onShowVersionModal={() => setShowVersionModal(true)}
+      />
+      <SidebarInset>
+        <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12">
+          <div className="flex items-center gap-2 px-4">
+            <SidebarTrigger className="-ml-1" />
+            <Separator orientation="vertical" className="mr-2 h-4" />
+            <div className="flex-1">
+              {selectedProject && (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">{selectedProject.displayName || selectedProject.name}</span>
+                  {selectedSession && (
+                    <>
+                      <span className="text-muted-foreground">/</span>
+                      <span className="text-sm text-muted-foreground">
+                        {selectedSession.summary || selectedSession.title || selectedSession.name || 'Untitled Session'}
+                      </span>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
-
-      {/* Mobile Sidebar Overlay */}
-      {isMobile && (
-        <div className={`fixed inset-0 z-50 flex transition-all duration-150 ease-out ${
-          sidebarOpen ? 'opacity-100 visible' : 'opacity-0 invisible'
-        }`}>
-          <div 
-            className="fixed inset-0 bg-background/80 backdrop-blur-sm transition-opacity duration-150 ease-out"
-            onClick={(e) => {
-              e.stopPropagation();
-              setSidebarOpen(false);
-            }}
-            onTouchStart={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setSidebarOpen(false);
-            }}
+        </header>
+        <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+          <MainContent
+            selectedProject={selectedProject}
+            selectedSession={selectedSession}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            ws={ws}
+            sendMessage={sendMessage}
+            messages={messages}
+            isMobile={isMobile}
+            onMenuClick={() => setSidebarOpen(true)}
+            isLoading={isLoadingProjects}
+            onInputFocusChange={setIsInputFocused}
+            onSessionActive={markSessionAsActive}
+            onSessionInactive={markSessionAsInactive}
+            onReplaceTemporarySession={replaceTemporarySession}
+            onNavigateToSession={(sessionId) => navigate(`/session/${sessionId}`)}
+            onShowSettings={() => setShowToolsSettings(true)}
+            autoExpandTools={autoExpandTools}
+            showRawParameters={showRawParameters}
+            autoScrollToBottom={autoScrollToBottom}
+            sendByCtrlEnter={sendByCtrlEnter}
           />
-          <div 
-            className={`relative w-[85vw] max-w-sm sm:w-80 bg-card border-r border-border h-full transform transition-transform duration-150 ease-out ${
-              sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-            }`}
-            onClick={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
-          >
-            <Sidebar
-              projects={projects}
-              selectedProject={selectedProject}
-              selectedSession={selectedSession}
-              onProjectSelect={handleProjectSelect}
-              onSessionSelect={handleSessionSelect}
-              onNewSession={handleNewSession}
-              onSessionDelete={handleSessionDelete}
-              onProjectDelete={handleProjectDelete}
-              isLoading={isLoadingProjects}
-              onRefresh={handleSidebarRefresh}
-              onShowSettings={() => setShowToolsSettings(true)}
-              updateAvailable={updateAvailable}
-              latestVersion={latestVersion}
-              currentVersion={currentVersion}
-              onShowVersionModal={() => setShowVersionModal(true)}
-            />
-          </div>
         </div>
-      )}
-
-      {/* Main Content Area - Flexible */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <MainContent
-          selectedProject={selectedProject}
-          selectedSession={selectedSession}
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          ws={ws}
-          sendMessage={sendMessage}
-          messages={messages}
-          isMobile={isMobile}
-          onMenuClick={() => setSidebarOpen(true)}
-          isLoading={isLoadingProjects}
-          onInputFocusChange={setIsInputFocused}
-          onSessionActive={markSessionAsActive}
-          onSessionInactive={markSessionAsInactive}
-          onReplaceTemporarySession={replaceTemporarySession}
-          onNavigateToSession={(sessionId) => navigate(`/session/${sessionId}`)}
-          onShowSettings={() => setShowToolsSettings(true)}
-          autoExpandTools={autoExpandTools}
-          showRawParameters={showRawParameters}
-          autoScrollToBottom={autoScrollToBottom}
-          sendByCtrlEnter={sendByCtrlEnter}
-        />
-      </div>
-
-      {/* Mobile Bottom Navigation */}
-      {isMobile && (
-        <MobileNav
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          isInputFocused={isInputFocused}
-        />
-      )}
+        {/* Mobile Bottom Navigation */}
+        {isMobile && (
+          <MobileNav
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            isInputFocused={isInputFocused}
+          />
+        )}
+      </SidebarInset>
       {/* Quick Settings Panel - Only show on chat tab */}
       {activeTab === 'chat' && (
         <QuickSettingsPanel
@@ -681,7 +671,7 @@ function AppContent() {
 
       {/* Version Upgrade Modal */}
       <VersionUpgradeModal />
-    </div>
+    </SidebarProvider>
   );
 }
 

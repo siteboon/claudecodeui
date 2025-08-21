@@ -1,0 +1,9 @@
+ignoredBuiltDependencies:
+  - bcrypt
+  - better-sqlite3
+  - esbuild
+  - sharp
+  - sqlite3
+
+onlyBuiltDependencies:
+  - node-pty
