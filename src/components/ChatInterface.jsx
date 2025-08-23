@@ -18,6 +18,7 @@
 
 import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
 import ReactMarkdown from 'react-markdown';
+import { getDirAttribute, shouldDisplayRTL } from '../utils/rtlDetection';
 import { useDropzone } from 'react-dropzone';
 import TodoList from './TodoList';
 import ClaudeLogo from './ClaudeLogo.jsx';
@@ -197,7 +198,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
         /* User message bubble on the right */
         <div className="flex items-end space-x-0 sm:space-x-3 w-full sm:w-auto sm:max-w-[85%] md:max-w-md lg:max-w-lg xl:max-w-xl">
           <div className="bg-blue-600 text-white rounded-2xl rounded-br-md px-3 sm:px-4 py-2 shadow-sm flex-1 sm:flex-initial">
-            <div className="text-sm whitespace-pre-wrap break-words">
+            <div className="text-sm whitespace-pre-wrap break-words" dir={getDirAttribute(message.content)}>
               {message.content}
             </div>
             {message.images && message.images.length > 0 && (
@@ -1063,7 +1064,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 )}
                 
                 {message.type === 'assistant' ? (
-                  <div className="prose prose-sm max-w-none dark:prose-invert prose-gray [&_code]:!bg-transparent [&_code]:!p-0 [&_pre]:!bg-transparent [&_pre]:!border-0 [&_pre]:!p-0">
+                  <div className="prose prose-sm max-w-none dark:prose-invert prose-gray [&_code]:!bg-transparent [&_code]:!p-0 [&_pre]:!bg-transparent [&_pre]:!border-0 [&_pre]:!p-0" dir={getDirAttribute(message.content)}>
                     <ReactMarkdown
                       components={{
                         code: ({node, inline, className, children, ...props}) => {
@@ -1073,7 +1074,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                             </strong>
                           ) : (
                             <div className="bg-gray-800 dark:bg-gray-800 border border-gray-600/30 dark:border-gray-600/30 p-3 rounded-lg overflow-hidden my-2">
-                              <code className="text-gray-100 dark:text-gray-200 text-sm font-mono block whitespace-pre-wrap break-words" {...props}>
+                              <code className="text-gray-100 dark:text-gray-200 text-sm font-mono block whitespace-pre-wrap break-words" dir="ltr" {...props}>
                                 {children}
                               </code>
                             </div>
@@ -1100,7 +1101,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     </ReactMarkdown>
                   </div>
                 ) : (
-                  <div className="whitespace-pre-wrap">
+                  <div className="whitespace-pre-wrap" dir={getDirAttribute(message.content)}>
                     {formatUsageLimitText(String(message.content || ''))}
                   </div>
                 )}
@@ -3342,6 +3343,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               placeholder="Ask Claude to help with your code... (@ to reference files)"
               disabled={isLoading}
               rows={1}
+              dir={getDirAttribute(input)}
               className="chat-input-placeholder w-full pl-12 pr-28 sm:pr-40 py-3 sm:py-4 bg-transparent rounded-2xl focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 resize-none min-h-[40px] sm:min-h-[56px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base transition-all duration-200"
               style={{ height: 'auto' }}
             />

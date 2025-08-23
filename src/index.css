@@ -736,4 +736,88 @@
     background-color: rgb(31 41 55) !important;
     color: rgb(243 244 246) !important;
   }
+
+  /* RTL (Right-to-Left) Text Support */
+  /* Ensure proper text alignment for RTL content */
+  [dir="rtl"] {
+    text-align: right;
+  }
+
+  [dir="ltr"] {
+    text-align: left;
+  }
+
+  /* RTL input field improvements */
+  textarea[dir="rtl"] {
+    text-align: right;
+    direction: rtl;
+  }
+
+  textarea[dir="ltr"] {
+    text-align: left;
+    direction: ltr;
+  }
+
+  /* RTL message content styling */
+  .chat-message [dir="rtl"] {
+    text-align: right;
+    direction: rtl;
+  }
+
+  .chat-message [dir="ltr"] {
+    text-align: left;
+    direction: ltr;
+  }
+
+  /* Ensure code blocks are always LTR regardless of surrounding text */
+  code[dir="ltr"],
+  pre[dir="ltr"],
+  .font-mono[dir="ltr"] {
+    text-align: left !important;
+    direction: ltr !important;
+  }
+
+  /* Mixed content handling - preserve inline code as LTR */
+  .prose [dir="rtl"] code:not([dir="ltr"]) {
+    direction: ltr;
+    unicode-bidi: embed;
+  }
+
+  /* RTL blockquote adjustments */
+  .prose [dir="rtl"] blockquote {
+    border-right: 4px solid;
+    border-left: none;
+    padding-right: 1rem;
+    padding-left: 0;
+  }
+
+  /* RTL list styling */
+  .prose [dir="rtl"] ul,
+  .prose [dir="rtl"] ol {
+    margin-right: 1.25rem;
+    margin-left: 0;
+  }
+
+  /* Ensure proper unicode-bidi handling for mixed content */
+  [dir="rtl"] {
+    unicode-bidi: isolate;
+  }
+
+  /* Handle punctuation and numbers in RTL text */
+  .rtl-text {
+    unicode-bidi: plaintext;
+    direction: rtl;
+    text-align: right;
+  }
+
+  .ltr-text {
+    unicode-bidi: plaintext;
+    direction: ltr;
+    text-align: left;
+  }
+
+  /* Improve RTL rendering in different browsers */
+  [dir="rtl"] * {
+    unicode-bidi: inherit;
+  }
 }
