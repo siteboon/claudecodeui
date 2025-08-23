@@ -6,6 +6,8 @@
 
 A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), and [Cursor CLI](https://docs.cursor.com/en/cli/overview). You can use it locally or remotely to view your active projects and sessions in Claude Code or Cursor and make changes to them from everywhere (mobile or desktop). This gives you a proper interface that works everywhere. Supports models including **Claude Sonnet 4**, **Opus 4.1**, and **GPT-5**
 
+Available as both a **web application** and a **native desktop app** with Electron.
+
 ## Screenshots
 
 <div align="center">
@@ -41,6 +43,7 @@ A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/cla
 
 ## Features
 
+- **Native Desktop App** - Electron-based desktop application with auto-start and system integration
 - **Responsive Design** - Works seamlessly across desktop, tablet, and mobile so you can also use Claude Code from mobile 
 - **Interactive Chat Interface** - Built-in chat interface for seamless communication with Claude Code or Cursor
 - **Integrated Shell Terminal** - Direct access to Claude Code or Cursor CLI through built-in shell functionality
@@ -78,15 +81,26 @@ cp .env.example .env
 ```
 
 4. **Start the application:**
+
+**Web Application:**
 ```bash
 # Development mode (with hot reload)
 npm run dev
-
 ```
 The application will start at the port you specified in your .env
 
-5. **Open your browser:**
-   - Development: `http://localhost:3001`
+**Desktop Application:**
+```bash
+# Native desktop app (production build)
+npm run app
+
+# Desktop app in development mode
+npm run electron:dev
+```
+
+5. **Access the interface:**
+   - **Web**: Open your browser to `http://localhost:3001` (or your configured port)
+   - **Desktop**: The Electron app will launch automatically
 
 ## Security & Tools Configuration
 
@@ -108,6 +122,31 @@ To use Claude Code's full functionality, you'll need to manually enable tools:
 </div>
 
 **Recommended approach**: Start with basic tools enabled and add more as needed. You can always adjust these settings later.
+
+## Desktop App Configuration
+
+### Native Desktop Features
+
+The Electron desktop app provides additional functionality beyond the web version:
+
+- **Auto-Start at Login** - Configure the app to launch automatically when your computer starts
+- **Native Window Controls** - Standard minimize, maximize, and close buttons with proper title bar
+- **System Integration** - Dock icon on macOS, taskbar on Windows/Linux
+- **Single Instance** - Prevents multiple app instances from running simultaneously
+- **Keyboard Shortcuts** - Standard system shortcuts (Cmd+Q, Cmd+H, etc.)
+
+### Desktop App Settings
+
+**Port Configuration:**
+The desktop app runs on port 7777 by default. To change this, update your `.env` file:
+```bash
+PORT=7777
+VITE_PORT=7777
+```
+
+**Auto-Start Configuration:**
+- **macOS**: Use the "Start at Login" option in the application menu
+- **Windows/Linux**: Configure through your system's startup applications settings
 
 ## Usage Guide
 
@@ -153,11 +192,20 @@ The UI automatically discovers Claude Code projects from `~/.claude/projects/` a
 
 ### System Overview
 
+**Web Application:**
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   Frontend      │    │   Backend       │    │  Claude CLI     │
 │   (React/Vite)  │◄──►│ (Express/WS)    │◄──►│  Integration    │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
+```
+
+**Desktop Application:**
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│  Electron Main  │    │   Frontend      │    │   Backend       │    │  Claude CLI     │
+│    Process      │◄──►│   (React/Vite)  │◄──►│ (Express/WS)    │◄──►│  Integration    │
+└─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 
 ### Backend (Node.js + Express)
@@ -170,6 +218,12 @@ The UI automatically discovers Claude Code projects from `~/.claude/projects/` a
 ### Frontend (React + Vite)
 - **React 18** - Modern component architecture with hooks
 - **CodeMirror** - Advanced code editor with syntax highlighting
+
+### Desktop App (Electron)
+- **Native Window Management** - System-integrated window controls and behavior
+- **Process Management** - Spawns and manages the Node.js server process
+- **Auto-Start Integration** - System login integration for automatic startup
+- **Security Configuration** - Sandboxed renderer with disabled node integration
 
 
 
