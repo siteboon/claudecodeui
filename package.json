@@ -6,8 +6,11 @@
   "main": "server/index.js",
   "scripts": {
     "dev": "concurrently --kill-others \"npm run server\" \"npm run client\"",
+    "prod": "concurrently --kill-others \"npm run server:prod\" \"npm run client:prod\"",
     "server": "node server/index.js",
+    "server:prod": "NODE_ENV=production node server/index.js",
     "client": "vite --host",
+    "client:prod": "vite build && vite preview --host --port 5173",
     "build": "vite build",
     "preview": "vite preview",
     "start": "npm run build && npm run server"
