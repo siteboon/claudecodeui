@@ -3,7 +3,8 @@
   "version": "1.7.0",
   "description": "A web-based UI for Claude Code CLI",
   "type": "module",
-  "main": "server/index.js",
+  "main": "electron.js",
+  "homepage": "./",
   "scripts": {
     "dev": "concurrently --kill-others \"npm run server\" \"npm run client\"",
     "prod": "concurrently --kill-others \"npm run server:prod\" \"npm run client:prod\"",
@@ -12,8 +13,13 @@
     "client": "vite --host",
     "client:prod": "vite build && vite preview --host --port 5173",
     "build": "vite build",
+    "build:electron": "npm run build",
     "preview": "vite preview",
-    "start": "npm run build && npm run server"
+    "start": "npm run build && npm run server",
+    "electron": "electron .",
+    "electron:dev": "NODE_ENV=development electron .",
+    "electron:prod": "NODE_ENV=production npm run build && electron .",
+    "app": "npm run electron:prod"
   },
   "keywords": [
     "claude",
@@ -68,6 +74,7 @@
     "@vitejs/plugin-react": "^4.6.0",
     "autoprefixer": "^10.4.16",
     "concurrently": "^8.2.2",
+    "electron": "^37.3.1",
     "node-gyp": "^10.0.0",
     "postcss": "^8.4.32",
     "sharp": "^0.34.2",
