@@ -78,6 +78,25 @@ SQLite database (`store.db`) includes:
 
 Initialize with `npm run server` on first start.
 
+## System Service Setup
+
+The application is configured to run as a systemd service for automatic startup:
+
+```bash
+# Service management commands
+sudo systemctl status claudecodeui    # Check status
+sudo systemctl start claudecodeui     # Start service
+sudo systemctl stop claudecodeui      # Stop service
+sudo systemctl restart claudecodeui   # Restart service
+sudo systemctl disable claudecodeui   # Disable startup
+```
+
+**Service Configuration**: Located at `/etc/systemd/system/claudecodeui.service`
+- Runs as user `jay` in `/home/jay/claudecodeui`
+- Automatically restarts on failure
+- Uses full Node.js path from nvm: `/home/jay/.nvm/versions/node/v22.9.0/bin/npm`
+- Accessible at http://localhost:5173/ (frontend) and http://localhost:3001/ (backend)
+
 ## Security Notes
 
 - All Claude Code tools are disabled by default in the UI
