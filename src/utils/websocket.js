@@ -21,11 +21,29 @@ export function useWebSocket() {
 
   const connect = async () => {
     try {
+      // Check if authentication is disabled by checking auth status
+      let authDisabled = false;
+      let token = localStorage.getItem('auth-token');
+      
+      try {
+        const statusResponse = await fetch('/api/auth/status');
+        if (statusResponse.ok) {
+          const statusData = await statusResponse.json();
+          authDisabled = statusData.authDisabled;
+        }
+      } catch (error) {
+        console.warn('Could not check auth status:', error);
+      }
+      
       // Get authentication token
-      const token = localStorage.getItem('auth-token');
-      if (!token) {
+      if (!authDisabled && !token) {
         console.warn('No authentication token found for WebSocket connection');
         return;
+      }
+      
+      // Use dummy token if authentication is disabled
+      if (authDisabled && !token) {
+        token = 'auth-disabled-token';
       }
       
       // Fetch server configuration to get the correct WebSocket URL

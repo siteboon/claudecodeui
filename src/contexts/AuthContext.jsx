@@ -9,6 +9,7 @@ const AuthContext = createContext({
   logout: () => {},
   isLoading: true,
   needsSetup: false,
+  authDisabled: false,
   error: null
 });
 
@@ -25,6 +26,7 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(localStorage.getItem('auth-token'));
   const [isLoading, setIsLoading] = useState(true);
   const [needsSetup, setNeedsSetup] = useState(false);
+  const [authDisabled, setAuthDisabled] = useState(false);
   const [error, setError] = useState(null);
 
   // Check authentication status on mount
@@ -40,6 +42,17 @@ export const AuthProvider = ({ children }) => {
       // Check if system needs setup
       const statusResponse = await api.auth.status();
       const statusData = await statusResponse.json();
+      
+      // Handle authentication disabled mode
+      if (statusData.authDisabled) {
+        setAuthDisabled(true);
+        setUser({ id: 1, username: 'admin' });
+        setNeedsSetup(false);
+        // Create a dummy token for frontend compatibility
+        setToken('auth-disabled-token');
+        setIsLoading(false);
+        return;
+      }
       
       if (statusData.needsSetup) {
         setNeedsSetup(true);
@@ -147,6 +160,7 @@ export const AuthProvider = ({ children }) => {
     logout,
     isLoading,
     needsSetup,
+    authDisabled,
     error
   };
 

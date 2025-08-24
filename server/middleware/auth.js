@@ -4,6 +4,11 @@ import { userDb } from '../database/db.js';
 // Get JWT secret from environment or use default (for development)
 const JWT_SECRET = process.env.JWT_SECRET || 'claude-ui-dev-secret-change-in-production';
 
+// Check if authentication is disabled
+const isAuthDisabled = () => {
+  return process.env.AUTH_DISABLED === 'true';
+};
+
 // Optional API key middleware
 const validateApiKey = (req, res, next) => {
   // Skip API key validation if not configured
@@ -20,6 +25,16 @@ const validateApiKey = (req, res, next) => {
 
 // JWT authentication middleware
 const authenticateToken = async (req, res, next) => {
+  // Skip authentication if AUTH_DISABLED is true
+  if (isAuthDisabled()) {
+    // Create a mock user object for compatibility
+    req.user = {
+      id: 1,
+      username: 'admin'
+    };
+    return next();
+  }
+
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
@@ -58,6 +73,15 @@ const generateToken = (user) => {
 
 // WebSocket authentication function
 const authenticateWebSocket = (token) => {
+  // Skip authentication if AUTH_DISABLED is true
+  if (isAuthDisabled()) {
+    // Return a mock user object for compatibility
+    return {
+      userId: 1,
+      username: 'admin'
+    };
+  }
+
   if (!token) {
     return null;
   }
@@ -76,5 +100,6 @@ export {
   authenticateToken,
   generateToken,
   authenticateWebSocket,
+  isAuthDisabled,
   JWT_SECRET
 };
