@@ -12,6 +12,11 @@ on:
 
 jobs:
   claude-review:
+    # Skip review for certain conditions
+    if: |
+      !contains(github.event.pull_request.title, '[skip-review]') &&
+      !contains(github.event.pull_request.title, '[WIP]')
+
     # Optional: Filter by PR author
     # if: |
     #   github.event.pull_request.user.login == 'external-contributor' ||
@@ -42,17 +47,19 @@ jobs:
 
           # Direct prompt for automated review (no @claude mention needed)
           direct_prompt: |
-            Please review this pull request and provide feedback on:
-            - Code quality and best practices
-            - Potential bugs or issues
-            - Performance considerations
-            - Security concerns
-            - Test coverage
-            
-            Be constructive and helpful in your feedback.
+            이 풀 리퀘스트를 리뷰하고 다음 항목들에 대해 한국어로 피드백을 제공해주세요:
+            - 코드 품질 및 모범 사례
+            - 잠재적 버그나 문제점
+            - 성능 고려사항
+            - 보안 관련 우려사항
+            - 테스트 커버리지
+
+            건설적이고 도움이 되는 피드백을 제공해주세요.
+
+            hook이 실패시 실패 메시지를 출력하고 코드 리뷰를 종료합니다.
 
           # Optional: Use sticky comments to make Claude reuse the same comment on subsequent pushes to the same PR
-          # use_sticky_comment: true
+          use_sticky_comment: true
           
           # Optional: Customize review based on file types
           # direct_prompt: |
@@ -70,9 +77,5 @@ jobs:
           
           # Optional: Add specific tools for running tests or linting
           # allowed_tools: "Bash(npm run test),Bash(npm run lint),Bash(npm run typecheck)"
-          
-          # Optional: Skip review for certain conditions
-          # if: |
-          #   !contains(github.event.pull_request.title, '[skip-review]') &&
-          #   !contains(github.event.pull_request.title, '[WIP]')
+
 
