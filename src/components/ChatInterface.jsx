@@ -1056,8 +1056,10 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                   <div className="prose prose-sm max-w-none dark:prose-invert prose-gray [&_code]:!bg-transparent [&_code]:!p-0 [&_pre]:!bg-transparent [&_pre]:!border-0 [&_pre]:!p-0">
                     <ReactMarkdown
                       components={{
-                        code: ({node, inline, className, children, ...props}) => {
-                          return inline ? (
+                        code: ({node, className, children, ...props}) => {
+                          // Detect inline code: no className or doesn't start with 'language-'
+                          const isInline = !className || !className.startsWith('language-');
+                          return isInline ? (
                             <strong className="text-blue-600 dark:text-blue-400 font-bold not-prose" {...props}>
                               {children}
                             </strong>
