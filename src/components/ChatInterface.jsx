@@ -618,29 +618,19 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 
                 {/* Tool Result Section */}
                 {message.toolResult && (
-                  <div className="mt-3 border-t border-blue-200 dark:border-blue-700 pt-3">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className={`w-4 h-4 rounded flex items-center justify-center ${
-                        message.toolResult.isError 
-                          ? 'bg-red-500' 
-                          : 'bg-green-500'
-                      }`}>
-                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          {message.toolResult.isError ? (
+                  <div className={`mt-3 ${message.toolResult.isError ? 'border-t border-blue-200 dark:border-blue-700 pt-3' : ''}`}>
+                    {message.toolResult.isError && (
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-4 h-4 rounded flex items-center justify-center bg-red-500">
+                          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          ) : (
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          )}
-                        </svg>
+                          </svg>
+                        </div>
+                        <span className="text-sm font-medium text-red-700 dark:text-red-300">
+                          Tool Error
+                        </span>
                       </div>
-                      <span className={`text-sm font-medium ${
-                        message.toolResult.isError 
-                          ? 'text-red-700 dark:text-red-300' 
-                          : 'text-green-700 dark:text-green-300'
-                      }`}>
-                        {message.toolResult.isError ? 'Tool Error' : 'Tool Result'}
-                      </span>
-                    </div>
+                    )}
                     
                     <div className={`text-sm ${
                       message.toolResult.isError 
