@@ -154,7 +154,7 @@ const safeLocalStorage = {
 };
 
 // Memoized message component to prevent unnecessary re-renders
-const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFileOpen, onShowSettings, autoExpandTools, showRawParameters }) => {
+const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFileOpen, onShowSettings, autoExpandTools, showRawParameters, showAvatars }) => {
   const isGrouped = prevMessage && prevMessage.type === message.type && 
                    prevMessage.type === 'assistant' && 
                    !prevMessage.isToolUse && !message.isToolUse;
@@ -217,7 +217,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
               {new Date(message.timestamp).toLocaleTimeString()}
             </div>
           </div>
-          {!isGrouped && (
+          {!isGrouped && showAvatars && (
             <div className="hidden sm:flex w-8 h-8 bg-blue-600 rounded-full items-center justify-center text-white text-sm flex-shrink-0">
               U
             </div>
@@ -226,7 +226,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
       ) : (
         /* Claude/Error/Tool messages on the left */
         <div className="w-full">
-          {!isGrouped && (
+          {!isGrouped && showAvatars && (
             <div className="flex items-center space-x-3 mb-2">
               {message.type === 'error' ? (
                 <div className="w-8 h-8 bg-red-600 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0">
@@ -1191,6 +1191,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [attachedImages, setAttachedImages] = useState([]);
   const [uploadingImages, setUploadingImages] = useState(new Map());
   const [imageErrors, setImageErrors] = useState(new Map());
+  const [showAvatars, setShowAvatars] = useState(false);
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const scrollContainerRef = useRef(null);
@@ -3154,6 +3155,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   onShowSettings={onShowSettings}
                   autoExpandTools={autoExpandTools}
                   showRawParameters={showRawParameters}
+                  showAvatars={showAvatars}
                 />
               );
             })}
@@ -3163,17 +3165,19 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         {isLoading && (
           <div className="chat-message assistant">
             <div className="w-full">
-              <div className="flex items-center space-x-3 mb-2">
-                <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0 p-1 bg-transparent">
-                  {(localStorage.getItem('selected-provider') || 'claude') === 'cursor' ? (
-                    <CursorLogo className="w-full h-full" />
-                  ) : (
-                    <ClaudeLogo className="w-full h-full" />
-                  )}
+              {showAvatars && (
+                <div className="flex items-center space-x-3 mb-2">
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0 p-1 bg-transparent">
+                    {(localStorage.getItem('selected-provider') || 'claude') === 'cursor' ? (
+                      <CursorLogo className="w-full h-full" />
+                    ) : (
+                      <ClaudeLogo className="w-full h-full" />
+                    )}
+                  </div>
+                  <div className="text-sm font-medium text-gray-900 dark:text-white">{(localStorage.getItem('selected-provider') || 'claude') === 'cursor' ? 'Cursor' : 'Claude'}</div>
+                  {/* Abort button removed - functionality not yet implemented at backend */}
                 </div>
-                <div className="text-sm font-medium text-gray-900 dark:text-white">{(localStorage.getItem('selected-provider') || 'claude') === 'cursor' ? 'Cursor' : 'Claude'}</div>
-                {/* Abort button removed - functionality not yet implemented at backend */}
-              </div>
+              )}
               <div className="w-full text-sm text-gray-500 dark:text-gray-400 pl-3 sm:pl-0">
                 <div className="flex items-center space-x-1">
                   <div className="animate-pulse">●</div>
