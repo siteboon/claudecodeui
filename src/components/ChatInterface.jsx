@@ -291,7 +291,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     const input = JSON.parse(message.toolInput);
                     if (input.file_path && input.old_string && input.new_string) {
                       return (
-                        <details className="mt-2" open={autoExpandTools}>
+                        <details className={`mt-2 ${autoExpandTools ? 'auto-expand-hide-summary' : ''}`} open={autoExpandTools}>
                           <summary className="text-sm text-blue-700 dark:text-blue-300 cursor-pointer hover:text-blue-800 dark:hover:text-blue-200 flex items-center gap-2">
                             <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -349,7 +349,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                               </div>
                             </div>
                             {showRawParameters && (
-                              <details className="mt-2" open={autoExpandTools}>
+                              <details className={`mt-2 ${autoExpandTools ? 'auto-expand-hide-summary' : ''}`} open={autoExpandTools}>
                                 <summary className="text-xs text-blue-600 dark:text-blue-400 cursor-pointer hover:text-blue-700 dark:hover:text-blue-300">
                                   View raw parameters
                                 </summary>
@@ -366,7 +366,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     // Fall back to raw display if parsing fails
                   }
                   return (
-                    <details className="mt-2" open={autoExpandTools}>
+                    <details className={`mt-2 ${autoExpandTools ? 'auto-expand-hide-summary' : ''}`} open={autoExpandTools}>
                       <summary className="text-sm text-blue-700 dark:text-blue-300 cursor-pointer hover:text-blue-800 dark:hover:text-blue-200">
                         View input parameters
                       </summary>
@@ -393,7 +393,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                       
                       if (input.file_path && input.content !== undefined) {
                         return (
-                          <details className="mt-2" open={autoExpandTools}>
+                          <details className={`mt-2 ${autoExpandTools ? 'auto-expand-hide-summary' : ''}`} open={autoExpandTools}>
                             <summary className="text-sm text-blue-700 dark:text-blue-300 cursor-pointer hover:text-blue-800 dark:hover:text-blue-200 flex items-center gap-2">
                               <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -451,7 +451,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                                 </div>
                               </div>
                               {showRawParameters && (
-                                <details className="mt-2" open={autoExpandTools}>
+                                <details className={`mt-2 ${autoExpandTools ? 'auto-expand-hide-summary' : ''}`} open={autoExpandTools}>
                                   <summary className="text-xs text-blue-600 dark:text-blue-400 cursor-pointer hover:text-blue-700 dark:hover:text-blue-300">
                                     View raw parameters
                                   </summary>
@@ -475,7 +475,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                       const input = JSON.parse(message.toolInput);
                       if (input.todos && Array.isArray(input.todos)) {
                         return (
-                          <details className="mt-2" open={autoExpandTools}>
+                          <details className={`mt-2 ${autoExpandTools ? 'auto-expand-hide-summary' : ''}`} open={autoExpandTools}>
                             <summary className="text-sm text-blue-700 dark:text-blue-300 cursor-pointer hover:text-blue-800 dark:hover:text-blue-200 flex items-center gap-2">
                               <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -485,7 +485,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                             <div className="mt-3">
                               <TodoList todos={input.todos} />
                               {showRawParameters && (
-                                <details className="mt-3" open={autoExpandTools}>
+                                <details className={`mt-3 ${autoExpandTools ? 'auto-expand-hide-summary' : ''}`} open={autoExpandTools}>
                                   <summary className="text-xs text-blue-600 dark:text-blue-400 cursor-pointer hover:text-blue-700 dark:hover:text-blue-300">
                                     View raw parameters
                                   </summary>
@@ -508,7 +508,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     try {
                       const input = JSON.parse(message.toolInput);
                       return (
-                        <details className="mt-2" open={autoExpandTools}>
+                        <details className={`mt-2 ${autoExpandTools ? 'auto-expand-hide-summary' : ''}`} open={autoExpandTools}>
                           <summary className="text-sm text-blue-700 dark:text-blue-300 cursor-pointer hover:text-blue-800 dark:hover:text-blue-200 flex items-center gap-2">
                             <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -582,7 +582,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                         // Replace escaped newlines with actual newlines
                         const planContent = input.plan.replace(/\\n/g, '\n');
                         return (
-                          <details className="mt-2" open={autoExpandTools}>
+                          <details className={`mt-2 ${autoExpandTools ? 'auto-expand-hide-summary' : ''}`} open={autoExpandTools}>
                             <summary className="text-sm text-blue-700 dark:text-blue-300 cursor-pointer hover:text-blue-800 dark:hover:text-blue-200 flex items-center gap-2">
                               <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -602,7 +602,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                   
                   // Regular tool input display for other tools
                   return (
-                    <details className="mt-2" open={autoExpandTools}>
+                    <details className={`mt-2 ${autoExpandTools ? 'auto-expand-hide-summary' : ''}`} open={autoExpandTools}>
                       <summary className="text-sm text-blue-700 dark:text-blue-300 cursor-pointer hover:text-blue-800 dark:hover:text-blue-200 flex items-center gap-2">
                         <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -856,7 +856,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                         
                         if (content.includes('cat -n') && content.includes('→')) {
                           return (
-                            <details open={autoExpandTools}>
+                            <details className={`${autoExpandTools ? 'auto-expand-hide-summary' : ''}`} open={autoExpandTools}>
                               <summary className="text-sm text-green-700 dark:text-green-300 cursor-pointer hover:text-green-800 dark:hover:text-green-200 mb-2 flex items-center gap-2">
                                 <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -874,7 +874,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                         
                         if (content.length > 300) {
                           return (
-                            <details open={autoExpandTools}>
+                            <details className={`${autoExpandTools ? 'auto-expand-hide-summary' : ''}`} open={autoExpandTools}>
                               <summary className="text-sm text-green-700 dark:text-green-300 cursor-pointer hover:text-green-800 dark:hover:text-green-200 mb-2 flex items-center gap-2">
                                 <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -2963,6 +2963,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         {`
           details[open] .details-chevron {
             transform: rotate(180deg);
+          }
+          
+          .auto-expand-hide-summary > summary {
+            display: none;
           }
         `}
       </style>
