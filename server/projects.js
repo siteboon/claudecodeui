@@ -65,6 +65,7 @@ import crypto from 'crypto';
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 import os from 'os';
+import { getProjectsPath } from './utils/paths.js';
 
 // Cache for extracted project directories
 const projectDirectoryCache = new Map();
@@ -140,7 +141,7 @@ async function extractProjectDirectory(projectName) {
   }
   
   
-  const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
+  const projectDir = path.join(getProjectsPath(), projectName);
   const cwdCounts = new Map();
   let latestTimestamp = 0;
   let latestCwd = null;
@@ -244,7 +245,7 @@ async function extractProjectDirectory(projectName) {
 }
 
 async function getProjects() {
-  const claudeDir = path.join(process.env.HOME, '.claude', 'projects');
+  const claudeDir = getProjectsPath();
   const config = await loadProjectConfig();
   const projects = [];
   const existingProjects = new Set();
@@ -349,7 +350,7 @@ async function getProjects() {
 }
 
 async function getSessions(projectName, limit = 5, offset = 0) {
-  const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
+  const projectDir = path.join(getProjectsPath(), projectName);
   
   try {
     const files = await fs.readdir(projectDir);
@@ -489,7 +490,7 @@ async function parseJsonlSessions(filePath) {
 
 // Get messages for a specific session with pagination support
 async function getSessionMessages(projectName, sessionId, limit = null, offset = 0) {
-  const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
+  const projectDir = path.join(getProjectsPath(), projectName);
   
   try {
     const files = await fs.readdir(projectDir);
@@ -576,7 +577,7 @@ async function renameProject(projectName, newDisplayName) {
 
 // Delete a session from a project
 async function deleteSession(projectName, sessionId) {
-  const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
+  const projectDir = path.join(getProjectsPath(), projectName);
   
   try {
     const files = await fs.readdir(projectDir);
@@ -639,7 +640,7 @@ async function isProjectEmpty(projectName) {
 
 // Delete an empty project
 async function deleteProject(projectName) {
-  const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
+  const projectDir = path.join(getProjectsPath(), projectName);
   
   try {
     // First check if the project is empty
@@ -679,7 +680,7 @@ async function addProjectManually(projectPath, displayName = null) {
   
   // Check if project already exists in config or as a folder
   const config = await loadProjectConfig();
-  const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
+  const projectDir = path.join(getProjectsPath(), projectName);
   
   try {
     await fs.access(projectDir);

@@ -20,7 +20,7 @@ try {
         }
     });
 } catch (e) {
-    console.log('No .env file found or error reading it:', e.message);
+    console.log('.env file not found or could not be read - using environment variables');
 }
 
 console.log('PORT from env:', process.env.PORT);
@@ -30,6 +30,7 @@ import { WebSocketServer } from 'ws';
 import http from 'http';
 import cors from 'cors';
 import { promises as fsPromises } from 'fs';
+import fs from 'fs';
 import { spawn } from 'child_process';
 import os from 'os';
 import pty from 'node-pty';
@@ -43,17 +44,100 @@ import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
 import mcpRoutes from './routes/mcp.js';
 import cursorRoutes from './routes/cursor.js';
-import { initializeDatabase } from './database/db.js';
+import { initializeDatabase, userDb } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
+import { getProjectsPath, getClaudeDir } from './utils/paths.js';
+import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 
 // File system watcher for projects folder
 let projectsWatcher = null;
 const connectedClients = new Set();
 
+
+// Create initial user if none exists
+async function createInitialUser() {
+    try {
+        const hasUsers = userDb.hasUsers();
+        
+        if (!hasUsers) {
+            const defaultUsername = process.env.DEFAULT_USERNAME;
+            const defaultPassword = process.env.DEFAULT_PASSWORD;
+            
+            // Generate random password if not provided
+            const randomPassword = crypto.randomBytes(12).toString('base64').slice(0, 16);
+            const actualPassword = defaultPassword || randomPassword;
+            
+            if (!defaultUsername) {
+                console.log('⚠️  No DEFAULT_USERNAME set, skipping initial user creation');
+                console.log('   Set DEFAULT_USERNAME and DEFAULT_PASSWORD in .env file to enable');
+                return;
+            }
+            
+            console.log(`🔧 Creating initial user: ${defaultUsername}`);
+            
+            const hashedPassword = await bcrypt.hash(actualPassword, 10);
+            const user = userDb.createUser(defaultUsername, hashedPassword);
+            
+            console.log(`✅ Initial user created: ${user.username}`);
+            
+            if (!defaultPassword) {
+                // Write password to secure file instead of console
+                try {
+                    const passwordFilePath = path.join(getClaudeDir(), '.initial_password');
+                    await fsPromises.writeFile(passwordFilePath, `Initial admin password: ${actualPassword}\nGenerated at: ${new Date().toISOString()}\n\nIMPORTANT: Delete this file after changing the password!`);
+                    console.log(`🔑 Random password generated and saved to: ${passwordFilePath}`);
+                    console.log(`⚠️  SECURITY: Please change password immediately after first login!`);
+                } catch (error) {
+                    console.error('❌ Could not save password to file. Please set DEFAULT_PASSWORD in .env');
+                    throw error;
+                }
+            } else {
+                console.log(`🔑 Using configured password from .env file`);
+                console.log(`⚠️  WARNING: Please change the default password after first login!`);
+            }
+        } else {
+            console.log('👤 Users already exist, skipping initial user creation');
+        }
+    } catch (error) {
+        console.error('❌ Error creating initial user:', error.message);
+    }
+}
+
+// Create necessary directories
+async function createDirectories() {
+    try {
+        if (process.env.AUTO_CREATE_DIRS === 'true') {
+            const claudeDir = getClaudeDir();
+            const projectsDir = getProjectsPath();
+            
+            try {
+                await fsPromises.access(claudeDir);
+            } catch (error) {
+                if (error.code === 'ENOENT') {
+                    await fsPromises.mkdir(claudeDir, { recursive: true });
+                    console.log(`📁 Created Claude directory: ${claudeDir}`);
+                }
+            }
+            
+            try {
+                await fsPromises.access(projectsDir);
+            } catch (error) {
+                if (error.code === 'ENOENT') {
+                    await fsPromises.mkdir(projectsDir, { recursive: true });
+                    console.log(`📁 Created projects directory: ${projectsDir}`);
+                }
+            }
+        }
+    } catch (error) {
+        console.error('❌ Error creating directories:', error.message);
+    }
+}
+
 // Setup file system watcher for Claude projects folder using chokidar
 async function setupProjectsWatcher() {
     const chokidar = (await import('chokidar')).default;
-    const claudeProjectsPath = path.join(process.env.HOME, '.claude', 'projects');
+    const claudeProjectsPath = getProjectsPath();
 
     if (projectsWatcher) {
         projectsWatcher.close();
@@ -184,6 +268,15 @@ app.use('/api/cursor', authenticateToken, cursorRoutes);
 app.use(express.static(path.join(__dirname, '../dist')));
 
 // API Routes (protected)
+// Health check endpoint for Docker and monitoring
+app.get('/health', (req, res) => {
+    res.status(200).json({ 
+        status: 'healthy', 
+        timestamp: new Date().toISOString(),
+        version: process.env.npm_package_version || '1.0.0'
+    });
+});
+
 app.get('/api/config', authenticateToken, (req, res) => {
     const host = req.headers.host || `${req.hostname}:${PORT}`;
     const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'wss' : 'ws';
@@ -304,8 +397,17 @@ app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) =
         if (!filePath || !path.isAbsolute(filePath)) {
             return res.status(400).json({ error: 'Invalid file path' });
         }
+        
+        // Additional security: normalize and validate path
+        const normalizedPath = path.normalize(filePath);
+        const resolvedPath = path.resolve(normalizedPath);
+        
+        // Prevent directory traversal attacks
+        if (normalizedPath !== resolvedPath || normalizedPath.includes('..')) {
+            return res.status(403).json({ error: 'Access denied: Invalid path' });
+        }
 
-        const content = await fsPromises.readFile(filePath, 'utf8');
+        const content = await fsPromises.readFile(resolvedPath, 'utf8');
         res.json({ content, path: filePath });
     } catch (error) {
         console.error('Error reading file:', error);
@@ -334,10 +436,19 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
         if (!filePath || !path.isAbsolute(filePath)) {
             return res.status(400).json({ error: 'Invalid file path' });
         }
+        
+        // Additional security: normalize and validate path
+        const normalizedPath = path.normalize(filePath);
+        const resolvedPath = path.resolve(normalizedPath);
+        
+        // Prevent directory traversal attacks
+        if (normalizedPath !== resolvedPath || normalizedPath.includes('..')) {
+            return res.status(403).json({ error: 'Access denied: Invalid path' });
+        }
 
         // Check if file exists
         try {
-            await fsPromises.access(filePath);
+            await fsPromises.access(resolvedPath);
         } catch (error) {
             return res.status(404).json({ error: 'File not found' });
         }
@@ -1061,7 +1172,13 @@ async function startServer() {
     try {
         // Initialize authentication database
         await initializeDatabase();
-        console.log('✅ Database initialization skipped (testing)');
+        console.log('✅ Database initialized successfully');
+        
+        // Create necessary directories
+        await createDirectories();
+        
+        // Create initial user if none exists
+        await createInitialUser();
 
         server.listen(PORT, '0.0.0.0', async () => {
             console.log(`Claude Code UI server running on http://0.0.0.0:${PORT}`);
