@@ -1,1 +1,8 @@
+# API routes
+/api/*    /api/:splat    200
+
+# WebSocket routes
+/ws    /ws    200
+
+# SPA routing
 /*    /index.html   200

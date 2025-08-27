@@ -10,8 +10,10 @@
     "client": "vite --host",
     "build": "vite build",
     "build:pages": "vite build --mode production",
+    "build:functions": "npm run build:pages && cp -r functions dist/",
     "preview": "vite preview",
-    "start": "npm run build && npm run server"
+    "start": "npm run build && npm run server",
+    "deploy:pages": "npm run build:functions && wrangler pages deploy dist"
   },
   "keywords": [
     "claude",
