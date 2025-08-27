@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { config } from '../config/api.js';
 
 export function useWebSocket() {
   const [ws, setWs] = useState(null);
@@ -7,6 +8,12 @@ export function useWebSocket() {
   const reconnectTimeoutRef = useRef(null);
 
   useEffect(() => {
+    // Don't connect WebSocket on Cloudflare Pages demo
+    if (config.isCloudflarePages && config.isProduction) {
+      console.log('Running on Cloudflare Pages - WebSocket disabled for demo');
+      return;
+    }
+    
     connect();
     
     return () => {

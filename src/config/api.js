@@ -43,3 +43,29 @@ export const getWsUrl = (endpoint) => {
   }
   return `${WS_BASE_URL}${endpoint}`;
 };
+
+// Mock API responses for Cloudflare Pages demo
+export const mockApiResponses = {
+  projects: () => Promise.resolve({
+    ok: true,
+    json: () => Promise.resolve([
+      { name: 'demo-project', displayName: 'Demo Project', path: '/demo', lastModified: new Date().toISOString() }
+    ])
+  }),
+  
+  sessions: () => Promise.resolve({
+    ok: true,
+    json: () => Promise.resolve([
+      { id: 'demo-session', name: 'Demo Session', lastModified: new Date().toISOString() }
+    ])
+  }),
+  
+  config: () => Promise.resolve({
+    ok: true,
+    json: () => Promise.resolve({
+      claudeApiKey: 'demo-key',
+      cursorApiKey: 'demo-key',
+      autoExpandTools: false
+    })
+  })
+};

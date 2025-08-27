@@ -1,5 +1,32 @@
+import { config, mockApiResponses } from '../config/api.js';
+
 // Utility function for authenticated API calls
 export const authenticatedFetch = (url, options = {}) => {
+  // If running on Cloudflare Pages without backend, return mock responses
+  if (config.isCloudflarePages && config.isProduction) {
+    console.log('Running on Cloudflare Pages - using mock API responses');
+    
+    // Return mock responses for demo purposes
+    if (url.includes('/api/projects')) {
+      return mockApiResponses.projects();
+    }
+    if (url.includes('/api/config')) {
+      return mockApiResponses.config();
+    }
+    if (url.includes('/api/auth/status')) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ authenticated: false, user: null })
+      });
+    }
+    
+    // Default mock response
+    return Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({ message: 'Mock response for Cloudflare Pages demo' })
+    });
+  }
+  
   const token = localStorage.getItem('auth-token');
   
   const defaultHeaders = {
