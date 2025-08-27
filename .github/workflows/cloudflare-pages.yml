@@ -37,3 +37,4 @@ jobs:
           projectName: claude-code-ui
           directory: dist
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          workingDirectory: .

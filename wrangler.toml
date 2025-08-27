@@ -4,3 +4,6 @@ compatibility_flags = ["nodejs_compat"]
 
 [build]
 command = "npm run build:pages"
+
+[pages]
+pages_build_output_dir = "dist"
