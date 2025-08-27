@@ -6,7 +6,3 @@ command = "npm run build:pages"
 
 [pages]
 pages_build_output_dir = "dist"
-pages_build_command = "npm run build:pages"
-
-[functions]
-directory = "functions"
