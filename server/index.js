@@ -1,5 +1,5 @@
 // Load environment variables from .env file
-import fs from 'fs';
+import fs, { promises as fsPromises } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
@@ -29,8 +29,6 @@ import express from 'express';
 import { WebSocketServer } from 'ws';
 import http from 'http';
 import cors from 'cors';
-import { promises as fsPromises } from 'fs';
-import fs from 'fs';
 import { spawn } from 'child_process';
 import os from 'os';
 import pty from 'node-pty';

@@ -666,7 +666,15 @@ async function deleteProject(projectName) {
 
 // Add a project manually to the config (without creating folders)
 async function addProjectManually(projectPath, displayName = null) {
-  const absolutePath = path.resolve(projectPath);
+  let absolutePath;
+  
+  // If the path is absolute, use it as is
+  if (path.isAbsolute(projectPath)) {
+    absolutePath = path.resolve(projectPath);
+  } else {
+    // If it's a relative path, resolve it against PROJECTS_PATH
+    absolutePath = path.resolve(getProjectsPath(), projectPath);
+  }
   
   try {
     // Check if the path exists
