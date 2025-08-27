@@ -7,3 +7,10 @@ command = "npm run build:pages"
 
 [pages]
 pages_build_output_dir = "dist"
+
+# SSL and Security Settings
+[pages.environment.production]
+name = "production"
+
+[pages.environment.preview]
+name = "preview"
