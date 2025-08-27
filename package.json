@@ -9,6 +9,7 @@
     "server": "node server/index.js",
     "client": "vite --host",
     "build": "vite build",
+    "build:pages": "vite build --mode production",
     "preview": "vite preview",
     "start": "npm run build && npm run server"
   },
