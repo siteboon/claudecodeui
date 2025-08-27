@@ -343,6 +343,13 @@ function Sidebar({
         setShowNewProject(false);
         setNewProjectPath('');
         
+        // Show success message indicating if directory was created
+        if (result.directoryCreated) {
+          alert(`Project created successfully! Directory created at: ${result.path}`);
+        } else {
+          alert(`Project added successfully! Using existing directory: ${result.path}`);
+        }
+        
         // Refresh projects to show the new one
         if (window.refreshProjects) {
           window.refreshProjects();
@@ -512,7 +519,7 @@ function Sidebar({
             <Input
               value={newProjectPath}
               onChange={(e) => setNewProjectPath(e.target.value)}
-              placeholder="/path/to/project or relative/path"
+              placeholder=\"/path/to/project (will create if doesn't exist)\"
               className="text-sm focus:ring-2 focus:ring-primary/20"
               autoFocus
               onKeyDown={(e) => {
@@ -566,7 +573,7 @@ function Sidebar({
                 <Input
                   value={newProjectPath}
                   onChange={(e) => setNewProjectPath(e.target.value)}
-                  placeholder="/path/to/project or relative/path"
+                  placeholder=\"/path/to/project (will create if doesn't exist)\"
                   className="text-sm h-10 rounded-md focus:border-primary transition-colors"
                   autoFocus
                   onKeyDown={(e) => {

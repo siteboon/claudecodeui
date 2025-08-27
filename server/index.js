@@ -105,26 +105,24 @@ async function createInitialUser() {
 // Create necessary directories
 async function createDirectories() {
     try {
-        if (process.env.AUTO_CREATE_DIRS === 'true') {
-            const claudeDir = getClaudeDir();
-            const projectsDir = getProjectsPath();
-            
-            try {
-                await fsPromises.access(claudeDir);
-            } catch (error) {
-                if (error.code === 'ENOENT') {
-                    await fsPromises.mkdir(claudeDir, { recursive: true });
-                    console.log(`📁 Created Claude directory: ${claudeDir}`);
-                }
+        const claudeDir = getClaudeDir();
+        const projectsDir = getProjectsPath();
+        
+        try {
+            await fsPromises.access(claudeDir);
+        } catch (error) {
+            if (error.code === 'ENOENT') {
+                await fsPromises.mkdir(claudeDir, { recursive: true });
+                console.log(`📁 Created Claude directory: ${claudeDir}`);
             }
-            
-            try {
-                await fsPromises.access(projectsDir);
-            } catch (error) {
-                if (error.code === 'ENOENT') {
-                    await fsPromises.mkdir(projectsDir, { recursive: true });
-                    console.log(`📁 Created projects directory: ${projectsDir}`);
-                }
+        }
+        
+        try {
+            await fsPromises.access(projectsDir);
+        } catch (error) {
+            if (error.code === 'ENOENT') {
+                await fsPromises.mkdir(projectsDir, { recursive: true });
+                console.log(`📁 Created projects directory: ${projectsDir}`);
             }
         }
     } catch (error) {

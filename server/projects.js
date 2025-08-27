@@ -665,6 +665,34 @@ async function deleteProject(projectName) {
 }
 
 // Add a project manually to the config (without creating folders)
+// Helper function to ensure directory exists (create if needed)
+async function ensureDirectoryExists(absolutePath) {
+  try {
+    // Check if the path exists
+    await fs.access(absolutePath);
+    return { directoryCreated: false };
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      // Path doesn't exist, try to create it
+      try {
+        await fs.mkdir(absolutePath, { recursive: true });
+        console.log(`Created directory: ${absolutePath}`);
+        return { directoryCreated: true };
+      } catch (createError) {
+        if (createError.code === 'EACCES') {
+          throw new Error(`Permission denied creating directory: ${absolutePath}`);
+        } else if (createError.code === 'ENOTDIR') {
+          throw new Error(`Cannot create directory - parent path is not a directory: ${absolutePath}`);
+        } else {
+          throw new Error(`Failed to create directory: ${absolutePath} - ${createError.message}`);
+        }
+      }
+    } else {
+      throw new Error(`Cannot access path: ${absolutePath} - ${error.message}`);
+    }
+  }
+}
+
 async function addProjectManually(projectPath, displayName = null) {
   let absolutePath;
   
@@ -676,28 +704,29 @@ async function addProjectManually(projectPath, displayName = null) {
     absolutePath = path.resolve(getProjectsPath(), projectPath);
   }
   
-  try {
-    // Check if the path exists
-    await fs.access(absolutePath);
-  } catch (error) {
-    throw new Error(`Path does not exist: ${absolutePath}`);
+  // Security: Prevent path traversal attacks
+  const normalizedPath = path.normalize(absolutePath);
+  if (normalizedPath.includes('..') || normalizedPath !== absolutePath) {
+    throw new Error('Invalid path: directory traversal detected');
   }
+  
+  // Security: Restrict to allowed base paths
+  const ALLOWED_BASE_PATHS = ['/home', '/Users', '/opt', '/workspace'];
+  const isPathAllowed = ALLOWED_BASE_PATHS.some(basePath => 
+    normalizedPath.startsWith(basePath)
+  );
+  if (!isPathAllowed) {
+    throw new Error('Path not allowed: must be within permitted directories (/home, /Users, /opt, /workspace)');
+  }
+  
+  // Ensure directory exists (create if needed)
+  const { directoryCreated } = await ensureDirectoryExists(absolutePath);
   
   // Generate project name (encode path for use as directory name)
   const projectName = absolutePath.replace(/\//g, '-');
   
-  // Check if project already exists in config or as a folder
+  // Check if project already exists in config
   const config = await loadProjectConfig();
-  const projectDir = path.join(getProjectsPath(), projectName);
-  
-  try {
-    await fs.access(projectDir);
-    throw new Error(`Project already exists for path: ${absolutePath}`);
-  } catch (error) {
-    if (error.code !== 'ENOENT') {
-      throw error;
-    }
-  }
   
   if (config[projectName]) {
     throw new Error(`Project already configured for path: ${absolutePath}`);
@@ -722,6 +751,7 @@ async function addProjectManually(projectPath, displayName = null) {
     fullPath: absolutePath,
     displayName: displayName || await generateDisplayName(projectName, absolutePath),
     isManuallyAdded: true,
+    directoryCreated: directoryCreated,
     sessions: [],
     cursorSessions: []
   };
