@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import ClaudeLogo from './ClaudeLogo';
+import { translations } from '../lib/i18n.js';
 
 const SetupForm = () => {
+  const t = (key) => translations[key] || key;
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -16,17 +18,17 @@ const SetupForm = () => {
     setError('');
     
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
+      setError(t('Passwords do not match'));
       return;
     }
     
     if (username.length < 3) {
-      setError('Username must be at least 3 characters long');
+      setError(t('Username must be at least 3 characters long'));
       return;
     }
     
     if (password.length < 6) {
-      setError('Password must be at least 6 characters long');
+      setError(t('Password must be at least 6 characters long'));
       return;
     }
     
@@ -50,9 +52,9 @@ const SetupForm = () => {
             <div className="flex justify-center mb-4">
               <ClaudeLogo size={64} />
             </div>
-            <h1 className="text-2xl font-bold text-foreground">Welcome to Claude Code UI</h1>
+            <h1 className="text-2xl font-bold text-foreground">{t("Welcome to Claude Code UI")}</h1>
             <p className="text-muted-foreground mt-2">
-              Set up your account to get started
+              {t("Set up your account to get started")}
             </p>
           </div>
 
@@ -60,7 +62,7 @@ const SetupForm = () => {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label htmlFor="username" className="block text-sm font-medium text-foreground mb-1">
-                Username
+                {t("Username")}
               </label>
               <input
                 type="text"
@@ -68,7 +70,7 @@ const SetupForm = () => {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Enter your username"
+                placeholder={t("Enter your username")}
                 required
                 disabled={isLoading}
               />
@@ -76,7 +78,7 @@ const SetupForm = () => {
 
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-foreground mb-1">
-                Password
+                {t("Password")}
               </label>
               <input
                 type="password"
@@ -84,7 +86,7 @@ const SetupForm = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Enter your password"
+                placeholder={t("Enter your password")}
                 required
                 disabled={isLoading}
               />
@@ -92,7 +94,7 @@ const SetupForm = () => {
 
             <div>
               <label htmlFor="confirmPassword" className="block text-sm font-medium text-foreground mb-1">
-                Confirm Password
+                {t("Confirm Password")}
               </label>
               <input
                 type="password"
@@ -100,7 +102,7 @@ const SetupForm = () => {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Confirm your password"
+                placeholder={t("Confirm your password")}
                 required
                 disabled={isLoading}
               />
@@ -117,13 +119,13 @@ const SetupForm = () => {
               disabled={isLoading}
               className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium py-2 px-4 rounded-md transition-colors duration-200"
             >
-              {isLoading ? 'Setting up...' : 'Create Account'}
+              {isLoading ? t('Setting up...') : t('Create Account')}
             </button>
           </form>
 
           <div className="text-center">
             <p className="text-sm text-muted-foreground">
-              This is a single-user system. Only one account can be created.
+              {t("This is a single-user system. Only one account can be created.")}
             </p>
           </div>
         </div>

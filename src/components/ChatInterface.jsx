@@ -19,6 +19,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useDropzone } from 'react-dropzone';
+import { translations } from '../lib/i18n.js';
 import TodoList from './TodoList';
 import ClaudeLogo from './ClaudeLogo.jsx';
 import CursorLogo from './CursorLogo.jsx';
@@ -155,6 +156,7 @@ const safeLocalStorage = {
 
 // Memoized message component to prevent unnecessary re-renders
 const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFileOpen, onShowSettings, autoExpandTools, showRawParameters }) => {
+  const t = (key) => translations[key] || key;
   const isGrouped = prevMessage && prevMessage.type === message.type && 
                    prevMessage.type === 'assistant' && 
                    !prevMessage.isToolUse && !message.isToolUse;
@@ -246,7 +248,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 </div>
               )}
               <div className="text-sm font-medium text-gray-900 dark:text-white">
-                {message.type === 'error' ? 'Error' : message.type === 'tool' ? 'Tool' : ((localStorage.getItem('selected-provider') || 'claude') === 'cursor' ? 'Cursor' : 'Claude')}
+                {message.type === 'error' ? t('Error') : message.type === 'tool' ? t('Tool') : ((localStorage.getItem('selected-provider') || 'claude') === 'cursor' ? t('Cursor') : t('Claude'))}
               </div>
             </div>
           )}
@@ -264,7 +266,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                       </svg>
                     </div>
                     <span className="font-medium text-blue-900 dark:text-blue-100">
-                      Using {message.toolName}
+                      {t("Using {message.toolName}").replace("{message.toolName}", message.toolName)}
                     </span>
                     <span className="text-xs text-blue-600 dark:text-blue-400 font-mono">
                       {message.toolId}
@@ -277,7 +279,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                         onShowSettings();
                       }}
                       className="p-1 rounded hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
-                      title="Tool Settings"
+                      title={t("Tool Settings")}
                     >
                       <svg className="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -296,7 +298,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                             <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                             </svg>
-                            📝 View edit diff for 
+                            📝 {t("View edit diff for")}
                             <button 
                               onClick={(e) => {
                                 e.preventDefault();
@@ -324,7 +326,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                                   {input.file_path}
                                 </button>
                                 <span className="text-xs text-gray-500 dark:text-gray-400">
-                                  Diff
+                                  {t("Diff")}
                                 </span>
                               </div>
                               <div className="text-xs font-mono">
@@ -351,7 +353,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                             {showRawParameters && (
                               <details className="mt-2" open={autoExpandTools}>
                                 <summary className="text-xs text-blue-600 dark:text-blue-400 cursor-pointer hover:text-blue-700 dark:hover:text-blue-300">
-                                  View raw parameters
+                                  {t("View raw parameters")}
                                 </summary>
                                 <pre className="mt-2 text-xs bg-blue-100 dark:bg-blue-800/30 p-2 rounded whitespace-pre-wrap break-words overflow-hidden text-blue-900 dark:text-blue-100">
                                   {message.toolInput}
@@ -368,7 +370,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                   return (
                     <details className="mt-2" open={autoExpandTools}>
                       <summary className="text-sm text-blue-700 dark:text-blue-300 cursor-pointer hover:text-blue-800 dark:hover:text-blue-200">
-                        View input parameters
+                        {t("View input parameters")}
                       </summary>
                       <pre className="mt-2 text-xs bg-blue-100 dark:bg-blue-800/30 p-2 rounded whitespace-pre-wrap break-words overflow-hidden text-blue-900 dark:text-blue-100">
                         {message.toolInput}
@@ -398,7 +400,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                               <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                               </svg>
-                              📄 Creating new file: 
+                              📄 {t("Creating new file:")}
                               <button 
                                 onClick={(e) => {
                                   e.preventDefault();
@@ -426,7 +428,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                                     {input.file_path}
                                   </button>
                                   <span className="text-xs text-gray-500 dark:text-gray-400">
-                                    New File
+                                    {t("New File")}
                                   </span>
                                 </div>
                                 <div className="text-xs font-mono">
@@ -453,7 +455,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                               {showRawParameters && (
                                 <details className="mt-2" open={autoExpandTools}>
                                   <summary className="text-xs text-blue-600 dark:text-blue-400 cursor-pointer hover:text-blue-700 dark:hover:text-blue-300">
-                                    View raw parameters
+                                  {t("View raw parameters")}
                                   </summary>
                                   <pre className="mt-2 text-xs bg-blue-100 dark:bg-blue-800/30 p-2 rounded whitespace-pre-wrap break-words overflow-hidden text-blue-900 dark:text-blue-100">
                                     {message.toolInput}
@@ -480,14 +482,14 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                               <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                               </svg>
-                              Updating Todo List
+                              {t("Updating Todo List")}
                             </summary>
                             <div className="mt-3">
                               <TodoList todos={input.todos} />
                               {showRawParameters && (
                                 <details className="mt-3" open={autoExpandTools}>
                                   <summary className="text-xs text-blue-600 dark:text-blue-400 cursor-pointer hover:text-blue-700 dark:hover:text-blue-300">
-                                    View raw parameters
+                                    {t("View raw parameters")}
                                   </summary>
                                   <pre className="mt-2 text-xs bg-blue-100 dark:bg-blue-800/30 p-2 rounded overflow-x-auto text-blue-900 dark:text-blue-100">
                                     {message.toolInput}
@@ -513,7 +515,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                             <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                             </svg>
-                            Running command
+                            {t("Running command")}
                           </summary>
                           <div className="mt-3 space-y-2">
                             <div className="bg-gray-900 dark:bg-gray-950 text-gray-100 rounded-lg p-3 font-mono text-sm">
@@ -521,7 +523,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                 </svg>
-                                <span className="text-xs">Terminal</span>
+                                <span className="text-xs">{t("Terminal")}</span>
                               </div>
                               <div className="whitespace-pre-wrap break-all text-green-400">
                                 $ {input.command}
@@ -535,7 +537,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                             {showRawParameters && (
                               <details className="mt-2">
                                 <summary className="text-xs text-blue-600 dark:text-blue-400 cursor-pointer hover:text-blue-700 dark:hover:text-blue-300">
-                                  View raw parameters
+                                  {t("View raw parameters")}
                                 </summary>
                                 <pre className="mt-2 text-xs bg-blue-100 dark:bg-blue-800/30 p-2 rounded whitespace-pre-wrap break-words overflow-hidden text-blue-900 dark:text-blue-100">
                                   {message.toolInput}
@@ -559,7 +561,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                         
                         return (
                           <div className="mt-2 text-sm text-blue-700 dark:text-blue-300">
-                            Read{' '}
+                            {t("Read")}{' '}
                             <button 
                               onClick={() => onFileOpen && onFileOpen(input.file_path)}
                               className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline font-mono"
@@ -587,7 +589,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                               <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                               </svg>
-                              📋 View implementation plan
+                              📋 {t("View implementation plan")}
                             </summary>
                             <div className="mt-3 prose prose-sm max-w-none dark:prose-invert">
                               <ReactMarkdown>{planContent}</ReactMarkdown>
@@ -607,7 +609,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                         <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
-                        View input parameters
+                        {t("View input parameters")}
                       </summary>
                       <pre className="mt-2 text-xs bg-blue-100 dark:bg-blue-800/30 p-2 rounded whitespace-pre-wrap break-words overflow-hidden text-blue-900 dark:text-blue-100">
                         {message.toolInput}
@@ -638,7 +640,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                           ? 'text-red-700 dark:text-red-300' 
                           : 'text-green-700 dark:text-green-300'
                       }`}>
-                        {message.toolResult.isError ? 'Tool Error' : 'Tool Result'}
+                        {message.toolResult.isError ? t('Tool Error') : t('Tool Result')}
                       </span>
                     </div>
                     
@@ -665,7 +667,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                               return (
                                 <div>
                                   <div className="flex items-center gap-2 mb-2">
-                                    <span className="font-medium">Todo list has been updated successfully</span>
+                                    <span className="font-medium">{t("Todo list has been updated successfully")}</span>
                                   </div>
                                 </div>
                               );
@@ -675,7 +677,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                               return (
                                 <div>
                                   <div className="flex items-center gap-2 mb-3">
-                                    <span className="font-medium">Current Todo List</span>
+                                    <span className="font-medium">{t("Current Todo List")}</span>
                                   </div>
                                   <TodoList todos={todos} isResult={true} />
                                 </div>
@@ -697,7 +699,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                               return (
                                 <div>
                                   <div className="flex items-center gap-2 mb-3">
-                                    <span className="font-medium">Implementation Plan</span>
+                                    <span className="font-medium">{t("Implementation Plan")}</span>
                                   </div>
                                   <div className="prose prose-sm max-w-none dark:prose-invert">
                                     <ReactMarkdown>{planContent}</ReactMarkdown>
@@ -752,7 +754,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                                   </div>
                                   <div className="flex-1">
                                     <h4 className="font-semibold text-amber-900 dark:text-amber-100 text-base mb-2">
-                                      Interactive Prompt
+                                      {t("Interactive Prompt")}
                                     </h4>
                                     <p className="text-sm text-amber-800 dark:text-amber-200 mb-4">
                                       {questionLine}
@@ -796,10 +798,10 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                                     {selectedOption && (
                                       <div className="bg-amber-100 dark:bg-amber-800/30 rounded-lg p-3">
                                         <p className="text-amber-900 dark:text-amber-100 text-sm font-medium mb-1">
-                                          ✓ Claude selected option {selectedOption}
+                                          {t("✓ Claude selected option {selectedOption}").replace("{selectedOption}", selectedOption)}
                                         </p>
                                         <p className="text-amber-800 dark:text-amber-200 text-xs">
-                                          In the CLI, you would select this option interactively using arrow keys or by typing the number.
+                                          {t("In the CLI, you would select this option interactively using arrow keys or by typing the number.")}
                                         </p>
                                       </div>
                                     )}
@@ -815,7 +817,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                           return (
                             <div>
                               <div className="flex items-center gap-2 mb-2">
-                                <span className="font-medium">File updated successfully</span>
+                                <span className="font-medium">{t("File updated successfully")}</span>
                               </div>
                               <button 
                                 onClick={() => onFileOpen && onFileOpen(fileEditMatch[1])}
@@ -833,7 +835,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                           return (
                             <div>
                               <div className="flex items-center gap-2 mb-2">
-                                <span className="font-medium">File created successfully</span>
+                                <span className="font-medium">{t("File created successfully")}</span>
                               </div>
                               <button 
                                 onClick={() => onFileOpen && onFileOpen(fileCreateMatch[1])}
@@ -855,10 +857,10 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
-                                <span className="font-medium">File written successfully</span>
+                                <span className="font-medium">{t("File written successfully")}</span>
                               </div>
                               <p className="text-xs mt-1 text-green-600 dark:text-green-400">
-                                The file content is displayed in the diff view above
+                                {t("The file content is displayed in the diff view above")}
                               </p>
                             </div>
                           );
@@ -871,7 +873,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                                 <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                 </svg>
-                                View file content
+                                {t("View file content")}
                               </summary>
                               <div className="mt-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
                                 <div className="text-xs font-mono p-3 whitespace-pre-wrap break-words overflow-hidden">
@@ -889,7 +891,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                                 <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                 </svg>
-                                View full output ({content.length} chars)
+                                {t("View full output ({content.length} chars)").replace("{content.length}", content.length)}
                               </summary>
                               <div className="mt-2 prose prose-sm max-w-none prose-green dark:prose-invert">
                                 <ReactMarkdown>{content}</ReactMarkdown>
@@ -919,7 +921,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                   </div>
                   <div className="flex-1">
                     <h4 className="font-semibold text-amber-900 dark:text-amber-100 text-base mb-3">
-                      Interactive Prompt
+                      {t("Interactive Prompt")}
                     </h4>
                     {(() => {
                       const lines = message.content.split('\n').filter(line => line.trim());
@@ -979,10 +981,10 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                           
                           <div className="bg-amber-100 dark:bg-amber-800/30 rounded-lg p-3">
                             <p className="text-amber-900 dark:text-amber-100 text-sm font-medium mb-1">
-                              ⏳ Waiting for your response in the CLI
+                              {t("⏳ Waiting for your response in the CLI")}
                             </p>
                             <p className="text-amber-800 dark:text-amber-200 text-xs">
-                              Please select an option in your terminal where Claude is running.
+                              {t("Please select an option in your terminal where Claude is running.")}
                             </p>
                           </div>
                         </>
@@ -1000,7 +1002,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     const filename = input.file_path.split('/').pop();
                     return (
                       <div className="bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-300 dark:border-blue-600 pl-3 py-1 mb-2 text-sm text-blue-700 dark:text-blue-300">
-                        📖 Read{' '}
+                        📖 {t("Read")}{' '}
                         <button 
                           onClick={() => onFileOpen && onFileOpen(input.file_path)}
                           className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline font-mono"
@@ -1013,7 +1015,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 } catch (e) {
                   return (
                     <div className="bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-300 dark:border-blue-600 pl-3 py-1 mb-2 text-sm text-blue-700 dark:text-blue-300">
-                      📖 Read file
+                      📖 {t("Read file")}
                     </div>
                   );
                 }
@@ -1027,7 +1029,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     return (
                       <div className="bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-300 dark:border-blue-600 pl-3 py-1 mb-2">
                         <div className="text-sm text-blue-700 dark:text-blue-300 mb-2">
-                          📝 Update todo list
+                          📝 {t("Update todo list")}
                         </div>
                         <TodoList todos={input.todos} />
                       </div>
@@ -1036,7 +1038,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 } catch (e) {
                   return (
                     <div className="bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-300 dark:border-blue-600 pl-3 py-1 mb-2 text-sm text-blue-700 dark:text-blue-300">
-                      📝 Update todo list
+                      📝 {t("Update todo list")}
                     </div>
                   );
                 }
@@ -1044,7 +1046,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
             ) : message.isToolUse && message.toolName === 'TodoRead' ? (
               // Simple TodoRead tool indicator
               <div className="bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-300 dark:border-blue-600 pl-3 py-1 mb-2 text-sm text-blue-700 dark:text-blue-300">
-                📋 Read todo list
+                📋 {t("Read todo list")}
               </div>
             ) : (
               <div className="text-sm text-gray-700 dark:text-gray-300">
@@ -1052,7 +1054,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 {message.reasoning && (
                   <details className="mb-3">
                     <summary className="cursor-pointer text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 font-medium">
-                      💭 Thinking...
+                      💭 {t("Thinking...")}
                     </summary>
                     <div className="mt-2 pl-4 border-l-2 border-gray-300 dark:border-gray-600 italic text-gray-600 dark:text-gray-400 text-sm">
                       <div className="whitespace-pre-wrap">
@@ -1163,6 +1165,7 @@ const ImageAttachment = ({ file, onRemove, uploadProgress, error }) => {
 //
 // This ensures uninterrupted chat experience by pausing sidebar refreshes during conversations.
 function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, messages, onFileOpen, onInputFocusChange, onSessionActive, onSessionInactive, onReplaceTemporarySession, onNavigateToSession, onShowSettings, autoExpandTools, showRawParameters, autoScrollToBottom, sendByCtrlEnter }) {
+  const t = (key) => translations[key] || key;
   const [input, setInput] = useState(() => {
     if (typeof window !== 'undefined' && selectedProject) {
       return safeLocalStorage.getItem(`draft_input_${selectedProject.name}`) || '';
@@ -2960,7 +2963,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center text-gray-500 dark:text-gray-400">
-          <p>Select a project to start chatting with Claude</p>
+          <p>{t("Select a project to start chatting with Claude")}</p>
         </div>
       </div>
     );
@@ -2985,16 +2988,16 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           <div className="text-center text-gray-500 dark:text-gray-400 mt-8">
             <div className="flex items-center justify-center space-x-2">
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400"></div>
-              <p>Loading session messages...</p>
+              <p>{t("Loading session messages...")}</p>
             </div>
           </div>
         ) : chatMessages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             {!selectedSession && !currentSessionId && (
               <div className="text-center px-6 sm:px-4 py-8">
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">Choose Your AI Assistant</h2>
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">{t("Choose Your AI Assistant")}</h2>
                 <p className="text-gray-600 dark:text-gray-400 mb-8">
-                  Select a provider to start a new conversation
+                  {t("Select a provider to start a new conversation")}
                 </p>
                 
                 <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-8">
@@ -3015,8 +3018,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                     <div className="flex flex-col items-center justify-center h-full gap-3">
                       <ClaudeLogo className="w-10 h-10" />
                       <div>
-                        <p className="font-semibold text-gray-900 dark:text-white">Claude</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">by Anthropic</p>
+                        <p className="font-semibold text-gray-900 dark:text-white">{t("Claude")}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{t("by Anthropic")}</p>
                       </div>
                     </div>
                     {provider === 'claude' && (
@@ -3047,8 +3050,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                     <div className="flex flex-col items-center justify-center h-full gap-3">
                       <CursorLogo className="w-10 h-10" />
                       <div>
-                        <p className="font-semibold text-gray-900 dark:text-white">Cursor</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">AI Code Editor</p>
+                        <p className="font-semibold text-gray-900 dark:text-white">{t("Cursor")}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{t("AI Code Editor")}</p>
                       </div>
                     </div>
                     {provider === 'cursor' && (
@@ -3066,7 +3069,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 {/* Model Selection for Cursor - Always reserve space to prevent jumping */}
                 <div className={`mb-6 transition-opacity duration-200 ${provider === 'cursor' ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    {provider === 'cursor' ? 'Select Model' : '\u00A0'}
+                    {provider === 'cursor' ? t("Select Model") : '\u00A0'}
                   </label>
                   <select
                     value={cursorModel}
@@ -3086,19 +3089,19 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   {provider === 'claude' 
-                    ? 'Ready to use Claude AI. Start typing your message below.'
+                    ? t("Ready to use Claude AI. Start typing your message below.")
                     : provider === 'cursor'
-                    ? `Ready to use Cursor with ${cursorModel}. Start typing your message below.`
-                    : 'Select a provider above to begin'
+                    ? t("Ready to use Cursor with {cursorModel}. Start typing your message below.").replace("{cursorModel}", cursorModel)
+                    : t("Select a provider above to begin")
                   }
                 </p>
               </div>
             )}
             {selectedSession && (
               <div className="text-center text-gray-500 dark:text-gray-400 px-6 sm:px-4">
-                <p className="font-bold text-lg sm:text-xl mb-3">Continue your conversation</p>
+                <p className="font-bold text-lg sm:text-xl mb-3">{t("Continue your conversation")}</p>
                 <p className="text-sm sm:text-base leading-relaxed">
-                  Ask questions about your code, request changes, or get help with development tasks
+                  {t("Ask questions about your code, request changes, or get help with development tasks")}
                 </p>
               </div>
             )}
@@ -3110,7 +3113,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               <div className="text-center text-gray-500 dark:text-gray-400 py-3">
                 <div className="flex items-center justify-center space-x-2">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400"></div>
-                  <p className="text-sm">Loading older messages...</p>
+                  <p className="text-sm">{t("Loading older messages...")}</p>
                 </div>
               </div>
             )}
@@ -3120,8 +3123,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               <div className="text-center text-gray-500 dark:text-gray-400 text-sm py-2 border-b border-gray-200 dark:border-gray-700">
                 {totalMessages > 0 && (
                   <span>
-                    Showing {sessionMessages.length} of {totalMessages} messages • 
-                    <span className="text-xs">Scroll up to load more</span>
+                    {t("Showing {sessionMessages.length} of {totalMessages} messages").replace("{sessionMessages.length}", sessionMessages.length).replace("{totalMessages}", totalMessages)} •
+                    <span className="text-xs">{t("Scroll up to load more")}</span>
                   </span>
                 )}
               </div>
@@ -3130,12 +3133,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             {/* Legacy message count indicator (for non-paginated view) */}
             {!hasMoreMessages && chatMessages.length > visibleMessageCount && (
               <div className="text-center text-gray-500 dark:text-gray-400 text-sm py-2 border-b border-gray-200 dark:border-gray-700">
-                Showing last {visibleMessageCount} messages ({chatMessages.length} total) • 
+                {t("Showing last {visibleMessageCount} messages ({chatMessages.length} total)").replace("{visibleMessageCount}", visibleMessageCount).replace("{chatMessages.length}", chatMessages.length)} •
                 <button 
                   className="ml-1 text-blue-600 hover:text-blue-700 underline"
                   onClick={loadEarlierMessages}
                 >
-                  Load earlier messages
+                  {t("Load earlier messages")}
                 </button>
               </div>
             )}
@@ -3179,7 +3182,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   <div className="animate-pulse">●</div>
                   <div className="animate-pulse" style={{ animationDelay: '0.2s' }}>●</div>
                   <div className="animate-pulse" style={{ animationDelay: '0.4s' }}>●</div>
-                  <span className="ml-2">Thinking...</span>
+                  <span className="ml-2">{t("Thinking...")}</span>
                 </div>
               </div>
             </div>
@@ -3218,7 +3221,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 border-orange-300 dark:border-orange-600 hover:bg-orange-100 dark:hover:bg-orange-900/30'
                   : 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900/30'
               }`}
-              title="Click to change permission mode (or press Tab in input)"
+              title={t("Click to change permission mode (or press Tab in input)")}
             >
               <div className="flex items-center gap-2">
                 <div className={`w-2 h-2 rounded-full ${
@@ -3231,10 +3234,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                     : 'bg-blue-500'
                 }`} />
                 <span>
-                  {permissionMode === 'default' && 'Default Mode'}
-                  {permissionMode === 'acceptEdits' && 'Accept Edits'}
-                  {permissionMode === 'bypassPermissions' && 'Bypass Permissions'}
-                  {permissionMode === 'plan' && 'Plan Mode'}
+                  {permissionMode === 'default' && t('Default Mode')}
+                  {permissionMode === 'acceptEdits' && t('Accept Edits')}
+                  {permissionMode === 'bypassPermissions' && t('Bypass Permissions')}
+                  {permissionMode === 'plan' && t('Plan Mode')}
                 </span>
               </div>
             </button>
@@ -3244,7 +3247,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               <button
                 onClick={scrollToBottom}
                 className="w-8 h-8 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center transition-all duration-200 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:ring-offset-gray-800"
-                title="Scroll to bottom"
+                title={t("Scroll to bottom")}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
@@ -3262,7 +3265,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 <svg className="w-8 h-8 text-blue-500 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                 </svg>
-                <p className="text-sm font-medium">Drop images here</p>
+                <p className="text-sm font-medium">{t("Drop images here")}</p>
               </div>
             </div>
           )}
@@ -3339,7 +3342,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 const isExpanded = e.target.scrollHeight > lineHeight * 2;
                 setIsTextareaExpanded(isExpanded);
               }}
-              placeholder="Ask Claude to help with your code... (@ to reference files)"
+              placeholder={t("Ask Claude to help with your code... (@ to reference files)")}
               disabled={isLoading}
               rows={1}
               className="chat-input-placeholder w-full pl-12 pr-28 sm:pr-40 py-3 sm:py-4 bg-transparent rounded-2xl focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 resize-none min-h-[40px] sm:min-h-[56px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base transition-all duration-200"
@@ -3370,7 +3373,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   setIsTextareaExpanded(false);
                 }}
                 className="absolute -left-0.5 -top-3 sm:right-28 sm:left-auto sm:top-1/2 sm:-translate-y-1/2 w-6 h-6 sm:w-8 sm:h-8 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 border border-gray-300 dark:border-gray-600 rounded-full flex items-center justify-center transition-all duration-200 group z-10 shadow-sm"
-                title="Clear input"
+                title={t("Clear input")}
               >
                 <svg 
                   className="w-3 h-3 sm:w-4 sm:h-4 text-gray-600 dark:text-gray-300 group-hover:text-gray-800 dark:group-hover:text-gray-100 transition-colors" 
@@ -3392,7 +3395,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               type="button"
               onClick={open}
               className="absolute left-2 bottom-4 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-              title="Attach images"
+              title={t("Attach images")}
             >
               <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -3438,15 +3441,15 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           {/* Hint text */}
           <div className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2 hidden sm:block">
             {sendByCtrlEnter 
-              ? "Ctrl+Enter to send (IME safe) • Shift+Enter for new line • Tab to change modes • @ to reference files" 
-              : "Press Enter to send • Shift+Enter for new line • Tab to change modes • @ to reference files"}
+              ? t("Ctrl+Enter to send (IME safe) • Shift+Enter for new line • Tab to change modes • @ to reference files")
+              : t("Press Enter to send • Shift+Enter for new line • Tab to change modes • @ to reference files")}
           </div>
           <div className={`text-xs text-gray-500 dark:text-gray-400 text-center mt-2 sm:hidden transition-opacity duration-200 ${
             isInputFocused ? 'opacity-100' : 'opacity-0'
           }`}>
             {sendByCtrlEnter 
-              ? "Ctrl+Enter to send (IME safe) • Tab for modes • @ for files" 
-              : "Enter to send • Tab for modes • @ for files"}
+              ? t("Ctrl+Enter to send (IME safe) • Tab for modes • @ for files")
+              : t("Enter to send • Tab for modes • @ for files")}
           </div>
         </form>
       </div>
