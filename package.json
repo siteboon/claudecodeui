@@ -1,6 +1,6 @@
 {
   "name": "claude-code-ui",
-  "version": "1.7.0",
+  "version": "hobart-0.0.1",
   "description": "A web-based UI for Claude Code CLI",
   "type": "module",
   "main": "server/index.js",

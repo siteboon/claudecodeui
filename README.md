@@ -88,6 +88,39 @@ The application will start at the port you specified in your .env
 5. **Open your browser:**
    - Development: `http://localhost:3001`
 
+### Environment Variables
+
+The application uses environment variables for configuration. These are stored in a `.env` file in the project root. You can create this file by copying the example: `cp .env.example .env`.
+
+#### Application Configuration Variables
+
+These variables are intended for user configuration in the `.env` file.
+
+| Variable | Description | Default |
+|---|---|---|
+| `PORT` | The port on which the backend Express server will run. | `3001` |
+| `VITE_PORT` | The port for the frontend Vite development server. | `5173` |
+| `JWT_SECRET` | A secret key for signing JSON Web Tokens (JWTs) for session authentication. **Must be changed for production.** | (none) |
+| `API_KEY` | An optional API key to provide an additional layer of security to the backend API. Uncomment to enable. | (none) |
+| `OPENAI_API_KEY` | Your OpenAI API key. Required for the voice-to-text transcription feature (mic button). | (none) |
+| `DEFAULT_USERNAME` | If set, a default admin user with this username will be created on the first run. | `admin` |
+| `DEFAULT_PASSWORD` | The password for the default admin user. Must be set if `DEFAULT_USERNAME` is used. | (none) |
+| `NODE_ENV` | The Node.js environment. Set to `production` to enable production optimizations. | `development` |
+| `PROJECTS_PATH` | **[Deprecated]** Overrides the directory where projects are stored. It's recommended to use the default (`~/.claude/projects`). | (none) |
+
+#### Security Best Practices
+
+*   **`JWT_SECRET`**: For production, this **must** be set to a long, complex, and random string. This is critical for securing user sessions. You can generate a strong secret using a command like `openssl rand -base64 32`. Do not commit your secret to version control.
+*   **`API_KEY`**: If you enable this, use a strong, randomly generated key. This key will be required in the `X-API-Key` header for all API requests, adding a layer of protection against unauthorized access.
+*   **`OPENAI_API_KEY`**: Treat this key like a password. Do not expose it in client-side code or commit it to version control. Keep it securely in your `.env` file on the server.
+
+#### System Environment Variables
+
+The application's internal logic may also use standard system environment variables. These are not typically set in the `.env` file but are inherited from the shell environment.
+
+*   `HOME` / `USERPROFILE`: Used to determine the user's home directory to locate the default projects folder (`~/.claude/projects`).
+*   `PATH`: Used when spawning child processes for command-line tools to ensure that executables can be found.
+
 ## Security & Tools Configuration
 
 **🔒 Important Notice**: All Claude Code tools are **disabled by default**. This prevents potentially harmful operations from running automatically.
