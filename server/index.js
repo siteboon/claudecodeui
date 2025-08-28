@@ -23,7 +23,10 @@ try {
     console.log('.env file not found or could not be read - using environment variables');
 }
 
-console.log('PORT from env:', process.env.PORT);
+// Only log environment variables in development for security
+if (process.env.NODE_ENV !== 'production') {
+    console.log('PORT from env:', process.env.PORT);
+}
 
 import express from 'express';
 import { WebSocketServer } from 'ws';
@@ -84,11 +87,13 @@ async function createInitialUser() {
                 try {
                     const passwordFilePath = path.join(getClaudeDir(), '.initial_password');
                     await fsPromises.writeFile(passwordFilePath, `Initial admin password: ${actualPassword}\nGenerated at: ${new Date().toISOString()}\n\nIMPORTANT: Delete this file after changing the password!`);
+                    await fsPromises.chmod(passwordFilePath, 0o600); // Restrict file permissions
                     console.log(`🔑 Random password generated and saved to: ${passwordFilePath}`);
                     console.log(`⚠️  SECURITY: Please change password immediately after first login!`);
                 } catch (error) {
-                    console.error('❌ Could not save password to file. Please set DEFAULT_PASSWORD in .env');
-                    throw error;
+                    console.error('⚠️  Could not save password to file:', error.message);
+                    console.error('⚠️  IMPORTANT: Set DEFAULT_PASSWORD in .env to persist this password');
+                    // Continue running - don't crash the server
                 }
             } else {
                 console.log(`🔑 Using configured password from .env file`);
@@ -712,11 +717,15 @@ function handleShellConnection(ws) {
                     const shell = os.platform() === 'win32' ? 'powershell.exe' : 'bash';
                     const shellArgs = os.platform() === 'win32' ? ['-Command', shellCommand] : ['-c', shellCommand];
 
+                    // Get safe home directory for shell cwd
+                    const homeDir = process.env.HOME || os.homedir() || 
+                                   (os.platform() === 'win32' ? process.env.USERPROFILE : '/');
+
                     shellProcess = pty.spawn(shell, shellArgs, {
                         name: 'xterm-256color',
                         cols: 80,
                         rows: 24,
-                        cwd: process.env.HOME || (os.platform() === 'win32' ? process.env.USERPROFILE : '/'),
+                        cwd: homeDir,
                         env: {
                             ...process.env,
                             TERM: 'xterm-256color',

@@ -65,7 +65,25 @@ import crypto from 'crypto';
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 import os from 'os';
-import { getProjectsPath } from './utils/paths.js';
+import { getProjectsPath, getClaudeDir } from './utils/paths.js';
+
+// Get platform-appropriate allowed base paths for security validation.
+// This is calculated once at module load time for performance.
+function getAllowedBasePaths() {
+    const homedir = os.homedir();
+    const paths = [homedir];
+
+    if (process.platform === 'win32') {
+        // Windows-specific paths
+        paths.push('C:\\Users', 'D:\\Users', 'C:\\Projects', 'D:\\Projects');
+    } else {
+        // Unix-like paths
+        paths.push('/home', '/Users', '/opt', '/workspace');
+    }
+
+    return paths;
+}
+const ALLOWED_BASE_PATHS = getAllowedBasePaths();
 
 // Cache for extracted project directories
 const projectDirectoryCache = new Map();
@@ -77,7 +95,7 @@ function clearProjectDirectoryCache() {
 
 // Load project configuration file
 async function loadProjectConfig() {
-  const configPath = path.join(process.env.HOME, '.claude', 'project-config.json');
+  const configPath = path.join(getClaudeDir(), 'project-config.json');
   try {
     const configData = await fs.readFile(configPath, 'utf8');
     return JSON.parse(configData);
@@ -89,7 +107,7 @@ async function loadProjectConfig() {
 
 // Save project configuration file
 async function saveProjectConfig(config) {
-  const claudeDir = path.join(process.env.HOME, '.claude');
+  const claudeDir = getClaudeDir();
   const configPath = path.join(claudeDir, 'project-config.json');
   
   // Ensure the .claude directory exists
@@ -700,23 +718,28 @@ async function addProjectManually(projectPath, displayName = null) {
   if (path.isAbsolute(projectPath)) {
     absolutePath = path.resolve(projectPath);
   } else {
-    // If it's a relative path, resolve it against PROJECTS_PATH
+    // If it's a relative path, resolve it against the projects directory
     absolutePath = path.resolve(getProjectsPath(), projectPath);
   }
   
-  // Security: Prevent path traversal attacks
+  // Security: Prevent path traversal attacks with strict validation
   const normalizedPath = path.normalize(absolutePath);
-  if (normalizedPath.includes('..') || normalizedPath !== absolutePath) {
+  const resolvedPath = path.resolve(absolutePath);
+  
+  // Check for path traversal attempts
+  if (normalizedPath.includes('..') || normalizedPath !== absolutePath || resolvedPath !== absolutePath) {
     throw new Error('Invalid path: directory traversal detected');
   }
   
-  // Security: Restrict to allowed base paths
-  const ALLOWED_BASE_PATHS = ['/home', '/Users', '/opt', '/workspace'];
-  const isPathAllowed = ALLOWED_BASE_PATHS.some(basePath => 
-    normalizedPath.startsWith(basePath)
-  );
+  // Security: Strict path validation with platform support
+  const isPathAllowed = ALLOWED_BASE_PATHS.some(basePath => {
+    const resolvedBase = path.resolve(basePath);
+    return resolvedPath.startsWith(resolvedBase + path.sep) || resolvedPath === resolvedBase;
+  });
+  
   if (!isPathAllowed) {
-    throw new Error('Path not allowed: must be within permitted directories (/home, /Users, /opt, /workspace)');
+    const allowedPathsStr = ALLOWED_BASE_PATHS.join(', ');
+    throw new Error(`Path not allowed: must be within permitted directories (${allowedPathsStr})`);
   }
   
   // Ensure directory exists (create if needed)
