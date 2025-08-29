@@ -118,35 +118,6 @@ async function spawnClaude(command, options = {}, ws) {
       allowedTools.forEach(tool => args.push('--allowedTools', tool));
       (settings.disallowedTools || []).forEach(tool => args.push('--disallowedTools', tool));
     }
-        
-        if (settings.skipPermissions && permissionMode !== 'plan') {
-          args.push('--dangerously-skip-permissions');
-        } else {
-          let allowedTools = [...(settings.allowedTools || [])];
-          if (permissionMode === 'plan') {
-            const planModeTools = ['Read', 'Task', 'exit_plan_mode', 'TodoRead', 'TodoWrite'];
-            for (const tool of planModeTools) {
-              if (!allowedTools.includes(tool)) {
-                allowedTools.push(tool);
-              }
-            }
-          }
-          allowedTools.forEach(tool => args.push('--allowedTools', tool));
-          (settings.disallowedTools || []).forEach(tool => args.push('--disallowedTools', tool));
-        }
-    } else {
-      let allowedTools = [...(settings.allowedTools || [])];
-      if (permissionMode === 'plan') {
-        const planModeTools = ['Read', 'Task', 'exit_plan_mode', 'TodoRead', 'TodoWrite'];
-        for (const tool of planModeTools) {
-          if (!allowedTools.includes(tool)) {
-            allowedTools.push(tool);
-          }
-        }
-      }
-      allowedTools.forEach(tool => args.push('--allowedTools', tool));
-      (settings.disallowedTools || []).forEach(tool => args.push('--disallowedTools', tool));
-    }
     
     console.log('Spawning Claude CLI:', 'claude', args.join(' '));
     
