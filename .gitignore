@@ -129,5 +129,6 @@ dev-debug.log
 # tasks.json
 # tasks/ 
 
-# MCP
+# LLM things
 .serena/
+.bmad-core/
