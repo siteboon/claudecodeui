@@ -1852,7 +1852,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           }
         } else {
           // For Claude, load messages normally with pagination
-          setCurrentSessionId(selectedSession.id);
+          // Only update currentSessionId if it's not already set or if it's different from selectedSession.id
+          // This prevents overwriting the session ID set by session-created event
+          if (!currentSessionId || currentSessionId !== selectedSession.id) {
+            setCurrentSessionId(selectedSession.id);
+          }
           
           // Only load messages from API if this is a user-initiated session change
           // For system-initiated changes, preserve existing messages and rely on WebSocket
@@ -1876,7 +1880,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           setChatMessages([]);
           setSessionMessages([]);
         }
-        setCurrentSessionId(null);
+        // Only clear currentSessionId if we don't have a pending session
+        // This prevents clearing the session ID during the brief moment when selectedSession is null
+        const pendingSessionId = sessionStorage.getItem('pendingSessionId');
+        if (!pendingSessionId && !isLoading) {
+          setCurrentSessionId(null);
+        }
         sessionStorage.removeItem('cursorSessionId');
         setMessagesOffset(0);
         setHasMoreMessages(false);
@@ -1938,14 +1947,31 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         case 'session-created':
           // New session created by Claude CLI - we receive the real session ID here
           // Store it temporarily until conversation completes (prevents premature session association)
+          console.log('[DEBUG] session-created event:', {
+            receivedSessionId: latestMessage.sessionId,
+            currentSessionId,
+            selectedSessionId: selectedSession?.id
+          });
           if (latestMessage.sessionId && !currentSessionId) {
             sessionStorage.setItem('pendingSessionId', latestMessage.sessionId);
+            
+            // Immediately set the current session ID to ensure it's used for future messages
+            setCurrentSessionId(latestMessage.sessionId);
+            console.log('[DEBUG] session-created - Set currentSessionId to:', latestMessage.sessionId);
             
             // Session Protection: Replace temporary "new-session-*" identifier with real session ID
             // This maintains protection continuity - no gap between temp ID and real ID
             // The temporary session is removed and real session is marked as active
             if (onReplaceTemporarySession) {
               onReplaceTemporarySession(latestMessage.sessionId);
+            }
+            
+            // Navigate to the new session to update UI and sidebar selection
+            // This ensures the user sees the new session and future messages appear correctly
+            if (onNavigateToSession) {
+              console.log('[DEBUG] session-created - Navigating to new session:', latestMessage.sessionId);
+              setIsSystemSessionChange(true);
+              onNavigateToSession(latestMessage.sessionId);
             }
           }
           break;
@@ -2014,6 +2040,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           // When resuming a session, Claude CLI creates a new session instead of resuming.
           // We detect this by checking for system/init messages with session_id that differs
           // from our current session. When found, we need to switch the user to the new session.
+          // DISABLED: Session duplication detection was causing new sessions to be created
+          // when Claude CLI resumes existing sessions with different internal IDs
+          /*
           if (latestMessage.data.type === 'system' && 
               latestMessage.data.subtype === 'init' && 
               latestMessage.data.session_id && 
@@ -2035,6 +2064,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             }
             return; // Don't process the message further, let the navigation handle it
           }
+          */
           
           // Handle system/init for new sessions (when currentSessionId is null)
           if (latestMessage.data.type === 'system' && 
@@ -2331,6 +2361,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           if (pendingSessionId && !currentSessionId && latestMessage.exitCode === 0) {
                 setCurrentSessionId(pendingSessionId);
             sessionStorage.removeItem('pendingSessionId');
+            
+            // Auto-select the new session to ensure it's properly tracked
+            // This ensures the session is selected in the sidebar and future messages use the correct session ID
+            if (onNavigateToSession) {
+              onNavigateToSession(pendingSessionId);
+            }
             
             // Trigger a project refresh to update the sidebar with the new session
             if (window.refreshProjects) {
@@ -2728,7 +2764,20 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     setTimeout(() => scrollToBottom(), 100); // Longer delay to ensure message is rendered
 
     // Determine effective session id for replies to avoid race on state updates
-    const effectiveSessionId = currentSessionId || selectedSession?.id || sessionStorage.getItem('cursorSessionId');
+    // Priority: 1) currentSessionId (most recent), 2) pendingSessionId (just created), 3) selectedSession (UI selection), 4) storage (fallback)
+    const effectiveSessionId = currentSessionId || 
+                              sessionStorage.getItem('pendingSessionId') || 
+                              selectedSession?.id || 
+                              sessionStorage.getItem('cursorSessionId');
+    
+    console.log('[DEBUG] handleSubmit - Session IDs:', {
+      currentSessionId,
+      pendingSessionId: sessionStorage.getItem('pendingSessionId'),
+      selectedSessionId: selectedSession?.id,
+      effectiveSessionId,
+      provider,
+      command: input
+    });
 
     // Session Protection: Mark session as active to prevent automatic project updates during conversation
     // Use existing session if available; otherwise a temporary placeholder until backend provides real ID

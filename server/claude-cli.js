@@ -118,6 +118,35 @@ async function spawnClaude(command, options = {}, ws) {
       allowedTools.forEach(tool => args.push('--allowedTools', tool));
       (settings.disallowedTools || []).forEach(tool => args.push('--disallowedTools', tool));
     }
+        
+        if (settings.skipPermissions && permissionMode !== 'plan') {
+          args.push('--dangerously-skip-permissions');
+        } else {
+          let allowedTools = [...(settings.allowedTools || [])];
+          if (permissionMode === 'plan') {
+            const planModeTools = ['Read', 'Task', 'exit_plan_mode', 'TodoRead', 'TodoWrite'];
+            for (const tool of planModeTools) {
+              if (!allowedTools.includes(tool)) {
+                allowedTools.push(tool);
+              }
+            }
+          }
+          allowedTools.forEach(tool => args.push('--allowedTools', tool));
+          (settings.disallowedTools || []).forEach(tool => args.push('--disallowedTools', tool));
+        }
+    } else {
+      let allowedTools = [...(settings.allowedTools || [])];
+      if (permissionMode === 'plan') {
+        const planModeTools = ['Read', 'Task', 'exit_plan_mode', 'TodoRead', 'TodoWrite'];
+        for (const tool of planModeTools) {
+          if (!allowedTools.includes(tool)) {
+            allowedTools.push(tool);
+          }
+        }
+      }
+      allowedTools.forEach(tool => args.push('--allowedTools', tool));
+      (settings.disallowedTools || []).forEach(tool => args.push('--disallowedTools', tool));
+    }
     
     console.log('Spawning Claude CLI:', 'claude', args.join(' '));
     
@@ -164,8 +193,11 @@ async function spawnClaude(command, options = {}, ws) {
               entry.capturedSessionId = capturedSessionId;
             }
             
-            if (!sessionId && !sessionCreatedSent) {
+            // Send session-created event if we get a new sessionId from Claude CLI
+            // This happens both for new sessions and when --resume returns a different sessionId
+            if (!sessionCreatedSent && capturedSessionId !== sessionId) {
               sessionCreatedSent = true;
+              console.log(`📋 Session ID updated: ${sessionId} -> ${capturedSessionId}`);
               ws.send(JSON.stringify({ type: 'session-created', sessionId: capturedSessionId }));
             }
           }

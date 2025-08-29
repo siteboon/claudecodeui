@@ -11,6 +11,7 @@ export default defineConfig(({ command, mode }) => {
     plugins: [react()],
     server: {
       port: parseInt(env.VITE_PORT) || 5173,
+      allowedHosts: ['mac-dev.twin-panga.ts.net'],
       proxy: {
         '/api': `http://localhost:${env.PORT || 3001}`,
         '/ws': {

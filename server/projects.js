@@ -712,67 +712,59 @@ async function ensureDirectoryExists(absolutePath) {
 }
 
 async function addProjectManually(projectPath, displayName = null) {
-  let absolutePath;
+  console.log('🚀 addProjectManually called with:', projectPath);
   
-  // If the path is absolute, use it as is
-  if (path.isAbsolute(projectPath)) {
-    absolutePath = path.resolve(projectPath);
-  } else {
-    // If it's a relative path, resolve it against the projects directory
-    absolutePath = path.resolve(getProjectsPath(), projectPath);
+  // Extract project name and force /workspace/ location
+  // This ensures all projects are created in the workspace directory where Claude CLI sessions work properly
+  const inputName = path.basename(projectPath.trim());
+  console.log('📝 Extracted input name:', inputName);
+  
+  // Validate project name
+  if (!inputName || inputName === '.' || inputName === '..') {
+    throw new Error('Invalid project name. Please provide a valid directory name.');
   }
   
-  // Security: Prevent path traversal attacks with strict validation
-  const normalizedPath = path.normalize(absolutePath);
-  const resolvedPath = path.resolve(absolutePath);
+  // Force all projects to be created under /workspace/
+  const absolutePath = path.resolve('/workspace', inputName);
+  console.log('🎯 Forced absolute path to:', absolutePath);
   
-  // Check for path traversal attempts
-  if (normalizedPath.includes('..') || normalizedPath !== absolutePath || resolvedPath !== absolutePath) {
-    throw new Error('Invalid path: directory traversal detected');
-  }
-  
-  // Security: Strict path validation with platform support
-  const isPathAllowed = ALLOWED_BASE_PATHS.some(basePath => {
-    const resolvedBase = path.resolve(basePath);
-    return resolvedPath.startsWith(resolvedBase + path.sep) || resolvedPath === resolvedBase;
-  });
-  
-  if (!isPathAllowed) {
-    const allowedPathsStr = ALLOWED_BASE_PATHS.join(', ');
-    throw new Error(`Path not allowed: must be within permitted directories (${allowedPathsStr})`);
+  // Security: Basic validation for /workspace/ prefix (already enforced above)
+  // Additional security check to ensure the path is within /workspace/
+  if (!absolutePath.startsWith('/workspace/')) {
+    throw new Error('Projects must be created within /workspace/ directory');
   }
   
   // Ensure directory exists (create if needed)
   const { directoryCreated } = await ensureDirectoryExists(absolutePath);
   
-  // Generate project name (encode path for use as directory name)
-  const projectName = absolutePath.replace(/\//g, '-');
+  // Generate project identifier (encode path for use as directory name)
+  const projectIdentifier = absolutePath.replace(/\//g, '-');
   
   // Check if project already exists in config
   const config = await loadProjectConfig();
   
-  if (config[projectName]) {
+  if (config[projectIdentifier]) {
     throw new Error(`Project already configured for path: ${absolutePath}`);
   }
   
   // Add to config as manually added project
-  config[projectName] = {
+  config[projectIdentifier] = {
     manuallyAdded: true,
     originalPath: absolutePath
   };
   
   if (displayName) {
-    config[projectName].displayName = displayName;
+    config[projectIdentifier].displayName = displayName;
   }
   
   await saveProjectConfig(config);
   
   
   return {
-    name: projectName,
+    name: projectIdentifier,
     path: absolutePath,
     fullPath: absolutePath,
-    displayName: displayName || await generateDisplayName(projectName, absolutePath),
+    displayName: displayName || await generateDisplayName(projectIdentifier, absolutePath),
     isManuallyAdded: true,
     directoryCreated: directoryCreated,
     sessions: [],

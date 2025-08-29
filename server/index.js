@@ -38,7 +38,7 @@ import pty from 'node-pty';
 import fetch from 'node-fetch';
 import mime from 'mime-types';
 
-import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
+import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache, loadProjectConfig } from './projects.js';
 import { spawnClaude, abortClaudeSession } from './claude-cli.js';
 import { spawnCursor, abortCursorSession } from './cursor-cli.js';
 import gitRoutes from './routes/git.js';
@@ -590,6 +590,25 @@ function handleChatConnection(ws) {
                 console.log('💬 User message:', data.command || '[Continue/Resume]');
                 console.log('📁 Project:', data.options?.projectPath || 'Unknown');
                 console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
+                
+                // Fix working directory for manually added projects
+                if (data.options?.projectPath) {
+                    try {
+                        // Get the correct project directory from our projects configuration
+                        const config = await loadProjectConfig();
+                        const projectIdentifier = data.options.projectPath.replace(/\//g, '-');
+                        const projectConfig = config[projectIdentifier];
+                        
+                        if (projectConfig && projectConfig.originalPath) {
+                            // Use the original path we stored when creating the project
+                            data.options.cwd = projectConfig.originalPath;
+                            console.log('🔧 Fixed working directory:', projectConfig.originalPath);
+                        }
+                    } catch (error) {
+                        console.error('Error fixing working directory:', error);
+                    }
+                }
+                
                 await spawnClaude(data.command, data.options, ws);
             } else if (data.type === 'cursor-command') {
                 console.log('🖱️ Cursor message:', data.command || '[Continue/Resume]');
