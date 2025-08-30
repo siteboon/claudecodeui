@@ -43,6 +43,8 @@ import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
 import mcpRoutes from './routes/mcp.js';
 import cursorRoutes from './routes/cursor.js';
+import taskmasterRoutes from './routes/taskmaster.js';
+import mcpUtilsRoutes from './routes/mcp-utils.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 
@@ -162,6 +164,9 @@ const wss = new WebSocketServer({
     }
 });
 
+// Make WebSocket server available to routes
+app.locals.wss = wss;
+
 app.use(cors());
 app.use(express.json());
 
@@ -179,6 +184,12 @@ app.use('/api/mcp', authenticateToken, mcpRoutes);
 
 // Cursor API Routes (protected)
 app.use('/api/cursor', authenticateToken, cursorRoutes);
+
+// TaskMaster API Routes (protected)
+app.use('/api/taskmaster', authenticateToken, taskmasterRoutes);
+
+// MCP utilities
+app.use('/api/mcp-utils', authenticateToken, mcpUtilsRoutes);
 
 // Static files served after API routes
 app.use(express.static(path.join(__dirname, '../dist')));
@@ -547,16 +558,26 @@ function handleShellConnection(ws) {
                 const sessionId = data.sessionId;
                 const hasSession = data.hasSession;
                 const provider = data.provider || 'claude';
+                const initialCommand = data.initialCommand;
+                const isPlainShell = data.isPlainShell || (!!initialCommand && !hasSession) || provider === 'plain-shell';
 
                 console.log('🚀 Starting shell in:', projectPath);
-                console.log('📋 Session info:', hasSession ? `Resume session ${sessionId}` : 'New session');
-                console.log('🤖 Provider:', provider);
+                console.log('📋 Session info:', hasSession ? `Resume session ${sessionId}` : (isPlainShell ? 'Plain shell mode' : 'New session'));
+                console.log('🤖 Provider:', isPlainShell ? 'plain-shell' : provider);
+                if (initialCommand) {
+                    console.log('⚡ Initial command:', initialCommand);
+                }
 
                 // First send a welcome message
-                const providerName = provider === 'cursor' ? 'Cursor' : 'Claude';
-                const welcomeMsg = hasSession ?
-                    `\x1b[36mResuming ${providerName} session ${sessionId} in: ${projectPath}\x1b[0m\r\n` :
-                    `\x1b[36mStarting new ${providerName} session in: ${projectPath}\x1b[0m\r\n`;
+                let welcomeMsg;
+                if (isPlainShell) {
+                    welcomeMsg = `\x1b[36mStarting terminal in: ${projectPath}\x1b[0m\r\n`;
+                } else {
+                    const providerName = provider === 'cursor' ? 'Cursor' : 'Claude';
+                    welcomeMsg = hasSession ?
+                        `\x1b[36mResuming ${providerName} session ${sessionId} in: ${projectPath}\x1b[0m\r\n` :
+                        `\x1b[36mStarting new ${providerName} session in: ${projectPath}\x1b[0m\r\n`;
+                }
 
                 ws.send(JSON.stringify({
                     type: 'output',
@@ -566,7 +587,14 @@ function handleShellConnection(ws) {
                 try {
                     // Prepare the shell command adapted to the platform and provider
                     let shellCommand;
-                    if (provider === 'cursor') {
+                    if (isPlainShell) {
+                        // Plain shell mode - just run the initial command in the project directory
+                        if (os.platform() === 'win32') {
+                            shellCommand = `Set-Location -Path "${projectPath}"; ${initialCommand}`;
+                        } else {
+                            shellCommand = `cd "${projectPath}" && ${initialCommand}`;
+                        }
+                    } else if (provider === 'cursor') {
                         // Use cursor-agent command
                         if (os.platform() === 'win32') {
                             if (hasSession && sessionId) {
@@ -582,19 +610,20 @@ function handleShellConnection(ws) {
                             }
                         }
                     } else {
-                        // Use claude command (default)
+                        // Use claude command (default) or initialCommand if provided
+                        const command = initialCommand || 'claude';
                         if (os.platform() === 'win32') {
                             if (hasSession && sessionId) {
                                 // Try to resume session, but with fallback to new session if it fails
                                 shellCommand = `Set-Location -Path "${projectPath}"; claude --resume ${sessionId}; if ($LASTEXITCODE -ne 0) { claude }`;
                             } else {
-                                shellCommand = `Set-Location -Path "${projectPath}"; claude`;
+                                shellCommand = `Set-Location -Path "${projectPath}"; ${command}`;
                             }
                         } else {
                             if (hasSession && sessionId) {
                                 shellCommand = `cd "${projectPath}" && claude --resume ${sessionId} || claude`;
                             } else {
-                                shellCommand = `cd "${projectPath}" && claude`;
+                                shellCommand = `cd "${projectPath}" && ${command}`;
                             }
                         }
                     }

@@ -1,14 +1,22 @@
 import { useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { translations } from '../lib/i18n.js';
 import { Badge } from './ui/badge';
 import { X, Plus, Settings, Shield, AlertTriangle, Moon, Sun, Server, Edit3, Trash2, Globe, Terminal, Zap, FolderOpen } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+import { useTasksSettings } from '../contexts/TasksSettingsContext';
+import { t } from '../lib/i18n';
 
 function ToolsSettings({ isOpen, onClose, projects = [] }) {
-  const t = (key) => translations[key] || key;
   const { isDarkMode, toggleDarkMode } = useTheme();
+  const {
+    tasksEnabled,
+    setTasksEnabled,
+    isTaskMasterInstalled,
+    isTaskMasterReady,
+    installationStatus,
+    isCheckingInstallation
+  } = useTasksSettings();
   const [allowedTools, setAllowedTools] = useState([]);
   const [disallowedTools, setDisallowedTools] = useState([]);
   const [newAllowedTool, setNewAllowedTool] = useState('');
@@ -101,10 +109,10 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
         const data = await response.json();
         setCursorMcpServers(data.servers || []);
       } else {
-        console.error(t('Failed to fetch Cursor MCP servers'));
+      console.error(t('failedToFetchCursorMcp'));
       }
     } catch (error) {
-      console.error(t('Error fetching Cursor MCP servers:'), error);
+    console.error(t('errorFetchingCursorMcp'), error);
     }
   };
   
@@ -174,10 +182,10 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
         const data = await response.json();
         setMcpServers(data.servers || []);
       } else {
-        console.error(t('Failed to fetch MCP servers'));
+      console.error(t('failedToFetchMcp'));
       }
     } catch (error) {
-      console.error(t('Error fetching MCP servers:'), error);
+    console.error(t('errorFetchingMcp'), error);
     }
   };
 
@@ -216,14 +224,14 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
           await fetchMcpServers(); // Refresh the list
           return true;
         } else {
-          throw new Error(result.error || t('Failed to save server via Claude CLI'));
+          throw new Error(result.error || t('failedToSaveMcpCli'));
         }
       } else {
         const error = await response.json();
-        throw new Error(error.error || t('Failed to save server'));
+        throw new Error(error.error || t('failedToSaveMcp'));
       }
     } catch (error) {
-      console.error(t('Error saving MCP server:'), error);
+      console.error(t('errorSavingMcp'), error);
       throw error;
     }
   };
@@ -247,14 +255,14 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
           await fetchMcpServers(); // Refresh the list
           return true;
         } else {
-          throw new Error(result.error || t('Failed to delete server via Claude CLI'));
+          throw new Error(result.error || t('failedToDeleteMcpCli'));
         }
       } else {
         const error = await response.json();
-        throw new Error(error.error || t('Failed to delete server'));
+        throw new Error(error.error || t('failedToDeleteMcp'));
       }
     } catch (error) {
-      console.error(t('Error deleting MCP server:'), error);
+      console.error(t('errorDeletingMcp'), error);
       throw error;
     }
   };
@@ -275,10 +283,10 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
         return data.testResult;
       } else {
         const error = await response.json();
-        throw new Error(error.error || t('Failed to test server'));
+        throw new Error(error.error || t('failedToTestMcp'));
       }
     } catch (error) {
-      console.error(t('Error testing MCP server:'), error);
+      console.error(t('errorTestingMcp'), error);
       throw error;
     }
   };
@@ -300,10 +308,10 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
         return data.toolsResult;
       } else {
         const error = await response.json();
-        throw new Error(error.error || t('Failed to discover tools'));
+        throw new Error(error.error || t('failedToDiscoverTools'));
       }
     } catch (error) {
-      console.error(t('Error discovering MCP tools:'), error);
+      console.error(t('errorDiscoveringTools'), error);
       throw error;
     }
   };
@@ -355,7 +363,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
       // Load Cursor MCP servers
       await fetchCursorMcpServers();
     } catch (error) {
-      console.error(t('Error loading tool settings:'), error);
+      console.error(t('errorLoadingSettings'), error);
       // Set defaults on error
       setAllowedTools([]);
       setDisallowedTools([]);
@@ -396,7 +404,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
         onClose();
       }, 1000);
     } catch (error) {
-      console.error(t('Error saving tool settings:'), error);
+      console.error(t('errorSavingSettings'), error);
       setSaveStatus('error');
     } finally {
       setIsSaving(false);
@@ -497,11 +505,11 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
             resetMcpForm();
             setSaveStatus('success');
           } else {
-            throw new Error(result.error || t('Failed to add server via JSON'));
+            throw new Error(result.error || 'Failed to add server via JSON');
           }
         } else {
           const error = await response.json();
-          throw new Error(error.error || t('Failed to add server'));
+          throw new Error(error.error || 'Failed to add server');
         }
       } else {
         // Use regular form-based save
@@ -510,7 +518,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
         setSaveStatus('success');
       }
     } catch (error) {
-      alert(`${t("Error")}: ${error.message}`);
+      alert(`Error: ${error.message}`);
       setSaveStatus('error');
     } finally {
       setMcpLoading(false);
@@ -518,12 +526,12 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
   };
 
   const handleMcpDelete = async (serverId, scope) => {
-    if (confirm(t('Are you sure you want to delete this MCP server?'))) {
+    if (confirm('Are you sure you want to delete this MCP server?')) {
       try {
         await deleteMcpServer(serverId, scope);
         setSaveStatus('success');
       } catch (error) {
-        alert(`${t("Error")}: ${error.message}`);
+        alert(`Error: ${error.message}`);
         setSaveStatus('error');
       }
     }
@@ -595,7 +603,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
           <div className="flex items-center gap-3">
             <Settings className="w-5 h-5 md:w-6 md:h-6 text-blue-600" />
             <h2 className="text-lg md:text-xl font-semibold text-foreground">
-              {t("Settings")}
+              {t('Settings')}
             </h2>
           </div>
           <Button
@@ -620,7 +628,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                     : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
               >
-                {t("Tools")}
+                {t('Tools')}
               </button>
               <button
                 onClick={() => setActiveTab('appearance')}
@@ -630,7 +638,17 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                     : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
               >
-                {t("Appearance")}
+                {t('Appearance')}
+              </button>
+              <button
+                onClick={() => setActiveTab('tasks')}
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'tasks'
+                    ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {t('Tasks')}
               </button>
             </div>
           </div>
@@ -648,10 +666,10 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
         <div className="flex items-center justify-between">
           <div>
             <div className="font-medium text-foreground">
-              {t("Dark Mode")}
+              {t('DarkMode')}
             </div>
             <div className="text-sm text-muted-foreground">
-              {t("Toggle between light and dark themes")}
+              {t('toggleTheme')}
             </div>
           </div>
           <button
@@ -659,9 +677,9 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
             className="relative inline-flex h-8 w-14 items-center rounded-full bg-gray-200 dark:bg-gray-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
             role="switch"
             aria-checked={isDarkMode}
-            aria-label={t("Toggle dark mode")}
+            aria-label={t('toggleTheme')}
           >
-            <span className="sr-only">{t("Toggle dark mode")}</span>
+            <span className="sr-only">{t('toggleTheme')}</span>
             <span
               className={`${
                 isDarkMode ? 'translate-x-7' : 'translate-x-1'
@@ -684,10 +702,10 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
         <div className="flex items-center justify-between">
           <div>
             <div className="font-medium text-foreground">
-              {t("Project Sorting")}
+              {t('projectSorting')}
             </div>
             <div className="text-sm text-muted-foreground">
-              {t("How projects are ordered in the sidebar")}
+              {t('howProjectsAreOrdered')}
             </div>
           </div>
           <select
@@ -695,8 +713,8 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
             onChange={(e) => setProjectSortOrder(e.target.value)}
             className="text-sm bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 w-32"
           >
-            <option value="name">{t("Alphabetical")}</option>
-            <option value="date">{t("Recent Activity")}</option>
+            <option value="name">{t('alphabetical')}</option>
+            <option value="date">{t('recentActivity')}</option>
           </select>
         </div>
       </div>
@@ -722,7 +740,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                       : 'border-transparent text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  {t("Claude Tools")}
+                  Claude Tools
                 </button>
                 <button
                   onClick={() => setToolsProvider('cursor')}
@@ -732,7 +750,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                       : 'border-transparent text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  {t("Cursor Tools")}
+                  Cursor Tools
                 </button>
               </div>
             </div>
@@ -746,7 +764,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
               <div className="flex items-center gap-3">
                 <AlertTriangle className="w-5 h-5 text-orange-500" />
                 <h3 className="text-lg font-medium text-foreground">
-                  {t("Permission Settings")}
+                  Permission Settings
                 </h3>
               </div>
               <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
@@ -759,10 +777,10 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                   />
                   <div>
                     <div className="font-medium text-orange-900 dark:text-orange-100">
-                      {t("Skip permission prompts (use with caution)")}
+                      Skip permission prompts (use with caution)
                     </div>
                     <div className="text-sm text-orange-700 dark:text-orange-300">
-                      {t("Equivalent to --dangerously-skip-permissions flag")}
+                      Equivalent to --dangerously-skip-permissions flag
                     </div>
                   </div>
                 </label>
@@ -774,18 +792,18 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
               <div className="flex items-center gap-3">
                 <Shield className="w-5 h-5 text-green-500" />
                 <h3 className="text-lg font-medium text-foreground">
-                  {t("Allowed Tools")}
+                  Allowed Tools
                 </h3>
               </div>
               <p className="text-sm text-muted-foreground">
-                {t("Tools that are automatically allowed without prompting for permission")}
+                Tools that are automatically allowed without prompting for permission
               </p>
               
               <div className="flex flex-col sm:flex-row gap-2">
                 <Input
                   value={newAllowedTool}
                   onChange={(e) => setNewAllowedTool(e.target.value)}
-                  placeholder={t('e.g., "Bash(git log:*)" or "Write"')}
+                  placeholder='e.g., "Bash(git log:*)" or "Write"'
                   onKeyPress={(e) => {
                     if (e.key === 'Enter') {
                       addAllowedTool(newAllowedTool);
@@ -801,14 +819,14 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                   className="h-10 px-4 touch-manipulation"
                 >
                   <Plus className="w-4 h-4 mr-2 sm:mr-0" />
-                  <span className="sm:hidden">{t("Add Tool")}</span>
+                  <span className="sm:hidden">Add Tool</span>
                 </Button>
               </div>
 
               {/* Common tools quick add */}
               <div className="space-y-2">
                 <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  {t("Quick add common tools:")}
+                  Quick add common tools:
                 </p>
                 <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
                   {commonTools.map(tool => (
@@ -844,7 +862,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                 ))}
                 {allowedTools.length === 0 && (
                   <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                    {t("No allowed tools configured")}
+                    No allowed tools configured
                   </div>
                 )}
               </div>
@@ -855,18 +873,18 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
               <div className="flex items-center gap-3">
                 <AlertTriangle className="w-5 h-5 text-red-500" />
                 <h3 className="text-lg font-medium text-foreground">
-                  {t("Disallowed Tools")}
+                  Disallowed Tools
                 </h3>
               </div>
               <p className="text-sm text-muted-foreground">
-                {t("Tools that are automatically blocked without prompting for permission")}
+                Tools that are automatically blocked without prompting for permission
               </p>
               
               <div className="flex flex-col sm:flex-row gap-2">
                 <Input
                   value={newDisallowedTool}
                   onChange={(e) => setNewDisallowedTool(e.target.value)}
-                  placeholder={t('e.g., "Bash(rm:*)" or "Write"')}
+                  placeholder='e.g., "Bash(rm:*)" or "Write"'
                   onKeyPress={(e) => {
                     if (e.key === 'Enter') {
                       addDisallowedTool(newDisallowedTool);
@@ -882,7 +900,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                   className="h-10 px-4 touch-manipulation"
                 >
                   <Plus className="w-4 h-4 mr-2 sm:mr-0" />
-                  <span className="sm:hidden">{t("Add Tool")}</span>
+                  <span className="sm:hidden">Add Tool</span>
                 </Button>
               </div>
 
@@ -904,7 +922,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                 ))}
                 {disallowedTools.length === 0 && (
                   <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                    {t("No disallowed tools configured")}
+                    No disallowed tools configured
                   </div>
                 )}
               </div>
@@ -913,14 +931,14 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
             {/* Help Section */}
             <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
               <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">
-                {t("Tool Pattern Examples:")}
+                Tool Pattern Examples:
               </h4>
               <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
-                <li><code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">"Bash(git log:*)"</code> - {t("Allow all git log commands")}</li>
-                <li><code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">"Bash(git diff:*)"</code> - {t("Allow all git diff commands")}</li>
-                <li><code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">"Write"</code> - {t("Allow all Write tool usage")}</li>
-                <li><code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">"Read"</code> - {t("Allow all Read tool usage")}</li>
-                <li><code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">"Bash(rm:*)"</code> - {t("Block all rm commands (dangerous)")}</li>
+                <li><code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">"Bash(git log:*)"</code> - Allow all git log commands</li>
+                <li><code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">"Bash(git diff:*)"</code> - Allow all git diff commands</li>
+                <li><code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">"Write"</code> - Allow all Write tool usage</li>
+                <li><code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">"Read"</code> - Allow all Read tool usage</li>
+                <li><code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">"Bash(rm:*)"</code> - Block all rm commands (dangerous)</li>
               </ul>
             </div>
 
@@ -929,12 +947,12 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
               <div className="flex items-center gap-3">
                 <Server className="w-5 h-5 text-purple-500" />
                 <h3 className="text-lg font-medium text-foreground">
-                  {t("MCP Servers")}
+                  MCP Servers
                 </h3>
               </div>
               <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">
-                  {t("Model Context Protocol servers provide additional tools and data sources to Claude")}
+                  Model Context Protocol servers provide additional tools and data sources to Claude
                 </p>
               </div>
               
@@ -945,7 +963,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                   size="sm"
                 >
                   <Plus className="w-4 h-4 mr-2" />
-                  {t("Add MCP Server")}
+                  Add MCP Server
                 </Button>
               </div>
 
@@ -973,20 +991,20 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                         
                         <div className="text-sm text-muted-foreground space-y-1">
                           {server.type === 'stdio' && server.config.command && (
-                            <div>{t("Command:")} <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded text-xs">{server.config.command}</code></div>
+                            <div>Command: <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded text-xs">{server.config.command}</code></div>
                           )}
                           {(server.type === 'sse' || server.type === 'http') && server.config.url && (
-                            <div>{t("URL:")} <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded text-xs">{server.config.url}</code></div>
+                            <div>URL: <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded text-xs">{server.config.url}</code></div>
                           )}
                           {server.config.args && server.config.args.length > 0 && (
-                            <div>{t("Args:")} <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded text-xs">{server.config.args.join(' ')}</code></div>
+                            <div>Args: <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded text-xs">{server.config.args.join(' ')}</code></div>
                           )}
                           {server.config.env && Object.keys(server.config.env).length > 0 && (
-                            <div>{t("Environment:")} <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded text-xs">{Object.entries(server.config.env).map(([k, v]) => `${k}=${v}`).join(', ')}</code></div>
+                            <div>Environment: <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded text-xs">{Object.entries(server.config.env).map(([k, v]) => `${k}=${v}`).join(', ')}</code></div>
                           )}
                           {server.raw && (
                             <details className="mt-2">
-                              <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">{t("View full config")}</summary>
+                              <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">View full config</summary>
                               <pre className="mt-1 text-xs bg-gray-100 dark:bg-gray-800 p-2 rounded overflow-x-auto">
                                 {JSON.stringify(server.raw, null, 2)}
                               </pre>
@@ -1015,11 +1033,11 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                         {/* Tools Discovery Results */}
                         {mcpServerTools[server.id] && (
                           <div className="mt-2 p-2 rounded text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200 border border-blue-200 dark:border-blue-800">
-                            <div className="font-medium mb-2">{t("Available Tools & Resources")}</div>
+                            <div className="font-medium mb-2">Available Tools & Resources</div>
                             
                             {mcpServerTools[server.id].tools && mcpServerTools[server.id].tools.length > 0 && (
                               <div className="mb-2">
-                                <div className="font-medium text-xs mb-1">{t("Tools")} ({mcpServerTools[server.id].tools.length}):</div>
+                                <div className="font-medium text-xs mb-1">Tools ({mcpServerTools[server.id].tools.length}):</div>
                                 <ul className="space-y-0.5">
                                   {mcpServerTools[server.id].tools.map((tool, i) => (
                                     <li key={i} className="flex items-start gap-1">
@@ -1038,7 +1056,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
 
                             {mcpServerTools[server.id].resources && mcpServerTools[server.id].resources.length > 0 && (
                               <div className="mb-2">
-                                <div className="font-medium text-xs mb-1">{t("Resources")} ({mcpServerTools[server.id].resources.length}):</div>
+                                <div className="font-medium text-xs mb-1">Resources ({mcpServerTools[server.id].resources.length}):</div>
                                 <ul className="space-y-0.5">
                                   {mcpServerTools[server.id].resources.map((resource, i) => (
                                     <li key={i} className="flex items-start gap-1">
@@ -1057,7 +1075,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
 
                             {mcpServerTools[server.id].prompts && mcpServerTools[server.id].prompts.length > 0 && (
                               <div>
-                                <div className="font-medium text-xs mb-1">{t("Prompts")} ({mcpServerTools[server.id].prompts.length}):</div>
+                                <div className="font-medium text-xs mb-1">Prompts ({mcpServerTools[server.id].prompts.length}):</div>
                                 <ul className="space-y-0.5">
                                   {mcpServerTools[server.id].prompts.map((prompt, i) => (
                                     <li key={i} className="flex items-start gap-1">
@@ -1077,7 +1095,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                             {(!mcpServerTools[server.id].tools || mcpServerTools[server.id].tools.length === 0) &&
                              (!mcpServerTools[server.id].resources || mcpServerTools[server.id].resources.length === 0) &&
                              (!mcpServerTools[server.id].prompts || mcpServerTools[server.id].prompts.length === 0) && (
-                              <div className="text-xs opacity-75">{t("No tools, resources, or prompts discovered")}</div>
+                              <div className="text-xs opacity-75">No tools, resources, or prompts discovered</div>
                             )}
                           </div>
                         )}
@@ -1089,7 +1107,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                           variant="ghost"
                           size="sm"
                           className="text-gray-600 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
-                          title={t("Edit server")}
+                          title="Edit server"
                         >
                           <Edit3 className="w-4 h-4" />
                         </Button>
@@ -1098,7 +1116,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                           variant="ghost"
                           size="sm"
                           className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-                          title={t("Delete server")}
+                          title="Delete server"
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -1108,7 +1126,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                 ))}
                 {mcpServers.length === 0 && (
                   <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                    {t("No MCP servers configured")}
+                    No MCP servers configured
                   </div>
                 )}
               </div>
@@ -1120,7 +1138,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                 <div className="bg-background border border-border rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
                   <div className="flex items-center justify-between p-4 border-b border-border">
                     <h3 className="text-lg font-medium text-foreground">
-                      {editingMcpServer ? t('Edit MCP Server') : t('Add MCP Server')}
+                      {editingMcpServer ? 'Edit MCP Server' : 'Add MCP Server'}
                     </h3>
                     <Button variant="ghost" size="sm" onClick={resetMcpForm}>
                       <X className="w-4 h-4" />
@@ -1140,7 +1158,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                             : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                         }`}
                       >
-                        {t("Form Input")}
+                        Form Input
                       </button>
                       <button
                         type="button"
@@ -1151,7 +1169,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                             : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                         }`}
                       >
-                        {t("JSON Import")}
+                        JSON Import
                       </button>
                     </div>
                     )}
@@ -1160,12 +1178,12 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                     {mcpFormData.importMode === 'form' && editingMcpServer && (
                       <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-3">
                         <label className="block text-sm font-medium text-foreground mb-2">
-                          {t("Scope")}
+                          Scope
                         </label>
                         <div className="flex items-center gap-2">
                           {mcpFormData.scope === 'user' ? <Globe className="w-4 h-4" /> : <FolderOpen className="w-4 h-4" />}
                           <span className="text-sm">
-                            {mcpFormData.scope === 'user' ? t('User (Global)') : t('Project (Local)')}
+                            {mcpFormData.scope === 'user' ? 'User (Global)' : 'Project (Local)'}
                           </span>
                           {mcpFormData.scope === 'local' && mcpFormData.projectPath && (
                             <span className="text-xs text-muted-foreground">
@@ -1174,7 +1192,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                           )}
                         </div>
                         <p className="text-xs text-muted-foreground mt-2">
-                          {t("Scope cannot be changed when editing an existing server")}
+                          Scope cannot be changed when editing an existing server
                         </p>
                       </div>
                     )}
@@ -1184,7 +1202,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                       <div className="space-y-4">
                         <div>
                           <label className="block text-sm font-medium text-foreground mb-2">
-                            {t("Scope")} *
+                            Scope *
                           </label>
                           <div className="flex gap-2">
                             <button
@@ -1198,7 +1216,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                             >
                               <div className="flex items-center justify-center gap-2">
                                 <Globe className="w-4 h-4" />
-                                <span>{t("User (Global)")}</span>
+                                <span>User (Global)</span>
                               </div>
                             </button>
                             <button
@@ -1212,14 +1230,14 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                             >
                               <div className="flex items-center justify-center gap-2">
                                 <FolderOpen className="w-4 h-4" />
-                                <span>{t("Project (Local)")}</span>
+                                <span>Project (Local)</span>
                               </div>
                             </button>
                           </div>
                           <p className="text-xs text-muted-foreground mt-2">
                             {mcpFormData.scope === 'user' 
-                              ? t('User scope: Available across all projects on your machine')
-                              : t('Local scope: Only available in the selected project')
+                              ? 'User scope: Available across all projects on your machine'
+                              : 'Local scope: Only available in the selected project'
                             }
                           </p>
                         </div>
@@ -1228,7 +1246,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                         {mcpFormData.scope === 'local' && !editingMcpServer && (
                           <div>
                             <label className="block text-sm font-medium text-foreground mb-2">
-                              {t("Project *")}
+                              Project *
                             </label>
                             <select
                               value={mcpFormData.projectPath}
@@ -1236,7 +1254,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                               required={mcpFormData.scope === 'local'}
                             >
-                              <option value="">{t("Select a project...")}</option>
+                              <option value="">Select a project...</option>
                               {projects.map(project => (
                                 <option key={project.name} value={project.path || project.fullPath}>
                                   {project.displayName || project.name}
@@ -1245,7 +1263,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                             </select>
                             {mcpFormData.projectPath && (
                               <p className="text-xs text-muted-foreground mt-1">
-                                {t("Path:")} {mcpFormData.projectPath}
+                                Path: {mcpFormData.projectPath}
                               </p>
                             )}
                           </div>
@@ -1257,14 +1275,14 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className={mcpFormData.importMode === 'json' ? 'md:col-span-2' : ''}>
                         <label className="block text-sm font-medium text-foreground mb-2">
-                          {t("Server Name *")}
+                          Server Name *
                         </label>
                         <Input
                           value={mcpFormData.name}
                           onChange={(e) => {
                             setMcpFormData(prev => ({...prev, name: e.target.value}));
                           }}
-                          placeholder={t("my-server")}
+                          placeholder="my-server"
                           required
                         />
                       </div>
@@ -1272,7 +1290,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                       {mcpFormData.importMode === 'form' && (
                         <div>
                           <label className="block text-sm font-medium text-foreground mb-2">
-                            {t("Transport Type *")}
+                            Transport Type *
                           </label>
                           <select
                             value={mcpFormData.type}
@@ -1294,7 +1312,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                     {editingMcpServer && mcpFormData.raw && mcpFormData.importMode === 'form' && (
                       <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
                         <h4 className="text-sm font-medium text-foreground mb-2">
-                          {t("Configuration Details (from {editingMcpServer.scope === 'global' ? '~/.claude.json' : 'project config'})").replace("{editingMcpServer.scope === 'global' ? '~/.claude.json' : 'project config'}", editingMcpServer.scope === 'global' ? '~/.claude.json' : 'project config')}
+                          Configuration Details (from {editingMcpServer.scope === 'global' ? '~/.claude.json' : 'project config'})
                         </h4>
                         <pre className="text-xs bg-gray-100 dark:bg-gray-800 p-3 rounded overflow-x-auto">
                           {JSON.stringify(mcpFormData.raw, null, 2)}
@@ -1307,7 +1325,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                       <div className="space-y-4">
                         <div>
                           <label className="block text-sm font-medium text-foreground mb-2">
-                            {t("JSON Configuration *")}
+                            JSON Configuration *
                           </label>
                           <textarea
                             value={mcpFormData.jsonInput}
@@ -1319,18 +1337,18 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                                   const parsed = JSON.parse(e.target.value);
                                   // Basic validation
                                   if (!parsed.type) {
-                                    setJsonValidationError(t('Missing required field: type'));
+                                    setJsonValidationError('Missing required field: type');
                                   } else if (parsed.type === 'stdio' && !parsed.command) {
-                                    setJsonValidationError(t('stdio type requires a command field'));
+                                    setJsonValidationError('stdio type requires a command field');
                                   } else if ((parsed.type === 'http' || parsed.type === 'sse') && !parsed.url) {
-                                    setJsonValidationError(t(`${parsed.type} type requires a url field`));
+                                    setJsonValidationError(`${parsed.type} type requires a url field`);
                                   } else {
                                     setJsonValidationError('');
                                   }
                                 }
                               } catch (err) {
                                 if (e.target.value.trim()) {
-                                  setJsonValidationError(t('Invalid JSON format'));
+                                  setJsonValidationError('Invalid JSON format');
                                 } else {
                                   setJsonValidationError('');
                                 }
@@ -1345,9 +1363,9 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                             <p className="text-xs text-red-500 mt-1">{jsonValidationError}</p>
                           )}
                           <p className="text-xs text-muted-foreground mt-2">
-                            {t("Paste your MCP server configuration in JSON format. Example formats:")}
-                            <br />{t("• stdio: {\"type\":\"stdio\",\"command\":\"npx\",\"args\":[\"@upstash/context7-mcp\"]}")}
-                            <br />{t("• http/sse: {\"type\":\"http\",\"url\":\"https://api.example.com/mcp\"}")}
+                            Paste your MCP server configuration in JSON format. Example formats:
+                            <br />• stdio: {`{"type":"stdio","command":"npx","args":["@upstash/context7-mcp"]}`}
+                            <br />• http/sse: {`{"type":"http","url":"https://api.example.com/mcp"}`}
                           </p>
                         </div>
                       </div>
@@ -1358,26 +1376,26 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                       <div className="space-y-4">
                         <div>
                           <label className="block text-sm font-medium text-foreground mb-2">
-                            {t("Command *")}
+                            Command *
                           </label>
                           <Input
                             value={mcpFormData.config.command}
                             onChange={(e) => updateMcpConfig('command', e.target.value)}
-                            placeholder={t("/path/to/mcp-server")}
+                            placeholder="/path/to/mcp-server"
                             required
                           />
                         </div>
                         
                         <div>
                           <label className="block text-sm font-medium text-foreground mb-2">
-                            {t("Arguments (one per line)")}
+                            Arguments (one per line)
                           </label>
                           <textarea
                             value={Array.isArray(mcpFormData.config.args) ? mcpFormData.config.args.join('\n') : ''}
                             onChange={(e) => updateMcpConfig('args', e.target.value.split('\n').filter(arg => arg.trim()))}
                             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                             rows="3"
-                            placeholder={t("--api-key\nabc123")}
+                            placeholder="--api-key&#10;abc123"
                           />
                         </div>
                       </div>
@@ -1386,12 +1404,12 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                     {mcpFormData.importMode === 'form' && (mcpFormData.type === 'sse' || mcpFormData.type === 'http') && (
                       <div>
                         <label className="block text-sm font-medium text-foreground mb-2">
-                          {t("URL *")}
+                          URL *
                         </label>
                         <Input
                           value={mcpFormData.config.url}
                           onChange={(e) => updateMcpConfig('url', e.target.value)}
-                          placeholder={t("https://api.example.com/mcp")}
+                          placeholder="https://api.example.com/mcp"
                           type="url"
                           required
                         />
@@ -1402,7 +1420,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                     {mcpFormData.importMode === 'form' && (
                       <div>
                       <label className="block text-sm font-medium text-foreground mb-2">
-                        {t("Environment Variables (KEY=value, one per line)")}
+                        Environment Variables (KEY=value, one per line)
                       </label>
                       <textarea
                         value={Object.entries(mcpFormData.config.env || {}).map(([k, v]) => `${k}=${v}`).join('\n')}
@@ -1418,7 +1436,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                         }}
                         className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                         rows="3"
-                        placeholder={t("API_KEY=your-key\nDEBUG=true")}
+                        placeholder="API_KEY=your-key&#10;DEBUG=true"
                       />
                     </div>
                     )}
@@ -1426,7 +1444,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                     {mcpFormData.importMode === 'form' && (mcpFormData.type === 'sse' || mcpFormData.type === 'http') && (
                       <div>
                         <label className="block text-sm font-medium text-foreground mb-2">
-                          {t("Headers (KEY=value, one per line)")}
+                          Headers (KEY=value, one per line)
                         </label>
                         <textarea
                           value={Object.entries(mcpFormData.config.headers || {}).map(([k, v]) => `${k}=${v}`).join('\n')}
@@ -1442,7 +1460,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                           }}
                           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                           rows="3"
-                          placeholder={t("Authorization=Bearer token\nX-API-Key=your-key")}
+                          placeholder="Authorization=Bearer token&#10;X-API-Key=your-key"
                         />
                       </div>
                     )}
@@ -1450,14 +1468,14 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
 
                     <div className="flex justify-end gap-2 pt-4">
                       <Button type="button" variant="outline" onClick={resetMcpForm}>
-                        {t("Cancel")}
+                        Cancel
                       </Button>
                       <Button 
                         type="submit" 
                         disabled={mcpLoading} 
                         className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50"
                       >
-                        {mcpLoading ? t('Saving...') : (editingMcpServer ? t('Update Server') : t('Add Server'))}
+                        {mcpLoading ? 'Saving...' : (editingMcpServer ? 'Update Server' : 'Add Server')}
                       </Button>
                     </div>
                   </form>
@@ -1476,7 +1494,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                   <div className="flex items-center gap-3">
                     <AlertTriangle className="w-5 h-5 text-orange-500" />
                     <h3 className="text-lg font-medium text-foreground">
-                      {t("Cursor Permission Settings")}
+                      Cursor Permission Settings
                     </h3>
                   </div>
                   <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
@@ -1489,10 +1507,10 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                       />
                       <div>
                         <div className="font-medium text-orange-900 dark:text-orange-100">
-                          {t("Skip permission prompts (use with caution)")}
+                          Skip permission prompts (use with caution)
                         </div>
                         <div className="text-sm text-orange-700 dark:text-orange-300">
-                          {t("Equivalent to -f flag in Cursor CLI")}
+                          Equivalent to -f flag in Cursor CLI
                         </div>
                       </div>
                     </label>
@@ -1504,18 +1522,18 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                   <div className="flex items-center gap-3">
                     <Shield className="w-5 h-5 text-green-500" />
                     <h3 className="text-lg font-medium text-foreground">
-                      {t("Allowed Shell Commands")}
+                      Allowed Shell Commands
                     </h3>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    {t("Shell commands that are automatically allowed without prompting for permission")}
+                    Shell commands that are automatically allowed without prompting for permission
                   </p>
                   
                   <div className="flex flex-col sm:flex-row gap-2">
                     <Input
                       value={newCursorCommand}
                       onChange={(e) => setNewCursorCommand(e.target.value)}
-                      placeholder={t('e.g., "Shell(ls)" or "Shell(git status)"')}
+                      placeholder='e.g., "Shell(ls)" or "Shell(git status)"'
                       onKeyPress={(e) => {
                         if (e.key === 'Enter') {
                           if (newCursorCommand && !cursorAllowedCommands.includes(newCursorCommand)) {
@@ -1539,14 +1557,14 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                       className="h-10 px-4 touch-manipulation"
                     >
                       <Plus className="w-4 h-4 mr-2 sm:mr-0" />
-                      <span className="sm:hidden">{t("Add Command")}</span>
+                      <span className="sm:hidden">Add Command</span>
                     </Button>
                   </div>
 
                   {/* Common commands quick add */}
                   <div className="space-y-2">
                     <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                      {t("Quick add common commands:")}
+                      Quick add common commands:
                     </p>
                     <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
                       {commonCursorCommands.map(cmd => (
@@ -1586,7 +1604,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                     ))}
                     {cursorAllowedCommands.length === 0 && (
                       <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                        {t("No allowed shell commands configured")}
+                        No allowed shell commands configured
                       </div>
                     )}
                   </div>
@@ -1597,18 +1615,18 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                   <div className="flex items-center gap-3">
                     <Shield className="w-5 h-5 text-red-500" />
                     <h3 className="text-lg font-medium text-foreground">
-                      {t("Disallowed Shell Commands")}
+                      Disallowed Shell Commands
                     </h3>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    {t("Shell commands that should always be denied")}
+                    Shell commands that should always be denied
                   </p>
                   
                   <div className="flex flex-col sm:flex-row gap-2">
                     <Input
                       value={newCursorDisallowedCommand}
                       onChange={(e) => setNewCursorDisallowedCommand(e.target.value)}
-                      placeholder={t('e.g., "Shell(rm -rf)" or "Shell(sudo)"')}
+                      placeholder='e.g., "Shell(rm -rf)" or "Shell(sudo)"'
                       onKeyPress={(e) => {
                         if (e.key === 'Enter') {
                           if (newCursorDisallowedCommand && !cursorDisallowedCommands.includes(newCursorDisallowedCommand)) {
@@ -1632,7 +1650,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                       className="h-10 px-4 touch-manipulation"
                     >
                       <Plus className="w-4 h-4 mr-2 sm:mr-0" />
-                      <span className="sm:hidden">{t("Add Command")}</span>
+                      <span className="sm:hidden">Add Command</span>
                     </Button>
                   </div>
 
@@ -1654,7 +1672,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                     ))}
                     {cursorDisallowedCommands.length === 0 && (
                       <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                        {t("No disallowed shell commands configured")}
+                        No disallowed shell commands configured
                       </div>
                     )}
                   </div>
@@ -1663,17 +1681,171 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                 {/* Help Section */}
                 <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
                   <h4 className="font-medium text-purple-900 dark:text-purple-100 mb-2">
-                    {t("Cursor Shell Command Examples:")}
+                    Cursor Shell Command Examples:
                   </h4>
                   <ul className="text-sm text-purple-800 dark:text-purple-200 space-y-1">
-                    <li><code className="bg-purple-100 dark:bg-purple-800 px-1 rounded">"Shell(ls)"</code> - {t("Allow ls command")}</li>
-                    <li><code className="bg-purple-100 dark:bg-purple-800 px-1 rounded">"Shell(git status)"</code> - {t("Allow git status command")}</li>
-                    <li><code className="bg-purple-100 dark:bg-purple-800 px-1 rounded">"Shell(mkdir)"</code> - {t("Allow mkdir command")}</li>
-                    <li><code className="bg-purple-100 dark:bg-purple-800 px-1 rounded">"-f"</code>{t(" flag - Skip all permission prompts (dangerous)")}</li>
+                    <li><code className="bg-purple-100 dark:bg-purple-800 px-1 rounded">"Shell(ls)"</code> - Allow ls command</li>
+                    <li><code className="bg-purple-100 dark:bg-purple-800 px-1 rounded">"Shell(git status)"</code> - Allow git status command</li>
+                    <li><code className="bg-purple-100 dark:bg-purple-800 px-1 rounded">"Shell(mkdir)"</code> - Allow mkdir command</li>
+                    <li><code className="bg-purple-100 dark:bg-purple-800 px-1 rounded">"-f"</code> flag - Skip all permission prompts (dangerous)</li>
                   </ul>
                 </div>
               </div>
             )}
+              </div>
+            )}
+
+            {/* Tasks Tab */}
+            {activeTab === 'tasks' && (
+              <div className="space-y-6 md:space-y-8">
+                {/* Installation Status Check */}
+                {isCheckingInstallation ? (
+                  <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="animate-spin w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+                      <span className="text-sm text-muted-foreground">Checking TaskMaster installation...</span>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {/* TaskMaster Not Installed Warning */}
+                    {!isTaskMasterInstalled && (
+                      <div className="bg-orange-50 dark:bg-orange-950/50 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
+                        <div className="flex items-start gap-3">
+                          <div className="w-8 h-8 bg-orange-100 dark:bg-orange-900 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <svg className="w-4 h-4 text-orange-600 dark:text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                            </svg>
+                          </div>
+                          <div className="flex-1">
+                            <div className="font-medium text-orange-900 dark:text-orange-100 mb-2">
+                              TaskMaster AI CLI Not Installed
+                            </div>
+                            <div className="text-sm text-orange-800 dark:text-orange-200 space-y-3">
+                              <p>TaskMaster CLI is required to use task management features. Install it to get started:</p>
+
+                              <div className="bg-orange-100 dark:bg-orange-900/50 rounded-lg p-3 font-mono text-sm">
+                                <code>npm install -g task-master-ai</code>
+                               <a
+                                  href="https://github.com/eyaltoledano/claude-task-master"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium"
+                                >
+                                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M10 0C4.477 0 0 4.484 0 10.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0110 4.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.203 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.942.359.31.678.921.678 1.856 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0020 10.017C20 4.484 15.522 0 10 0z" clipRule="evenodd" />
+                                  </svg>
+                                  View on GitHub
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                  </svg>
+                                </a>
+                              </div>
+
+                              <div className="space-y-2">
+                                <p className="font-medium">After installation:</p>
+                                <ol className="list-decimal list-inside space-y-1 text-xs">
+                                  <li>Restart this application</li>
+                                  <li>TaskMaster features will automatically become available</li>
+                                  <li>Use <code className="bg-orange-100 dark:bg-orange-800 px-1 rounded">task-master init</code> in your project directory</li>
+                                </ol>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* TaskMaster Settings */}
+                    <div className="space-y-4">
+                      <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="font-medium text-foreground">
+                              Enable TaskMaster Integration
+                            </div>
+                            <div className="text-sm text-muted-foreground mt-1">
+                              Show TaskMaster tasks, banners, and sidebar indicators across the interface
+                            </div>
+                            {!isTaskMasterInstalled && (
+                              <div className="text-xs text-orange-600 dark:text-orange-400 mt-1">
+                                TaskMaster CLI must be installed first
+                              </div>
+                            )}
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={tasksEnabled}
+                              onChange={(e) => setTasksEnabled(e.target.checked)}
+                              disabled={!isTaskMasterInstalled}
+                              className="sr-only peer"
+                            />
+                            <div className={`w-11 h-6 ${!isTaskMasterInstalled ? 'bg-gray-300 dark:bg-gray-600' : 'bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800'} rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600`}></div>
+                          </label>
+                        </div>
+                      </div>
+
+                      {/* TaskMaster Information */}
+                      <div className="bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <Zap className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <div>
+                        <div className="font-medium text-blue-900 dark:text-blue-100 mb-2">
+                          🎯 About TaskMaster AI
+                        </div>
+                        <div className="text-sm text-blue-800 dark:text-blue-200 space-y-2">
+                          <p><strong>AI-Powered Task Management:</strong> Break complex projects into manageable subtasks with AI assistance</p>
+                          <p><strong>PRD:</strong> Generate structured tasks from Product Requirements Documents</p>
+                          <p><strong>Dependency Tracking:</strong> Understand task relationships and execution order</p>
+                          <p><strong>Progress Visualization:</strong> Kanban boards, and detailed task views</p>
+                        </div>
+                      </div>
+
+                      {/* GitHub Link and Resources */}
+                      <div className="mt-4 pt-4 border-t border-blue-200 dark:border-blue-700">
+                        <div className="flex items-start gap-3">
+                          <div className="w-6 h-6 bg-blue-100 dark:bg-blue-800 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <svg className="w-3 h-3 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M12.586 4.586a2 2 0 112.828 2.828l-3 3a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3-3a4 4 0 00-5.656-5.656l-1.5 1.5a1 1 0 101.414 1.414l1.5-1.5zm-5 5a2 2 0 012.828 0 1 1 0 101.414-1.414 4 4 0 00-5.656 0l-3 3a4 4 0 105.656 5.656l1.5-1.5a1 1 0 10-1.414-1.414l-1.5 1.5a2 2 0 11-2.828-2.828l3-3z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                          <div className="flex-1">
+                            <div className="font-medium text-blue-900 dark:text-blue-100 mb-2">
+                              📚 Learn More & Tutorial
+                            </div>
+                            <div className="text-sm text-blue-800 dark:text-blue-200 space-y-2">
+                              <p>TaskMaster AI (aka <strong>claude-task-master</strong> ) is an advanced AI-powered task management system built for developers.</p>
+                              <div className="flex flex-col gap-2">
+                                <a
+                                  href="https://github.com/eyaltoledano/claude-task-master"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium"
+                                >
+                                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M10 0C4.477 0 0 4.484 0 10.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0110 4.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.203 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.942.359.31.678.921.678 1.856 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0020 10.017C20 4.484 15.522 0 10 0z" clipRule="evenodd" />
+                                  </svg>
+                                  View on GitHub
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                  </svg>
+                                </a>
+                                <p className="text-xs text-blue-700 dark:text-blue-300">
+                                  Find documentation, setup guides, and examples for advanced TaskMaster workflows
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -1686,7 +1858,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
-                {t("Settings saved successfully!")}
+                Settings saved successfully!
               </div>
             )}
             {saveStatus === 'error' && (
@@ -1694,7 +1866,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                 </svg>
-                {t("Failed to save settings")}
+                Failed to save settings
               </div>
             )}
           </div>
@@ -1705,7 +1877,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
               disabled={isSaving}
               className="flex-1 sm:flex-none h-10 touch-manipulation"
             >
-              {t("Cancel")}
+              Cancel
             </Button>
             <Button 
               onClick={saveSettings} 
@@ -1715,10 +1887,10 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
               {isSaving ? (
                 <div className="flex items-center gap-2">
                   <div className="w-4 h-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  {t("Saving...")}
+                  Saving...
                 </div>
               ) : (
-                t('Save Settings')
+                'Save Settings'
               )}
             </Button>
           </div>

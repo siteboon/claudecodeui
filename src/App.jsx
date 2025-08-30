@@ -20,26 +20,27 @@
 
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useParams } from 'react-router-dom';
-import { translations } from './lib/i18n.js';
 import Sidebar from './components/Sidebar';
 import MainContent from './components/MainContent';
 import MobileNav from './components/MobileNav';
 import ToolsSettings from './components/ToolsSettings';
 import QuickSettingsPanel from './components/QuickSettingsPanel';
 
-import { useWebSocket } from './utils/websocket';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
+import { TaskMasterProvider } from './contexts/TaskMasterContext';
+import { TasksSettingsProvider } from './contexts/TasksSettingsContext';
+import { WebSocketProvider, useWebSocketContext } from './contexts/WebSocketContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import { useVersionCheck } from './hooks/useVersionCheck';
 import { api, authenticatedFetch } from './utils/api';
+import { t } from './lib/i18n';
 
 
 // Main App component with routing
 function AppContent() {
   const navigate = useNavigate();
   const { sessionId } = useParams();
-  const t = (key) => translations[key] || key;
   
   const { updateAvailable, latestVersion, currentVersion } = useVersionCheck('siteboon', 'claudecodeui');
   const [showVersionModal, setShowVersionModal] = useState(false);
@@ -76,7 +77,7 @@ function AppContent() {
   // until the conversation completes or is aborted.
   const [activeSessions, setActiveSessions] = useState(new Set()); // Track sessions with active conversations
   
-  const { ws, sendMessage, messages } = useWebSocket();
+  const { ws, sendMessage, messages } = useWebSocketContext();
 
   useEffect(() => {
     const checkMobile = () => {
@@ -476,8 +477,8 @@ function AppContent() {
                 </svg>
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{t("Update Available")}</h2>
-                <p className="text-sm text-gray-500 dark:text-gray-400">{t("A new version is ready")}</p>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{t('Update Available')}</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{t('A new version is ready')}</p>
               </div>
             </div>
             <button
@@ -493,25 +494,25 @@ function AppContent() {
           {/* Version Info */}
           <div className="space-y-3">
             <div className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t("Current Version")}</span>
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('Current Version')}</span>
               <span className="text-sm text-gray-900 dark:text-white font-mono">{currentVersion}</span>
             </div>
             <div className="flex justify-between items-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
-              <span className="text-sm font-medium text-blue-700 dark:text-blue-300">{t("Latest Version")}</span>
+              <span className="text-sm font-medium text-blue-700 dark:text-blue-300">{t('Latest Version')}</span>
               <span className="text-sm text-blue-900 dark:text-blue-100 font-mono">{latestVersion}</span>
             </div>
           </div>
 
           {/* Upgrade Instructions */}
           <div className="space-y-3">
-            <h3 className="text-sm font-medium text-gray-900 dark:text-white">{t("How to upgrade:")}</h3>
+            <h3 className="text-sm font-medium text-gray-900 dark:text-white">{t('How to upgrade:')}</h3>
             <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3 border">
               <code className="text-sm text-gray-800 dark:text-gray-200 font-mono">
                 git checkout main && git pull && npm install
               </code>
             </div>
             <p className="text-xs text-gray-600 dark:text-gray-400">
-              {t("Run this command in your Claude Code UI directory to update to the latest version.")}
+              {t('Run this command in your Claude Code UI directory to update to the latest version.')}
             </p>
           </div>
 
@@ -521,7 +522,7 @@ function AppContent() {
               onClick={() => setShowVersionModal(false)}
               className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md transition-colors"
             >
-              {t("Later")}
+              {t('Later')}
             </button>
             <button
               onClick={() => {
@@ -531,7 +532,7 @@ function AppContent() {
               }}
               className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
             >
-              {t("Copy Command")}
+              {t('Copy Command')}
             </button>
           </div>
         </div>
@@ -692,14 +693,20 @@ function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <ProtectedRoute>
-          <Router>
-            <Routes>
-              <Route path="/" element={<AppContent />} />
-              <Route path="/session/:sessionId" element={<AppContent />} />
-            </Routes>
-          </Router>
-        </ProtectedRoute>
+        <WebSocketProvider>
+          <TasksSettingsProvider>
+            <TaskMasterProvider>
+              <ProtectedRoute>
+                <Router>
+                  <Routes>
+                    <Route path="/" element={<AppContent />} />
+                    <Route path="/session/:sessionId" element={<AppContent />} />
+                  </Routes>
+                </Router>
+              </ProtectedRoute>
+            </TaskMasterProvider>
+          </TasksSettingsProvider>
+        </WebSocketProvider>
       </AuthProvider>
     </ThemeProvider>
   );

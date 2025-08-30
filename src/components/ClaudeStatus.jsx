@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { cn } from '../lib/utils';
+import { t } from '../lib/i18n';
 
 function ClaudeStatus({ status, onAbort, isLoading, provider = 'claude' }) {
   const [elapsedTime, setElapsedTime] = useState(0);
@@ -39,7 +40,7 @@ function ClaudeStatus({ status, onAbort, isLoading, provider = 'claude' }) {
   if (!isLoading) return null;
   
   // Clever action words that cycle
-  const actionWords = ['Thinking', 'Processing', 'Analyzing', 'Working', 'Computing', 'Reasoning'];
+  const actionWords = [t('Thinking'), t('Processing'), t('Analyzing'), t('Working'), t('Computing'), t('Reasoning')];
   const actionIndex = Math.floor(elapsedTime / 3) % actionWords.length;
   
   // Parse status data
@@ -72,16 +73,16 @@ function ClaudeStatus({ status, onAbort, isLoading, provider = 'claude' }) {
                 {tokens > 0 && (
                   <>
                     <span className="text-gray-400">·</span>
-                    <span className="text-gray-300 text-sm hidden sm:inline">⚒ {tokens.toLocaleString()} tokens</span>
+                    <span className="text-gray-300 text-sm hidden sm:inline">⚒ {tokens.toLocaleString()} {t('tokens')}</span>
                     <span className="text-gray-300 text-sm sm:hidden">⚒ {tokens.toLocaleString()}</span>
                   </>
                 )}
                 <span className="text-gray-400 hidden sm:inline">·</span>
-                <span className="text-gray-300 text-sm hidden sm:inline">esc to interrupt</span>
+                <span className="text-gray-300 text-sm hidden sm:inline">{t('escToInterrupt')}</span>
               </div>
               {/* Second line for mobile */}
               <div className="text-xs text-gray-400 sm:hidden mt-1">
-                esc to interrupt
+                {t('escToInterrupt')}
               </div>
             </div>
           </div>
@@ -96,7 +97,7 @@ function ClaudeStatus({ status, onAbort, isLoading, provider = 'claude' }) {
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
-            <span className="hidden sm:inline">Stop</span>
+            <span className="hidden sm:inline">{t('Stop')}</span>
           </button>
         )}
       </div>
