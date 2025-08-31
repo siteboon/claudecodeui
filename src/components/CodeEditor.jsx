@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { t } from '../lib/i18n';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { python } from '@codemirror/lang-python';
@@ -249,7 +250,7 @@ function CodeEditor({ file, onClose, projectPath }) {
           <div className="code-editor-loading w-full h-full md:rounded-lg md:w-auto md:h-auto p-8 flex items-center justify-center">
             <div className="flex items-center gap-3">
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-              <span className="text-gray-900 dark:text-white">Loading {file.name}...</span>
+              <span className="text-gray-900 dark:text-white">{t('Loading...')} {file.name}...</span>
             </div>
           </div>
         </div>
@@ -280,7 +281,7 @@ function CodeEditor({ file, onClose, projectPath }) {
                 <h3 className="font-medium text-gray-900 truncate">{file.name}</h3>
                 {file.diffInfo && (
                   <span className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded whitespace-nowrap">
-                    📝 Has changes
+                    📝 {t('hasChanges')}
                   </span>
                 )}
               </div>
@@ -293,7 +294,7 @@ function CodeEditor({ file, onClose, projectPath }) {
               <button
                 onClick={() => setShowDiff(!showDiff)}
                 className="p-2 md:p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
-                title={showDiff ? "Hide diff highlighting" : "Show diff highlighting"}
+                title={t(showDiff ? "hideDiff" : "showDiff")}
               >
                 {showDiff ? <EyeOff className="w-5 h-5 md:w-4 md:h-4" /> : <Eye className="w-5 h-5 md:w-4 md:h-4" />}
               </button>
@@ -306,7 +307,7 @@ function CodeEditor({ file, onClose, projectPath }) {
                   ? 'text-blue-600 bg-blue-50' 
                   : 'text-gray-600 hover:text-gray-900'
               }`}
-              title={wordWrap ? 'Disable word wrap' : 'Enable word wrap'}
+              title={t(wordWrap ? 'disableWordWrap' : 'enableWordWrap')}
             >
               <span className="text-sm md:text-xs font-mono font-bold">↵</span>
             </button>
@@ -314,7 +315,7 @@ function CodeEditor({ file, onClose, projectPath }) {
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
               className="p-2 md:p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
-              title="Toggle theme"
+              title={t('toggleTheme')}
             >
               <span className="text-lg md:text-base">{isDarkMode ? '☀️' : '🌙'}</span>
             </button>
@@ -322,7 +323,7 @@ function CodeEditor({ file, onClose, projectPath }) {
             <button
               onClick={handleDownload}
               className="p-2 md:p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
-              title="Download file"
+              title={t('downloadFile')}
             >
               <Download className="w-5 h-5 md:w-4 md:h-4" />
             </button>
@@ -341,12 +342,12 @@ function CodeEditor({ file, onClose, projectPath }) {
                   <svg className="w-5 h-5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  <span className="hidden sm:inline">Saved!</span>
+                  <span className="hidden sm:inline">{t('savedMessage')}</span>
                 </>
               ) : (
                 <>
                   <Save className="w-5 h-5 md:w-4 md:h-4" />
-                  <span className="hidden sm:inline">{saving ? 'Saving...' : 'Save'}</span>
+                  <span className="hidden sm:inline">{saving ? t('Saving...') : t('Save')}</span>
                 </>
               )}
             </button>
@@ -354,7 +355,7 @@ function CodeEditor({ file, onClose, projectPath }) {
             <button
               onClick={toggleFullscreen}
               className="hidden md:flex p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 items-center justify-center"
-              title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+              title={t(isFullscreen ? 'exitFullscreen' : 'fullscreen')}
             >
               {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
             </button>
@@ -362,7 +363,7 @@ function CodeEditor({ file, onClose, projectPath }) {
             <button
               onClick={onClose}
               className="p-2 md:p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
-              title="Close"
+              title={t('Close')}
             >
               <X className="w-6 h-6 md:w-4 md:h-4" />
             </button>
@@ -405,13 +406,13 @@ function CodeEditor({ file, onClose, projectPath }) {
         {/* Footer */}
         <div className="flex items-center justify-between p-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 flex-shrink-0">
           <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
-            <span>Lines: {content.split('\n').length}</span>
-            <span>Characters: {content.length}</span>
-            <span>Language: {file.name.split('.').pop()?.toUpperCase() || 'Text'}</span>
+            <span>{t('lines')}: {content.split('\n').length}</span>
+            <span>{t('characters')}: {content.length}</span>
+            <span>{t('language')}: {file.name.split('.').pop()?.toUpperCase() || 'Text'}</span>
           </div>
           
           <div className="text-sm text-gray-500 dark:text-gray-400">
-            Press Ctrl+S to save • Esc to close
+            {t('saveAndCloseHelp')}
           </div>
         </div>
       </div>

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import ClaudeLogo from './ClaudeLogo';
+import { t } from '../lib/i18n';
 
 const SetupForm = () => {
   const [username, setUsername] = useState('');
@@ -50,9 +51,9 @@ const SetupForm = () => {
             <div className="flex justify-center mb-4">
               <ClaudeLogo size={64} />
             </div>
-            <h1 className="text-2xl font-bold text-foreground">Welcome to Claude Code UI</h1>
+            <h1 className="text-2xl font-bold text-foreground">{t('welcomeToClaudeCodeUI')}</h1>
             <p className="text-muted-foreground mt-2">
-              Set up your account to get started
+              {t('setupYourAccountToGetStarted')}
             </p>
           </div>
 
@@ -60,7 +61,7 @@ const SetupForm = () => {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label htmlFor="username" className="block text-sm font-medium text-foreground mb-1">
-                Username
+                {t('Username')}
               </label>
               <input
                 type="text"
@@ -68,7 +69,7 @@ const SetupForm = () => {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Enter your username"
+                placeholder={t('enterUsernamePlaceholder')}
                 required
                 disabled={isLoading}
               />
@@ -76,7 +77,7 @@ const SetupForm = () => {
 
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-foreground mb-1">
-                Password
+                {t('Password')}
               </label>
               <input
                 type="password"
@@ -84,7 +85,7 @@ const SetupForm = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Enter your password"
+                placeholder={t('enterPasswordPlaceholder')}
                 required
                 disabled={isLoading}
               />
@@ -92,7 +93,7 @@ const SetupForm = () => {
 
             <div>
               <label htmlFor="confirmPassword" className="block text-sm font-medium text-foreground mb-1">
-                Confirm Password
+                {t('confirmPasswordLabel')}
               </label>
               <input
                 type="password"
@@ -100,7 +101,7 @@ const SetupForm = () => {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Confirm your password"
+                placeholder={t('confirmPasswordPlaceholder')}
                 required
                 disabled={isLoading}
               />
@@ -117,13 +118,13 @@ const SetupForm = () => {
               disabled={isLoading}
               className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium py-2 px-4 rounded-md transition-colors duration-200"
             >
-              {isLoading ? 'Setting up...' : 'Create Account'}
+              {isLoading ? t('creatingAccount') : t('createAccountButton')}
             </button>
           </form>
 
           <div className="text-center">
             <p className="text-sm text-muted-foreground">
-              This is a single-user system. Only one account can be created.
+              {t('singleUserSystemMessage')}
             </p>
           </div>
         </div>

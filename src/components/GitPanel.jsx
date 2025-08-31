@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { t } from '../lib/i18n';
 import { GitBranch, GitCommit, Plus, Minus, RefreshCw, Check, X, ChevronDown, ChevronRight, Info, History, FileText, Mic, MicOff, Sparkles, Download, RotateCcw, Trash2, AlertTriangle, Upload } from 'lucide-react';
 import { MicButton } from './MicButton.jsx';
 import { authenticatedFetch } from '../utils/api';
@@ -547,10 +548,10 @@ function GitPanel({ selectedProject, isMobile }) {
 
   const getStatusLabel = (status) => {
     switch (status) {
-      case 'M': return 'Modified';
-      case 'A': return 'Added';
-      case 'D': return 'Deleted';
-      case 'U': return 'Untracked';
+      case 'M': return t('modifiedStatus');
+      case 'A': return t('addedStatus');
+      case 'D': return t('deletedStatus');
+      case 'U': return t('untrackedStatus');
       default: return status;
     }
   };
@@ -633,10 +634,10 @@ function GitPanel({ selectedProject, isMobile }) {
                     });
                   }}
                   className={`${isMobile ? 'px-2 py-1 text-xs' : 'p-1'} hover:bg-red-100 dark:hover:bg-red-900 rounded text-red-600 dark:text-red-400 font-medium flex items-center gap-1`}
-                  title="Discard changes"
+                  title={t('discardChanges')}
                 >
                   <Trash2 className={`${isMobile ? 'w-3 h-3' : 'w-3 h-3'}`} />
-                  {isMobile && <span>Discard</span>}
+                  {isMobile && <span>{t('discardButton')}</span>}
                 </button>
               )}
               {status === 'U' && (
@@ -650,10 +651,10 @@ function GitPanel({ selectedProject, isMobile }) {
                     });
                   }}
                   className={`${isMobile ? 'px-2 py-1 text-xs' : 'p-1'} hover:bg-red-100 dark:hover:bg-red-900 rounded text-red-600 dark:text-red-400 font-medium flex items-center gap-1`}
-                  title="Delete untracked file"
+                  title={t('deleteUntrackedFile')}
                 >
                   <Trash2 className={`${isMobile ? 'w-3 h-3' : 'w-3 h-3'}`} />
-                  {isMobile && <span>Delete</span>}
+                  {isMobile && <span>{t('deleteButton')}</span>}
                 </button>
               )}
               <span 
@@ -747,7 +748,7 @@ function GitPanel({ selectedProject, isMobile }) {
                     </span>
                   )}
                   {remoteStatus.isUpToDate && (
-                    <span className="text-gray-500 dark:text-gray-400" title="Up to date with remote">
+                    <span className="text-gray-500 dark:text-gray-400" title={t('upToDateWithRemote')}>
                       ✓
                     </span>
                   )}
@@ -785,7 +786,7 @@ function GitPanel({ selectedProject, isMobile }) {
                   className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2"
                 >
                   <Plus className="w-3 h-3" />
-                  <span>Create new branch</span>
+                  <span>{t('Create New Project')}</span>
                 </button>
               </div>
             </div>
@@ -808,7 +809,7 @@ function GitPanel({ selectedProject, isMobile }) {
                   title={`Publish branch "${currentBranch}" to ${remoteStatus.remoteName}`}
                 >
                   <Upload className={`w-3 h-3 ${isPublishing ? 'animate-pulse' : ''}`} />
-                  <span>{isPublishing ? 'Publishing...' : 'Publish'}</span>
+                  <span>{isPublishing ? t('Publishing...') : t('Publish')}</span>
                 </button>
               )}
               
@@ -827,7 +828,7 @@ function GitPanel({ selectedProject, isMobile }) {
                       title={`Pull ${remoteStatus.behind} commit${remoteStatus.behind !== 1 ? 's' : ''} from ${remoteStatus.remoteName}`}
                     >
                       <Download className={`w-3 h-3 ${isPulling ? 'animate-pulse' : ''}`} />
-                      <span>{isPulling ? 'Pulling...' : `Pull ${remoteStatus.behind}`}</span>
+                      <span>{isPulling ? t('Pulling...') : `${t('Pull')} ${remoteStatus.behind}`}</span>
                     </button>
                   )}
                   
@@ -843,7 +844,7 @@ function GitPanel({ selectedProject, isMobile }) {
                       title={`Push ${remoteStatus.ahead} commit${remoteStatus.ahead !== 1 ? 's' : ''} to ${remoteStatus.remoteName}`}
                     >
                       <Upload className={`w-3 h-3 ${isPushing ? 'animate-pulse' : ''}`} />
-                      <span>{isPushing ? 'Pushing...' : `Push ${remoteStatus.ahead}`}</span>
+                      <span>{isPushing ? t('Pushing...') : `${t('Push')} ${remoteStatus.ahead}`}</span>
                     </button>
                   )}
                   
@@ -856,7 +857,7 @@ function GitPanel({ selectedProject, isMobile }) {
                       title={`Fetch from ${remoteStatus.remoteName}`}
                     >
                       <RefreshCw className={`w-3 h-3 ${isFetching ? 'animate-spin' : ''}`} />
-                      <span>{isFetching ? 'Fetching...' : 'Fetch'}</span>
+                      <span>{isFetching ? t('Fetching...') : t('Fetch')}</span>
                     </button>
                   )}
                 </>
@@ -910,7 +911,7 @@ function GitPanel({ selectedProject, isMobile }) {
             >
               <div className="flex items-center justify-center gap-2">
                 <FileText className="w-4 h-4" />
-                <span>Changes</span>
+                <span>{t('Changes')}</span>
               </div>
             </button>
             <button
@@ -923,7 +924,7 @@ function GitPanel({ selectedProject, isMobile }) {
             >
               <div className="flex items-center justify-center gap-2">
                 <History className="w-4 h-4" />
-                <span>History</span>
+                <span>{t('History')}</span>
               </div>
             </button>
           </div>
@@ -944,7 +945,7 @@ function GitPanel({ selectedProject, isMobile }) {
                         className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
                       >
                         <GitCommit className="w-4 h-4" />
-                        <span>Commit {selectedFiles.size} file{selectedFiles.size !== 1 ? 's' : ''}</span>
+                        <span>{t('Commit')} {selectedFiles.size} file{selectedFiles.size !== 1 ? 's' : ''}</span>
                         <ChevronDown className="w-3 h-3" />
                       </button>
                     </div>
@@ -955,7 +956,7 @@ function GitPanel({ selectedProject, isMobile }) {
                     {/* Mobile collapse button */}
                     {isMobile && (
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium">Commit Changes</span>
+                        <span className="text-sm font-medium">{t('Commit')} {t('Changes')}</span>
                         <button
                           onClick={() => setIsCommitAreaCollapsed(true)}
                           className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded"
@@ -970,7 +971,7 @@ function GitPanel({ selectedProject, isMobile }) {
                         ref={textareaRef}
                         value={commitMessage}
                         onChange={(e) => setCommitMessage(e.target.value)}
-                        placeholder="Message (Ctrl+Enter to commit)"
+                        placeholder={t('commitMessagePlaceholder')}
                         className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 resize-none pr-20"
                         rows="3"
                         onKeyDown={(e) => {
@@ -984,7 +985,7 @@ function GitPanel({ selectedProject, isMobile }) {
                           onClick={generateCommitMessage}
                           disabled={selectedFiles.size === 0 || isGeneratingMessage}
                           className="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                          title="Generate commit message"
+                          title={t('generateCommitMessage')}
                         >
                           {isGeneratingMessage ? (
                             <RefreshCw className="w-4 h-4 animate-spin" />
@@ -1014,7 +1015,7 @@ function GitPanel({ selectedProject, isMobile }) {
                         className="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
                       >
                         <Check className="w-3 h-3" />
-                        <span>{isCommitting ? 'Committing...' : 'Commit'}</span>
+                        <span>{isCommitting ? t('Creating...') : t('Commit')}</span>
                       </button>
                     </div>
                   </div>
@@ -1047,14 +1048,14 @@ function GitPanel({ selectedProject, isMobile }) {
                   }}
                   className={`text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 ${isMobile ? 'text-xs' : 'text-xs'}`}
                 >
-                  {isMobile ? 'All' : 'Select All'}
+                  {isMobile ? t('All') : t('Select All')}
                 </button>
                 <span className="text-gray-300 dark:text-gray-600">|</span>
                 <button
                   onClick={() => setSelectedFiles(new Set())}
                   className={`text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 ${isMobile ? 'text-xs' : 'text-xs'}`}
                 >
-                  {isMobile ? 'None' : 'Deselect All'}
+                  {isMobile ? t('None') : t('Deselect All')}
                 </button>
               </div>
             </div>
@@ -1079,25 +1080,25 @@ function GitPanel({ selectedProject, isMobile }) {
                       <span className="inline-flex items-center justify-center w-5 h-5 bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300 rounded border border-yellow-200 dark:border-yellow-800 font-bold text-xs">
                         M
                       </span>
-                      <span className="text-gray-600 dark:text-gray-400 italic">Modified</span>
+                      <span className="text-gray-600 dark:text-gray-400 italic">{t('modifiedStatus')}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="inline-flex items-center justify-center w-5 h-5 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 rounded border border-green-200 dark:border-green-800 font-bold text-xs">
                         A
                       </span>
-                      <span className="text-gray-600 dark:text-gray-400 italic">Added</span>
+                      <span className="text-gray-600 dark:text-gray-400 italic">{t('addedStatus')}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="inline-flex items-center justify-center w-5 h-5 bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 rounded border border-red-200 dark:border-red-800 font-bold text-xs">
                         D
                       </span>
-                      <span className="text-gray-600 dark:text-gray-400 italic">Deleted</span>
+                      <span className="text-gray-600 dark:text-gray-400 italic">{t('deletedStatus')}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="inline-flex items-center justify-center w-5 h-5 bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 rounded border border-gray-300 dark:border-gray-600 font-bold text-xs">
                         U
                       </span>
-                      <span className="text-gray-600 dark:text-gray-400 italic">Untracked</span>
+                      <span className="text-gray-600 dark:text-gray-400 italic">{t('untrackedStatus')}</span>
                     </div>
                   </div>
                 </div>
@@ -1156,10 +1157,10 @@ function GitPanel({ selectedProject, isMobile }) {
           <div className="fixed inset-0 bg-black bg-opacity-50" onClick={() => setShowNewBranchModal(false)} />
           <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
             <div className="p-6">
-              <h3 className="text-lg font-semibold mb-4">Create New Branch</h3>
+              <h3 className="text-lg font-semibold mb-4">{t('Create New Project')}</h3>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Branch Name
+                  {t('Branch Name')}
                 </label>
                 <input
                   type="text"
@@ -1186,7 +1187,7 @@ function GitPanel({ selectedProject, isMobile }) {
                   }}
                   className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md"
                 >
-                  Cancel
+                  {t('Cancel')}
                 </button>
                 <button
                   onClick={createBranch}
@@ -1196,12 +1197,12 @@ function GitPanel({ selectedProject, isMobile }) {
                   {isCreatingBranch ? (
                     <>
                       <RefreshCw className="w-3 h-3 animate-spin" />
-                      <span>Creating...</span>
+                      <span>{t('Creating...')}</span>
                     </>
                   ) : (
                     <>
                       <Plus className="w-3 h-3" />
-                      <span>Create Branch</span>
+                      <span>{t('Create Branch')}</span>
                     </>
                   )}
                 </button>
@@ -1226,11 +1227,11 @@ function GitPanel({ selectedProject, isMobile }) {
                   }`} />
                 </div>
                 <h3 className="text-lg font-semibold">
-                  {confirmAction.type === 'discard' ? 'Discard Changes' : 
-                   confirmAction.type === 'delete' ? 'Delete File' :
-                   confirmAction.type === 'commit' ? 'Confirm Commit' : 
-                   confirmAction.type === 'pull' ? 'Confirm Pull' : 
-                   confirmAction.type === 'publish' ? 'Publish Branch' : 'Confirm Push'}
+                  {confirmAction.type === 'discard' ? t('discardChanges') :
+                   confirmAction.type === 'delete' ? t('deleteFile') :
+                   confirmAction.type === 'commit' ? t('Confirm Commit') :
+                   confirmAction.type === 'pull' ? t('Confirm Pull') :
+                   confirmAction.type === 'publish' ? t('Publish Branch') : t('Confirm Push')}
                 </h3>
               </div>
               
@@ -1243,7 +1244,7 @@ function GitPanel({ selectedProject, isMobile }) {
                   onClick={() => setConfirmAction(null)}
                   className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md"
                 >
-                  Cancel
+                  {t('Cancel')}
                 </button>
                 <button
                   onClick={confirmAndExecute}
@@ -1262,32 +1263,32 @@ function GitPanel({ selectedProject, isMobile }) {
                   {confirmAction.type === 'discard' ? (
                     <>
                       <Trash2 className="w-4 h-4" />
-                      <span>Discard</span>
+                      <span>{t('discardButton')}</span>
                     </>
                   ) : confirmAction.type === 'delete' ? (
                     <>
                       <Trash2 className="w-4 h-4" />
-                      <span>Delete</span>
+                      <span>{t('deleteButton')}</span>
                     </>
                   ) : confirmAction.type === 'commit' ? (
                     <>
                       <Check className="w-4 h-4" />
-                      <span>Commit</span>
+                      <span>{t('Commit')}</span>
                     </>
                   ) : confirmAction.type === 'pull' ? (
                     <>
                       <Download className="w-4 h-4" />
-                      <span>Pull</span>
+                      <span>{t('Pull')}</span>
                     </>
                   ) : confirmAction.type === 'publish' ? (
                     <>
                       <Upload className="w-4 h-4" />
-                      <span>Publish</span>
+                      <span>{t('Publish')}</span>
                     </>
                   ) : (
                     <>
                       <Upload className="w-4 h-4" />
-                      <span>Push</span>
+                      <span>{t('Push')}</span>
                     </>
                   )}
                 </button>
