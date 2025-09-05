@@ -39,10 +39,12 @@ import mime from 'mime-types';
 import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
 import { spawnClaude, abortClaudeSession } from './claude-cli.js';
 import { spawnCursor, abortCursorSession } from './cursor-cli.js';
+import { spawnCodegen, abortCodegenSession } from './codegen-cli.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
 import mcpRoutes from './routes/mcp.js';
 import cursorRoutes from './routes/cursor.js';
+import codegenRoutes from './routes/codegen.js';
 import taskmasterRoutes from './routes/taskmaster.js';
 import mcpUtilsRoutes from './routes/mcp-utils.js';
 import { initializeDatabase } from './database/db.js';
@@ -184,6 +186,9 @@ app.use('/api/mcp', authenticateToken, mcpRoutes);
 
 // Cursor API Routes (protected)
 app.use('/api/cursor', authenticateToken, cursorRoutes);
+
+// Codegen API Routes (protected)
+app.use('/api/codegen', authenticateToken, codegenRoutes);
 
 // TaskMaster API Routes (protected)
 app.use('/api/taskmaster', authenticateToken, taskmasterRoutes);

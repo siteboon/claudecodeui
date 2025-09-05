@@ -4,7 +4,7 @@
 </div>
 
 
-A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), and [Cursor CLI](https://docs.cursor.com/en/cli/overview). You can use it locally or remotely to view your active projects and sessions in Claude Code or Cursor and make changes to them from everywhere (mobile or desktop). This gives you a proper interface that works everywhere. Supports models including **Claude Sonnet 4**, **Opus 4.1**, and **GPT-5**
+A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor CLI](https://docs.cursor.com/en/cli/overview), and **[Codegen](https://codegen.com)**. You can use it locally or remotely to view your active projects and sessions in Claude Code, Cursor, or Codegen and make changes to them from everywhere (mobile or desktop). This gives you a proper interface that works everywhere. Supports models including **Claude Sonnet 4**, **Opus 4.1**, and **GPT-5**
 
 ## Screenshots
 
@@ -42,8 +42,9 @@ A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/cla
 ## Features
 
 - **Responsive Design** - Works seamlessly across desktop, tablet, and mobile so you can also use Claude Code from mobile 
-- **Interactive Chat Interface** - Built-in chat interface for seamless communication with Claude Code or Cursor
-- **Integrated Shell Terminal** - Direct access to Claude Code or Cursor CLI through built-in shell functionality
+- **Interactive Chat Interface** - Built-in chat interface for seamless communication with Claude Code, Cursor, or Codegen
+- **Integrated Shell Terminal** - Direct access to Claude Code, Cursor CLI, or Codegen through built-in shell functionality
+- **Multi-Provider Support** - Switch between Claude Code, Cursor, and Codegen providers with a single click
 - **File Explorer** - Interactive file tree with syntax highlighting and live editing
 - **Git Explorer** - View, stage and commit your changes. You can also switch branches 
 - **Session Management** - Resume conversations, manage multiple sessions, and track history
@@ -57,7 +58,8 @@ A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/cla
 
 - [Node.js](https://nodejs.org/) v20 or higher
 - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and configured, and/or
-- [Cursor CLI](https://docs.cursor.com/en/cli/overview) installed and configured
+- [Cursor CLI](https://docs.cursor.com/en/cli/overview) installed and configured, and/or
+- [Codegen](https://codegen.com) installed and configured
 
 ### Installation
 
@@ -242,6 +244,11 @@ d
 - Review server console logs for detailed error messages
 - Ensure you're not trying to access system directories outside project scope
 
+## Codegen Integration
+
+For detailed information about Codegen integration, see:
+- [Codegen Setup Guide](./CODEGEN_SETUP.md) - Complete setup and configuration documentation
+- [Quick Start with Codegen](./QUICK_START_CODEGEN.md) - Fast setup guide
 
 ## License
 
