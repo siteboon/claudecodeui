@@ -1,3 +1,12 @@
 #!/bin/bash
+# --no-sandbox is required for Flatpak compatibility due to sandboxing conflicts
+# Flatpak provides its own sandboxing, so this is acceptable in this context
 cd /app/claude-code-ui
-exec /app/claude-code-ui/node_modules/electron/dist/electron --no-sandbox --disable-features=VizDisplayCompositor electron.js "$@"
+exec /app/claude-code-ui/node_modules/electron/dist/electron \
+  --no-sandbox \
+  --disable-features=VizDisplayCompositor \
+  --disable-dev-shm-usage \
+  --disable-background-timer-throttling \
+  --disable-backgrounding-occluded-windows \
+  --disable-renderer-backgrounding \
+  electron.js "$@"
