@@ -90,7 +90,7 @@
   </content_rating>
   
   <releases>
-    <release version="1.8.0" date="2025-01-11">
+    <release version="1.8.0" date="2025-09-11">
       <description>
         <p>Major release with Flatpak support and enhanced desktop integration:</p>
         <ul>
