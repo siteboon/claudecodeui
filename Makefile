@@ -12,6 +12,7 @@ help:
 	@echo "============================="
 	@echo ""
 	@echo "Available targets:"
+ 	@echo "  install      - Install NPM packages"
 	@echo "  build        - Build frontend only"
 	@echo "  dev          - Start development servers"
 	@echo "  test         - Run tests (if available)"
@@ -34,6 +35,11 @@ help:
 	@echo ""
 	@echo "Release:"
 	@echo "  release      - Build all packages for release"
+
+# Install NPM packages
+install:
+	@echo "📦 Installing NPM packages"
+	npm install
 
 # Build frontend
 build:
