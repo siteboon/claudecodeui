@@ -532,7 +532,7 @@ async function getSessions(projectName, limit = 5, offset = 0) {
       return { sessions: [], hasMore: false, total: 0 };
     }
     
-    // For performance, get file stats to sort by modification time
+    // Sort files by modification time (newest first)
     const filesWithStats = await Promise.all(
       jsonlFiles.map(async (file) => {
         const filePath = path.join(projectDir, file);
@@ -540,40 +540,84 @@ async function getSessions(projectName, limit = 5, offset = 0) {
         return { file, mtime: stats.mtime };
       })
     );
-    
-    // Sort files by modification time (newest first) for better performance
     filesWithStats.sort((a, b) => b.mtime - a.mtime);
     
     const allSessions = new Map();
-    let processedCount = 0;
+    const allEntries = [];
+    const uuidToSessionMap = new Map();
     
-    // Process files in order of modification time
+    // Collect all sessions and entries from all files
     for (const { file } of filesWithStats) {
       const jsonlFile = path.join(projectDir, file);
-      const sessions = await parseJsonlSessions(jsonlFile);
+      const result = await parseJsonlSessions(jsonlFile);
       
-      // Merge sessions, avoiding duplicates by session ID
-      sessions.forEach(session => {
+      result.sessions.forEach(session => {
         if (!allSessions.has(session.id)) {
           allSessions.set(session.id, session);
         }
       });
       
-      processedCount++;
+      allEntries.push(...result.entries);
       
-      // Early exit optimization: if we have enough sessions and processed recent files
-      if (allSessions.size >= (limit + offset) * 2 && processedCount >= Math.min(3, filesWithStats.length)) {
+      // Early exit optimization for large projects
+      if (allSessions.size >= (limit + offset) * 2 && allEntries.length >= Math.min(3, filesWithStats.length)) {
         break;
       }
     }
     
-    // Convert to array and sort by last activity
-    const sortedSessions = Array.from(allSessions.values()).sort((a, b) => 
-      new Date(b.lastActivity) - new Date(a.lastActivity)
-    );
+    // Build UUID-to-session mapping for timeline detection
+    allEntries.forEach(entry => {
+      if (entry.uuid && entry.sessionId) {
+        uuidToSessionMap.set(entry.uuid, entry.sessionId);
+      }
+    });
     
-    const total = sortedSessions.length;
-    const paginatedSessions = sortedSessions.slice(offset, offset + limit);
+    // Detect session continuations using leafUuid
+    const sessionContinuations = new Map();
+    let pendingContinuationInfo = null;
+    
+    allEntries.forEach(entry => {
+      // Summary entries without sessionId indicate a session continuation
+      if (entry.type === 'summary' && !entry.sessionId && (entry.leafUuid || entry.leafUUID)) {
+        pendingContinuationInfo = {
+          leafUuid: entry.leafUuid || entry.leafUUID,
+          summary: entry.summary || 'Continued Session'
+        };
+        return;
+      }
+      
+      if (entry.sessionId) {
+        const session = allSessions.get(entry.sessionId);
+        
+        // Apply pending continuation info
+        if (session && pendingContinuationInfo) {
+          const previousSession = uuidToSessionMap.get(pendingContinuationInfo.leafUuid);
+          if (previousSession) {
+            session.summary = pendingContinuationInfo.summary;
+            sessionContinuations.set(entry.sessionId, previousSession);
+          }
+          pendingContinuationInfo = null;
+        }
+        
+        // Handle summary entries with sessionId that have leafUuid
+        if (entry.type === 'summary' && (entry.leafUuid || entry.leafUUID)) {
+          const leafUuid = entry.leafUuid || entry.leafUUID;
+          const previousSession = uuidToSessionMap.get(leafUuid);
+          if (previousSession && session) {
+            sessionContinuations.set(entry.sessionId, previousSession);
+          }
+        }
+      }
+    });
+    
+    // Filter out continued sessions - only show the latest in each timeline
+    const continuedSessions = new Set(sessionContinuations.values());
+    const visibleSessions = Array.from(allSessions.values())
+      .filter(session => !continuedSessions.has(session.id))
+      .sort((a, b) => new Date(b.lastActivity) - new Date(a.lastActivity));
+    
+    const total = visibleSessions.length;
+    const paginatedSessions = visibleSessions.slice(offset, offset + limit);
     const hasMore = offset + limit < total;
     
     return {
@@ -591,6 +635,7 @@ async function getSessions(projectName, limit = 5, offset = 0) {
 
 async function parseJsonlSessions(filePath) {
   const sessions = new Map();
+  const entries = [];
   
   try {
     const fileStream = fsSync.createReadStream(filePath);
@@ -599,14 +644,11 @@ async function parseJsonlSessions(filePath) {
       crlfDelay: Infinity
     });
     
-    // console.log(`[JSONL Parser] Reading file: ${filePath}`);
-    let lineCount = 0;
-    
     for await (const line of rl) {
       if (line.trim()) {
-        lineCount++;
         try {
           const entry = JSON.parse(line);
+          entries.push(entry);
           
           if (entry.sessionId) {
             if (!sessions.has(entry.sessionId)) {
@@ -621,43 +663,37 @@ async function parseJsonlSessions(filePath) {
             
             const session = sessions.get(entry.sessionId);
             
-            // Update summary if this is a summary entry
+            // Update summary from summary entries or first user message
             if (entry.type === 'summary' && entry.summary) {
               session.summary = entry.summary;
             } else if (entry.message?.role === 'user' && entry.message?.content && session.summary === 'New Session') {
-              // Use first user message as summary if no summary entry exists
               const content = entry.message.content;
-              if (typeof content === 'string' && content.length > 0) {
-                // Skip command messages that start with <command-name>
-                if (!content.startsWith('<command-name>')) {
-                  session.summary = content.length > 50 ? content.substring(0, 50) + '...' : content;
-                }
+              if (typeof content === 'string' && content.length > 0 && !content.startsWith('<command-name>')) {
+                session.summary = content.length > 50 ? content.substring(0, 50) + '...' : content;
               }
             }
             
-            // Count messages instead of storing them all
-            session.messageCount = (session.messageCount || 0) + 1;
+            session.messageCount++;
             
-            // Update last activity
             if (entry.timestamp) {
               session.lastActivity = new Date(entry.timestamp);
             }
           }
         } catch (parseError) {
-          console.warn(`[JSONL Parser] Error parsing line ${lineCount}:`, parseError.message);
+          // Skip malformed lines silently
         }
       }
     }
     
-    // console.log(`[JSONL Parser] Processed ${lineCount} lines, found ${sessions.size} sessions`);
+    return {
+      sessions: Array.from(sessions.values()),
+      entries: entries
+    };
+    
   } catch (error) {
     console.error('Error reading JSONL file:', error);
+    return { sessions: [], entries: [] };
   }
-  
-  // Convert Map to Array and sort by last activity
-  return Array.from(sessions.values()).sort((a, b) => 
-    new Date(b.lastActivity) - new Date(a.lastActivity)
-  );
 }
 
 // Get messages for a specific session with pagination support

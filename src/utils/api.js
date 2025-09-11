@@ -128,6 +128,14 @@ export const api = {
       }),
   },
   
+  // Browse filesystem for project suggestions
+  browseFilesystem: (dirPath = null) => {
+    const params = new URLSearchParams();
+    if (dirPath) params.append('path', dirPath);
+    
+    return authenticatedFetch(`/api/browse-filesystem?${params}`);
+  },
+
   // Generic GET method for any endpoint
   get: (endpoint) => authenticatedFetch(`/api${endpoint}`),
 };
