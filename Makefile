@@ -12,7 +12,7 @@ help:
 	@echo "============================="
 	@echo ""
 	@echo "Available targets:"
- 	@echo "  install      - Install NPM packages"
+	@echo "  install      - Install NPM packages"
 	@echo "  build        - Build frontend only"
 	@echo "  dev          - Start development servers"
 	@echo "  test         - Run tests (if available)"
@@ -198,11 +198,7 @@ release: clean
 	@echo "📁 Release artifacts in release/ directory:"
 	@ls -la release/ 2>/dev/null || echo "   (No release directory created)"
 
-# Install dependencies
-install:
-	@echo "📥 Installing dependencies..."
-	npm install
-	@echo "✅ Dependencies installed"
+# Install dependencies (removed duplicate - already defined above)
 
 # Development setup
 setup: install
