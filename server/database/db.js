@@ -10,8 +10,40 @@ const __dirname = dirname(__filename);
 
 // Use a writable directory for the database in packaged apps
 const getDbPath = () => {
-  // Check if we're in a packaged app (AppImage, etc.)
-  if (process.env.APPIMAGE || __dirname.includes('.mount_') || __dirname.includes('app.asar')) {
+  const isPackaged = () => {
+    // Check for Electron's app.isPackaged if available
+    if (typeof process !== 'undefined' && process.versions && process.versions.electron) {
+      try {
+        const { app } = require('electron');
+        if (app && typeof app.isPackaged !== 'undefined') {
+          return app.isPackaged;
+        }
+      } catch (e) {
+        // Fall through to other detection methods
+      }
+    }
+    
+    // Check for common packaging environment variables
+    if (process.env.APPIMAGE || 
+        process.env.SNAP || 
+        process.env.FLATPAK_ID ||
+        process.env.PKG_EXECPATH ||
+        process.env.PORTABLE_EXECUTABLE_DIR) {
+      return true;
+    }
+    
+    // Check if we're in a read-only location (common for packaged apps)
+    try {
+      const testFile = path.join(__dirname, 'write-test-' + Date.now());
+      fs.writeFileSync(testFile, 'test');
+      fs.unlinkSync(testFile);
+      return false; // Directory is writable, likely development
+    } catch (e) {
+      return true; // Directory is read-only, likely packaged
+    }
+  };
+
+  if (isPackaged()) {
     // Use user's config directory for packaged apps
     const configDir = path.join(os.homedir(), '.config', 'claude-code-ui');
     if (!fs.existsSync(configDir)) {
