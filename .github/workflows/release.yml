@@ -22,20 +22,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build frontend
-        run: npm run build
-
       - name: Install Wine for Windows cross-compilation
         run: |
           sudo apt update
           sudo apt install -y wine
 
-      - name: Build Electron packages (Linux + Windows)
+      - name: Build Linux and Windows packages
         run: |
-          # Build Linux packages
-          npm run dist-linux
-          # Build Windows packages via Wine
-          npm run dist-win
+          make dist-linux-deb
+          make dist-linux-appimage
+          make dist-win
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
@@ -75,7 +71,7 @@ jobs:
         run: npm ci
 
       - name: Build Flatpak
-        run: make flatpak
+        run: make dist-linux-flatpak
 
       - name: Upload Flatpak artifacts
         uses: actions/upload-artifact@v4
@@ -99,11 +95,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build frontend
-        run: npm run build
-
       - name: Build macOS packages
-        run: npm run dist-mac
+        run: make dist-mac
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
