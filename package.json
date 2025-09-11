@@ -99,10 +99,17 @@
             "x64",
             "arm64"
           ]
+        },
+        {
+          "target": "rpm",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ],
       "category": "Development",
-      "icon": "public/logo.png"
+      "icon": "public/logo-512.png"
     },
     "win": {
       "target": [
