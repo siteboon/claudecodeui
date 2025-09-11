@@ -135,8 +135,15 @@ const startServerWithSpawn = () => {
     
     serverProcess = spawn(process.execPath, [serverScript], {
       env: { ...process.env, PORT: '37429', NODE_ENV: 'production' },
-      stdio: 'ignore' // Suppress server output to prevent recursion
+      stdio: ['ignore', 'pipe', 'pipe'] // Pipe stdout and stderr for diagnostics
     });
+
+    // Log any error output from the server process
+    if (serverProcess.stderr) {
+      serverProcess.stderr.on('data', (data) => {
+        console.error(`[server stderr]: ${data.toString()}`);
+      });
+    }
 
     serverProcess.on('error', (error) => {
       console.error('Failed to start server with spawn:', error);
