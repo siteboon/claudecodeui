@@ -106,9 +106,10 @@ const startServer = () => {
         
         // Import and start the server directly
         import(path.join(__dirname, 'server', 'index.js'))
-          .then(() => {
+          .then(async () => {
             console.log('Server started successfully');
-            setTimeout(() => resolve(), 2000); // Give server time to start
+            await waitForServer('http://localhost:37429');
+            resolve();
           })
           .catch((error) => {
             console.error('Failed to import server:', error);
@@ -149,10 +150,13 @@ const startServerWithSpawn = () => {
       }
     });
 
-    // Give server time to start
-    setTimeout(() => {
-      resolve();
-    }, 3000);
+    // Wait for server to be ready
+    waitForServer('http://localhost:37429')
+      .then(() => resolve())
+      .catch(() => {
+        // If server check fails, still resolve after a shorter timeout
+        setTimeout(() => resolve(), 1000);
+      });
   });
 };
 
