@@ -1,0 +1,3 @@
+#!/bin/bash
+cd /app/claude-code-ui
+exec /app/claude-code-ui/node_modules/electron/dist/electron --no-sandbox --disable-features=VizDisplayCompositor electron.js "$@"

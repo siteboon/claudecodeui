@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.claude_code_ui.app</id>
+  <name>Claude Code UI</name>
+  <summary>A web-based UI for Claude Code CLI</summary>
+  <description>
+    <p>
+      Claude Code UI is a comprehensive desktop application that provides a user-friendly interface for 
+      the Claude Code CLI. It combines the power of AI-assisted coding with an intuitive graphical interface, 
+      making it accessible to developers of all experience levels.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>Full-featured terminal with Claude Code CLI integration</li>
+      <li>Project management and file operations</li>
+      <li>Secure authentication and session management</li>
+      <li>Cross-platform desktop application built with Electron</li>
+      <li>Clean, modern interface with hidden menu bar by default</li>
+      <li>Built-in file browser and project explorer</li>
+    </ul>
+    <p>
+      Whether you're working on personal projects or professional development, Claude Code UI streamlines 
+      your workflow by providing direct access to AI-powered coding assistance through an elegant desktop interface.
+    </p>
+  </description>
+  
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  
+  <url type="homepage">https://github.com/dnviti/claudecodeui</url>
+  <url type="bugtracker">https://github.com/dnviti/claudecodeui/issues</url>
+  <url type="help">https://github.com/dnviti/claudecodeui/blob/main/README.md</url>
+  <url type="vcs-browser">https://github.com/dnviti/claudecodeui</url>
+  
+  <launchable type="desktop-id">com.claude_code_ui.app.desktop</launchable>
+  
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/dnviti/claudecodeui/main/public/logo.png</image>
+      <caption>Claude Code UI Main Interface</caption>
+    </screenshot>
+  </screenshots>
+  
+  <categories>
+    <category>Development</category>
+    <category>Programming</category>
+    <category>IDE</category>
+  </categories>
+  
+  <keywords>
+    <keyword>claude</keyword>
+    <keyword>ai</keyword>
+    <keyword>coding</keyword>
+    <keyword>development</keyword>
+    <keyword>cli</keyword>
+    <keyword>assistant</keyword>
+    <keyword>programming</keyword>
+  </keywords>
+  
+  <developer_name>Claude Code UI Contributors</developer_name>
+  
+  <content_rating type="oars-1.1">
+    <content_attribute id="violence-cartoon">none</content_attribute>
+    <content_attribute id="violence-fantasy">none</content_attribute>
+    <content_attribute id="violence-realistic">none</content_attribute>
+    <content_attribute id="violence-bloodshed">none</content_attribute>
+    <content_attribute id="violence-sexual">none</content_attribute>
+    <content_attribute id="violence-desecration">none</content_attribute>
+    <content_attribute id="violence-slavery">none</content_attribute>
+    <content_attribute id="violence-worship">none</content_attribute>
+    <content_attribute id="drugs-alcohol">none</content_attribute>
+    <content_attribute id="drugs-narcotics">none</content_attribute>
+    <content_attribute id="drugs-tobacco">none</content_attribute>
+    <content_attribute id="sex-nudity">none</content_attribute>
+    <content_attribute id="sex-themes">none</content_attribute>
+    <content_attribute id="sex-homosexuality">none</content_attribute>
+    <content_attribute id="sex-prostitution">none</content_attribute>
+    <content_attribute id="sex-adultery">none</content_attribute>
+    <content_attribute id="sex-appearance">none</content_attribute>
+    <content_attribute id="language-profanity">none</content_attribute>
+    <content_attribute id="language-humor">none</content_attribute>
+    <content_attribute id="language-discrimination">none</content_attribute>
+    <content_attribute id="social-chat">intense</content_attribute>
+    <content_attribute id="social-info">none</content_attribute>
+    <content_attribute id="social-audio">none</content_attribute>
+    <content_attribute id="social-location">none</content_attribute>
+    <content_attribute id="social-contacts">none</content_attribute>
+    <content_attribute id="money-purchasing">none</content_attribute>
+    <content_attribute id="money-gambling">none</content_attribute>
+  </content_rating>
+  
+  <releases>
+    <release version="1.8.0" date="2025-01-11">
+      <description>
+        <p>Major release with Flatpak support and enhanced desktop integration:</p>
+        <ul>
+          <li>Added complete Flatpak packaging for Flathub distribution</li>
+          <li>Hidden menu bar by default for cleaner interface</li>
+          <li>Cross-platform build automation with Makefile</li>
+          <li>GitHub Actions workflow for automated releases</li>
+          <li>Improved Electron desktop integration</li>
+          <li>Enhanced documentation and build instructions</li>
+        </ul>
+      </description>
+    </release>
+  </releases>
+  
+  <requires>
+    <display_length compare="ge">768</display_length>
+  </requires>
+  
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+</component>

@@ -1,0 +1,55 @@
+app-id: com.claude_code_ui.app
+runtime: org.freedesktop.Platform
+runtime-version: '23.08'
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.node20
+command: claude-code-ui
+
+finish-args:
+  - --share=ipc
+  - --socket=x11
+  - --socket=wayland
+  - --share=network
+  - --device=dri
+  - --filesystem=home
+  - --filesystem=xdg-documents
+  - --filesystem=xdg-desktop
+  - --filesystem=xdg-download
+  - --talk-name=org.freedesktop.Notifications
+  - --talk-name=org.freedesktop.secrets
+  - --talk-name=org.freedesktop.FileManager1
+  - --env=TMPDIR=/var/tmp
+  - --env=NODE_ENV=production
+
+build-options:
+  append-path: /usr/lib/sdk/node20/bin
+  env:
+    NPM_CONFIG_LOGLEVEL: info
+
+modules:
+  - name: claude-code-ui
+    buildsystem: simple
+    build-options:
+      build-args:
+        - --share=network
+    build-commands:
+      - npm install
+      - npm run build
+      - mkdir -p /app/claude-code-ui
+      - cp -r dist server public electron.js package.json node_modules /app/claude-code-ui/
+      - mkdir -p /app/bin/node
+      - cp -r /usr/lib/sdk/node20/bin/* /app/bin/node/
+      - install -D claude-code-ui.desktop /app/share/applications/com.claude_code_ui.app.desktop
+      - install -D com.claude_code_ui.app.metainfo.xml /app/share/metainfo/com.claude_code_ui.app.metainfo.xml
+      - install -D public/logo-512.png /app/share/icons/hicolor/512x512/apps/com.claude_code_ui.app.png
+      - install -Dm755 claude-code-ui-wrapper /app/bin/claude-code-ui
+    sources:
+      - type: dir
+        path: ..
+      - type: file
+        path: claude-code-ui.desktop
+      - type: file
+        path: claude-code-ui-wrapper
+      - type: file
+        path: com.claude_code_ui.app.metainfo.xml

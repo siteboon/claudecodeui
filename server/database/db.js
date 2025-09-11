@@ -1,13 +1,30 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const DB_PATH = path.join(__dirname, 'auth.db');
+// Use a writable directory for the database in packaged apps
+const getDbPath = () => {
+  // Check if we're in a packaged app (AppImage, etc.)
+  if (process.env.APPIMAGE || __dirname.includes('.mount_') || __dirname.includes('app.asar')) {
+    // Use user's config directory for packaged apps
+    const configDir = path.join(os.homedir(), '.config', 'claude-code-ui');
+    if (!fs.existsSync(configDir)) {
+      fs.mkdirSync(configDir, { recursive: true });
+    }
+    return path.join(configDir, 'auth.db');
+  } else {
+    // Use local directory for development
+    return path.join(__dirname, 'auth.db');
+  }
+};
+
+const DB_PATH = getDbPath();
 const INIT_SQL_PATH = path.join(__dirname, 'init.sql');
 
 // Create database connection
