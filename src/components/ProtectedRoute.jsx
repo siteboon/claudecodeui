@@ -24,10 +24,15 @@ const LoadingScreen = () => (
 );
 
 const ProtectedRoute = ({ children }) => {
-  const { user, isLoading, needsSetup } = useAuth();
+  const { user, isLoading, needsSetup, authDisabled } = useAuth();
 
   if (isLoading) {
     return <LoadingScreen />;
+  }
+
+  // If authentication is disabled, allow access immediately
+  if (authDisabled) {
+    return children;
   }
 
   if (needsSetup) {

@@ -46,7 +46,7 @@ import cursorRoutes from './routes/cursor.js';
 import taskmasterRoutes from './routes/taskmaster.js';
 import mcpUtilsRoutes from './routes/mcp-utils.js';
 import { initializeDatabase } from './database/db.js';
-import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
+import { validateApiKey, authenticateToken, authenticateWebSocket, isAuthDisabled } from './middleware/auth.js';
 
 // File system watcher for projects folder
 let projectsWatcher = null;
@@ -144,6 +144,17 @@ const wss = new WebSocketServer({
     server,
     verifyClient: (info) => {
         console.log('WebSocket connection attempt to:', info.req.url);
+
+        // Skip authentication if AUTH_DISABLED is true
+        if (isAuthDisabled()) {
+            // Store mock user info for compatibility
+            info.req.user = {
+                userId: 1,
+                username: 'admin'
+            };
+            console.log('✅ WebSocket authentication bypassed (AUTH_DISABLED=true)');
+            return true;
+        }
 
         // Extract token from query parameters or headers
         const url = new URL(info.req.url, 'http://localhost');
