@@ -25,15 +25,6 @@ async function spawnClaude(command, options = {}, ws) {
     // Build Claude CLI command - start with print/resume flags first
     const args = [];
     
-    // Add print flag with command if we have a command
-    if (command && command.trim()) {
-
-      // Separate arguments for better cross-platform compatibility
-      // This prevents issues with spaces and quotes on Windows
-      args.push('--print');
-      args.push(command);
-    }
-    
     // Use cwd (actual project directory) instead of projectPath (Claude's metadata directory)
     const workingDir = cwd || process.cwd();
     
@@ -224,6 +215,17 @@ async function spawnClaude(command, options = {}, ws) {
       if (settings.skipPermissions && permissionMode === 'plan') {
         console.log('📝 Skip permissions disabled due to plan mode');
       }
+    }
+
+    // Add print flag with command if we have a command
+    if (command && command.trim()) {
+
+      // Separate arguments for better cross-platform compatibility
+      // This prevents issues with spaces and quotes on Windows
+      args.push('--print');
+      // Use `--` so user input is always treated as text, not options
+      args.push('--');
+      args.push(command);
     }
     
     console.log('Spawning Claude CLI:', 'claude', args.map(arg => {
