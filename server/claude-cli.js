@@ -235,7 +235,11 @@ async function spawnClaude(command, options = {}, ws) {
     console.log('🔍 Full command args:', JSON.stringify(args, null, 2));
     console.log('🔍 Final Claude command will be: claude ' + args.join(' '));
     
-    const claudeProcess = spawnFunction('claude', args, {
+    // Use Claude CLI from environment variable or default to 'claude'
+    const claudePath = process.env.CLAUDE_CLI_PATH || 'claude';
+    console.log('🔍 Using Claude CLI path:', claudePath);
+    
+    const claudeProcess = spawnFunction(claudePath, args, {
       cwd: workingDir,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env } // Inherit all environment variables
