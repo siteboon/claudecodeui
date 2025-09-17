@@ -128,3 +128,17 @@ dev-debug.log
 # Task files
 # tasks.json
 # tasks/ 
+
+# Electron build artifacts
+release/
+*.AppImage
+*.deb
+*.dmg
+*.exe
+*.zip
+
+# Flatpak build artifacts
+build-dir/
+repo*/
+.flatpak-builder/
+*.flatpak

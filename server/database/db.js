@@ -1,13 +1,62 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const DB_PATH = path.join(__dirname, 'auth.db');
+// Use a writable directory for the database in packaged apps
+const getDbPath = () => {
+  const isPackaged = () => {
+    // Check for Electron's app.isPackaged if available
+    if (typeof process !== 'undefined' && process.versions && process.versions.electron) {
+      try {
+        const { app } = require('electron');
+        if (app && typeof app.isPackaged !== 'undefined') {
+          return app.isPackaged;
+        }
+      } catch (e) {
+        // Fall through to other detection methods
+      }
+    }
+    
+    // Check for common packaging environment variables
+    if (process.env.APPIMAGE || 
+        process.env.SNAP || 
+        process.env.FLATPAK_ID ||
+        process.env.PKG_EXECPATH ||
+        process.env.PORTABLE_EXECUTABLE_DIR) {
+      return true;
+    }
+    
+    // Check if we're in a read-only location (common for packaged apps)
+    try {
+      const testFile = path.join(__dirname, 'write-test-' + Date.now());
+      fs.writeFileSync(testFile, 'test');
+      fs.unlinkSync(testFile);
+      return false; // Directory is writable, likely development
+    } catch (e) {
+      return true; // Directory is read-only, likely packaged
+    }
+  };
+
+  if (isPackaged()) {
+    // Use user's config directory for packaged apps
+    const configDir = path.join(os.homedir(), '.config', 'claude-code-ui');
+    if (!fs.existsSync(configDir)) {
+      fs.mkdirSync(configDir, { recursive: true });
+    }
+    return path.join(configDir, 'auth.db');
+  } else {
+    // Use local directory for development
+    return path.join(__dirname, 'auth.db');
+  }
+};
+
+const DB_PATH = getDbPath();
 const INIT_SQL_PATH = path.join(__dirname, 'init.sql');
 
 // Create database connection

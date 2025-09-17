@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Claude Code UI
+Exec=claude-code-ui
+Terminal=false
+Type=Application
+Icon=com.claude_code_ui.app
+StartupWMClass=Claude Code UI
+Comment=A web-based UI for Claude Code CLI
+Categories=Development;
+Keywords=ai;claude;development;coding;
