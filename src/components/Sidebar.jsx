@@ -8,6 +8,7 @@ import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRig
 import { cn } from '../lib/utils';
 import ClaudeLogo from './ClaudeLogo';
 import CursorLogo from './CursorLogo.jsx';
+import CodegenLogo from './CodegenLogo.jsx';
 import TaskIndicator from './TaskIndicator';
 import { api } from '../utils/api';
 import { useTaskMaster } from '../contexts/TaskMasterContext';

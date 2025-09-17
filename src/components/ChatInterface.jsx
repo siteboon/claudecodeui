@@ -22,6 +22,7 @@ import { useDropzone } from 'react-dropzone';
 import TodoList from './TodoList';
 import ClaudeLogo from './ClaudeLogo.jsx';
 import CursorLogo from './CursorLogo.jsx';
+import CodegenLogo from './CodegenLogo.jsx';
 import NextTaskBanner from './NextTaskBanner.jsx';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
 
@@ -250,7 +251,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 </div>
               )}
               <div className="text-sm font-medium text-gray-900 dark:text-white">
-                {message.type === 'error' ? 'Error' : message.type === 'tool' ? 'Tool' : ((localStorage.getItem('selected-provider') || 'claude') === 'cursor' ? 'Cursor' : 'Claude')}
+                {message.type === 'error' ? 'Error' : message.type === 'tool' ? 'Tool' : ((localStorage.getItem('selected-provider') || 'claude') === 'cursor' ? 'Cursor' : (localStorage.getItem('selected-provider') || 'claude') === 'codegen' ? 'Codegen' : 'Claude')}
               </div>
             </div>
           )}
@@ -2782,6 +2783,20 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           toolsSettings: toolsSettings
         }
       });
+    } else if (provider === 'codegen') {
+      // Send Codegen command
+      sendMessage({
+        type: 'codegen-command',
+        command: input,
+        sessionId: effectiveSessionId,
+        options: {
+          cwd: selectedProject.fullPath || selectedProject.path,
+          projectPath: selectedProject.fullPath || selectedProject.path,
+          sessionId: effectiveSessionId,
+          resume: !!effectiveSessionId,
+          toolsSettings: toolsSettings
+        }
+      });
     } else {
       // Send Claude command (existing code)
       sendMessage({
@@ -3004,7 +3019,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   Select a provider to start a new conversation
                 </p>
                 
-                <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-8">
+                <div className="flex flex-col sm:flex-row sm:flex-wrap gap-4 justify-center items-center mb-8">
                   {/* Claude Button */}
                   <button
                     onClick={() => {
@@ -3068,6 +3083,38 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                       </div>
                     )}
                   </button>
+                  
+                  {/* Codegen Button */}
+                  <button
+                    onClick={() => {
+                      setProvider('codegen');
+                      localStorage.setItem('selected-provider', 'codegen');
+                      // Focus input after selection
+                      setTimeout(() => textareaRef.current?.focus(), 100);
+                    }}
+                    className={`group relative w-64 h-32 bg-white dark:bg-gray-800 rounded-xl border-2 transition-all duration-200 hover:scale-105 hover:shadow-xl ${
+                      provider === 'codegen' 
+                        ? 'border-green-500 shadow-lg ring-2 ring-green-500/20' 
+                        : 'border-gray-200 dark:border-gray-700 hover:border-green-400'
+                    }`}
+                  >
+                    <div className="flex flex-col items-center justify-center h-full gap-3">
+                      <CodegenLogo className="w-10 h-10" />
+                      <div>
+                        <p className="font-semibold text-gray-900 dark:text-white">Codegen</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">AI Code Assistant</p>
+                      </div>
+                    </div>
+                    {provider === 'codegen' && (
+                      <div className="absolute top-2 right-2">
+                        <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
+                          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </div>
+                      </div>
+                    )}
+                  </button>
                 </div>
                 
                 {/* Model Selection for Cursor - Always reserve space to prevent jumping */}
@@ -3096,7 +3143,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                     ? 'Ready to use Claude AI. Start typing your message below.'
                     : provider === 'cursor'
                     ? `Ready to use Cursor with ${cursorModel}. Start typing your message below.`
-                    : 'Select a provider above to begin'
+                    : provider === 'codegen' ? 'Ready to use Codegen AI. Start typing your message below.' : 'Select a provider above to begin'
                   }
                 </p>
                 
@@ -3198,7 +3245,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                     <ClaudeLogo className="w-full h-full" />
                   )}
                 </div>
-                <div className="text-sm font-medium text-gray-900 dark:text-white">{(localStorage.getItem('selected-provider') || 'claude') === 'cursor' ? 'Cursor' : 'Claude'}</div>
+                <div className="text-sm font-medium text-gray-900 dark:text-white">{(localStorage.getItem('selected-provider') || 'claude') === 'cursor' ? 'Cursor' : (localStorage.getItem('selected-provider') || 'claude') === 'codegen' ? 'Codegen' : 'Claude'}</div>
                 {/* Abort button removed - functionality not yet implemented at backend */}
               </div>
               <div className="w-full text-sm text-gray-500 dark:text-gray-400 pl-3 sm:pl-0">
