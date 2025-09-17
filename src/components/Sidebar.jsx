@@ -47,6 +47,7 @@ function Sidebar({
   onSessionSelect, 
   onNewSession,
   onSessionDelete,
+  onUpdateSessionSummary,
   onProjectDelete,
   isLoading,
   onRefresh,
@@ -1451,7 +1452,9 @@ function Sidebar({
                                       onKeyDown={(e) => {
                                         e.stopPropagation();
                                         if (e.key === 'Enter') {
-                                          updateSessionSummary(project.name, session.id, editingSessionName);
+                                          onUpdateSessionSummary(project.name, session.id, editingSessionName);
+                                          setEditingSession(null);
+                                          setEditingSessionName('');
                                         } else if (e.key === 'Escape') {
                                           setEditingSession(null);
                                           setEditingSessionName('');
@@ -1465,7 +1468,9 @@ function Sidebar({
                                       className="w-6 h-6 bg-green-50 hover:bg-green-100 dark:bg-green-900/20 dark:hover:bg-green-900/40 rounded flex items-center justify-center"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        updateSessionSummary(project.name, session.id, editingSessionName);
+                                        onUpdateSessionSummary(project.name, session.id, editingSessionName);
+                                        setEditingSession(null);
+                                        setEditingSessionName('');
                                       }}
                                       title="Save"
                                     >
