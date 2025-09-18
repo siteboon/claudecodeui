@@ -5,7 +5,7 @@ Your project is now fully configured to work with Cloudflare Pages as a **comple
 ## ✅ What's Been Configured
 
 ### 🏗️ **Backend Systems (Real Implementation)**
-1. **Authentication System**: Full login/register with JWT tokens
+1. **Authentication System**: Full login with JWT tokens
 2. **Project Management**: Create, edit, and manage projects
 3. **Git Operations**: Complete Git workflow support
 4. **MCP Protocol**: Real tool integration framework
@@ -100,7 +100,7 @@ Once deployed, your site will be available at:
 
 ### **1. Authentication**
 - **Login**: Use `demo` / `demo` or `admin` / `admin`
-- **Register**: Create new user accounts
+- **Login**: Authenticate existing user accounts
 - **JWT Tokens**: Secure authentication system
 - **Session Management**: Persistent login state
 

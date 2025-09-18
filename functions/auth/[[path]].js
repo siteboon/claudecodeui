@@ -22,8 +22,6 @@ export async function onRequest(context) {
         return handleAuthStatus(request, corsHeaders);
       case 'login':
         return handleLogin(request, corsHeaders);
-      case 'register':
-        return handleRegister(request, corsHeaders);
       case 'logout':
         return handleLogout(request, corsHeaders);
       case 'user':
@@ -176,88 +174,6 @@ async function handleLogin(request, corsHeaders) {
   }
 }
 
-// Register
-async function handleRegister(request, corsHeaders) {
-  if (request.method === 'POST') {
-    const { username, email, password, confirmPassword } = await request.json();
-    
-    // Validation
-    if (!username || !email || !password) {
-      return new Response(JSON.stringify({ 
-        success: false, 
-        error: 'All fields are required' 
-      }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
-    
-    if (password !== confirmPassword) {
-      return new Response(JSON.stringify({ 
-        success: false, 
-        error: 'Passwords do not match' 
-      }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
-    
-    if (password.length < 6) {
-      return new Response(JSON.stringify({ 
-        success: false, 
-        error: 'Password must be at least 6 characters long' 
-      }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
-    
-    // Check if user already exists
-    const existingUser = mockUsers.find(u => 
-      u.username === username || u.email === email
-    );
-    
-    if (existingUser) {
-      return new Response(JSON.stringify({ 
-        success: false, 
-        error: 'Username or email already exists' 
-      }), {
-        status: 409,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
-    
-    // Create new user
-    const newUser = {
-      id: mockUsers.length + 1,
-      username,
-      email,
-      password, // In real app, this would be hashed
-      role: 'user',
-      createdAt: new Date().toISOString(),
-      lastLogin: new Date().toISOString()
-    };
-    
-    mockUsers.push(newUser);
-    
-    // Generate token
-    const token = generateMockToken(newUser);
-    
-    return new Response(JSON.stringify({ 
-      success: true, 
-      message: 'User registered successfully',
-      token,
-      user: {
-        id: newUser.id,
-        username: newUser.username,
-        email: newUser.email,
-        role: newUser.role
-      }
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
-  }
-}
 
 // Logout
 async function handleLogout(request, corsHeaders) {

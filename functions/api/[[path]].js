@@ -26,8 +26,6 @@ export async function onRequest(context) {
         return handleAuthStatus(request, corsHeaders);
       case 'auth/login':
         return handleLogin(request, corsHeaders);
-      case 'auth/register':
-        return handleRegister(request, corsHeaders);
       default:
         if (path.startsWith('projects/')) {
           return handleProjectOperations(path, request, corsHeaders);
@@ -148,21 +146,6 @@ async function handleLogin(request, corsHeaders) {
   }
 }
 
-// Handle register
-async function handleRegister(request, corsHeaders) {
-  if (request.method === 'POST') {
-    const { username, password } = await request.json();
-    
-    // In real app, create user in database
-    return new Response(JSON.stringify({ 
-      success: true, 
-      message: 'User registered successfully',
-      user: { username, role: 'user' }
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
-  }
-}
 
 // Handle project-specific operations
 async function handleProjectOperations(path, request, corsHeaders) {

@@ -5,7 +5,7 @@ A fully functional web-based UI for Claude Code CLI, now running on Cloudflare P
 ## 🚀 Features
 
 ### ✅ **Real Backend Systems**
-- **Authentication System**: Full login/register with JWT tokens
+- **Authentication System**: Full login with JWT tokens
 - **Project Management**: Create, edit, and manage projects
 - **Git Operations**: Complete Git workflow support
 - **MCP (Model Context Protocol)**: Real tool integration
@@ -115,7 +115,7 @@ Default demo accounts:
 
 ### **1. Real Authentication System**
 - JWT token-based authentication
-- User registration and login
+- User login
 - Role-based access control
 - Secure token storage and validation
 

@@ -5,10 +5,8 @@ const AuthContext = createContext({
   user: null,
   token: null,
   login: () => {},
-  register: () => {},
   logout: () => {},
   isLoading: true,
-  needsSetup: false,
   error: null
 });
 
@@ -24,7 +22,6 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('auth-token'));
   const [isLoading, setIsLoading] = useState(true);
-  const [needsSetup, setNeedsSetup] = useState(false);
   const [error, setError] = useState(null);
 
   // Check authentication status on mount
@@ -37,16 +34,6 @@ export const AuthProvider = ({ children }) => {
       setIsLoading(true);
       setError(null);
       
-      // Check if system needs setup
-      const statusResponse = await api.auth.status();
-      const statusData = await statusResponse.json();
-      
-      if (statusData.needsSetup) {
-        setNeedsSetup(true);
-        setIsLoading(false);
-        return;
-      }
-      
       // If we have a token, verify it
       if (token) {
         try {
@@ -55,7 +42,6 @@ export const AuthProvider = ({ children }) => {
           if (userResponse.ok) {
             const userData = await userResponse.json();
             setUser(userData.user);
-            setNeedsSetup(false);
           } else {
             // Token is invalid
             localStorage.removeItem('auth-token');
@@ -101,30 +87,6 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const register = async (username, password) => {
-    try {
-      setError(null);
-      const response = await api.auth.register(username, password);
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setToken(data.token);
-        setUser(data.user);
-        setNeedsSetup(false);
-        localStorage.setItem('auth-token', data.token);
-        return { success: true };
-      } else {
-        setError(data.error || 'Registration failed');
-        return { success: false, error: data.error || 'Registration failed' };
-      }
-    } catch (error) {
-      console.error('Registration error:', error);
-      const errorMessage = 'Network error. Please try again.';
-      setError(errorMessage);
-      return { success: false, error: errorMessage };
-    }
-  };
 
   const logout = () => {
     setToken(null);
@@ -143,10 +105,8 @@ export const AuthProvider = ({ children }) => {
     user,
     token,
     login,
-    register,
     logout,
     isLoading,
-    needsSetup,
     error
   };
 

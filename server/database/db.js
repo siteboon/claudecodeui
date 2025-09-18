@@ -28,27 +28,6 @@ const initializeDatabase = async () => {
 
 // User database operations
 const userDb = {
-  // Check if any users exist
-  hasUsers: () => {
-    try {
-      const row = db.prepare('SELECT COUNT(*) as count FROM users').get();
-      return row.count > 0;
-    } catch (err) {
-      throw err;
-    }
-  },
-
-  // Create a new user
-  createUser: (username, passwordHash) => {
-    try {
-      const stmt = db.prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)');
-      const result = stmt.run(username, passwordHash);
-      return { id: result.lastInsertRowid, username };
-    } catch (err) {
-      throw err;
-    }
-  },
-
   // Get user by username
   getUserByUsername: (username) => {
     try {

@@ -5,7 +5,7 @@ This project is now configured to work with Cloudflare Pages as a **fully functi
 ## 🚀 What's New
 
 ### ✅ **Real Backend Systems**
-- **Authentication**: Full login/register with JWT tokens
+- **Authentication**: Full login with JWT tokens
 - **Projects**: Create, edit, and manage projects
 - **Git Operations**: Complete Git workflow support
 - **MCP Protocol**: Real tool integration
@@ -177,7 +177,7 @@ directory = "functions"
 
 ### **1. Authentication System**
 - **Login**: `demo` / `demo` or `admin` / `admin`
-- **Register**: Create new accounts
+- **Login**: Authenticate existing accounts
 - **JWT Tokens**: Secure authentication
 - **Session Management**: Persistent login
 
