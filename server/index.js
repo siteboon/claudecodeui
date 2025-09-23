@@ -301,6 +301,66 @@ app.post('/api/projects/create', authenticateToken, async (req, res) => {
     }
 });
 
+// Browse filesystem endpoint for project suggestions - uses existing getFileTree
+app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {    
+    try {
+        const { path: dirPath } = req.query;
+        
+        // Default to home directory if no path provided
+        const homeDir = os.homedir();
+        let targetPath = dirPath ? dirPath.replace('~', homeDir) : homeDir;
+        
+        // Resolve and normalize the path
+        targetPath = path.resolve(targetPath);
+        
+        // Security check - ensure path is accessible
+        try {
+            await fs.promises.access(targetPath);
+            const stats = await fs.promises.stat(targetPath);
+            
+            if (!stats.isDirectory()) {
+                return res.status(400).json({ error: 'Path is not a directory' });
+            }
+        } catch (err) {
+            return res.status(404).json({ error: 'Directory not accessible' });
+        }
+        
+        // Use existing getFileTree function with shallow depth (only direct children)
+        const fileTree = await getFileTree(targetPath, 1, 0, false); // maxDepth=1, showHidden=false
+        
+        // Filter only directories and format for suggestions
+        const directories = fileTree
+            .filter(item => item.type === 'directory')
+            .map(item => ({
+                path: item.path,
+                name: item.name,
+                type: 'directory'
+            }))
+            .slice(0, 20); // Limit results
+            
+        // Add common directories if browsing home directory
+        const suggestions = [];
+        if (targetPath === homeDir) {
+            const commonDirs = ['Desktop', 'Documents', 'Projects', 'Development', 'Dev', 'Code', 'workspace'];
+            const existingCommon = directories.filter(dir => commonDirs.includes(dir.name));
+            const otherDirs = directories.filter(dir => !commonDirs.includes(dir.name));
+            
+            suggestions.push(...existingCommon, ...otherDirs);
+        } else {
+            suggestions.push(...directories);
+        }
+        
+        res.json({ 
+            path: targetPath,
+            suggestions: suggestions 
+        });
+        
+    } catch (error) {
+        console.error('Error browsing filesystem:', error);
+        res.status(500).json({ error: 'Failed to browse filesystem' });
+    }
+});
+
 // Read file content endpoint
 app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) => {
     try {
