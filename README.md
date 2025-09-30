@@ -47,6 +47,7 @@ A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/cla
 - **File Explorer** - Interactive file tree with syntax highlighting and live editing
 - **Git Explorer** - View, stage and commit your changes. You can also switch branches 
 - **Session Management** - Resume conversations, manage multiple sessions, and track history
+- **TaskMaster AI Integration** *(Optional)* - Advanced project management with AI-powered task planning, PRD parsing, and workflow automation
 - **Model Compatibility** - Works with Claude Sonnet 4, Opus 4.1, and GPT-5
 
 
@@ -58,7 +59,17 @@ A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/cla
 - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and configured, and/or
 - [Cursor CLI](https://docs.cursor.com/en/cli/overview) installed and configured
 
-### Installation
+### One-click Operation (Recommended)
+
+No installation required, direct operation:
+
+```bash
+npx @siteboon/claude-code-ui
+```
+
+Your default browser will automatically open the Claude Code UI interface.
+
+### Local Development Installation
 
 1. **Clone the repository:**
 ```bash
@@ -109,6 +120,19 @@ To use Claude Code's full functionality, you'll need to manually enable tools:
 
 **Recommended approach**: Start with basic tools enabled and add more as needed. You can always adjust these settings later.
 
+## TaskMaster AI Integration *(Optional)*
+
+Claude Code UI supports **[TaskMaster AI](https://github.com/eyaltoledano/claude-task-master)** (aka claude-task-master) integration for advanced project management and AI-powered task planning.
+
+It provides
+- AI-powered task generation from PRDs (Product Requirements Documents)
+- Smart task breakdown and dependency management  
+- Visual task boards and progress tracking
+
+**Setup & Documentation**: Visit the [TaskMaster AI GitHub repository](https://github.com/eyaltoledano/claude-task-master) for installation instructions, configuration guides, and usage examples.
+After installing it you should be able to enable it from the Settings
+
+
 ## Usage Guide
 
 ### Core Features
@@ -135,6 +159,11 @@ The UI automatically discovers Claude Code projects from `~/.claude/projects/` a
 
 #### Git Explorer
 
+
+#### TaskMaster AI Integration *(Optional)*
+- **Visual Task Board** - Kanban-style interface for managing development tasks
+- **PRD Parser** - Create Product Requirements Documents and parse them into structured tasks
+- **Progress Tracking** - Real-time status updates and completion tracking
 
 #### Session Management
 - **Session Persistence** - All conversations automatically saved
@@ -238,7 +267,7 @@ This project is open source and free to use, modify, and distribute under the GP
 - **[Vite](https://vitejs.dev/)** - Fast build tool and dev server
 - **[Tailwind CSS](https://tailwindcss.com/)** - Utility-first CSS framework
 - **[CodeMirror](https://codemirror.net/)** - Advanced code editor
-
+- **[TaskMaster AI](https://github.com/eyaltoledano/claude-task-master)** *(Optional)* - AI-powered project management and task planning
 
 ## Support & Community
 

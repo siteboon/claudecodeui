@@ -17,7 +17,7 @@ export function useWebSocket() {
         ws.close();
       }
     };
-  }, []);
+  }, []); // Keep dependency array but add proper cleanup
 
   const connect = async () => {
     try {

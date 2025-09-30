@@ -23,12 +23,14 @@ import { BrowserRouter as Router, Routes, Route, useNavigate, useParams } from '
 import Sidebar from './components/Sidebar';
 import MainContent from './components/MainContent';
 import MobileNav from './components/MobileNav';
-import ToolsSettings from './components/ToolsSettings';
+import Settings from './components/Settings';
 import QuickSettingsPanel from './components/QuickSettingsPanel';
 
-import { useWebSocket } from './utils/websocket';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
+import { TaskMasterProvider } from './contexts/TaskMasterContext';
+import { TasksSettingsProvider } from './contexts/TasksSettingsContext';
+import { WebSocketProvider, useWebSocketContext } from './contexts/WebSocketContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import { useVersionCheck } from './hooks/useVersionCheck';
 import { api, authenticatedFetch } from './utils/api';
@@ -52,7 +54,7 @@ function AppContent() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [isInputFocused, setIsInputFocused] = useState(false);
-  const [showToolsSettings, setShowToolsSettings] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [showQuickSettings, setShowQuickSettings] = useState(false);
   const [autoExpandTools, setAutoExpandTools] = useState(() => {
     const saved = localStorage.getItem('autoExpandTools');
@@ -76,7 +78,38 @@ function AppContent() {
   // until the conversation completes or is aborted.
   const [activeSessions, setActiveSessions] = useState(new Set()); // Track sessions with active conversations
   
-  const { ws, sendMessage, messages } = useWebSocket();
+  const { ws, sendMessage, messages } = useWebSocketContext();
+  
+  // Detect if running as PWA
+  const [isPWA, setIsPWA] = useState(false);
+  
+  useEffect(() => {
+    // Check if running in standalone mode (PWA)
+    const checkPWA = () => {
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+                          window.navigator.standalone ||
+                          document.referrer.includes('android-app://');
+      setIsPWA(isStandalone);
+      
+      // Add class to html and body for CSS targeting
+      if (isStandalone) {
+        document.documentElement.classList.add('pwa-mode');
+        document.body.classList.add('pwa-mode');
+      } else {
+        document.documentElement.classList.remove('pwa-mode');
+        document.body.classList.remove('pwa-mode');
+      }
+    };
+    
+    checkPWA();
+    
+    // Listen for changes
+    window.matchMedia('(display-mode: standalone)').addEventListener('change', checkPWA);
+    
+    return () => {
+      window.matchMedia('(display-mode: standalone)').removeEventListener('change', checkPWA);
+    };
+  }, []);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -618,11 +651,13 @@ function AppContent() {
               onProjectDelete={handleProjectDelete}
               isLoading={isLoadingProjects}
               onRefresh={handleSidebarRefresh}
-              onShowSettings={() => setShowToolsSettings(true)}
+              onShowSettings={() => setShowSettings(true)}
               updateAvailable={updateAvailable}
               latestVersion={latestVersion}
               currentVersion={currentVersion}
               onShowVersionModal={() => setShowVersionModal(true)}
+              isPWA={isPWA}
+              isMobile={isMobile}
             />
           </div>
         </div>
@@ -646,9 +681,10 @@ function AppContent() {
             }}
           />
           <div 
-            className={`relative w-[85vw] max-w-sm sm:w-80 bg-card border-r border-border h-full transform transition-transform duration-150 ease-out ${
+            className={`relative w-[85vw] max-w-sm sm:w-80 bg-card border-r border-border transform transition-transform duration-150 ease-out ${
               sidebarOpen ? 'translate-x-0' : '-translate-x-full'
             }`}
+            style={{ height: 'calc(100vh - 80px)' }}
             onClick={(e) => e.stopPropagation()}
             onTouchStart={(e) => e.stopPropagation()}
           >
@@ -663,18 +699,20 @@ function AppContent() {
               onProjectDelete={handleProjectDelete}
               isLoading={isLoadingProjects}
               onRefresh={handleSidebarRefresh}
-              onShowSettings={() => setShowToolsSettings(true)}
+              onShowSettings={() => setShowSettings(true)}
               updateAvailable={updateAvailable}
               latestVersion={latestVersion}
               currentVersion={currentVersion}
               onShowVersionModal={() => setShowVersionModal(true)}
+              isPWA={isPWA}
+              isMobile={isMobile}
             />
           </div>
         </div>
       )}
 
       {/* Main Content Area - Flexible */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className={`flex-1 flex flex-col min-w-0 ${isMobile && !isInputFocused ? 'pb-16' : ''}`}>
         <MainContent
           selectedProject={selectedProject}
           selectedSession={selectedSession}
@@ -684,6 +722,7 @@ function AppContent() {
           sendMessage={sendMessage}
           messages={messages}
           isMobile={isMobile}
+          isPWA={isPWA}
           onMenuClick={() => setSidebarOpen(true)}
           isLoading={isLoadingProjects}
           onInputFocusChange={setIsInputFocused}
@@ -691,7 +730,7 @@ function AppContent() {
           onSessionInactive={markSessionAsInactive}
           onReplaceTemporarySession={replaceTemporarySession}
           onNavigateToSession={(sessionId) => navigate(`/session/${sessionId}`)}
-          onShowSettings={() => setShowToolsSettings(true)}
+          onShowSettings={() => setShowSettings(true)}
           autoExpandTools={autoExpandTools}
           showRawParameters={showRawParameters}
           autoScrollToBottom={autoScrollToBottom}
@@ -736,10 +775,10 @@ function AppContent() {
         />
       )}
 
-      {/* Tools Settings Modal */}
-      <ToolsSettings
-        isOpen={showToolsSettings}
-        onClose={() => setShowToolsSettings(false)}
+      {/* Settings Modal */}
+      <Settings
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
         projects={projects}
       />
 
@@ -754,14 +793,20 @@ function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <ProtectedRoute>
-          <Router>
-            <Routes>
-              <Route path="/" element={<AppContent />} />
-              <Route path="/session/:sessionId" element={<AppContent />} />
-            </Routes>
-          </Router>
-        </ProtectedRoute>
+        <WebSocketProvider>
+          <TasksSettingsProvider>
+            <TaskMasterProvider>
+              <ProtectedRoute>
+                <Router>
+                  <Routes>
+                    <Route path="/" element={<AppContent />} />
+                    <Route path="/session/:sessionId" element={<AppContent />} />
+                  </Routes>
+                </Router>
+              </ProtectedRoute>
+            </TaskMasterProvider>
+          </TasksSettingsProvider>
+        </WebSocketProvider>
       </AuthProvider>
     </ThemeProvider>
   );

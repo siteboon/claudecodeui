@@ -1,23 +1,40 @@
 {
-  "name": "claude-code-ui",
-  "version": "1.7.0",
+  "name": "@siteboon/claude-code-ui",
+  "version": "1.8.10",
   "description": "A web-based UI for Claude Code CLI",
   "type": "module",
   "main": "server/index.js",
+  "bin": {
+    "claude-code-ui": "server/index.js"
+  },
+  "files": [
+    "server/",
+    "dist/",
+    "README.md"
+  ],
+  "homepage": "https://claudecodeui.siteboon.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/siteboon/claudecodeui.git"
+  },
+  "bugs": {
+    "url": "https://github.com/siteboon/claudecodeui/issues"
+  },
   "scripts": {
     "dev": "concurrently --kill-others \"npm run server\" \"npm run client\"",
     "server": "node server/index.js",
     "client": "vite --host",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "npm run build && npm run server"
+    "start": "npm run build && npm run server",
+    "release": "release-it"
   },
   "keywords": [
-    "claude",
+    "claude coode",
     "ai",
-    "code",
+    "anthropic",
     "ui",
-    "assistant"
+    "mobile"
   ],
   "author": "Claude Code UI Contributors",
   "license": "MIT",
@@ -63,10 +80,12 @@
     "@types/react": "^18.2.43",
     "@types/react-dom": "^18.2.17",
     "@vitejs/plugin-react": "^4.6.0",
+    "auto-changelog": "^2.5.0",
     "autoprefixer": "^10.4.16",
     "concurrently": "^8.2.2",
     "node-gyp": "^10.0.0",
     "postcss": "^8.4.32",
+    "release-it": "^19.0.5",
     "sharp": "^0.34.2",
     "tailwindcss": "^3.4.0",
     "vite": "^7.0.4"

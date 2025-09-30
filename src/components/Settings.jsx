@@ -2,11 +2,23 @@ import { useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Badge } from './ui/badge';
-import { X, Plus, Settings, Shield, AlertTriangle, Moon, Sun, Server, Edit3, Trash2, Globe, Terminal, Zap, FolderOpen } from 'lucide-react';
+import { X, Plus, Settings as SettingsIcon, Shield, AlertTriangle, Moon, Sun, Server, Edit3, Trash2, Globe, Terminal, Zap, FolderOpen, LogIn } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+import { useTasksSettings } from '../contexts/TasksSettingsContext';
+import StandaloneShell from './StandaloneShell';
+import ClaudeLogo from './ClaudeLogo';
+import CursorLogo from './CursorLogo';
 
-function ToolsSettings({ isOpen, onClose, projects = [] }) {
+function Settings({ isOpen, onClose, projects = [] }) {
   const { isDarkMode, toggleDarkMode } = useTheme();
+  const { 
+    tasksEnabled, 
+    setTasksEnabled, 
+    isTaskMasterInstalled, 
+    isTaskMasterReady, 
+    installationStatus, 
+    isCheckingInstallation 
+  } = useTasksSettings();
   const [allowedTools, setAllowedTools] = useState([]);
   const [disallowedTools, setDisallowedTools] = useState([]);
   const [newAllowedTool, setNewAllowedTool] = useState('');
@@ -50,6 +62,11 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
   const [newCursorCommand, setNewCursorCommand] = useState('');
   const [newCursorDisallowedCommand, setNewCursorDisallowedCommand] = useState('');
   const [cursorMcpServers, setCursorMcpServers] = useState([]);
+
+  // Login modal states
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [loginProvider, setLoginProvider] = useState(''); // 'claude' or 'cursor'
+  const [selectedProject, setSelectedProject] = useState(null);
   // Common tool patterns for Claude
   const commonTools = [
     'Bash(git log:*)',
@@ -316,7 +333,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
     try {
       
       // Load Claude settings from localStorage
-      const savedSettings = localStorage.getItem('claude-tools-settings');
+      const savedSettings = localStorage.getItem('claude-settings');
       
       if (savedSettings) {
         const settings = JSON.parse(savedSettings);
@@ -362,6 +379,26 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
     }
   };
 
+  // Login handlers
+  const handleClaudeLogin = () => {
+    setLoginProvider('claude');
+    setSelectedProject(projects?.[0] || { name: 'default', fullPath: process.cwd() });
+    setShowLoginModal(true);
+  };
+
+  const handleCursorLogin = () => {
+    setLoginProvider('cursor');
+    setSelectedProject(projects?.[0] || { name: 'default', fullPath: process.cwd() });
+    setShowLoginModal(true);
+  };
+
+  const handleLoginComplete = (exitCode) => {
+    if (exitCode === 0) {
+      // Login successful - could show a success message here
+    }
+    setShowLoginModal(false);
+  };
+
   const saveSettings = () => {
     setIsSaving(true);
     setSaveStatus(null);
@@ -385,7 +422,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
       };
       
       // Save to localStorage
-      localStorage.setItem('claude-tools-settings', JSON.stringify(claudeSettings));
+      localStorage.setItem('claude-settings', JSON.stringify(claudeSettings));
       localStorage.setItem('cursor-tools-settings', JSON.stringify(cursorSettings));
       
       setSaveStatus('success');
@@ -591,7 +628,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
       <div className="bg-background border border-border md:rounded-lg shadow-xl w-full md:max-w-4xl h-full md:h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-4 md:p-6 border-b border-border flex-shrink-0">
           <div className="flex items-center gap-3">
-            <Settings className="w-5 h-5 md:w-6 md:h-6 text-blue-600" />
+            <SettingsIcon className="w-5 h-5 md:w-6 md:h-6 text-blue-600" />
             <h2 className="text-lg md:text-xl font-semibold text-foreground">
               Settings
             </h2>
@@ -629,6 +666,16 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                 }`}
               >
                 Appearance
+              </button>
+              <button
+                onClick={() => setActiveTab('tasks')}
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'tasks'
+                    ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Tasks
               </button>
             </div>
           </div>
@@ -720,7 +767,10 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                       : 'border-transparent text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  Claude Tools
+                  <div className="flex items-center gap-2">
+                    <ClaudeLogo className="w-4 h-4" />
+                    <span>Claude</span>
+                  </div>
                 </button>
                 <button
                   onClick={() => setToolsProvider('cursor')}
@@ -730,12 +780,15 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                       : 'border-transparent text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  Cursor Tools
+                  <div className="flex items-center gap-2">
+                    <CursorLogo className="w-4 h-4" />
+                    <span>Cursor</span>
+                  </div>
                 </button>
               </div>
             </div>
             
-            {/* Claude Tools Content */}
+            {/* Claude Content */}
             {toolsProvider === 'claude' && (
               <div className="space-y-6 md:space-y-8">
             
@@ -764,6 +817,36 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                     </div>
                   </div>
                 </label>
+              </div>
+            </div>
+
+            {/* Claude Login */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <LogIn className="w-5 h-5 text-blue-500" />
+                <h3 className="text-lg font-medium text-foreground">
+                  Authentication
+                </h3>
+              </div>
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-medium text-blue-900 dark:text-blue-100">
+                      Claude CLI Login
+                    </div>
+                    <div className="text-sm text-blue-700 dark:text-blue-300">
+                      Sign in to your Claude account to enable AI features
+                    </div>
+                  </div>
+                  <Button
+                    onClick={handleClaudeLogin}
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                    size="sm"
+                  >
+                    <LogIn className="w-4 h-4 mr-2" />
+                    Login
+                  </Button>
+                </div>
               </div>
             </div>
 
@@ -1465,7 +1548,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
               </div>
             )}
             
-            {/* Cursor Tools Content */}
+            {/* Cursor Content */}
             {toolsProvider === 'cursor' && (
               <div className="space-y-6 md:space-y-8">
                 
@@ -1494,6 +1577,36 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                         </div>
                       </div>
                     </label>
+                  </div>
+                </div>
+
+                {/* Cursor Login */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <LogIn className="w-5 h-5 text-purple-500" />
+                    <h3 className="text-lg font-medium text-foreground">
+                      Authentication
+                    </h3>
+                  </div>
+                  <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium text-purple-900 dark:text-purple-100">
+                          Cursor CLI Login
+                        </div>
+                        <div className="text-sm text-purple-700 dark:text-purple-300">
+                          Sign in to your Cursor account to enable AI features
+                        </div>
+                      </div>
+                      <Button
+                        onClick={handleCursorLogin}
+                        className="bg-purple-600 hover:bg-purple-700 text-white"
+                        size="sm"
+                      >
+                        <LogIn className="w-4 h-4 mr-2" />
+                        Login
+                      </Button>
+                    </div>
                   </div>
                 </div>
 
@@ -1674,6 +1787,160 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
             )}
               </div>
             )}
+
+            {/* Tasks Tab */}
+            {activeTab === 'tasks' && (
+              <div className="space-y-6 md:space-y-8">
+                {/* Installation Status Check */}
+                {isCheckingInstallation ? (
+                  <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="animate-spin w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+                      <span className="text-sm text-muted-foreground">Checking TaskMaster installation...</span>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {/* TaskMaster Not Installed Warning */}
+                    {!isTaskMasterInstalled && (
+                      <div className="bg-orange-50 dark:bg-orange-950/50 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
+                        <div className="flex items-start gap-3">
+                          <div className="w-8 h-8 bg-orange-100 dark:bg-orange-900 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <svg className="w-4 h-4 text-orange-600 dark:text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                            </svg>
+                          </div>
+                          <div className="flex-1">
+                            <div className="font-medium text-orange-900 dark:text-orange-100 mb-2">
+                              TaskMaster AI CLI Not Installed
+                            </div>
+                            <div className="text-sm text-orange-800 dark:text-orange-200 space-y-3">
+                              <p>TaskMaster CLI is required to use task management features. Install it to get started:</p>
+                              
+                              <div className="bg-orange-100 dark:bg-orange-900/50 rounded-lg p-3 font-mono text-sm">
+                                <code>npm install -g task-master-ai</code>
+                               <a 
+                                  href="https://github.com/eyaltoledano/claude-task-master" 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium"
+                                >
+                                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M10 0C4.477 0 0 4.484 0 10.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0110 4.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.203 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.942.359.31.678.921.678 1.856 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0020 10.017C20 4.484 15.522 0 10 0z" clipRule="evenodd" />
+                                  </svg>
+                                  View on GitHub
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                  </svg>
+                                </a>
+                              </div>
+                              
+                              <div className="space-y-2">
+                                <p className="font-medium">After installation:</p>
+                                <ol className="list-decimal list-inside space-y-1 text-xs">
+                                  <li>Restart this application</li>
+                                  <li>TaskMaster features will automatically become available</li>
+                                  <li>Use <code className="bg-orange-100 dark:bg-orange-800 px-1 rounded">task-master init</code> in your project directory</li>
+                                </ol>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* TaskMaster Settings */}
+                    <div className="space-y-4">
+                      <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="font-medium text-foreground">
+                              Enable TaskMaster Integration
+                            </div>
+                            <div className="text-sm text-muted-foreground mt-1">
+                              Show TaskMaster tasks, banners, and sidebar indicators across the interface
+                            </div>
+                            {!isTaskMasterInstalled && (
+                              <div className="text-xs text-orange-600 dark:text-orange-400 mt-1">
+                                TaskMaster CLI must be installed first
+                              </div>
+                            )}
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={tasksEnabled}
+                              onChange={(e) => setTasksEnabled(e.target.checked)}
+                              disabled={!isTaskMasterInstalled}
+                              className="sr-only peer"
+                            />
+                            <div className={`w-11 h-6 ${!isTaskMasterInstalled ? 'bg-gray-300 dark:bg-gray-600' : 'bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800'} rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600`}></div>
+                          </label>
+                        </div>
+                      </div>
+
+                      {/* TaskMaster Information */}
+                      <div className="bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <Zap className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <div>
+                        <div className="font-medium text-blue-900 dark:text-blue-100 mb-2">
+                          🎯 About TaskMaster AI
+                        </div>
+                        <div className="text-sm text-blue-800 dark:text-blue-200 space-y-2">
+                          <p><strong>AI-Powered Task Management:</strong> Break complex projects into manageable subtasks with AI assistance</p>
+                          <p><strong>PRD:</strong> Generate structured tasks from Product Requirements Documents</p>
+                          <p><strong>Dependency Tracking:</strong> Understand task relationships and execution order</p>
+                          <p><strong>Progress Visualization:</strong> Kanban boards, and detailed task views</p>
+                        </div>
+                      </div>
+                      
+                      {/* GitHub Link and Resources */}
+                      <div className="mt-4 pt-4 border-t border-blue-200 dark:border-blue-700">
+                        <div className="flex items-start gap-3">
+                          <div className="w-6 h-6 bg-blue-100 dark:bg-blue-800 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <svg className="w-3 h-3 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M12.586 4.586a2 2 0 112.828 2.828l-3 3a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3-3a4 4 0 00-5.656-5.656l-1.5 1.5a1 1 0 101.414 1.414l1.5-1.5zm-5 5a2 2 0 012.828 0 1 1 0 101.414-1.414 4 4 0 00-5.656 0l-3 3a4 4 0 105.656 5.656l1.5-1.5a1 1 0 10-1.414-1.414l-1.5 1.5a2 2 0 11-2.828-2.828l3-3z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                          <div className="flex-1">
+                            <div className="font-medium text-blue-900 dark:text-blue-100 mb-2">
+                              📚 Learn More & Tutorial
+                            </div>
+                            <div className="text-sm text-blue-800 dark:text-blue-200 space-y-2">
+                              <p>TaskMaster AI (aka <strong>claude-task-master</strong> ) is an advanced AI-powered task management system built for developers.</p>
+                              <div className="flex flex-col gap-2">
+                                <a 
+                                  href="https://github.com/eyaltoledano/claude-task-master" 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium"
+                                >
+                                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M10 0C4.477 0 0 4.484 0 10.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0110 4.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.203 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.942.359.31.678.921.678 1.856 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0020 10.017C20 4.484 15.522 0 10 0z" clipRule="evenodd" />
+                                  </svg>
+                                  View on GitHub
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                  </svg>
+                                </a>
+                                <p className="text-xs text-blue-700 dark:text-blue-300">
+                                  Find documentation, setup guides, and examples for advanced TaskMaster workflows
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -1722,8 +1989,35 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
           </div>
         </div>
       </div>
+
+      {/* Login Modal */}
+      {showLoginModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 max-md:items-stretch max-md:justify-stretch">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl h-3/4 flex flex-col md:max-w-4xl md:h-3/4 md:rounded-lg md:m-4 max-md:max-w-none max-md:h-full max-md:rounded-none max-md:m-0">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                {loginProvider === 'claude' ? 'Claude CLI Login' : 'Cursor CLI Login'}
+              </h3>
+              <button
+                onClick={() => setShowLoginModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <StandaloneShell
+                project={selectedProject}
+                command={loginProvider === 'claude' ? 'claude /login' : 'cursor-agent login'}
+                onComplete={handleLoginComplete}
+                showHeader={false}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-export default ToolsSettings;
+export default Settings;

@@ -43,6 +43,22 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
+    
+    /* Safe area CSS variables */
+    --safe-area-inset-top: env(safe-area-inset-top);
+    --safe-area-inset-right: env(safe-area-inset-right);
+    --safe-area-inset-bottom: env(safe-area-inset-bottom);
+    --safe-area-inset-left: env(safe-area-inset-left);
+  }
+  
+  /* Fallback for older iOS versions */
+  @supports (padding-top: constant(safe-area-inset-top)) {
+    :root {
+      --safe-area-inset-top: constant(safe-area-inset-top);
+      --safe-area-inset-right: constant(safe-area-inset-right);
+      --safe-area-inset-bottom: constant(safe-area-inset-bottom);
+      --safe-area-inset-left: constant(safe-area-inset-left);
+    }
   }
 
   .dark {
@@ -82,10 +98,58 @@
     padding: 0;
   }
 
-  html, body, #root {
+  html, body {
     height: 100%;
     margin: 0;
     padding: 0;
+  }
+  
+  /* Root element with safe area padding for PWA */
+  #root {
+    min-height: 100vh;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  
+  /* Apply safe area padding in standalone mode */
+  @supports (padding-top: env(safe-area-inset-top)) {
+    @media (display-mode: standalone) {
+      #root {
+        padding-top: var(--safe-area-inset-top);
+        padding-left: var(--safe-area-inset-left);
+        padding-right: var(--safe-area-inset-right);
+      }
+    }
+  }
+  
+  /* PWA mode detected by JavaScript - more reliable */
+  html.pwa-mode,
+  body.pwa-mode {
+    height: 100%;
+    overflow: hidden;
+    background-color: rgb(255 255 255); /* white - same as bg-white for safe area */
+  }
+
+  body.pwa-mode #root {
+    padding-top: calc(env(safe-area-inset-top, 0px) + 8px);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* Adjust fixed inset positioning in PWA mode */
+  body.pwa-mode .fixed.inset-0 {
+    top: calc(env(safe-area-inset-top, 0px) + 8px);
+    left: env(safe-area-inset-left);
+    right: env(safe-area-inset-right);
+    bottom: 0;
+  }
+
+  /* Dark mode safe area background */
+  html.dark body.pwa-mode {
+    background-color: rgb(31 41 55); /* gray-800 - matches header color */
   }
   
   /* Global transition defaults */
@@ -575,6 +639,25 @@
   /* Safe area support for iOS devices */
   .ios-bottom-safe {
     padding-bottom: max(env(safe-area-inset-bottom), 12px);
+  }
+  
+  /* PWA specific header adjustments for iOS */
+  .pwa-header-safe {
+    padding-top: 16px;
+  }
+  
+  /* When PWA mode is detected by JavaScript */
+  body.pwa-mode .pwa-header-safe {
+    /* Reset padding since #root already handles safe area */
+    padding-top: 0px !important;
+  }
+
+  /* For mobile PWA, ensure proper header spacing */
+  @media screen and (max-width: 768px) {
+    body.pwa-mode .pwa-header-safe {
+      padding-top: 4px !important;
+      padding-bottom: 12px;
+    }
   }
   
   @media screen and (max-width: 768px) {

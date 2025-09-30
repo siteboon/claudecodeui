@@ -29,7 +29,7 @@ if (typeof document !== 'undefined') {
 // Global store for shell sessions to persist across tab switches
 const shellSessions = new Map();
 
-function Shell({ selectedProject, selectedSession, isActive }) {
+function Shell({ selectedProject, selectedSession, isActive, initialCommand, isPlainShell = false, onProcessComplete }) {
   const terminalRef = useRef(null);
   const terminal = useRef(null);
   const fitAddon = useRef(null);
@@ -434,12 +434,16 @@ function Shell({ selectedProject, selectedSession, isActive }) {
               const initPayload = {
                 type: 'init',
                 projectPath: selectedProject.fullPath || selectedProject.path,
-                sessionId: selectedSession?.id,
-                hasSession: !!selectedSession,
-                provider: selectedSession?.__provider || 'claude',
+                sessionId: isPlainShell ? null : selectedSession?.id,
+                hasSession: isPlainShell ? false : !!selectedSession,
+                provider: isPlainShell ? 'plain-shell' : (selectedSession?.__provider || 'claude'),
                 cols: terminal.current.cols,
-                rows: terminal.current.rows
+                rows: terminal.current.rows,
+                initialCommand: initialCommand,
+                isPlainShell: isPlainShell
               };
+              
+              console.log('Shell init payload:', initPayload);
               
               ws.current.send(JSON.stringify(initPayload));
               
@@ -471,6 +475,18 @@ function Shell({ selectedProject, selectedSession, isActive }) {
             let match;
             while ((match = urlRegex.exec(output.replace(/\x1b\[[0-9;]*m/g, ''))) !== null) {
               urls.push(match[1]);
+            }
+            
+            if (isPlainShell && onProcessComplete) {
+              const cleanOutput = output.replace(/\x1b\[[0-9;]*m/g, ''); // Remove ANSI codes
+              if (cleanOutput.includes('Process exited with code 0')) {
+                onProcessComplete(0); // Success
+              } else if (cleanOutput.match(/Process exited with code (\d+)/)) {
+                const exitCode = parseInt(cleanOutput.match(/Process exited with code (\d+)/)[1]);
+                if (exitCode !== 0) {
+                  onProcessComplete(exitCode); // Error
+                }
+              }
             }
             
             // If URLs found, log them for potential opening
@@ -606,14 +622,16 @@ function Shell({ selectedProject, selectedSession, isActive }) {
                 <span>Continue in Shell</span>
               </button>
               <p className="text-gray-400 text-sm mt-3 px-2">
-                {selectedSession ? 
-                  (() => {
-                    const displaySessionName = selectedSession.__provider === 'cursor'
-                      ? (selectedSession.name || 'Untitled Session')
-                      : (selectedSession.summary || 'New Session');
-                    return `Resume session: ${displaySessionName.slice(0, 50)}...`;
-                  })() : 
-                  'Start a new Claude session'
+                {isPlainShell ? 
+                  `Run ${initialCommand || 'command'} in ${selectedProject.displayName}` :
+                  selectedSession ? 
+                    (() => {
+                      const displaySessionName = selectedSession.__provider === 'cursor'
+                        ? (selectedSession.name || 'Untitled Session')
+                        : (selectedSession.summary || 'New Session');
+                      return `Resume session: ${displaySessionName.slice(0, 50)}...`;
+                    })() : 
+                    'Start a new Claude session'
                 }
               </p>
             </div>
@@ -629,7 +647,10 @@ function Shell({ selectedProject, selectedSession, isActive }) {
                 <span className="text-base font-medium">Connecting to shell...</span>
               </div>
               <p className="text-gray-400 text-sm mt-3 px-2">
-                Starting Claude CLI in {selectedProject.displayName}
+                {isPlainShell ? 
+                  `Running ${initialCommand || 'command'} in ${selectedProject.displayName}` :
+                  `Starting Claude CLI in ${selectedProject.displayName}`
+                }
               </p>
             </div>
           </div>

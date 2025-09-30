@@ -15,11 +15,18 @@ import React, { useState, useEffect } from 'react';
 import ChatInterface from './ChatInterface';
 import FileTree from './FileTree';
 import CodeEditor from './CodeEditor';
-import Shell from './Shell';
+import StandaloneShell from './StandaloneShell';
 import GitPanel from './GitPanel';
 import ErrorBoundary from './ErrorBoundary';
 import ClaudeLogo from './ClaudeLogo';
 import CursorLogo from './CursorLogo';
+import TaskList from './TaskList';
+import TaskDetail from './TaskDetail';
+import PRDEditor from './PRDEditor';
+import Tooltip from './Tooltip';
+import { useTaskMaster } from '../contexts/TaskMasterContext';
+import { useTasksSettings } from '../contexts/TasksSettingsContext';
+import { api } from '../utils/api';
 
 function MainContent({ 
   selectedProject, 
@@ -30,6 +37,7 @@ function MainContent({
   sendMessage, 
   messages,
   isMobile,
+  isPWA,
   onMenuClick,
   isLoading,
   onInputFocusChange,
@@ -46,6 +54,60 @@ function MainContent({
   sendByCtrlEnter         // Send by Ctrl+Enter mode for East Asian language input
 }) {
   const [editingFile, setEditingFile] = useState(null);
+  const [selectedTask, setSelectedTask] = useState(null);
+  const [showTaskDetail, setShowTaskDetail] = useState(false);
+  
+  // PRD Editor state
+  const [showPRDEditor, setShowPRDEditor] = useState(false);
+  const [selectedPRD, setSelectedPRD] = useState(null);
+  const [existingPRDs, setExistingPRDs] = useState([]);
+  const [prdNotification, setPRDNotification] = useState(null);
+  
+  // TaskMaster context
+  const { tasks, currentProject, refreshTasks, setCurrentProject } = useTaskMaster();
+  const { tasksEnabled, isTaskMasterInstalled, isTaskMasterReady } = useTasksSettings();
+  
+  // Only show tasks tab if TaskMaster is installed and enabled
+  const shouldShowTasksTab = tasksEnabled && isTaskMasterInstalled;
+
+  // Sync selectedProject with TaskMaster context
+  useEffect(() => {
+    if (selectedProject && selectedProject !== currentProject) {
+      setCurrentProject(selectedProject);
+    }
+  }, [selectedProject, currentProject, setCurrentProject]);
+
+  // Switch away from tasks tab when tasks are disabled or TaskMaster is not installed
+  useEffect(() => {
+    if (!shouldShowTasksTab && activeTab === 'tasks') {
+      setActiveTab('chat');
+    }
+  }, [shouldShowTasksTab, activeTab, setActiveTab]);
+
+  // Load existing PRDs when current project changes
+  useEffect(() => {
+    const loadExistingPRDs = async () => {
+      if (!currentProject?.name) {
+        setExistingPRDs([]);
+        return;
+      }
+      
+      try {
+        const response = await api.get(`/taskmaster/prd/${encodeURIComponent(currentProject.name)}`);
+        if (response.ok) {
+          const data = await response.json();
+          setExistingPRDs(data.prdFiles || []);
+        } else {
+          setExistingPRDs([]);
+        }
+      } catch (error) {
+        console.error('Failed to load existing PRDs:', error);
+        setExistingPRDs([]);
+      }
+    };
+
+    loadExistingPRDs();
+  }, [currentProject?.name]);
 
   const handleFileOpen = (filePath, diffInfo = null) => {
     // Create a file object that CodeEditor expects
@@ -61,15 +123,42 @@ function MainContent({
   const handleCloseEditor = () => {
     setEditingFile(null);
   };
+
+  const handleTaskClick = (task) => {
+    // If task is just an ID (from dependency click), find the full task object
+    if (typeof task === 'object' && task.id && !task.title) {
+      const fullTask = tasks?.find(t => t.id === task.id);
+      if (fullTask) {
+        setSelectedTask(fullTask);
+        setShowTaskDetail(true);
+      }
+    } else {
+      setSelectedTask(task);
+      setShowTaskDetail(true);
+    }
+  };
+
+  const handleTaskDetailClose = () => {
+    setShowTaskDetail(false);
+    setSelectedTask(null);
+  };
+
+  const handleTaskStatusChange = (taskId, newStatus) => {
+    // This would integrate with TaskMaster API to update task status
+    console.log('Update task status:', taskId, newStatus);
+    refreshTasks?.();
+  };
   if (isLoading) {
     return (
       <div className="h-full flex flex-col">
         {/* Header with menu button for mobile */}
         {isMobile && (
-          <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-3 sm:p-4 flex-shrink-0">
+          <div 
+            className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-3 sm:p-4 pwa-header-safe flex-shrink-0"
+          >
             <button
               onClick={onMenuClick}
-              className="p-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+              className="p-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 pwa-menu-button"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -102,10 +191,12 @@ function MainContent({
       <div className="h-full flex flex-col">
         {/* Header with menu button for mobile */}
         {isMobile && (
-          <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-3 sm:p-4 flex-shrink-0">
+          <div 
+            className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-3 sm:p-4 pwa-header-safe flex-shrink-0"
+          >
             <button
               onClick={onMenuClick}
-              className="p-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+              className="p-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 pwa-menu-button"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -138,7 +229,9 @@ function MainContent({
   return (
     <div className="h-full flex flex-col">
       {/* Header with tabs */}
-      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-3 sm:p-4 flex-shrink-0">
+      <div 
+        className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-3 sm:p-4 pwa-header-safe flex-shrink-0"
+      >
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2 sm:space-x-3">
             {isMobile && (
@@ -148,7 +241,7 @@ function MainContent({
                   e.preventDefault();
                   onMenuClick();
                 }}
-                className="p-2.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 touch-manipulation active:scale-95"
+                className="p-2.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 touch-manipulation active:scale-95 pwa-menu-button"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -187,7 +280,10 @@ function MainContent({
                 ) : (
                   <div>
                     <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
-                      {activeTab === 'files' ? 'Project Files' : activeTab === 'git' ? 'Source Control' : 'Project'}
+                      {activeTab === 'files' ? 'Project Files' : 
+                       activeTab === 'git' ? 'Source Control' : 
+                       (activeTab === 'tasks' && shouldShowTasksTab) ? 'TaskMaster' : 
+                       'Project'}
                     </h2>
                     <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
                       {selectedProject.displayName}
@@ -201,66 +297,93 @@ function MainContent({
           {/* Modern Tab Navigation - Right Side */}
           <div className="flex-shrink-0 hidden sm:block">
             <div className="relative flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
-              <button
-                onClick={() => setActiveTab('chat')}
-                className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md ${
-                  activeTab === 'chat'
-                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-700'
-                }`}
-              >
-                <span className="flex items-center gap-1 sm:gap-1.5">
-                  <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                  </svg>
-                  <span className="hidden sm:inline">Chat</span>
-                </span>
-              </button>
-              <button
-                onClick={() => setActiveTab('shell')}
-                className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
-                  activeTab === 'shell'
-                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-700'
-                }`}
-              >
-                <span className="flex items-center gap-1 sm:gap-1.5">
-                  <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                  </svg>
-                  <span className="hidden sm:inline">Shell</span>
-                </span>
-              </button>
-              <button
-                onClick={() => setActiveTab('files')}
-                className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
-                  activeTab === 'files'
-                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-700'
-                }`}
-              >
-                <span className="flex items-center gap-1 sm:gap-1.5">
-                  <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-5l-2-2H5a2 2 0 00-2 2z" />
-                  </svg>
-                  <span className="hidden sm:inline">Files</span>
-                </span>
-              </button>
-              <button
-                onClick={() => setActiveTab('git')}
-                className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
-                  activeTab === 'git'
-                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-700'
-                }`}
-              >
-                <span className="flex items-center gap-1 sm:gap-1.5">
-                  <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                  <span className="hidden sm:inline">Source Control</span>
-                </span>
-              </button>
+              <Tooltip content="Chat" position="bottom">
+                <button
+                  onClick={() => setActiveTab('chat')}
+                  className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md ${
+                    activeTab === 'chat'
+                      ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  <span className="flex items-center gap-1 sm:gap-1.5">
+                    <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                    <span className="hidden md:hidden lg:inline">Chat</span>
+                  </span>
+                </button>
+              </Tooltip>
+              <Tooltip content="Shell" position="bottom">
+                <button
+                  onClick={() => setActiveTab('shell')}
+                  className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
+                    activeTab === 'shell'
+                      ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  <span className="flex items-center gap-1 sm:gap-1.5">
+                    <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                    <span className="hidden md:hidden lg:inline">Shell</span>
+                  </span>
+                </button>
+              </Tooltip>
+              <Tooltip content="Files" position="bottom">
+                <button
+                  onClick={() => setActiveTab('files')}
+                  className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
+                    activeTab === 'files'
+                      ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  <span className="flex items-center gap-1 sm:gap-1.5">
+                    <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-5l-2-2H5a2 2 0 00-2 2z" />
+                    </svg>
+                    <span className="hidden md:hidden lg:inline">Files</span>
+                  </span>
+                </button>
+              </Tooltip>
+              <Tooltip content="Source Control" position="bottom">
+                <button
+                  onClick={() => setActiveTab('git')}
+                  className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
+                    activeTab === 'git'
+                      ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  <span className="flex items-center gap-1 sm:gap-1.5">
+                    <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    <span className="hidden md:hidden lg:inline">Source Control</span>
+                  </span>
+                </button>
+              </Tooltip>
+              {shouldShowTasksTab && (
+                <Tooltip content="Tasks" position="bottom">
+                  <button
+                    onClick={() => setActiveTab('tasks')}
+                    className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
+                      activeTab === 'tasks'
+                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-700'
+                    }`}
+                  >
+                    <span className="flex items-center gap-1 sm:gap-1.5">
+                      <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                      </svg>
+                      <span className="hidden md:hidden lg:inline">Tasks</span>
+                    </span>
+                  </button>
+                </Tooltip>
+              )}
                {/* <button
                 onClick={() => setActiveTab('preview')}
                 className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
@@ -302,26 +425,56 @@ function MainContent({
               showRawParameters={showRawParameters}
               autoScrollToBottom={autoScrollToBottom}
               sendByCtrlEnter={sendByCtrlEnter}
+              onShowAllTasks={tasksEnabled ? () => setActiveTab('tasks') : null}
             />
           </ErrorBoundary>
         </div>
-        {activeTab === 'files' && (
-          <div className="h-full overflow-hidden">
-            <FileTree selectedProject={selectedProject} />
-          </div>
-        )}
-        {activeTab === 'shell' && (
-          <div className="h-full overflow-hidden">
-            <Shell 
-              selectedProject={selectedProject} 
-              selectedSession={selectedSession}
-              isActive
-            />
-          </div>
-        )}
-        {activeTab === 'git' && (
-          <div className="h-full overflow-hidden">
-            <GitPanel selectedProject={selectedProject} isMobile={isMobile} />
+        <div className={`h-full overflow-hidden ${activeTab === 'files' ? 'block' : 'hidden'}`}>
+          <FileTree selectedProject={selectedProject} />
+        </div>
+        <div className={`h-full overflow-hidden ${activeTab === 'shell' ? 'block' : 'hidden'}`}>
+          <StandaloneShell
+            project={selectedProject}
+            session={selectedSession}
+            isActive={activeTab === 'shell'}
+            showHeader={false}
+          />
+        </div>
+        <div className={`h-full overflow-hidden ${activeTab === 'git' ? 'block' : 'hidden'}`}>
+          <GitPanel selectedProject={selectedProject} isMobile={isMobile} />
+        </div>
+        {shouldShowTasksTab && (
+          <div className={`h-full ${activeTab === 'tasks' ? 'block' : 'hidden'}`}>
+            <div className="h-full flex flex-col overflow-hidden">
+              <TaskList
+                tasks={tasks || []}
+                onTaskClick={handleTaskClick}
+                showParentTasks={true}
+                className="flex-1 overflow-y-auto p-4"
+                currentProject={currentProject}
+                onTaskCreated={refreshTasks}
+                onShowPRDEditor={(prd = null) => {
+                  setSelectedPRD(prd);
+                  setShowPRDEditor(true);
+                }}
+                existingPRDs={existingPRDs}
+                onRefreshPRDs={(showNotification = false) => {
+                  // Reload existing PRDs
+                  if (currentProject?.name) {
+                    api.get(`/taskmaster/prd/${encodeURIComponent(currentProject.name)}`)
+                      .then(response => response.ok ? response.json() : Promise.reject())
+                      .then(data => {
+                        setExistingPRDs(data.prdFiles || []);
+                        if (showNotification) {
+                          setPRDNotification('PRD saved successfully!');
+                          setTimeout(() => setPRDNotification(null), 3000);
+                        }
+                      })
+                      .catch(error => console.error('Failed to refresh PRDs:', error));
+                  }
+                }}
+              />
+            </div>
           </div>
         )}
         <div className={`h-full overflow-hidden ${activeTab === 'preview' ? 'block' : 'hidden'}`}>
@@ -359,6 +512,63 @@ function MainContent({
           onClose={handleCloseEditor}
           projectPath={selectedProject?.path}
         />
+      )}
+
+      {/* Task Detail Modal */}
+      {shouldShowTasksTab && showTaskDetail && selectedTask && (
+        <TaskDetail
+          task={selectedTask}
+          isOpen={showTaskDetail}
+          onClose={handleTaskDetailClose}
+          onStatusChange={handleTaskStatusChange}
+          onTaskClick={handleTaskClick}
+        />
+      )}
+      {/* PRD Editor Modal */}
+      {showPRDEditor && (
+        <PRDEditor
+          project={currentProject}
+          projectPath={currentProject?.fullPath || currentProject?.path}
+          onClose={() => {
+            setShowPRDEditor(false);
+            setSelectedPRD(null);
+          }}
+          isNewFile={!selectedPRD?.isExisting}
+          file={{ 
+            name: selectedPRD?.name || 'prd.txt',
+            content: selectedPRD?.content || ''
+          }}
+          onSave={async () => {
+            setShowPRDEditor(false);
+            setSelectedPRD(null);
+            
+            // Reload existing PRDs with notification
+            try {
+              const response = await api.get(`/taskmaster/prd/${encodeURIComponent(currentProject.name)}`);
+              if (response.ok) {
+                const data = await response.json();
+                setExistingPRDs(data.prdFiles || []);
+                setPRDNotification('PRD saved successfully!');
+                setTimeout(() => setPRDNotification(null), 3000);
+              }
+            } catch (error) {
+              console.error('Failed to refresh PRDs:', error);
+            }
+            
+            refreshTasks?.();
+          }}
+        />
+      )}
+      {/* PRD Notification */}
+      {prdNotification && (
+        <div className="fixed bottom-4 right-4 z-50 animate-in slide-in-from-bottom-2 duration-300">
+          <div className="bg-green-600 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-3">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            <span className="font-medium">{prdNotification}</span>
+          </div>
+        </div>
       )}
     </div>
   );

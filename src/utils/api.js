@@ -86,4 +86,56 @@ export const api = {
       body: formData,
       headers: {}, // Let browser set Content-Type for FormData
     }),
+
+  // TaskMaster endpoints
+  taskmaster: {
+    // Initialize TaskMaster in a project
+    init: (projectName) => 
+      authenticatedFetch(`/api/taskmaster/init/${projectName}`, {
+        method: 'POST',
+      }),
+    
+    // Add a new task
+    addTask: (projectName, { prompt, title, description, priority, dependencies }) =>
+      authenticatedFetch(`/api/taskmaster/add-task/${projectName}`, {
+        method: 'POST',
+        body: JSON.stringify({ prompt, title, description, priority, dependencies }),
+      }),
+    
+    // Parse PRD to generate tasks
+    parsePRD: (projectName, { fileName, numTasks, append }) =>
+      authenticatedFetch(`/api/taskmaster/parse-prd/${projectName}`, {
+        method: 'POST',
+        body: JSON.stringify({ fileName, numTasks, append }),
+      }),
+
+    // Get available PRD templates
+    getTemplates: () =>
+      authenticatedFetch('/api/taskmaster/prd-templates'),
+
+    // Apply a PRD template
+    applyTemplate: (projectName, { templateId, fileName, customizations }) =>
+      authenticatedFetch(`/api/taskmaster/apply-template/${projectName}`, {
+        method: 'POST',
+        body: JSON.stringify({ templateId, fileName, customizations }),
+      }),
+
+    // Update a task
+    updateTask: (projectName, taskId, updates) =>
+      authenticatedFetch(`/api/taskmaster/update-task/${projectName}/${taskId}`, {
+        method: 'PUT',
+        body: JSON.stringify(updates),
+      }),
+  },
+  
+  // Browse filesystem for project suggestions
+  browseFilesystem: (dirPath = null) => {
+    const params = new URLSearchParams();
+    if (dirPath) params.append('path', dirPath);
+    
+    return authenticatedFetch(`/api/browse-filesystem?${params}`);
+  },
+
+  // Generic GET method for any endpoint
+  get: (endpoint) => authenticatedFetch(`/api${endpoint}`),
 };

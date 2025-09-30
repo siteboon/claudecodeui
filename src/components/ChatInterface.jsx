@@ -22,6 +22,8 @@ import { useDropzone } from 'react-dropzone';
 import TodoList from './TodoList';
 import ClaudeLogo from './ClaudeLogo.jsx';
 import CursorLogo from './CursorLogo.jsx';
+import NextTaskBanner from './NextTaskBanner.jsx';
+import { useTasksSettings } from '../contexts/TasksSettingsContext';
 
 import ClaudeStatus from './ClaudeStatus';
 import { MicButton } from './MicButton.jsx';
@@ -155,9 +157,11 @@ const safeLocalStorage = {
 
 // Memoized message component to prevent unnecessary re-renders
 const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFileOpen, onShowSettings, autoExpandTools, showRawParameters }) => {
-  const isGrouped = prevMessage && prevMessage.type === message.type && 
-                   prevMessage.type === 'assistant' && 
-                   !prevMessage.isToolUse && !message.isToolUse;
+  const isGrouped = prevMessage && prevMessage.type === message.type &&
+                   ((prevMessage.type === 'assistant') ||
+                    (prevMessage.type === 'user') ||
+                    (prevMessage.type === 'tool') ||
+                    (prevMessage.type === 'error'));
   const messageRef = React.useRef(null);
   const [isExpanded, setIsExpanded] = React.useState(false);
   React.useEffect(() => {
@@ -1162,7 +1166,8 @@ const ImageAttachment = ({ file, onRemove, uploadProgress, error }) => {
 // - onReplaceTemporarySession: Called to replace temporary session ID with real WebSocket session ID
 //
 // This ensures uninterrupted chat experience by pausing sidebar refreshes during conversations.
-function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, messages, onFileOpen, onInputFocusChange, onSessionActive, onSessionInactive, onReplaceTemporarySession, onNavigateToSession, onShowSettings, autoExpandTools, showRawParameters, autoScrollToBottom, sendByCtrlEnter }) {
+function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, messages, onFileOpen, onInputFocusChange, onSessionActive, onSessionInactive, onReplaceTemporarySession, onNavigateToSession, onShowSettings, autoExpandTools, showRawParameters, autoScrollToBottom, sendByCtrlEnter, onTaskClick, onShowAllTasks }) {
+  const { tasksEnabled } = useTasksSettings();
   const [input, setInput] = useState(() => {
     if (typeof window !== 'undefined' && selectedProject) {
       return safeLocalStorage.getItem(`draft_input_${selectedProject.name}`) || '';
@@ -2115,6 +2120,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           // When resuming a session, Claude CLI creates a new session instead of resuming.
           // We detect this by checking for system/init messages with session_id that differs
           // from our current session. When found, we need to switch the user to the new session.
+          // This works exactly like new session detection - preserve messages during navigation.
           if (latestMessage.data.type === 'system' && 
               latestMessage.data.subtype === 'init' && 
               latestMessage.data.session_id && 
@@ -2127,6 +2133,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             });
             
             // Mark this as a system-initiated session change to preserve messages
+            // This works exactly like new session init - messages stay visible during navigation
             setIsSystemSessionChange(true);
             
             // Guard: If user has already navigated to a concrete session route, avoid toggling back to '/'
@@ -2883,7 +2890,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     // Get tools settings from localStorage based on provider
     const getToolsSettings = () => {
       try {
-        const settingsKey = provider === 'cursor' ? 'cursor-tools-settings' : 'claude-tools-settings';
+        const settingsKey = provider === 'cursor' ? 'cursor-tools-settings' : 'claude-settings';
         const savedSettings = safeLocalStorage.getItem(settingsKey);
         if (savedSettings) {
           return JSON.parse(savedSettings);
@@ -3237,6 +3244,16 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                     : 'Select a provider above to begin'
                   }
                 </p>
+                
+                {/* Show NextTaskBanner when provider is selected and ready */}
+                {provider && tasksEnabled && (
+                  <div className="mt-4 px-4 sm:px-0">
+                    <NextTaskBanner 
+                      onStartTask={() => setInput('Start the next task')}
+                      onShowAllTasks={onShowAllTasks}
+                    />
+                  </div>
+                )}
               </div>
             )}
             {selectedSession && (
@@ -3245,6 +3262,16 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 <p className="text-sm sm:text-base leading-relaxed">
                   Ask questions about your code, request changes, or get help with development tasks
                 </p>
+                
+                {/* Show NextTaskBanner for existing sessions too */}
+                {tasksEnabled && (
+                  <div className="mt-4 px-4 sm:px-0">
+                    <NextTaskBanner 
+                      onStartTask={() => setInput('Start the next task')}
+                      onShowAllTasks={onShowAllTasks}
+                    />
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -3337,7 +3364,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
       {/* Input Area - Fixed Bottom */}
       <div className={`p-2 sm:p-4 md:p-4 flex-shrink-0 ${
-        isInputFocused ? 'pb-2 sm:pb-4 md:pb-6' : 'pb-16 sm:pb-4 md:pb-6'
+        isInputFocused ? 'pb-2 sm:pb-4 md:pb-6' : 'pb-2 sm:pb-4 md:pb-6'
       }`}>
     
         <div className="flex-1">

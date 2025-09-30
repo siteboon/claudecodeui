@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ScrollArea } from './ui/scroll-area';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -8,7 +8,10 @@ import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRig
 import { cn } from '../lib/utils';
 import ClaudeLogo from './ClaudeLogo';
 import CursorLogo from './CursorLogo.jsx';
+import TaskIndicator from './TaskIndicator';
 import { api } from '../utils/api';
+import { useTaskMaster } from '../contexts/TaskMasterContext';
+import { useTasksSettings } from '../contexts/TasksSettingsContext';
 
 // Move formatTimeAgo outside component to avoid recreation on every render
 const formatTimeAgo = (dateString, currentTime) => {
@@ -51,7 +54,9 @@ function Sidebar({
   updateAvailable,
   latestVersion,
   currentVersion,
-  onShowVersionModal
+  onShowVersionModal,
+  isPWA,
+  isMobile
 }) {
   const [expandedProjects, setExpandedProjects] = useState(new Set());
   const [editingProject, setEditingProject] = useState(null);
@@ -69,6 +74,14 @@ function Sidebar({
   const [editingSessionName, setEditingSessionName] = useState('');
   const [generatingSummary, setGeneratingSummary] = useState({});
   const [searchFilter, setSearchFilter] = useState('');
+  const [showPathDropdown, setShowPathDropdown] = useState(false);
+  const [pathList, setPathList] = useState([]);
+  const [filteredPaths, setFilteredPaths] = useState([]);
+  const [selectedPathIndex, setSelectedPathIndex] = useState(-1);
+
+  // TaskMaster context
+  const { setCurrentProject, mcpServerStatus } = useTaskMaster();
+  const { tasksEnabled } = useTasksSettings();
 
   
   // Starred projects state - persisted in localStorage
@@ -134,7 +147,7 @@ function Sidebar({
   useEffect(() => {
     const loadSortOrder = () => {
       try {
-        const savedSettings = localStorage.getItem('claude-tools-settings');
+        const savedSettings = localStorage.getItem('claude-settings');
         if (savedSettings) {
           const settings = JSON.parse(savedSettings);
           setProjectSortOrder(settings.projectSortOrder || 'name');
@@ -149,7 +162,7 @@ function Sidebar({
 
     // Listen for storage changes
     const handleStorageChange = (e) => {
-      if (e.key === 'claude-tools-settings') {
+      if (e.key === 'claude-settings') {
         loadSortOrder();
       }
     };
@@ -168,6 +181,124 @@ function Sidebar({
       clearInterval(checkInterval);
     };
   }, []);
+
+  // Load available paths for suggestions
+  useEffect(() => {
+    const loadPaths = async () => {
+      try {
+        // Get recent paths from localStorage
+        const recentPaths = JSON.parse(localStorage.getItem('recentProjectPaths') || '[]');
+        
+        // Load common/home directory paths
+        const response = await api.browseFilesystem();
+        const data = await response.json();
+        
+        if (data.suggestions) {
+          const homePaths = data.suggestions.map(s => ({ name: s.name, path: s.path }));
+          const allPaths = [...recentPaths.map(path => ({ name: path.split('/').pop(), path })), ...homePaths];
+          setPathList(allPaths);
+        } else {
+          setPathList(recentPaths.map(path => ({ name: path.split('/').pop(), path })));
+        }
+      } catch (error) {
+        console.error('Error loading paths:', error);
+        const recentPaths = JSON.parse(localStorage.getItem('recentProjectPaths') || '[]');
+        setPathList(recentPaths.map(path => ({ name: path.split('/').pop(), path })));
+      }
+    };
+
+    loadPaths();
+  }, []);
+
+  // Handle input change and path filtering with dynamic browsing (ChatInterface pattern + dynamic browsing)
+  useEffect(() => {
+    const inputValue = newProjectPath.trim();
+    
+    if (inputValue.length === 0) {
+      setShowPathDropdown(false);
+      return;
+    }
+    
+    // Show dropdown when user starts typing
+    setShowPathDropdown(true);
+    
+    const updateSuggestions = async () => {
+      // First show filtered existing suggestions from pathList
+      const staticFiltered = pathList.filter(pathItem => 
+        pathItem.name.toLowerCase().includes(inputValue.toLowerCase()) ||
+        pathItem.path.toLowerCase().includes(inputValue.toLowerCase())
+      );
+
+      // Check if input looks like a directory path for dynamic browsing
+      const isDirPath = inputValue.includes('/') && inputValue.length > 1;
+      
+      if (isDirPath) {
+        try {
+          let dirToSearch;
+          
+          // Determine which directory to search
+          if (inputValue.endsWith('/')) {
+            // User typed "/home/simos/" - search inside /home/simos
+            dirToSearch = inputValue.slice(0, -1);
+          } else {
+            // User typed "/home/simos/con" - search inside /home/simos for items starting with "con"
+            const lastSlashIndex = inputValue.lastIndexOf('/');
+            dirToSearch = inputValue.substring(0, lastSlashIndex);
+          }
+          
+          // Only search if we have a valid directory path (not root only)
+          if (dirToSearch && dirToSearch !== '') {
+            const response = await api.browseFilesystem(dirToSearch);
+            const data = await response.json();
+            
+            if (data.suggestions) {
+              // Filter directories that match the current input
+              const partialName = inputValue.substring(inputValue.lastIndexOf('/') + 1);
+              const dynamicPaths = data.suggestions
+                .filter(suggestion => {
+                  const dirName = suggestion.name;
+                  return partialName ? dirName.toLowerCase().startsWith(partialName.toLowerCase()) : true;
+                })
+                .map(s => ({ name: s.name, path: s.path }))
+                .slice(0, 8);
+              
+              // Combine static and dynamic suggestions, prioritize dynamic
+              const combined = [...dynamicPaths, ...staticFiltered].slice(0, 8);
+              setFilteredPaths(combined);
+              setSelectedPathIndex(-1);
+              return;
+            }
+          }
+        } catch (error) {
+          console.debug('Dynamic browsing failed:', error.message);
+        }
+      }
+
+      // Fallback to just static filtered suggestions
+      setFilteredPaths(staticFiltered.slice(0, 8));
+      setSelectedPathIndex(-1);
+    };
+
+    updateSuggestions();
+  }, [newProjectPath, pathList]);
+
+  // Select path from dropdown (ChatInterface pattern)
+  const selectPath = (pathItem) => {
+    setNewProjectPath(pathItem.path);
+    setShowPathDropdown(false);
+    setSelectedPathIndex(-1);
+  };
+
+  // Save path to recent paths
+  const saveToRecentPaths = (path) => {
+    try {
+      const recentPaths = JSON.parse(localStorage.getItem('recentProjectPaths') || '[]');
+      const updatedPaths = [path, ...recentPaths.filter(p => p !== path)].slice(0, 10);
+      localStorage.setItem('recentProjectPaths', JSON.stringify(updatedPaths));
+    } catch (error) {
+      console.error('Error saving recent paths:', error);
+    }
+  };
 
   const toggleProject = (projectName) => {
     const newExpanded = new Set(expandedProjects);
@@ -340,8 +471,13 @@ function Sidebar({
 
       if (response.ok) {
         const result = await response.json();
+        
+        // Save the path to recent paths before clearing
+        saveToRecentPaths(newProjectPath.trim());
+        
         setShowNewProject(false);
         setNewProjectPath('');
+        setShowSuggestions(false);
         
         // Refresh projects to show the new one
         if (window.refreshProjects) {
@@ -364,6 +500,7 @@ function Sidebar({
   const cancelNewProject = () => {
     setShowNewProject(false);
     setNewProjectPath('');
+    setShowSuggestions(false);
   };
 
   const loadMoreSessions = async (project) => {
@@ -417,8 +554,20 @@ function Sidebar({
     return displayName.includes(searchLower) || projectName.includes(searchLower);
   });
 
+  // Enhanced project selection that updates both the main UI and TaskMaster context
+  const handleProjectSelect = (project) => {
+    // Call the original project select handler
+    onProjectSelect(project);
+    
+    // Update TaskMaster context with the selected project
+    setCurrentProject(project);
+  };
+
   return (
-    <div className="h-full flex flex-col bg-card md:select-none">
+    <div 
+      className="h-full flex flex-col bg-card md:select-none"
+      style={isPWA && isMobile ? { paddingTop: '44px' } : {}}
+    >
       {/* Header */}
       <div className="md:p-4 md:border-b md:border-border">
         {/* Desktop Header */}
@@ -463,7 +612,10 @@ function Sidebar({
         </div>
         
         {/* Mobile Header */}
-        <div className="md:hidden p-3 border-b border-border">
+        <div 
+          className="md:hidden p-3 border-b border-border"
+          style={isPWA && isMobile ? { paddingTop: '16px' } : {}}
+        >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
@@ -500,6 +652,7 @@ function Sidebar({
         </div>
       </div>
       
+
       {/* New Project Form */}
       {showNewProject && (
         <div className="md:p-3 md:border-b md:border-border md:bg-muted/30">
@@ -509,17 +662,96 @@ function Sidebar({
               <FolderPlus className="w-4 h-4" />
               Create New Project
             </div>
-            <Input
-              value={newProjectPath}
-              onChange={(e) => setNewProjectPath(e.target.value)}
-              placeholder="/path/to/project or relative/path"
-              className="text-sm focus:ring-2 focus:ring-primary/20"
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') createNewProject();
-                if (e.key === 'Escape') cancelNewProject();
-              }}
-            />
+            <div className="relative">
+              <Input
+                value={newProjectPath}
+                onChange={(e) => setNewProjectPath(e.target.value)}
+                placeholder="/path/to/project or relative/path"
+                className="text-sm focus:ring-2 focus:ring-primary/20"
+                autoFocus
+                onKeyDown={(e) => {
+                  // Handle path dropdown navigation (ChatInterface pattern)
+                  if (showPathDropdown && filteredPaths.length > 0) {
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      setSelectedPathIndex(prev => 
+                        prev < filteredPaths.length - 1 ? prev + 1 : 0
+                      );
+                    } else if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      setSelectedPathIndex(prev => 
+                        prev > 0 ? prev - 1 : filteredPaths.length - 1
+                      );
+                    } else if (e.key === 'Enter') {
+                      e.preventDefault();
+                      if (selectedPathIndex >= 0) {
+                        selectPath(filteredPaths[selectedPathIndex]);
+                      } else if (filteredPaths.length > 0) {
+                        selectPath(filteredPaths[0]);
+                      } else {
+                        createNewProject();
+                      }
+                      return;
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault();
+                      setShowPathDropdown(false);
+                      return;
+                    } else if (e.key === 'Tab') {
+                      e.preventDefault();
+                      if (selectedPathIndex >= 0) {
+                        selectPath(filteredPaths[selectedPathIndex]);
+                      } else if (filteredPaths.length > 0) {
+                        selectPath(filteredPaths[0]);
+                      }
+                      return;
+                    }
+                  }
+
+                  // Regular input handling
+                  if (e.key === 'Enter') {
+                    createNewProject();
+                  }
+                  if (e.key === 'Escape') {
+                    cancelNewProject();
+                  }
+                }}
+              />
+              
+              {/* Path dropdown (ChatInterface pattern) */}
+              {showPathDropdown && filteredPaths.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-popover border border-border rounded-md shadow-lg max-h-48 overflow-y-auto z-50">
+                  {filteredPaths.map((pathItem, index) => (
+                    <div
+                      key={pathItem.path}
+                      className={`px-3 py-2 cursor-pointer border-b border-border last:border-b-0 ${
+                        index === selectedPathIndex
+                          ? 'bg-accent text-accent-foreground'
+                          : 'hover:bg-accent/50'
+                      }`}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        selectPath(pathItem);
+                      }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Folder className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                        <div>
+                          <div className="font-medium text-sm">{pathItem.name}</div>
+                          <div className="text-xs text-muted-foreground font-mono">
+                            {pathItem.path}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             <div className="flex gap-2">
               <Button
                 size="sm"
@@ -542,8 +774,8 @@ function Sidebar({
           </div>
           
           {/* Mobile Form - Simple Overlay */}
-          <div className="md:hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-sm">
-            <div className="absolute bottom-0 left-0 right-0 bg-card rounded-t-lg border-t border-border p-4 space-y-4 animate-in slide-in-from-bottom duration-300">
+          <div className="md:hidden fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-end justify-center px-4 pb-24">
+            <div className="w-full max-w-sm bg-card rounded-t-lg border-t border-border p-4 space-y-4 animate-in slide-in-from-bottom duration-300">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="w-6 h-6 bg-primary/10 rounded-md flex items-center justify-center">
@@ -563,17 +795,92 @@ function Sidebar({
               </div>
               
               <div className="space-y-3">
-                <Input
-                  value={newProjectPath}
-                  onChange={(e) => setNewProjectPath(e.target.value)}
-                  placeholder="/path/to/project or relative/path"
-                  className="text-sm h-10 rounded-md focus:border-primary transition-colors"
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') createNewProject();
-                    if (e.key === 'Escape') cancelNewProject();
-                  }}
-                />
+                <div className="relative">
+                  <Input
+                    value={newProjectPath}
+                    onChange={(e) => setNewProjectPath(e.target.value)}
+                    placeholder="/path/to/project or relative/path"
+                    className="text-sm h-10 rounded-md focus:border-primary transition-colors"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      // Handle path dropdown navigation (same as desktop)
+                      if (showPathDropdown && filteredPaths.length > 0) {
+                        if (e.key === 'ArrowDown') {
+                          e.preventDefault();
+                          setSelectedPathIndex(prev => 
+                            prev < filteredPaths.length - 1 ? prev + 1 : 0
+                          );
+                        } else if (e.key === 'ArrowUp') {
+                          e.preventDefault();
+                          setSelectedPathIndex(prev => 
+                            prev > 0 ? prev - 1 : filteredPaths.length - 1
+                          );
+                        } else if (e.key === 'Enter') {
+                          e.preventDefault();
+                          if (selectedPathIndex >= 0) {
+                            selectPath(filteredPaths[selectedPathIndex]);
+                          } else if (filteredPaths.length > 0) {
+                            selectPath(filteredPaths[0]);
+                          } else {
+                            createNewProject();
+                          }
+                          return;
+                        } else if (e.key === 'Escape') {
+                          e.preventDefault();
+                          setShowPathDropdown(false);
+                          return;
+                        }
+                      }
+
+                      // Regular input handling
+                      if (e.key === 'Enter') {
+                        createNewProject();
+                      }
+                      if (e.key === 'Escape') {
+                        cancelNewProject();
+                      }
+                    }}
+                    style={{
+                      fontSize: '16px', // Prevents zoom on iOS
+                      WebkitAppearance: 'none'
+                    }}
+                  />
+                  
+                  {/* Mobile Path dropdown */}
+                  {showPathDropdown && filteredPaths.length > 0 && (
+                    <div className="absolute bottom-full left-0 right-0 mb-2 bg-popover border border-border rounded-md shadow-lg max-h-40 overflow-y-auto">
+                      {filteredPaths.map((pathItem, index) => (
+                        <div
+                          key={pathItem.path}
+                          className={`px-3 py-2.5 cursor-pointer border-b border-border last:border-b-0 active:scale-95 transition-all ${
+                            index === selectedPathIndex
+                              ? 'bg-accent text-accent-foreground'
+                              : 'hover:bg-accent/50'
+                          }`}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                          }}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            selectPath(pathItem);
+                          }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Folder className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                            <div>
+                              <div className="font-medium text-sm">{pathItem.name}</div>
+                              <div className="text-xs text-muted-foreground font-mono">
+                                {pathItem.path}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 
                 <div className="flex gap-2">
                   <Button
@@ -717,9 +1024,25 @@ function Sidebar({
                                 />
                               ) : (
                                 <>
-                                  <h3 className="text-sm font-medium text-foreground truncate">
-                                    {project.displayName}
-                                  </h3>
+                                  <div className="flex items-center justify-between min-w-0 flex-1">
+                                    <h3 className="text-sm font-medium text-foreground truncate">
+                                      {project.displayName}
+                                    </h3>
+                                    {tasksEnabled && (
+                                      <TaskIndicator 
+                                        status={(() => {
+                                          const projectConfigured = project.taskmaster?.hasTaskmaster;
+                                          const mcpConfigured = mcpServerStatus?.hasMCPServer && mcpServerStatus?.isConfigured;
+                                          if (projectConfigured && mcpConfigured) return 'fully-configured';
+                                          if (projectConfigured) return 'taskmaster-only';
+                                          if (mcpConfigured) return 'mcp-only';
+                                          return 'not-configured';
+                                        })()} 
+                                        size="xs"
+                                        className="flex-shrink-0 ml-2"
+                                      />
+                                    )}
+                                  </div>
                                   <p className="text-xs text-muted-foreground">
                                     {(() => {
                                       const sessionCount = getAllSessions(project).length;
@@ -825,13 +1148,13 @@ function Sidebar({
                       onClick={() => {
                         // Desktop behavior: select project and toggle
                         if (selectedProject?.name !== project.name) {
-                          onProjectSelect(project);
+                          handleProjectSelect(project);
                         }
                         toggleProject(project.name);
                       }}
                       onTouchEnd={handleTouchClick(() => {
                         if (selectedProject?.name !== project.name) {
-                          onProjectSelect(project);
+                          handleProjectSelect(project);
                         }
                         toggleProject(project.name);
                       })}
@@ -1013,11 +1336,11 @@ function Sidebar({
                                   isActive ? "border-green-500/30 bg-green-50/5 dark:bg-green-900/5" : "border-border/30"
                                 )}
                                 onClick={() => {
-                                  onProjectSelect(project);
+                                  handleProjectSelect(project);
                                   onSessionSelect(session);
                                 }}
                                 onTouchEnd={handleTouchClick(() => {
-                                  onProjectSelect(project);
+                                  handleProjectSelect(project);
                                   onSessionSelect(session);
                                 })}
                               >
@@ -1239,7 +1562,7 @@ function Sidebar({
                         <button
                           className="w-full h-8 bg-primary hover:bg-primary/90 text-primary-foreground rounded-md flex items-center justify-center gap-2 font-medium text-xs active:scale-[0.98] transition-all duration-150"
                           onClick={() => {
-                            onProjectSelect(project);
+                            handleProjectSelect(project);
                             onNewSession(project);
                           }}
                         >
@@ -1332,7 +1655,7 @@ function Sidebar({
           onClick={onShowSettings}
         >
           <Settings className="w-3 h-3" />
-          <span className="text-xs">Tools Settings</span>
+          <span className="text-xs">Settings</span>
         </Button>
       </div>
     </div>

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { ScrollArea } from './ui/scroll-area';
 import { Button } from './ui/button';
-import { Folder, FolderOpen, File, FileText, FileCode, List, TableProperties, Eye } from 'lucide-react';
+import { Input } from './ui/input';
+import { Folder, FolderOpen, File, FileText, FileCode, List, TableProperties, Eye, Search, X } from 'lucide-react';
 import { cn } from '../lib/utils';
 import CodeEditor from './CodeEditor';
 import ImageViewer from './ImageViewer';
@@ -14,6 +15,8 @@ function FileTree({ selectedProject }) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
   const [viewMode, setViewMode] = useState('detailed'); // 'simple', 'detailed', 'compact'
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredFiles, setFilteredFiles] = useState([]);
 
   useEffect(() => {
     if (selectedProject) {
@@ -28,6 +31,51 @@ function FileTree({ selectedProject }) {
       setViewMode(savedViewMode);
     }
   }, []);
+
+  // Filter files based on search query
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredFiles(files);
+    } else {
+      const filtered = filterFiles(files, searchQuery.toLowerCase());
+      setFilteredFiles(filtered);
+
+      // Auto-expand directories that contain matches
+      const expandMatches = (items) => {
+        items.forEach(item => {
+          if (item.type === 'directory' && item.children && item.children.length > 0) {
+            setExpandedDirs(prev => new Set(prev.add(item.path)));
+            expandMatches(item.children);
+          }
+        });
+      };
+      expandMatches(filtered);
+    }
+  }, [files, searchQuery]);
+
+  // Recursively filter files and directories based on search query
+  const filterFiles = (items, query) => {
+    return items.reduce((filtered, item) => {
+      const matchesName = item.name.toLowerCase().includes(query);
+      let filteredChildren = [];
+
+      if (item.type === 'directory' && item.children) {
+        filteredChildren = filterFiles(item.children, query);
+      }
+
+      // Include item if:
+      // 1. It matches the search query, or
+      // 2. It's a directory with matching children
+      if (matchesName || filteredChildren.length > 0) {
+        filtered.push({
+          ...item,
+          children: filteredChildren
+        });
+      }
+
+      return filtered;
+    }, []);
+  };
 
   const fetchFiles = async () => {
     setLoading(true);
@@ -308,42 +356,67 @@ function FileTree({ selectedProject }) {
 
   return (
     <div className="h-full flex flex-col bg-card">
-      {/* View Mode Toggle */}
-      <div className="p-4 border-b border-border flex items-center justify-between">
-        <h3 className="text-sm font-medium text-foreground">Files</h3>
-        <div className="flex gap-1">
-          <Button
-            variant={viewMode === 'simple' ? 'default' : 'ghost'}
-            size="sm"
-            className="h-8 w-8 p-0"
-            onClick={() => changeViewMode('simple')}
-            title="Simple view"
-          >
-            <List className="w-4 h-4" />
-          </Button>
-          <Button
-            variant={viewMode === 'compact' ? 'default' : 'ghost'}
-            size="sm"
-            className="h-8 w-8 p-0"
-            onClick={() => changeViewMode('compact')}
-            title="Compact view"
-          >
-            <Eye className="w-4 h-4" />
-          </Button>
-          <Button
-            variant={viewMode === 'detailed' ? 'default' : 'ghost'}
-            size="sm"
-            className="h-8 w-8 p-0"
-            onClick={() => changeViewMode('detailed')}
-            title="Detailed view"
-          >
-            <TableProperties className="w-4 h-4" />
-          </Button>
+      {/* Header with Search and View Mode Toggle */}
+      <div className="p-4 border-b border-border space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-medium text-foreground">Files</h3>
+          <div className="flex gap-1">
+            <Button
+              variant={viewMode === 'simple' ? 'default' : 'ghost'}
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => changeViewMode('simple')}
+              title="Simple view"
+            >
+              <List className="w-4 h-4" />
+            </Button>
+            <Button
+              variant={viewMode === 'compact' ? 'default' : 'ghost'}
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => changeViewMode('compact')}
+              title="Compact view"
+            >
+              <Eye className="w-4 h-4" />
+            </Button>
+            <Button
+              variant={viewMode === 'detailed' ? 'default' : 'ghost'}
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => changeViewMode('detailed')}
+              title="Detailed view"
+            >
+              <TableProperties className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Search Bar */}
+        <div className="relative">
+          <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            type="text"
+            placeholder="Search files and folders..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-8 pr-8 h-8 text-sm"
+          />
+          {searchQuery && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0 hover:bg-accent"
+              onClick={() => setSearchQuery('')}
+              title="Clear search"
+            >
+              <X className="w-3 h-3" />
+            </Button>
+          )}
         </div>
       </div>
 
       {/* Column Headers for Detailed View */}
-      {viewMode === 'detailed' && files.length > 0 && (
+      {viewMode === 'detailed' && filteredFiles.length > 0 && (
         <div className="px-4 pt-2 pb-1 border-b border-border">
           <div className="grid grid-cols-12 gap-2 px-2 text-xs font-medium text-muted-foreground">
             <div className="col-span-5">Name</div>
@@ -365,11 +438,21 @@ function FileTree({ selectedProject }) {
               Check if the project path is accessible
             </p>
           </div>
+        ) : filteredFiles.length === 0 && searchQuery ? (
+          <div className="text-center py-8">
+            <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-3">
+              <Search className="w-6 h-6 text-muted-foreground" />
+            </div>
+            <h4 className="font-medium text-foreground mb-1">No matches found</h4>
+            <p className="text-sm text-muted-foreground">
+              Try a different search term or clear the search
+            </p>
+          </div>
         ) : (
           <div className={viewMode === 'detailed' ? '' : 'space-y-1'}>
-            {viewMode === 'simple' && renderFileTree(files)}
-            {viewMode === 'compact' && renderCompactView(files)}
-            {viewMode === 'detailed' && renderDetailedView(files)}
+            {viewMode === 'simple' && renderFileTree(filteredFiles)}
+            {viewMode === 'compact' && renderCompactView(filteredFiles)}
+            {viewMode === 'detailed' && renderDetailedView(filteredFiles)}
           </div>
         )}
       </ScrollArea>

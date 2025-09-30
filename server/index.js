@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 // Load environment variables from .env file
 import fs from 'fs';
 import path from 'path';
@@ -43,6 +44,8 @@ import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
 import mcpRoutes from './routes/mcp.js';
 import cursorRoutes from './routes/cursor.js';
+import taskmasterRoutes from './routes/taskmaster.js';
+import mcpUtilsRoutes from './routes/mcp-utils.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 
@@ -162,6 +165,9 @@ const wss = new WebSocketServer({
     }
 });
 
+// Make WebSocket server available to routes
+app.locals.wss = wss;
+
 app.use(cors());
 app.use(express.json());
 
@@ -179,6 +185,12 @@ app.use('/api/mcp', authenticateToken, mcpRoutes);
 
 // Cursor API Routes (protected)
 app.use('/api/cursor', authenticateToken, cursorRoutes);
+
+// TaskMaster API Routes (protected)
+app.use('/api/taskmaster', authenticateToken, taskmasterRoutes);
+
+// MCP utilities
+app.use('/api/mcp-utils', authenticateToken, mcpUtilsRoutes);
 
 // Static files served after API routes
 app.use(express.static(path.join(__dirname, '../dist')));
@@ -287,6 +299,66 @@ app.post('/api/projects/create', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('Error creating project:', error);
         res.status(500).json({ error: error.message });
+    }
+});
+
+// Browse filesystem endpoint for project suggestions - uses existing getFileTree
+app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {    
+    try {
+        const { path: dirPath } = req.query;
+        
+        // Default to home directory if no path provided
+        const homeDir = os.homedir();
+        let targetPath = dirPath ? dirPath.replace('~', homeDir) : homeDir;
+        
+        // Resolve and normalize the path
+        targetPath = path.resolve(targetPath);
+        
+        // Security check - ensure path is accessible
+        try {
+            await fs.promises.access(targetPath);
+            const stats = await fs.promises.stat(targetPath);
+            
+            if (!stats.isDirectory()) {
+                return res.status(400).json({ error: 'Path is not a directory' });
+            }
+        } catch (err) {
+            return res.status(404).json({ error: 'Directory not accessible' });
+        }
+        
+        // Use existing getFileTree function with shallow depth (only direct children)
+        const fileTree = await getFileTree(targetPath, 1, 0, false); // maxDepth=1, showHidden=false
+        
+        // Filter only directories and format for suggestions
+        const directories = fileTree
+            .filter(item => item.type === 'directory')
+            .map(item => ({
+                path: item.path,
+                name: item.name,
+                type: 'directory'
+            }))
+            .slice(0, 20); // Limit results
+            
+        // Add common directories if browsing home directory
+        const suggestions = [];
+        if (targetPath === homeDir) {
+            const commonDirs = ['Desktop', 'Documents', 'Projects', 'Development', 'Dev', 'Code', 'workspace'];
+            const existingCommon = directories.filter(dir => commonDirs.includes(dir.name));
+            const otherDirs = directories.filter(dir => !commonDirs.includes(dir.name));
+            
+            suggestions.push(...existingCommon, ...otherDirs);
+        } else {
+            suggestions.push(...directories);
+        }
+        
+        res.json({ 
+            path: targetPath,
+            suggestions: suggestions 
+        });
+        
+    } catch (error) {
+        console.error('Error browsing filesystem:', error);
+        res.status(500).json({ error: 'Failed to browse filesystem' });
     }
 });
 
@@ -435,7 +507,7 @@ app.get('/api/projects/:projectName/files', authenticateToken, async (req, res) 
             return res.status(404).json({ error: `Project path not found: ${actualPath}` });
         }
 
-        const files = await getFileTree(actualPath, 3, 0, true);
+        const files = await getFileTree(actualPath, 10, 0, true);
         const hiddenFiles = files.filter(f => f.name.startsWith('.'));
         res.json(files);
     } catch (error) {
@@ -547,16 +619,26 @@ function handleShellConnection(ws) {
                 const sessionId = data.sessionId;
                 const hasSession = data.hasSession;
                 const provider = data.provider || 'claude';
+                const initialCommand = data.initialCommand;
+                const isPlainShell = data.isPlainShell || (!!initialCommand && !hasSession) || provider === 'plain-shell';
 
                 console.log('🚀 Starting shell in:', projectPath);
-                console.log('📋 Session info:', hasSession ? `Resume session ${sessionId}` : 'New session');
-                console.log('🤖 Provider:', provider);
+                console.log('📋 Session info:', hasSession ? `Resume session ${sessionId}` : (isPlainShell ? 'Plain shell mode' : 'New session'));
+                console.log('🤖 Provider:', isPlainShell ? 'plain-shell' : provider);
+                if (initialCommand) {
+                    console.log('⚡ Initial command:', initialCommand);
+                }
 
                 // First send a welcome message
-                const providerName = provider === 'cursor' ? 'Cursor' : 'Claude';
-                const welcomeMsg = hasSession ?
-                    `\x1b[36mResuming ${providerName} session ${sessionId} in: ${projectPath}\x1b[0m\r\n` :
-                    `\x1b[36mStarting new ${providerName} session in: ${projectPath}\x1b[0m\r\n`;
+                let welcomeMsg;
+                if (isPlainShell) {
+                    welcomeMsg = `\x1b[36mStarting terminal in: ${projectPath}\x1b[0m\r\n`;
+                } else {
+                    const providerName = provider === 'cursor' ? 'Cursor' : 'Claude';
+                    welcomeMsg = hasSession ?
+                        `\x1b[36mResuming ${providerName} session ${sessionId} in: ${projectPath}\x1b[0m\r\n` :
+                        `\x1b[36mStarting new ${providerName} session in: ${projectPath}\x1b[0m\r\n`;
+                }
 
                 ws.send(JSON.stringify({
                     type: 'output',
@@ -566,7 +648,14 @@ function handleShellConnection(ws) {
                 try {
                     // Prepare the shell command adapted to the platform and provider
                     let shellCommand;
-                    if (provider === 'cursor') {
+                    if (isPlainShell) {
+                        // Plain shell mode - just run the initial command in the project directory
+                        if (os.platform() === 'win32') {
+                            shellCommand = `Set-Location -Path "${projectPath}"; ${initialCommand}`;
+                        } else {
+                            shellCommand = `cd "${projectPath}" && ${initialCommand}`;
+                        }
+                    } else if (provider === 'cursor') {
                         // Use cursor-agent command
                         if (os.platform() === 'win32') {
                             if (hasSession && sessionId) {
@@ -582,19 +671,20 @@ function handleShellConnection(ws) {
                             }
                         }
                     } else {
-                        // Use claude command (default)
+                        // Use claude command (default) or initialCommand if provided
+                        const command = initialCommand || 'claude';
                         if (os.platform() === 'win32') {
                             if (hasSession && sessionId) {
                                 // Try to resume session, but with fallback to new session if it fails
                                 shellCommand = `Set-Location -Path "${projectPath}"; claude --resume ${sessionId}; if ($LASTEXITCODE -ne 0) { claude }`;
                             } else {
-                                shellCommand = `Set-Location -Path "${projectPath}"; claude`;
+                                shellCommand = `Set-Location -Path "${projectPath}"; ${command}`;
                             }
                         } else {
                             if (hasSession && sessionId) {
                                 shellCommand = `cd "${projectPath}" && claude --resume ${sessionId} || claude`;
                             } else {
-                                shellCommand = `cd "${projectPath}" && claude`;
+                                shellCommand = `cd "${projectPath}" && ${command}`;
                             }
                         }
                     }

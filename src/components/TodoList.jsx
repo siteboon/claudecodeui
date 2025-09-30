@@ -51,9 +51,9 @@ const TodoList = ({ todos, isResult = false }) => {
         </div>
       )}
       
-      {todos.map((todo) => (
+      {todos.map((todo, index) => (
         <div
-          key={todo.id}
+          key={todo.id || `todo-${index}`}
           className="flex items-start gap-3 p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm hover:shadow-md dark:shadow-gray-900/50 transition-shadow"
         >
           <div className="flex-shrink-0 mt-0.5">

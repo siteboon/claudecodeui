@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { GitBranch, GitCommit, Plus, Minus, RefreshCw, Check, X, ChevronDown, ChevronRight, Info, History, FileText, Mic, MicOff, Sparkles, Download, RotateCcw, Trash2, AlertTriangle, Upload } from 'lucide-react';
 import { MicButton } from './MicButton.jsx';
 import { authenticatedFetch } from '../utils/api';
+import DiffViewer from './DiffViewer.jsx';
 
 function GitPanel({ selectedProject, isMobile }) {
   const [gitStatus, setGitStatus] = useState(null);
@@ -523,27 +524,6 @@ function GitPanel({ selectedProject, isMobile }) {
     }
   };
 
-  const renderDiffLine = (line, index) => {
-    const isAddition = line.startsWith('+') && !line.startsWith('+++');
-    const isDeletion = line.startsWith('-') && !line.startsWith('---');
-    const isHeader = line.startsWith('@@');
-    
-    return (
-      <div
-        key={index}
-        className={`font-mono text-xs ${
-          isMobile && wrapText ? 'whitespace-pre-wrap break-all' : 'whitespace-pre overflow-x-auto'
-        } ${
-          isAddition ? 'bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300' :
-          isDeletion ? 'bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300' :
-          isHeader ? 'bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300' :
-          'text-gray-600 dark:text-gray-400'
-        }`}
-      >
-        {line}
-      </div>
-    );
-  };
 
   const getStatusLabel = (status) => {
     switch (status) {
@@ -590,7 +570,7 @@ function GitPanel({ selectedProject, isMobile }) {
               <div className="text-xs font-mono text-gray-600 dark:text-gray-400 mb-2">
                 {commit.stats}
               </div>
-              {diff.split('\n').map((line, index) => renderDiffLine(line, index))}
+              <DiffViewer diff={diff} fileName="commit" isMobile={isMobile} wrapText={wrapText} />
             </div>
           </div>
         )}
@@ -705,8 +685,8 @@ function GitPanel({ selectedProject, isMobile }) {
                 </button>
               )}
             </div>
-            <div className="max-h-96 overflow-y-auto p-2">
-              {diff && diff.split('\n').map((line, index) => renderDiffLine(line, index))}
+            <div className="max-h-96 overflow-y-auto">
+              {diff && <DiffViewer diff={diff} fileName={filePath} isMobile={isMobile} wrapText={wrapText} />}
             </div>
         </div>
       </div>

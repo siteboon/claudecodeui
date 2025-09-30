@@ -25,15 +25,6 @@ async function spawnClaude(command, options = {}, ws) {
     // Build Claude CLI command - start with print/resume flags first
     const args = [];
     
-    // Add print flag with command if we have a command
-    if (command && command.trim()) {
-
-      // Separate arguments for better cross-platform compatibility
-      // This prevents issues with spaces and quotes on Windows
-      args.push('--print');
-      args.push(command);
-    }
-    
     // Use cwd (actual project directory) instead of projectPath (Claude's metadata directory)
     const workingDir = cwd || process.cwd();
     
@@ -225,6 +216,17 @@ async function spawnClaude(command, options = {}, ws) {
         console.log('📝 Skip permissions disabled due to plan mode');
       }
     }
+
+    // Add print flag with command if we have a command
+    if (command && command.trim()) {
+
+      // Separate arguments for better cross-platform compatibility
+      // This prevents issues with spaces and quotes on Windows
+      args.push('--print');
+      // Use `--` so user input is always treated as text, not options
+      args.push('--');
+      args.push(command);
+    }
     
     console.log('Spawning Claude CLI:', 'claude', args.map(arg => {
       const cleanArg = arg.replace(/\n/g, '\\n').replace(/\r/g, '\\r');
@@ -235,7 +237,11 @@ async function spawnClaude(command, options = {}, ws) {
     console.log('🔍 Full command args:', JSON.stringify(args, null, 2));
     console.log('🔍 Final Claude command will be: claude ' + args.join(' '));
     
-    const claudeProcess = spawnFunction('claude', args, {
+    // Use Claude CLI from environment variable or default to 'claude'
+    const claudePath = process.env.CLAUDE_CLI_PATH || 'claude';
+    console.log('🔍 Using Claude CLI path:', claudePath);
+    
+    const claudeProcess = spawnFunction(claudePath, args, {
       cwd: workingDir,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env } // Inherit all environment variables
