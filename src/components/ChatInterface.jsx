@@ -1307,11 +1307,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       .then(res => res.json())
       .then(data => {
         if (data.success && data.config?.model?.modelId) {
-          // Map Cursor model IDs to our simplified names
+          // Map Cursor model IDs to CLI-compatible names
           const modelMap = {
             'gpt-5': 'gpt-5',
-            'claude-4-sonnet': 'sonnet-4',
-            'sonnet-4': 'sonnet-4',
+            'claude-4-sonnet': 'sonnet-4.5',
+            'sonnet-4': 'sonnet-4.5',
+            'sonnet-4.5': 'sonnet-4.5',
             'claude-4-opus': 'opus-4.1',
             'opus-4.1': 'opus-4.1'
           };
@@ -3230,9 +3231,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                     className="pl-4 pr-10 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 min-w-[140px]"
                     disabled={provider !== 'cursor'}
                   >
+                    <option value="auto">Auto</option>
                     <option value="gpt-5">GPT-5</option>
-                    <option value="sonnet-4">Sonnet-4</option>
+                    <option value="sonnet-4.5">Sonnet 4.5</option>
+                    <option value="sonnet-4.5-thinking">Sonnet 4.5 (Thinking)</option>
                     <option value="opus-4.1">Opus 4.1</option>
+                    <option value="grok">Grok</option>
                   </select>
                 </div>
                 
