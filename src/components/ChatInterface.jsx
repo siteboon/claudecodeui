@@ -1309,12 +1309,15 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         if (data.success && data.config?.model?.modelId) {
           // Map Cursor model IDs to CLI-compatible names
           const modelMap = {
+            'auto': 'auto',
             'gpt-5': 'gpt-5',
             'claude-4-sonnet': 'sonnet-4.5',
             'sonnet-4': 'sonnet-4.5',
             'sonnet-4.5': 'sonnet-4.5',
+            'sonnet-4.5-thinking': 'sonnet-4.5-thinking',
             'claude-4-opus': 'opus-4.1',
-            'opus-4.1': 'opus-4.1'
+            'opus-4.1': 'opus-4.1',
+            'grok': 'grok'
           };
           const mappedModel = modelMap[data.config.model.modelId] || data.config.model.modelId;
           if (!localStorage.getItem('cursor-model')) {
