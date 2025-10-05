@@ -259,25 +259,25 @@ async function spawnClaude(command, options = {}, ws) {
     claudeProcess.stdout.on('data', (data) => {
       const rawOutput = data.toString();
       console.log('📤 Claude CLI stdout:', rawOutput);
-      
+
       const lines = rawOutput.split('\n').filter(line => line.trim());
-      
+
       for (const line of lines) {
         try {
           const response = JSON.parse(line);
-          console.log('📄 Parsed JSON response:', response);
-          
+          console.log('📄 Parsed JSON response type:', response.type);
+
           // Capture session ID if it's in the response
           if (response.session_id && !capturedSessionId) {
             capturedSessionId = response.session_id;
             console.log('📝 Captured session ID:', capturedSessionId);
-            
+
             // Update process key with captured session ID
             if (processKey !== capturedSessionId) {
               activeClaudeProcesses.delete(processKey);
               activeClaudeProcesses.set(capturedSessionId, claudeProcess);
             }
-            
+
             // Send session-created event only once for new sessions
             if (!sessionId && !sessionCreatedSent) {
               sessionCreatedSent = true;
@@ -287,7 +287,39 @@ async function spawnClaude(command, options = {}, ws) {
               }));
             }
           }
-          
+
+          // Parse token budget from usage information in result messages
+          if (response.type === 'result' && response.modelUsage) {
+            // Get the first (and usually only) model's usage data
+            const modelKey = Object.keys(response.modelUsage)[0];
+            const modelData = response.modelUsage[modelKey];
+
+            if (modelData && modelData.contextWindow) {
+              // Calculate total tokens used (input + output + cache)
+              const inputTokens = modelData.inputTokens || 0;
+              const outputTokens = modelData.outputTokens || 0;
+              const cacheReadTokens = modelData.cacheReadInputTokens || 0;
+              const cacheCreationTokens = modelData.cacheCreationInputTokens || 0;
+
+              // Total used = input + output + cache tokens
+              const totalUsed = inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
+              const contextWindow = modelData.contextWindow;
+
+              const tokenBudget = {
+                used: totalUsed,
+                total: contextWindow
+              };
+
+              console.log('📊 Token budget:', tokenBudget);
+
+              // Send token budget update to frontend
+              ws.send(JSON.stringify({
+                type: 'token-budget',
+                data: tokenBudget
+              }));
+            }
+          }
+
           // Send parsed response to WebSocket
           ws.send(JSON.stringify({
             type: 'claude-response',

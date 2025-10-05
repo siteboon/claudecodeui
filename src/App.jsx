@@ -57,6 +57,7 @@ function AppContent() {
   const [showQuickSettings, setShowQuickSettings] = useState(false);
   const [autoExpandTools, setAutoExpandTools] = useLocalStorage('autoExpandTools', false);
   const [showRawParameters, setShowRawParameters] = useLocalStorage('showRawParameters', false);
+  const [showThinking, setShowThinking] = useLocalStorage('showThinking', true);
   const [autoScrollToBottom, setAutoScrollToBottom] = useLocalStorage('autoScrollToBottom', true);
   const [sendByCtrlEnter, setSendByCtrlEnter] = useLocalStorage('sendByCtrlEnter', false);
   // Session Protection System: Track sessions with active conversations to prevent
@@ -660,6 +661,7 @@ function AppContent() {
           onShowSettings={() => setShowSettings(true)}
           autoExpandTools={autoExpandTools}
           showRawParameters={showRawParameters}
+          showThinking={showThinking}
           autoScrollToBottom={autoScrollToBottom}
           sendByCtrlEnter={sendByCtrlEnter}
         />
@@ -682,6 +684,8 @@ function AppContent() {
           onAutoExpandChange={setAutoExpandTools}
           showRawParameters={showRawParameters}
           onShowRawParametersChange={setShowRawParameters}
+          showThinking={showThinking}
+          onShowThinkingChange={setShowThinking}
           autoScrollToBottom={autoScrollToBottom}
           onAutoScrollChange={setAutoScrollToBottom}
           sendByCtrlEnter={sendByCtrlEnter}
