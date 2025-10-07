@@ -31,6 +31,17 @@ import { MicButton } from './MicButton.jsx';
 import { api, authenticatedFetch } from '../utils/api';
 
 
+// Helper function to decode HTML entities in text
+function decodeHtmlEntities(text) {
+  if (!text) return text;
+  return text
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&');
+}
+
 // Format "Claude AI usage limit reached|<epoch>" into a local time string
 function formatUsageLimitText(text) {
   try {
@@ -1411,10 +1422,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 
                 for (const part of content.content) {
                   if (part?.type === 'text' && part?.text) {
-                    textParts.push(part.text);
+                    textParts.push(decodeHtmlEntities(part.text));
                   } else if (part?.type === 'reasoning' && part?.text) {
                     // Handle reasoning type - will be displayed in a collapsible section
-                    reasoningText = part.text;
+                    reasoningText = decodeHtmlEntities(part.text);
                   } else if (part?.type === 'tool-call') {
                     // First, add any text/reasoning we've collected so far as a message
                     if (textParts.length > 0 || reasoningText) {
@@ -1710,16 +1721,16 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           
           for (const part of msg.message.content) {
             if (part.type === 'text') {
-              textParts.push(part.text);
+              textParts.push(decodeHtmlEntities(part.text));
             }
             // Skip tool_result parts - they're handled in the first pass
           }
           
           content = textParts.join('\n');
         } else if (typeof msg.message.content === 'string') {
-          content = msg.message.content;
+          content = decodeHtmlEntities(msg.message.content);
         } else {
-          content = String(msg.message.content);
+          content = decodeHtmlEntities(String(msg.message.content));
         }
         
         // Skip command messages and empty content
@@ -2039,8 +2050,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           // Handle Cursor streaming format (content_block_delta / content_block_stop)
           if (messageData && typeof messageData === 'object' && messageData.type) {
             if (messageData.type === 'content_block_delta' && messageData.delta?.text) {
-              // Buffer deltas and flush periodically to reduce rerenders
-              streamBufferRef.current += messageData.delta.text;
+              // Decode HTML entities and buffer deltas
+              const decodedText = decodeHtmlEntities(messageData.delta.text);
+              streamBufferRef.current += decodedText;
               if (!streamTimerRef.current) {
                 streamTimerRef.current = setTimeout(() => {
                   const chunk = streamBufferRef.current;
@@ -2168,9 +2180,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   toolResult: null // Will be updated when result comes in
                 }]);
               } else if (part.type === 'text' && part.text?.trim()) {
-                // Normalize usage limit message to local time
-                let content = formatUsageLimitText(part.text);
-                
+                // Decode HTML entities and normalize usage limit message to local time
+                let content = decodeHtmlEntities(part.text);
+                content = formatUsageLimitText(content);
+
                 // Add regular text message
                 setChatMessages(prev => [...prev, {
                   type: 'assistant',
@@ -2180,9 +2193,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               }
             }
           } else if (typeof messageData.content === 'string' && messageData.content.trim()) {
-            // Normalize usage limit message to local time
-            let content = formatUsageLimitText(messageData.content);
-            
+            // Decode HTML entities and normalize usage limit message to local time
+            let content = decodeHtmlEntities(messageData.content);
+            content = formatUsageLimitText(content);
+
             // Add regular text message
             setChatMessages(prev => [...prev, {
               type: 'assistant',
