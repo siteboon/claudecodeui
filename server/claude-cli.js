@@ -289,34 +289,39 @@ async function spawnClaude(command, options = {}, ws) {
           }
 
           // Parse token budget from usage information in result messages
-          if (response.type === 'result' && response.modelUsage) {
-            // Get the first (and usually only) model's usage data
-            const modelKey = Object.keys(response.modelUsage)[0];
-            const modelData = response.modelUsage[modelKey];
+          if (response.type === 'result') {
+            console.log('📊 Full result response keys:', Object.keys(response));
+            console.log('📊 Full result response:', JSON.stringify(response, null, 2));
 
-            if (modelData && modelData.contextWindow) {
-              // Calculate total tokens used (input + output + cache)
-              const inputTokens = modelData.inputTokens || 0;
-              const outputTokens = modelData.outputTokens || 0;
-              const cacheReadTokens = modelData.cacheReadInputTokens || 0;
-              const cacheCreationTokens = modelData.cacheCreationInputTokens || 0;
+            if (response.modelUsage) {
+              // Get the first (and usually only) model's usage data
+              const modelKey = Object.keys(response.modelUsage)[0];
+              const modelData = response.modelUsage[modelKey];
 
-              // Total used = input + output + cache tokens
-              const totalUsed = inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
-              const contextWindow = modelData.contextWindow;
+              if (modelData && modelData.contextWindow) {
+                // Calculate total tokens used (input + output + cache)
+                const inputTokens = modelData.inputTokens || 0;
+                const outputTokens = modelData.outputTokens || 0;
+                const cacheReadTokens = modelData.cacheReadInputTokens || 0;
+                const cacheCreationTokens = modelData.cacheCreationInputTokens || 0;
 
-              const tokenBudget = {
-                used: totalUsed,
-                total: contextWindow
-              };
+                // Total used = input + output + cache tokens
+                const totalUsed = inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
+                const contextWindow = modelData.contextWindow;
 
-              console.log('📊 Token budget:', tokenBudget);
+                const tokenBudget = {
+                  used: totalUsed,
+                  total: contextWindow
+                };
 
-              // Send token budget update to frontend
-              ws.send(JSON.stringify({
-                type: 'token-budget',
-                data: tokenBudget
-              }));
+                console.log('📊 Token budget from modelUsage:', tokenBudget);
+
+                // Send token budget update to frontend
+                ws.send(JSON.stringify({
+                  type: 'token-budget',
+                  data: tokenBudget
+                }));
+              }
             }
           }
 
@@ -352,9 +357,10 @@ async function spawnClaude(command, options = {}, ws) {
       // Clean up process reference
       const finalSessionId = capturedSessionId || sessionId || processKey;
       activeClaudeProcesses.delete(finalSessionId);
-      
+
       ws.send(JSON.stringify({
         type: 'claude-complete',
+        sessionId: finalSessionId,
         exitCode: code,
         isNewSession: !sessionId && !!command // Flag to indicate this was a new session
       }));
@@ -423,7 +429,17 @@ function abortClaudeSession(sessionId) {
   return false;
 }
 
+function isClaudeSessionActive(sessionId) {
+  return activeClaudeProcesses.has(sessionId);
+}
+
+function getActiveClaudeSessions() {
+  return Array.from(activeClaudeProcesses.keys());
+}
+
 export {
   spawnClaude,
-  abortClaudeSession
+  abortClaudeSession,
+  isClaudeSessionActive,
+  getActiveClaudeSessions
 };

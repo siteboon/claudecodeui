@@ -44,7 +44,10 @@ function MainContent({
   // Session Protection Props: Functions passed down from App.jsx to manage active session state
   // These functions control when project updates are paused during active conversations
   onSessionActive,        // Mark session as active when user sends message
-  onSessionInactive,      // Mark session as inactive when conversation completes/aborts  
+  onSessionInactive,      // Mark session as inactive when conversation completes/aborts
+  onSessionProcessing,    // Mark session as processing (thinking/working)
+  onSessionNotProcessing, // Mark session as not processing (finished thinking)
+  processingSessions,     // Set of session IDs currently processing
   onReplaceTemporarySession, // Replace temporary session ID with real session ID from WebSocket
   onNavigateToSession,    // Navigate to a specific session (for Claude CLI session duplication workaround)
   onShowSettings,         // Show tools settings panel
@@ -419,6 +422,9 @@ function MainContent({
               onInputFocusChange={onInputFocusChange}
               onSessionActive={onSessionActive}
               onSessionInactive={onSessionInactive}
+              onSessionProcessing={onSessionProcessing}
+              onSessionNotProcessing={onSessionNotProcessing}
+              processingSessions={processingSessions}
               onReplaceTemporarySession={onReplaceTemporarySession}
               onNavigateToSession={onNavigateToSession}
               onShowSettings={onShowSettings}

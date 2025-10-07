@@ -1167,7 +1167,7 @@ const ImageAttachment = ({ file, onRemove, uploadProgress, error }) => {
 // - onReplaceTemporarySession: Called to replace temporary session ID with real WebSocket session ID
 //
 // This ensures uninterrupted chat experience by pausing sidebar refreshes during conversations.
-function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, messages, onFileOpen, onInputFocusChange, onSessionActive, onSessionInactive, onReplaceTemporarySession, onNavigateToSession, onShowSettings, autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter, onTaskClick, onShowAllTasks }) {
+function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, messages, onFileOpen, onInputFocusChange, onSessionActive, onSessionInactive, onSessionProcessing, onSessionNotProcessing, processingSessions, onReplaceTemporarySession, onNavigateToSession, onShowSettings, autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter, onTaskClick, onShowAllTasks }) {
   const { tasksEnabled } = useTasksSettings();
   const [input, setInput] = useState(() => {
     if (typeof window !== 'undefined' && selectedProject) {
@@ -1724,6 +1724,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         
         // Skip command messages and empty content
         if (content && !content.startsWith('<command-name>') && !content.startsWith('[Request interrupted')) {
+          // Unescape double-escaped newlines and other escape sequences
+          content = content.replace(/\\n/g, '\n')
+                           .replace(/\\t/g, '\t')
+                           .replace(/\\r/g, '\r');
           converted.push({
             type: messageType,
             content: content,
@@ -1737,9 +1741,16 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         if (Array.isArray(msg.message.content)) {
           for (const part of msg.message.content) {
             if (part.type === 'text') {
+              // Unescape double-escaped newlines and other escape sequences
+              let text = part.text;
+              if (typeof text === 'string') {
+                text = text.replace(/\\n/g, '\n')
+                           .replace(/\\t/g, '\t')
+                           .replace(/\\r/g, '\r');
+              }
               converted.push({
                 type: 'assistant',
-                content: part.text,
+                content: text,
                 timestamp: msg.timestamp || new Date().toISOString()
               });
             } else if (part.type === 'tool_use') {
@@ -1760,9 +1771,14 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             }
           }
         } else if (typeof msg.message.content === 'string') {
+          // Unescape double-escaped newlines and other escape sequences
+          let text = msg.message.content;
+          text = text.replace(/\\n/g, '\n')
+                     .replace(/\\t/g, '\t')
+                     .replace(/\\r/g, '\r');
           converted.push({
             type: 'assistant',
-            content: msg.message.content,
+            content: text,
             timestamp: msg.timestamp || new Date().toISOString()
           });
         }
@@ -1849,11 +1865,32 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           // Reset token budget when switching sessions
           // It will update when user sends a message and receives new budget from WebSocket
           setTokenBudget(null);
+          // Reset loading state when switching sessions (unless the new session is processing)
+          // The restore effect will set it back to true if needed
+          setIsLoading(false);
+
+          // Check if the session is currently processing on the backend
+          if (ws && sendMessage) {
+            sendMessage({
+              type: 'check-session-status',
+              sessionId: selectedSession.id,
+              provider
+            });
+          }
         } else if (currentSessionId === null) {
           // Initial load - reset pagination but not token budget
           setMessagesOffset(0);
           setHasMoreMessages(false);
           setTotalMessages(0);
+
+          // Check if the session is currently processing on the backend
+          if (ws && sendMessage) {
+            sendMessage({
+              type: 'check-session-status',
+              sessionId: selectedSession.id,
+              provider
+            });
+          }
         }
         
         if (provider === 'cursor') {
@@ -1951,6 +1988,24 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, [selectedProject?.name]);
 
+  // Track processing state: notify parent when isLoading becomes true
+  // Note: onSessionNotProcessing is called directly in completion message handlers
+  useEffect(() => {
+    if (currentSessionId && isLoading && onSessionProcessing) {
+      onSessionProcessing(currentSessionId);
+    }
+  }, [isLoading, currentSessionId, onSessionProcessing]);
+
+  // Restore processing state when switching to a processing session
+  useEffect(() => {
+    if (currentSessionId && processingSessions) {
+      const shouldBeProcessing = processingSessions.has(currentSessionId);
+      if (shouldBeProcessing && !isLoading) {
+        setIsLoading(true);
+        setCanAbortSession(true); // Assume processing sessions can be aborted
+      }
+    }
+  }, [currentSessionId, processingSessions]);
 
   useEffect(() => {
     // Handle WebSocket messages
@@ -1974,15 +2029,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           break;
 
         case 'token-budget':
-          // Update token budget from backend
-          console.log('📊 Received token budget:', latestMessage.data);
-          if (latestMessage.data) {
-            console.log('🔧 Setting tokenBudget state to:', latestMessage.data);
-            setTokenBudget(latestMessage.data);
-            console.log('✅ setTokenBudget called');
-          } else {
-            console.warn('⚠️ token-budget data is empty');
-          }
+          // Token budget is now fetched from API endpoint, ignore WebSocket data
+          console.log('📊 Ignoring WebSocket token budget (using API instead)');
           break;
 
         case 'claude-response':
@@ -2267,50 +2315,64 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           break;
           
         case 'cursor-result':
-          // Handle Cursor completion and final result text
-          setIsLoading(false);
-          setCanAbortSession(false);
-          setClaudeStatus(null);
-          try {
-            const r = latestMessage.data || {};
-            const textResult = typeof r.result === 'string' ? r.result : '';
-            // Flush buffered deltas before finalizing
-            if (streamTimerRef.current) {
-              clearTimeout(streamTimerRef.current);
-              streamTimerRef.current = null;
-            }
-            const pendingChunk = streamBufferRef.current;
-            streamBufferRef.current = '';
+          // Get session ID from message or fall back to current session
+          const cursorCompletedSessionId = latestMessage.sessionId || currentSessionId;
 
-            setChatMessages(prev => {
-              const updated = [...prev];
-              // Try to consolidate into the last streaming assistant message
-              const last = updated[updated.length - 1];
-              if (last && last.type === 'assistant' && !last.isToolUse && last.isStreaming) {
-                // Replace streaming content with the final content so deltas don't remain
-                const finalContent = textResult && textResult.trim() ? textResult : (last.content || '') + (pendingChunk || '');
-                last.content = finalContent;
-                last.isStreaming = false;
-              } else if (textResult && textResult.trim()) {
-                updated.push({ type: r.is_error ? 'error' : 'assistant', content: textResult, timestamp: new Date(), isStreaming: false });
+          // Only update UI state if this is the current session
+          if (cursorCompletedSessionId === currentSessionId) {
+            setIsLoading(false);
+            setCanAbortSession(false);
+            setClaudeStatus(null);
+          }
+
+          // Always mark the completed session as inactive and not processing
+          if (cursorCompletedSessionId) {
+            if (onSessionInactive) {
+              onSessionInactive(cursorCompletedSessionId);
+            }
+            if (onSessionNotProcessing) {
+              onSessionNotProcessing(cursorCompletedSessionId);
+            }
+          }
+
+          // Only process result for current session
+          if (cursorCompletedSessionId === currentSessionId) {
+            try {
+              const r = latestMessage.data || {};
+              const textResult = typeof r.result === 'string' ? r.result : '';
+              // Flush buffered deltas before finalizing
+              if (streamTimerRef.current) {
+                clearTimeout(streamTimerRef.current);
+                streamTimerRef.current = null;
               }
-              return updated;
-            });
-          } catch (e) {
-            console.warn('Error handling cursor-result message:', e);
+              const pendingChunk = streamBufferRef.current;
+              streamBufferRef.current = '';
+
+              setChatMessages(prev => {
+                const updated = [...prev];
+                // Try to consolidate into the last streaming assistant message
+                const last = updated[updated.length - 1];
+                if (last && last.type === 'assistant' && !last.isToolUse && last.isStreaming) {
+                  // Replace streaming content with the final content so deltas don't remain
+                  const finalContent = textResult && textResult.trim() ? textResult : (last.content || '') + (pendingChunk || '');
+                  last.content = finalContent;
+                  last.isStreaming = false;
+                } else if (textResult && textResult.trim()) {
+                  updated.push({ type: r.is_error ? 'error' : 'assistant', content: textResult, timestamp: new Date(), isStreaming: false });
+                }
+                return updated;
+              });
+            } catch (e) {
+              console.warn('Error handling cursor-result message:', e);
+            }
           }
-          
-          // Mark session as inactive
-          const cursorSessionId = currentSessionId || sessionStorage.getItem('pendingSessionId');
-          if (cursorSessionId && onSessionInactive) {
-            onSessionInactive(cursorSessionId);
-          }
-          
-          // Store session ID for future use and trigger refresh
-          if (cursorSessionId && !currentSessionId) {
-            setCurrentSessionId(cursorSessionId);
+
+          // Store session ID for future use and trigger refresh (for new sessions)
+          const pendingCursorSessionId = sessionStorage.getItem('pendingSessionId');
+          if (cursorCompletedSessionId && !currentSessionId && cursorCompletedSessionId === pendingCursorSessionId) {
+            setCurrentSessionId(cursorCompletedSessionId);
             sessionStorage.removeItem('pendingSessionId');
-            
+
             // Trigger a project refresh to update the sidebar with the new session
             if (window.refreshProjects) {
               setTimeout(() => window.refreshProjects(), 500);
@@ -2350,17 +2412,24 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           break;
           
         case 'claude-complete':
-          setIsLoading(false);
-          setCanAbortSession(false);
-          setClaudeStatus(null);
+          // Get session ID from message or fall back to current session
+          const completedSessionId = latestMessage.sessionId || currentSessionId || sessionStorage.getItem('pendingSessionId');
 
-          
-          // Session Protection: Mark session as inactive to re-enable automatic project updates
-          // Conversation is complete, safe to allow project updates again
-          // Use real session ID if available, otherwise use pending session ID
-          const activeSessionId = currentSessionId || sessionStorage.getItem('pendingSessionId');
-          if (activeSessionId && onSessionInactive) {
-            onSessionInactive(activeSessionId);
+          // Only update UI state if this is the current session
+          if (completedSessionId === currentSessionId) {
+            setIsLoading(false);
+            setCanAbortSession(false);
+            setClaudeStatus(null);
+          }
+
+          // Always mark the completed session as inactive and not processing
+          if (completedSessionId) {
+            if (onSessionInactive) {
+              onSessionInactive(completedSessionId);
+            }
+            if (onSessionNotProcessing) {
+              onSessionNotProcessing(completedSessionId);
+            }
           }
           
           // If we have a pending session ID and the conversation completed successfully, use it
@@ -2382,21 +2451,46 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           break;
           
         case 'session-aborted':
-          setIsLoading(false);
-          setCanAbortSession(false);
-          setClaudeStatus(null);
-          
-          // Session Protection: Mark session as inactive when aborted
-          // User or system aborted the conversation, re-enable project updates
-          if (currentSessionId && onSessionInactive) {
-            onSessionInactive(currentSessionId);
+          // Get session ID from message or fall back to current session
+          const abortedSessionId = latestMessage.sessionId || currentSessionId;
+
+          // Only update UI state if this is the current session
+          if (abortedSessionId === currentSessionId) {
+            setIsLoading(false);
+            setCanAbortSession(false);
+            setClaudeStatus(null);
           }
-          
+
+          // Always mark the aborted session as inactive and not processing
+          if (abortedSessionId) {
+            if (onSessionInactive) {
+              onSessionInactive(abortedSessionId);
+            }
+            if (onSessionNotProcessing) {
+              onSessionNotProcessing(abortedSessionId);
+            }
+          }
+
           setChatMessages(prev => [...prev, {
             type: 'assistant',
             content: 'Session interrupted by user.',
             timestamp: new Date()
           }]);
+          break;
+
+        case 'session-status':
+          // Response to check-session-status request
+          const statusSessionId = latestMessage.sessionId;
+          const isCurrentSession = statusSessionId === currentSessionId ||
+                                   (selectedSession && statusSessionId === selectedSession.id);
+          if (isCurrentSession && latestMessage.isProcessing) {
+            // Session is currently processing, restore UI state
+            setIsLoading(true);
+            setCanAbortSession(true);
+            if (onSessionProcessing) {
+              onSessionProcessing(statusSessionId);
+            }
+          }
           break;
 
         case 'claude-status':
@@ -2600,6 +2694,75 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       setIsTextareaExpanded(false);
     }
   }, [input]);
+
+  // Poll token usage from JSONL file
+  useEffect(() => {
+    console.log('🔍 Token usage polling effect triggered', {
+      sessionId: selectedSession?.id,
+      projectPath: selectedProject?.path
+    });
+
+    if (!selectedProject) {
+      console.log('⚠️ Skipping token usage fetch - missing project');
+      return;
+    }
+
+    // No session selected - reset to zero (new session state)
+    if (!selectedSession) {
+      console.log('🆕 No session selected, resetting token budget to zero');
+      setTokenBudget({ used: 0, total: parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 160000, percentage: 0 });
+      return;
+    }
+
+    // For new sessions without an ID yet, reset to zero
+    if (!selectedSession.id || selectedSession.id.startsWith('new-session-')) {
+      console.log('🆕 New session detected, resetting token budget to zero');
+      setTokenBudget({ used: 0, total: parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 160000, percentage: 0 });
+      return;
+    }
+
+    const fetchTokenUsage = async () => {
+      try {
+        const url = `/api/sessions/${selectedSession.id}/token-usage?projectPath=${encodeURIComponent(selectedProject.path)}`;
+        console.log('📊 Fetching token usage from:', url);
+
+        const response = await authenticatedFetch(url);
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log('✅ Token usage data received:', data);
+          setTokenBudget(data);
+        } else {
+          console.error('❌ Token usage fetch failed:', response.status, await response.text());
+          // Reset to zero if fetch fails (likely new session with no JSONL yet)
+          setTokenBudget({ used: 0, total: parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 160000, percentage: 0 });
+        }
+      } catch (error) {
+        console.error('Failed to fetch token usage:', error);
+        // Reset to zero on error
+        setTokenBudget({ used: 0, total: parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 160000, percentage: 0 });
+      }
+    };
+
+    // Fetch immediately on mount/session change
+    fetchTokenUsage();
+
+    // Then poll every 5 seconds
+    const interval = setInterval(fetchTokenUsage, 5000);
+
+    // Also fetch when page becomes visible (tab focus/refresh)
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchTokenUsage();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [selectedSession?.id, selectedProject?.path]);
 
   const handleTranscript = useCallback((text) => {
     if (text.trim()) {
@@ -3301,7 +3464,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             {(() => {
               // Default to 0 tokens if no budget received yet
               const used = tokenBudget?.used || 0;
-              const total = tokenBudget?.total || 200000; // Default context window
+              const total = tokenBudget?.total || parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 200000;
 
               const percentage = total > 0 ? Math.min(100, (used / total) * 100) : 0;
               console.log('🎨 Rendering pie chart:', { tokenBudget, used, total, percentage: percentage.toFixed(0) + '%' });
@@ -3321,7 +3484,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                     <circle cx="12" cy="12" r={radius} fill="none" stroke={getColor()} strokeWidth="2" strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round" />
                   </svg>
                   <span className="hidden sm:inline" title={`${used.toLocaleString()} / ${total.toLocaleString()} tokens`}>
-                    {percentage.toFixed(0)}%
+                    {percentage.toFixed(1)}%
                   </span>
                 </div>
               );
@@ -3427,7 +3590,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 const isExpanded = e.target.scrollHeight > lineHeight * 2;
                 setIsTextareaExpanded(isExpanded);
               }}
-              placeholder="Ask Claude to help with your code... (@ to reference files)"
+              placeholder="Ask Claude to help with your code..."
               disabled={isLoading}
               rows={1}
               className="chat-input-placeholder w-full pl-12 pr-28 sm:pr-40 py-3 sm:py-4 bg-transparent rounded-2xl focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 resize-none min-h-[40px] sm:min-h-[56px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base transition-all duration-200"
@@ -3525,9 +3688,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           </div>
           {/* Hint text */}
           <div className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2 hidden sm:block">
-            {sendByCtrlEnter 
-              ? "Ctrl+Enter to send (IME safe) • Shift+Enter for new line • Tab to change modes • @ to reference files" 
-              : "Press Enter to send • Shift+Enter for new line • Tab to change modes • @ to reference files"}
+            {sendByCtrlEnter
+              ? "Ctrl+Enter to send (IME safe) • Shift+Enter for new line • Tab to change modes"
+              : "Press Enter to send • Shift+Enter for new line • Tab to change modes"}
           </div>
           <div className={`text-xs text-gray-500 dark:text-gray-400 text-center mt-2 sm:hidden transition-opacity duration-200 ${
             isInputFocused ? 'opacity-100' : 'opacity-0'

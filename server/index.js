@@ -28,18 +28,18 @@ console.log('PORT from env:', process.env.PORT);
 
 import express from 'express';
 import { WebSocketServer } from 'ws';
+import os from 'os';
 import http from 'http';
 import cors from 'cors';
 import { promises as fsPromises } from 'fs';
 import { spawn } from 'child_process';
-import os from 'os';
 import pty from 'node-pty';
 import fetch from 'node-fetch';
 import mime from 'mime-types';
 
 import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
-import { spawnClaude, abortClaudeSession } from './claude-cli.js';
-import { spawnCursor, abortCursorSession } from './cursor-cli.js';
+import { spawnClaude, abortClaudeSession, isClaudeSessionActive, getActiveClaudeSessions } from './claude-cli.js';
+import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
 import mcpRoutes from './routes/mcp.js';
@@ -586,6 +586,29 @@ function handleChatConnection(ws) {
                     provider: 'cursor',
                     success
                 }));
+            } else if (data.type === 'check-session-status') {
+                // Check if a specific session is currently processing
+                const provider = data.provider || 'claude';
+                const sessionId = data.sessionId;
+                const isActive = provider === 'cursor'
+                    ? isCursorSessionActive(sessionId)
+                    : isClaudeSessionActive(sessionId);
+                ws.send(JSON.stringify({
+                    type: 'session-status',
+                    sessionId,
+                    provider,
+                    isProcessing: isActive
+                }));
+            } else if (data.type === 'get-active-sessions') {
+                // Get all currently active sessions
+                const activeSessions = {
+                    claude: getActiveClaudeSessions(),
+                    cursor: getActiveCursorSessions()
+                };
+                ws.send(JSON.stringify({
+                    type: 'active-sessions',
+                    sessions: activeSessions
+                }));
             }
         } catch (error) {
             console.error('❌ Chat WebSocket error:', error.message);
@@ -1051,6 +1074,77 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
         console.error('Error in image upload endpoint:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
+});
+
+// API endpoint to get token usage for a session by reading its JSONL file
+app.get('/api/sessions/:sessionId/token-usage', authenticateToken, async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { projectPath } = req.query;
+
+    if (!projectPath) {
+      return res.status(400).json({ error: 'projectPath query parameter is required' });
+    }
+
+    // Construct the JSONL file path
+    // Claude stores session files in ~/.claude/projects/[encoded-project-path]/[session-id].jsonl
+    // The encoding replaces /, spaces, ~, and _ with -
+    const homeDir = os.homedir();
+    const encodedPath = projectPath.replace(/[\/\s~_]/g, '-');
+    const jsonlPath = path.join(homeDir, '.claude', 'projects', encodedPath, `${sessionId}.jsonl`);
+
+    // Check if file exists
+    if (!fs.existsSync(jsonlPath)) {
+      return res.status(404).json({ error: 'Session file not found', path: jsonlPath });
+    }
+
+    // Read and parse the JSONL file
+    const fileContent = fs.readFileSync(jsonlPath, 'utf8');
+    const lines = fileContent.trim().split('\n');
+
+    let contextWindow = parseInt(process.env.CONTEXT_WINDOW) || 200000; // Claude Code context window
+    let inputTokens = 0;
+    let cacheCreationTokens = 0;
+    let cacheReadTokens = 0;
+
+    // Find the latest assistant message with usage data (scan from end)
+    for (let i = lines.length - 1; i >= 0; i--) {
+      try {
+        const entry = JSON.parse(lines[i]);
+
+        // Only count assistant messages which have usage data
+        if (entry.type === 'assistant' && entry.message?.usage) {
+          const usage = entry.message.usage;
+
+          // Use token counts from latest assistant message only
+          inputTokens = usage.input_tokens || 0;
+          cacheCreationTokens = usage.cache_creation_input_tokens || 0;
+          cacheReadTokens = usage.cache_read_input_tokens || 0;
+
+          break; // Stop after finding the latest assistant message
+        }
+      } catch (parseError) {
+        // Skip lines that can't be parsed
+        continue;
+      }
+    }
+
+    // Calculate total context usage (excluding output_tokens, as per ccusage)
+    const totalUsed = inputTokens + cacheCreationTokens + cacheReadTokens;
+
+    res.json({
+      used: totalUsed,
+      total: contextWindow,
+      breakdown: {
+        input: inputTokens,
+        cacheCreation: cacheCreationTokens,
+        cacheRead: cacheReadTokens
+      }
+    });
+  } catch (error) {
+    console.error('Error reading session token usage:', error);
+    res.status(500).json({ error: 'Failed to read session token usage' });
+  }
 });
 
 // Serve React app for all other routes (excluding static files)
