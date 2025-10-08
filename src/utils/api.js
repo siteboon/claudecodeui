@@ -34,6 +34,12 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
     }),
+    pamLogin: (username, password) => fetch('/api/auth/pam-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    }),
+    pamStatus: () => fetch('/api/auth/pam-status'),
     user: () => authenticatedFetch('/api/auth/user'),
     logout: () => authenticatedFetch('/api/auth/logout', { method: 'POST' }),
   },

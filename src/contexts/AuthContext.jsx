@@ -6,9 +6,11 @@ const AuthContext = createContext({
   token: null,
   login: () => {},
   register: () => {},
+  pamLogin: () => {},
   logout: () => {},
   isLoading: true,
   needsSetup: false,
+  pamAvailable: false,
   error: null
 });
 
@@ -25,6 +27,7 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(localStorage.getItem('auth-token'));
   const [isLoading, setIsLoading] = useState(true);
   const [needsSetup, setNeedsSetup] = useState(false);
+  const [pamAvailable, setPamAvailable] = useState(false);
   const [error, setError] = useState(null);
 
   // Check authentication status on mount
@@ -36,22 +39,24 @@ export const AuthProvider = ({ children }) => {
     try {
       setIsLoading(true);
       setError(null);
-      
-      // Check if system needs setup
+
+      // Check if system needs setup and PAM availability
       const statusResponse = await api.auth.status();
       const statusData = await statusResponse.json();
-      
+
+      setPamAvailable(statusData.pamAvailable || false);
+
       if (statusData.needsSetup) {
         setNeedsSetup(true);
         setIsLoading(false);
         return;
       }
-      
+
       // If we have a token, verify it
       if (token) {
         try {
           const userResponse = await api.auth.user();
-          
+
           if (userResponse.ok) {
             const userData = await userResponse.json();
             setUser(userData.user);
@@ -126,6 +131,31 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const pamLogin = async (username, password) => {
+    try {
+      setError(null);
+      const response = await api.auth.pamLogin(username, password);
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setToken(data.token);
+        setUser(data.user);
+        setNeedsSetup(false);
+        localStorage.setItem('auth-token', data.token);
+        return { success: true };
+      } else {
+        setError(data.error || 'PAM login failed');
+        return { success: false, error: data.error || 'PAM login failed' };
+      }
+    } catch (error) {
+      console.error('PAM login error:', error);
+      const errorMessage = 'Network error. Please try again.';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    }
+  };
+
   const logout = () => {
     setToken(null);
     setUser(null);
@@ -144,9 +174,11 @@ export const AuthProvider = ({ children }) => {
     token,
     login,
     register,
+    pamLogin,
     logout,
     isLoading,
     needsSetup,
+    pamAvailable,
     error
   };
 
