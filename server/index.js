@@ -38,7 +38,7 @@ import fetch from 'node-fetch';
 import mime from 'mime-types';
 
 import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
-import { spawnClaude, abortClaudeSession, isClaudeSessionActive, getActiveClaudeSessions } from './claude-cli.js';
+import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions } from './claude-sdk.js';
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
@@ -550,7 +550,9 @@ function handleChatConnection(ws) {
                 console.log('💬 User message:', data.command || '[Continue/Resume]');
                 console.log('📁 Project:', data.options?.projectPath || 'Unknown');
                 console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
-                await spawnClaude(data.command, data.options, ws);
+
+                // Use Claude Agents SDK
+                await queryClaudeSDK(data.command, data.options, ws);
             } else if (data.type === 'cursor-command') {
                 console.log('🖱️ Cursor message:', data.command || '[Continue/Resume]');
                 console.log('📁 Project:', data.options?.cwd || 'Unknown');
@@ -568,9 +570,15 @@ function handleChatConnection(ws) {
             } else if (data.type === 'abort-session') {
                 console.log('🛑 Abort session request:', data.sessionId);
                 const provider = data.provider || 'claude';
-                const success = provider === 'cursor' 
-                    ? abortCursorSession(data.sessionId)
-                    : abortClaudeSession(data.sessionId);
+                let success;
+
+                if (provider === 'cursor') {
+                    success = abortCursorSession(data.sessionId);
+                } else {
+                    // Use Claude Agents SDK
+                    success = await abortClaudeSDKSession(data.sessionId);
+                }
+
                 ws.send(JSON.stringify({
                     type: 'session-aborted',
                     sessionId: data.sessionId,
@@ -590,9 +598,15 @@ function handleChatConnection(ws) {
                 // Check if a specific session is currently processing
                 const provider = data.provider || 'claude';
                 const sessionId = data.sessionId;
-                const isActive = provider === 'cursor'
-                    ? isCursorSessionActive(sessionId)
-                    : isClaudeSessionActive(sessionId);
+                let isActive;
+
+                if (provider === 'cursor') {
+                    isActive = isCursorSessionActive(sessionId);
+                } else {
+                    // Use Claude Agents SDK
+                    isActive = isClaudeSDKSessionActive(sessionId);
+                }
+
                 ws.send(JSON.stringify({
                     type: 'session-status',
                     sessionId,
@@ -602,7 +616,7 @@ function handleChatConnection(ws) {
             } else if (data.type === 'get-active-sessions') {
                 // Get all currently active sessions
                 const activeSessions = {
-                    claude: getActiveClaudeSessions(),
+                    claude: getActiveClaudeSDKSessions(),
                     cursor: getActiveCursorSessions()
                 };
                 ws.send(JSON.stringify({
@@ -1249,11 +1263,14 @@ async function startServer() {
         await initializeDatabase();
         console.log('✅ Database initialization skipped (testing)');
 
+        // Log Claude implementation mode
+        console.log('🚀 Using Claude Agents SDK for Claude integration');
+
         server.listen(PORT, '0.0.0.0', async () => {
             console.log(`Claude Code UI server running on http://0.0.0.0:${PORT}`);
 
             // Start watching the projects folder for changes
-            await setupProjectsWatcher(); 
+            await setupProjectsWatcher();
         });
     } catch (error) {
         console.error('❌ Failed to start server:', error);
