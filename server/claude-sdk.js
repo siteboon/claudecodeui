@@ -76,7 +76,8 @@ function mapCliOptionsToSDK(options = {}) {
   }
 
   // Map model (default to sonnet)
-  sdkOptions.model = 'sonnet';
+  // Map model (default to sonnet)
+  sdkOptions.model = options.model || 'sonnet';
 
   // Map resume session
   if (sessionId) {
