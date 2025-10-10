@@ -3473,36 +3473,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 </span>
               </div>
             </button>
-
             {/* Token usage pie chart - positioned next to mode indicator */}
-            {(() => {
-              // Default to 0 tokens if no budget received yet
-              const used = tokenBudget?.used || 0;
-              const total = tokenBudget?.total || parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 160000;
-
-              const percentage = total > 0 ? Math.min(100, (used / total) * 100) : 0;
-              console.log('🎨 Rendering pie chart:', { tokenBudget, used, total, percentage: percentage.toFixed(0) + '%' });
-              const radius = 10;
-              const circumference = 2 * Math.PI * radius;
-              const offset = circumference - (percentage / 100) * circumference;
-              const getColor = () => {
-                if (percentage < 50) return '#3b82f6';
-                if (percentage < 75) return '#f59e0b';
-                return '#ef4444';
-              };
-
-              return (
-                <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
-                  <svg width="24" height="24" viewBox="0 0 24 24" className="transform -rotate-90">
-                    <circle cx="12" cy="12" r={radius} fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-300 dark:text-gray-600" />
-                    <circle cx="12" cy="12" r={radius} fill="none" stroke={getColor()} strokeWidth="2" strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round" />
-                  </svg>
-                  <span className="hidden sm:inline" title={`${used.toLocaleString()} / ${total.toLocaleString()} tokens`}>
-                    {percentage.toFixed(1)}%
-                  </span>
-                </div>
-              );
-            })()}
+            <TokenUsagePie
+              used={tokenBudget?.used || 0}
+              total={tokenBudget?.total || parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 160000}
+            />
 
             {/* Scroll to bottom button - positioned next to mode indicator */}
             {isUserScrolledUp && chatMessages.length > 0 && (
