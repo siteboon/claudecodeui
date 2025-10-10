@@ -3478,7 +3478,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             {(() => {
               // Default to 0 tokens if no budget received yet
               const used = tokenBudget?.used || 0;
-              const total = tokenBudget?.total || parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 200000;
+              const total = tokenBudget?.total || parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 160000;
 
               const percentage = total > 0 ? Math.min(100, (used / total) * 100) : 0;
               console.log('🎨 Rendering pie chart:', { tokenBudget, used, total, percentage: percentage.toFixed(0) + '%' });
