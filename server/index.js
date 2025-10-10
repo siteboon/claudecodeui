@@ -1116,7 +1116,8 @@ app.get('/api/sessions/:sessionId/token-usage', authenticateToken, async (req, r
     const fileContent = fs.readFileSync(jsonlPath, 'utf8');
     const lines = fileContent.trim().split('\n');
 
-    let contextWindow = parseInt(process.env.CONTEXT_WINDOW) || 200000; // Claude Code context window
+    const parsedContextWindow = parseInt(process.env.CONTEXT_WINDOW, 10);
+    const contextWindow = Number.isFinite(parsedContextWindow) ? parsedContextWindow : 160000;
     let inputTokens = 0;
     let cacheCreationTokens = 0;
     let cacheReadTokens = 0;
