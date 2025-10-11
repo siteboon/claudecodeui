@@ -57,6 +57,7 @@ function AppContent() {
   const [showQuickSettings, setShowQuickSettings] = useState(false);
   const [autoExpandTools, setAutoExpandTools] = useLocalStorage('autoExpandTools', false);
   const [showRawParameters, setShowRawParameters] = useLocalStorage('showRawParameters', false);
+  const [showThinking, setShowThinking] = useLocalStorage('showThinking', true);
   const [autoScrollToBottom, setAutoScrollToBottom] = useLocalStorage('autoScrollToBottom', true);
   const [sendByCtrlEnter, setSendByCtrlEnter] = useLocalStorage('sendByCtrlEnter', false);
   // Session Protection System: Track sessions with active conversations to prevent
@@ -64,7 +65,11 @@ function AppContent() {
   // a message, the session is marked as "active" and project updates are paused
   // until the conversation completes or is aborted.
   const [activeSessions, setActiveSessions] = useState(new Set()); // Track sessions with active conversations
-  
+
+  // Processing Sessions: Track which sessions are currently thinking/processing
+  // This allows us to restore the "Thinking..." banner when switching back to a processing session
+  const [processingSessions, setProcessingSessions] = useState(new Set());
+
   const { ws, sendMessage, messages } = useWebSocketContext();
   
   // Detect if running as PWA
@@ -186,13 +191,16 @@ function AppContent() {
         // Update projects state with the new data from WebSocket
         const updatedProjects = latestMessage.projects;
         setProjects(updatedProjects);
-        
+
         // Update selected project if it exists in the updated projects
         if (selectedProject) {
           const updatedSelectedProject = updatedProjects.find(p => p.name === selectedProject.name);
           if (updatedSelectedProject) {
-            setSelectedProject(updatedSelectedProject);
-            
+            // Only update selected project if it actually changed - prevents flickering
+            if (JSON.stringify(updatedSelectedProject) !== JSON.stringify(selectedProject)) {
+              setSelectedProject(updatedSelectedProject);
+            }
+
             // Update selected session only if it was deleted - avoid unnecessary reloads
             if (selectedSession) {
               const updatedSelectedSession = updatedSelectedProject.sessions?.find(s => s.id === selectedSession.id);
@@ -454,6 +462,26 @@ function AppContent() {
     }
   };
 
+  // Processing Session Functions: Track which sessions are currently thinking/processing
+
+  // markSessionAsProcessing: Called when Claude starts thinking/processing
+  const markSessionAsProcessing = (sessionId) => {
+    if (sessionId) {
+      setProcessingSessions(prev => new Set([...prev, sessionId]));
+    }
+  };
+
+  // markSessionAsNotProcessing: Called when Claude finishes thinking/processing
+  const markSessionAsNotProcessing = (sessionId) => {
+    if (sessionId) {
+      setProcessingSessions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(sessionId);
+        return newSet;
+      });
+    }
+  };
+
   // replaceTemporarySession: Called when WebSocket provides real session ID for new sessions
   // Removes temporary "new-session-*" identifiers and adds the real session ID
   // This maintains protection continuity during the transition from temporary to real session
@@ -655,11 +683,15 @@ function AppContent() {
           onInputFocusChange={setIsInputFocused}
           onSessionActive={markSessionAsActive}
           onSessionInactive={markSessionAsInactive}
+          onSessionProcessing={markSessionAsProcessing}
+          onSessionNotProcessing={markSessionAsNotProcessing}
+          processingSessions={processingSessions}
           onReplaceTemporarySession={replaceTemporarySession}
           onNavigateToSession={(sessionId) => navigate(`/session/${sessionId}`)}
           onShowSettings={() => setShowSettings(true)}
           autoExpandTools={autoExpandTools}
           showRawParameters={showRawParameters}
+          showThinking={showThinking}
           autoScrollToBottom={autoScrollToBottom}
           sendByCtrlEnter={sendByCtrlEnter}
         />
@@ -682,6 +714,8 @@ function AppContent() {
           onAutoExpandChange={setAutoExpandTools}
           showRawParameters={showRawParameters}
           onShowRawParametersChange={setShowRawParameters}
+          showThinking={showThinking}
+          onShowThinkingChange={setShowThinking}
           autoScrollToBottom={autoScrollToBottom}
           onAutoScrollChange={setAutoScrollToBottom}
           sendByCtrlEnter={sendByCtrlEnter}
