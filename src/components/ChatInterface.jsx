@@ -2735,12 +2735,32 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       return;
     }
 
+    // Create AbortController to cancel in-flight requests when session/project changes
+    let abortController = new AbortController();
+
     const fetchTokenUsage = async () => {
+      // Abort previous request if still in flight
+      if (abortController.signal.aborted) {
+        abortController = new AbortController();
+      }
+
+      // Capture current session/project to verify before updating state
+      const currentSessionId = selectedSession.id;
+      const currentProjectPath = selectedProject.path;
+
       try {
-        const url = `/api/sessions/${selectedSession.id}/token-usage?projectPath=${encodeURIComponent(selectedProject.path)}`;
+        const url = `/api/sessions/${currentSessionId}/token-usage?projectPath=${encodeURIComponent(currentProjectPath)}`;
         console.log('📊 Fetching token usage from:', url);
 
-        const response = await authenticatedFetch(url);
+        const response = await authenticatedFetch(url, {
+          signal: abortController.signal
+        });
+
+        // Only update state if session/project hasn't changed
+        if (currentSessionId !== selectedSession?.id || currentProjectPath !== selectedProject?.path) {
+          console.log('⚠️ Session/project changed during fetch, discarding stale data');
+          return;
+        }
 
         if (response.ok) {
           const data = await response.json();
@@ -2752,6 +2772,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           setTokenBudget({ used: 0, total: parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 160000, percentage: 0 });
         }
       } catch (error) {
+        // Don't log error if request was aborted (expected behavior)
+        if (error.name === 'AbortError') {
+          console.log('🚫 Token usage fetch aborted (session/project changed)');
+          return;
+        }
         console.error('Failed to fetch token usage:', error);
         // Reset to zero on error
         setTokenBudget({ used: 0, total: parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 160000, percentage: 0 });
@@ -2773,6 +2798,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
+      // Abort any in-flight requests when effect cleans up
+      abortController.abort();
       clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
