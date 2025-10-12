@@ -28,18 +28,18 @@ console.log('PORT from env:', process.env.PORT);
 
 import express from 'express';
 import { WebSocketServer } from 'ws';
+import os from 'os';
 import http from 'http';
 import cors from 'cors';
 import { promises as fsPromises } from 'fs';
 import { spawn } from 'child_process';
-import os from 'os';
 import pty from 'node-pty';
 import fetch from 'node-fetch';
 import mime from 'mime-types';
 
 import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
-import { spawnClaude, abortClaudeSession } from './claude-cli.js';
-import { spawnCursor, abortCursorSession } from './cursor-cli.js';
+import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions } from './claude-sdk.js';
+import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
 import mcpRoutes from './routes/mcp.js';
@@ -550,7 +550,9 @@ function handleChatConnection(ws) {
                 console.log('💬 User message:', data.command || '[Continue/Resume]');
                 console.log('📁 Project:', data.options?.projectPath || 'Unknown');
                 console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
-                await spawnClaude(data.command, data.options, ws);
+
+                // Use Claude Agents SDK
+                await queryClaudeSDK(data.command, data.options, ws);
             } else if (data.type === 'cursor-command') {
                 console.log('🖱️ Cursor message:', data.command || '[Continue/Resume]');
                 console.log('📁 Project:', data.options?.cwd || 'Unknown');
@@ -568,9 +570,15 @@ function handleChatConnection(ws) {
             } else if (data.type === 'abort-session') {
                 console.log('🛑 Abort session request:', data.sessionId);
                 const provider = data.provider || 'claude';
-                const success = provider === 'cursor' 
-                    ? abortCursorSession(data.sessionId)
-                    : abortClaudeSession(data.sessionId);
+                let success;
+
+                if (provider === 'cursor') {
+                    success = abortCursorSession(data.sessionId);
+                } else {
+                    // Use Claude Agents SDK
+                    success = await abortClaudeSDKSession(data.sessionId);
+                }
+
                 ws.send(JSON.stringify({
                     type: 'session-aborted',
                     sessionId: data.sessionId,
@@ -585,6 +593,35 @@ function handleChatConnection(ws) {
                     sessionId: data.sessionId,
                     provider: 'cursor',
                     success
+                }));
+            } else if (data.type === 'check-session-status') {
+                // Check if a specific session is currently processing
+                const provider = data.provider || 'claude';
+                const sessionId = data.sessionId;
+                let isActive;
+
+                if (provider === 'cursor') {
+                    isActive = isCursorSessionActive(sessionId);
+                } else {
+                    // Use Claude Agents SDK
+                    isActive = isClaudeSDKSessionActive(sessionId);
+                }
+
+                ws.send(JSON.stringify({
+                    type: 'session-status',
+                    sessionId,
+                    provider,
+                    isProcessing: isActive
+                }));
+            } else if (data.type === 'get-active-sessions') {
+                // Get all currently active sessions
+                const activeSessions = {
+                    claude: getActiveClaudeSDKSessions(),
+                    cursor: getActiveCursorSessions()
+                };
+                ws.send(JSON.stringify({
+                    type: 'active-sessions',
+                    sessions: activeSessions
                 }));
             }
         } catch (error) {
@@ -1053,13 +1090,87 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
     }
 });
 
-// Serve React app for all other routes
+// API endpoint to get token usage for a session by reading its JSONL file
+app.get('/api/sessions/:sessionId/token-usage', authenticateToken, async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { projectPath } = req.query;
+
+    if (!projectPath) {
+      return res.status(400).json({ error: 'projectPath query parameter is required' });
+    }
+
+    // Construct the JSONL file path
+    // Claude stores session files in ~/.claude/projects/[encoded-project-path]/[session-id].jsonl
+    // The encoding replaces /, spaces, ~, and _ with -
+    const homeDir = os.homedir();
+    const encodedPath = projectPath.replace(/[\/\s~_]/g, '-');
+    const jsonlPath = path.join(homeDir, '.claude', 'projects', encodedPath, `${sessionId}.jsonl`);
+
+    // Check if file exists
+    if (!fs.existsSync(jsonlPath)) {
+      return res.status(404).json({ error: 'Session file not found', path: jsonlPath });
+    }
+
+    // Read and parse the JSONL file
+    const fileContent = fs.readFileSync(jsonlPath, 'utf8');
+    const lines = fileContent.trim().split('\n');
+
+    const parsedContextWindow = parseInt(process.env.CONTEXT_WINDOW, 10);
+    const contextWindow = Number.isFinite(parsedContextWindow) ? parsedContextWindow : 160000;
+    let inputTokens = 0;
+    let cacheCreationTokens = 0;
+    let cacheReadTokens = 0;
+
+    // Find the latest assistant message with usage data (scan from end)
+    for (let i = lines.length - 1; i >= 0; i--) {
+      try {
+        const entry = JSON.parse(lines[i]);
+
+        // Only count assistant messages which have usage data
+        if (entry.type === 'assistant' && entry.message?.usage) {
+          const usage = entry.message.usage;
+
+          // Use token counts from latest assistant message only
+          inputTokens = usage.input_tokens || 0;
+          cacheCreationTokens = usage.cache_creation_input_tokens || 0;
+          cacheReadTokens = usage.cache_read_input_tokens || 0;
+
+          break; // Stop after finding the latest assistant message
+        }
+      } catch (parseError) {
+        // Skip lines that can't be parsed
+        continue;
+      }
+    }
+
+    // Calculate total context usage (excluding output_tokens, as per ccusage)
+    const totalUsed = inputTokens + cacheCreationTokens + cacheReadTokens;
+
+    res.json({
+      used: totalUsed,
+      total: contextWindow,
+      breakdown: {
+        input: inputTokens,
+        cacheCreation: cacheCreationTokens,
+        cacheRead: cacheReadTokens
+      }
+    });
+  } catch (error) {
+    console.error('Error reading session token usage:', error);
+    res.status(500).json({ error: 'Failed to read session token usage' });
+  }
+});
+
+// Serve React app for all other routes (excluding static files)
 app.get('*', (req, res) => {
+  // Only serve index.html for HTML routes, not for static assets
+  // Static assets should already be handled by express.static middleware above
   if (process.env.NODE_ENV === 'production') {
     res.sendFile(path.join(__dirname, '../dist/index.html'));
   } else {
     // In development, redirect to Vite dev server
-    res.redirect(`http://localhost:${process.env.VITE_PORT || 3001}`);
+    res.redirect(`http://localhost:${process.env.VITE_PORT || 5173}`);
   }
 });
 
@@ -1153,11 +1264,14 @@ async function startServer() {
         await initializeDatabase();
         console.log('✅ Database initialization skipped (testing)');
 
+        // Log Claude implementation mode
+        console.log('🚀 Using Claude Agents SDK for Claude integration');
+
         server.listen(PORT, '0.0.0.0', async () => {
             console.log(`Claude Code UI server running on http://0.0.0.0:${PORT}`);
 
             // Start watching the projects folder for changes
-            await setupProjectsWatcher(); 
+            await setupProjectsWatcher();
         });
     } catch (error) {
         console.error('❌ Failed to start server:', error);
