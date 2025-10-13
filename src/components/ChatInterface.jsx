@@ -29,6 +29,8 @@ import ClaudeStatus from './ClaudeStatus';
 import TokenUsagePie from './TokenUsagePie';
 import { MicButton } from './MicButton.jsx';
 import { api, authenticatedFetch } from '../utils/api';
+import Fuse from 'fuse.js';
+import CommandMenu from './CommandMenu';
 
 
 // Helper function to decode HTML entities in text
@@ -1214,6 +1216,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   // Streaming throttle buffers
   const streamBufferRef = useRef('');
   const streamTimerRef = useRef(null);
+  const commandQueryTimerRef = useRef(null);
   const [debouncedInput, setDebouncedInput] = useState('');
   const [showFileDropdown, setShowFileDropdown] = useState(false);
   const [fileList, setFileList] = useState([]);
@@ -1227,6 +1230,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [showCommandMenu, setShowCommandMenu] = useState(false);
   const [slashCommands, setSlashCommands] = useState([]);
   const [filteredCommands, setFilteredCommands] = useState([]);
+  const [commandQuery, setCommandQuery] = useState('');
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
   const [tokenBudget, setTokenBudget] = useState(null);
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(-1);
@@ -1275,6 +1279,351 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       .catch(err => console.error('Error loading Cursor config:', err));
     }
   }, [provider]);
+
+  // Fetch slash commands on mount and when project changes
+  useEffect(() => {
+    const fetchCommands = async () => {
+      if (!selectedProject) return;
+
+      try {
+        const response = await authenticatedFetch('/api/commands/list', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            projectPath: selectedProject.path
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch commands');
+        }
+
+        const data = await response.json();
+
+        // Combine built-in and custom commands
+        const allCommands = [
+          ...(data.builtIn || []).map(cmd => ({ ...cmd, type: 'built-in' })),
+          ...(data.custom || []).map(cmd => ({ ...cmd, type: 'custom' }))
+        ];
+
+        setSlashCommands(allCommands);
+
+        // Load command history from localStorage
+        const historyKey = `command_history_${selectedProject.name}`;
+        const history = safeLocalStorage.getItem(historyKey);
+        if (history) {
+          try {
+            const parsedHistory = JSON.parse(history);
+            // Sort commands by usage frequency
+            const sortedCommands = allCommands.sort((a, b) => {
+              const aCount = parsedHistory[a.name] || 0;
+              const bCount = parsedHistory[b.name] || 0;
+              return bCount - aCount;
+            });
+            setSlashCommands(sortedCommands);
+          } catch (e) {
+            console.error('Error parsing command history:', e);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching slash commands:', error);
+        setSlashCommands([]);
+      }
+    };
+
+    fetchCommands();
+  }, [selectedProject]);
+
+  // Create Fuse instance for fuzzy search
+  const fuse = useMemo(() => {
+    if (!slashCommands.length) return null;
+
+    return new Fuse(slashCommands, {
+      keys: [
+        { name: 'name', weight: 2 },
+        { name: 'description', weight: 1 }
+      ],
+      threshold: 0.4,
+      includeScore: true,
+      minMatchCharLength: 1
+    });
+  }, [slashCommands]);
+
+  // Filter commands based on query
+  useEffect(() => {
+    if (!commandQuery) {
+      setFilteredCommands(slashCommands);
+      return;
+    }
+
+    if (!fuse) {
+      setFilteredCommands([]);
+      return;
+    }
+
+    const results = fuse.search(commandQuery);
+    setFilteredCommands(results.map(result => result.item));
+  }, [commandQuery, slashCommands, fuse]);
+
+  // Calculate frequently used commands
+  const frequentCommands = useMemo(() => {
+    if (!selectedProject || slashCommands.length === 0) return [];
+
+    const historyKey = `command_history_${selectedProject.name}`;
+    const history = safeLocalStorage.getItem(historyKey);
+
+    if (!history) return [];
+
+    try {
+      const parsedHistory = JSON.parse(history);
+
+      // Sort commands by usage count
+      const commandsWithUsage = slashCommands
+        .map(cmd => ({
+          ...cmd,
+          usageCount: parsedHistory[cmd.name] || 0
+        }))
+        .filter(cmd => cmd.usageCount > 0)
+        .sort((a, b) => b.usageCount - a.usageCount)
+        .slice(0, 5); // Top 5 most used
+
+      return commandsWithUsage;
+    } catch (e) {
+      console.error('Error parsing command history:', e);
+      return [];
+    }
+  }, [selectedProject, slashCommands]);
+
+  // Command selection callback with history tracking
+  const handleCommandSelect = useCallback((command, index, isHover) => {
+    if (!command || !selectedProject) return;
+
+    // If hovering, just update the selected index
+    if (isHover) {
+      setSelectedCommandIndex(index);
+      return;
+    }
+
+    // Update command history
+    const historyKey = `command_history_${selectedProject.name}`;
+    const history = safeLocalStorage.getItem(historyKey);
+    let parsedHistory = {};
+
+    try {
+      parsedHistory = history ? JSON.parse(history) : {};
+    } catch (e) {
+      console.error('Error parsing command history:', e);
+    }
+
+    parsedHistory[command.name] = (parsedHistory[command.name] || 0) + 1;
+    safeLocalStorage.setItem(historyKey, JSON.stringify(parsedHistory));
+
+    // Execute the command
+    executeCommand(command);
+  }, [selectedProject]);
+
+  // Execute a command
+  const executeCommand = useCallback(async (command) => {
+    if (!command || !selectedProject) return;
+
+    try {
+      // Parse command and arguments from current input
+      const commandMatch = input.match(new RegExp(`${command.name}\\s*(.*)`));
+      const args = commandMatch && commandMatch[1]
+        ? commandMatch[1].trim().split(/\s+/)
+        : [];
+
+      // Prepare context for command execution
+      const context = {
+        projectPath: selectedProject.path,
+        projectName: selectedProject.name,
+        sessionId: currentSessionId,
+        provider,
+        model: provider === 'cursor' ? cursorModel : 'claude-sonnet-4.5',
+        tokenUsage: tokenBudget
+      };
+
+      // Call the execute endpoint
+      const response = await authenticatedFetch('/api/commands/execute', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          commandName: command.name,
+          commandPath: command.path,
+          args,
+          context
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to execute command');
+      }
+
+      const result = await response.json();
+
+      // Handle built-in commands
+      if (result.type === 'builtin') {
+        handleBuiltInCommand(result);
+      } else if (result.type === 'custom') {
+        // Handle custom commands - inject as system message
+        await handleCustomCommand(result, args);
+      }
+
+      // Clear the input after successful execution
+      setInput('');
+      setShowCommandMenu(false);
+      setSlashPosition(-1);
+      setCommandQuery('');
+      setSelectedCommandIndex(-1);
+
+    } catch (error) {
+      console.error('Error executing command:', error);
+      // Show error message to user
+      setChatMessages(prev => [...prev, {
+        role: 'assistant',
+        content: `Error executing command: ${error.message}`,
+        timestamp: Date.now()
+      }]);
+    }
+  }, [input, selectedProject, currentSessionId, provider, cursorModel, tokenBudget]);
+
+  // Handle built-in command actions
+  const handleBuiltInCommand = useCallback((result) => {
+    const { action, data } = result;
+
+    switch (action) {
+      case 'clear':
+        // Clear conversation history
+        setChatMessages([]);
+        setSessionMessages([]);
+        break;
+
+      case 'help':
+        // Show help content
+        setChatMessages(prev => [...prev, {
+          role: 'assistant',
+          content: data.content,
+          timestamp: Date.now()
+        }]);
+        break;
+
+      case 'model':
+        // Show model information
+        setChatMessages(prev => [...prev, {
+          role: 'assistant',
+          content: `**Current Model**: ${data.current.model}\n\n**Available Models**:\n\nClaude: ${data.available.claude.join(', ')}\n\nCursor: ${data.available.cursor.join(', ')}`,
+          timestamp: Date.now()
+        }]);
+        break;
+
+      case 'cost':
+        // Show cost information
+        const costMessage = `**Token Usage**: ${data.tokenUsage.used.toLocaleString()} / ${data.tokenUsage.total.toLocaleString()} (${data.tokenUsage.percentage}%)\n\n**Estimated Cost**:\n- Input: $${data.cost.input}\n- Output: $${data.cost.output}\n- **Total**: $${data.cost.total}\n\n**Model**: ${data.model}`;
+        setChatMessages(prev => [...prev, {
+          role: 'assistant',
+          content: costMessage,
+          timestamp: Date.now()
+        }]);
+        break;
+
+      case 'status':
+        // Show status information
+        const statusMessage = `**System Status**\n\n- Version: ${data.version}\n- Uptime: ${data.uptime}\n- Model: ${data.model}\n- Provider: ${data.provider}\n- Node.js: ${data.nodeVersion}\n- Platform: ${data.platform}`;
+        setChatMessages(prev => [...prev, {
+          role: 'assistant',
+          content: statusMessage,
+          timestamp: Date.now()
+        }]);
+        break;
+
+      case 'memory':
+        // Show memory file info
+        if (data.error) {
+          setChatMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `⚠️ ${data.message}`,
+            timestamp: Date.now()
+          }]);
+        } else {
+          setChatMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `📝 ${data.message}\n\nPath: \`${data.path}\``,
+            timestamp: Date.now()
+          }]);
+          // Optionally open file in editor
+          if (data.exists && onFileOpen) {
+            onFileOpen(data.path);
+          }
+        }
+        break;
+
+      case 'config':
+        // Open settings
+        if (onShowSettings) {
+          onShowSettings();
+        }
+        break;
+
+      case 'rewind':
+        // Rewind conversation
+        if (data.error) {
+          setChatMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `⚠️ ${data.message}`,
+            timestamp: Date.now()
+          }]);
+        } else {
+          // Remove last N messages
+          setChatMessages(prev => prev.slice(0, -data.steps * 2)); // Remove user + assistant pairs
+          setChatMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `⏪ ${data.message}`,
+            timestamp: Date.now()
+          }]);
+        }
+        break;
+
+      default:
+        console.warn('Unknown built-in command action:', action);
+    }
+  }, [onFileOpen, onShowSettings]);
+
+  // Handle custom command execution
+  const handleCustomCommand = useCallback(async (result, args) => {
+    const { content, hasBashCommands, hasFileIncludes } = result;
+
+    // Show confirmation for bash commands
+    if (hasBashCommands) {
+      const confirmed = window.confirm(
+        'This command contains bash commands that will be executed. Do you want to proceed?'
+      );
+      if (!confirmed) {
+        setChatMessages(prev => [...prev, {
+          role: 'assistant',
+          content: '❌ Command execution cancelled',
+          timestamp: Date.now()
+        }]);
+        return;
+      }
+    }
+
+    // Inject the processed command content as user message
+    const commandMessage = {
+      role: 'user',
+      content: content,
+      timestamp: Date.now(),
+      isCommand: true
+    };
+
+    setChatMessages(prev => [...prev, commandMessage]);
+
+    // Automatically send to Claude for processing
+    // The command content will be included in the next API call
+  }, []);
 
 
   // Memoized diff calculation to prevent recalculating on every render
@@ -3052,7 +3401,87 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   };
 
+  const selectCommand = (command) => {
+    if (!command) return;
+
+    // Track command usage
+    handleCommandSelect(command);
+
+    const textBeforeSlash = input.slice(0, slashPosition);
+    const textAfterSlash = input.slice(slashPosition);
+    const spaceIndex = textAfterSlash.indexOf(' ');
+    const textAfterQuery = spaceIndex !== -1 ? textAfterSlash.slice(spaceIndex) : '';
+
+    const newInput = textBeforeSlash + '/' + command.name + ' ' + textAfterQuery;
+    const newCursorPos = textBeforeSlash.length + 1 + command.name.length + 1;
+
+    // Update input and cursor position
+    setInput(newInput);
+    setCursorPosition(newCursorPos);
+
+    // Hide command menu
+    setShowCommandMenu(false);
+    setSlashPosition(-1);
+    setCommandQuery('');
+    setSelectedCommandIndex(-1);
+
+    // Clear debounce timer
+    if (commandQueryTimerRef.current) {
+      clearTimeout(commandQueryTimerRef.current);
+    }
+
+    // Set cursor position
+    if (textareaRef.current) {
+      requestAnimationFrame(() => {
+        if (textareaRef.current) {
+          textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+          if (!textareaRef.current.matches(':focus')) {
+            textareaRef.current.focus();
+          }
+        }
+      });
+    }
+  };
+
   const handleKeyDown = (e) => {
+    // Handle command menu navigation
+    if (showCommandMenu && filteredCommands.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedCommandIndex(prev =>
+          prev < filteredCommands.length - 1 ? prev + 1 : 0
+        );
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedCommandIndex(prev =>
+          prev > 0 ? prev - 1 : filteredCommands.length - 1
+        );
+        return;
+      }
+      if (e.key === 'Tab' || e.key === 'Enter') {
+        e.preventDefault();
+        if (selectedCommandIndex >= 0) {
+          selectCommand(filteredCommands[selectedCommandIndex]);
+        } else if (filteredCommands.length > 0) {
+          selectCommand(filteredCommands[0]);
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowCommandMenu(false);
+        setSlashPosition(-1);
+        setCommandQuery('');
+        setSelectedCommandIndex(-1);
+        if (commandQueryTimerRef.current) {
+          clearTimeout(commandQueryTimerRef.current);
+        }
+        return;
+      }
+    }
+
     // Handle file dropdown navigation
     if (showFileDropdown && filteredFiles.length > 0) {
       if (e.key === 'ArrowDown') {
@@ -3085,8 +3514,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       }
     }
     
-    // Handle Tab key for mode switching (only when file dropdown is not showing)
-    if (e.key === 'Tab' && !showFileDropdown) {
+    // Handle Tab key for mode switching (only when dropdowns are not showing)
+    if (e.key === 'Tab' && !showFileDropdown && !showCommandMenu) {
       e.preventDefault();
       const modes = ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
       const currentIndex = modes.indexOf(permissionMode);
@@ -3156,13 +3585,68 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
   const handleInputChange = (e) => {
     const newValue = e.target.value;
+    const cursorPos = e.target.selectionStart;
+
     setInput(newValue);
-    setCursorPosition(e.target.selectionStart);
-    
+    setCursorPosition(cursorPos);
+
     // Handle height reset when input becomes empty
     if (!newValue.trim()) {
       e.target.style.height = 'auto';
       setIsTextareaExpanded(false);
+      setShowCommandMenu(false);
+      setSlashPosition(-1);
+      setCommandQuery('');
+      return;
+    }
+
+    // Detect slash command at cursor position
+    // Look backwards from cursor to find a slash that starts a command
+    const textBeforeCursor = newValue.slice(0, cursorPos);
+
+    // Check if we're in a code block (simple heuristic: between triple backticks)
+    const backticksBefore = (textBeforeCursor.match(/```/g) || []).length;
+    const inCodeBlock = backticksBefore % 2 === 1;
+
+    if (inCodeBlock) {
+      // Don't show command menu in code blocks
+      setShowCommandMenu(false);
+      setSlashPosition(-1);
+      setCommandQuery('');
+      return;
+    }
+
+    // Find the last slash before cursor that could start a command
+    // Slash is valid if it's at the start or preceded by whitespace
+    const slashPattern = /(^|\s)\/(\S*)$/;
+    const match = textBeforeCursor.match(slashPattern);
+
+    if (match) {
+      const slashPos = match.index + match[1].length; // Position of the slash
+      const query = match[2]; // Text after the slash
+
+      // Update states with debouncing for query
+      setSlashPosition(slashPos);
+      setShowCommandMenu(true);
+      setSelectedCommandIndex(-1);
+
+      // Debounce the command query update
+      if (commandQueryTimerRef.current) {
+        clearTimeout(commandQueryTimerRef.current);
+      }
+
+      commandQueryTimerRef.current = setTimeout(() => {
+        setCommandQuery(query);
+      }, 150); // 150ms debounce
+    } else {
+      // No slash command detected
+      setShowCommandMenu(false);
+      setSlashPosition(-1);
+      setCommandQuery('');
+
+      if (commandQueryTimerRef.current) {
+        clearTimeout(commandQueryTimerRef.current);
+      }
     }
   };
 
@@ -3583,7 +4067,30 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               ))}
             </div>
           )}
-          
+
+          {/* Command Menu */}
+          <CommandMenu
+            commands={filteredCommands}
+            selectedIndex={selectedCommandIndex}
+            onSelect={handleCommandSelect}
+            onClose={() => {
+              setShowCommandMenu(false);
+              setSlashPosition(-1);
+              setCommandQuery('');
+              setSelectedCommandIndex(-1);
+            }}
+            position={{
+              top: textareaRef.current
+                ? textareaRef.current.getBoundingClientRect().top - 308
+                : 0,
+              left: textareaRef.current
+                ? textareaRef.current.getBoundingClientRect().left
+                : 0
+            }}
+            isOpen={showCommandMenu}
+            frequentCommands={commandQuery ? [] : frequentCommands}
+          />
+
           <div {...getRootProps()} className={`relative bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-600 focus-within:ring-2 focus-within:ring-blue-500 dark:focus-within:ring-blue-500 focus-within:border-blue-500 transition-all duration-200 ${isTextareaExpanded ? 'chat-input-expanded' : ''}`}>
             <input {...getInputProps()} />
             <textarea
@@ -3606,7 +4113,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 const isExpanded = e.target.scrollHeight > lineHeight * 2;
                 setIsTextareaExpanded(isExpanded);
               }}
-              placeholder={`Ask ${provider === 'cursor' ? 'Cursor' : 'Claude'} to help with your code...`}
+              placeholder={input.trim() ? '' : `Type / for commands, @ for files, or ask ${provider === 'cursor' ? 'Cursor' : 'Claude'} anything...`}
               disabled={isLoading}
               rows={1}
               className="chat-input-placeholder w-full pl-12 pr-28 sm:pr-40 py-3 sm:py-4 bg-transparent rounded-2xl focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 resize-none min-h-[40px] sm:min-h-[56px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base transition-all duration-200"
@@ -3673,6 +4180,52 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 className="w-10 h-10 sm:w-10 sm:h-10"
               />
             </div>
+
+            {/* Slash commands button */}
+            <button
+              type="button"
+              onClick={() => {
+                const isOpening = !showCommandMenu;
+                setShowCommandMenu(isOpening);
+                setCommandQuery('');
+                setSelectedCommandIndex(-1);
+
+                // When opening, ensure all commands are shown
+                if (isOpening) {
+                  setFilteredCommands(slashCommands);
+                }
+
+                if (textareaRef.current) {
+                  textareaRef.current.focus();
+                }
+              }}
+              className="absolute right-16 top-1/2 transform -translate-y-1/2 w-10 h-10 sm:w-10 sm:h-10 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-full flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:ring-offset-gray-800 relative"
+              title="Show all commands"
+            >
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"
+                />
+              </svg>
+              {/* Command count badge */}
+              {slashCommands.length > 0 && (
+                <span
+                  className="absolute -top-1 -right-1 bg-blue-600 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center"
+                  style={{ fontSize: '10px' }}
+                >
+                  {slashCommands.length}
+                </span>
+              )}
+            </button>
+
             {/* Send button */}
             <button
               type="submit"
