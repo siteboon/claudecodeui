@@ -79,7 +79,12 @@ export function replaceArguments(content, args) {
 export function isPathSafe(filePath, basePath) {
   const resolvedPath = path.resolve(basePath, filePath);
   const resolvedBase = path.resolve(basePath);
-  return resolvedPath.startsWith(resolvedBase);
+  const relative = path.relative(resolvedBase, resolvedPath);
+  return (
+    relative !== '' &&
+    !relative.startsWith('..') &&
+    !path.isAbsolute(relative)
+  );
 }
 
 /**
