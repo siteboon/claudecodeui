@@ -162,8 +162,16 @@ export function isBashCommandAllowed(command) {
 export function sanitizeOutput(output) {
   if (!output) return '';
 
-  // Remove control characters except newlines and tabs
-  return output.replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/g, '');
+  // Remove control characters except \t, \n, \r
+  return [...output]
+    .filter(ch => {
+      const code = ch.charCodeAt(0);
+      return code === 9  // \t
+          || code === 10 // \n
+          || code === 13 // \r
+          || (code >= 32 && code !== 127);
+    })
+    .join('');
 }
 
 /**
