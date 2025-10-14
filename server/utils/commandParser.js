@@ -1,10 +1,11 @@
 import matter from 'gray-matter';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { parse as parseShellCommand } from 'shell-quote';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 // Configuration
 const MAX_INCLUDE_DEPTH = 3;
@@ -142,21 +143,82 @@ export async function processFileIncludes(content, basePath, depth = 0) {
 }
 
 /**
- * Validate bash command against allowlist
+ * Validate that a command and its arguments are safe
+ * @param {string} commandString - Command string to validate
+ * @returns {{ allowed: boolean, command: string, args: string[], error?: string }} Validation result
+ */
+export function validateCommand(commandString) {
+  const trimmedCommand = commandString.trim();
+  if (!trimmedCommand) {
+    return { allowed: false, command: '', args: [], error: 'Empty command' };
+  }
+
+  // Parse the command using shell-quote to handle quotes properly
+  const parsed = parseShellCommand(trimmedCommand);
+
+  // Check for shell operators or control structures
+  const hasOperators = parsed.some(token =>
+    typeof token === 'object' && token.op
+  );
+
+  if (hasOperators) {
+    return {
+      allowed: false,
+      command: '',
+      args: [],
+      error: 'Shell operators (&&, ||, |, ;, etc.) are not allowed'
+    };
+  }
+
+  // Extract command and args (all should be strings after validation)
+  const tokens = parsed.filter(token => typeof token === 'string');
+
+  if (tokens.length === 0) {
+    return { allowed: false, command: '', args: [], error: 'No valid command found' };
+  }
+
+  const [command, ...args] = tokens;
+
+  // Extract just the command name (remove path if present)
+  const commandName = path.basename(command);
+
+  // Check if command exactly matches allowlist (no prefix matching)
+  const isAllowed = BASH_COMMAND_ALLOWLIST.includes(commandName);
+
+  if (!isAllowed) {
+    return {
+      allowed: false,
+      command: commandName,
+      args,
+      error: `Command '${commandName}' is not in the allowlist`
+    };
+  }
+
+  // Validate arguments don't contain dangerous metacharacters
+  const dangerousPattern = /[;&|`$()<>{}[\]\\]/;
+  for (const arg of args) {
+    if (dangerousPattern.test(arg)) {
+      return {
+        allowed: false,
+        command: commandName,
+        args,
+        error: `Argument contains dangerous characters: ${arg}`
+      };
+    }
+  }
+
+  return { allowed: true, command: commandName, args };
+}
+
+/**
+ * Backward compatibility: Check if command is allowed (deprecated)
+ * @deprecated Use validateCommand() instead for better security
  * @param {string} command - Command to validate
  * @returns {boolean} True if command is allowed
  */
 export function isBashCommandAllowed(command) {
-  const trimmedCommand = command.trim();
-  if (!trimmedCommand) return false;
-
-  // Extract the first word (the actual command)
-  const firstWord = trimmedCommand.split(/\s+/)[0];
-
-  // Check if it's in the allowlist
-  return BASH_COMMAND_ALLOWLIST.some(allowed =>
-    firstWord === allowed || firstWord.startsWith(allowed + '/')
-  );
+  const result = validateCommand(command);
+  return result.allowed;
 }
 
 /**
@@ -202,20 +264,28 @@ export async function processBashCommands(content, options = {}) {
 
   for (const match of matches) {
     const fullMatch = match[0];
-    const command = match[1].trim();
+    const commandString = match[1].trim();
 
-    // Security: validate command against allowlist
-    if (!isBashCommandAllowed(command)) {
-      throw new Error(`Command not allowed: ${command}`);
+    // Security: validate command and parse args
+    const validation = validateCommand(commandString);
+
+    if (!validation.allowed) {
+      throw new Error(`Command not allowed: ${commandString} - ${validation.error}`);
     }
 
     try {
-      const { stdout, stderr } = await execAsync(command, {
-        cwd,
-        timeout,
-        maxBuffer: 1024 * 1024, // 1MB max output
-        shell: '/bin/bash'
-      });
+      // Execute without shell using execFile with parsed args
+      const { stdout, stderr } = await execFileAsync(
+        validation.command,
+        validation.args,
+        {
+          cwd,
+          timeout,
+          maxBuffer: 1024 * 1024, // 1MB max output
+          shell: false, // IMPORTANT: No shell interpretation
+          env: { ...process.env, PATH: process.env.PATH } // Inherit PATH for finding commands
+        }
+      );
 
       const output = sanitizeOutput(stdout || stderr || '');
 
@@ -223,9 +293,9 @@ export async function processBashCommands(content, options = {}) {
       result = result.replace(fullMatch, fullMatch.startsWith('\n') ? '\n' + output : output);
     } catch (error) {
       if (error.killed) {
-        throw new Error(`Command timeout: ${command}`);
+        throw new Error(`Command timeout: ${commandString}`);
       }
-      throw new Error(`Command failed: ${command} - ${error.message}`);
+      throw new Error(`Command failed: ${commandString} - ${error.message}`);
     }
   }
 

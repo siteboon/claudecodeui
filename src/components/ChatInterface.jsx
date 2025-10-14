@@ -2804,7 +2804,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           }
           break;
           
-        case 'session-aborted':
+        case 'session-aborted': {
           // Get session ID from message or fall back to current session
           const abortedSessionId = latestMessage.sessionId || currentSessionId;
 
@@ -2831,6 +2831,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             timestamp: new Date()
           }]);
           break;
+        }
 
         case 'session-status': {
           const statusSessionId = latestMessage.sessionId;
@@ -3395,9 +3396,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const selectCommand = (command) => {
     if (!command) return;
 
-    // Track command usage
-    handleCommandSelect(command);
-
+    // Insert command into input (execution happens when user sends the message)
     const textBeforeSlash = input.slice(0, slashPosition);
     const textAfterSlash = input.slice(slashPosition);
     const spaceIndex = textAfterSlash.indexOf(' ');

@@ -1113,15 +1113,16 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
       return res.status(400).json({ error: 'Invalid path' });
     }
 
-    // Check if file exists
-    if (!fs.existsSync(jsonlPath)) {
-      return res.status(404).json({ error: 'Session file not found', path: jsonlPath });
-    }
-// … following code unchanged …
-    }
-
     // Read and parse the JSONL file
-    const fileContent = fs.readFileSync(jsonlPath, 'utf8');
+    let fileContent;
+    try {
+      fileContent = await fsPromises.readFile(jsonlPath, 'utf8');
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        return res.status(404).json({ error: 'Session file not found', path: jsonlPath });
+      }
+      throw error; // Re-throw other errors to be caught by outer try-catch
+    }
     const lines = fileContent.trim().split('\n');
 
     const parsedContextWindow = parseInt(process.env.CONTEXT_WINDOW, 10);
