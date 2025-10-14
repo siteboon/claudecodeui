@@ -3412,13 +3412,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     const spaceIndex = textAfterSlash.indexOf(' ');
     const textAfterQuery = spaceIndex !== -1 ? textAfterSlash.slice(spaceIndex) : '';
 
-    const newInput = textBeforeSlash + '/' + command.name + ' ' + textAfterQuery;
-    const newCursorPos = textBeforeSlash.length + 1 + command.name.length + 1;
+    const newInput = textBeforeSlash + command.name + ' ' + textAfterQuery;
+    const newCursorPos = textBeforeSlash.length + command.name.length + 1;
 
     // Update input and cursor position
     setInput(newInput);
     setCursorPosition(newCursorPos);
-
     // Hide command menu
     setShowCommandMenu(false);
     setSlashPosition(-1);
