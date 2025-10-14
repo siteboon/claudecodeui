@@ -1520,26 +1520,17 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         }]);
         break;
 
-      case 'cost':
-        // Show cost information
+      case 'cost': {
         const costMessage = `**Token Usage**: ${data.tokenUsage.used.toLocaleString()} / ${data.tokenUsage.total.toLocaleString()} (${data.tokenUsage.percentage}%)\n\n**Estimated Cost**:\n- Input: $${data.cost.input}\n- Output: $${data.cost.output}\n- **Total**: $${data.cost.total}\n\n**Model**: ${data.model}`;
-        setChatMessages(prev => [...prev, {
-          role: 'assistant',
-          content: costMessage,
-          timestamp: Date.now()
-        }]);
+        setChatMessages(prev => [...prev, { role: 'assistant', content: costMessage, timestamp: Date.now() }]);
         break;
+      }
 
-      case 'status':
-        // Show status information
+      case 'status': {
         const statusMessage = `**System Status**\n\n- Version: ${data.version}\n- Uptime: ${data.uptime}\n- Model: ${data.model}\n- Provider: ${data.provider}\n- Node.js: ${data.nodeVersion}\n- Platform: ${data.platform}`;
-        setChatMessages(prev => [...prev, {
-          role: 'assistant',
-          content: statusMessage,
-          timestamp: Date.now()
-        }]);
+        setChatMessages(prev => [...prev, { role: 'assistant', content: statusMessage, timestamp: Date.now() }]);
         break;
-
+      }
       case 'memory':
         // Show memory file info
         if (data.error) {
