@@ -27,7 +27,7 @@ try {
 console.log('PORT from env:', process.env.PORT);
 
 import express from 'express';
-import { WebSocketServer } from 'ws';
+import { WebSocketServer, WebSocket } from 'ws';
 import os from 'os';
 import http from 'http';
 import cors from 'cors';
@@ -108,7 +108,7 @@ async function setupProjectsWatcher() {
                     });
 
                     connectedClients.forEach(client => {
-                        if (client.readyState === client.OPEN) {
+                        if (client.readyState === WebSocket.OPEN) {
                             client.send(updateMessage);
                         }
                     });
@@ -781,7 +781,7 @@ function handleShellConnection(ws) {
 
                     // Handle data output
                     shellProcess.onData((data) => {
-                        if (ws.readyState === ws.OPEN) {
+                        if (ws.readyState === WebSocket.OPEN) {
                             let outputData = data;
 
                             // Check for various URL opening patterns
@@ -828,7 +828,7 @@ function handleShellConnection(ws) {
                     // Handle process exit
                     shellProcess.onExit((exitCode) => {
                         console.log('🔚 Shell process exited with code:', exitCode.exitCode, 'signal:', exitCode.signal);
-                        if (ws.readyState === ws.OPEN) {
+                        if (ws.readyState === WebSocket.OPEN) {
                             ws.send(JSON.stringify({
                                 type: 'output',
                                 data: `\r\n\x1b[33mProcess exited with code ${exitCode.exitCode}${exitCode.signal ? ` (${exitCode.signal})` : ''}\x1b[0m\r\n`
@@ -865,7 +865,7 @@ function handleShellConnection(ws) {
             }
         } catch (error) {
             console.error('❌ Shell WebSocket error:', error.message);
-            if (ws.readyState === ws.OPEN) {
+            if (ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({
                     type: 'output',
                     data: `\r\n\x1b[31mError: ${error.message}\x1b[0m\r\n`
