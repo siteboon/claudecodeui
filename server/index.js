@@ -1108,7 +1108,7 @@ app.get('/api/sessions/:sessionId/token-usage', authenticateToken, async (req, r
     // Claude stores session files in ~/.claude/projects/[encoded-project-path]/[session-id].jsonl
     // The encoding replaces /, spaces, ~, and _ with -
     const homeDir = os.homedir();
-    const encodedPath = projectPath.replace(/[\/\s~_]/g, '-');
+   const encodedPath = projectPath.replace(/[\\/:\s~_]/g, '-');
     const jsonlPath = path.join(homeDir, '.claude', 'projects', encodedPath, `${sessionId}.jsonl`);
 
     // Check if file exists
