@@ -1094,19 +1094,34 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
     }
 });
 
-// … previous code unchanged …
+// Get token usage for a specific session
+app.get('/api/projects/:projectName/sessions/:sessionId/token-usage', authenticateToken, async (req, res) => {
+  try {
+    const { projectName, sessionId } = req.params;
+    const homeDir = os.homedir();
+
+    // Extract actual project path
+    let projectPath;
+    try {
+      projectPath = await extractProjectDirectory(projectName);
+    } catch (error) {
+      console.error('Error extracting project directory:', error);
+      return res.status(500).json({ error: 'Failed to determine project path' });
+    }
+
     // Construct the JSONL file path
     // Claude stores session files in ~/.claude/projects/[encoded-project-path]/[session-id].jsonl
     // The encoding replaces /, spaces, ~, and _ with -
-    const homeDir = os.homedir();
     const encodedPath = projectPath.replace(/[\\/:\s~_]/g, '-');
     const projectDir = path.join(homeDir, '.claude', 'projects', encodedPath);
+
     // Allow only safe characters in sessionId
     const safeSessionId = String(sessionId).replace(/[^a-zA-Z0-9._-]/g, '');
     if (!safeSessionId) {
       return res.status(400).json({ error: 'Invalid sessionId' });
     }
     const jsonlPath = path.join(projectDir, `${safeSessionId}.jsonl`);
+
     // Constrain to projectDir
     const rel = path.relative(path.resolve(projectDir), path.resolve(jsonlPath));
     if (rel.startsWith('..') || path.isAbsolute(rel)) {
