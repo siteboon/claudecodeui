@@ -374,15 +374,24 @@ app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) =
 
         console.log('📄 File read request:', projectName, filePath);
 
-        // Using fsPromises from import
-
-        // Security check - ensure the path is safe and absolute
-        if (!filePath || !path.isAbsolute(filePath)) {
+        // Security: ensure the requested path is inside the project root
+        if (!filePath) {
             return res.status(400).json({ error: 'Invalid file path' });
         }
 
-        const content = await fsPromises.readFile(filePath, 'utf8');
-        res.json({ content, path: filePath });
+        const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+        if (!projectRoot) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+
+        const resolved = path.resolve(filePath);
+        const normalizedRoot = path.resolve(projectRoot) + path.sep;
+        if (!resolved.startsWith(normalizedRoot)) {
+            return res.status(403).json({ error: 'Path must be under project root' });
+        }
+
+        const content = await fsPromises.readFile(resolved, 'utf8');
+        res.json({ content, path: resolved });
     } catch (error) {
         console.error('Error reading file:', error);
         if (error.code === 'ENOENT') {
@@ -403,27 +412,35 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
 
         console.log('🖼️ Binary file serve request:', projectName, filePath);
 
-        // Using fs from import
-        // Using mime from import
-
-        // Security check - ensure the path is safe and absolute
-        if (!filePath || !path.isAbsolute(filePath)) {
+        // Security: ensure the requested path is inside the project root
+        if (!filePath) {
             return res.status(400).json({ error: 'Invalid file path' });
+        }
+
+        const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+        if (!projectRoot) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+
+        const resolved = path.resolve(filePath);
+        const normalizedRoot = path.resolve(projectRoot) + path.sep;
+        if (!resolved.startsWith(normalizedRoot)) {
+            return res.status(403).json({ error: 'Path must be under project root' });
         }
 
         // Check if file exists
         try {
-            await fsPromises.access(filePath);
+            await fsPromises.access(resolved);
         } catch (error) {
             return res.status(404).json({ error: 'File not found' });
         }
 
         // Get file extension and set appropriate content type
-        const mimeType = mime.lookup(filePath) || 'application/octet-stream';
+        const mimeType = mime.lookup(resolved) || 'application/octet-stream';
         res.setHeader('Content-Type', mimeType);
 
         // Stream the file
-        const fileStream = fs.createReadStream(filePath);
+        const fileStream = fs.createReadStream(resolved);
         fileStream.pipe(res);
 
         fileStream.on('error', (error) => {
@@ -449,10 +466,8 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
 
         console.log('💾 File save request:', projectName, filePath);
 
-        // Using fsPromises from import
-
-        // Security check - ensure the path is safe and absolute
-        if (!filePath || !path.isAbsolute(filePath)) {
+        // Security: ensure the requested path is inside the project root
+        if (!filePath) {
             return res.status(400).json({ error: 'Invalid file path' });
         }
 
@@ -460,21 +475,32 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
             return res.status(400).json({ error: 'Content is required' });
         }
 
+        const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+        if (!projectRoot) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+
+        const resolved = path.resolve(filePath);
+        const normalizedRoot = path.resolve(projectRoot) + path.sep;
+        if (!resolved.startsWith(normalizedRoot)) {
+            return res.status(403).json({ error: 'Path must be under project root' });
+        }
+
         // Create backup of original file
         try {
-            const backupPath = filePath + '.backup.' + Date.now();
-            await fsPromises.copyFile(filePath, backupPath);
+            const backupPath = resolved + '.backup.' + Date.now();
+            await fsPromises.copyFile(resolved, backupPath);
             console.log('📋 Created backup:', backupPath);
         } catch (backupError) {
             console.warn('Could not create backup:', backupError.message);
         }
 
         // Write the new content
-        await fsPromises.writeFile(filePath, content, 'utf8');
+        await fsPromises.writeFile(resolved, content, 'utf8');
 
         res.json({
             success: true,
-            path: filePath,
+            path: resolved,
             message: 'File saved successfully'
         });
     } catch (error) {
