@@ -512,9 +512,26 @@ router.post('/execute', async (req, res) => {
     }
 
     // Load command content
+    // Security: validate commandPath is within allowed directories
+    {
+      const resolvedPath = path.resolve(commandPath);
+      const userBase = path.resolve(path.join(os.homedir(), '.claude', 'commands'));
+      const projectBase = context?.projectPath
+        ? path.resolve(path.join(context.projectPath, '.claude', 'commands'))
+        : null;
+      const isUnder = (base) => {
+        const rel = path.relative(base, resolvedPath);
+        return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+      };
+      if (!(isUnder(userBase) || (projectBase && isUnder(projectBase)))) {
+        return res.status(403).json({
+          error: 'Access denied',
+          message: 'Command must be in .claude/commands directory'
+        });
+      }
+    }
     const content = await fs.readFile(commandPath, 'utf8');
     const { data: metadata, content: commandContent } = matter(content);
-
     // Basic argument replacement (will be enhanced in command parser utility)
     let processedContent = commandContent;
 
