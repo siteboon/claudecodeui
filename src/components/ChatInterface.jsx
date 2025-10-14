@@ -2841,8 +2841,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           }]);
           break;
 
-        case 'session-status':
-          // Response to check-session-status request
+        case 'session-status': {
           const statusSessionId = latestMessage.sessionId;
           const isCurrentSession = statusSessionId === currentSessionId ||
                                    (selectedSession && statusSessionId === selectedSession.id);
@@ -2855,6 +2854,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             }
           }
           break;
+        }
 
         case 'claude-status':
           // Handle Claude working status messages
