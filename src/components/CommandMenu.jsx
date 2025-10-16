@@ -18,12 +18,16 @@ const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, pos
   const getMenuPosition = () => {
     const isMobile = window.innerWidth < 640;
     const viewportHeight = window.innerHeight;
+    const menuHeight = 308; // Approximate menu height
 
     if (isMobile) {
-      // On mobile, position from bottom with some padding
+      // On mobile, position just above the input by calculating from top
+      // Ensure it doesn't go above the viewport
+      const calculatedTop = Math.max(16, position.top);
+
       return {
         position: 'fixed',
-        bottom: '80px', // Above the input area
+        top: `${calculatedTop}px`,
         left: '16px',
         right: '16px',
         width: 'auto',
@@ -42,6 +46,22 @@ const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, pos
   };
 
   const menuPosition = getMenuPosition();
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target) && isOpen) {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [isOpen, onClose]);
 
   // Scroll selected item into view
   useEffect(() => {
