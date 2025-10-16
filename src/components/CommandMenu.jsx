@@ -18,30 +18,19 @@ const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, pos
   const getMenuPosition = () => {
     const isMobile = window.innerWidth < 640;
     const viewportHeight = window.innerHeight;
-    const menuHeight = 308; // Approximate menu height
+    const menuHeight = 300; // Max height of menu
 
     if (isMobile) {
-      // On mobile with keyboard open, position.top might be the position above the textarea
-      // We need to ensure the menu appears in the visible viewport
-      let calculatedTop;
-
-      if (position.top < menuHeight) {
-        // If there's not enough space above, position from the top of viewport
-        calculatedTop = 16;
-      } else {
-        // Position above the input
-        calculatedTop = Math.max(16, Math.min(position.top, viewportHeight - 60));
-      }
-
-      console.log('Mobile positioning:', { positionTop: position.top, calculatedTop, viewportHeight });
-
+      // On mobile, use bottom positioning to always appear just above the input
+      // This works better with the mobile keyboard
       return {
         position: 'fixed',
-        top: `${calculatedTop}px`,
+        bottom: '90px', // Just above the input area
         left: '16px',
         right: '16px',
         width: 'auto',
-        maxWidth: 'calc(100vw - 32px)'
+        maxWidth: 'calc(100vw - 32px)',
+        maxHeight: '50vh' // Limit height to 50% of viewport
       };
     }
 
@@ -86,8 +75,6 @@ const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, pos
       }
     }
   }, [selectedIndex]);
-
-  console.log('CommandMenu render:', { isOpen, commandsLength: commands.length, position, menuPosition });
 
   if (!isOpen) {
     return null;
