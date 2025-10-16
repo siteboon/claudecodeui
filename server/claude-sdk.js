@@ -151,23 +151,29 @@ function extractTokenBudget(resultMessage) {
     return null;
   }
 
-  // Get the first model's usage data (same as CLI implementation)
+  // Get the first model's usage data
   const modelKey = Object.keys(resultMessage.modelUsage)[0];
   const modelData = resultMessage.modelUsage[modelKey];
 
-  if (!modelData || !modelData.contextWindow) {
+  if (!modelData) {
     return null;
   }
 
-  // Calculate total tokens used (input + output + cache)
-  const inputTokens = modelData.inputTokens || 0;
-  const outputTokens = modelData.outputTokens || 0;
-  const cacheReadTokens = modelData.cacheReadInputTokens || 0;
-  const cacheCreationTokens = modelData.cacheCreationInputTokens || 0;
+  // Use cumulative tokens if available (tracks total for the session)
+  // Otherwise fall back to per-request tokens
+  const inputTokens = modelData.cumulativeInputTokens || modelData.inputTokens || 0;
+  const outputTokens = modelData.cumulativeOutputTokens || modelData.outputTokens || 0;
+  const cacheReadTokens = modelData.cumulativeCacheReadInputTokens || modelData.cacheReadInputTokens || 0;
+  const cacheCreationTokens = modelData.cumulativeCacheCreationInputTokens || modelData.cacheCreationInputTokens || 0;
 
   // Total used = input + output + cache tokens
   const totalUsed = inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
-  const contextWindow = modelData.contextWindow;
+
+  // Use configured context window budget from environment (default 160000)
+  // This is the user's budget limit, not the model's context window
+  const contextWindow = parseInt(process.env.CONTEXT_WINDOW) || 160000;
+
+  console.log(`📊 Token calculation: input=${inputTokens}, output=${outputTokens}, cache=${cacheReadTokens + cacheCreationTokens}, total=${totalUsed}/${contextWindow}`);
 
   return {
     used: totalUsed,
@@ -387,8 +393,12 @@ async function queryClaudeSDK(command, options = {}, ws) {
         data: transformedMessage
       }));
 
+      // Log all message types for debugging
+      console.log('🔵 SDK message type:', message.type);
+
       // Extract and send token budget updates from result messages
       if (message.type === 'result') {
+        console.log('✅ Result message received, extracting token budget...');
         const tokenBudget = extractTokenBudget(message);
         if (tokenBudget) {
           console.log('📊 Token budget from modelUsage:', tokenBudget);
@@ -396,6 +406,9 @@ async function queryClaudeSDK(command, options = {}, ws) {
             type: 'token-budget',
             data: tokenBudget
           }));
+          console.log('📤 Token budget sent to WebSocket');
+        } else {
+          console.log('⚠️ extractTokenBudget returned null');
         }
       }
     }

@@ -43,7 +43,7 @@ function TokenUsagePie({ used, total }) {
           strokeLinecap="round"
         />
       </svg>
-      <span className="hidden sm:inline" title={`${used.toLocaleString()} / ${total.toLocaleString()} tokens`}>
+      <span title={`${used.toLocaleString()} / ${total.toLocaleString()} tokens`}>
         {percentage.toFixed(0)}%
       </span>
     </div>

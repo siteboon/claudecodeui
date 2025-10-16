@@ -2362,7 +2362,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     // Handle WebSocket messages
     if (messages.length > 0) {
       const latestMessage = messages[messages.length - 1];
-      
+      console.log('🔵 WebSocket message received:', latestMessage.type, latestMessage);
+
       switch (latestMessage.type) {
         case 'session-created':
           // New session created by Claude CLI - we receive the real session ID here
@@ -2380,8 +2381,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           break;
 
         case 'token-budget':
-          // Token budget is now fetched from API endpoint, ignore WebSocket data
-          console.log('📊 Ignoring WebSocket token budget (using API instead)');
+          // Token budget now fetched via API after message completion instead of WebSocket
+          // This case is kept for compatibility but does nothing
           break;
 
         case 'claude-response':
@@ -2774,6 +2775,23 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             setIsLoading(false);
             setCanAbortSession(false);
             setClaudeStatus(null);
+
+            // Fetch updated token usage after message completes
+            if (selectedProject && selectedSession?.id) {
+              const fetchUpdatedTokenUsage = async () => {
+                try {
+                  const url = `/api/projects/${selectedProject.name}/sessions/${selectedSession.id}/token-usage`;
+                  const response = await authenticatedFetch(url);
+                  if (response.ok) {
+                    const data = await response.json();
+                    setTokenBudget(data);
+                  }
+                } catch (error) {
+                  console.error('Failed to fetch updated token usage:', error);
+                }
+              };
+              fetchUpdatedTokenUsage();
+            }
           }
 
           // Always mark the completed session as inactive and not processing
@@ -3050,100 +3068,36 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, [input]);
 
-  // Poll token usage from JSONL file
+  // Load token usage when session changes (but don't poll to avoid conflicts with WebSocket)
   useEffect(() => {
-    console.log('🔍 Token usage polling effect triggered', {
-      sessionId: selectedSession?.id,
-      projectPath: selectedProject?.path
-    });
-
-    if (!selectedProject) {
-      console.log('⚠️ Skipping token usage fetch - missing project');
+    if (!selectedProject || !selectedSession?.id || selectedSession.id.startsWith('new-session-')) {
+      // Reset for new/empty sessions
+      setTokenBudget(null);
       return;
     }
 
-    // No session selected - reset to zero (new session state)
-    if (!selectedSession) {
-      console.log('🆕 No session selected, resetting token budget to zero');
-      setTokenBudget({ used: 0, total: parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 160000, percentage: 0 });
-      return;
-    }
-
-    // For new sessions without an ID yet, reset to zero
-    if (!selectedSession.id || selectedSession.id.startsWith('new-session-')) {
-      console.log('🆕 New session detected, resetting token budget to zero');
-      setTokenBudget({ used: 0, total: parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 160000, percentage: 0 });
-      return;
-    }
-
-    // Create AbortController to cancel in-flight requests when session/project changes
-    let abortController = new AbortController();
-
-    const fetchTokenUsage = async () => {
-      // Abort previous request if still in flight
-      if (abortController.signal.aborted) {
-        abortController = new AbortController();
-      }
-
-      // Capture current session/project to verify before updating state
-      const currentSessionId = selectedSession.id;
-      const currentProjectPath = selectedProject.path;
-
+    // Fetch token usage once when session loads
+    const fetchInitialTokenUsage = async () => {
       try {
-        const url = `/api/sessions/${currentSessionId}/token-usage?projectPath=${encodeURIComponent(currentProjectPath)}`;
-        console.log('📊 Fetching token usage from:', url);
+        const url = `/api/projects/${selectedProject.name}/sessions/${selectedSession.id}/token-usage`;
+        console.log('📊 Fetching initial token usage from:', url);
 
-        const response = await authenticatedFetch(url, {
-          signal: abortController.signal
-        });
-
-        // Only update state if session/project hasn't changed
-        if (currentSessionId !== selectedSession?.id || currentProjectPath !== selectedProject?.path) {
-          console.log('⚠️ Session/project changed during fetch, discarding stale data');
-          return;
-        }
+        const response = await authenticatedFetch(url);
 
         if (response.ok) {
           const data = await response.json();
-          console.log('✅ Token usage data received:', data);
+          console.log('✅ Initial token usage loaded:', data);
           setTokenBudget(data);
         } else {
-          console.error('❌ Token usage fetch failed:', response.status, await response.text());
-          // Reset to zero if fetch fails (likely new session with no JSONL yet)
-          setTokenBudget({ used: 0, total: parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 160000, percentage: 0 });
+          console.log('⚠️ No token usage data available for this session yet');
+          setTokenBudget(null);
         }
       } catch (error) {
-        // Don't log error if request was aborted (expected behavior)
-        if (error.name === 'AbortError') {
-          console.log('🚫 Token usage fetch aborted (session/project changed)');
-          return;
-        }
-        console.error('Failed to fetch token usage:', error);
-        // Reset to zero on error
-        setTokenBudget({ used: 0, total: parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 160000, percentage: 0 });
+        console.error('Failed to fetch initial token usage:', error);
       }
     };
 
-    // Fetch immediately on mount/session change
-    fetchTokenUsage();
-
-    // Then poll every 5 seconds
-    const interval = setInterval(fetchTokenUsage, 5000);
-
-    // Also fetch when page becomes visible (tab focus/refresh)
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        fetchTokenUsage();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      // Abort any in-flight requests when effect cleans up
-      abortController.abort();
-      clearInterval(interval);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
+    fetchInitialTokenUsage();
   }, [selectedSession?.id, selectedProject?.path]);
 
   const handleTranscript = useCallback((text) => {
@@ -4102,12 +4056,20 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 const isExpanded = e.target.scrollHeight > lineHeight * 2;
                 setIsTextareaExpanded(isExpanded);
               }}
-              placeholder={input.trim() ? '' : `Type / for commands, @ for files, or ask ${provider === 'cursor' ? 'Cursor' : 'Claude'} anything...`}
               disabled={isLoading}
               rows={1}
-              className="chat-input-placeholder w-full pl-12 pr-28 sm:pr-40 py-3 sm:py-4 bg-transparent rounded-2xl focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 resize-none min-h-[40px] sm:min-h-[56px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base transition-all duration-200"
+              className="chat-input-placeholder w-full pl-12 pr-20 sm:pr-40 py-2 sm:py-4 bg-transparent rounded-2xl focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 resize-none min-h-[48px] sm:min-h-[56px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base transition-all duration-200"
               style={{ height: 'auto' }}
             />
+            {/* Custom placeholder overlay that can wrap */}
+            {!input.trim() && !isInputFocused && (
+              <div
+                className="absolute inset-0 pl-12 pr-20 sm:pr-40 py-2 sm:py-4 pointer-events-none text-gray-400 dark:text-gray-500 text-sm sm:text-base"
+                style={{ whiteSpace: 'normal', wordWrap: 'break-word' }}
+              >
+                Type / for commands, @ for files, or ask {provider === 'cursor' ? 'Cursor' : 'Claude'} anything...
+              </div>
+            )}
             {/* Clear button - shown when there's text */}
             {input.trim() && (
               <button
