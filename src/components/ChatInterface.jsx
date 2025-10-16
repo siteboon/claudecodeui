@@ -4024,11 +4024,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             }}
             position={{
               top: textareaRef.current
-                ? textareaRef.current.getBoundingClientRect().top - 308
+                ? Math.max(16, textareaRef.current.getBoundingClientRect().top - 316)
                 : 0,
               left: textareaRef.current
                 ? textareaRef.current.getBoundingClientRect().left
-                : 0
+                : 16
             }}
             isOpen={showCommandMenu}
             frequentCommands={commandQuery ? [] : frequentCommands}

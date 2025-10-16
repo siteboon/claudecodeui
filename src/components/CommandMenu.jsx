@@ -14,6 +14,35 @@ const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, pos
   const menuRef = useRef(null);
   const selectedItemRef = useRef(null);
 
+  // Calculate responsive positioning
+  const getMenuPosition = () => {
+    const isMobile = window.innerWidth < 640;
+    const viewportHeight = window.innerHeight;
+
+    if (isMobile) {
+      // On mobile, position from bottom with some padding
+      return {
+        position: 'fixed',
+        bottom: '80px', // Above the input area
+        left: '16px',
+        right: '16px',
+        width: 'auto',
+        maxWidth: 'calc(100vw - 32px)'
+      };
+    }
+
+    // On desktop, use provided position but ensure it stays on screen
+    return {
+      position: 'fixed',
+      top: `${Math.max(16, Math.min(position.top, viewportHeight - 316))}px`,
+      left: `${position.left}px`,
+      width: 'min(400px, calc(100vw - 32px))',
+      maxWidth: 'calc(100vw - 32px)'
+    };
+  };
+
+  const menuPosition = getMenuPosition();
+
   // Scroll selected item into view
   useEffect(() => {
     if (selectedItemRef.current && menuRef.current) {
@@ -39,12 +68,8 @@ const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, pos
         ref={menuRef}
         className="command-menu"
         style={{
-          position: 'fixed',
-          top: `${position.top}px`,
-          left: `${position.left}px`,
+          ...menuPosition,
           maxHeight: '300px',
-          width: 'min(400px, calc(100vw - 32px))',
-          maxWidth: 'calc(100vw - 32px)',
           backgroundColor: 'white',
           border: '1px solid #e5e7eb',
           borderRadius: '8px',
@@ -115,12 +140,8 @@ const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, pos
       aria-label="Available commands"
       className="command-menu"
       style={{
-        position: 'fixed',
-        top: `${position.top}px`,
-        left: `${position.left}px`,
+        ...menuPosition,
         maxHeight: '300px',
-        width: 'min(400px, calc(100vw - 32px))',
-        maxWidth: 'calc(100vw - 32px)',
         overflowY: 'auto',
         backgroundColor: 'white',
         border: '1px solid #e5e7eb',
