@@ -1180,7 +1180,7 @@ const ImageAttachment = ({ file, onRemove, uploadProgress, error }) => {
 // - onReplaceTemporarySession: Called to replace temporary session ID with real WebSocket session ID
 //
 // This ensures uninterrupted chat experience by pausing sidebar refreshes during conversations.
-function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, messages, onFileOpen, onInputFocusChange, onSessionActive, onSessionInactive, onSessionProcessing, onSessionNotProcessing, processingSessions, onReplaceTemporarySession, onNavigateToSession, onShowSettings, autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter, onTaskClick, onShowAllTasks }) {
+function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, messages, onFileOpen, onInputFocusChange, onSessionActive, onSessionInactive, onSessionProcessing, onSessionNotProcessing, processingSessions, onReplaceTemporarySession, onNavigateToSession, onShowSettings, autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter, externalMessageUpdate, onTaskClick, onShowAllTasks }) {
   const { tasksEnabled } = useTasksSettings();
   const [input, setInput] = useState(() => {
     if (typeof window !== 'undefined' && selectedProject) {
@@ -1212,6 +1212,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [imageErrors, setImageErrors] = useState(new Map());
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
+  const inputContainerRef = useRef(null);
   const scrollContainerRef = useRef(null);
   // Streaming throttle buffers
   const streamBufferRef = useRef('');
@@ -1243,6 +1244,18 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [cursorModel, setCursorModel] = useState(() => {
     return localStorage.getItem('cursor-model') || 'gpt-5';
   });
+  // Load permission mode for the current session
+  useEffect(() => {
+    if (selectedSession?.id) {
+      const savedMode = localStorage.getItem(`permissionMode-${selectedSession.id}`);
+      if (savedMode) {
+        setPermissionMode(savedMode);
+      } else {
+        setPermissionMode('default');
+      }
+    }
+  }, [selectedSession?.id]);
+
   // When selecting a session from Sidebar, auto-switch provider to match session's origin
   useEffect(() => {
     if (selectedSession && selectedSession.__provider && selectedSession.__provider !== provider) {
@@ -2073,8 +2086,18 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           content = decodeHtmlEntities(String(msg.message.content));
         }
         
-        // Skip command messages and empty content
-        if (content && !content.startsWith('<command-name>') && !content.startsWith('[Request interrupted')) {
+        // Skip command messages, system messages, and empty content
+        const shouldSkip = !content ||
+                          content.startsWith('<command-name>') ||
+                          content.startsWith('<command-message>') ||
+                          content.startsWith('<command-args>') ||
+                          content.startsWith('<local-command-stdout>') ||
+                          content.startsWith('<system-reminder>') ||
+                          content.startsWith('Caveat:') ||
+                          content.startsWith('This session is being continued from a previous') ||
+                          content.startsWith('[Request interrupted');
+
+        if (!shouldSkip) {
           // Unescape double-escaped newlines and other escape sequences
           content = content.replace(/\\n/g, '\n')
                            .replace(/\\t/g, '\t')
@@ -2298,6 +2321,44 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     loadMessages();
   }, [selectedSession, selectedProject, loadCursorSessionMessages, scrollToBottom, isSystemSessionChange]);
 
+  // External Message Update Handler: Reload messages when external CLI modifies current session
+  // This triggers when App.jsx detects a JSONL file change for the currently-viewed session
+  // Only reloads if the session is NOT active (respecting Session Protection System)
+  useEffect(() => {
+    if (externalMessageUpdate > 0 && selectedSession && selectedProject) {
+      console.log('🔄 Reloading messages due to external CLI update');
+
+      const reloadExternalMessages = async () => {
+        try {
+          const provider = localStorage.getItem('selected-provider') || 'claude';
+
+          if (provider === 'cursor') {
+            // Reload Cursor messages from SQLite
+            const projectPath = selectedProject.fullPath || selectedProject.path;
+            const converted = await loadCursorSessionMessages(projectPath, selectedSession.id);
+            setSessionMessages([]);
+            setChatMessages(converted);
+          } else {
+            // Reload Claude messages from API/JSONL
+            const messages = await loadSessionMessages(selectedProject.name, selectedSession.id, false);
+            setSessionMessages(messages);
+            // convertedMessages will be automatically updated via useMemo
+
+            // Smart scroll behavior: only auto-scroll if user is near bottom
+            if (isNearBottom && autoScrollToBottom) {
+              setTimeout(() => scrollToBottom(), 200);
+            }
+            // If user scrolled up, preserve their position (they're reading history)
+          }
+        } catch (error) {
+          console.error('Error reloading messages from external update:', error);
+        }
+      };
+
+      reloadExternalMessages();
+    }
+  }, [externalMessageUpdate, selectedSession, selectedProject, loadCursorSessionMessages, loadSessionMessages, isNearBottom, autoScrollToBottom, scrollToBottom]);
+
   // Update chatMessages when convertedMessages changes
   useEffect(() => {
     if (sessionMessages.length > 0) {
@@ -2363,6 +2424,17 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     if (messages.length > 0) {
       const latestMessage = messages[messages.length - 1];
       console.log('🔵 WebSocket message received:', latestMessage.type, latestMessage);
+
+      // Filter messages by session ID to prevent cross-session interference
+      // Skip filtering for global messages that apply to all sessions
+      const globalMessageTypes = ['projects_updated', 'taskmaster-project-updated', 'session-created'];
+      const isGlobalMessage = globalMessageTypes.includes(latestMessage.type);
+
+      if (!isGlobalMessage && latestMessage.sessionId && latestMessage.sessionId !== currentSessionId) {
+        // Message is for a different session, ignore it
+        console.log('⏭️ Skipping message for different session:', latestMessage.sessionId, 'current:', currentSessionId);
+        return;
+      }
 
       switch (latestMessage.type) {
         case 'session-created':
@@ -3047,7 +3119,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, [handleScroll]);
 
-  // Initial textarea setup
+  // Initial textarea setup - set to 2 rows height
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -3104,20 +3176,20 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     if (text.trim()) {
       setInput(prevInput => {
         const newInput = prevInput.trim() ? `${prevInput} ${text}` : text;
-        
+
         // Update textarea height after setting new content
         setTimeout(() => {
           if (textareaRef.current) {
             textareaRef.current.style.height = 'auto';
             textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px';
-            
+
             // Check if expanded after transcript
             const lineHeight = parseInt(window.getComputedStyle(textareaRef.current).lineHeight);
             const isExpanded = textareaRef.current.scrollHeight > lineHeight * 2;
             setIsTextareaExpanded(isExpanded);
           }
         }, 0);
-        
+
         return newInput;
       });
     }
@@ -3333,14 +3405,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     setUploadingImages(new Map());
     setImageErrors(new Map());
     setIsTextareaExpanded(false);
-    
+
     // Reset textarea height
-
-
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-    
+
     // Clear the saved draft since message was sent
     if (selectedProject) {
       safeLocalStorage.removeItem(`draft_input_${selectedProject.name}`);
@@ -3463,7 +3533,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       const modes = ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
       const currentIndex = modes.indexOf(permissionMode);
       const nextIndex = (currentIndex + 1) % modes.length;
-      setPermissionMode(modes[nextIndex]);
+      const newMode = modes[nextIndex];
+      setPermissionMode(newMode);
+
+      // Save mode for this session
+      if (selectedSession?.id) {
+        localStorage.setItem(`permissionMode-${selectedSession.id}`, newMode);
+      }
       return;
     }
     
@@ -3620,7 +3696,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     const modes = ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
     const currentIndex = modes.indexOf(permissionMode);
     const nextIndex = (currentIndex + 1) % modes.length;
-    setPermissionMode(modes[nextIndex]);
+    const newMode = modes[nextIndex];
+    setPermissionMode(newMode);
+
+    // Save mode for this session
+    if (selectedSession?.id) {
+      localStorage.setItem(`permissionMode-${selectedSession.id}`, newMode);
+    }
   };
 
   // Don't render if no project is selected
@@ -3893,7 +3975,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               />
               </div>
         {/* Permission Mode Selector with scroll to bottom button - Above input, clickable for mobile */}
-        <div className="max-w-4xl mx-auto mb-3">
+        <div ref={inputContainerRef} className="max-w-4xl mx-auto mb-3">
           <div className="flex items-center justify-center gap-3">
             <button
               type="button"
@@ -4028,13 +4110,16 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 : 0,
               left: textareaRef.current
                 ? textareaRef.current.getBoundingClientRect().left
-                : 16
+                : 16,
+              bottom: inputContainerRef.current
+                ? window.innerHeight - inputContainerRef.current.getBoundingClientRect().bottom - 5
+                : 90
             }}
             isOpen={showCommandMenu}
             frequentCommands={commandQuery ? [] : frequentCommands}
           />
 
-          <div {...getRootProps()} className={`relative bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-600 focus-within:ring-2 focus-within:ring-blue-500 dark:focus-within:ring-blue-500 focus-within:border-blue-500 transition-all duration-200 ${isTextareaExpanded ? 'chat-input-expanded' : ''}`}>
+          <div {...getRootProps()} className={`relative bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-600 focus-within:ring-2 focus-within:ring-blue-500 dark:focus-within:ring-blue-500 focus-within:border-blue-500 transition-all duration-200 overflow-hidden ${isTextareaExpanded ? 'chat-input-expanded' : ''}`}>
             <input {...getInputProps()} />
             <textarea
               ref={textareaRef}
@@ -4050,21 +4135,20 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 e.target.style.height = 'auto';
                 e.target.style.height = e.target.scrollHeight + 'px';
                 setCursorPosition(e.target.selectionStart);
-                
+
                 // Check if textarea is expanded (more than 2 lines worth of height)
                 const lineHeight = parseInt(window.getComputedStyle(e.target).lineHeight);
                 const isExpanded = e.target.scrollHeight > lineHeight * 2;
                 setIsTextareaExpanded(isExpanded);
               }}
               disabled={isLoading}
-              rows={1}
-              className="chat-input-placeholder w-full pl-12 pr-20 sm:pr-40 py-2 sm:py-4 bg-transparent rounded-2xl focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 resize-none min-h-[48px] sm:min-h-[56px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base transition-all duration-200"
-              style={{ height: 'auto' }}
+              className="chat-input-placeholder block w-full pl-12 pr-20 sm:pr-40 py-1.5 sm:py-4 bg-transparent rounded-2xl focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 resize-none min-h-[50px] sm:min-h-[80px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base leading-[21px] sm:leading-6 transition-all duration-200"
+              style={{ height: '50px' }}
             />
             {/* Custom placeholder overlay that can wrap */}
             {!input.trim() && !isInputFocused && (
               <div
-                className="absolute inset-0 pl-12 pr-20 sm:pr-40 py-2 sm:py-4 pointer-events-none text-gray-400 dark:text-gray-500 text-sm sm:text-base"
+                className="absolute inset-0 pl-12 pr-20 sm:pr-40 py-1.5 sm:py-4 pointer-events-none text-gray-400 dark:text-gray-500 text-sm sm:text-base"
                 style={{ whiteSpace: 'normal', wordWrap: 'break-word' }}
               >
                 Type / for commands, @ for files, or ask {provider === 'cursor' ? 'Cursor' : 'Claude'} anything...
@@ -4116,7 +4200,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             <button
               type="button"
               onClick={open}
-              className="absolute left-2 bottom-4 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              className="absolute left-2 top-1/2 transform -translate-y-1/2 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
               title="Attach images"
             >
               <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -1029,7 +1029,7 @@ function Sidebar({
                                       {project.displayName}
                                     </h3>
                                     {tasksEnabled && (
-                                      <TaskIndicator 
+                                      <TaskIndicator
                                         status={(() => {
                                           const projectConfigured = project.taskmaster?.hasTaskmaster;
                                           const mcpConfigured = mcpServerStatus?.hasMCPServer && mcpServerStatus?.isConfigured;
@@ -1037,9 +1037,9 @@ function Sidebar({
                                           if (projectConfigured) return 'taskmaster-only';
                                           if (mcpConfigured) return 'mcp-only';
                                           return 'not-configured';
-                                        })()} 
+                                        })()}
                                         size="xs"
-                                        className="flex-shrink-0 ml-2"
+                                        className="hidden md:inline-flex flex-shrink-0 ml-2"
                                       />
                                     )}
                                   </div>

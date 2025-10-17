@@ -21,11 +21,13 @@ const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, pos
     const menuHeight = 300; // Max height of menu
 
     if (isMobile) {
-      // On mobile, use bottom positioning to always appear just above the input
-      // This works better with the mobile keyboard
+      // On mobile, calculate bottom position dynamically to appear above the input
+      // Account for the textarea's position from the bottom of viewport
+      const inputBottom = position.bottom || 90; // Use provided bottom or default
+
       return {
         position: 'fixed',
-        bottom: '90px', // Just above the input area
+        bottom: `${inputBottom + 8}px`, // 8px gap above the input container
         left: '16px',
         right: '16px',
         width: 'auto',

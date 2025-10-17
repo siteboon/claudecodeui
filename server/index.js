@@ -1214,6 +1214,11 @@ app.get('/api/projects/:projectName/sessions/:sessionId/token-usage', authentica
 
 // Serve React app for all other routes (excluding static files)
 app.get('*', (req, res) => {
+  // Skip requests for static assets (files with extensions)
+  if (path.extname(req.path)) {
+    return res.status(404).send('Not found');
+  }
+
   // Only serve index.html for HTML routes, not for static assets
   // Static assets should already be handled by express.static middleware above
   if (process.env.NODE_ENV === 'production') {

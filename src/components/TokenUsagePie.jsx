@@ -44,7 +44,7 @@ function TokenUsagePie({ used, total }) {
         />
       </svg>
       <span title={`${used.toLocaleString()} / ${total.toLocaleString()} tokens`}>
-        {percentage.toFixed(0)}%
+        {percentage.toFixed(1)}%
       </span>
     </div>
   );

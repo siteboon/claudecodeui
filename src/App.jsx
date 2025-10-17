@@ -70,6 +70,10 @@ function AppContent() {
   // This allows us to restore the "Thinking..." banner when switching back to a processing session
   const [processingSessions, setProcessingSessions] = useState(new Set());
 
+  // External Message Update Trigger: Incremented when external CLI modifies current session's JSONL
+  // Triggers ChatInterface to reload messages without switching sessions
+  const [externalMessageUpdate, setExternalMessageUpdate] = useState(0);
+
   const { ws, sendMessage, messages } = useWebSocketContext();
   
   // Detect if running as PWA
@@ -164,7 +168,32 @@ function AppContent() {
       const latestMessage = messages[messages.length - 1];
       
       if (latestMessage.type === 'projects_updated') {
-        
+
+        // External Session Update Detection: Check if the changed file is the current session's JSONL
+        // If so, and the session is not active, trigger a message reload in ChatInterface
+        if (latestMessage.changedFile && selectedSession && selectedProject) {
+          // Extract session ID from changedFile (format: "project-name/session-id.jsonl")
+          const changedFileParts = latestMessage.changedFile.split('/');
+          if (changedFileParts.length >= 2) {
+            const filename = changedFileParts[changedFileParts.length - 1];
+            const changedSessionId = filename.replace('.jsonl', '');
+
+            // Check if this is the currently-selected session
+            if (changedSessionId === selectedSession.id) {
+              const isSessionActive = activeSessions.has(selectedSession.id);
+
+              if (!isSessionActive) {
+                // Session is not active - safe to reload messages
+                console.log('🔄 External CLI update detected for current session:', changedSessionId);
+                setExternalMessageUpdate(prev => prev + 1);
+              } else {
+                // Session is active - skip reload to avoid interrupting user
+                console.log('⏸️ External update paused - session is active:', changedSessionId);
+              }
+            }
+          }
+        }
+
         // Session Protection Logic: Allow additions but prevent changes during active conversations
         // This allows new sessions/projects to appear in sidebar while protecting active chat messages
         // We check for two types of active sessions:
@@ -694,6 +723,7 @@ function AppContent() {
           showThinking={showThinking}
           autoScrollToBottom={autoScrollToBottom}
           sendByCtrlEnter={sendByCtrlEnter}
+          externalMessageUpdate={externalMessageUpdate}
         />
       </div>
 
