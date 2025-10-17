@@ -26,9 +26,23 @@ import NextTaskBanner from './NextTaskBanner.jsx';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
 
 import ClaudeStatus from './ClaudeStatus';
+import TokenUsagePie from './TokenUsagePie';
 import { MicButton } from './MicButton.jsx';
 import { api, authenticatedFetch } from '../utils/api';
+import Fuse from 'fuse.js';
+import CommandMenu from './CommandMenu';
 
+
+// Helper function to decode HTML entities in text
+function decodeHtmlEntities(text) {
+  if (!text) return text;
+  return text
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&');
+}
 
 // Format "Claude AI usage limit reached|<epoch>" into a local time string
 function formatUsageLimitText(text) {
@@ -156,7 +170,7 @@ const safeLocalStorage = {
 };
 
 // Memoized message component to prevent unnecessary re-renders
-const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFileOpen, onShowSettings, autoExpandTools, showRawParameters }) => {
+const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFileOpen, onShowSettings, autoExpandTools, showRawParameters, showThinking }) => {
   const isGrouped = prevMessage && prevMessage.type === message.type &&
                    ((prevMessage.type === 'assistant') ||
                     (prevMessage.type === 'user') ||
@@ -1053,7 +1067,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
             ) : (
               <div className="text-sm text-gray-700 dark:text-gray-300">
                 {/* Thinking accordion for reasoning */}
-                {message.reasoning && (
+                {showThinking && message.reasoning && (
                   <details className="mb-3">
                     <summary className="cursor-pointer text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 font-medium">
                       💭 Thinking...
@@ -1166,7 +1180,7 @@ const ImageAttachment = ({ file, onRemove, uploadProgress, error }) => {
 // - onReplaceTemporarySession: Called to replace temporary session ID with real WebSocket session ID
 //
 // This ensures uninterrupted chat experience by pausing sidebar refreshes during conversations.
-function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, messages, onFileOpen, onInputFocusChange, onSessionActive, onSessionInactive, onReplaceTemporarySession, onNavigateToSession, onShowSettings, autoExpandTools, showRawParameters, autoScrollToBottom, sendByCtrlEnter, onTaskClick, onShowAllTasks }) {
+function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, messages, onFileOpen, onInputFocusChange, onSessionActive, onSessionInactive, onSessionProcessing, onSessionNotProcessing, processingSessions, onReplaceTemporarySession, onNavigateToSession, onShowSettings, autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter, externalMessageUpdate, onTaskClick, onShowAllTasks }) {
   const { tasksEnabled } = useTasksSettings();
   const [input, setInput] = useState(() => {
     if (typeof window !== 'undefined' && selectedProject) {
@@ -1198,10 +1212,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [imageErrors, setImageErrors] = useState(new Map());
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
+  const inputContainerRef = useRef(null);
   const scrollContainerRef = useRef(null);
   // Streaming throttle buffers
   const streamBufferRef = useRef('');
   const streamTimerRef = useRef(null);
+  const commandQueryTimerRef = useRef(null);
   const [debouncedInput, setDebouncedInput] = useState('');
   const [showFileDropdown, setShowFileDropdown] = useState(false);
   const [fileList, setFileList] = useState([]);
@@ -1215,7 +1231,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [showCommandMenu, setShowCommandMenu] = useState(false);
   const [slashCommands, setSlashCommands] = useState([]);
   const [filteredCommands, setFilteredCommands] = useState([]);
+  const [commandQuery, setCommandQuery] = useState('');
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
+  const [tokenBudget, setTokenBudget] = useState(null);
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(-1);
   const [slashPosition, setSlashPosition] = useState(-1);
   const [visibleMessageCount, setVisibleMessageCount] = useState(100);
@@ -1226,6 +1244,18 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [cursorModel, setCursorModel] = useState(() => {
     return localStorage.getItem('cursor-model') || 'gpt-5';
   });
+  // Load permission mode for the current session
+  useEffect(() => {
+    if (selectedSession?.id) {
+      const savedMode = localStorage.getItem(`permissionMode-${selectedSession.id}`);
+      if (savedMode) {
+        setPermissionMode(savedMode);
+      } else {
+        setPermissionMode('default');
+      }
+    }
+  }, [selectedSession?.id]);
+
   // When selecting a session from Sidebar, auto-switch provider to match session's origin
   useEffect(() => {
     if (selectedSession && selectedSession.__provider && selectedSession.__provider !== provider) {
@@ -1262,6 +1292,342 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       .catch(err => console.error('Error loading Cursor config:', err));
     }
   }, [provider]);
+
+  // Fetch slash commands on mount and when project changes
+  useEffect(() => {
+    const fetchCommands = async () => {
+      if (!selectedProject) return;
+
+      try {
+        const response = await authenticatedFetch('/api/commands/list', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            projectPath: selectedProject.path
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch commands');
+        }
+
+        const data = await response.json();
+
+        // Combine built-in and custom commands
+        const allCommands = [
+          ...(data.builtIn || []).map(cmd => ({ ...cmd, type: 'built-in' })),
+          ...(data.custom || []).map(cmd => ({ ...cmd, type: 'custom' }))
+        ];
+
+        setSlashCommands(allCommands);
+
+        // Load command history from localStorage
+        const historyKey = `command_history_${selectedProject.name}`;
+        const history = safeLocalStorage.getItem(historyKey);
+        if (history) {
+          try {
+            const parsedHistory = JSON.parse(history);
+            // Sort commands by usage frequency
+            const sortedCommands = allCommands.sort((a, b) => {
+              const aCount = parsedHistory[a.name] || 0;
+              const bCount = parsedHistory[b.name] || 0;
+              return bCount - aCount;
+            });
+            setSlashCommands(sortedCommands);
+          } catch (e) {
+            console.error('Error parsing command history:', e);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching slash commands:', error);
+        setSlashCommands([]);
+      }
+    };
+
+    fetchCommands();
+  }, [selectedProject]);
+
+  // Create Fuse instance for fuzzy search
+  const fuse = useMemo(() => {
+    if (!slashCommands.length) return null;
+
+    return new Fuse(slashCommands, {
+      keys: [
+        { name: 'name', weight: 2 },
+        { name: 'description', weight: 1 }
+      ],
+      threshold: 0.4,
+      includeScore: true,
+      minMatchCharLength: 1
+    });
+  }, [slashCommands]);
+
+  // Filter commands based on query
+  useEffect(() => {
+    if (!commandQuery) {
+      setFilteredCommands(slashCommands);
+      return;
+    }
+
+    if (!fuse) {
+      setFilteredCommands([]);
+      return;
+    }
+
+    const results = fuse.search(commandQuery);
+    setFilteredCommands(results.map(result => result.item));
+  }, [commandQuery, slashCommands, fuse]);
+
+  // Calculate frequently used commands
+  const frequentCommands = useMemo(() => {
+    if (!selectedProject || slashCommands.length === 0) return [];
+
+    const historyKey = `command_history_${selectedProject.name}`;
+    const history = safeLocalStorage.getItem(historyKey);
+
+    if (!history) return [];
+
+    try {
+      const parsedHistory = JSON.parse(history);
+
+      // Sort commands by usage count
+      const commandsWithUsage = slashCommands
+        .map(cmd => ({
+          ...cmd,
+          usageCount: parsedHistory[cmd.name] || 0
+        }))
+        .filter(cmd => cmd.usageCount > 0)
+        .sort((a, b) => b.usageCount - a.usageCount)
+        .slice(0, 5); // Top 5 most used
+
+      return commandsWithUsage;
+    } catch (e) {
+      console.error('Error parsing command history:', e);
+      return [];
+    }
+  }, [selectedProject, slashCommands]);
+
+  // Command selection callback with history tracking
+  const handleCommandSelect = useCallback((command, index, isHover) => {
+    if (!command || !selectedProject) return;
+
+    // If hovering, just update the selected index
+    if (isHover) {
+      setSelectedCommandIndex(index);
+      return;
+    }
+
+    // Update command history
+    const historyKey = `command_history_${selectedProject.name}`;
+    const history = safeLocalStorage.getItem(historyKey);
+    let parsedHistory = {};
+
+    try {
+      parsedHistory = history ? JSON.parse(history) : {};
+    } catch (e) {
+      console.error('Error parsing command history:', e);
+    }
+
+    parsedHistory[command.name] = (parsedHistory[command.name] || 0) + 1;
+    safeLocalStorage.setItem(historyKey, JSON.stringify(parsedHistory));
+
+    // Execute the command
+    executeCommand(command);
+  }, [selectedProject]);
+
+  // Execute a command
+  const executeCommand = useCallback(async (command) => {
+    if (!command || !selectedProject) return;
+
+    try {
+      // Parse command and arguments from current input
+      const commandMatch = input.match(new RegExp(`${command.name}\\s*(.*)`));
+      const args = commandMatch && commandMatch[1]
+        ? commandMatch[1].trim().split(/\s+/)
+        : [];
+
+      // Prepare context for command execution
+      const context = {
+        projectPath: selectedProject.path,
+        projectName: selectedProject.name,
+        sessionId: currentSessionId,
+        provider,
+        model: provider === 'cursor' ? cursorModel : 'claude-sonnet-4.5',
+        tokenUsage: tokenBudget
+      };
+
+      // Call the execute endpoint
+      const response = await authenticatedFetch('/api/commands/execute', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          commandName: command.name,
+          commandPath: command.path,
+          args,
+          context
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to execute command');
+      }
+
+      const result = await response.json();
+
+      // Handle built-in commands
+      if (result.type === 'builtin') {
+        handleBuiltInCommand(result);
+      } else if (result.type === 'custom') {
+        // Handle custom commands - inject as system message
+        await handleCustomCommand(result, args);
+      }
+
+      // Clear the input after successful execution
+      setInput('');
+      setShowCommandMenu(false);
+      setSlashPosition(-1);
+      setCommandQuery('');
+      setSelectedCommandIndex(-1);
+
+    } catch (error) {
+      console.error('Error executing command:', error);
+      // Show error message to user
+      setChatMessages(prev => [...prev, {
+        role: 'assistant',
+        content: `Error executing command: ${error.message}`,
+        timestamp: Date.now()
+      }]);
+    }
+  }, [input, selectedProject, currentSessionId, provider, cursorModel, tokenBudget]);
+
+  // Handle built-in command actions
+  const handleBuiltInCommand = useCallback((result) => {
+    const { action, data } = result;
+
+    switch (action) {
+      case 'clear':
+        // Clear conversation history
+        setChatMessages([]);
+        setSessionMessages([]);
+        break;
+
+      case 'help':
+        // Show help content
+        setChatMessages(prev => [...prev, {
+          role: 'assistant',
+          content: data.content,
+          timestamp: Date.now()
+        }]);
+        break;
+
+      case 'model':
+        // Show model information
+        setChatMessages(prev => [...prev, {
+          role: 'assistant',
+          content: `**Current Model**: ${data.current.model}\n\n**Available Models**:\n\nClaude: ${data.available.claude.join(', ')}\n\nCursor: ${data.available.cursor.join(', ')}`,
+          timestamp: Date.now()
+        }]);
+        break;
+
+      case 'cost': {
+        const costMessage = `**Token Usage**: ${data.tokenUsage.used.toLocaleString()} / ${data.tokenUsage.total.toLocaleString()} (${data.tokenUsage.percentage}%)\n\n**Estimated Cost**:\n- Input: $${data.cost.input}\n- Output: $${data.cost.output}\n- **Total**: $${data.cost.total}\n\n**Model**: ${data.model}`;
+        setChatMessages(prev => [...prev, { role: 'assistant', content: costMessage, timestamp: Date.now() }]);
+        break;
+      }
+
+      case 'status': {
+        const statusMessage = `**System Status**\n\n- Version: ${data.version}\n- Uptime: ${data.uptime}\n- Model: ${data.model}\n- Provider: ${data.provider}\n- Node.js: ${data.nodeVersion}\n- Platform: ${data.platform}`;
+        setChatMessages(prev => [...prev, { role: 'assistant', content: statusMessage, timestamp: Date.now() }]);
+        break;
+      }
+      case 'memory':
+        // Show memory file info
+        if (data.error) {
+          setChatMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `⚠️ ${data.message}`,
+            timestamp: Date.now()
+          }]);
+        } else {
+          setChatMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `📝 ${data.message}\n\nPath: \`${data.path}\``,
+            timestamp: Date.now()
+          }]);
+          // Optionally open file in editor
+          if (data.exists && onFileOpen) {
+            onFileOpen(data.path);
+          }
+        }
+        break;
+
+      case 'config':
+        // Open settings
+        if (onShowSettings) {
+          onShowSettings();
+        }
+        break;
+
+      case 'rewind':
+        // Rewind conversation
+        if (data.error) {
+          setChatMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `⚠️ ${data.message}`,
+            timestamp: Date.now()
+          }]);
+        } else {
+          // Remove last N messages
+          setChatMessages(prev => prev.slice(0, -data.steps * 2)); // Remove user + assistant pairs
+          setChatMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `⏪ ${data.message}`,
+            timestamp: Date.now()
+          }]);
+        }
+        break;
+
+      default:
+        console.warn('Unknown built-in command action:', action);
+    }
+  }, [onFileOpen, onShowSettings]);
+
+  // Handle custom command execution
+  const handleCustomCommand = useCallback(async (result, args) => {
+    const { content, hasBashCommands, hasFileIncludes } = result;
+
+    // Show confirmation for bash commands
+    if (hasBashCommands) {
+      const confirmed = window.confirm(
+        'This command contains bash commands that will be executed. Do you want to proceed?'
+      );
+      if (!confirmed) {
+        setChatMessages(prev => [...prev, {
+          role: 'assistant',
+          content: '❌ Command execution cancelled',
+          timestamp: Date.now()
+        }]);
+        return;
+      }
+    }
+
+    // Inject the processed command content as user message
+    const commandMessage = {
+      role: 'user',
+      content: content,
+      timestamp: Date.now(),
+      isCommand: true
+    };
+
+    setChatMessages(prev => [...prev, commandMessage]);
+
+    // Automatically send to Claude for processing
+    // The command content will be included in the next API call
+  }, []);
 
 
   // Memoized diff calculation to prevent recalculating on every render
@@ -1409,10 +1775,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 
                 for (const part of content.content) {
                   if (part?.type === 'text' && part?.text) {
-                    textParts.push(part.text);
+                    textParts.push(decodeHtmlEntities(part.text));
                   } else if (part?.type === 'reasoning' && part?.text) {
                     // Handle reasoning type - will be displayed in a collapsible section
-                    reasoningText = part.text;
+                    reasoningText = decodeHtmlEntities(part.text);
                   } else if (part?.type === 'tool-call') {
                     // First, add any text/reasoning we've collected so far as a message
                     if (textParts.length > 0 || reasoningText) {
@@ -1708,20 +2074,34 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           
           for (const part of msg.message.content) {
             if (part.type === 'text') {
-              textParts.push(part.text);
+              textParts.push(decodeHtmlEntities(part.text));
             }
             // Skip tool_result parts - they're handled in the first pass
           }
           
           content = textParts.join('\n');
         } else if (typeof msg.message.content === 'string') {
-          content = msg.message.content;
+          content = decodeHtmlEntities(msg.message.content);
         } else {
-          content = String(msg.message.content);
+          content = decodeHtmlEntities(String(msg.message.content));
         }
         
-        // Skip command messages and empty content
-        if (content && !content.startsWith('<command-name>') && !content.startsWith('[Request interrupted')) {
+        // Skip command messages, system messages, and empty content
+        const shouldSkip = !content ||
+                          content.startsWith('<command-name>') ||
+                          content.startsWith('<command-message>') ||
+                          content.startsWith('<command-args>') ||
+                          content.startsWith('<local-command-stdout>') ||
+                          content.startsWith('<system-reminder>') ||
+                          content.startsWith('Caveat:') ||
+                          content.startsWith('This session is being continued from a previous') ||
+                          content.startsWith('[Request interrupted');
+
+        if (!shouldSkip) {
+          // Unescape double-escaped newlines and other escape sequences
+          content = content.replace(/\\n/g, '\n')
+                           .replace(/\\t/g, '\t')
+                           .replace(/\\r/g, '\r');
           converted.push({
             type: messageType,
             content: content,
@@ -1735,9 +2115,16 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         if (Array.isArray(msg.message.content)) {
           for (const part of msg.message.content) {
             if (part.type === 'text') {
+              // Unescape double-escaped newlines and other escape sequences
+              let text = part.text;
+              if (typeof text === 'string') {
+                text = text.replace(/\\n/g, '\n')
+                           .replace(/\\t/g, '\t')
+                           .replace(/\\r/g, '\r');
+              }
               converted.push({
                 type: 'assistant',
-                content: part.text,
+                content: text,
                 timestamp: msg.timestamp || new Date().toISOString()
               });
             } else if (part.type === 'tool_use') {
@@ -1758,9 +2145,14 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             }
           }
         } else if (typeof msg.message.content === 'string') {
+          // Unescape double-escaped newlines and other escape sequences
+          let text = msg.message.content;
+          text = text.replace(/\\n/g, '\n')
+                     .replace(/\\t/g, '\t')
+                     .replace(/\\r/g, '\r');
           converted.push({
             type: 'assistant',
-            content: msg.message.content,
+            content: text,
             timestamp: msg.timestamp || new Date().toISOString()
           });
         }
@@ -1774,6 +2166,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const convertedMessages = useMemo(() => {
     return convertSessionMessages(sessionMessages);
   }, [sessionMessages]);
+
+  // Note: Token budgets are not saved to JSONL files, only sent via WebSocket
+  // So we don't try to extract them from loaded sessionMessages
 
   // Define scroll functions early to avoid hoisting issues in useEffect dependencies
   const scrollToBottom = useCallback(() => {
@@ -1832,11 +2227,45 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     const loadMessages = async () => {
       if (selectedSession && selectedProject) {
         const provider = localStorage.getItem('selected-provider') || 'claude';
-        
-        // Reset pagination state when switching sessions
-        setMessagesOffset(0);
-        setHasMoreMessages(false);
-        setTotalMessages(0);
+
+        // Only reset state if the session ID actually changed (not initial load)
+        const sessionChanged = currentSessionId !== null && currentSessionId !== selectedSession.id;
+
+        if (sessionChanged) {
+          // Reset pagination state when switching sessions
+          setMessagesOffset(0);
+          setHasMoreMessages(false);
+          setTotalMessages(0);
+          // Reset token budget when switching sessions
+          // It will update when user sends a message and receives new budget from WebSocket
+          setTokenBudget(null);
+          // Reset loading state when switching sessions (unless the new session is processing)
+          // The restore effect will set it back to true if needed
+          setIsLoading(false);
+
+          // Check if the session is currently processing on the backend
+          if (ws && sendMessage) {
+            sendMessage({
+              type: 'check-session-status',
+              sessionId: selectedSession.id,
+              provider
+            });
+          }
+        } else if (currentSessionId === null) {
+          // Initial load - reset pagination but not token budget
+          setMessagesOffset(0);
+          setHasMoreMessages(false);
+          setTotalMessages(0);
+
+          // Check if the session is currently processing on the backend
+          if (ws && sendMessage) {
+            sendMessage({
+              type: 'check-session-status',
+              sessionId: selectedSession.id,
+              provider
+            });
+          }
+        }
         
         if (provider === 'cursor') {
           // For Cursor, set the session ID for resuming
@@ -1892,6 +2321,44 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     loadMessages();
   }, [selectedSession, selectedProject, loadCursorSessionMessages, scrollToBottom, isSystemSessionChange]);
 
+  // External Message Update Handler: Reload messages when external CLI modifies current session
+  // This triggers when App.jsx detects a JSONL file change for the currently-viewed session
+  // Only reloads if the session is NOT active (respecting Session Protection System)
+  useEffect(() => {
+    if (externalMessageUpdate > 0 && selectedSession && selectedProject) {
+      console.log('🔄 Reloading messages due to external CLI update');
+
+      const reloadExternalMessages = async () => {
+        try {
+          const provider = localStorage.getItem('selected-provider') || 'claude';
+
+          if (provider === 'cursor') {
+            // Reload Cursor messages from SQLite
+            const projectPath = selectedProject.fullPath || selectedProject.path;
+            const converted = await loadCursorSessionMessages(projectPath, selectedSession.id);
+            setSessionMessages([]);
+            setChatMessages(converted);
+          } else {
+            // Reload Claude messages from API/JSONL
+            const messages = await loadSessionMessages(selectedProject.name, selectedSession.id, false);
+            setSessionMessages(messages);
+            // convertedMessages will be automatically updated via useMemo
+
+            // Smart scroll behavior: only auto-scroll if user is near bottom
+            if (isNearBottom && autoScrollToBottom) {
+              setTimeout(() => scrollToBottom(), 200);
+            }
+            // If user scrolled up, preserve their position (they're reading history)
+          }
+        } catch (error) {
+          console.error('Error reloading messages from external update:', error);
+        }
+      };
+
+      reloadExternalMessages();
+    }
+  }, [externalMessageUpdate, selectedSession, selectedProject, loadCursorSessionMessages, loadSessionMessages, isNearBottom, autoScrollToBottom, scrollToBottom]);
+
   // Update chatMessages when convertedMessages changes
   useEffect(() => {
     if (sessionMessages.length > 0) {
@@ -1933,12 +2400,42 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, [selectedProject?.name]);
 
+  // Track processing state: notify parent when isLoading becomes true
+  // Note: onSessionNotProcessing is called directly in completion message handlers
+  useEffect(() => {
+    if (currentSessionId && isLoading && onSessionProcessing) {
+      onSessionProcessing(currentSessionId);
+    }
+  }, [isLoading, currentSessionId, onSessionProcessing]);
+
+  // Restore processing state when switching to a processing session
+  useEffect(() => {
+    if (currentSessionId && processingSessions) {
+      const shouldBeProcessing = processingSessions.has(currentSessionId);
+      if (shouldBeProcessing && !isLoading) {
+        setIsLoading(true);
+        setCanAbortSession(true); // Assume processing sessions can be aborted
+      }
+    }
+  }, [currentSessionId, processingSessions]);
 
   useEffect(() => {
     // Handle WebSocket messages
     if (messages.length > 0) {
       const latestMessage = messages[messages.length - 1];
-      
+      console.log('🔵 WebSocket message received:', latestMessage.type, latestMessage);
+
+      // Filter messages by session ID to prevent cross-session interference
+      // Skip filtering for global messages that apply to all sessions
+      const globalMessageTypes = ['projects_updated', 'taskmaster-project-updated', 'session-created'];
+      const isGlobalMessage = globalMessageTypes.includes(latestMessage.type);
+
+      if (!isGlobalMessage && latestMessage.sessionId && latestMessage.sessionId !== currentSessionId) {
+        // Message is for a different session, ignore it
+        console.log('⏭️ Skipping message for different session:', latestMessage.sessionId, 'current:', currentSessionId);
+        return;
+      }
+
       switch (latestMessage.type) {
         case 'session-created':
           // New session created by Claude CLI - we receive the real session ID here
@@ -1954,15 +2451,21 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             }
           }
           break;
-          
+
+        case 'token-budget':
+          // Token budget now fetched via API after message completion instead of WebSocket
+          // This case is kept for compatibility but does nothing
+          break;
+
         case 'claude-response':
           const messageData = latestMessage.data.message || latestMessage.data;
           
           // Handle Cursor streaming format (content_block_delta / content_block_stop)
           if (messageData && typeof messageData === 'object' && messageData.type) {
             if (messageData.type === 'content_block_delta' && messageData.delta?.text) {
-              // Buffer deltas and flush periodically to reduce rerenders
-              streamBufferRef.current += messageData.delta.text;
+              // Decode HTML entities and buffer deltas
+              const decodedText = decodeHtmlEntities(messageData.delta.text);
+              streamBufferRef.current += decodedText;
               if (!streamTimerRef.current) {
                 streamTimerRef.current = setTimeout(() => {
                   const chunk = streamBufferRef.current;
@@ -2090,9 +2593,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   toolResult: null // Will be updated when result comes in
                 }]);
               } else if (part.type === 'text' && part.text?.trim()) {
-                // Normalize usage limit message to local time
-                let content = formatUsageLimitText(part.text);
-                
+                // Decode HTML entities and normalize usage limit message to local time
+                let content = decodeHtmlEntities(part.text);
+                content = formatUsageLimitText(content);
+
                 // Add regular text message
                 setChatMessages(prev => [...prev, {
                   type: 'assistant',
@@ -2102,9 +2606,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               }
             }
           } else if (typeof messageData.content === 'string' && messageData.content.trim()) {
-            // Normalize usage limit message to local time
-            let content = formatUsageLimitText(messageData.content);
-            
+            // Decode HTML entities and normalize usage limit message to local time
+            let content = decodeHtmlEntities(messageData.content);
+            content = formatUsageLimitText(content);
+
             // Add regular text message
             setChatMessages(prev => [...prev, {
               type: 'assistant',
@@ -2237,50 +2742,64 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           break;
           
         case 'cursor-result':
-          // Handle Cursor completion and final result text
-          setIsLoading(false);
-          setCanAbortSession(false);
-          setClaudeStatus(null);
-          try {
-            const r = latestMessage.data || {};
-            const textResult = typeof r.result === 'string' ? r.result : '';
-            // Flush buffered deltas before finalizing
-            if (streamTimerRef.current) {
-              clearTimeout(streamTimerRef.current);
-              streamTimerRef.current = null;
-            }
-            const pendingChunk = streamBufferRef.current;
-            streamBufferRef.current = '';
+          // Get session ID from message or fall back to current session
+          const cursorCompletedSessionId = latestMessage.sessionId || currentSessionId;
 
-            setChatMessages(prev => {
-              const updated = [...prev];
-              // Try to consolidate into the last streaming assistant message
-              const last = updated[updated.length - 1];
-              if (last && last.type === 'assistant' && !last.isToolUse && last.isStreaming) {
-                // Replace streaming content with the final content so deltas don't remain
-                const finalContent = textResult && textResult.trim() ? textResult : (last.content || '') + (pendingChunk || '');
-                last.content = finalContent;
-                last.isStreaming = false;
-              } else if (textResult && textResult.trim()) {
-                updated.push({ type: r.is_error ? 'error' : 'assistant', content: textResult, timestamp: new Date(), isStreaming: false });
+          // Only update UI state if this is the current session
+          if (cursorCompletedSessionId === currentSessionId) {
+            setIsLoading(false);
+            setCanAbortSession(false);
+            setClaudeStatus(null);
+          }
+
+          // Always mark the completed session as inactive and not processing
+          if (cursorCompletedSessionId) {
+            if (onSessionInactive) {
+              onSessionInactive(cursorCompletedSessionId);
+            }
+            if (onSessionNotProcessing) {
+              onSessionNotProcessing(cursorCompletedSessionId);
+            }
+          }
+
+          // Only process result for current session
+          if (cursorCompletedSessionId === currentSessionId) {
+            try {
+              const r = latestMessage.data || {};
+              const textResult = typeof r.result === 'string' ? r.result : '';
+              // Flush buffered deltas before finalizing
+              if (streamTimerRef.current) {
+                clearTimeout(streamTimerRef.current);
+                streamTimerRef.current = null;
               }
-              return updated;
-            });
-          } catch (e) {
-            console.warn('Error handling cursor-result message:', e);
+              const pendingChunk = streamBufferRef.current;
+              streamBufferRef.current = '';
+
+              setChatMessages(prev => {
+                const updated = [...prev];
+                // Try to consolidate into the last streaming assistant message
+                const last = updated[updated.length - 1];
+                if (last && last.type === 'assistant' && !last.isToolUse && last.isStreaming) {
+                  // Replace streaming content with the final content so deltas don't remain
+                  const finalContent = textResult && textResult.trim() ? textResult : (last.content || '') + (pendingChunk || '');
+                  last.content = finalContent;
+                  last.isStreaming = false;
+                } else if (textResult && textResult.trim()) {
+                  updated.push({ type: r.is_error ? 'error' : 'assistant', content: textResult, timestamp: new Date(), isStreaming: false });
+                }
+                return updated;
+              });
+            } catch (e) {
+              console.warn('Error handling cursor-result message:', e);
+            }
           }
-          
-          // Mark session as inactive
-          const cursorSessionId = currentSessionId || sessionStorage.getItem('pendingSessionId');
-          if (cursorSessionId && onSessionInactive) {
-            onSessionInactive(cursorSessionId);
-          }
-          
-          // Store session ID for future use and trigger refresh
-          if (cursorSessionId && !currentSessionId) {
-            setCurrentSessionId(cursorSessionId);
+
+          // Store session ID for future use and trigger refresh (for new sessions)
+          const pendingCursorSessionId = sessionStorage.getItem('pendingSessionId');
+          if (cursorCompletedSessionId && !currentSessionId && cursorCompletedSessionId === pendingCursorSessionId) {
+            setCurrentSessionId(cursorCompletedSessionId);
             sessionStorage.removeItem('pendingSessionId');
-            
+
             // Trigger a project refresh to update the sidebar with the new session
             if (window.refreshProjects) {
               setTimeout(() => window.refreshProjects(), 500);
@@ -2320,17 +2839,41 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           break;
           
         case 'claude-complete':
-          setIsLoading(false);
-          setCanAbortSession(false);
-          setClaudeStatus(null);
+          // Get session ID from message or fall back to current session
+          const completedSessionId = latestMessage.sessionId || currentSessionId || sessionStorage.getItem('pendingSessionId');
 
-          
-          // Session Protection: Mark session as inactive to re-enable automatic project updates
-          // Conversation is complete, safe to allow project updates again
-          // Use real session ID if available, otherwise use pending session ID
-          const activeSessionId = currentSessionId || sessionStorage.getItem('pendingSessionId');
-          if (activeSessionId && onSessionInactive) {
-            onSessionInactive(activeSessionId);
+          // Only update UI state if this is the current session
+          if (completedSessionId === currentSessionId) {
+            setIsLoading(false);
+            setCanAbortSession(false);
+            setClaudeStatus(null);
+
+            // Fetch updated token usage after message completes
+            if (selectedProject && selectedSession?.id) {
+              const fetchUpdatedTokenUsage = async () => {
+                try {
+                  const url = `/api/projects/${selectedProject.name}/sessions/${selectedSession.id}/token-usage`;
+                  const response = await authenticatedFetch(url);
+                  if (response.ok) {
+                    const data = await response.json();
+                    setTokenBudget(data);
+                  }
+                } catch (error) {
+                  console.error('Failed to fetch updated token usage:', error);
+                }
+              };
+              fetchUpdatedTokenUsage();
+            }
+          }
+
+          // Always mark the completed session as inactive and not processing
+          if (completedSessionId) {
+            if (onSessionInactive) {
+              onSessionInactive(completedSessionId);
+            }
+            if (onSessionNotProcessing) {
+              onSessionNotProcessing(completedSessionId);
+            }
           }
           
           // If we have a pending session ID and the conversation completed successfully, use it
@@ -2351,23 +2894,49 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           }
           break;
           
-        case 'session-aborted':
-          setIsLoading(false);
-          setCanAbortSession(false);
-          setClaudeStatus(null);
-          
-          // Session Protection: Mark session as inactive when aborted
-          // User or system aborted the conversation, re-enable project updates
-          if (currentSessionId && onSessionInactive) {
-            onSessionInactive(currentSessionId);
+        case 'session-aborted': {
+          // Get session ID from message or fall back to current session
+          const abortedSessionId = latestMessage.sessionId || currentSessionId;
+
+          // Only update UI state if this is the current session
+          if (abortedSessionId === currentSessionId) {
+            setIsLoading(false);
+            setCanAbortSession(false);
+            setClaudeStatus(null);
           }
-          
+
+          // Always mark the aborted session as inactive and not processing
+          if (abortedSessionId) {
+            if (onSessionInactive) {
+              onSessionInactive(abortedSessionId);
+            }
+            if (onSessionNotProcessing) {
+              onSessionNotProcessing(abortedSessionId);
+            }
+          }
+
           setChatMessages(prev => [...prev, {
             type: 'assistant',
             content: 'Session interrupted by user.',
             timestamp: new Date()
           }]);
           break;
+        }
+
+        case 'session-status': {
+          const statusSessionId = latestMessage.sessionId;
+          const isCurrentSession = statusSessionId === currentSessionId ||
+                                   (selectedSession && statusSessionId === selectedSession.id);
+          if (isCurrentSession && latestMessage.isProcessing) {
+            // Session is currently processing, restore UI state
+            setIsLoading(true);
+            setCanAbortSession(true);
+            if (onSessionProcessing) {
+              onSessionProcessing(statusSessionId);
+            }
+          }
+          break;
+        }
 
         case 'claude-status':
           // Handle Claude working status messages
@@ -2550,7 +3119,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, [handleScroll]);
 
-  // Initial textarea setup
+  // Initial textarea setup - set to 2 rows height
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -2571,24 +3140,56 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, [input]);
 
+  // Load token usage when session changes (but don't poll to avoid conflicts with WebSocket)
+  useEffect(() => {
+    if (!selectedProject || !selectedSession?.id || selectedSession.id.startsWith('new-session-')) {
+      // Reset for new/empty sessions
+      setTokenBudget(null);
+      return;
+    }
+
+    // Fetch token usage once when session loads
+    const fetchInitialTokenUsage = async () => {
+      try {
+        const url = `/api/projects/${selectedProject.name}/sessions/${selectedSession.id}/token-usage`;
+        console.log('📊 Fetching initial token usage from:', url);
+
+        const response = await authenticatedFetch(url);
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log('✅ Initial token usage loaded:', data);
+          setTokenBudget(data);
+        } else {
+          console.log('⚠️ No token usage data available for this session yet');
+          setTokenBudget(null);
+        }
+      } catch (error) {
+        console.error('Failed to fetch initial token usage:', error);
+      }
+    };
+
+    fetchInitialTokenUsage();
+  }, [selectedSession?.id, selectedProject?.path]);
+
   const handleTranscript = useCallback((text) => {
     if (text.trim()) {
       setInput(prevInput => {
         const newInput = prevInput.trim() ? `${prevInput} ${text}` : text;
-        
+
         // Update textarea height after setting new content
         setTimeout(() => {
           if (textareaRef.current) {
             textareaRef.current.style.height = 'auto';
             textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px';
-            
+
             // Check if expanded after transcript
             const lineHeight = parseInt(window.getComputedStyle(textareaRef.current).lineHeight);
             const isExpanded = textareaRef.current.scrollHeight > lineHeight * 2;
             setIsTextareaExpanded(isExpanded);
           }
         }, 0);
-        
+
         return newInput;
       });
     }
@@ -2804,21 +3405,96 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     setUploadingImages(new Map());
     setImageErrors(new Map());
     setIsTextareaExpanded(false);
-    
+
     // Reset textarea height
-
-
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-    
+
     // Clear the saved draft since message was sent
     if (selectedProject) {
       safeLocalStorage.removeItem(`draft_input_${selectedProject.name}`);
     }
   };
 
+  const selectCommand = (command) => {
+    if (!command) return;
+
+    // Insert command into input (execution happens when user sends the message)
+    const textBeforeSlash = input.slice(0, slashPosition);
+    const textAfterSlash = input.slice(slashPosition);
+    const spaceIndex = textAfterSlash.indexOf(' ');
+    const textAfterQuery = spaceIndex !== -1 ? textAfterSlash.slice(spaceIndex) : '';
+
+    const newInput = textBeforeSlash + command.name + ' ' + textAfterQuery;
+    const newCursorPos = textBeforeSlash.length + command.name.length + 1;
+
+    // Update input and cursor position
+    setInput(newInput);
+    setCursorPosition(newCursorPos);
+    // Hide command menu
+    setShowCommandMenu(false);
+    setSlashPosition(-1);
+    setCommandQuery('');
+    setSelectedCommandIndex(-1);
+
+    // Clear debounce timer
+    if (commandQueryTimerRef.current) {
+      clearTimeout(commandQueryTimerRef.current);
+    }
+
+    // Set cursor position
+    if (textareaRef.current) {
+      requestAnimationFrame(() => {
+        if (textareaRef.current) {
+          textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+          if (!textareaRef.current.matches(':focus')) {
+            textareaRef.current.focus();
+          }
+        }
+      });
+    }
+  };
+
   const handleKeyDown = (e) => {
+    // Handle command menu navigation
+    if (showCommandMenu && filteredCommands.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedCommandIndex(prev =>
+          prev < filteredCommands.length - 1 ? prev + 1 : 0
+        );
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedCommandIndex(prev =>
+          prev > 0 ? prev - 1 : filteredCommands.length - 1
+        );
+        return;
+      }
+      if (e.key === 'Tab' || e.key === 'Enter') {
+        e.preventDefault();
+        if (selectedCommandIndex >= 0) {
+          selectCommand(filteredCommands[selectedCommandIndex]);
+        } else if (filteredCommands.length > 0) {
+          selectCommand(filteredCommands[0]);
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowCommandMenu(false);
+        setSlashPosition(-1);
+        setCommandQuery('');
+        setSelectedCommandIndex(-1);
+        if (commandQueryTimerRef.current) {
+          clearTimeout(commandQueryTimerRef.current);
+        }
+        return;
+      }
+    }
+
     // Handle file dropdown navigation
     if (showFileDropdown && filteredFiles.length > 0) {
       if (e.key === 'ArrowDown') {
@@ -2851,13 +3527,19 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       }
     }
     
-    // Handle Tab key for mode switching (only when file dropdown is not showing)
-    if (e.key === 'Tab' && !showFileDropdown) {
+    // Handle Tab key for mode switching (only when dropdowns are not showing)
+    if (e.key === 'Tab' && !showFileDropdown && !showCommandMenu) {
       e.preventDefault();
       const modes = ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
       const currentIndex = modes.indexOf(permissionMode);
       const nextIndex = (currentIndex + 1) % modes.length;
-      setPermissionMode(modes[nextIndex]);
+      const newMode = modes[nextIndex];
+      setPermissionMode(newMode);
+
+      // Save mode for this session
+      if (selectedSession?.id) {
+        localStorage.setItem(`permissionMode-${selectedSession.id}`, newMode);
+      }
       return;
     }
     
@@ -2922,13 +3604,68 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
   const handleInputChange = (e) => {
     const newValue = e.target.value;
+    const cursorPos = e.target.selectionStart;
+
     setInput(newValue);
-    setCursorPosition(e.target.selectionStart);
-    
+    setCursorPosition(cursorPos);
+
     // Handle height reset when input becomes empty
     if (!newValue.trim()) {
       e.target.style.height = 'auto';
       setIsTextareaExpanded(false);
+      setShowCommandMenu(false);
+      setSlashPosition(-1);
+      setCommandQuery('');
+      return;
+    }
+
+    // Detect slash command at cursor position
+    // Look backwards from cursor to find a slash that starts a command
+    const textBeforeCursor = newValue.slice(0, cursorPos);
+
+    // Check if we're in a code block (simple heuristic: between triple backticks)
+    const backticksBefore = (textBeforeCursor.match(/```/g) || []).length;
+    const inCodeBlock = backticksBefore % 2 === 1;
+
+    if (inCodeBlock) {
+      // Don't show command menu in code blocks
+      setShowCommandMenu(false);
+      setSlashPosition(-1);
+      setCommandQuery('');
+      return;
+    }
+
+    // Find the last slash before cursor that could start a command
+    // Slash is valid if it's at the start or preceded by whitespace
+    const slashPattern = /(^|\s)\/(\S*)$/;
+    const match = textBeforeCursor.match(slashPattern);
+
+    if (match) {
+      const slashPos = match.index + match[1].length; // Position of the slash
+      const query = match[2]; // Text after the slash
+
+      // Update states with debouncing for query
+      setSlashPosition(slashPos);
+      setShowCommandMenu(true);
+      setSelectedCommandIndex(-1);
+
+      // Debounce the command query update
+      if (commandQueryTimerRef.current) {
+        clearTimeout(commandQueryTimerRef.current);
+      }
+
+      commandQueryTimerRef.current = setTimeout(() => {
+        setCommandQuery(query);
+      }, 150); // 150ms debounce
+    } else {
+      // No slash command detected
+      setShowCommandMenu(false);
+      setSlashPosition(-1);
+      setCommandQuery('');
+
+      if (commandQueryTimerRef.current) {
+        clearTimeout(commandQueryTimerRef.current);
+      }
     }
   };
 
@@ -2959,7 +3696,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     const modes = ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
     const currentIndex = modes.indexOf(permissionMode);
     const nextIndex = (currentIndex + 1) % modes.length;
-    setPermissionMode(modes[nextIndex]);
+    const newMode = modes[nextIndex];
+    setPermissionMode(newMode);
+
+    // Save mode for this session
+    if (selectedSession?.id) {
+      localStorage.setItem(`permissionMode-${selectedSession.id}`, newMode);
+    }
   };
 
   // Don't render if no project is selected
@@ -3181,6 +3924,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   onShowSettings={onShowSettings}
                   autoExpandTools={autoExpandTools}
                   showRawParameters={showRawParameters}
+                  showThinking={showThinking}
                 />
               );
             })}
@@ -3231,7 +3975,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               />
               </div>
         {/* Permission Mode Selector with scroll to bottom button - Above input, clickable for mobile */}
-        <div className="max-w-4xl mx-auto mb-3">
+        <div ref={inputContainerRef} className="max-w-4xl mx-auto mb-3">
           <div className="flex items-center justify-center gap-3">
             <button
               type="button"
@@ -3265,7 +4009,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 </span>
               </div>
             </button>
-            
+            {/* Token usage pie chart - positioned next to mode indicator */}
+            <TokenUsagePie
+              used={tokenBudget?.used || 0}
+              total={tokenBudget?.total || parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 160000}
+            />
+
             {/* Scroll to bottom button - positioned next to mode indicator */}
             {isUserScrolledUp && chatMessages.length > 0 && (
               <button
@@ -3343,8 +4092,34 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               ))}
             </div>
           )}
-          
-          <div {...getRootProps()} className={`relative bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-600 focus-within:ring-2 focus-within:ring-blue-500 dark:focus-within:ring-blue-500 focus-within:border-blue-500 transition-all duration-200 ${isTextareaExpanded ? 'chat-input-expanded' : ''}`}>
+
+          {/* Command Menu */}
+          <CommandMenu
+            commands={filteredCommands}
+            selectedIndex={selectedCommandIndex}
+            onSelect={handleCommandSelect}
+            onClose={() => {
+              setShowCommandMenu(false);
+              setSlashPosition(-1);
+              setCommandQuery('');
+              setSelectedCommandIndex(-1);
+            }}
+            position={{
+              top: textareaRef.current
+                ? Math.max(16, textareaRef.current.getBoundingClientRect().top - 316)
+                : 0,
+              left: textareaRef.current
+                ? textareaRef.current.getBoundingClientRect().left
+                : 16,
+              bottom: inputContainerRef.current
+                ? window.innerHeight - inputContainerRef.current.getBoundingClientRect().bottom - 5
+                : 90
+            }}
+            isOpen={showCommandMenu}
+            frequentCommands={commandQuery ? [] : frequentCommands}
+          />
+
+          <div {...getRootProps()} className={`relative bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-600 focus-within:ring-2 focus-within:ring-blue-500 dark:focus-within:ring-blue-500 focus-within:border-blue-500 transition-all duration-200 overflow-hidden ${isTextareaExpanded ? 'chat-input-expanded' : ''}`}>
             <input {...getInputProps()} />
             <textarea
               ref={textareaRef}
@@ -3360,18 +4135,25 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 e.target.style.height = 'auto';
                 e.target.style.height = e.target.scrollHeight + 'px';
                 setCursorPosition(e.target.selectionStart);
-                
+
                 // Check if textarea is expanded (more than 2 lines worth of height)
                 const lineHeight = parseInt(window.getComputedStyle(e.target).lineHeight);
                 const isExpanded = e.target.scrollHeight > lineHeight * 2;
                 setIsTextareaExpanded(isExpanded);
               }}
-              placeholder="Ask Claude to help with your code... (@ to reference files)"
               disabled={isLoading}
-              rows={1}
-              className="chat-input-placeholder w-full pl-12 pr-28 sm:pr-40 py-3 sm:py-4 bg-transparent rounded-2xl focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 resize-none min-h-[40px] sm:min-h-[56px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base transition-all duration-200"
-              style={{ height: 'auto' }}
+              className="chat-input-placeholder block w-full pl-12 pr-20 sm:pr-40 py-1.5 sm:py-4 bg-transparent rounded-2xl focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 resize-none min-h-[50px] sm:min-h-[80px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base leading-[21px] sm:leading-6 transition-all duration-200"
+              style={{ height: '50px' }}
             />
+            {/* Custom placeholder overlay that can wrap */}
+            {!input.trim() && !isInputFocused && (
+              <div
+                className="absolute inset-0 pl-12 pr-20 sm:pr-40 py-1.5 sm:py-4 pointer-events-none text-gray-400 dark:text-gray-500 text-sm sm:text-base"
+                style={{ whiteSpace: 'normal', wordWrap: 'break-word' }}
+              >
+                Type / for commands, @ for files, or ask {provider === 'cursor' ? 'Cursor' : 'Claude'} anything...
+              </div>
+            )}
             {/* Clear button - shown when there's text */}
             {input.trim() && (
               <button
@@ -3418,7 +4200,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             <button
               type="button"
               onClick={open}
-              className="absolute left-2 bottom-4 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              className="absolute left-2 top-1/2 transform -translate-y-1/2 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
               title="Attach images"
             >
               <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3433,6 +4215,52 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 className="w-10 h-10 sm:w-10 sm:h-10"
               />
             </div>
+
+            {/* Slash commands button */}
+            <button
+              type="button"
+              onClick={() => {
+                const isOpening = !showCommandMenu;
+                setShowCommandMenu(isOpening);
+                setCommandQuery('');
+                setSelectedCommandIndex(-1);
+
+                // When opening, ensure all commands are shown
+                if (isOpening) {
+                  setFilteredCommands(slashCommands);
+                }
+
+                if (textareaRef.current) {
+                  textareaRef.current.focus();
+                }
+              }}
+              className="absolute right-16 top-1/2 transform -translate-y-1/2 w-10 h-10 sm:w-10 sm:h-10 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-full flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:ring-offset-gray-800 relative"
+              title="Show all commands"
+            >
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"
+                />
+              </svg>
+              {/* Command count badge */}
+              {slashCommands.length > 0 && (
+                <span
+                  className="absolute -top-1 -right-1 bg-blue-600 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center"
+                  style={{ fontSize: '10px' }}
+                >
+                  {slashCommands.length}
+                </span>
+              )}
+            </button>
+
             {/* Send button */}
             <button
               type="submit"
@@ -3464,9 +4292,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           </div>
           {/* Hint text */}
           <div className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2 hidden sm:block">
-            {sendByCtrlEnter 
-              ? "Ctrl+Enter to send (IME safe) • Shift+Enter for new line • Tab to change modes • @ to reference files" 
-              : "Press Enter to send • Shift+Enter for new line • Tab to change modes • @ to reference files"}
+            {sendByCtrlEnter
+              ? "Ctrl+Enter to send (IME safe) • Shift+Enter for new line • Tab to change modes"
+              : "Press Enter to send • Shift+Enter for new line • Tab to change modes"}
           </div>
           <div className={`text-xs text-gray-500 dark:text-gray-400 text-center mt-2 sm:hidden transition-opacity duration-200 ${
             isInputFocused ? 'opacity-100' : 'opacity-0'

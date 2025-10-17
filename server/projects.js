@@ -649,20 +649,26 @@ async function getSessions(projectName, limit = 5, offset = 0) {
 async function parseJsonlSessions(filePath) {
   const sessions = new Map();
   const entries = [];
-  
+  const pendingSummaries = new Map(); // leafUuid -> summary for entries without sessionId
+
   try {
     const fileStream = fsSync.createReadStream(filePath);
     const rl = readline.createInterface({
       input: fileStream,
       crlfDelay: Infinity
     });
-    
+
     for await (const line of rl) {
       if (line.trim()) {
         try {
           const entry = JSON.parse(line);
           entries.push(entry);
-          
+
+          // Handle summary entries that don't have sessionId yet
+          if (entry.type === 'summary' && entry.summary && !entry.sessionId && entry.leafUuid) {
+            pendingSummaries.set(entry.leafUuid, entry.summary);
+          }
+
           if (entry.sessionId) {
             if (!sessions.has(entry.sessionId)) {
               sessions.set(entry.sessionId, {
@@ -670,24 +676,69 @@ async function parseJsonlSessions(filePath) {
                 summary: 'New Session',
                 messageCount: 0,
                 lastActivity: new Date(),
-                cwd: entry.cwd || ''
+                cwd: entry.cwd || '',
+                lastUserMessage: null,
+                lastAssistantMessage: null
               });
             }
-            
+
             const session = sessions.get(entry.sessionId);
-            
-            // Update summary from summary entries or first user message
+
+            // Apply pending summary if this entry has a parentUuid that matches a pending summary
+            if (session.summary === 'New Session' && entry.parentUuid && pendingSummaries.has(entry.parentUuid)) {
+              session.summary = pendingSummaries.get(entry.parentUuid);
+            }
+
+            // Update summary from summary entries with sessionId
             if (entry.type === 'summary' && entry.summary) {
               session.summary = entry.summary;
-            } else if (entry.message?.role === 'user' && entry.message?.content && session.summary === 'New Session') {
+            }
+
+            // Track last user and assistant messages (skip system messages)
+            if (entry.message?.role === 'user' && entry.message?.content) {
               const content = entry.message.content;
-              if (typeof content === 'string' && content.length > 0 && !content.startsWith('<command-name>')) {
-                session.summary = content.length > 50 ? content.substring(0, 50) + '...' : content;
+              const isSystemMessage = typeof content === 'string' && (
+                content.startsWith('<command-name>') ||
+                content.startsWith('<command-message>') ||
+                content.startsWith('<command-args>') ||
+                content.startsWith('<local-command-stdout>') ||
+                content.startsWith('<system-reminder>') ||
+                content.startsWith('Caveat:') ||
+                content.startsWith('This session is being continued from a previous') ||
+                content.startsWith('Invalid API key') ||
+                content === 'Warmup' // Explicitly filter out "Warmup"
+              );
+
+              if (typeof content === 'string' && content.length > 0 && !isSystemMessage) {
+                session.lastUserMessage = content;
+              }
+            } else if (entry.message?.role === 'assistant' && entry.message?.content) {
+              // Skip API error messages using the isApiErrorMessage flag
+              if (entry.isApiErrorMessage === true) {
+                // Skip this message entirely
+              } else {
+                // Track last assistant text message
+                let assistantText = null;
+
+                if (Array.isArray(entry.message.content)) {
+                  for (const part of entry.message.content) {
+                    if (part.type === 'text' && part.text) {
+                      assistantText = part.text;
+                    }
+                  }
+                } else if (typeof entry.message.content === 'string') {
+                  assistantText = entry.message.content;
+                }
+
+                // Additional filter for assistant messages that start with "Invalid API key"
+                if (assistantText && !assistantText.startsWith('Invalid API key')) {
+                  session.lastAssistantMessage = assistantText;
+                }
               }
             }
-            
+
             session.messageCount++;
-            
+
             if (entry.timestamp) {
               session.lastActivity = new Date(entry.timestamp);
             }
@@ -697,12 +748,23 @@ async function parseJsonlSessions(filePath) {
         }
       }
     }
-    
+
+    // After processing all entries, set final summary based on last message if no summary exists
+    for (const session of sessions.values()) {
+      if (session.summary === 'New Session') {
+        // Prefer last user message, fall back to last assistant message
+        const lastMessage = session.lastUserMessage || session.lastAssistantMessage;
+        if (lastMessage) {
+          session.summary = lastMessage.length > 50 ? lastMessage.substring(0, 50) + '...' : lastMessage;
+        }
+      }
+    }
+
     return {
       sessions: Array.from(sessions.values()),
       entries: entries
     };
-    
+
   } catch (error) {
     console.error('Error reading JSONL file:', error);
     return { sessions: [], entries: [] };

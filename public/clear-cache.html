@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Clear Cache - Claude Code UI</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .success { color: green; }
+        .error { color: red; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        #status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            background: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Clear Cache & Service Worker</h1>
+    <p>If you're seeing a blank page or old content, click the button below to clear all cached data.</p>
+
+    <button onclick="clearEverything()">Clear Cache & Reload</button>
+
+    <div id="status"></div>
+
+    <script>
+        async function clearEverything() {
+            const status = document.getElementById('status');
+            status.innerHTML = '<p>Clearing cache and service workers...</p>';
+
+            try {
+                // Unregister all service workers
+                if ('serviceWorker' in navigator) {
+                    const registrations = await navigator.serviceWorker.getRegistrations();
+                    for (let registration of registrations) {
+                        await registration.unregister();
+                        status.innerHTML += '<p class="success">✓ Unregistered service worker</p>';
+                    }
+                }
+
+                // Clear all caches
+                if ('caches' in window) {
+                    const cacheNames = await caches.keys();
+                    for (let cacheName of cacheNames) {
+                        await caches.delete(cacheName);
+                        status.innerHTML += `<p class="success">✓ Deleted cache: ${cacheName}</p>`;
+                    }
+                }
+
+                // Clear localStorage
+                localStorage.clear();
+                status.innerHTML += '<p class="success">✓ Cleared localStorage</p>';
+
+                // Clear sessionStorage
+                sessionStorage.clear();
+                status.innerHTML += '<p class="success">✓ Cleared sessionStorage</p>';
+
+                status.innerHTML += '<p class="success"><strong>✓ All caches cleared!</strong></p>';
+                status.innerHTML += '<p>Cache cleared successfully. You can now close this tab or <a href="/">go to home page</a>.</p>';
+
+            } catch (error) {
+                status.innerHTML += `<p class="error">✗ Error: ${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>
