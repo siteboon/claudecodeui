@@ -1438,73 +1438,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   }, [selectedProject]);
 
   // Execute a command
-  const executeCommand = useCallback(async (command) => {
-    if (!command || !selectedProject) return;
-
-    try {
-      // Parse command and arguments from current input
-      const commandMatch = input.match(new RegExp(`${command.name}\\s*(.*)`));
-      const args = commandMatch && commandMatch[1]
-        ? commandMatch[1].trim().split(/\s+/)
-        : [];
-
-      // Prepare context for command execution
-      const context = {
-        projectPath: selectedProject.path,
-        projectName: selectedProject.name,
-        sessionId: currentSessionId,
-        provider,
-        model: provider === 'cursor' ? cursorModel : 'claude-sonnet-4.5',
-        tokenUsage: tokenBudget
-      };
-
-      // Call the execute endpoint
-      const response = await authenticatedFetch('/api/commands/execute', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          commandName: command.name,
-          commandPath: command.path,
-          args,
-          context
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to execute command');
-      }
-
-      const result = await response.json();
-
-      // Handle built-in commands
-      if (result.type === 'builtin') {
-        handleBuiltInCommand(result);
-      } else if (result.type === 'custom') {
-        // Handle custom commands - inject as system message
-        await handleCustomCommand(result, args);
-      }
-
-      // Clear the input after successful execution
-      setInput('');
-      setShowCommandMenu(false);
-      setSlashPosition(-1);
-      setCommandQuery('');
-      setSelectedCommandIndex(-1);
-
-    } catch (error) {
-      console.error('Error executing command:', error);
-      // Show error message to user
-      setChatMessages(prev => [...prev, {
-        role: 'assistant',
-        content: `Error executing command: ${error.message}`,
-        timestamp: Date.now()
-      }]);
-    }
-  }, [input, selectedProject, currentSessionId, provider, cursorModel, tokenBudget]);
-
-  // Handle built-in command actions
   const handleBuiltInCommand = useCallback((result) => {
     const { action, data } = result;
 
@@ -1628,6 +1561,73 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     // Automatically send to Claude for processing
     // The command content will be included in the next API call
   }, []);
+  const executeCommand = useCallback(async (command) => {
+    if (!command || !selectedProject) return;
+
+    try {
+      // Parse command and arguments from current input
+      const commandMatch = input.match(new RegExp(`${command.name}\\s*(.*)`));
+      const args = commandMatch && commandMatch[1]
+        ? commandMatch[1].trim().split(/\s+/)
+        : [];
+
+      // Prepare context for command execution
+      const context = {
+        projectPath: selectedProject.path,
+        projectName: selectedProject.name,
+        sessionId: currentSessionId,
+        provider,
+        model: provider === 'cursor' ? cursorModel : 'claude-sonnet-4.5',
+        tokenUsage: tokenBudget
+      };
+
+      // Call the execute endpoint
+      const response = await authenticatedFetch('/api/commands/execute', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          commandName: command.name,
+          commandPath: command.path,
+          args,
+          context
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to execute command');
+      }
+
+      const result = await response.json();
+
+      // Handle built-in commands
+      if (result.type === 'builtin') {
+        handleBuiltInCommand(result);
+      } else if (result.type === 'custom') {
+        // Handle custom commands - inject as system message
+        await handleCustomCommand(result, args);
+      }
+
+      // Clear the input after successful execution
+      setInput('');
+      setShowCommandMenu(false);
+      setSlashPosition(-1);
+      setCommandQuery('');
+      setSelectedCommandIndex(-1);
+
+    } catch (error) {
+      console.error('Error executing command:', error);
+      // Show error message to user
+      setChatMessages(prev => [...prev, {
+        role: 'assistant',
+        content: `Error executing command: ${error.message}`,
+        timestamp: Date.now()
+      }]);
+    }
+  }, [input, selectedProject, currentSessionId, provider, cursorModel, tokenBudget]);
+
+  // Handle built-in command actions
 
 
   // Memoized diff calculation to prevent recalculating on every render
