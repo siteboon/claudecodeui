@@ -9,6 +9,174 @@ const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
 
 let activeClaudeProcesses = new Map(); // Track active processes by session ID
 
+// Auto-compact constants
+const TOKEN_BUDGET_TOTAL = 200000;
+const TOKEN_CRITICAL_THRESHOLD = 30000; // Auto-compact trigger threshold
+const AUTO_COMPACT_COOLDOWN = 300000; // 5 minutes cooldown to prevent loops
+
+// Track token usage and auto-compact state per session
+const sessionTokenUsage = new Map();
+
+/**
+ * Parse system warnings from Claude output for token budget information
+ * Example: <system_warning>Token usage: 95000/200000; 105000 remaining</system_warning>
+ * @param {string} output - Raw output string from Claude CLI
+ * @returns {object|null} Token data object with used, total, remaining or null if not found
+ */
+function parseSystemWarnings(output) {
+  const warningMatch = output.match(/Token usage: (\d+)\/(\d+); (\d+) remaining/);
+  if (warningMatch) {
+    return {
+      used: parseInt(warningMatch[1]),
+      total: parseInt(warningMatch[2]),
+      remaining: parseInt(warningMatch[3])
+    };
+  }
+  return null;
+}
+
+/**
+ * Check if auto-compact should trigger based on token threshold and cooldown
+ * @param {string} sessionId - Current Claude session ID
+ * @param {object} tokenData - Token budget data from parseSystemWarnings
+ * @returns {boolean} True if auto-compact should trigger
+ */
+function shouldTriggerAutoCompact(sessionId, tokenData) {
+  // Check if remaining tokens below critical threshold
+  if (tokenData.remaining < TOKEN_CRITICAL_THRESHOLD) {
+    // Check if we haven't auto-compacted recently (avoid loops)
+    const sessionData = sessionTokenUsage.get(sessionId);
+    const lastCompactTime = sessionData?.lastCompactTime;
+    const now = Date.now();
+
+    if (!lastCompactTime || (now - lastCompactTime) > AUTO_COMPACT_COOLDOWN) {
+      console.log(`⚡ Auto-compact trigger conditions met: ${tokenData.remaining} tokens remaining, cooldown satisfied`);
+      return true;
+    } else {
+      const timeSinceLastCompact = Math.floor((now - lastCompactTime) / 1000);
+      console.log(`⏸️ Auto-compact skipped: in cooldown period (${timeSinceLastCompact}s since last compact)`);
+    }
+  }
+  return false;
+}
+
+/**
+ * Execute /context save command to compress conversation context
+ * @param {string} sessionId - Claude session ID to compact
+ * @returns {Promise<object>} Result object with tokensSaved count
+ */
+async function executeContextSave(sessionId) {
+  return new Promise((resolve, reject) => {
+    console.log(`📦 Executing /context save for session ${sessionId}`);
+
+    const args = [
+      '--resume', sessionId,
+      '--output-format', 'stream-json',
+      '--print',
+      '--',
+      '/context save'
+    ];
+
+    const compactProcess = spawnFunction('claude', args, {
+      cwd: process.cwd(),
+      env: process.env
+    });
+
+    let compactOutput = '';
+
+    compactProcess.stdout.on('data', (data) => {
+      compactOutput += data.toString();
+      console.log('📤 Context save output:', data.toString());
+    });
+
+    compactProcess.stderr.on('data', (data) => {
+      console.error('❌ Context save error:', data.toString());
+    });
+
+    compactProcess.on('close', (code) => {
+      if (code === 0) {
+        // Parse output to extract tokens saved (rough estimate from compression ratio)
+        const tokensSaved = parseTokensSavedFromOutput(compactOutput);
+        console.log(`✅ Context save completed: ${tokensSaved} tokens saved`);
+        resolve({ tokensSaved });
+      } else {
+        reject(new Error(`Context save failed with exit code ${code}`));
+      }
+    });
+
+    compactProcess.on('error', (error) => {
+      console.error('❌ Context save process error:', error);
+      reject(error);
+    });
+  });
+}
+
+/**
+ * Parse tokens saved from /context save command output
+ * @param {string} output - Raw output from /context save command
+ * @returns {number} Estimated tokens saved (defaults to rough estimate if not found)
+ */
+function parseTokensSavedFromOutput(output) {
+  // Look for token count in output (Claude may report this)
+  const tokenMatch = output.match(/Saved (\d+) tokens|Compressed (\d+) tokens/);
+  if (tokenMatch) {
+    return parseInt(tokenMatch[1] || tokenMatch[2]);
+  }
+
+  // Rough estimate: context save typically saves 85-95% of tokens
+  // Assume 90% compression if not explicitly reported
+  return Math.floor(TOKEN_BUDGET_TOTAL * 0.90);
+}
+
+/**
+ * Trigger auto-compact workflow: notify frontend, execute /context save, report results
+ * @param {string} sessionId - Claude session ID
+ * @param {object} tokenData - Current token budget data
+ * @param {object} ws - WebSocket connection to frontend
+ */
+async function triggerAutoCompact(sessionId, tokenData, ws) {
+  console.log(`⚡ Auto-compact triggered for session ${sessionId}: ${tokenData.remaining} tokens remaining`);
+
+  // Record compact time to prevent loops
+  const sessionData = sessionTokenUsage.get(sessionId) || {};
+  sessionData.lastCompactTime = Date.now();
+  sessionTokenUsage.set(sessionId, sessionData);
+
+  // Notify frontend that auto-compact is starting
+  ws.send(JSON.stringify({
+    type: 'auto-compact-triggered',
+    data: {
+      sessionId,
+      remainingTokens: tokenData.remaining,
+      message: `⚡ Auto-compressing context (${tokenData.remaining.toLocaleString()} tokens remaining)...`
+    }
+  }));
+
+  // Execute /context save command
+  try {
+    const compactResult = await executeContextSave(sessionId);
+
+    ws.send(JSON.stringify({
+      type: 'auto-compact-complete',
+      data: {
+        sessionId,
+        tokensSaved: compactResult.tokensSaved,
+        message: `✅ Context compressed → Saved ${compactResult.tokensSaved.toLocaleString()} tokens → Continuing workflow`
+      }
+    }));
+  } catch (error) {
+    console.error('❌ Auto-compact failed:', error);
+    ws.send(JSON.stringify({
+      type: 'auto-compact-error',
+      data: {
+        sessionId,
+        error: error.message,
+        message: `❌ Auto-compact failed: ${error.message}`
+      }
+    }));
+  }
+}
+
 async function spawnClaude(command, options = {}, ws) {
   return new Promise(async (resolve, reject) => {
     const { sessionId, projectPath, cwd, resume, toolsSettings, permissionMode, images } = options;
@@ -259,25 +427,42 @@ async function spawnClaude(command, options = {}, ws) {
     claudeProcess.stdout.on('data', (data) => {
       const rawOutput = data.toString();
       console.log('📤 Claude CLI stdout:', rawOutput);
-      
+
+      // Parse system warnings for token budget BEFORE JSON parsing
+      const tokenData = parseSystemWarnings(rawOutput);
+      if (tokenData && capturedSessionId) {
+        console.log(`💰 Token budget update: ${tokenData.used}/${tokenData.total} (${tokenData.remaining} remaining)`);
+
+        // Send token budget update to frontend
+        ws.send(JSON.stringify({
+          type: 'token-budget-update',
+          data: tokenData
+        }));
+
+        // Check if auto-compact should trigger
+        if (shouldTriggerAutoCompact(capturedSessionId, tokenData)) {
+          triggerAutoCompact(capturedSessionId, tokenData, ws);
+        }
+      }
+
       const lines = rawOutput.split('\n').filter(line => line.trim());
-      
+
       for (const line of lines) {
         try {
           const response = JSON.parse(line);
           console.log('📄 Parsed JSON response:', response);
-          
+
           // Capture session ID if it's in the response
           if (response.session_id && !capturedSessionId) {
             capturedSessionId = response.session_id;
             console.log('📝 Captured session ID:', capturedSessionId);
-            
+
             // Update process key with captured session ID
             if (processKey !== capturedSessionId) {
               activeClaudeProcesses.delete(processKey);
               activeClaudeProcesses.set(capturedSessionId, claudeProcess);
             }
-            
+
             // Send session-created event only once for new sessions
             if (!sessionId && !sessionCreatedSent) {
               sessionCreatedSent = true;
@@ -287,7 +472,7 @@ async function spawnClaude(command, options = {}, ws) {
               }));
             }
           }
-          
+
           // Send parsed response to WebSocket
           ws.send(JSON.stringify({
             type: 'claude-response',

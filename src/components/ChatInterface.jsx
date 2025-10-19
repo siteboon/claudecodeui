@@ -28,6 +28,8 @@ import { useTasksSettings } from '../contexts/TasksSettingsContext';
 import ClaudeStatus from './ClaudeStatus';
 import { MicButton } from './MicButton.jsx';
 import { api, authenticatedFetch } from '../utils/api';
+import TokenBudgetIndicator from './TokenBudgetIndicator';
+import AutoCompactNotification from './AutoCompactNotification';
 
 
 // Format "Claude AI usage limit reached|<epoch>" into a local time string
@@ -1196,6 +1198,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [attachedImages, setAttachedImages] = useState([]);
   const [uploadingImages, setUploadingImages] = useState(new Map());
   const [imageErrors, setImageErrors] = useState(new Map());
+  const [tokenBudget, setTokenBudget] = useState(null);
+  const [autoCompactNotification, setAutoCompactNotification] = useState(null);
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const scrollContainerRef = useRef(null);
@@ -2179,7 +2183,19 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             timestamp: new Date()
           }]);
           break;
-          
+
+        case 'token-budget-update':
+          // Update token budget display
+          setTokenBudget(latestMessage.data);
+          break;
+
+        case 'auto-compact-triggered':
+        case 'auto-compact-complete':
+        case 'auto-compact-error':
+          // Display auto-compact notification
+          setAutoCompactNotification(latestMessage);
+          break;
+
         case 'cursor-system':
           // Handle Cursor system/init messages similar to Claude
           try {
@@ -2982,9 +2998,23 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           }
         `}
       </style>
+
+      {/* Auto-Compact Notification - Fixed Position */}
+      <AutoCompactNotification
+        notification={autoCompactNotification}
+        onDismiss={() => setAutoCompactNotification(null)}
+      />
+
       <div className="h-full flex flex-col">
+        {/* Token Budget Indicator - Top of Interface */}
+        {tokenBudget && (
+          <div className="p-2 border-b border-gray-700">
+            <TokenBudgetIndicator tokenData={tokenBudget} />
+          </div>
+        )}
+
         {/* Messages Area - Scrollable Middle Section */}
-      <div 
+      <div
         ref={scrollContainerRef}
         className="flex-1 overflow-y-auto overflow-x-hidden px-0 py-3 sm:p-4 space-y-3 sm:space-y-4 relative"
       >
