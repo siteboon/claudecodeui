@@ -2192,8 +2192,15 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         case 'auto-compact-triggered':
         case 'auto-compact-complete':
         case 'auto-compact-error':
-          // Display auto-compact notification
-          setAutoCompactNotification(latestMessage);
+          // Display auto-compact notification only if user has enabled notifications
+          const savedSettings = localStorage.getItem('claude-settings');
+          const showNotifications = savedSettings
+            ? JSON.parse(savedSettings).showAutoCompactNotifications !== false
+            : true; // default true
+
+          if (showNotifications) {
+            setAutoCompactNotification(latestMessage);
+          }
           break;
 
         case 'cursor-system':

@@ -11,25 +11,30 @@ let activeClaudeProcesses = new Map(); // Track active processes by session ID
 
 // Auto-compact constants
 const TOKEN_BUDGET_TOTAL = 200000;
-const TOKEN_CRITICAL_THRESHOLD = 30000; // Auto-compact trigger threshold
+let tokenCriticalThreshold = 30000; // Auto-compact trigger threshold (configurable)
 const AUTO_COMPACT_COOLDOWN = 300000; // 5 minutes cooldown to prevent loops
 
 // Track token usage and auto-compact state per session
 const sessionTokenUsage = new Map();
 
+// Track in-progress auto-compact operations to prevent double-trigger
+const activeAutoCompacts = new Set();
+
 /**
  * Parse system warnings from Claude output for token budget information
  * Example: <system_warning>Token usage: 95000/200000; 105000 remaining</system_warning>
+ * Example with commas: <system_warning>Token usage: 95,000/200,000; 105,000 remaining</system_warning>
  * @param {string} output - Raw output string from Claude CLI
  * @returns {object|null} Token data object with used, total, remaining or null if not found
  */
 function parseSystemWarnings(output) {
-  const warningMatch = output.match(/Token usage: (\d+)\/(\d+); (\d+) remaining/);
+  // Make regex more robust: handle commas in numbers, case-insensitive matching
+  const warningMatch = output.match(/Token usage:\s*([\d,]+)\s*\/\s*([\d,]+);\s*([\d,]+)\s+remaining/i);
   if (warningMatch) {
     return {
-      used: parseInt(warningMatch[1]),
-      total: parseInt(warningMatch[2]),
-      remaining: parseInt(warningMatch[3])
+      used: parseInt(warningMatch[1].replace(/,/g, '')),
+      total: parseInt(warningMatch[2].replace(/,/g, '')),
+      remaining: parseInt(warningMatch[3].replace(/,/g, ''))
     };
   }
   return null;
@@ -42,8 +47,14 @@ function parseSystemWarnings(output) {
  * @returns {boolean} True if auto-compact should trigger
  */
 function shouldTriggerAutoCompact(sessionId, tokenData) {
+  // Check if already compacting for this session (prevent double-trigger)
+  if (activeAutoCompacts.has(sessionId)) {
+    console.log(`⏸️ Auto-compact skipped: already in progress for session ${sessionId}`);
+    return false;
+  }
+
   // Check if remaining tokens below critical threshold
-  if (tokenData.remaining < TOKEN_CRITICAL_THRESHOLD) {
+  if (tokenData.remaining < tokenCriticalThreshold) {
     // Check if we haven't auto-compacted recently (avoid loops)
     const sessionData = sessionTokenUsage.get(sessionId);
     const lastCompactTime = sessionData?.lastCompactTime;
@@ -77,7 +88,11 @@ async function executeContextSave(sessionId) {
       '/context save'
     ];
 
-    const compactProcess = spawnFunction('claude', args, {
+    // Honor CLAUDE_CLI_PATH environment variable
+    const claudePath = process.env.CLAUDE_CLI_PATH || 'claude';
+    console.log('🔍 Using Claude CLI path for context save:', claudePath);
+
+    const compactProcess = spawnFunction(claudePath, args, {
       cwd: process.cwd(),
       env: process.env
     });
@@ -95,9 +110,9 @@ async function executeContextSave(sessionId) {
 
     compactProcess.on('close', (code) => {
       if (code === 0) {
-        // Parse output to extract tokens saved (rough estimate from compression ratio)
+        // Parse output to extract tokens saved
         const tokensSaved = parseTokensSavedFromOutput(compactOutput);
-        console.log(`✅ Context save completed: ${tokensSaved} tokens saved`);
+        console.log(`✅ Context save completed: ${tokensSaved !== null ? tokensSaved + ' tokens saved' : 'tokens saved unknown'}`);
         resolve({ tokensSaved });
       } else {
         reject(new Error(`Context save failed with exit code ${code}`));
@@ -114,18 +129,19 @@ async function executeContextSave(sessionId) {
 /**
  * Parse tokens saved from /context save command output
  * @param {string} output - Raw output from /context save command
- * @returns {number} Estimated tokens saved (defaults to rough estimate if not found)
+ * @returns {number|null} Tokens saved count or null if not found
  */
 function parseTokensSavedFromOutput(output) {
   // Look for token count in output (Claude may report this)
-  const tokenMatch = output.match(/Saved (\d+) tokens|Compressed (\d+) tokens/);
+  const tokenMatch = output.match(/Saved ([\d,]+) tokens|Compressed ([\d,]+) tokens/i);
   if (tokenMatch) {
-    return parseInt(tokenMatch[1] || tokenMatch[2]);
+    const tokensStr = tokenMatch[1] || tokenMatch[2];
+    return parseInt(tokensStr.replace(/,/g, ''));
   }
 
-  // Rough estimate: context save typically saves 85-95% of tokens
-  // Assume 90% compression if not explicitly reported
-  return Math.floor(TOKEN_BUDGET_TOTAL * 0.90);
+  // Return null if we can't determine actual tokens saved
+  // Don't inflate expectations with guesses
+  return null;
 }
 
 /**
@@ -136,6 +152,9 @@ function parseTokensSavedFromOutput(output) {
  */
 async function triggerAutoCompact(sessionId, tokenData, ws) {
   console.log(`⚡ Auto-compact triggered for session ${sessionId}: ${tokenData.remaining} tokens remaining`);
+
+  // Mark as in-progress to prevent double-trigger
+  activeAutoCompacts.add(sessionId);
 
   // Record compact time to prevent loops
   const sessionData = sessionTokenUsage.get(sessionId) || {};
@@ -156,12 +175,17 @@ async function triggerAutoCompact(sessionId, tokenData, ws) {
   try {
     const compactResult = await executeContextSave(sessionId);
 
+    // Build message based on whether we know tokens saved
+    const message = compactResult.tokensSaved !== null
+      ? `✅ Context compressed → Saved ${compactResult.tokensSaved.toLocaleString()} tokens → Continuing workflow`
+      : `✅ Context compressed → Continuing workflow`;
+
     ws.send(JSON.stringify({
       type: 'auto-compact-complete',
       data: {
         sessionId,
         tokensSaved: compactResult.tokensSaved,
-        message: `✅ Context compressed → Saved ${compactResult.tokensSaved.toLocaleString()} tokens → Continuing workflow`
+        message
       }
     }));
   } catch (error) {
@@ -174,6 +198,9 @@ async function triggerAutoCompact(sessionId, tokenData, ws) {
         message: `❌ Auto-compact failed: ${error.message}`
       }
     }));
+  } finally {
+    // Remove in-progress flag after completion (success or failure)
+    activeAutoCompacts.delete(sessionId);
   }
 }
 
@@ -182,13 +209,19 @@ async function spawnClaude(command, options = {}, ws) {
     const { sessionId, projectPath, cwd, resume, toolsSettings, permissionMode, images } = options;
     let capturedSessionId = sessionId; // Track session ID throughout the process
     let sessionCreatedSent = false; // Track if we've already sent session-created event
-    
+
     // Use tools settings passed from frontend, or defaults
     const settings = toolsSettings || {
       allowedTools: [],
       disallowedTools: [],
       skipPermissions: false
     };
+
+    // Apply auto-compact settings from toolsSettings if provided
+    if (toolsSettings?.autoCompactEnabled !== undefined && toolsSettings?.autoCompactThreshold !== undefined) {
+      tokenCriticalThreshold = Math.max(10000, Math.min(100000, toolsSettings.autoCompactThreshold));
+      console.log('🔧 Auto-compact threshold set to:', tokenCriticalThreshold);
+    }
     
     // Build Claude CLI command - start with print/resume flags first
     const args = [];
@@ -433,14 +466,18 @@ async function spawnClaude(command, options = {}, ws) {
       if (tokenData && capturedSessionId) {
         console.log(`💰 Token budget update: ${tokenData.used}/${tokenData.total} (${tokenData.remaining} remaining)`);
 
-        // Send token budget update to frontend
+        // Send token budget update to frontend with sessionId
         ws.send(JSON.stringify({
           type: 'token-budget-update',
-          data: tokenData
+          data: {
+            ...tokenData,
+            sessionId: capturedSessionId
+          }
         }));
 
-        // Check if auto-compact should trigger
-        if (shouldTriggerAutoCompact(capturedSessionId, tokenData)) {
+        // Check if auto-compact should trigger (respect user settings)
+        const autoCompactEnabled = toolsSettings?.autoCompactEnabled !== false; // default true
+        if (autoCompactEnabled && shouldTriggerAutoCompact(capturedSessionId, tokenData)) {
           triggerAutoCompact(capturedSessionId, tokenData, ws);
         }
       }

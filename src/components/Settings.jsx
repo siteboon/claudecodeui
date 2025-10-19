@@ -339,19 +339,26 @@ function Settings({ isOpen, onClose, projects = [] }) {
       
       // Load Claude settings from localStorage
       const savedSettings = localStorage.getItem('claude-settings');
-      
+
       if (savedSettings) {
         const settings = JSON.parse(savedSettings);
         setAllowedTools(settings.allowedTools || []);
         setDisallowedTools(settings.disallowedTools || []);
         setSkipPermissions(settings.skipPermissions || false);
         setProjectSortOrder(settings.projectSortOrder || 'name');
+        // Load auto-compact settings
+        setAutoCompactEnabled(settings.autoCompactEnabled !== false); // default true
+        setAutoCompactThreshold(settings.autoCompactThreshold || 30000);
+        setShowAutoCompactNotifications(settings.showAutoCompactNotifications !== false); // default true
       } else {
         // Set defaults
         setAllowedTools([]);
         setDisallowedTools([]);
         setSkipPermissions(false);
         setProjectSortOrder('name');
+        setAutoCompactEnabled(true);
+        setAutoCompactThreshold(30000);
+        setShowAutoCompactNotifications(true);
       }
       
       // Load Cursor settings from localStorage
@@ -407,17 +414,23 @@ function Settings({ isOpen, onClose, projects = [] }) {
   const saveSettings = () => {
     setIsSaving(true);
     setSaveStatus(null);
-    
+
     try {
+      // Validate and clamp auto-compact threshold
+      const validatedThreshold = Math.max(10000, Math.min(100000, autoCompactThreshold || 30000));
+
       // Save Claude settings
       const claudeSettings = {
         allowedTools,
         disallowedTools,
         skipPermissions,
         projectSortOrder,
+        autoCompactEnabled,
+        autoCompactThreshold: validatedThreshold,
+        showAutoCompactNotifications,
         lastUpdated: new Date().toISOString()
       };
-      
+
       // Save Cursor settings
       const cursorSettings = {
         allowedCommands: cursorAllowedCommands,
@@ -425,13 +438,13 @@ function Settings({ isOpen, onClose, projects = [] }) {
         skipPermissions: cursorSkipPermissions,
         lastUpdated: new Date().toISOString()
       };
-      
+
       // Save to localStorage
       localStorage.setItem('claude-settings', JSON.stringify(claudeSettings));
       localStorage.setItem('cursor-tools-settings', JSON.stringify(cursorSettings));
-      
+
       setSaveStatus('success');
-      
+
       setTimeout(() => {
         onClose();
       }, 1000);
@@ -784,7 +797,14 @@ function Settings({ isOpen, onClose, projects = [] }) {
               max="100000"
               step="5000"
               value={autoCompactThreshold}
-              onChange={(e) => setAutoCompactThreshold(parseInt(e.target.value))}
+              onChange={(e) => {
+                const value = parseInt(e.target.value);
+                // Validate and clamp value to acceptable range
+                if (!isNaN(value)) {
+                  const clampedValue = Math.max(10000, Math.min(100000, value));
+                  setAutoCompactThreshold(clampedValue);
+                }
+              }}
               disabled={!autoCompactEnabled}
               className="text-sm bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 w-32 disabled:opacity-50 disabled:cursor-not-allowed"
             />

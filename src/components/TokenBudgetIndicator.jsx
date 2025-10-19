@@ -23,7 +23,8 @@ function TokenBudgetIndicator({ tokenData }) {
   if (!tokenData) return null;
 
   const { used, total, remaining } = tokenData;
-  const percentage = (used / total) * 100;
+  // Guard against division by zero
+  const percentage = total > 0 ? (used / total) * 100 : 0;
 
   // Color coding based on remaining tokens
   const getStatusColor = () => {
