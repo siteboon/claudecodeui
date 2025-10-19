@@ -2191,7 +2191,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
         case 'auto-compact-triggered':
         case 'auto-compact-complete':
-        case 'auto-compact-error':
+        case 'auto-compact-error': {
           // Display auto-compact notification only if user has enabled notifications
           const savedSettings = localStorage.getItem('claude-settings');
           const showNotifications = savedSettings
@@ -2202,6 +2202,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             setAutoCompactNotification(latestMessage);
           }
           break;
+        }
 
         case 'cursor-system':
           // Handle Cursor system/init messages similar to Claude

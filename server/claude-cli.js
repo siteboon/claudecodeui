@@ -11,10 +11,11 @@ let activeClaudeProcesses = new Map(); // Track active processes by session ID
 
 // Auto-compact constants
 const TOKEN_BUDGET_TOTAL = 200000;
-let tokenCriticalThreshold = 30000; // Auto-compact trigger threshold (configurable)
+const DEFAULT_TOKEN_THRESHOLD = 30000; // Default auto-compact trigger threshold
 const AUTO_COMPACT_COOLDOWN = 300000; // 5 minutes cooldown to prevent loops
 
 // Track token usage and auto-compact state per session
+// Structure: { lastCompactTime, autoCompactEnabled, autoCompactThreshold }
 const sessionTokenUsage = new Map();
 
 // Track in-progress auto-compact operations to prevent double-trigger
@@ -53,15 +54,24 @@ function shouldTriggerAutoCompact(sessionId, tokenData) {
     return false;
   }
 
+  // Get per-session settings (fallback to defaults if not set)
+  const sessionData = sessionTokenUsage.get(sessionId) || {};
+  const autoCompactEnabled = sessionData.autoCompactEnabled !== false; // default true
+  const threshold = sessionData.autoCompactThreshold || DEFAULT_TOKEN_THRESHOLD;
+
+  // Check if auto-compact is enabled for this session
+  if (!autoCompactEnabled) {
+    return false;
+  }
+
   // Check if remaining tokens below critical threshold
-  if (tokenData.remaining < tokenCriticalThreshold) {
+  if (tokenData.remaining < threshold) {
     // Check if we haven't auto-compacted recently (avoid loops)
-    const sessionData = sessionTokenUsage.get(sessionId);
-    const lastCompactTime = sessionData?.lastCompactTime;
+    const lastCompactTime = sessionData.lastCompactTime;
     const now = Date.now();
 
     if (!lastCompactTime || (now - lastCompactTime) > AUTO_COMPACT_COOLDOWN) {
-      console.log(`⚡ Auto-compact trigger conditions met: ${tokenData.remaining} tokens remaining, cooldown satisfied`);
+      console.log(`⚡ Auto-compact trigger conditions met: ${tokenData.remaining} tokens remaining (threshold: ${threshold}), cooldown satisfied`);
       return true;
     } else {
       const timeSinceLastCompact = Math.floor((now - lastCompactTime) / 1000);
@@ -217,10 +227,26 @@ async function spawnClaude(command, options = {}, ws) {
       skipPermissions: false
     };
 
-    // Apply auto-compact settings from toolsSettings if provided
-    if (toolsSettings?.autoCompactEnabled !== undefined && toolsSettings?.autoCompactThreshold !== undefined) {
-      tokenCriticalThreshold = Math.max(10000, Math.min(100000, toolsSettings.autoCompactThreshold));
-      console.log('🔧 Auto-compact threshold set to:', tokenCriticalThreshold);
+    // Store auto-compact settings per-session (initialize or update)
+    const initializeSessionSettings = (sid) => {
+      if (!sid) return;
+
+      const existingData = sessionTokenUsage.get(sid) || {};
+      const updatedData = {
+        ...existingData,
+        autoCompactEnabled: toolsSettings?.autoCompactEnabled !== false, // default true
+        autoCompactThreshold: toolsSettings?.autoCompactThreshold
+          ? Math.max(10000, Math.min(100000, toolsSettings.autoCompactThreshold))
+          : DEFAULT_TOKEN_THRESHOLD
+      };
+
+      sessionTokenUsage.set(sid, updatedData);
+      console.log(`🔧 Auto-compact settings for session ${sid}: enabled=${updatedData.autoCompactEnabled}, threshold=${updatedData.autoCompactThreshold}`);
+    };
+
+    // Initialize settings for existing session ID
+    if (capturedSessionId) {
+      initializeSessionSettings(capturedSessionId);
     }
     
     // Build Claude CLI command - start with print/resume flags first
@@ -475,9 +501,8 @@ async function spawnClaude(command, options = {}, ws) {
           }
         }));
 
-        // Check if auto-compact should trigger (respect user settings)
-        const autoCompactEnabled = toolsSettings?.autoCompactEnabled !== false; // default true
-        if (autoCompactEnabled && shouldTriggerAutoCompact(capturedSessionId, tokenData)) {
+        // Check if auto-compact should trigger (uses per-session settings)
+        if (shouldTriggerAutoCompact(capturedSessionId, tokenData)) {
           triggerAutoCompact(capturedSessionId, tokenData, ws);
         }
       }
@@ -493,6 +518,9 @@ async function spawnClaude(command, options = {}, ws) {
           if (response.session_id && !capturedSessionId) {
             capturedSessionId = response.session_id;
             console.log('📝 Captured session ID:', capturedSessionId);
+
+            // Initialize auto-compact settings for newly captured session
+            initializeSessionSettings(capturedSessionId);
 
             // Update process key with captured session ID
             if (processKey !== capturedSessionId) {

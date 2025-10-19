@@ -22,9 +22,20 @@ import { cn } from '../lib/utils';
 function TokenBudgetIndicator({ tokenData }) {
   if (!tokenData) return null;
 
-  const { used, total, remaining } = tokenData;
-  // Guard against division by zero
-  const percentage = total > 0 ? (used / total) * 100 : 0;
+  // Sanitize and normalize token data with fallbacks
+  const {
+    used: rawUsed = 0,
+    total: rawTotal = 0,
+    remaining: rawRemaining = 0
+  } = tokenData;
+
+  const used = Number.isFinite(rawUsed) ? rawUsed : 0;
+  const total = Number.isFinite(rawTotal) ? rawTotal : 0;
+  const remaining = Number.isFinite(rawRemaining) ? rawRemaining : 0;
+
+  // Guard against division by zero and clamp percentage to 0-100
+  const rawPercentage = total > 0 ? (used / total) * 100 : 0;
+  const percentage = Math.max(0, Math.min(100, rawPercentage));
 
   // Color coding based on remaining tokens
   const getStatusColor = () => {
