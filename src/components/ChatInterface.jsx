@@ -2774,7 +2774,17 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         const settingsKey = provider === 'cursor' ? 'cursor-tools-settings' : 'claude-settings';
         const savedSettings = safeLocalStorage.getItem(settingsKey);
         if (savedSettings) {
-          return JSON.parse(savedSettings);
+          const parsed = JSON.parse(savedSettings);
+          // Return all saved settings including auto-compact configuration
+          return {
+            allowedTools: parsed.allowedTools || [],
+            disallowedTools: parsed.disallowedTools || [],
+            skipPermissions: parsed.skipPermissions || false,
+            // Auto-compact settings (Claude only)
+            autoCompactEnabled: parsed.autoCompactEnabled !== false, // default true
+            autoCompactThreshold: parsed.autoCompactThreshold || 30000,
+            showAutoCompactNotifications: parsed.showAutoCompactNotifications !== false // default true
+          };
         }
       } catch (error) {
         console.error('Error loading tools settings:', error);
@@ -2782,7 +2792,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       return {
         allowedTools: [],
         disallowedTools: [],
-        skipPermissions: false
+        skipPermissions: false,
+        // Auto-compact defaults
+        autoCompactEnabled: true,
+        autoCompactThreshold: 30000,
+        showAutoCompactNotifications: true
       };
     };
 

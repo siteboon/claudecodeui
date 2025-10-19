@@ -29,8 +29,11 @@ const activeAutoCompacts = new Set();
  * @returns {object|null} Token data object with used, total, remaining or null if not found
  */
 function parseSystemWarnings(output) {
+  // Strip HTML tags and ANSI codes before parsing
+  const clean = output.replace(/<[^>]+>/g, '').replace(/\x1B\[[0-9;]*m/g, '');
+
   // Make regex more robust: handle commas in numbers, case-insensitive matching
-  const warningMatch = output.match(/Token usage:\s*([\d,]+)\s*\/\s*([\d,]+);\s*([\d,]+)\s+remaining/i);
+  const warningMatch = clean.match(/Token usage:\s*([\d,]+)\s*\/\s*([\d,]+);\s*([\d,]+)\s*remaining/i);
   if (warningMatch) {
     return {
       used: parseInt(warningMatch[1].replace(/,/g, '')),
@@ -481,35 +484,47 @@ async function spawnClaude(command, options = {}, ws) {
     // Store process reference for potential abort
     const processKey = capturedSessionId || sessionId || Date.now().toString();
     activeClaudeProcesses.set(processKey, claudeProcess);
-    
+
+    // Buffer for NDJSON line-based parsing to handle chunk boundaries
+    let stdoutBuffer = '';
+
     // Handle stdout (streaming JSON responses)
     claudeProcess.stdout.on('data', (data) => {
       const rawOutput = data.toString();
-      console.log('📤 Claude CLI stdout:', rawOutput);
+      console.log('📤 Claude CLI stdout chunk:', rawOutput);
 
-      // Parse system warnings for token budget BEFORE JSON parsing
-      const tokenData = parseSystemWarnings(rawOutput);
-      if (tokenData && capturedSessionId) {
-        console.log(`💰 Token budget update: ${tokenData.used}/${tokenData.total} (${tokenData.remaining} remaining)`);
+      // Append to buffer and split into complete lines
+      stdoutBuffer += rawOutput;
+      const lines = stdoutBuffer.split('\n');
+      // Keep incomplete last line in buffer
+      stdoutBuffer = lines.pop() || '';
 
-        // Send token budget update to frontend with sessionId
-        ws.send(JSON.stringify({
-          type: 'token-budget-update',
-          data: {
-            ...tokenData,
-            sessionId: capturedSessionId
+      // Process each complete line
+      for (const lineRaw of lines) {
+        const line = lineRaw.trim();
+        if (!line) continue;
+
+        // Parse token warnings line-by-line
+        const tokenData = parseSystemWarnings(line);
+        if (tokenData && capturedSessionId) {
+          console.log(`💰 Token budget update: ${tokenData.used}/${tokenData.total} (${tokenData.remaining} remaining)`);
+
+          // Send token budget update to frontend with sessionId
+          ws.send(JSON.stringify({
+            type: 'token-budget-update',
+            data: {
+              ...tokenData,
+              sessionId: capturedSessionId
+            }
+          }));
+
+          // Check if auto-compact should trigger (uses per-session settings)
+          if (shouldTriggerAutoCompact(capturedSessionId, tokenData)) {
+            triggerAutoCompact(capturedSessionId, tokenData, ws);
           }
-        }));
-
-        // Check if auto-compact should trigger (uses per-session settings)
-        if (shouldTriggerAutoCompact(capturedSessionId, tokenData)) {
-          triggerAutoCompact(capturedSessionId, tokenData, ws);
         }
-      }
 
-      const lines = rawOutput.split('\n').filter(line => line.trim());
-
-      for (const line of lines) {
+        // Try JSON parsing
         try {
           const response = JSON.parse(line);
           console.log('📄 Parsed JSON response:', response);
@@ -544,12 +559,14 @@ async function spawnClaude(command, options = {}, ws) {
             data: response
           }));
         } catch (parseError) {
-          console.log('📄 Non-JSON response:', line);
-          // If not JSON, send as raw text
-          ws.send(JSON.stringify({
-            type: 'claude-output',
-            data: line
-          }));
+          // Not JSON; forward as raw text (unless it was a token warning)
+          if (!tokenData) {
+            console.log('📄 Non-JSON response:', line);
+            ws.send(JSON.stringify({
+              type: 'claude-output',
+              data: line
+            }));
+          }
         }
       }
     });
@@ -566,10 +583,13 @@ async function spawnClaude(command, options = {}, ws) {
     // Handle process completion
     claudeProcess.on('close', async (code) => {
       console.log(`Claude CLI process exited with code ${code}`);
-      
-      // Clean up process reference
+
+      // Clean up process reference and per-session state to prevent memory leaks
       const finalSessionId = capturedSessionId || sessionId || processKey;
       activeClaudeProcesses.delete(finalSessionId);
+      sessionTokenUsage.delete(finalSessionId);
+      activeAutoCompacts.delete(finalSessionId);
+      console.log(`🧹 Cleaned up session state for: ${finalSessionId}`);
       
       ws.send(JSON.stringify({
         type: 'claude-complete',
