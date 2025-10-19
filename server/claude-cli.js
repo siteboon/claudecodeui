@@ -9,18 +9,248 @@ const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
 
 let activeClaudeProcesses = new Map(); // Track active processes by session ID
 
+// Auto-compact constants
+const TOKEN_BUDGET_TOTAL = 200000;
+const DEFAULT_TOKEN_THRESHOLD = 30000; // Default auto-compact trigger threshold
+const AUTO_COMPACT_COOLDOWN = 300000; // 5 minutes cooldown to prevent loops
+
+// Track token usage and auto-compact state per session
+// Structure: { lastCompactTime, autoCompactEnabled, autoCompactThreshold }
+const sessionTokenUsage = new Map();
+
+// Track in-progress auto-compact operations to prevent double-trigger
+const activeAutoCompacts = new Set();
+
+/**
+ * Parse system warnings from Claude output for token budget information
+ * Example: <system_warning>Token usage: 95000/200000; 105000 remaining</system_warning>
+ * Example with commas: <system_warning>Token usage: 95,000/200,000; 105,000 remaining</system_warning>
+ * @param {string} output - Raw output string from Claude CLI
+ * @returns {object|null} Token data object with used, total, remaining or null if not found
+ */
+function parseSystemWarnings(output) {
+  // Strip HTML tags and ANSI codes before parsing
+  const clean = output.replace(/<[^>]+>/g, '').replace(/\x1B\[[0-9;]*m/g, '');
+
+  // Make regex more robust: handle commas in numbers, case-insensitive matching
+  const warningMatch = clean.match(/Token usage:\s*([\d,]+)\s*\/\s*([\d,]+);\s*([\d,]+)\s*remaining/i);
+  if (warningMatch) {
+    return {
+      used: parseInt(warningMatch[1].replace(/,/g, '')),
+      total: parseInt(warningMatch[2].replace(/,/g, '')),
+      remaining: parseInt(warningMatch[3].replace(/,/g, ''))
+    };
+  }
+  return null;
+}
+
+/**
+ * Check if auto-compact should trigger based on token threshold and cooldown
+ * @param {string} sessionId - Current Claude session ID
+ * @param {object} tokenData - Token budget data from parseSystemWarnings
+ * @returns {boolean} True if auto-compact should trigger
+ */
+function shouldTriggerAutoCompact(sessionId, tokenData) {
+  // Check if already compacting for this session (prevent double-trigger)
+  if (activeAutoCompacts.has(sessionId)) {
+    console.log(`⏸️ Auto-compact skipped: already in progress for session ${sessionId}`);
+    return false;
+  }
+
+  // Get per-session settings (fallback to defaults if not set)
+  const sessionData = sessionTokenUsage.get(sessionId) || {};
+  const autoCompactEnabled = sessionData.autoCompactEnabled !== false; // default true
+  const threshold = sessionData.autoCompactThreshold || DEFAULT_TOKEN_THRESHOLD;
+
+  // Check if auto-compact is enabled for this session
+  if (!autoCompactEnabled) {
+    return false;
+  }
+
+  // Check if remaining tokens below critical threshold
+  if (tokenData.remaining < threshold) {
+    // Check if we haven't auto-compacted recently (avoid loops)
+    const lastCompactTime = sessionData.lastCompactTime;
+    const now = Date.now();
+
+    if (!lastCompactTime || (now - lastCompactTime) > AUTO_COMPACT_COOLDOWN) {
+      console.log(`⚡ Auto-compact trigger conditions met: ${tokenData.remaining} tokens remaining (threshold: ${threshold}), cooldown satisfied`);
+      return true;
+    } else {
+      const timeSinceLastCompact = Math.floor((now - lastCompactTime) / 1000);
+      console.log(`⏸️ Auto-compact skipped: in cooldown period (${timeSinceLastCompact}s since last compact)`);
+    }
+  }
+  return false;
+}
+
+/**
+ * Execute /context save command to compress conversation context
+ * @param {string} sessionId - Claude session ID to compact
+ * @returns {Promise<object>} Result object with tokensSaved count
+ */
+async function executeContextSave(sessionId) {
+  return new Promise((resolve, reject) => {
+    console.log(`📦 Executing /context save for session ${sessionId}`);
+
+    const args = [
+      '--resume', sessionId,
+      '--output-format', 'stream-json',
+      '--print',
+      '--',
+      '/context save'
+    ];
+
+    // Honor CLAUDE_CLI_PATH environment variable
+    const claudePath = process.env.CLAUDE_CLI_PATH || 'claude';
+    console.log('🔍 Using Claude CLI path for context save:', claudePath);
+
+    const compactProcess = spawnFunction(claudePath, args, {
+      cwd: process.cwd(),
+      env: process.env
+    });
+
+    let compactOutput = '';
+
+    compactProcess.stdout.on('data', (data) => {
+      compactOutput += data.toString();
+      console.log('📤 Context save output:', data.toString());
+    });
+
+    compactProcess.stderr.on('data', (data) => {
+      console.error('❌ Context save error:', data.toString());
+    });
+
+    compactProcess.on('close', (code) => {
+      if (code === 0) {
+        // Parse output to extract tokens saved
+        const tokensSaved = parseTokensSavedFromOutput(compactOutput);
+        console.log(`✅ Context save completed: ${tokensSaved !== null ? tokensSaved + ' tokens saved' : 'tokens saved unknown'}`);
+        resolve({ tokensSaved });
+      } else {
+        reject(new Error(`Context save failed with exit code ${code}`));
+      }
+    });
+
+    compactProcess.on('error', (error) => {
+      console.error('❌ Context save process error:', error);
+      reject(error);
+    });
+  });
+}
+
+/**
+ * Parse tokens saved from /context save command output
+ * @param {string} output - Raw output from /context save command
+ * @returns {number|null} Tokens saved count or null if not found
+ */
+function parseTokensSavedFromOutput(output) {
+  // Look for token count in output (Claude may report this)
+  const tokenMatch = output.match(/Saved ([\d,]+) tokens|Compressed ([\d,]+) tokens/i);
+  if (tokenMatch) {
+    const tokensStr = tokenMatch[1] || tokenMatch[2];
+    return parseInt(tokensStr.replace(/,/g, ''));
+  }
+
+  // Return null if we can't determine actual tokens saved
+  // Don't inflate expectations with guesses
+  return null;
+}
+
+/**
+ * Trigger auto-compact workflow: notify frontend, execute /context save, report results
+ * @param {string} sessionId - Claude session ID
+ * @param {object} tokenData - Current token budget data
+ * @param {object} ws - WebSocket connection to frontend
+ */
+async function triggerAutoCompact(sessionId, tokenData, ws) {
+  console.log(`⚡ Auto-compact triggered for session ${sessionId}: ${tokenData.remaining} tokens remaining`);
+
+  // Mark as in-progress to prevent double-trigger
+  activeAutoCompacts.add(sessionId);
+
+  // Record compact time to prevent loops
+  const sessionData = sessionTokenUsage.get(sessionId) || {};
+  sessionData.lastCompactTime = Date.now();
+  sessionTokenUsage.set(sessionId, sessionData);
+
+  // Notify frontend that auto-compact is starting
+  ws.send(JSON.stringify({
+    type: 'auto-compact-triggered',
+    data: {
+      sessionId,
+      remainingTokens: tokenData.remaining,
+      message: `⚡ Auto-compressing context (${tokenData.remaining.toLocaleString()} tokens remaining)...`
+    }
+  }));
+
+  // Execute /context save command
+  try {
+    const compactResult = await executeContextSave(sessionId);
+
+    // Build message based on whether we know tokens saved
+    const message = compactResult.tokensSaved !== null
+      ? `✅ Context compressed → Saved ${compactResult.tokensSaved.toLocaleString()} tokens → Continuing workflow`
+      : `✅ Context compressed → Continuing workflow`;
+
+    ws.send(JSON.stringify({
+      type: 'auto-compact-complete',
+      data: {
+        sessionId,
+        tokensSaved: compactResult.tokensSaved,
+        message
+      }
+    }));
+  } catch (error) {
+    console.error('❌ Auto-compact failed:', error);
+    ws.send(JSON.stringify({
+      type: 'auto-compact-error',
+      data: {
+        sessionId,
+        error: error.message,
+        message: `❌ Auto-compact failed: ${error.message}`
+      }
+    }));
+  } finally {
+    // Remove in-progress flag after completion (success or failure)
+    activeAutoCompacts.delete(sessionId);
+  }
+}
+
 async function spawnClaude(command, options = {}, ws) {
   return new Promise(async (resolve, reject) => {
     const { sessionId, projectPath, cwd, resume, toolsSettings, permissionMode, images } = options;
     let capturedSessionId = sessionId; // Track session ID throughout the process
     let sessionCreatedSent = false; // Track if we've already sent session-created event
-    
+
     // Use tools settings passed from frontend, or defaults
     const settings = toolsSettings || {
       allowedTools: [],
       disallowedTools: [],
       skipPermissions: false
     };
+
+    // Store auto-compact settings per-session (initialize or update)
+    const initializeSessionSettings = (sid) => {
+      if (!sid) return;
+
+      const existingData = sessionTokenUsage.get(sid) || {};
+      const updatedData = {
+        ...existingData,
+        autoCompactEnabled: toolsSettings?.autoCompactEnabled !== false, // default true
+        autoCompactThreshold: toolsSettings?.autoCompactThreshold
+          ? Math.max(10000, Math.min(100000, toolsSettings.autoCompactThreshold))
+          : DEFAULT_TOKEN_THRESHOLD
+      };
+
+      sessionTokenUsage.set(sid, updatedData);
+      console.log(`🔧 Auto-compact settings for session ${sid}: enabled=${updatedData.autoCompactEnabled}, threshold=${updatedData.autoCompactThreshold}`);
+    };
+
+    // Initialize settings for existing session ID
+    if (capturedSessionId) {
+      initializeSessionSettings(capturedSessionId);
+    }
     
     // Build Claude CLI command - start with print/resume flags first
     const args = [];
@@ -254,30 +484,65 @@ async function spawnClaude(command, options = {}, ws) {
     // Store process reference for potential abort
     const processKey = capturedSessionId || sessionId || Date.now().toString();
     activeClaudeProcesses.set(processKey, claudeProcess);
-    
+
+    // Buffer for NDJSON line-based parsing to handle chunk boundaries
+    let stdoutBuffer = '';
+
     // Handle stdout (streaming JSON responses)
     claudeProcess.stdout.on('data', (data) => {
       const rawOutput = data.toString();
-      console.log('📤 Claude CLI stdout:', rawOutput);
-      
-      const lines = rawOutput.split('\n').filter(line => line.trim());
-      
-      for (const line of lines) {
+      console.log('📤 Claude CLI stdout chunk:', rawOutput);
+
+      // Append to buffer and split into complete lines
+      stdoutBuffer += rawOutput;
+      const lines = stdoutBuffer.split('\n');
+      // Keep incomplete last line in buffer
+      stdoutBuffer = lines.pop() || '';
+
+      // Process each complete line
+      for (const lineRaw of lines) {
+        const line = lineRaw.trim();
+        if (!line) continue;
+
+        // Parse token warnings line-by-line
+        const tokenData = parseSystemWarnings(line);
+        if (tokenData && capturedSessionId) {
+          console.log(`💰 Token budget update: ${tokenData.used}/${tokenData.total} (${tokenData.remaining} remaining)`);
+
+          // Send token budget update to frontend with sessionId
+          ws.send(JSON.stringify({
+            type: 'token-budget-update',
+            data: {
+              ...tokenData,
+              sessionId: capturedSessionId
+            }
+          }));
+
+          // Check if auto-compact should trigger (uses per-session settings)
+          if (shouldTriggerAutoCompact(capturedSessionId, tokenData)) {
+            triggerAutoCompact(capturedSessionId, tokenData, ws);
+          }
+        }
+
+        // Try JSON parsing
         try {
           const response = JSON.parse(line);
           console.log('📄 Parsed JSON response:', response);
-          
+
           // Capture session ID if it's in the response
           if (response.session_id && !capturedSessionId) {
             capturedSessionId = response.session_id;
             console.log('📝 Captured session ID:', capturedSessionId);
-            
+
+            // Initialize auto-compact settings for newly captured session
+            initializeSessionSettings(capturedSessionId);
+
             // Update process key with captured session ID
             if (processKey !== capturedSessionId) {
               activeClaudeProcesses.delete(processKey);
               activeClaudeProcesses.set(capturedSessionId, claudeProcess);
             }
-            
+
             // Send session-created event only once for new sessions
             if (!sessionId && !sessionCreatedSent) {
               sessionCreatedSent = true;
@@ -287,19 +552,21 @@ async function spawnClaude(command, options = {}, ws) {
               }));
             }
           }
-          
+
           // Send parsed response to WebSocket
           ws.send(JSON.stringify({
             type: 'claude-response',
             data: response
           }));
         } catch (parseError) {
-          console.log('📄 Non-JSON response:', line);
-          // If not JSON, send as raw text
-          ws.send(JSON.stringify({
-            type: 'claude-output',
-            data: line
-          }));
+          // Not JSON; forward as raw text (unless it was a token warning)
+          if (!tokenData) {
+            console.log('📄 Non-JSON response:', line);
+            ws.send(JSON.stringify({
+              type: 'claude-output',
+              data: line
+            }));
+          }
         }
       }
     });
@@ -316,10 +583,13 @@ async function spawnClaude(command, options = {}, ws) {
     // Handle process completion
     claudeProcess.on('close', async (code) => {
       console.log(`Claude CLI process exited with code ${code}`);
-      
-      // Clean up process reference
+
+      // Clean up process reference and per-session state to prevent memory leaks
       const finalSessionId = capturedSessionId || sessionId || processKey;
       activeClaudeProcesses.delete(finalSessionId);
+      sessionTokenUsage.delete(finalSessionId);
+      activeAutoCompacts.delete(finalSessionId);
+      console.log(`🧹 Cleaned up session state for: ${finalSessionId}`);
       
       ws.send(JSON.stringify({
         type: 'claude-complete',

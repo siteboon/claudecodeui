@@ -28,6 +28,11 @@ function Settings({ isOpen, onClose, projects = [] }) {
   const [saveStatus, setSaveStatus] = useState(null);
   const [projectSortOrder, setProjectSortOrder] = useState('name');
 
+  // Auto-compact settings
+  const [autoCompactEnabled, setAutoCompactEnabled] = useState(true);
+  const [autoCompactThreshold, setAutoCompactThreshold] = useState(30000);
+  const [showAutoCompactNotifications, setShowAutoCompactNotifications] = useState(true);
+
   const [mcpServers, setMcpServers] = useState([]);
   const [showMcpForm, setShowMcpForm] = useState(false);
   const [editingMcpServer, setEditingMcpServer] = useState(null);
@@ -334,19 +339,26 @@ function Settings({ isOpen, onClose, projects = [] }) {
       
       // Load Claude settings from localStorage
       const savedSettings = localStorage.getItem('claude-settings');
-      
+
       if (savedSettings) {
         const settings = JSON.parse(savedSettings);
         setAllowedTools(settings.allowedTools || []);
         setDisallowedTools(settings.disallowedTools || []);
         setSkipPermissions(settings.skipPermissions || false);
         setProjectSortOrder(settings.projectSortOrder || 'name');
+        // Load auto-compact settings
+        setAutoCompactEnabled(settings.autoCompactEnabled !== false); // default true
+        setAutoCompactThreshold(settings.autoCompactThreshold || 30000);
+        setShowAutoCompactNotifications(settings.showAutoCompactNotifications !== false); // default true
       } else {
         // Set defaults
         setAllowedTools([]);
         setDisallowedTools([]);
         setSkipPermissions(false);
         setProjectSortOrder('name');
+        setAutoCompactEnabled(true);
+        setAutoCompactThreshold(30000);
+        setShowAutoCompactNotifications(true);
       }
       
       // Load Cursor settings from localStorage
@@ -402,17 +414,23 @@ function Settings({ isOpen, onClose, projects = [] }) {
   const saveSettings = () => {
     setIsSaving(true);
     setSaveStatus(null);
-    
+
     try {
+      // Validate and clamp auto-compact threshold
+      const validatedThreshold = Math.max(10000, Math.min(100000, autoCompactThreshold || 30000));
+
       // Save Claude settings
       const claudeSettings = {
         allowedTools,
         disallowedTools,
         skipPermissions,
         projectSortOrder,
+        autoCompactEnabled,
+        autoCompactThreshold: validatedThreshold,
+        showAutoCompactNotifications,
         lastUpdated: new Date().toISOString()
       };
-      
+
       // Save Cursor settings
       const cursorSettings = {
         allowedCommands: cursorAllowedCommands,
@@ -420,13 +438,13 @@ function Settings({ isOpen, onClose, projects = [] }) {
         skipPermissions: cursorSkipPermissions,
         lastUpdated: new Date().toISOString()
       };
-      
+
       // Save to localStorage
       localStorage.setItem('claude-settings', JSON.stringify(claudeSettings));
       localStorage.setItem('cursor-tools-settings', JSON.stringify(cursorSettings));
-      
+
       setSaveStatus('success');
-      
+
       setTimeout(() => {
         onClose();
       }, 1000);
@@ -718,6 +736,109 @@ function Settings({ isOpen, onClose, projects = [] }) {
                 <Sun className="w-3.5 h-3.5 text-yellow-500" />
               )}
             </span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    {/* Auto-Compact Settings */}
+    <div className="space-y-4">
+      <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-4">
+        <div>
+          <div className="font-medium text-foreground mb-1 flex items-center gap-2">
+            <Zap className="w-4 h-4 text-blue-500" />
+            Auto-Compact Settings
+          </div>
+          <div className="text-sm text-muted-foreground">
+            Automatically compress conversation context when token budget is low
+          </div>
+        </div>
+
+        {/* Enable Auto-Compact */}
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm font-medium text-foreground">
+              Enable Auto-Compact
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Automatically compress context when tokens are low
+            </div>
+          </div>
+          <button
+            onClick={() => setAutoCompactEnabled(!autoCompactEnabled)}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 ${
+              autoCompactEnabled ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'
+            }`}
+            role="switch"
+            aria-checked={autoCompactEnabled}
+          >
+            <span
+              className={`${
+                autoCompactEnabled ? 'translate-x-6' : 'translate-x-1'
+              } inline-block h-4 w-4 transform rounded-full bg-white shadow-lg transition-transform duration-200`}
+            />
+          </button>
+        </div>
+
+        {/* Token Threshold */}
+        <div className="space-y-2">
+          <div>
+            <div className="text-sm font-medium text-foreground">
+              Token Threshold
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Trigger auto-compact when remaining tokens fall below this value
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <input
+              type="number"
+              min="10000"
+              max="100000"
+              step="5000"
+              value={autoCompactThreshold}
+              onChange={(e) => {
+                const value = parseInt(e.target.value);
+                // Validate and clamp value to acceptable range
+                if (!isNaN(value)) {
+                  const clampedValue = Math.max(10000, Math.min(100000, value));
+                  setAutoCompactThreshold(clampedValue);
+                }
+              }}
+              disabled={!autoCompactEnabled}
+              className="text-sm bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 w-32 disabled:opacity-50 disabled:cursor-not-allowed"
+            />
+            <span className="text-sm text-muted-foreground">tokens</span>
+          </div>
+          <div className="text-xs text-muted-foreground">
+            Default: 30,000 tokens (recommended)
+          </div>
+        </div>
+
+        {/* Show Notifications */}
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm font-medium text-foreground">
+              Show Notifications
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Display notifications when auto-compact occurs
+            </div>
+          </div>
+          <button
+            onClick={() => setShowAutoCompactNotifications(!showAutoCompactNotifications)}
+            disabled={!autoCompactEnabled}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed ${
+              showAutoCompactNotifications ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'
+            }`}
+            role="switch"
+            aria-checked={showAutoCompactNotifications}
+          >
+            <span
+              className={`${
+                showAutoCompactNotifications ? 'translate-x-6' : 'translate-x-1'
+              } inline-block h-4 w-4 transform rounded-full bg-white shadow-lg transition-transform duration-200`}
+            />
           </button>
         </div>
       </div>
