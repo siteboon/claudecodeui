@@ -22,17 +22,17 @@ const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, pos
 
     if (isMobile) {
       // On mobile, calculate bottom position dynamically to appear above the input
-      // Account for the textarea's position from the bottom of viewport
+      // Use the bottom value which is calculated as: window.innerHeight - textarea.top + spacing
       const inputBottom = position.bottom || 90; // Use provided bottom or default
 
       return {
         position: 'fixed',
-        bottom: `${inputBottom + 8}px`, // 8px gap above the input container
+        bottom: `${inputBottom}px`, // Position above the input with spacing already included
         left: '16px',
         right: '16px',
         width: 'auto',
         maxWidth: 'calc(100vw - 32px)',
-        maxHeight: '50vh' // Limit height to 50% of viewport
+        maxHeight: 'min(50vh, 300px)' // Limit to smaller of 50vh or 300px
       };
     }
 
@@ -42,7 +42,8 @@ const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, pos
       top: `${Math.max(16, Math.min(position.top, viewportHeight - 316))}px`,
       left: `${position.left}px`,
       width: 'min(400px, calc(100vw - 32px))',
-      maxWidth: 'calc(100vw - 32px)'
+      maxWidth: 'calc(100vw - 32px)',
+      maxHeight: '300px'
     };
   };
 
@@ -87,12 +88,10 @@ const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, pos
     return (
       <div
         ref={menuRef}
-        className="command-menu"
+        className="command-menu command-menu-empty"
         style={{
           ...menuPosition,
           maxHeight: '300px',
-          backgroundColor: 'white',
-          border: '1px solid #e5e7eb',
           borderRadius: '8px',
           boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
           zIndex: 1000,
@@ -100,8 +99,7 @@ const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, pos
           opacity: 1,
           transform: 'translateY(0)',
           transition: 'opacity 150ms ease-in-out, transform 150ms ease-in-out',
-          textAlign: 'center',
-          color: '#6b7280'
+          textAlign: 'center'
         }}
       >
         No commands available
@@ -164,8 +162,6 @@ const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, pos
         ...menuPosition,
         maxHeight: '300px',
         overflowY: 'auto',
-        backgroundColor: 'white',
-        border: '1px solid #e5e7eb',
         borderRadius: '8px',
         boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
         zIndex: 1000,
@@ -304,12 +300,23 @@ const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, pos
         </div>
       ))}
 
-      {/* Dark mode styles */}
+      {/* Default light mode styles */}
       <style>{`
+        .command-menu {
+          background-color: white;
+          border: 1px solid #e5e7eb;
+        }
+        .command-menu-empty {
+          color: #6b7280;
+        }
+
         @media (prefers-color-scheme: dark) {
           .command-menu {
             background-color: #1f2937 !important;
-            border-color: #374151 !important;
+            border: 1px solid #374151 !important;
+          }
+          .command-menu-empty {
+            color: #9ca3af !important;
           }
           .command-item[aria-selected="true"] {
             background-color: #1e40af !important;

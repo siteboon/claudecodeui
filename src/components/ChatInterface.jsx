@@ -1080,48 +1080,83 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                   </details>
                 )}
                 
-                {message.type === 'assistant' ? (
-                  <div className="prose prose-sm max-w-none dark:prose-invert prose-gray [&_code]:!bg-transparent [&_code]:!p-0 [&_pre]:!bg-transparent [&_pre]:!border-0 [&_pre]:!p-0">
-                    <ReactMarkdown
-                      components={{
-                        code: ({node, inline, className, children, ...props}) => {
-                          return inline ? (
-                            <strong className="text-blue-600 dark:text-blue-400 font-bold not-prose" {...props}>
-                              {children}
-                            </strong>
-                          ) : (
-                            <div className="bg-gray-800 dark:bg-gray-800 border border-gray-600/30 dark:border-gray-600/30 p-3 rounded-lg overflow-hidden my-2">
-                              <code className="text-gray-100 dark:text-gray-200 text-sm font-mono block whitespace-pre-wrap break-words" {...props}>
-                                {children}
-                              </code>
-                            </div>
-                          );
-                        },
-                        blockquote: ({children}) => (
-                          <blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-4 italic text-gray-600 dark:text-gray-400 my-2">
-                            {children}
-                          </blockquote>
-                        ),
-                        a: ({href, children}) => (
-                          <a href={href} className="text-blue-600 dark:text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">
-                            {children}
-                          </a>
-                        ),
-                        p: ({children}) => (
-                          <div className="mb-2 last:mb-0">
-                            {children}
+                {(() => {
+                  const content = formatUsageLimitText(String(message.content || ''));
+
+                  // Detect if content is pure JSON (starts with { or [)
+                  const trimmedContent = content.trim();
+                  if ((trimmedContent.startsWith('{') || trimmedContent.startsWith('[')) &&
+                      (trimmedContent.endsWith('}') || trimmedContent.endsWith(']'))) {
+                    try {
+                      const parsed = JSON.parse(trimmedContent);
+                      const formatted = JSON.stringify(parsed, null, 2);
+
+                      return (
+                        <div className="my-2">
+                          <div className="flex items-center gap-2 mb-2 text-sm text-gray-600 dark:text-gray-400">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                            </svg>
+                            <span className="font-medium">JSON Response</span>
                           </div>
-                        )
-                      }}
-                    >
-                      {formatUsageLimitText(String(message.content || ''))}
-                    </ReactMarkdown>
-                  </div>
-                ) : (
-                  <div className="whitespace-pre-wrap">
-                    {formatUsageLimitText(String(message.content || ''))}
-                  </div>
-                )}
+                          <div className="bg-gray-800 dark:bg-gray-900 border border-gray-600/30 dark:border-gray-700 rounded-lg overflow-hidden">
+                            <pre className="p-4 overflow-x-auto">
+                              <code className="text-gray-100 dark:text-gray-200 text-sm font-mono block whitespace-pre">
+                                {formatted}
+                              </code>
+                            </pre>
+                          </div>
+                        </div>
+                      );
+                    } catch (e) {
+                      // Not valid JSON, fall through to normal rendering
+                    }
+                  }
+
+                  // Normal rendering for non-JSON content
+                  return message.type === 'assistant' ? (
+                    <div className="prose prose-sm max-w-none dark:prose-invert prose-gray [&_code]:!bg-transparent [&_code]:!p-0 [&_pre]:!bg-transparent [&_pre]:!border-0 [&_pre]:!p-0">
+                      <ReactMarkdown
+                        components={{
+                          code: ({node, inline, className, children, ...props}) => {
+                            return inline ? (
+                              <strong className="text-blue-600 dark:text-blue-400 font-bold not-prose" {...props}>
+                                {children}
+                              </strong>
+                            ) : (
+                              <div className="bg-gray-800 dark:bg-gray-800 border border-gray-600/30 dark:border-gray-600/30 p-3 rounded-lg overflow-hidden my-2">
+                                <code className="text-gray-100 dark:text-gray-200 text-sm font-mono block whitespace-pre-wrap break-words" {...props}>
+                                  {children}
+                                </code>
+                              </div>
+                            );
+                          },
+                          blockquote: ({children}) => (
+                            <blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-4 italic text-gray-600 dark:text-gray-400 my-2">
+                              {children}
+                            </blockquote>
+                          ),
+                          a: ({href, children}) => (
+                            <a href={href} className="text-blue-600 dark:text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">
+                              {children}
+                            </a>
+                          ),
+                          p: ({children}) => (
+                            <div className="mb-2 last:mb-0">
+                              {children}
+                            </div>
+                          )
+                        }}
+                      >
+                        {content}
+                      </ReactMarkdown>
+                    </div>
+                  ) : (
+                    <div className="whitespace-pre-wrap">
+                      {content}
+                    </div>
+                  );
+                })()}
               </div>
             )}
             
@@ -1530,6 +1565,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, [onFileOpen, onShowSettings]);
 
+  // Ref to store handleSubmit so we can call it from handleCustomCommand
+  const handleSubmitRef = useRef(null);
+
   // Handle custom command execution
   const handleCustomCommand = useCallback(async (result, args) => {
     const { content, hasBashCommands, hasFileIncludes } = result;
@@ -1549,29 +1587,18 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       }
     }
 
-    // Inject the processed command content as user message
-    const commandMessage = {
-      role: 'user',
-      content: content,
-      timestamp: Date.now(),
-      isCommand: true
-    };
-
-    setChatMessages(prev => [...prev, commandMessage]);
-
-    // Automatically send to Claude for processing
     // Set the input to the command content
     setInput(content);
-    
-    // Wait for state to update, then trigger form submission
+
+    // Wait for state to update, then directly call handleSubmit
     setTimeout(() => {
-      // Find the form and submit it programmatically
-      const form = document.querySelector('form');
-      if (form) {
-        form.requestSubmit();
+      if (handleSubmitRef.current) {
+        // Create a fake event to pass to handleSubmit
+        const fakeEvent = { preventDefault: () => {} };
+        handleSubmitRef.current(fakeEvent);
       }
-    }, 100);
-  }, []);;;
+    }, 50);
+  }, []);
   const executeCommand = useCallback(async (command) => {
     if (!command || !selectedProject) return;
 
@@ -3133,7 +3160,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       setIsUserScrolledUp(false);
       setTimeout(() => scrollToBottom(), 200); // Delay to ensure full rendering
     }
-  }, [chatMessages.length > 0, scrollToBottom]); // Trigger when messages first appear
+  }, [selectedSession?.id, selectedProject?.name]); // Only trigger when session/project changes
 
   // Add scroll event listener to detect user scrolling
   useEffect(() => {
@@ -3297,7 +3324,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     noKeyboard: true
   });
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
     if (!input.trim() || isLoading || !selectedProject) return;
 
@@ -3440,23 +3467,27 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     if (selectedProject) {
       safeLocalStorage.removeItem(`draft_input_${selectedProject.name}`);
     }
-  };
+  }, [input, isLoading, selectedProject, attachedImages, currentSessionId, selectedSession, provider, permissionMode, onSessionActive, cursorModel, sendMessage, setInput, setAttachedImages, setUploadingImages, setImageErrors, setIsTextareaExpanded, textareaRef, setChatMessages, setIsLoading, setCanAbortSession, setClaudeStatus, setIsUserScrolledUp, scrollToBottom]);
+
+  // Store handleSubmit in ref so handleCustomCommand can access it
+  useEffect(() => {
+    handleSubmitRef.current = handleSubmit;
+  }, [handleSubmit]);
 
   const selectCommand = (command) => {
     if (!command) return;
 
-    // Insert command into input (execution happens when user sends the message)
+    // Prepare the input with command name and any arguments that were already typed
     const textBeforeSlash = input.slice(0, slashPosition);
     const textAfterSlash = input.slice(slashPosition);
     const spaceIndex = textAfterSlash.indexOf(' ');
-    const textAfterQuery = spaceIndex !== -1 ? textAfterSlash.slice(spaceIndex) : '';
+    const textAfterQuery = spaceIndex !==-1 ? textAfterSlash.slice(spaceIndex) : '';
 
     const newInput = textBeforeSlash + command.name + ' ' + textAfterQuery;
-    const newCursorPos = textBeforeSlash.length + command.name.length + 1;
 
-    // Update input and cursor position
+    // Update input temporarily so executeCommand can parse arguments
     setInput(newInput);
-    setCursorPosition(newCursorPos);
+
     // Hide command menu
     setShowCommandMenu(false);
     setSlashPosition(-1);
@@ -3468,17 +3499,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       clearTimeout(commandQueryTimerRef.current);
     }
 
-    // Set cursor position
-    if (textareaRef.current) {
-      requestAnimationFrame(() => {
-        if (textareaRef.current) {
-          textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
-          if (!textareaRef.current.matches(':focus')) {
-            textareaRef.current.focus();
-          }
-        }
-      });
-    }
+    // Execute the command (which will load its content and send to Claude)
+    executeCommand(command);
   };
 
   const handleKeyDown = (e) => {
@@ -3630,6 +3652,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const handleInputChange = (e) => {
     const newValue = e.target.value;
     const cursorPos = e.target.selectionStart;
+
+    // Auto-select Claude provider if no session exists and user starts typing
+    if (!currentSessionId && newValue.trim() && provider === 'claude') {
+      // Provider is already set to 'claude' by default, so no need to change it
+      // The session will be created automatically when they submit
+    }
 
     setInput(newValue);
     setCursorPosition(cursorPos);
@@ -3992,11 +4020,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       }`}>
     
         <div className="flex-1">
-              <ClaudeStatus 
+              <ClaudeStatus
                 status={claudeStatus}
                 isLoading={isLoading}
                 onAbort={handleAbortSession}
                 provider={provider}
+                showThinking={showThinking}
               />
               </div>
         {/* Permission Mode Selector with scroll to bottom button - Above input, clickable for mobile */}
@@ -4039,6 +4068,39 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               used={tokenBudget?.used || 0}
               total={tokenBudget?.total || parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 160000}
             />
+
+            {/* Clear input button - positioned to the right of token pie, only shows when there's input */}
+            {input.trim() && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setInput('');
+                  if (textareaRef.current) {
+                    textareaRef.current.style.height = 'auto';
+                    textareaRef.current.focus();
+                  }
+                  setIsTextareaExpanded(false);
+                }}
+                className="w-8 h-8 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-full flex items-center justify-center transition-all duration-200 group shadow-sm"
+                title="Clear input"
+              >
+                <svg
+                  className="w-4 h-4 text-gray-600 dark:text-gray-300 group-hover:text-gray-800 dark:group-hover:text-gray-100 transition-colors"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            )}
 
             {/* Scroll to bottom button - positioned next to mode indicator */}
             {isUserScrolledUp && chatMessages.length > 0 && (
@@ -4136,8 +4198,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               left: textareaRef.current
                 ? textareaRef.current.getBoundingClientRect().left
                 : 16,
-              bottom: inputContainerRef.current
-                ? window.innerHeight - inputContainerRef.current.getBoundingClientRect().bottom - 5
+              bottom: textareaRef.current
+                ? window.innerHeight - textareaRef.current.getBoundingClientRect().top + 8
                 : 90
             }}
             isOpen={showCommandMenu}
@@ -4179,48 +4241,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 Type / for commands, @ for files, or ask {provider === 'cursor' ? 'Cursor' : 'Claude'} anything...
               </div>
             )}
-            {/* Clear button - shown when there's text */}
-            {input.trim() && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setInput('');
-                  if (textareaRef.current) {
-                    textareaRef.current.style.height = 'auto';
-                    textareaRef.current.focus();
-                  }
-                  setIsTextareaExpanded(false);
-                }}
-                onTouchEnd={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setInput('');
-                  if (textareaRef.current) {
-                    textareaRef.current.style.height = 'auto';
-                    textareaRef.current.focus();
-                  }
-                  setIsTextareaExpanded(false);
-                }}
-                className="absolute -left-0.5 -top-3 sm:right-28 sm:left-auto sm:top-1/2 sm:-translate-y-1/2 w-6 h-6 sm:w-8 sm:h-8 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 border border-gray-300 dark:border-gray-600 rounded-full flex items-center justify-center transition-all duration-200 group z-10 shadow-sm"
-                title="Clear input"
-              >
-                <svg 
-                  className="w-3 h-3 sm:w-4 sm:h-4 text-gray-600 dark:text-gray-300 group-hover:text-gray-800 dark:group-hover:text-gray-100 transition-colors" 
-                  fill="none" 
-                  stroke="currentColor" 
-                  viewBox="0 0 24 24"
-                >
-                  <path 
-                    strokeLinecap="round" 
-                    strokeLinejoin="round" 
-                    strokeWidth={2} 
-                    d="M6 18L18 6M6 6l12 12" 
-                  />
-                </svg>
-              </button>
-            )}
             {/* Image upload button */}
             <button
               type="button"
@@ -4259,7 +4279,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   textareaRef.current.focus();
                 }
               }}
-              className="absolute right-16 top-1/2 transform -translate-y-1/2 w-10 h-10 sm:w-10 sm:h-10 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-full flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:ring-offset-gray-800 relative"
+              className="absolute right-14 sm:right-36 top-1/2 transform -translate-y-1/2 w-10 h-10 sm:w-10 sm:h-10 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-full flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:ring-offset-gray-800 relative z-10"
               title="Show all commands"
             >
               <svg

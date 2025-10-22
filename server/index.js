@@ -197,7 +197,20 @@ app.use('/api/mcp-utils', authenticateToken, mcpUtilsRoutes);
 app.use('/api/commands', authenticateToken, commandsRoutes);
 
 // Static files served after API routes
-app.use(express.static(path.join(__dirname, '../dist')));
+// Add cache control: HTML files should not be cached, but assets can be cached
+app.use(express.static(path.join(__dirname, '../dist'), {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) {
+      // Prevent HTML caching to avoid service worker issues after builds
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    } else if (filePath.match(/\.(js|css|woff2?|ttf|eot|svg|png|jpg|jpeg|gif|ico)$/)) {
+      // Cache static assets for 1 year (they have hashed names)
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
+  }
+}));
 
 // API Routes (protected)
 app.get('/api/config', authenticateToken, (req, res) => {
@@ -1222,6 +1235,10 @@ app.get('*', (req, res) => {
   // Only serve index.html for HTML routes, not for static assets
   // Static assets should already be handled by express.static middleware above
   if (process.env.NODE_ENV === 'production') {
+    // Set no-cache headers for HTML to prevent service worker issues
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.sendFile(path.join(__dirname, '../dist/index.html'));
   } else {
     // In development, redirect to Vite dev server

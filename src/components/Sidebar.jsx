@@ -301,10 +301,10 @@ function Sidebar({
   };
 
   const toggleProject = (projectName) => {
-    const newExpanded = new Set(expandedProjects);
-    if (newExpanded.has(projectName)) {
-      newExpanded.delete(projectName);
-    } else {
+    const newExpanded = new Set();
+    // If clicking the already-expanded project, collapse it (newExpanded stays empty)
+    // If clicking a different project, expand only that one
+    if (!expandedProjects.has(projectName)) {
       newExpanded.add(projectName);
     }
     setExpandedProjects(newExpanded);
