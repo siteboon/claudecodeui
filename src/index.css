@@ -443,18 +443,18 @@
     color: rgb(156 163 175) !important;
     opacity: 1 !important;
   }
-  
+
   .dark .chat-input-placeholder::placeholder {
     color: rgb(75 85 99) !important;
     opacity: 1 !important;
     -webkit-text-fill-color: rgb(75 85 99) !important;
   }
-  
+
   .chat-input-placeholder::-webkit-input-placeholder {
     color: rgb(156 163 175) !important;
     opacity: 1 !important;
   }
-  
+
   .dark .chat-input-placeholder::-webkit-input-placeholder {
     color: rgb(75 85 99) !important;
     opacity: 1 !important;
@@ -722,8 +722,14 @@
   
   /* Improved textarea styling */
   .chat-input-placeholder {
+    display: block !important;
     scrollbar-width: thin;
     scrollbar-color: rgba(156, 163, 175, 0.3) transparent;
+  }
+
+  /* Ensure container fits textarea tightly */
+  .chat-input-placeholder:not(:focus) {
+    height: auto;
   }
   
   .chat-input-placeholder::-webkit-scrollbar {
