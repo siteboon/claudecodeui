@@ -627,7 +627,7 @@ async function getSessions(projectName, limit = 5, offset = 0) {
       return session;
     });
     const visibleSessions = [...latestFromGroups, ...standaloneSessionsArray]
-      .filter(session => !session.summary.includes('{"subtasks":'))
+      .filter(session => !session.summary.startsWith('{ "'))
       .sort((a, b) => new Date(b.lastActivity) - new Date(a.lastActivity));
 
     const total = visibleSessions.length;
@@ -776,12 +776,12 @@ async function parseJsonlSessions(filePath) {
       }
     }
 
-    // Filter out sessions that contain JSON subtasks (Task Master errors)
+    // Filter out sessions that contain JSON responses (Task Master errors)
     const allSessions = Array.from(sessions.values());
     const filteredSessions = allSessions.filter(session => {
-      const shouldFilter = session.summary.includes('{"subtasks":');
+      const shouldFilter = session.summary.startsWith('{ "');
       if (shouldFilter) {
-        console.log('🔇 Filtering out Task Master JSON session:', session.id, session.summary.substring(0, 80) + '...');
+        console.log('🔇 Filtering out JSON session:', session.id, session.summary.substring(0, 80) + '...');
       }
       // Log a sample of summaries to debug
       if (Math.random() < 0.01) { // Log 1% of sessions
