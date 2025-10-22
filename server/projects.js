@@ -627,8 +627,9 @@ async function getSessions(projectName, limit = 5, offset = 0) {
       return session;
     });
     const visibleSessions = [...latestFromGroups, ...standaloneSessionsArray]
+      .filter(session => !session.summary.includes('{"subtasks":'))
       .sort((a, b) => new Date(b.lastActivity) - new Date(a.lastActivity));
-    
+
     const total = visibleSessions.length;
     const paginatedSessions = visibleSessions.slice(offset, offset + limit);
     const hasMore = offset + limit < total;
@@ -697,20 +698,29 @@ async function parseJsonlSessions(filePath) {
             // Track last user and assistant messages (skip system messages)
             if (entry.message?.role === 'user' && entry.message?.content) {
               const content = entry.message.content;
-              const isSystemMessage = typeof content === 'string' && (
-                content.startsWith('<command-name>') ||
-                content.startsWith('<command-message>') ||
-                content.startsWith('<command-args>') ||
-                content.startsWith('<local-command-stdout>') ||
-                content.startsWith('<system-reminder>') ||
-                content.startsWith('Caveat:') ||
-                content.startsWith('This session is being continued from a previous') ||
-                content.startsWith('Invalid API key') ||
-                content === 'Warmup' // Explicitly filter out "Warmup"
+
+              // Extract text from array format if needed
+              let textContent = content;
+              if (Array.isArray(content) && content.length > 0 && content[0].type === 'text') {
+                textContent = content[0].text;
+              }
+
+              const isSystemMessage = typeof textContent === 'string' && (
+                textContent.startsWith('<command-name>') ||
+                textContent.startsWith('<command-message>') ||
+                textContent.startsWith('<command-args>') ||
+                textContent.startsWith('<local-command-stdout>') ||
+                textContent.startsWith('<system-reminder>') ||
+                textContent.startsWith('Caveat:') ||
+                textContent.startsWith('This session is being continued from a previous') ||
+                textContent.startsWith('Invalid API key') ||
+                textContent.includes('{"subtasks":') || // Filter Task Master prompts
+                textContent.includes('CRITICAL: You MUST respond with ONLY a JSON') || // Filter Task Master system prompts
+                textContent === 'Warmup' // Explicitly filter out "Warmup"
               );
 
-              if (typeof content === 'string' && content.length > 0 && !isSystemMessage) {
-                session.lastUserMessage = content;
+              if (typeof textContent === 'string' && textContent.length > 0 && !isSystemMessage) {
+                session.lastUserMessage = textContent;
               }
             } else if (entry.message?.role === 'assistant' && entry.message?.content) {
               // Skip API error messages using the isApiErrorMessage flag
@@ -730,8 +740,14 @@ async function parseJsonlSessions(filePath) {
                   assistantText = entry.message.content;
                 }
 
-                // Additional filter for assistant messages that start with "Invalid API key"
-                if (assistantText && !assistantText.startsWith('Invalid API key')) {
+                // Additional filter for assistant messages with system content
+                const isSystemAssistantMessage = typeof assistantText === 'string' && (
+                  assistantText.startsWith('Invalid API key') ||
+                  assistantText.includes('{"subtasks":') ||
+                  assistantText.includes('CRITICAL: You MUST respond with ONLY a JSON')
+                );
+
+                if (assistantText && !isSystemAssistantMessage) {
                   session.lastAssistantMessage = assistantText;
                 }
               }
@@ -760,8 +776,24 @@ async function parseJsonlSessions(filePath) {
       }
     }
 
+    // Filter out sessions that contain JSON subtasks (Task Master errors)
+    const allSessions = Array.from(sessions.values());
+    const filteredSessions = allSessions.filter(session => {
+      const shouldFilter = session.summary.includes('{"subtasks":');
+      if (shouldFilter) {
+        console.log('🔇 Filtering out Task Master JSON session:', session.id, session.summary.substring(0, 80) + '...');
+      }
+      // Log a sample of summaries to debug
+      if (Math.random() < 0.01) { // Log 1% of sessions
+        console.log(`📝 Sample summary for ${session.id}:`, session.summary.substring(0, 60));
+      }
+      return !shouldFilter;
+    });
+
+    console.log(`📊 Session filtering: ${allSessions.length} total, ${filteredSessions.length} after filtering`);
+
     return {
-      sessions: Array.from(sessions.values()),
+      sessions: filteredSessions,
       entries: entries
     };
 
