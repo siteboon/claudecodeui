@@ -310,6 +310,11 @@ function Sidebar({
     setExpandedProjects(newExpanded);
   };
 
+  // Wrapper to attach project context when session is clicked
+  const handleSessionClick = (session, projectName) => {
+    onSessionSelect({ ...session, __projectName: projectName });
+  };
+
   // Starred projects utility functions
   const toggleStarProject = (projectName) => {
     const newStarred = new Set(starredProjects);
@@ -1337,11 +1342,11 @@ function Sidebar({
                                 )}
                                 onClick={() => {
                                   handleProjectSelect(project);
-                                  onSessionSelect(session);
+                                  handleSessionClick(session, project.name);
                                 }}
                                 onTouchEnd={handleTouchClick(() => {
                                   handleProjectSelect(project);
-                                  onSessionSelect(session);
+                                  handleSessionClick(session, project.name);
                                 })}
                               >
                                 <div className="flex items-center gap-2">
@@ -1404,8 +1409,8 @@ function Sidebar({
                                   "w-full justify-start p-2 h-auto font-normal text-left hover:bg-accent/50 transition-colors duration-200",
                                   selectedSession?.id === session.id && "bg-accent text-accent-foreground"
                                 )}
-                                onClick={() => onSessionSelect(session)}
-                                onTouchEnd={handleTouchClick(() => onSessionSelect(session))}
+                                onClick={() => handleSessionClick(session, project.name)}
+                                onTouchEnd={handleTouchClick(() => handleSessionClick(session, project.name))}
                               >
                                 <div className="flex items-start gap-2 min-w-0 w-full">
                                   {isCursorSession ? (

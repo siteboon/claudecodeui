@@ -361,7 +361,7 @@ function AppContent() {
     if (activeTab !== 'git' && activeTab !== 'preview') {
       setActiveTab('chat');
     }
-    
+
     // For Cursor sessions, we need to set the session ID differently
     // since they're persistent and not created by Claude
     const provider = localStorage.getItem('selected-provider') || 'claude';
@@ -369,9 +369,17 @@ function AppContent() {
       // Cursor sessions have persistent IDs
       sessionStorage.setItem('cursorSessionId', session.id);
     }
-    
+
+    // Only close sidebar on mobile if switching to a different project
     if (isMobile) {
-      setSidebarOpen(false);
+      const sessionProjectName = session.__projectName;
+      const currentProjectName = selectedProject?.name;
+
+      // Close sidebar if clicking a session from a different project
+      // Keep it open if clicking a session from the same project
+      if (sessionProjectName !== currentProjectName) {
+        setSidebarOpen(false);
+      }
     }
     navigate(`/session/${session.id}`);
   };

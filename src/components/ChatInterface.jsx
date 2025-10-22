@@ -1214,6 +1214,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const textareaRef = useRef(null);
   const inputContainerRef = useRef(null);
   const scrollContainerRef = useRef(null);
+  const isLoadingSessionRef = useRef(false); // Track session loading to prevent multiple scrolls
   // Streaming throttle buffers
   const streamBufferRef = useRef('');
   const streamTimerRef = useRef(null);
@@ -1559,8 +1560,18 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     setChatMessages(prev => [...prev, commandMessage]);
 
     // Automatically send to Claude for processing
-    // The command content will be included in the next API call
-  }, []);
+    // Set the input to the command content
+    setInput(content);
+    
+    // Wait for state to update, then trigger form submission
+    setTimeout(() => {
+      // Find the form and submit it programmatically
+      const form = document.querySelector('form');
+      if (form) {
+        form.requestSubmit();
+      }
+    }, 100);
+  }, []);;;
   const executeCommand = useCallback(async (command) => {
     if (!command || !selectedProject) return;
 
@@ -2228,6 +2239,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       if (selectedSession && selectedProject) {
         const provider = localStorage.getItem('selected-provider') || 'claude';
 
+        // Mark that we're loading a session to prevent multiple scroll triggers
+        isLoadingSessionRef.current = true;
+
         // Only reset state if the session ID actually changed (not initial load)
         const sessionChanged = currentSessionId !== null && currentSessionId !== selectedSession.id;
 
@@ -2294,10 +2308,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             const messages = await loadSessionMessages(selectedProject.name, selectedSession.id, false);
             setSessionMessages(messages);
             // convertedMessages will be automatically updated via useMemo
-            // Scroll to bottom after loading session messages if auto-scroll is enabled
-            if (autoScrollToBottom) {
-              setTimeout(() => scrollToBottom(), 200);
-            }
+            // Scroll will be handled by the main scroll useEffect after messages are rendered
           } else {
             // Reset the flag after handling system session change
             setIsSystemSessionChange(false);
@@ -2316,8 +2327,14 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         setHasMoreMessages(false);
         setTotalMessages(0);
       }
+
+      // Mark loading as complete after messages are set
+      // Use setTimeout to ensure state updates and DOM rendering are complete
+      setTimeout(() => {
+        isLoadingSessionRef.current = false;
+      }, 250);
     };
-    
+
     loadMessages();
   }, [selectedSession, selectedProject, loadCursorSessionMessages, scrollToBottom, isSystemSessionChange]);
 
@@ -2427,10 +2444,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
       // Filter messages by session ID to prevent cross-session interference
       // Skip filtering for global messages that apply to all sessions
-      const globalMessageTypes = ['projects_updated', 'taskmaster-project-updated', 'session-created'];
+      const globalMessageTypes = ['projects_updated', 'taskmaster-project-updated', 'session-created', 'claude-complete'];
       const isGlobalMessage = globalMessageTypes.includes(latestMessage.type);
 
-      if (!isGlobalMessage && latestMessage.sessionId && latestMessage.sessionId !== currentSessionId) {
+      // For new sessions (currentSessionId is null), allow messages through
+      if (!isGlobalMessage && latestMessage.sessionId && currentSessionId && latestMessage.sessionId !== currentSessionId) {
         // Message is for a different session, ignore it
         console.log('⏭️ Skipping message for different session:', latestMessage.sessionId, 'current:', currentSessionId);
         return;
@@ -2842,8 +2860,16 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           // Get session ID from message or fall back to current session
           const completedSessionId = latestMessage.sessionId || currentSessionId || sessionStorage.getItem('pendingSessionId');
 
-          // Only update UI state if this is the current session
-          if (completedSessionId === currentSessionId) {
+          console.log('🎯 claude-complete received:', {
+            completedSessionId,
+            currentSessionId,
+            match: completedSessionId === currentSessionId,
+            isNew: !currentSessionId
+          });
+
+          // Update UI state if this is the current session OR if we don't have a session ID yet (new session)
+          if (completedSessionId === currentSessionId || !currentSessionId) {
+            console.log('✅ Stopping loading state');
             setIsLoading(false);
             setCanAbortSession(false);
             setClaudeStatus(null);
@@ -2881,11 +2907,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           if (pendingSessionId && !currentSessionId && latestMessage.exitCode === 0) {
                 setCurrentSessionId(pendingSessionId);
             sessionStorage.removeItem('pendingSessionId');
-            
-            // Trigger a project refresh to update the sidebar with the new session
-            if (window.refreshProjects) {
-              setTimeout(() => window.refreshProjects(), 500);
-            }
+
+            // No need to manually refresh - projects_updated WebSocket message will handle it
+            console.log('✅ New session complete, ID set to:', pendingSessionId);
           }
           
           // Clear persisted chat messages after successful completion
@@ -3100,13 +3124,14 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, [chatMessages.length, isUserScrolledUp, scrollToBottom, autoScrollToBottom]);
 
-  // Scroll to bottom when component mounts with existing messages or when messages first load
+  // Scroll to bottom when messages first load after session switch
   useEffect(() => {
-    if (scrollContainerRef.current && chatMessages.length > 0) {
-      // Always scroll to bottom when messages first load (user expects to see latest)
+    if (scrollContainerRef.current && chatMessages.length > 0 && !isLoadingSessionRef.current) {
+      // Only scroll if we're not in the middle of loading a session
+      // This prevents the "double scroll" effect during session switching
       // Also reset scroll state
       setIsUserScrolledUp(false);
-      setTimeout(() => scrollToBottom(), 200); // Longer delay to ensure full rendering
+      setTimeout(() => scrollToBottom(), 200); // Delay to ensure full rendering
     }
   }, [chatMessages.length > 0, scrollToBottom]); // Trigger when messages first appear
 

@@ -370,20 +370,27 @@ async function queryClaudeSDK(command, options = {}, ws) {
     }
 
     // Process streaming messages
+    console.log('🔄 Starting async generator loop for session:', capturedSessionId || 'NEW');
     for await (const message of queryInstance) {
       // Capture session ID from first message
       if (message.session_id && !capturedSessionId) {
+        console.log('📝 Captured session ID:', message.session_id);
         capturedSessionId = message.session_id;
         addSession(capturedSessionId, queryInstance, tempImagePaths, tempDir);
 
         // Send session-created event only once for new sessions
         if (!sessionId && !sessionCreatedSent) {
+          console.log('📤 Sending session-created event');
           sessionCreatedSent = true;
           ws.send(JSON.stringify({
             type: 'session-created',
             sessionId: capturedSessionId
           }));
+        } else {
+          console.log('⚠️ Not sending session-created. sessionId:', sessionId, 'sessionCreatedSent:', sessionCreatedSent);
         }
+      } else {
+        console.log('⚠️ No session_id in message or already captured. message.session_id:', message.session_id, 'capturedSessionId:', capturedSessionId);
       }
 
       // Transform and send message to WebSocket
@@ -412,6 +419,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
         }
       }
     }
+    console.log('🏁 Async generator loop completed');
 
     // Clean up session on completion
     if (capturedSessionId) {
@@ -422,12 +430,14 @@ async function queryClaudeSDK(command, options = {}, ws) {
     await cleanupTempFiles(tempImagePaths, tempDir);
 
     // Send completion event
+    console.log('✅ Streaming complete, sending claude-complete event');
     ws.send(JSON.stringify({
       type: 'claude-complete',
       sessionId: capturedSessionId,
       exitCode: 0,
       isNewSession: !sessionId && !!command
     }));
+    console.log('📤 claude-complete event sent');
 
   } catch (error) {
     console.error('SDK query error:', error);
