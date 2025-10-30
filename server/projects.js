@@ -781,16 +781,13 @@ async function parseJsonlSessions(filePath) {
     const filteredSessions = allSessions.filter(session => {
       const shouldFilter = session.summary.startsWith('{ "');
       if (shouldFilter) {
-        console.log('🔇 Filtering out JSON session:', session.id, session.summary.substring(0, 80) + '...');
       }
       // Log a sample of summaries to debug
       if (Math.random() < 0.01) { // Log 1% of sessions
-        console.log(`📝 Sample summary for ${session.id}:`, session.summary.substring(0, 60));
       }
       return !shouldFilter;
     });
 
-    console.log(`📊 Session filtering: ${allSessions.length} total, ${filteredSessions.length} after filtering`);
 
     return {
       sessions: filteredSessions,
