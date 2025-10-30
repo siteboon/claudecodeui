@@ -9,6 +9,7 @@ import React, { useEffect, useRef } from 'react';
  * @param {Function} onClose - Callback when menu should close
  * @param {Object} position - Position object { top, left } for absolute positioning
  * @param {boolean} isOpen - Whether the menu is open
+ * @param {Array} frequentCommands - Array of frequently used command objects
  */
 const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, position = { top: 0, left: 0 }, isOpen = false, frequentCommands = [] }) => {
   const menuRef = useRef(null);
