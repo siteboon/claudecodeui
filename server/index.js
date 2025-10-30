@@ -1234,14 +1234,17 @@ app.get('*', (req, res) => {
 
   // Only serve index.html for HTML routes, not for static assets
   // Static assets should already be handled by express.static middleware above
-  if (process.env.NODE_ENV === 'production') {
+  const indexPath = path.join(__dirname, '../dist/index.html');
+
+  // Check if dist/index.html exists (production build available)
+  if (fs.existsSync(indexPath)) {
     // Set no-cache headers for HTML to prevent service worker issues
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
-    res.sendFile(path.join(__dirname, '../dist/index.html'));
+    res.sendFile(indexPath);
   } else {
-    // In development, redirect to Vite dev server
+    // In development, redirect to Vite dev server only if dist doesn't exist
     res.redirect(`http://localhost:${process.env.VITE_PORT || 5173}`);
   }
 });
@@ -1336,8 +1339,17 @@ async function startServer() {
         await initializeDatabase();
         console.log('✅ Database initialization skipped (testing)');
 
+        // Check if running in production mode (dist folder exists)
+        const distIndexPath = path.join(__dirname, '../dist/index.html');
+        const isProduction = fs.existsSync(distIndexPath);
+
         // Log Claude implementation mode
         console.log('🚀 Using Claude Agents SDK for Claude integration');
+        console.log(`📦 Running in ${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'} mode`);
+
+        if (!isProduction) {
+            console.log(`⚠️  Note: Requests will be proxied to Vite dev server at http://localhost:${process.env.VITE_PORT || 5173}`);
+        }
 
         server.listen(PORT, '0.0.0.0', async () => {
             console.log(`Claude Code UI server running on http://0.0.0.0:${PORT}`);

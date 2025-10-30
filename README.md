@@ -67,7 +67,49 @@ No installation required, direct operation:
 npx @siteboon/claude-code-ui
 ```
 
-Your default browser will automatically open the Claude Code UI interface.
+The server will start and be accessible at `http://localhost:3001` (or your configured PORT).
+
+**To restart**: Simply run the same `npx` command again after stopping the server (Ctrl+C or Cmd+C).
+
+### Global Installation (For Regular Use)
+
+For frequent use, install globally once:
+
+```bash
+npm install -g @siteboon/claude-code-ui
+```
+
+Then start with a simple command:
+
+```bash
+claude-code-ui
+```
+
+**Benefits**:
+- Faster startup (no download/cache check)
+- Simple command to remember
+- Same experience every time
+
+**To restart**: Stop with Ctrl+C and run `claude-code-ui` again.
+
+### Run as Background Service (Optional)
+
+To keep the server running in the background, use PM2:
+
+```bash
+# Install PM2 globally (one-time)
+npm install -g pm2
+
+# Start the server
+pm2 start claude-code-ui --name "claude-ui"
+
+# Manage the service
+pm2 list             # View status
+pm2 restart claude-ui # Restart
+pm2 stop claude-ui   # Stop
+pm2 logs claude-ui   # View logs
+pm2 startup          # Auto-start on system boot
+```
 
 ### Local Development Installation
 
@@ -236,13 +278,29 @@ We welcome contributions! Please follow these guidelines:
 
 ### Common Issues & Solutions
 
+#### Server starts but redirects to port 5173 (Vite)
+**Problem**: Running `npx @siteboon/claude-code-ui` says it's running on port 3001, but redirects to 5173
+**Solutions**:
+- This was fixed in v1.9.1+. Update to the latest version:
+  ```bash
+  npx @siteboon/claude-code-ui@latest
+  ```
+- Or clear NPX cache and reinstall:
+  ```bash
+  npx clear-npx-cache
+  npx @siteboon/claude-code-ui
+  ```
+- If using global install, update it:
+  ```bash
+  npm update -g @siteboon/claude-code-ui
+  ```
+
 #### "No Claude projects found"
 **Problem**: The UI shows no projects or empty project list
 **Solutions**:
 - Ensure [Claude CLI](https://docs.anthropic.com/en/docs/claude-code) is properly installed
 - Run `claude` command in at least one project directory to initialize
 - Verify `~/.claude/projects/` directory exists and has proper permissions
-d
 
 #### File Explorer Issues
 **Problem**: Files not loading, permission errors, empty directories
