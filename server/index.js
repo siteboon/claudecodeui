@@ -27,7 +27,7 @@ try {
 console.log('PORT from env:', process.env.PORT);
 
 import express from 'express';
-import { WebSocketServer } from 'ws';
+import { WebSocketServer, WebSocket } from 'ws';
 import os from 'os';
 import http from 'http';
 import cors from 'cors';
@@ -46,6 +46,7 @@ import mcpRoutes from './routes/mcp.js';
 import cursorRoutes from './routes/cursor.js';
 import taskmasterRoutes from './routes/taskmaster.js';
 import mcpUtilsRoutes from './routes/mcp-utils.js';
+import commandsRoutes from './routes/commands.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 
@@ -107,7 +108,7 @@ async function setupProjectsWatcher() {
                     });
 
                     connectedClients.forEach(client => {
-                        if (client.readyState === client.OPEN) {
+                        if (client.readyState === WebSocket.OPEN) {
                             client.send(updateMessage);
                         }
                     });
@@ -192,8 +193,24 @@ app.use('/api/taskmaster', authenticateToken, taskmasterRoutes);
 // MCP utilities
 app.use('/api/mcp-utils', authenticateToken, mcpUtilsRoutes);
 
+// Commands API Routes (protected)
+app.use('/api/commands', authenticateToken, commandsRoutes);
+
 // Static files served after API routes
-app.use(express.static(path.join(__dirname, '../dist')));
+// Add cache control: HTML files should not be cached, but assets can be cached
+app.use(express.static(path.join(__dirname, '../dist'), {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) {
+      // Prevent HTML caching to avoid service worker issues after builds
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    } else if (filePath.match(/\.(js|css|woff2?|ttf|eot|svg|png|jpg|jpeg|gif|ico)$/)) {
+      // Cache static assets for 1 year (they have hashed names)
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
+  }
+}));
 
 // API Routes (protected)
 app.get('/api/config', authenticateToken, (req, res) => {
@@ -370,15 +387,24 @@ app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) =
 
         console.log('📄 File read request:', projectName, filePath);
 
-        // Using fsPromises from import
-
-        // Security check - ensure the path is safe and absolute
-        if (!filePath || !path.isAbsolute(filePath)) {
+        // Security: ensure the requested path is inside the project root
+        if (!filePath) {
             return res.status(400).json({ error: 'Invalid file path' });
         }
 
-        const content = await fsPromises.readFile(filePath, 'utf8');
-        res.json({ content, path: filePath });
+        const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+        if (!projectRoot) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+
+        const resolved = path.resolve(filePath);
+        const normalizedRoot = path.resolve(projectRoot) + path.sep;
+        if (!resolved.startsWith(normalizedRoot)) {
+            return res.status(403).json({ error: 'Path must be under project root' });
+        }
+
+        const content = await fsPromises.readFile(resolved, 'utf8');
+        res.json({ content, path: resolved });
     } catch (error) {
         console.error('Error reading file:', error);
         if (error.code === 'ENOENT') {
@@ -399,27 +425,35 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
 
         console.log('🖼️ Binary file serve request:', projectName, filePath);
 
-        // Using fs from import
-        // Using mime from import
-
-        // Security check - ensure the path is safe and absolute
-        if (!filePath || !path.isAbsolute(filePath)) {
+        // Security: ensure the requested path is inside the project root
+        if (!filePath) {
             return res.status(400).json({ error: 'Invalid file path' });
+        }
+
+        const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+        if (!projectRoot) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+
+        const resolved = path.resolve(filePath);
+        const normalizedRoot = path.resolve(projectRoot) + path.sep;
+        if (!resolved.startsWith(normalizedRoot)) {
+            return res.status(403).json({ error: 'Path must be under project root' });
         }
 
         // Check if file exists
         try {
-            await fsPromises.access(filePath);
+            await fsPromises.access(resolved);
         } catch (error) {
             return res.status(404).json({ error: 'File not found' });
         }
 
         // Get file extension and set appropriate content type
-        const mimeType = mime.lookup(filePath) || 'application/octet-stream';
+        const mimeType = mime.lookup(resolved) || 'application/octet-stream';
         res.setHeader('Content-Type', mimeType);
 
         // Stream the file
-        const fileStream = fs.createReadStream(filePath);
+        const fileStream = fs.createReadStream(resolved);
         fileStream.pipe(res);
 
         fileStream.on('error', (error) => {
@@ -445,10 +479,8 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
 
         console.log('💾 File save request:', projectName, filePath);
 
-        // Using fsPromises from import
-
-        // Security check - ensure the path is safe and absolute
-        if (!filePath || !path.isAbsolute(filePath)) {
+        // Security: ensure the requested path is inside the project root
+        if (!filePath) {
             return res.status(400).json({ error: 'Invalid file path' });
         }
 
@@ -456,21 +488,32 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
             return res.status(400).json({ error: 'Content is required' });
         }
 
+        const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+        if (!projectRoot) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+
+        const resolved = path.resolve(filePath);
+        const normalizedRoot = path.resolve(projectRoot) + path.sep;
+        if (!resolved.startsWith(normalizedRoot)) {
+            return res.status(403).json({ error: 'Path must be under project root' });
+        }
+
         // Create backup of original file
         try {
-            const backupPath = filePath + '.backup.' + Date.now();
-            await fsPromises.copyFile(filePath, backupPath);
+            const backupPath = resolved + '.backup.' + Date.now();
+            await fsPromises.copyFile(resolved, backupPath);
             console.log('📋 Created backup:', backupPath);
         } catch (backupError) {
             console.warn('Could not create backup:', backupError.message);
         }
 
         // Write the new content
-        await fsPromises.writeFile(filePath, content, 'utf8');
+        await fsPromises.writeFile(resolved, content, 'utf8');
 
         res.json({
             success: true,
-            path: filePath,
+            path: resolved,
             message: 'File saved successfully'
         });
     } catch (error) {
@@ -751,7 +794,7 @@ function handleShellConnection(ws) {
 
                     // Handle data output
                     shellProcess.onData((data) => {
-                        if (ws.readyState === ws.OPEN) {
+                        if (ws.readyState === WebSocket.OPEN) {
                             let outputData = data;
 
                             // Check for various URL opening patterns
@@ -798,7 +841,7 @@ function handleShellConnection(ws) {
                     // Handle process exit
                     shellProcess.onExit((exitCode) => {
                         console.log('🔚 Shell process exited with code:', exitCode.exitCode, 'signal:', exitCode.signal);
-                        if (ws.readyState === ws.OPEN) {
+                        if (ws.readyState === WebSocket.OPEN) {
                             ws.send(JSON.stringify({
                                 type: 'output',
                                 data: `\r\n\x1b[33mProcess exited with code ${exitCode.exitCode}${exitCode.signal ? ` (${exitCode.signal})` : ''}\x1b[0m\r\n`
@@ -835,7 +878,7 @@ function handleShellConnection(ws) {
             }
         } catch (error) {
             console.error('❌ Shell WebSocket error:', error.message);
-            if (ws.readyState === ws.OPEN) {
+            if (ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({
                     type: 'output',
                     data: `\r\n\x1b[31mError: ${error.message}\x1b[0m\r\n`
@@ -1090,30 +1133,50 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
     }
 });
 
-// API endpoint to get token usage for a session by reading its JSONL file
-app.get('/api/sessions/:sessionId/token-usage', authenticateToken, async (req, res) => {
+// Get token usage for a specific session
+app.get('/api/projects/:projectName/sessions/:sessionId/token-usage', authenticateToken, async (req, res) => {
   try {
-    const { sessionId } = req.params;
-    const { projectPath } = req.query;
+    const { projectName, sessionId } = req.params;
+    const homeDir = os.homedir();
 
-    if (!projectPath) {
-      return res.status(400).json({ error: 'projectPath query parameter is required' });
+    // Extract actual project path
+    let projectPath;
+    try {
+      projectPath = await extractProjectDirectory(projectName);
+    } catch (error) {
+      console.error('Error extracting project directory:', error);
+      return res.status(500).json({ error: 'Failed to determine project path' });
     }
 
     // Construct the JSONL file path
     // Claude stores session files in ~/.claude/projects/[encoded-project-path]/[session-id].jsonl
     // The encoding replaces /, spaces, ~, and _ with -
-    const homeDir = os.homedir();
-    const encodedPath = projectPath.replace(/[\/\s~_]/g, '-');
-    const jsonlPath = path.join(homeDir, '.claude', 'projects', encodedPath, `${sessionId}.jsonl`);
+    const encodedPath = projectPath.replace(/[\\/:\s~_]/g, '-');
+    const projectDir = path.join(homeDir, '.claude', 'projects', encodedPath);
 
-    // Check if file exists
-    if (!fs.existsSync(jsonlPath)) {
-      return res.status(404).json({ error: 'Session file not found', path: jsonlPath });
+    // Allow only safe characters in sessionId
+    const safeSessionId = String(sessionId).replace(/[^a-zA-Z0-9._-]/g, '');
+    if (!safeSessionId) {
+      return res.status(400).json({ error: 'Invalid sessionId' });
+    }
+    const jsonlPath = path.join(projectDir, `${safeSessionId}.jsonl`);
+
+    // Constrain to projectDir
+    const rel = path.relative(path.resolve(projectDir), path.resolve(jsonlPath));
+    if (rel.startsWith('..') || path.isAbsolute(rel)) {
+      return res.status(400).json({ error: 'Invalid path' });
     }
 
     // Read and parse the JSONL file
-    const fileContent = fs.readFileSync(jsonlPath, 'utf8');
+    let fileContent;
+    try {
+      fileContent = await fsPromises.readFile(jsonlPath, 'utf8');
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        return res.status(404).json({ error: 'Session file not found', path: jsonlPath });
+      }
+      throw error; // Re-throw other errors to be caught by outer try-catch
+    }
     const lines = fileContent.trim().split('\n');
 
     const parsedContextWindow = parseInt(process.env.CONTEXT_WINDOW, 10);
@@ -1164,9 +1227,18 @@ app.get('/api/sessions/:sessionId/token-usage', authenticateToken, async (req, r
 
 // Serve React app for all other routes (excluding static files)
 app.get('*', (req, res) => {
+  // Skip requests for static assets (files with extensions)
+  if (path.extname(req.path)) {
+    return res.status(404).send('Not found');
+  }
+
   // Only serve index.html for HTML routes, not for static assets
   // Static assets should already be handled by express.static middleware above
   if (process.env.NODE_ENV === 'production') {
+    // Set no-cache headers for HTML to prevent service worker issues
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.sendFile(path.join(__dirname, '../dist/index.html'));
   } else {
     // In development, redirect to Vite dev server

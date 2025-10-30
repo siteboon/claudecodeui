@@ -55,7 +55,8 @@ function MainContent({
   showRawParameters,      // Show raw parameters in tool accordions
   showThinking,           // Show thinking/reasoning sections
   autoScrollToBottom,     // Auto-scroll to bottom when new messages arrive
-  sendByCtrlEnter         // Send by Ctrl+Enter mode for East Asian language input
+  sendByCtrlEnter,        // Send by Ctrl+Enter mode for East Asian language input
+  externalMessageUpdate   // Trigger for external CLI updates to current session
 }) {
   const [editingFile, setEditingFile] = useState(null);
   const [selectedTask, setSelectedTask] = useState(null);
@@ -433,6 +434,7 @@ function MainContent({
               showThinking={showThinking}
               autoScrollToBottom={autoScrollToBottom}
               sendByCtrlEnter={sendByCtrlEnter}
+              externalMessageUpdate={externalMessageUpdate}
               onShowAllTasks={tasksEnabled ? () => setActiveTab('tasks') : null}
             />
           </ErrorBoundary>

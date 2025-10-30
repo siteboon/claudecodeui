@@ -151,23 +151,29 @@ function extractTokenBudget(resultMessage) {
     return null;
   }
 
-  // Get the first model's usage data (same as CLI implementation)
+  // Get the first model's usage data
   const modelKey = Object.keys(resultMessage.modelUsage)[0];
   const modelData = resultMessage.modelUsage[modelKey];
 
-  if (!modelData || !modelData.contextWindow) {
+  if (!modelData) {
     return null;
   }
 
-  // Calculate total tokens used (input + output + cache)
-  const inputTokens = modelData.inputTokens || 0;
-  const outputTokens = modelData.outputTokens || 0;
-  const cacheReadTokens = modelData.cacheReadInputTokens || 0;
-  const cacheCreationTokens = modelData.cacheCreationInputTokens || 0;
+  // Use cumulative tokens if available (tracks total for the session)
+  // Otherwise fall back to per-request tokens
+  const inputTokens = modelData.cumulativeInputTokens || modelData.inputTokens || 0;
+  const outputTokens = modelData.cumulativeOutputTokens || modelData.outputTokens || 0;
+  const cacheReadTokens = modelData.cumulativeCacheReadInputTokens || modelData.cacheReadInputTokens || 0;
+  const cacheCreationTokens = modelData.cumulativeCacheCreationInputTokens || modelData.cacheCreationInputTokens || 0;
 
   // Total used = input + output + cache tokens
   const totalUsed = inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
-  const contextWindow = modelData.contextWindow;
+
+  // Use configured context window budget from environment (default 160000)
+  // This is the user's budget limit, not the model's context window
+  const contextWindow = parseInt(process.env.CONTEXT_WINDOW) || 160000;
+
+  console.log(`📊 Token calculation: input=${inputTokens}, output=${outputTokens}, cache=${cacheReadTokens + cacheCreationTokens}, total=${totalUsed}/${contextWindow}`);
 
   return {
     used: totalUsed,
@@ -364,9 +370,11 @@ async function queryClaudeSDK(command, options = {}, ws) {
     }
 
     // Process streaming messages
+    console.log('🔄 Starting async generator loop for session:', capturedSessionId || 'NEW');
     for await (const message of queryInstance) {
       // Capture session ID from first message
       if (message.session_id && !capturedSessionId) {
+        console.log('📝 Captured session ID:', message.session_id);
         capturedSessionId = message.session_id;
         addSession(capturedSessionId, queryInstance, tempImagePaths, tempDir);
 
@@ -377,7 +385,11 @@ async function queryClaudeSDK(command, options = {}, ws) {
             type: 'session-created',
             sessionId: capturedSessionId
           }));
+        } else {
+          console.log('⚠️ Not sending session-created. sessionId:', sessionId, 'sessionCreatedSent:', sessionCreatedSent);
         }
+      } else {
+        console.log('⚠️ No session_id in message or already captured. message.session_id:', message.session_id, 'capturedSessionId:', capturedSessionId);
       }
 
       // Transform and send message to WebSocket
@@ -409,12 +421,14 @@ async function queryClaudeSDK(command, options = {}, ws) {
     await cleanupTempFiles(tempImagePaths, tempDir);
 
     // Send completion event
+    console.log('✅ Streaming complete, sending claude-complete event');
     ws.send(JSON.stringify({
       type: 'claude-complete',
       sessionId: capturedSessionId,
       exitCode: 0,
       isNewSession: !sessionId && !!command
     }));
+    console.log('📤 claude-complete event sent');
 
   } catch (error) {
     console.error('SDK query error:', error);
