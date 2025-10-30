@@ -4228,20 +4228,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 const isExpanded = e.target.scrollHeight > lineHeight * 2;
                 setIsTextareaExpanded(isExpanded);
               }}
-              placeholder={`Ask ${provider === 'cursor' ? 'Cursor' : 'Claude'} to help with your code...`}
+              placeholder={`Type / for commands, @ for files, or ask ${provider === 'cursor' ? 'Cursor' : 'Claude'} anything...`}
               disabled={isLoading}
               className="chat-input-placeholder block w-full pl-12 pr-20 sm:pr-40 py-1.5 sm:py-4 bg-transparent rounded-2xl focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 resize-none min-h-[50px] sm:min-h-[80px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base leading-[21px] sm:leading-6 transition-all duration-200"
               style={{ height: '50px' }}
             />
-            {/* Custom placeholder overlay that can wrap */}
-            {!input.trim() && !isInputFocused && (
-              <div
-                className="absolute inset-0 pl-12 pr-20 sm:pr-40 py-1.5 sm:py-4 pointer-events-none text-gray-400 dark:text-gray-500 text-sm sm:text-base"
-                style={{ whiteSpace: 'normal', wordWrap: 'break-word' }}
-              >
-                Type / for commands, @ for files, or ask {provider === 'cursor' ? 'Cursor' : 'Claude'} anything...
-              </div>
-            )}
             {/* Image upload button */}
             <button
               type="button"
@@ -4339,15 +4330,15 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           {/* Hint text */}
           <div className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2 hidden sm:block">
             {sendByCtrlEnter
-              ? "Ctrl+Enter to send (IME safe) • Shift+Enter for new line • Tab to change modes"
-              : "Press Enter to send • Shift+Enter for new line • Tab to change modes"}
+              ? "Ctrl+Enter to send (IME safe) • Shift+Enter for new line • Tab to change modes • Type / for slash commands"
+              : "Press Enter to send • Shift+Enter for new line • Tab to change modes • Type / for slash commands"}
           </div>
           <div className={`text-xs text-gray-500 dark:text-gray-400 text-center mt-2 sm:hidden transition-opacity duration-200 ${
             isInputFocused ? 'opacity-100' : 'opacity-0'
           }`}>
-            {sendByCtrlEnter 
-              ? "Ctrl+Enter to send (IME safe) • Tab for modes • @ for files" 
-              : "Enter to send • Tab for modes • @ for files"}
+            {sendByCtrlEnter
+              ? "Ctrl+Enter to send (IME safe) • Tab for modes • @ for files • / for commands"
+              : "Enter to send • Tab for modes • @ for files • / for commands"}
           </div>
         </form>
       </div>
