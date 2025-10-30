@@ -35,6 +35,22 @@ function GitPanel({ selectedProject, isMobile }) {
   const textareaRef = useRef(null);
   const dropdownRef = useRef(null);
 
+  // Get current provider from localStorage (same as ChatInterface does)
+  const [provider, setProvider] = useState(() => {
+    return localStorage.getItem('selected-provider') || 'claude';
+  });
+
+  // Listen for provider changes in localStorage
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const newProvider = localStorage.getItem('selected-provider') || 'claude';
+      setProvider(newProvider);
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
   useEffect(() => {
     if (selectedProject) {
       fetchGitStatus();
@@ -435,10 +451,11 @@ function GitPanel({ selectedProject, isMobile }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           project: selectedProject.name,
-          files: Array.from(selectedFiles)
+          files: Array.from(selectedFiles),
+          provider: provider // Pass the current provider (claude or cursor)
         })
       });
-      
+
       const data = await response.json();
       if (data.message) {
         setCommitMessage(data.message);

@@ -4,6 +4,8 @@ import { promisify } from 'util';
 import path from 'path';
 import { promises as fs } from 'fs';
 import { extractProjectDirectory } from '../projects.js';
+import { queryClaudeSDK } from '../claude-sdk.js';
+import { spawnCursor } from '../cursor-cli.js';
 
 const router = express.Router();
 const execAsync = promisify(exec);
@@ -343,19 +345,24 @@ router.get('/commit-diff', async (req, res) => {
   }
 });
 
-// Generate commit message based on staged changes
+// Generate commit message based on staged changes using AI
 router.post('/generate-commit-message', async (req, res) => {
-  const { project, files } = req.body;
-  
+  const { project, files, provider = 'claude' } = req.body;
+
   if (!project || !files || files.length === 0) {
     return res.status(400).json({ error: 'Project name and files are required' });
   }
 
+  // Validate provider
+  if (!['claude', 'cursor'].includes(provider)) {
+    return res.status(400).json({ error: 'provider must be "claude" or "cursor"' });
+  }
+
   try {
     const projectPath = await getActualProjectPath(project);
-    
+
     // Get diff for selected files
-    let combinedDiff = '';
+    let diffContext = '';
     for (const file of files) {
       try {
         const { stdout } = await execAsync(
@@ -363,17 +370,30 @@ router.post('/generate-commit-message', async (req, res) => {
           { cwd: projectPath }
         );
         if (stdout) {
-          combinedDiff += `\n--- ${file} ---\n${stdout}`;
+          diffContext += `\n--- ${file} ---\n${stdout}`;
         }
       } catch (error) {
         console.error(`Error getting diff for ${file}:`, error);
       }
     }
-    
-    // Use AI to generate commit message (simple implementation)
-    // In a real implementation, you might want to use GPT or Claude API
-    const message = generateSimpleCommitMessage(files, combinedDiff);
-    
+
+    // If no diff found, might be untracked files
+    if (!diffContext.trim()) {
+      // Try to get content of untracked files
+      for (const file of files) {
+        try {
+          const filePath = path.join(projectPath, file);
+          const content = await fs.readFile(filePath, 'utf-8');
+          diffContext += `\n--- ${file} (new file) ---\n${content.substring(0, 1000)}\n`;
+        } catch (error) {
+          console.error(`Error reading file ${file}:`, error);
+        }
+      }
+    }
+
+    // Generate commit message using AI
+    const message = await generateCommitMessageWithAI(files, diffContext, provider, projectPath);
+
     res.json({ message });
   } catch (error) {
     console.error('Generate commit message error:', error);
@@ -381,44 +401,143 @@ router.post('/generate-commit-message', async (req, res) => {
   }
 });
 
-// Simple commit message generator (can be replaced with AI)
-function generateSimpleCommitMessage(files, diff) {
-  const fileCount = files.length;
-  const isMultipleFiles = fileCount > 1;
-  
-  // Analyze the diff to determine the type of change
-  const additions = (diff.match(/^\+[^+]/gm) || []).length;
-  const deletions = (diff.match(/^-[^-]/gm) || []).length;
-  
-  // Determine the primary action
-  let action = 'Update';
-  if (additions > 0 && deletions === 0) {
-    action = 'Add';
-  } else if (deletions > 0 && additions === 0) {
-    action = 'Remove';
-  } else if (additions > deletions * 2) {
-    action = 'Enhance';
-  } else if (deletions > additions * 2) {
-    action = 'Refactor';
-  }
-  
-  // Generate message based on files
-  if (isMultipleFiles) {
-    const components = new Set(files.map(f => {
-      const parts = f.split('/');
-      return parts[parts.length - 2] || parts[0];
-    }));
-    
-    if (components.size === 1) {
-      return `${action} ${[...components][0]} component`;
-    } else {
-      return `${action} multiple components`;
+/**
+ * Generates a commit message using AI (Claude SDK or Cursor CLI)
+ * @param {Array<string>} files - List of changed files
+ * @param {string} diffContext - Git diff content
+ * @param {string} provider - 'claude' or 'cursor'
+ * @param {string} projectPath - Project directory path
+ * @returns {Promise<string>} Generated commit message
+ */
+async function generateCommitMessageWithAI(files, diffContext, provider, projectPath) {
+  // Create the prompt
+  const prompt = `You are a git commit message generator. Based on the following file changes and diffs, generate a commit message in conventional commit format.
+
+REQUIREMENTS:
+- Use conventional commit format: type(scope): subject
+- Include a body that explains what changed and why
+- Valid types: feat, fix, docs, style, refactor, perf, test, build, ci, chore
+- Keep subject line under 50 characters
+- Wrap body at 72 characters
+- Be specific and descriptive
+- Return ONLY the commit message, nothing else - no markdown, no explanations, no code blocks
+
+FILES CHANGED:
+${files.map(f => `- ${f}`).join('\n')}
+
+DIFFS:
+${diffContext.substring(0, 4000)}
+
+Generate the commit message now:`;
+
+  try {
+    // Create a simple writer that collects the response
+    let responseText = '';
+    const writer = {
+      send: (data) => {
+        try {
+          const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+          console.log('🔍 Writer received message type:', parsed.type);
+
+          // Handle different message formats from Claude SDK and Cursor CLI
+          // Claude SDK sends: {type: 'claude-response', data: {message: {content: [...]}}}
+          if (parsed.type === 'claude-response' && parsed.data) {
+            const message = parsed.data.message || parsed.data;
+            console.log('📦 Claude response message:', JSON.stringify(message, null, 2).substring(0, 500));
+            if (message.content && Array.isArray(message.content)) {
+              // Extract text from content array
+              for (const item of message.content) {
+                if (item.type === 'text' && item.text) {
+                  console.log('✅ Extracted text chunk:', item.text.substring(0, 100));
+                  responseText += item.text;
+                }
+              }
+            }
+          }
+          // Cursor CLI sends: {type: 'cursor-output', output: '...'}
+          else if (parsed.type === 'cursor-output' && parsed.output) {
+            console.log('✅ Cursor output:', parsed.output.substring(0, 100));
+            responseText += parsed.output;
+          }
+          // Also handle direct text messages
+          else if (parsed.type === 'text' && parsed.text) {
+            console.log('✅ Direct text:', parsed.text.substring(0, 100));
+            responseText += parsed.text;
+          }
+        } catch (e) {
+          // Ignore parse errors
+          console.error('Error parsing writer data:', e);
+        }
+      },
+      setSessionId: () => {}, // No-op for this use case
+    };
+
+    console.log('🚀 Calling AI agent with provider:', provider);
+    console.log('📝 Prompt length:', prompt.length);
+
+    // Call the appropriate agent
+    if (provider === 'claude') {
+      await queryClaudeSDK(prompt, {
+        cwd: projectPath,
+        permissionMode: 'bypassPermissions',
+        model: 'sonnet'
+      }, writer);
+    } else if (provider === 'cursor') {
+      await spawnCursor(prompt, {
+        cwd: projectPath,
+        skipPermissions: true
+      }, writer);
     }
-  } else {
-    const fileName = files[0].split('/').pop();
-    const componentName = fileName.replace(/\.(jsx?|tsx?|css|scss)$/, '');
-    return `${action} ${componentName}`;
+
+    console.log('📊 Total response text collected:', responseText.length, 'characters');
+    console.log('📄 Response preview:', responseText.substring(0, 200));
+
+    // Clean up the response
+    const cleanedMessage = cleanCommitMessage(responseText);
+    console.log('🧹 Cleaned message:', cleanedMessage.substring(0, 200));
+
+    return cleanedMessage || 'chore: update files';
+  } catch (error) {
+    console.error('Error generating commit message with AI:', error);
+    // Fallback to simple message
+    return `chore: update ${files.length} file${files.length !== 1 ? 's' : ''}`;
   }
+}
+
+/**
+ * Cleans the AI-generated commit message by removing markdown, code blocks, and extra formatting
+ * @param {string} text - Raw AI response
+ * @returns {string} Clean commit message
+ */
+function cleanCommitMessage(text) {
+  if (!text || !text.trim()) {
+    return '';
+  }
+
+  let cleaned = text.trim();
+
+  // Remove markdown code blocks
+  cleaned = cleaned.replace(/```[a-z]*\n/g, '');
+  cleaned = cleaned.replace(/```/g, '');
+
+  // Remove markdown headers
+  cleaned = cleaned.replace(/^#+\s*/gm, '');
+
+  // Remove leading/trailing quotes
+  cleaned = cleaned.replace(/^["']|["']$/g, '');
+
+  // If there are multiple lines, take everything (subject + body)
+  // Just clean up extra blank lines
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+
+  // Remove any explanatory text before the actual commit message
+  // Look for conventional commit pattern and start from there
+  const conventionalCommitMatch = cleaned.match(/(feat|fix|docs|style|refactor|perf|test|build|ci|chore)(\(.+?\))?:.+/s);
+  if (conventionalCommitMatch) {
+    cleaned = cleaned.substring(cleaned.indexOf(conventionalCommitMatch[0]));
+  }
+
+  return cleaned.trim();
 }
 
 // Get remote status (ahead/behind commits with smart remote detection)

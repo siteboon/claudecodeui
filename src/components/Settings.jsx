@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Badge } from './ui/badge';
-import { X, Plus, Settings as SettingsIcon, Shield, AlertTriangle, Moon, Sun, Server, Edit3, Trash2, Globe, Terminal, Zap, FolderOpen, LogIn } from 'lucide-react';
+import { X, Plus, Settings as SettingsIcon, Shield, AlertTriangle, Moon, Sun, Server, Edit3, Trash2, Globe, Terminal, Zap, FolderOpen, LogIn, Key } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
 import StandaloneShell from './StandaloneShell';
 import ClaudeLogo from './ClaudeLogo';
 import CursorLogo from './CursorLogo';
+import CredentialsSettings from './CredentialsSettings';
 
 function Settings({ isOpen, onClose, projects = [] }) {
   const { isDarkMode, toggleDarkMode } = useTheme();
@@ -676,6 +677,17 @@ function Settings({ isOpen, onClose, projects = [] }) {
                 }`}
               >
                 Tasks
+              </button>
+              <button
+                onClick={() => setActiveTab('api')}
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'api'
+                    ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Key className="w-4 h-4 inline mr-2" />
+                API & Tokens
               </button>
             </div>
           </div>
@@ -1939,6 +1951,13 @@ function Settings({ isOpen, onClose, projects = [] }) {
                     </div>
                   </>
                 )}
+              </div>
+            )}
+
+            {/* API & Tokens Tab */}
+            {activeTab === 'api' && (
+              <div className="space-y-6 md:space-y-8">
+                <CredentialsSettings />
               </div>
             )}
           </div>

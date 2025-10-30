@@ -47,6 +47,8 @@ import cursorRoutes from './routes/cursor.js';
 import taskmasterRoutes from './routes/taskmaster.js';
 import mcpUtilsRoutes from './routes/mcp-utils.js';
 import commandsRoutes from './routes/commands.js';
+import settingsRoutes from './routes/settings.js';
+import agentRoutes from './routes/agent.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 
@@ -195,6 +197,15 @@ app.use('/api/mcp-utils', authenticateToken, mcpUtilsRoutes);
 
 // Commands API Routes (protected)
 app.use('/api/commands', authenticateToken, commandsRoutes);
+
+// Settings API Routes (protected)
+app.use('/api/settings', authenticateToken, settingsRoutes);
+
+// Agent API Routes (uses API key authentication)
+app.use('/api/agent', agentRoutes);
+
+// Serve public files (like api-docs.html)
+app.use(express.static(path.join(__dirname, '../public')));
 
 // Static files served after API routes
 // Add cache control: HTML files should not be cached, but assets can be cached

@@ -523,10 +523,12 @@ async function getProjects() {
 
 async function getSessions(projectName, limit = 5, offset = 0) {
   const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
-  
+
   try {
     const files = await fs.readdir(projectDir);
-    const jsonlFiles = files.filter(file => file.endsWith('.jsonl'));
+    // agent-*.jsonl files contain session start data at this point. This needs to be revisited
+    // periodically to make sure only accurate data is there and no new functionality is added there
+    const jsonlFiles = files.filter(file => file.endsWith('.jsonl') && !file.startsWith('agent-'));
     
     if (jsonlFiles.length === 0) {
       return { sessions: [], hasMore: false, total: 0 };
@@ -803,10 +805,12 @@ async function parseJsonlSessions(filePath) {
 // Get messages for a specific session with pagination support
 async function getSessionMessages(projectName, sessionId, limit = null, offset = 0) {
   const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
-  
+
   try {
     const files = await fs.readdir(projectDir);
-    const jsonlFiles = files.filter(file => file.endsWith('.jsonl'));
+    // agent-*.jsonl files contain session start data at this point. This needs to be revisited
+    // periodically to make sure only accurate data is there and no new functionality is added there
+    const jsonlFiles = files.filter(file => file.endsWith('.jsonl') && !file.startsWith('agent-'));
     
     if (jsonlFiles.length === 0) {
       return { messages: [], total: 0, hasMore: false };

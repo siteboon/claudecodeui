@@ -378,6 +378,11 @@ async function queryClaudeSDK(command, options = {}, ws) {
         capturedSessionId = message.session_id;
         addSession(capturedSessionId, queryInstance, tempImagePaths, tempDir);
 
+        // Set session ID on writer
+        if (ws.setSessionId && typeof ws.setSessionId === 'function') {
+          ws.setSessionId(capturedSessionId);
+        }
+
         // Send session-created event only once for new sessions
         if (!sessionId && !sessionCreatedSent) {
           sessionCreatedSent = true;

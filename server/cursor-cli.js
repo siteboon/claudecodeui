@@ -94,6 +94,11 @@ async function spawnCursor(command, options = {}, ws) {
                     activeCursorProcesses.set(capturedSessionId, cursorProcess);
                   }
                   
+                  // Set session ID on writer (for API endpoint compatibility)
+                  if (ws.setSessionId && typeof ws.setSessionId === 'function') {
+                    ws.setSessionId(capturedSessionId);
+                  }
+
                   // Send session-created event only once for new sessions
                   if (!sessionId && !sessionCreatedSent) {
                     sessionCreatedSent = true;
