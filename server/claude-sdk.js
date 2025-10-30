@@ -380,7 +380,6 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
         // Send session-created event only once for new sessions
         if (!sessionId && !sessionCreatedSent) {
-          console.log('📤 Sending session-created event');
           sessionCreatedSent = true;
           ws.send(JSON.stringify({
             type: 'session-created',
@@ -400,12 +399,8 @@ async function queryClaudeSDK(command, options = {}, ws) {
         data: transformedMessage
       }));
 
-      // Log all message types for debugging
-      console.log('🔵 SDK message type:', message.type);
-
       // Extract and send token budget updates from result messages
       if (message.type === 'result') {
-        console.log('✅ Result message received, extracting token budget...');
         const tokenBudget = extractTokenBudget(message);
         if (tokenBudget) {
           console.log('📊 Token budget from modelUsage:', tokenBudget);
@@ -413,13 +408,9 @@ async function queryClaudeSDK(command, options = {}, ws) {
             type: 'token-budget',
             data: tokenBudget
           }));
-          console.log('📤 Token budget sent to WebSocket');
-        } else {
-          console.log('⚠️ extractTokenBudget returned null');
         }
       }
     }
-    console.log('🏁 Async generator loop completed');
 
     // Clean up session on completion
     if (capturedSessionId) {

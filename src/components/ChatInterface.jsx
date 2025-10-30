@@ -2989,6 +2989,21 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           break;
         }
 
+        case 'session-status':
+          // Response to check-session-status request
+          const statusSessionId = latestMessage.sessionId;
+          const isCurrentSession = statusSessionId === currentSessionId ||
+                                   (selectedSession && statusSessionId === selectedSession.id);
+          if (isCurrentSession && latestMessage.isProcessing) {
+            // Session is currently processing, restore UI state
+            setIsLoading(true);
+            setCanAbortSession(true);
+            if (onSessionProcessing) {
+              onSessionProcessing(statusSessionId);
+            }
+          }
+          break;
+
         case 'claude-status':
           // Handle Claude working status messages
           const statusData = latestMessage.data;
@@ -4228,6 +4243,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 const isExpanded = e.target.scrollHeight > lineHeight * 2;
                 setIsTextareaExpanded(isExpanded);
               }}
+              placeholder={`Ask ${provider === 'cursor' ? 'Cursor' : 'Claude'} to help with your code...`}
               disabled={isLoading}
               className="chat-input-placeholder block w-full pl-12 pr-20 sm:pr-40 py-1.5 sm:py-4 bg-transparent rounded-2xl focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 resize-none min-h-[50px] sm:min-h-[80px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base leading-[21px] sm:leading-6 transition-all duration-200"
               style={{ height: '50px' }}
