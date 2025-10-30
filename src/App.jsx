@@ -57,6 +57,7 @@ function AppContent() {
   const [showQuickSettings, setShowQuickSettings] = useState(false);
   const [autoExpandTools, setAutoExpandTools] = useLocalStorage('autoExpandTools', false);
   const [showRawParameters, setShowRawParameters] = useLocalStorage('showRawParameters', false);
+  const [showThinking, setShowThinking] = useLocalStorage('showThinking', true);
   const [autoScrollToBottom, setAutoScrollToBottom] = useLocalStorage('autoScrollToBottom', true);
   const [sendByCtrlEnter, setSendByCtrlEnter] = useLocalStorage('sendByCtrlEnter', false);
   // Session Protection System: Track sessions with active conversations to prevent
@@ -64,7 +65,15 @@ function AppContent() {
   // a message, the session is marked as "active" and project updates are paused
   // until the conversation completes or is aborted.
   const [activeSessions, setActiveSessions] = useState(new Set()); // Track sessions with active conversations
-  
+
+  // Processing Sessions: Track which sessions are currently thinking/processing
+  // This allows us to restore the "Thinking..." banner when switching back to a processing session
+  const [processingSessions, setProcessingSessions] = useState(new Set());
+
+  // External Message Update Trigger: Incremented when external CLI modifies current session's JSONL
+  // Triggers ChatInterface to reload messages without switching sessions
+  const [externalMessageUpdate, setExternalMessageUpdate] = useState(0);
+
   const { ws, sendMessage, messages } = useWebSocketContext();
   
   // Detect if running as PWA
@@ -159,7 +168,32 @@ function AppContent() {
       const latestMessage = messages[messages.length - 1];
       
       if (latestMessage.type === 'projects_updated') {
-        
+
+        // External Session Update Detection: Check if the changed file is the current session's JSONL
+        // If so, and the session is not active, trigger a message reload in ChatInterface
+        if (latestMessage.changedFile && selectedSession && selectedProject) {
+          // Extract session ID from changedFile (format: "project-name/session-id.jsonl")
+          const changedFileParts = latestMessage.changedFile.split('/');
+          if (changedFileParts.length >= 2) {
+            const filename = changedFileParts[changedFileParts.length - 1];
+            const changedSessionId = filename.replace('.jsonl', '');
+
+            // Check if this is the currently-selected session
+            if (changedSessionId === selectedSession.id) {
+              const isSessionActive = activeSessions.has(selectedSession.id);
+
+              if (!isSessionActive) {
+                // Session is not active - safe to reload messages
+                console.log('🔄 External CLI update detected for current session:', changedSessionId);
+                setExternalMessageUpdate(prev => prev + 1);
+              } else {
+                // Session is active - skip reload to avoid interrupting user
+                console.log('⏸️ External update paused - session is active:', changedSessionId);
+              }
+            }
+          }
+        }
+
         // Session Protection Logic: Allow additions but prevent changes during active conversations
         // This allows new sessions/projects to appear in sidebar while protecting active chat messages
         // We check for two types of active sessions:
@@ -186,13 +220,16 @@ function AppContent() {
         // Update projects state with the new data from WebSocket
         const updatedProjects = latestMessage.projects;
         setProjects(updatedProjects);
-        
+
         // Update selected project if it exists in the updated projects
         if (selectedProject) {
           const updatedSelectedProject = updatedProjects.find(p => p.name === selectedProject.name);
           if (updatedSelectedProject) {
-            setSelectedProject(updatedSelectedProject);
-            
+            // Only update selected project if it actually changed - prevents flickering
+            if (JSON.stringify(updatedSelectedProject) !== JSON.stringify(selectedProject)) {
+              setSelectedProject(updatedSelectedProject);
+            }
+
             // Update selected session only if it was deleted - avoid unnecessary reloads
             if (selectedSession) {
               const updatedSelectedSession = updatedSelectedProject.sessions?.find(s => s.id === selectedSession.id);
@@ -324,7 +361,7 @@ function AppContent() {
     if (activeTab !== 'git' && activeTab !== 'preview') {
       setActiveTab('chat');
     }
-    
+
     // For Cursor sessions, we need to set the session ID differently
     // since they're persistent and not created by Claude
     const provider = localStorage.getItem('selected-provider') || 'claude';
@@ -332,9 +369,17 @@ function AppContent() {
       // Cursor sessions have persistent IDs
       sessionStorage.setItem('cursorSessionId', session.id);
     }
-    
+
+    // Only close sidebar on mobile if switching to a different project
     if (isMobile) {
-      setSidebarOpen(false);
+      const sessionProjectName = session.__projectName;
+      const currentProjectName = selectedProject?.name;
+
+      // Close sidebar if clicking a session from a different project
+      // Keep it open if clicking a session from the same project
+      if (sessionProjectName !== currentProjectName) {
+        setSidebarOpen(false);
+      }
     }
     navigate(`/session/${session.id}`);
   };
@@ -447,6 +492,26 @@ function AppContent() {
   const markSessionAsInactive = (sessionId) => {
     if (sessionId) {
       setActiveSessions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(sessionId);
+        return newSet;
+      });
+    }
+  };
+
+  // Processing Session Functions: Track which sessions are currently thinking/processing
+
+  // markSessionAsProcessing: Called when Claude starts thinking/processing
+  const markSessionAsProcessing = (sessionId) => {
+    if (sessionId) {
+      setProcessingSessions(prev => new Set([...prev, sessionId]));
+    }
+  };
+
+  // markSessionAsNotProcessing: Called when Claude finishes thinking/processing
+  const markSessionAsNotProcessing = (sessionId) => {
+    if (sessionId) {
+      setProcessingSessions(prev => {
         const newSet = new Set(prev);
         newSet.delete(sessionId);
         return newSet;
@@ -655,13 +720,18 @@ function AppContent() {
           onInputFocusChange={setIsInputFocused}
           onSessionActive={markSessionAsActive}
           onSessionInactive={markSessionAsInactive}
+          onSessionProcessing={markSessionAsProcessing}
+          onSessionNotProcessing={markSessionAsNotProcessing}
+          processingSessions={processingSessions}
           onReplaceTemporarySession={replaceTemporarySession}
           onNavigateToSession={(sessionId) => navigate(`/session/${sessionId}`)}
           onShowSettings={() => setShowSettings(true)}
           autoExpandTools={autoExpandTools}
           showRawParameters={showRawParameters}
+          showThinking={showThinking}
           autoScrollToBottom={autoScrollToBottom}
           sendByCtrlEnter={sendByCtrlEnter}
+          externalMessageUpdate={externalMessageUpdate}
         />
       </div>
 
@@ -682,6 +752,8 @@ function AppContent() {
           onAutoExpandChange={setAutoExpandTools}
           showRawParameters={showRawParameters}
           onShowRawParametersChange={setShowRawParameters}
+          showThinking={showThinking}
+          onShowThinkingChange={setShowThinking}
           autoScrollToBottom={autoScrollToBottom}
           onAutoScrollChange={setAutoScrollToBottom}
           sendByCtrlEnter={sendByCtrlEnter}

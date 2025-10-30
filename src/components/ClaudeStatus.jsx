@@ -5,7 +5,7 @@ function ClaudeStatus({ status, onAbort, isLoading, provider = 'claude' }) {
   const [elapsedTime, setElapsedTime] = useState(0);
   const [animationPhase, setAnimationPhase] = useState(0);
   const [fakeTokens, setFakeTokens] = useState(0);
-  
+
   // Update elapsed time every second
   useEffect(() => {
     if (!isLoading) {
@@ -13,7 +13,7 @@ function ClaudeStatus({ status, onAbort, isLoading, provider = 'claude' }) {
       setFakeTokens(0);
       return;
     }
-    
+
     const startTime = Date.now();
     const timer = setInterval(() => {
       const elapsed = Math.floor((Date.now() - startTime) / 1000);
@@ -21,21 +21,23 @@ function ClaudeStatus({ status, onAbort, isLoading, provider = 'claude' }) {
       // Simulate token count increasing over time (roughly 30-50 tokens per second)
       setFakeTokens(Math.floor(elapsed * (30 + Math.random() * 20)));
     }, 1000);
-    
+
     return () => clearInterval(timer);
   }, [isLoading]);
-  
+
   // Animate the status indicator
   useEffect(() => {
     if (!isLoading) return;
-    
+
     const timer = setInterval(() => {
       setAnimationPhase(prev => (prev + 1) % 4);
     }, 500);
-    
+
     return () => clearInterval(timer);
   }, [isLoading]);
-  
+
+  // Don't show if loading is false
+  // Note: showThinking only controls the reasoning accordion in messages, not this processing indicator
   if (!isLoading) return null;
   
   // Clever action words that cycle

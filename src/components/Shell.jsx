@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Terminal } from 'xterm';
-import { FitAddon } from 'xterm-addon-fit';
+import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
 import { WebglAddon } from '@xterm/addon-webgl';
-import 'xterm/css/xterm.css';
+import '@xterm/xterm/css/xterm.css';
 
 // CSS to remove xterm focus outline
 const xtermStyles = `

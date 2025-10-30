@@ -1,6 +1,6 @@
 {
   "name": "@siteboon/claude-code-ui",
-  "version": "1.8.10",
+  "version": "1.9.1",
   "description": "A web-based UI for Claude Code CLI",
   "type": "module",
   "main": "server/index.js",
@@ -39,6 +39,7 @@
   "author": "Claude Code UI Contributors",
   "license": "MIT",
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.1.29",
     "@codemirror/lang-css": "^6.3.1",
     "@codemirror/lang-html": "^6.4.9",
     "@codemirror/lang-javascript": "^6.2.4",
@@ -58,6 +59,8 @@
     "cors": "^2.8.5",
     "cross-spawn": "^7.0.3",
     "express": "^4.18.2",
+    "fuse.js": "^7.0.0",
+    "gray-matter": "^4.0.3",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.515.0",
     "mime-types": "^3.0.1",
@@ -73,8 +76,8 @@
     "sqlite3": "^5.1.7",
     "tailwind-merge": "^3.3.1",
     "ws": "^8.14.2",
-    "xterm": "^5.3.0",
-    "xterm-addon-fit": "^0.8.0"
+    "@xterm/xterm": "^5.5.0",
+    "@xterm/addon-fit": "^0.10.0"
   },
   "devDependencies": {
     "@types/react": "^18.2.43",

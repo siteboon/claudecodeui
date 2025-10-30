@@ -301,13 +301,18 @@ function Sidebar({
   };
 
   const toggleProject = (projectName) => {
-    const newExpanded = new Set(expandedProjects);
-    if (newExpanded.has(projectName)) {
-      newExpanded.delete(projectName);
-    } else {
+    const newExpanded = new Set();
+    // If clicking the already-expanded project, collapse it (newExpanded stays empty)
+    // If clicking a different project, expand only that one
+    if (!expandedProjects.has(projectName)) {
       newExpanded.add(projectName);
     }
     setExpandedProjects(newExpanded);
+  };
+
+  // Wrapper to attach project context when session is clicked
+  const handleSessionClick = (session, projectName) => {
+    onSessionSelect({ ...session, __projectName: projectName });
   };
 
   // Starred projects utility functions
@@ -1029,7 +1034,7 @@ function Sidebar({
                                       {project.displayName}
                                     </h3>
                                     {tasksEnabled && (
-                                      <TaskIndicator 
+                                      <TaskIndicator
                                         status={(() => {
                                           const projectConfigured = project.taskmaster?.hasTaskmaster;
                                           const mcpConfigured = mcpServerStatus?.hasMCPServer && mcpServerStatus?.isConfigured;
@@ -1037,9 +1042,9 @@ function Sidebar({
                                           if (projectConfigured) return 'taskmaster-only';
                                           if (mcpConfigured) return 'mcp-only';
                                           return 'not-configured';
-                                        })()} 
+                                        })()}
                                         size="xs"
-                                        className="flex-shrink-0 ml-2"
+                                        className="hidden md:inline-flex flex-shrink-0 ml-2"
                                       />
                                     )}
                                   </div>
@@ -1337,11 +1342,11 @@ function Sidebar({
                                 )}
                                 onClick={() => {
                                   handleProjectSelect(project);
-                                  onSessionSelect(session);
+                                  handleSessionClick(session, project.name);
                                 }}
                                 onTouchEnd={handleTouchClick(() => {
                                   handleProjectSelect(project);
-                                  onSessionSelect(session);
+                                  handleSessionClick(session, project.name);
                                 })}
                               >
                                 <div className="flex items-center gap-2">
@@ -1404,8 +1409,8 @@ function Sidebar({
                                   "w-full justify-start p-2 h-auto font-normal text-left hover:bg-accent/50 transition-colors duration-200",
                                   selectedSession?.id === session.id && "bg-accent text-accent-foreground"
                                 )}
-                                onClick={() => onSessionSelect(session)}
-                                onTouchEnd={handleTouchClick(() => onSessionSelect(session))}
+                                onClick={() => handleSessionClick(session, project.name)}
+                                onTouchEnd={handleTouchClick(() => handleSessionClick(session, project.name))}
                               >
                                 <div className="flex items-start gap-2 min-w-0 w-full">
                                   {isCursorSession ? (

@@ -27,25 +27,26 @@ try {
 console.log('PORT from env:', process.env.PORT);
 
 import express from 'express';
-import { WebSocketServer } from 'ws';
+import { WebSocketServer, WebSocket } from 'ws';
+import os from 'os';
 import http from 'http';
 import cors from 'cors';
 import { promises as fsPromises } from 'fs';
 import { spawn } from 'child_process';
-import os from 'os';
 import pty from 'node-pty';
 import fetch from 'node-fetch';
 import mime from 'mime-types';
 
 import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
-import { spawnClaude, abortClaudeSession } from './claude-cli.js';
-import { spawnCursor, abortCursorSession } from './cursor-cli.js';
+import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions } from './claude-sdk.js';
+import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
 import mcpRoutes from './routes/mcp.js';
 import cursorRoutes from './routes/cursor.js';
 import taskmasterRoutes from './routes/taskmaster.js';
 import mcpUtilsRoutes from './routes/mcp-utils.js';
+import commandsRoutes from './routes/commands.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 
@@ -107,7 +108,7 @@ async function setupProjectsWatcher() {
                     });
 
                     connectedClients.forEach(client => {
-                        if (client.readyState === client.OPEN) {
+                        if (client.readyState === WebSocket.OPEN) {
                             client.send(updateMessage);
                         }
                     });
@@ -192,8 +193,24 @@ app.use('/api/taskmaster', authenticateToken, taskmasterRoutes);
 // MCP utilities
 app.use('/api/mcp-utils', authenticateToken, mcpUtilsRoutes);
 
+// Commands API Routes (protected)
+app.use('/api/commands', authenticateToken, commandsRoutes);
+
 // Static files served after API routes
-app.use(express.static(path.join(__dirname, '../dist')));
+// Add cache control: HTML files should not be cached, but assets can be cached
+app.use(express.static(path.join(__dirname, '../dist'), {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) {
+      // Prevent HTML caching to avoid service worker issues after builds
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    } else if (filePath.match(/\.(js|css|woff2?|ttf|eot|svg|png|jpg|jpeg|gif|ico)$/)) {
+      // Cache static assets for 1 year (they have hashed names)
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
+  }
+}));
 
 // API Routes (protected)
 app.get('/api/config', authenticateToken, (req, res) => {
@@ -370,15 +387,24 @@ app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) =
 
         console.log('📄 File read request:', projectName, filePath);
 
-        // Using fsPromises from import
-
-        // Security check - ensure the path is safe and absolute
-        if (!filePath || !path.isAbsolute(filePath)) {
+        // Security: ensure the requested path is inside the project root
+        if (!filePath) {
             return res.status(400).json({ error: 'Invalid file path' });
         }
 
-        const content = await fsPromises.readFile(filePath, 'utf8');
-        res.json({ content, path: filePath });
+        const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+        if (!projectRoot) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+
+        const resolved = path.resolve(filePath);
+        const normalizedRoot = path.resolve(projectRoot) + path.sep;
+        if (!resolved.startsWith(normalizedRoot)) {
+            return res.status(403).json({ error: 'Path must be under project root' });
+        }
+
+        const content = await fsPromises.readFile(resolved, 'utf8');
+        res.json({ content, path: resolved });
     } catch (error) {
         console.error('Error reading file:', error);
         if (error.code === 'ENOENT') {
@@ -399,27 +425,35 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
 
         console.log('🖼️ Binary file serve request:', projectName, filePath);
 
-        // Using fs from import
-        // Using mime from import
-
-        // Security check - ensure the path is safe and absolute
-        if (!filePath || !path.isAbsolute(filePath)) {
+        // Security: ensure the requested path is inside the project root
+        if (!filePath) {
             return res.status(400).json({ error: 'Invalid file path' });
+        }
+
+        const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+        if (!projectRoot) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+
+        const resolved = path.resolve(filePath);
+        const normalizedRoot = path.resolve(projectRoot) + path.sep;
+        if (!resolved.startsWith(normalizedRoot)) {
+            return res.status(403).json({ error: 'Path must be under project root' });
         }
 
         // Check if file exists
         try {
-            await fsPromises.access(filePath);
+            await fsPromises.access(resolved);
         } catch (error) {
             return res.status(404).json({ error: 'File not found' });
         }
 
         // Get file extension and set appropriate content type
-        const mimeType = mime.lookup(filePath) || 'application/octet-stream';
+        const mimeType = mime.lookup(resolved) || 'application/octet-stream';
         res.setHeader('Content-Type', mimeType);
 
         // Stream the file
-        const fileStream = fs.createReadStream(filePath);
+        const fileStream = fs.createReadStream(resolved);
         fileStream.pipe(res);
 
         fileStream.on('error', (error) => {
@@ -445,10 +479,8 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
 
         console.log('💾 File save request:', projectName, filePath);
 
-        // Using fsPromises from import
-
-        // Security check - ensure the path is safe and absolute
-        if (!filePath || !path.isAbsolute(filePath)) {
+        // Security: ensure the requested path is inside the project root
+        if (!filePath) {
             return res.status(400).json({ error: 'Invalid file path' });
         }
 
@@ -456,21 +488,32 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
             return res.status(400).json({ error: 'Content is required' });
         }
 
+        const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+        if (!projectRoot) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+
+        const resolved = path.resolve(filePath);
+        const normalizedRoot = path.resolve(projectRoot) + path.sep;
+        if (!resolved.startsWith(normalizedRoot)) {
+            return res.status(403).json({ error: 'Path must be under project root' });
+        }
+
         // Create backup of original file
         try {
-            const backupPath = filePath + '.backup.' + Date.now();
-            await fsPromises.copyFile(filePath, backupPath);
+            const backupPath = resolved + '.backup.' + Date.now();
+            await fsPromises.copyFile(resolved, backupPath);
             console.log('📋 Created backup:', backupPath);
         } catch (backupError) {
             console.warn('Could not create backup:', backupError.message);
         }
 
         // Write the new content
-        await fsPromises.writeFile(filePath, content, 'utf8');
+        await fsPromises.writeFile(resolved, content, 'utf8');
 
         res.json({
             success: true,
-            path: filePath,
+            path: resolved,
             message: 'File saved successfully'
         });
     } catch (error) {
@@ -550,7 +593,9 @@ function handleChatConnection(ws) {
                 console.log('💬 User message:', data.command || '[Continue/Resume]');
                 console.log('📁 Project:', data.options?.projectPath || 'Unknown');
                 console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
-                await spawnClaude(data.command, data.options, ws);
+
+                // Use Claude Agents SDK
+                await queryClaudeSDK(data.command, data.options, ws);
             } else if (data.type === 'cursor-command') {
                 console.log('🖱️ Cursor message:', data.command || '[Continue/Resume]');
                 console.log('📁 Project:', data.options?.cwd || 'Unknown');
@@ -568,9 +613,15 @@ function handleChatConnection(ws) {
             } else if (data.type === 'abort-session') {
                 console.log('🛑 Abort session request:', data.sessionId);
                 const provider = data.provider || 'claude';
-                const success = provider === 'cursor' 
-                    ? abortCursorSession(data.sessionId)
-                    : abortClaudeSession(data.sessionId);
+                let success;
+
+                if (provider === 'cursor') {
+                    success = abortCursorSession(data.sessionId);
+                } else {
+                    // Use Claude Agents SDK
+                    success = await abortClaudeSDKSession(data.sessionId);
+                }
+
                 ws.send(JSON.stringify({
                     type: 'session-aborted',
                     sessionId: data.sessionId,
@@ -585,6 +636,35 @@ function handleChatConnection(ws) {
                     sessionId: data.sessionId,
                     provider: 'cursor',
                     success
+                }));
+            } else if (data.type === 'check-session-status') {
+                // Check if a specific session is currently processing
+                const provider = data.provider || 'claude';
+                const sessionId = data.sessionId;
+                let isActive;
+
+                if (provider === 'cursor') {
+                    isActive = isCursorSessionActive(sessionId);
+                } else {
+                    // Use Claude Agents SDK
+                    isActive = isClaudeSDKSessionActive(sessionId);
+                }
+
+                ws.send(JSON.stringify({
+                    type: 'session-status',
+                    sessionId,
+                    provider,
+                    isProcessing: isActive
+                }));
+            } else if (data.type === 'get-active-sessions') {
+                // Get all currently active sessions
+                const activeSessions = {
+                    claude: getActiveClaudeSDKSessions(),
+                    cursor: getActiveCursorSessions()
+                };
+                ws.send(JSON.stringify({
+                    type: 'active-sessions',
+                    sessions: activeSessions
                 }));
             }
         } catch (error) {
@@ -714,7 +794,7 @@ function handleShellConnection(ws) {
 
                     // Handle data output
                     shellProcess.onData((data) => {
-                        if (ws.readyState === ws.OPEN) {
+                        if (ws.readyState === WebSocket.OPEN) {
                             let outputData = data;
 
                             // Check for various URL opening patterns
@@ -761,7 +841,7 @@ function handleShellConnection(ws) {
                     // Handle process exit
                     shellProcess.onExit((exitCode) => {
                         console.log('🔚 Shell process exited with code:', exitCode.exitCode, 'signal:', exitCode.signal);
-                        if (ws.readyState === ws.OPEN) {
+                        if (ws.readyState === WebSocket.OPEN) {
                             ws.send(JSON.stringify({
                                 type: 'output',
                                 data: `\r\n\x1b[33mProcess exited with code ${exitCode.exitCode}${exitCode.signal ? ` (${exitCode.signal})` : ''}\x1b[0m\r\n`
@@ -798,7 +878,7 @@ function handleShellConnection(ws) {
             }
         } catch (error) {
             console.error('❌ Shell WebSocket error:', error.message);
-            if (ws.readyState === ws.OPEN) {
+            if (ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({
                     type: 'output',
                     data: `\r\n\x1b[31mError: ${error.message}\x1b[0m\r\n`
@@ -1053,13 +1133,119 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
     }
 });
 
-// Serve React app for all other routes
+// Get token usage for a specific session
+app.get('/api/projects/:projectName/sessions/:sessionId/token-usage', authenticateToken, async (req, res) => {
+  try {
+    const { projectName, sessionId } = req.params;
+    const homeDir = os.homedir();
+
+    // Extract actual project path
+    let projectPath;
+    try {
+      projectPath = await extractProjectDirectory(projectName);
+    } catch (error) {
+      console.error('Error extracting project directory:', error);
+      return res.status(500).json({ error: 'Failed to determine project path' });
+    }
+
+    // Construct the JSONL file path
+    // Claude stores session files in ~/.claude/projects/[encoded-project-path]/[session-id].jsonl
+    // The encoding replaces /, spaces, ~, and _ with -
+    const encodedPath = projectPath.replace(/[\\/:\s~_]/g, '-');
+    const projectDir = path.join(homeDir, '.claude', 'projects', encodedPath);
+
+    // Allow only safe characters in sessionId
+    const safeSessionId = String(sessionId).replace(/[^a-zA-Z0-9._-]/g, '');
+    if (!safeSessionId) {
+      return res.status(400).json({ error: 'Invalid sessionId' });
+    }
+    const jsonlPath = path.join(projectDir, `${safeSessionId}.jsonl`);
+
+    // Constrain to projectDir
+    const rel = path.relative(path.resolve(projectDir), path.resolve(jsonlPath));
+    if (rel.startsWith('..') || path.isAbsolute(rel)) {
+      return res.status(400).json({ error: 'Invalid path' });
+    }
+
+    // Read and parse the JSONL file
+    let fileContent;
+    try {
+      fileContent = await fsPromises.readFile(jsonlPath, 'utf8');
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        return res.status(404).json({ error: 'Session file not found', path: jsonlPath });
+      }
+      throw error; // Re-throw other errors to be caught by outer try-catch
+    }
+    const lines = fileContent.trim().split('\n');
+
+    const parsedContextWindow = parseInt(process.env.CONTEXT_WINDOW, 10);
+    const contextWindow = Number.isFinite(parsedContextWindow) ? parsedContextWindow : 160000;
+    let inputTokens = 0;
+    let cacheCreationTokens = 0;
+    let cacheReadTokens = 0;
+
+    // Find the latest assistant message with usage data (scan from end)
+    for (let i = lines.length - 1; i >= 0; i--) {
+      try {
+        const entry = JSON.parse(lines[i]);
+
+        // Only count assistant messages which have usage data
+        if (entry.type === 'assistant' && entry.message?.usage) {
+          const usage = entry.message.usage;
+
+          // Use token counts from latest assistant message only
+          inputTokens = usage.input_tokens || 0;
+          cacheCreationTokens = usage.cache_creation_input_tokens || 0;
+          cacheReadTokens = usage.cache_read_input_tokens || 0;
+
+          break; // Stop after finding the latest assistant message
+        }
+      } catch (parseError) {
+        // Skip lines that can't be parsed
+        continue;
+      }
+    }
+
+    // Calculate total context usage (excluding output_tokens, as per ccusage)
+    const totalUsed = inputTokens + cacheCreationTokens + cacheReadTokens;
+
+    res.json({
+      used: totalUsed,
+      total: contextWindow,
+      breakdown: {
+        input: inputTokens,
+        cacheCreation: cacheCreationTokens,
+        cacheRead: cacheReadTokens
+      }
+    });
+  } catch (error) {
+    console.error('Error reading session token usage:', error);
+    res.status(500).json({ error: 'Failed to read session token usage' });
+  }
+});
+
+// Serve React app for all other routes (excluding static files)
 app.get('*', (req, res) => {
-  if (process.env.NODE_ENV === 'production') {
-    res.sendFile(path.join(__dirname, '../dist/index.html'));
+  // Skip requests for static assets (files with extensions)
+  if (path.extname(req.path)) {
+    return res.status(404).send('Not found');
+  }
+
+  // Only serve index.html for HTML routes, not for static assets
+  // Static assets should already be handled by express.static middleware above
+  const indexPath = path.join(__dirname, '../dist/index.html');
+
+  // Check if dist/index.html exists (production build available)
+  if (fs.existsSync(indexPath)) {
+    // Set no-cache headers for HTML to prevent service worker issues
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.sendFile(indexPath);
   } else {
-    // In development, redirect to Vite dev server
-    res.redirect(`http://localhost:${process.env.VITE_PORT || 3001}`);
+    // In development, redirect to Vite dev server only if dist doesn't exist
+    res.redirect(`http://localhost:${process.env.VITE_PORT || 5173}`);
   }
 });
 
@@ -1153,11 +1339,23 @@ async function startServer() {
         await initializeDatabase();
         console.log('✅ Database initialization skipped (testing)');
 
+        // Check if running in production mode (dist folder exists)
+        const distIndexPath = path.join(__dirname, '../dist/index.html');
+        const isProduction = fs.existsSync(distIndexPath);
+
+        // Log Claude implementation mode
+        console.log('🚀 Using Claude Agents SDK for Claude integration');
+        console.log(`📦 Running in ${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'} mode`);
+
+        if (!isProduction) {
+            console.log(`⚠️  Note: Requests will be proxied to Vite dev server at http://localhost:${process.env.VITE_PORT || 5173}`);
+        }
+
         server.listen(PORT, '0.0.0.0', async () => {
             console.log(`Claude Code UI server running on http://0.0.0.0:${PORT}`);
 
             // Start watching the projects folder for changes
-            await setupProjectsWatcher(); 
+            await setupProjectsWatcher();
         });
     } catch (error) {
         console.error('❌ Failed to start server:', error);
