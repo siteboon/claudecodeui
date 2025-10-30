@@ -278,22 +278,6 @@ We welcome contributions! Please follow these guidelines:
 
 ### Common Issues & Solutions
 
-#### Server starts but redirects to port 5173 (Vite)
-**Problem**: Running `npx @siteboon/claude-code-ui` says it's running on port 3001, but redirects to 5173
-**Solutions**:
-- This was fixed in v1.9.1+. Update to the latest version:
-  ```bash
-  npx @siteboon/claude-code-ui@latest
-  ```
-- Or clear NPX cache and reinstall:
-  ```bash
-  npx clear-npx-cache
-  npx @siteboon/claude-code-ui
-  ```
-- If using global install, update it:
-  ```bash
-  npm update -g @siteboon/claude-code-ui
-  ```
 
 #### "No Claude projects found"
 **Problem**: The UI shows no projects or empty project list
