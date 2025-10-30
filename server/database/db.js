@@ -7,12 +7,27 @@ import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const DB_PATH = path.join(__dirname, 'auth.db');
+// Use DATABASE_PATH environment variable if set, otherwise use default location
+const DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, 'auth.db');
 const INIT_SQL_PATH = path.join(__dirname, 'init.sql');
+
+// Ensure database directory exists if custom path is provided
+if (process.env.DATABASE_PATH) {
+  const dbDir = path.dirname(DB_PATH);
+  try {
+    if (!fs.existsSync(dbDir)) {
+      fs.mkdirSync(dbDir, { recursive: true });
+      console.log(`Created database directory: ${dbDir}`);
+    }
+  } catch (error) {
+    console.error(`Failed to create database directory ${dbDir}:`, error.message);
+    throw error;
+  }
+}
 
 // Create database connection
 const db = new Database(DB_PATH);
-console.log('Connected to SQLite database');
+console.log(`Connected to SQLite database at: ${DB_PATH}`);
 
 // Initialize database with schema
 const initializeDatabase = async () => {
