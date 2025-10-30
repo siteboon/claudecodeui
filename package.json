@@ -1,6 +1,6 @@
 {
   "name": "@siteboon/claude-code-ui",
-  "version": "1.8.12",
+  "version": "1.9.0",
   "description": "A web-based UI for Claude Code CLI",
   "type": "module",
   "main": "server/index.js",
