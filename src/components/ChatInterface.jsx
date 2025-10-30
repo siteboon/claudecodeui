@@ -2989,21 +2989,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           break;
         }
 
-        case 'session-status':
-          // Response to check-session-status request
-          const statusSessionId = latestMessage.sessionId;
-          const isCurrentSession = statusSessionId === currentSessionId ||
-                                   (selectedSession && statusSessionId === selectedSession.id);
-          if (isCurrentSession && latestMessage.isProcessing) {
-            // Session is currently processing, restore UI state
-            setIsLoading(true);
-            setCanAbortSession(true);
-            if (onSessionProcessing) {
-              onSessionProcessing(statusSessionId);
-            }
-          }
-          break;
-
         case 'claude-status':
           // Handle Claude working status messages
           const statusData = latestMessage.data;
