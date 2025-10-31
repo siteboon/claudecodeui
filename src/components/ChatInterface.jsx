@@ -197,6 +197,7 @@ const safeLocalStorage = {
 // Common markdown components to ensure consistent rendering (tables, inline code, links, etc.)
 const markdownComponents = {
   code: ({ node, inline, className, children, ...props }) => {
+    const [copied, setCopied] = React.useState(false);
     const raw = Array.isArray(children) ? children.join('') : String(children ?? '');
     const looksMultiline = /[\r\n]/.test(raw);
     const inlineDetected = inline || (node && node.type === 'inlineCode');
@@ -213,7 +214,6 @@ const markdownComponents = {
         </code>
       );
     }
-    const [copied, setCopied] = React.useState(false);
     const textToCopy = raw;
 
     const handleCopy = () => {
