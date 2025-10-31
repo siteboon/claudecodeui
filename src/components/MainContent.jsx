@@ -11,7 +11,7 @@
  * No session protection logic is implemented here - it's purely a props bridge.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import ChatInterface from './ChatInterface';
 import FileTree from './FileTree';
 import CodeEditor from './CodeEditor';
@@ -28,13 +28,13 @@ import { useTaskMaster } from '../contexts/TaskMasterContext';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
 import { api } from '../utils/api';
 
-function MainContent({ 
-  selectedProject, 
-  selectedSession, 
-  activeTab, 
-  setActiveTab, 
-  ws, 
-  sendMessage, 
+function MainContent({
+  selectedProject,
+  selectedSession,
+  activeTab,
+  setActiveTab,
+  ws,
+  sendMessage,
   messages,
   isMobile,
   isPWA,
@@ -61,6 +61,9 @@ function MainContent({
   const [editingFile, setEditingFile] = useState(null);
   const [selectedTask, setSelectedTask] = useState(null);
   const [showTaskDetail, setShowTaskDetail] = useState(false);
+  const [editorWidth, setEditorWidth] = useState(600);
+  const [isResizing, setIsResizing] = useState(false);
+  const resizeRef = useRef(null);
   
   // PRD Editor state
   const [showPRDEditor, setShowPRDEditor] = useState(false);
@@ -153,6 +156,52 @@ function MainContent({
     console.log('Update task status:', taskId, newStatus);
     refreshTasks?.();
   };
+
+  // Handle resize functionality
+  const handleMouseDown = (e) => {
+    if (isMobile) return; // Disable resize on mobile
+    setIsResizing(true);
+    e.preventDefault();
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (!isResizing) return;
+
+      const container = resizeRef.current?.parentElement;
+      if (!container) return;
+
+      const containerRect = container.getBoundingClientRect();
+      const newWidth = containerRect.right - e.clientX;
+
+      // Min width: 300px, Max width: 80% of container
+      const minWidth = 300;
+      const maxWidth = containerRect.width * 0.8;
+
+      if (newWidth >= minWidth && newWidth <= maxWidth) {
+        setEditorWidth(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizing]);
+
   if (isLoading) {
     return (
       <div className="h-full flex flex-col">
@@ -234,10 +283,10 @@ function MainContent({
   return (
     <div className="h-full flex flex-col">
       {/* Header with tabs */}
-      <div 
+      <div
         className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-3 sm:p-4 pwa-header-safe flex-shrink-0"
       >
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between relative">
           <div className="flex items-center space-x-2 sm:space-x-3">
             {isMobile && (
               <button
@@ -409,11 +458,13 @@ function MainContent({
         </div>
       </div>
 
-      {/* Content Area */}
-      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-        <div className={`h-full ${activeTab === 'chat' ? 'block' : 'hidden'}`}>
-          <ErrorBoundary showDetails={true}>
-            <ChatInterface
+      {/* Content Area with Right Sidebar */}
+      <div className="flex-1 flex min-h-0 overflow-hidden">
+        {/* Main Content */}
+        <div className={`flex-1 flex flex-col min-h-0 overflow-hidden ${editingFile ? 'mr-0' : ''}`}>
+          <div className={`h-full ${activeTab === 'chat' ? 'block' : 'hidden'}`}>
+            <ErrorBoundary showDetails={true}>
+              <ChatInterface
               selectedProject={selectedProject}
               selectedSession={selectedSession}
               ws={ws}
@@ -513,14 +564,45 @@ function MainContent({
             onClearLogs={() => setServerLogs([])}
           /> */}
         </div>
+        </div>
+
+        {/* Code Editor Right Sidebar - Desktop only, Mobile uses modal */}
+        {editingFile && !isMobile && (
+          <>
+            {/* Resize Handle */}
+            <div
+              ref={resizeRef}
+              onMouseDown={handleMouseDown}
+              className="flex-shrink-0 w-1 bg-gray-200 dark:bg-gray-700 hover:bg-blue-500 dark:hover:bg-blue-600 cursor-col-resize transition-colors relative group"
+              title="Drag to resize"
+            >
+              {/* Visual indicator on hover */}
+              <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-1 bg-blue-500 dark:bg-blue-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
+
+            {/* Editor Sidebar */}
+            <div
+              className="flex-shrink-0 border-l border-gray-200 dark:border-gray-700 h-full overflow-hidden"
+              style={{ width: `${editorWidth}px` }}
+            >
+              <CodeEditor
+                file={editingFile}
+                onClose={handleCloseEditor}
+                projectPath={selectedProject?.path}
+                isSidebar={true}
+              />
+            </div>
+          </>
+        )}
       </div>
 
-      {/* Code Editor Modal */}
-      {editingFile && (
+      {/* Code Editor Modal for Mobile */}
+      {editingFile && isMobile && (
         <CodeEditor
           file={editingFile}
           onClose={handleCloseEditor}
           projectPath={selectedProject?.path}
+          isSidebar={false}
         />
       )}
 
