@@ -8,6 +8,7 @@ import { apiKeysDb, githubTokensDb } from '../database/db.js';
 import { addProjectManually } from '../projects.js';
 import { queryClaudeSDK } from '../claude-sdk.js';
 import { spawnCursor } from '../cursor-cli.js';
+import { Octokit } from '@octokit/rest';
 
 const router = express.Router();
 
@@ -79,6 +80,194 @@ function normalizeGitHubUrl(url) {
   // Remove trailing slash
   normalized = normalized.replace(/\/$/, '');
   return normalized.toLowerCase();
+}
+
+/**
+ * Parse GitHub URL to extract owner and repo
+ * @param {string} url - GitHub URL (HTTPS or SSH)
+ * @returns {{owner: string, repo: string}} - Parsed owner and repo
+ */
+function parseGitHubUrl(url) {
+  // Handle HTTPS URLs: https://github.com/owner/repo or https://github.com/owner/repo.git
+  // Handle SSH URLs: git@github.com:owner/repo or git@github.com:owner/repo.git
+  const match = url.match(/github\.com[:/]([^/]+)\/([^/.]+)/);
+  if (!match) {
+    throw new Error('Invalid GitHub URL format');
+  }
+  return {
+    owner: match[1],
+    repo: match[2].replace('.git', '')
+  };
+}
+
+/**
+ * Auto-generate a branch name from a message
+ * @param {string} message - The agent message
+ * @returns {string} - Generated branch name
+ */
+function autogenerateBranchName(message) {
+  // Convert to lowercase, replace spaces/special chars with hyphens
+  let branchName = message
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '') // Remove special characters
+    .replace(/\s+/g, '-') // Replace spaces with hyphens
+    .replace(/-+/g, '-') // Replace multiple hyphens with single
+    .replace(/^-|-$/g, ''); // Remove leading/trailing hyphens
+
+  // Limit length to 50 characters
+  if (branchName.length > 50) {
+    branchName = branchName.substring(0, 50).replace(/-$/, '');
+  }
+
+  // Add timestamp suffix to ensure uniqueness
+  const timestamp = Date.now().toString(36).substring(-6);
+  branchName = `${branchName}-${timestamp}`;
+
+  return branchName;
+}
+
+/**
+ * Validate a Git branch name
+ * @param {string} branchName - Branch name to validate
+ * @returns {{valid: boolean, error?: string}} - Validation result
+ */
+function validateBranchName(branchName) {
+  if (!branchName || branchName.trim() === '') {
+    return { valid: false, error: 'Branch name cannot be empty' };
+  }
+
+  // Git branch name rules
+  const invalidPatterns = [
+    { pattern: /^\./, message: 'Branch name cannot start with a dot' },
+    { pattern: /\.$/, message: 'Branch name cannot end with a dot' },
+    { pattern: /\.\./, message: 'Branch name cannot contain consecutive dots (..)' },
+    { pattern: /\s/, message: 'Branch name cannot contain spaces' },
+    { pattern: /[~^:?*\[\\]/, message: 'Branch name cannot contain special characters: ~ ^ : ? * [ \\' },
+    { pattern: /@{/, message: 'Branch name cannot contain @{' },
+    { pattern: /\/$/, message: 'Branch name cannot end with a slash' },
+    { pattern: /^\//, message: 'Branch name cannot start with a slash' },
+    { pattern: /\/\//, message: 'Branch name cannot contain consecutive slashes' },
+    { pattern: /\.lock$/, message: 'Branch name cannot end with .lock' }
+  ];
+
+  for (const { pattern, message } of invalidPatterns) {
+    if (pattern.test(branchName)) {
+      return { valid: false, error: message };
+    }
+  }
+
+  // Check for ASCII control characters
+  if (/[\x00-\x1F\x7F]/.test(branchName)) {
+    return { valid: false, error: 'Branch name cannot contain control characters' };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Get recent commit messages from a repository
+ * @param {string} projectPath - Path to the git repository
+ * @param {number} limit - Number of commits to retrieve (default: 5)
+ * @returns {Promise<string[]>} - Array of commit messages
+ */
+async function getCommitMessages(projectPath, limit = 5) {
+  return new Promise((resolve, reject) => {
+    const gitProcess = spawn('git', ['log', `-${limit}`, '--pretty=format:%s'], {
+      cwd: projectPath,
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    gitProcess.stdout.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    gitProcess.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    gitProcess.on('close', (code) => {
+      if (code === 0) {
+        const messages = stdout.trim().split('\n').filter(msg => msg.length > 0);
+        resolve(messages);
+      } else {
+        reject(new Error(`Failed to get commit messages: ${stderr}`));
+      }
+    });
+
+    gitProcess.on('error', (error) => {
+      reject(new Error(`Failed to execute git: ${error.message}`));
+    });
+  });
+}
+
+/**
+ * Create a new branch on GitHub using the API
+ * @param {Octokit} octokit - Octokit instance
+ * @param {string} owner - Repository owner
+ * @param {string} repo - Repository name
+ * @param {string} branchName - Name of the new branch
+ * @param {string} baseBranch - Base branch to branch from (default: 'main')
+ * @returns {Promise<void>}
+ */
+async function createGitHubBranch(octokit, owner, repo, branchName, baseBranch = 'main') {
+  try {
+    // Get the SHA of the base branch
+    const { data: ref } = await octokit.git.getRef({
+      owner,
+      repo,
+      ref: `heads/${baseBranch}`
+    });
+
+    const baseSha = ref.object.sha;
+
+    // Create the new branch
+    await octokit.git.createRef({
+      owner,
+      repo,
+      ref: `refs/heads/${branchName}`,
+      sha: baseSha
+    });
+
+    console.log(`✅ Created branch '${branchName}' on GitHub`);
+  } catch (error) {
+    if (error.status === 422 && error.message.includes('Reference already exists')) {
+      console.log(`ℹ️ Branch '${branchName}' already exists on GitHub`);
+    } else {
+      throw error;
+    }
+  }
+}
+
+/**
+ * Create a pull request on GitHub
+ * @param {Octokit} octokit - Octokit instance
+ * @param {string} owner - Repository owner
+ * @param {string} repo - Repository name
+ * @param {string} branchName - Head branch name
+ * @param {string} title - PR title
+ * @param {string} body - PR body/description
+ * @param {string} baseBranch - Base branch (default: 'main')
+ * @returns {Promise<{number: number, url: string}>} - PR number and URL
+ */
+async function createGitHubPR(octokit, owner, repo, branchName, title, body, baseBranch = 'main') {
+  const { data: pr } = await octokit.pulls.create({
+    owner,
+    repo,
+    title,
+    head: branchName,
+    base: baseBranch,
+    body
+  });
+
+  console.log(`✅ Created pull request #${pr.number}: ${pr.html_url}`);
+
+  return {
+    number: pr.number,
+    url: pr.html_url
+  };
 }
 
 /**
@@ -361,26 +550,242 @@ class ResponseCollector {
 /**
  * POST /api/agent
  *
- * Trigger an AI agent (Claude or Cursor) to work on a project
+ * Trigger an AI agent (Claude or Cursor) to work on a project.
+ * Supports automatic GitHub branch and pull request creation after successful completion.
  *
- * Body:
- * - githubUrl: string (conditionally required) - GitHub repository URL to clone
- * - projectPath: string (conditionally required) - Path to existing project or where to clone
- * - message: string (required) - Message to send to the AI agent
- * - provider: string (optional) - 'claude' or 'cursor' (default: 'claude')
- * - stream: boolean (optional) - Whether to stream responses (default: true)
- * - model: string (optional) - Model to use (for Cursor)
- * - cleanup: boolean (optional) - Whether to cleanup project after completion (default: true)
- * - githubToken: string (optional) - GitHub token for private repos (overrides stored token)
+ * ================================================================================================
+ * REQUEST BODY PARAMETERS
+ * ================================================================================================
  *
- * Note: Either githubUrl OR projectPath must be provided. If both are provided, githubUrl will be cloned to projectPath.
+ * @param {string} githubUrl - (Conditionally Required) GitHub repository URL to clone.
+ *                             Supported formats:
+ *                             - HTTPS: https://github.com/owner/repo
+ *                             - HTTPS with .git: https://github.com/owner/repo.git
+ *                             - SSH: git@github.com:owner/repo
+ *                             - SSH with .git: git@github.com:owner/repo.git
+ *
+ * @param {string} projectPath - (Conditionally Required) Path to existing project OR destination for cloning.
+ *                               Behavior depends on usage:
+ *                               - If used alone: Must point to existing project directory
+ *                               - If used with githubUrl: Target location for cloning
+ *                               - If omitted with githubUrl: Auto-generates temporary path in ~/.claude/external-projects/
+ *
+ * @param {string} message - (Required) Task description for the AI agent. Used as:
+ *                          - Instructions for the agent
+ *                          - Source for auto-generated branch names (if createBranch=true and no branchName)
+ *                          - Fallback for PR title if no commits are made
+ *
+ * @param {string} provider - (Optional) AI provider to use. Options: 'claude' | 'cursor'
+ *                           Default: 'claude'
+ *
+ * @param {boolean} stream - (Optional) Enable Server-Sent Events (SSE) streaming for real-time updates.
+ *                          Default: true
+ *                          - true: Returns text/event-stream with incremental updates
+ *                          - false: Returns complete JSON response after completion
+ *
+ * @param {string} model - (Optional) Model identifier for Cursor provider.
+ *                        Only applicable when provider='cursor'.
+ *                        Examples: 'gpt-4', 'claude-3-opus', etc.
+ *
+ * @param {boolean} cleanup - (Optional) Auto-cleanup project directory after completion.
+ *                           Default: true
+ *                           Behavior:
+ *                           - Only applies when cloning via githubUrl (not for existing projectPath)
+ *                           - Deletes cloned repository after 5 seconds
+ *                           - Also deletes associated Claude session directory
+ *                           - Remote branch and PR remain on GitHub if created
+ *
+ * @param {string} githubToken - (Optional) GitHub Personal Access Token for authentication.
+ *                              Overrides stored token from user settings.
+ *                              Required for:
+ *                              - Private repositories
+ *                              - Branch/PR creation features
+ *                              Token must have 'repo' scope for full functionality.
+ *
+ * @param {string} branchName - (Optional) Custom name for the Git branch.
+ *                             If provided, createBranch is automatically set to true.
+ *                             Validation rules (errors returned if violated):
+ *                             - Cannot be empty or whitespace only
+ *                             - Cannot start or end with dot (.)
+ *                             - Cannot contain consecutive dots (..)
+ *                             - Cannot contain spaces
+ *                             - Cannot contain special characters: ~ ^ : ? * [ \
+ *                             - Cannot contain @{
+ *                             - Cannot start or end with forward slash (/)
+ *                             - Cannot contain consecutive slashes (//)
+ *                             - Cannot end with .lock
+ *                             - Cannot contain ASCII control characters
+ *                             Examples: 'feature/user-auth', 'bugfix/login-error', 'refactor/db-optimization'
+ *
+ * @param {boolean} createBranch - (Optional) Create a new Git branch after successful agent completion.
+ *                                Default: false (or true if branchName is provided)
+ *                                Behavior:
+ *                                - Creates branch locally and pushes to remote
+ *                                - If branch exists locally: Checks out existing branch (no error)
+ *                                - If branch exists on remote: Uses existing branch (no error)
+ *                                - Branch name: Custom (if branchName provided) or auto-generated from message
+ *                                - Requires either githubUrl OR projectPath with GitHub remote
+ *
+ * @param {boolean} createPR - (Optional) Create a GitHub Pull Request after successful completion.
+ *                            Default: false
+ *                            Behavior:
+ *                            - PR title: First commit message (or fallback to message parameter)
+ *                            - PR description: Auto-generated from all commit messages
+ *                            - Base branch: Always 'main' (currently hardcoded)
+ *                            - If PR already exists: GitHub returns error with details
+ *                            - Requires either githubUrl OR projectPath with GitHub remote
+ *
+ * ================================================================================================
+ * PATH HANDLING BEHAVIOR
+ * ================================================================================================
+ *
+ * Scenario 1: Only githubUrl provided
+ *   Input:  { githubUrl: "https://github.com/owner/repo" }
+ *   Action: Clones to auto-generated temporary path: ~/.claude/external-projects/<hash>/
+ *   Cleanup: Yes (if cleanup=true)
+ *
+ * Scenario 2: Only projectPath provided
+ *   Input:  { projectPath: "/home/user/my-project" }
+ *   Action: Uses existing project at specified path
+ *   Validation: Path must exist and be accessible
+ *   Cleanup: No (never cleanup existing projects)
+ *
+ * Scenario 3: Both githubUrl and projectPath provided
+ *   Input:  { githubUrl: "https://github.com/owner/repo", projectPath: "/custom/path" }
+ *   Action: Clones githubUrl to projectPath location
+ *   Validation:
+ *     - If projectPath exists with git repo:
+ *       - Compares remote URL with githubUrl
+ *       - If URLs match: Reuses existing repo
+ *       - If URLs differ: Returns error
+ *   Cleanup: Yes (if cleanup=true)
+ *
+ * ================================================================================================
+ * GITHUB BRANCH/PR CREATION REQUIREMENTS
+ * ================================================================================================
+ *
+ * For createBranch or createPR to work, one of the following must be true:
+ *
+ * Option A: githubUrl provided
+ *   - Repository URL directly specified
+ *   - Works with both cloning and existing paths
+ *
+ * Option B: projectPath with GitHub remote
+ *   - Project must be a Git repository
+ *   - Must have 'origin' remote configured
+ *   - Remote URL must point to github.com
+ *   - System auto-detects GitHub URL via: git remote get-url origin
+ *
+ * Additional Requirements:
+ *   - Valid GitHub token (from settings or githubToken parameter)
+ *   - Token must have 'repo' scope for private repos
+ *   - Project must have commits (for PR creation)
+ *
+ * ================================================================================================
+ * VALIDATION & ERROR HANDLING
+ * ================================================================================================
+ *
+ * Input Validations (400 Bad Request):
+ *   - Either githubUrl OR projectPath must be provided (not neither)
+ *   - message must be non-empty string
+ *   - provider must be 'claude' or 'cursor'
+ *   - createBranch/createPR requires githubUrl OR projectPath (not neither)
+ *   - branchName must pass Git naming rules (if provided)
+ *
+ * Runtime Validations (500 Internal Server Error or specific error in response):
+ *   - projectPath must exist (if used alone)
+ *   - GitHub URL format must be valid
+ *   - Git remote URL must include github.com (for projectPath + branch/PR)
+ *   - GitHub token must be available (for private repos and branch/PR)
+ *   - Directory conflicts handled (existing path with different repo)
+ *
+ * Branch Name Validation Errors (returned in response, not HTTP error):
+ *   Invalid names return: { branch: { error: "Invalid branch name: <reason>" } }
+ *   Examples:
+ *   - "my branch" → "Branch name cannot contain spaces"
+ *   - ".feature" → "Branch name cannot start with a dot"
+ *   - "feature.lock" → "Branch name cannot end with .lock"
+ *
+ * ================================================================================================
+ * RESPONSE FORMATS
+ * ================================================================================================
+ *
+ * Streaming Response (stream=true):
+ *   Content-Type: text/event-stream
+ *   Events:
+ *     - { type: "status", message: "...", projectPath: "..." }
+ *     - { type: "claude-response", data: {...} }
+ *     - { type: "github-branch", branch: { name: "...", url: "..." } }
+ *     - { type: "github-pr", pullRequest: { number: 42, url: "..." } }
+ *     - { type: "github-error", error: "..." }
+ *     - { type: "done" }
+ *
+ * Non-Streaming Response (stream=false):
+ *   Content-Type: application/json
+ *   {
+ *     success: true,
+ *     sessionId: "session-123",
+ *     messages: [...],        // Assistant messages only (filtered)
+ *     tokens: {
+ *       inputTokens: 150,
+ *       outputTokens: 50,
+ *       cacheReadTokens: 0,
+ *       cacheCreationTokens: 0,
+ *       totalTokens: 200
+ *     },
+ *     projectPath: "/path/to/project",
+ *     branch: {               // Only if createBranch=true
+ *       name: "feature/xyz",
+ *       url: "https://github.com/owner/repo/tree/feature/xyz"
+ *     } | { error: "..." },
+ *     pullRequest: {          // Only if createPR=true
+ *       number: 42,
+ *       url: "https://github.com/owner/repo/pull/42"
+ *     } | { error: "..." }
+ *   }
+ *
+ * Error Response:
+ *   HTTP Status: 400, 401, 500
+ *   Content-Type: application/json
+ *   { success: false, error: "Error description" }
+ *
+ * ================================================================================================
+ * EXAMPLES
+ * ================================================================================================
+ *
+ * Example 1: Clone and process with auto-cleanup
+ *   POST /api/agent
+ *   { "githubUrl": "https://github.com/user/repo", "message": "Fix bug" }
+ *
+ * Example 2: Use existing project with custom branch and PR
+ *   POST /api/agent
+ *   {
+ *     "projectPath": "/home/user/project",
+ *     "message": "Add feature",
+ *     "branchName": "feature/new-feature",
+ *     "createPR": true
+ *   }
+ *
+ * Example 3: Clone to specific path with auto-generated branch
+ *   POST /api/agent
+ *   {
+ *     "githubUrl": "https://github.com/user/repo",
+ *     "projectPath": "/tmp/work",
+ *     "message": "Refactor code",
+ *     "createBranch": true,
+ *     "cleanup": false
+ *   }
  */
 router.post('/', validateExternalApiKey, async (req, res) => {
-  const { githubUrl, projectPath, message, provider = 'claude', model, githubToken } = req.body;
+  const { githubUrl, projectPath, message, provider = 'claude', model, githubToken, branchName } = req.body;
 
   // Parse stream and cleanup as booleans (handle string "true"/"false" from curl)
   const stream = req.body.stream === undefined ? true : (req.body.stream === true || req.body.stream === 'true');
   const cleanup = req.body.cleanup === undefined ? true : (req.body.cleanup === true || req.body.cleanup === 'true');
+
+  // If branchName is provided, automatically enable createBranch
+  const createBranch = branchName ? true : (req.body.createBranch === true || req.body.createBranch === 'true');
+  const createPR = req.body.createPR === true || req.body.createPR === 'true';
 
   // Validate inputs
   if (!githubUrl && !projectPath) {
@@ -393,6 +798,12 @@ router.post('/', validateExternalApiKey, async (req, res) => {
 
   if (!['claude', 'cursor'].includes(provider)) {
     return res.status(400).json({ error: 'provider must be "claude" or "cursor"' });
+  }
+
+  // Validate GitHub branch/PR creation requirements
+  // Allow branch/PR creation with projectPath as long as it has a GitHub remote
+  if ((createBranch || createPR) && !githubUrl && !projectPath) {
+    return res.status(400).json({ error: 'createBranch and createPR require either githubUrl or projectPath with a GitHub remote' });
   }
 
   let finalProjectPath = null;
@@ -492,6 +903,187 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       }, writer);
     }
 
+    // Handle GitHub branch and PR creation after successful agent completion
+    let branchInfo = null;
+    let prInfo = null;
+
+    if (createBranch || createPR) {
+      try {
+        console.log('🔄 Starting GitHub branch/PR creation workflow...');
+
+        // Get GitHub token
+        const tokenToUse = githubToken || githubTokensDb.getActiveGithubToken(req.user.id);
+
+        if (!tokenToUse) {
+          throw new Error('GitHub token required for branch/PR creation. Please configure a GitHub token in settings.');
+        }
+
+        // Initialize Octokit
+        const octokit = new Octokit({ auth: tokenToUse });
+
+        // Get GitHub URL - either from parameter or from git remote
+        let repoUrl = githubUrl;
+        if (!repoUrl) {
+          console.log('🔍 Getting GitHub URL from git remote...');
+          try {
+            repoUrl = await getGitRemoteUrl(finalProjectPath);
+            if (!repoUrl.includes('github.com')) {
+              throw new Error('Project does not have a GitHub remote configured');
+            }
+            console.log(`✅ Found GitHub remote: ${repoUrl}`);
+          } catch (error) {
+            throw new Error(`Failed to get GitHub remote URL: ${error.message}`);
+          }
+        }
+
+        // Parse GitHub URL to get owner and repo
+        const { owner, repo } = parseGitHubUrl(repoUrl);
+        console.log(`📦 Repository: ${owner}/${repo}`);
+
+        // Use provided branch name or auto-generate from message
+        const finalBranchName = branchName || autogenerateBranchName(message);
+        if (branchName) {
+          console.log(`🌿 Using provided branch name: ${finalBranchName}`);
+
+          // Validate custom branch name
+          const validation = validateBranchName(finalBranchName);
+          if (!validation.valid) {
+            throw new Error(`Invalid branch name: ${validation.error}`);
+          }
+        } else {
+          console.log(`🌿 Auto-generated branch name: ${finalBranchName}`);
+        }
+
+        if (createBranch) {
+          // Create and checkout the new branch locally
+          console.log('🔄 Creating local branch...');
+          const checkoutProcess = spawn('git', ['checkout', '-b', finalBranchName], {
+            cwd: finalProjectPath,
+            stdio: 'pipe'
+          });
+
+          await new Promise((resolve, reject) => {
+            let stderr = '';
+            checkoutProcess.stderr.on('data', (data) => { stderr += data.toString(); });
+            checkoutProcess.on('close', (code) => {
+              if (code === 0) {
+                console.log(`✅ Created and checked out local branch '${finalBranchName}'`);
+                resolve();
+              } else {
+                // Branch might already exist locally, try to checkout
+                if (stderr.includes('already exists')) {
+                  console.log(`ℹ️ Branch '${finalBranchName}' already exists locally, checking out...`);
+                  const checkoutExisting = spawn('git', ['checkout', finalBranchName], {
+                    cwd: finalProjectPath,
+                    stdio: 'pipe'
+                  });
+                  checkoutExisting.on('close', (checkoutCode) => {
+                    if (checkoutCode === 0) {
+                      console.log(`✅ Checked out existing branch '${finalBranchName}'`);
+                      resolve();
+                    } else {
+                      reject(new Error(`Failed to checkout existing branch: ${stderr}`));
+                    }
+                  });
+                } else {
+                  reject(new Error(`Failed to create branch: ${stderr}`));
+                }
+              }
+            });
+          });
+
+          // Push the branch to remote
+          console.log('🔄 Pushing branch to remote...');
+          const pushProcess = spawn('git', ['push', '-u', 'origin', finalBranchName], {
+            cwd: finalProjectPath,
+            stdio: 'pipe'
+          });
+
+          await new Promise((resolve, reject) => {
+            let stderr = '';
+            let stdout = '';
+            pushProcess.stdout.on('data', (data) => { stdout += data.toString(); });
+            pushProcess.stderr.on('data', (data) => { stderr += data.toString(); });
+            pushProcess.on('close', (code) => {
+              if (code === 0) {
+                console.log(`✅ Pushed branch '${finalBranchName}' to remote`);
+                resolve();
+              } else {
+                // Check if branch exists on remote but has different commits
+                if (stderr.includes('already exists') || stderr.includes('up-to-date')) {
+                  console.log(`ℹ️ Branch '${finalBranchName}' already exists on remote, using existing branch`);
+                  resolve();
+                } else {
+                  reject(new Error(`Failed to push branch: ${stderr}`));
+                }
+              }
+            });
+          });
+
+          branchInfo = {
+            name: finalBranchName,
+            url: `https://github.com/${owner}/${repo}/tree/${finalBranchName}`
+          };
+        }
+
+        if (createPR) {
+          // Get commit messages to generate PR description
+          console.log('🔄 Generating PR title and description...');
+          const commitMessages = await getCommitMessages(finalProjectPath, 5);
+
+          // Use the first commit message as the PR title, or fallback to the agent message
+          const prTitle = commitMessages.length > 0 ? commitMessages[0] : message;
+
+          // Generate PR body from commit messages
+          let prBody = '## Changes\n\n';
+          if (commitMessages.length > 0) {
+            prBody += commitMessages.map(msg => `- ${msg}`).join('\n');
+          } else {
+            prBody += `Agent task: ${message}`;
+          }
+          prBody += '\n\n---\n*This pull request was automatically created by Claude Code UI Agent.*';
+
+          console.log(`📝 PR Title: ${prTitle}`);
+
+          // Create the pull request
+          console.log('🔄 Creating pull request...');
+          prInfo = await createGitHubPR(octokit, owner, repo, finalBranchName, prTitle, prBody, 'main');
+        }
+
+        // Send branch/PR info in response
+        if (stream) {
+          if (branchInfo) {
+            writer.send({
+              type: 'github-branch',
+              branch: branchInfo
+            });
+          }
+          if (prInfo) {
+            writer.send({
+              type: 'github-pr',
+              pullRequest: prInfo
+            });
+          }
+        }
+
+      } catch (error) {
+        console.error('❌ GitHub branch/PR creation error:', error);
+
+        // Send error but don't fail the entire request
+        if (stream) {
+          writer.send({
+            type: 'github-error',
+            error: error.message
+          });
+        }
+        // Store error info for non-streaming response
+        if (!stream) {
+          branchInfo = { error: error.message };
+          prInfo = { error: error.message };
+        }
+      }
+    }
+
     // Handle response based on streaming mode
     if (stream) {
       // Streaming mode: end the SSE stream
@@ -501,13 +1093,23 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       const assistantMessages = writer.getAssistantMessages();
       const tokenSummary = writer.getTotalTokens();
 
-      res.json({
+      const response = {
         success: true,
         sessionId: writer.getSessionId(),
         messages: assistantMessages,
         tokens: tokenSummary,
         projectPath: finalProjectPath
-      });
+      };
+
+      // Add branch/PR info if created
+      if (branchInfo) {
+        response.branch = branchInfo;
+      }
+      if (prInfo) {
+        response.pullRequest = prInfo;
+      }
+
+      res.json(response);
     }
 
     // Clean up if requested
