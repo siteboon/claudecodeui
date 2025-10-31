@@ -57,7 +57,8 @@ function Sidebar({
   releaseInfo,
   onShowVersionModal,
   isPWA,
-  isMobile
+  isMobile,
+  onToggleSidebar
 }) {
   const [expandedProjects, setExpandedProjects] = useState(new Set());
   const [editingProject, setEditingProject] = useState(null);
@@ -587,34 +588,24 @@ function Sidebar({
               <p className="text-sm text-muted-foreground">AI coding assistant interface</p>
             </div>
           </div>
-          <div className="flex gap-2">
+          {onToggleSidebar && (
             <Button
               variant="ghost"
               size="sm"
-              className="h-9 w-9 px-0 hover:bg-accent transition-colors duration-200 group"
-              onClick={async () => {
-                setIsRefreshing(true);
-                try {
-                  await onRefresh();
-                } finally {
-                  setIsRefreshing(false);
-                }
-              }}
-              disabled={isRefreshing}
-              title="Refresh projects and sessions (Ctrl+R)"
+              className="h-8 w-8 px-0 hover:bg-accent transition-colors duration-200"
+              onClick={onToggleSidebar}
+              title="Hide sidebar"
             >
-              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''} group-hover:rotate-180 transition-transform duration-300`} />
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
             </Button>
-            <Button
-              variant="default"
-              size="sm"
-              className="h-9 w-9 px-0 bg-primary hover:bg-primary/90 transition-all duration-200 shadow-sm hover:shadow-md"
-              onClick={() => setShowNewProject(true)}
-              title="Create new project (Ctrl+N)"
-            >
-              <FolderPlus className="w-4 h-4" />
-            </Button>
-          </div>
+          )}
         </div>
         
         {/* Mobile Header */}
@@ -914,9 +905,9 @@ function Sidebar({
         </div>
       )}
       
-      {/* Search Filter */}
+      {/* Search Filter and Actions */}
       {projects.length > 0 && !isLoading && (
-        <div className="px-3 md:px-4 py-2 border-b border-border">
+        <div className="px-3 md:px-4 py-2 border-b border-border space-y-2">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
@@ -935,6 +926,39 @@ function Sidebar({
               </button>
             )}
           </div>
+
+          {/* Action Buttons - Desktop only */}
+          {!isMobile && (
+            <div className="flex gap-2">
+              <Button
+                variant="default"
+                size="sm"
+                className="flex-1 h-8 text-xs bg-primary hover:bg-primary/90 transition-all duration-200"
+                onClick={() => setShowNewProject(true)}
+                title="Create new project (Ctrl+N)"
+              >
+                <FolderPlus className="w-3.5 h-3.5 mr-1.5" />
+                New Project
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 w-8 px-0 hover:bg-accent transition-colors duration-200 group"
+                onClick={async () => {
+                  setIsRefreshing(true);
+                  try {
+                    await onRefresh();
+                  } finally {
+                    setIsRefreshing(false);
+                  }
+                }}
+                disabled={isRefreshing}
+                title="Refresh projects and sessions (Ctrl+R)"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''} group-hover:rotate-180 transition-transform duration-300`} />
+              </Button>
+            </div>
+          )}
         </div>
       )}
       

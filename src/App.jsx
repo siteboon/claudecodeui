@@ -20,6 +20,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useParams } from 'react-router-dom';
+import { Settings as SettingsIcon, Sparkles } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import MainContent from './components/MainContent';
 import MobileNav from './components/MobileNav';
@@ -60,6 +61,7 @@ function AppContent() {
   const [showThinking, setShowThinking] = useLocalStorage('showThinking', true);
   const [autoScrollToBottom, setAutoScrollToBottom] = useLocalStorage('autoScrollToBottom', true);
   const [sendByCtrlEnter, setSendByCtrlEnter] = useLocalStorage('sendByCtrlEnter', false);
+  const [sidebarVisible, setSidebarVisible] = useLocalStorage('sidebarVisible', true);
   // Session Protection System: Track sessions with active conversations to prevent
   // automatic project updates from interrupting ongoing chats. When a user sends
   // a message, the session is marked as "active" and project updates are paused
@@ -734,28 +736,78 @@ function AppContent() {
     <div className="fixed inset-0 flex bg-background">
       {/* Fixed Desktop Sidebar */}
       {!isMobile && (
-        <div className="w-80 flex-shrink-0 border-r border-border bg-card">
+        <div
+          className={`flex-shrink-0 border-r border-border bg-card transition-all duration-300 ${
+            sidebarVisible ? 'w-80' : 'w-14'
+          }`}
+        >
           <div className="h-full overflow-hidden">
-            <Sidebar
-              projects={projects}
-              selectedProject={selectedProject}
-              selectedSession={selectedSession}
-              onProjectSelect={handleProjectSelect}
-              onSessionSelect={handleSessionSelect}
-              onNewSession={handleNewSession}
-              onSessionDelete={handleSessionDelete}
-              onProjectDelete={handleProjectDelete}
-              isLoading={isLoadingProjects}
-              onRefresh={handleSidebarRefresh}
-              onShowSettings={() => setShowSettings(true)}
-              updateAvailable={updateAvailable}
-              latestVersion={latestVersion}
-              currentVersion={currentVersion}
-              releaseInfo={releaseInfo}
-              onShowVersionModal={() => setShowVersionModal(true)}
-              isPWA={isPWA}
-              isMobile={isMobile}
-            />
+            {sidebarVisible ? (
+              <Sidebar
+                projects={projects}
+                selectedProject={selectedProject}
+                selectedSession={selectedSession}
+                onProjectSelect={handleProjectSelect}
+                onSessionSelect={handleSessionSelect}
+                onNewSession={handleNewSession}
+                onSessionDelete={handleSessionDelete}
+                onProjectDelete={handleProjectDelete}
+                isLoading={isLoadingProjects}
+                onRefresh={handleSidebarRefresh}
+                onShowSettings={() => setShowSettings(true)}
+                updateAvailable={updateAvailable}
+                latestVersion={latestVersion}
+                currentVersion={currentVersion}
+                releaseInfo={releaseInfo}
+                onShowVersionModal={() => setShowVersionModal(true)}
+                isPWA={isPWA}
+                isMobile={isMobile}
+                onToggleSidebar={() => setSidebarVisible(false)}
+              />
+            ) : (
+              /* Collapsed Sidebar */
+              <div className="h-full flex flex-col items-center py-4 gap-4">
+                {/* Expand Button */}
+                <button
+                  onClick={() => setSidebarVisible(true)}
+                  className="p-2 hover:bg-accent rounded-md transition-colors duration-200 group"
+                  aria-label="Show sidebar"
+                  title="Show sidebar"
+                >
+                  <svg
+                    className="w-5 h-5 text-foreground group-hover:scale-110 transition-transform"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                  </svg>
+                </button>
+
+                {/* Settings Icon */}
+                <button
+                  onClick={() => setShowSettings(true)}
+                  className="p-2 hover:bg-accent rounded-md transition-colors duration-200"
+                  aria-label="Settings"
+                  title="Settings"
+                >
+                  <SettingsIcon className="w-5 h-5 text-muted-foreground hover:text-foreground transition-colors" />
+                </button>
+
+                {/* Update Indicator */}
+                {updateAvailable && (
+                  <button
+                    onClick={() => setShowVersionModal(true)}
+                    className="relative p-2 hover:bg-accent rounded-md transition-colors duration-200"
+                    aria-label="Update available"
+                    title="Update available"
+                  >
+                    <Sparkles className="w-5 h-5 text-blue-500" />
+                    <span className="absolute top-1 right-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -805,6 +857,7 @@ function AppContent() {
               onShowVersionModal={() => setShowVersionModal(true)}
               isPWA={isPWA}
               isMobile={isMobile}
+              onToggleSidebar={() => setSidebarVisible(false)}
             />
           </div>
         </div>

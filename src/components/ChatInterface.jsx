@@ -514,7 +514,6 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                             </svg>
                             <span className="flex items-center gap-2">
-                              <span className="text-lg leading-none">📝</span>
                               <span>View edit diff for</span>
                             </span> 
                             <button
