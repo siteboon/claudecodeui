@@ -75,6 +75,7 @@
     "react-dom": "^18.2.0",
     "react-dropzone": "^14.2.3",
     "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.0",
     "react-router-dom": "^6.8.1",
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",

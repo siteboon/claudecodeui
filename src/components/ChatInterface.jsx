@@ -18,6 +18,7 @@
 
 import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { useDropzone } from 'react-dropzone';
 import TodoList from './TodoList';
 import ClaudeLogo from './ClaudeLogo.jsx';
@@ -43,6 +44,30 @@ function decodeHtmlEntities(text) {
     .replace(/&#39;/g, "'")
     .replace(/&amp;/g, '&');
 }
+
+// Normalize markdown text where providers mistakenly wrap short inline code with single-line triple fences.
+// Only convert fences that do NOT contain any newline to avoid touching real code blocks.
+function normalizeInlineCodeFences(text) {
+  if (!text || typeof text !== 'string') return text;
+  try {
+    // ```code```  -> `code`
+    return text.replace(/```\s*([^\n\r]+?)\s*```/g, '`$1`');
+  } catch {
+    return text;
+  }
+}
+
+// Small wrapper to keep markdown behavior consistent in one place
+const Markdown = ({ children, className }) => {
+  const content = normalizeInlineCodeFences(String(children ?? ''));
+  return (
+    <div className={className}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
+};
 
 // Format "Claude AI usage limit reached|<epoch>" into a local time string
 function formatUsageLimitText(text) {
@@ -167,6 +192,125 @@ const safeLocalStorage = {
       console.error('localStorage removeItem error:', error);
     }
   }
+};
+
+// Common markdown components to ensure consistent rendering (tables, inline code, links, etc.)
+const markdownComponents = {
+  code: ({ node, inline, className, children, ...props }) => {
+    const [copied, setCopied] = React.useState(false);
+    const raw = Array.isArray(children) ? children.join('') : String(children ?? '');
+    const looksMultiline = /[\r\n]/.test(raw);
+    const inlineDetected = inline || (node && node.type === 'inlineCode');
+    const shouldInline = inlineDetected || !looksMultiline; // fallback to inline if single-line
+    if (shouldInline) {
+      return (
+        <code
+          className={`font-mono text-[0.9em] px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-900 border border-gray-200 dark:bg-gray-800/60 dark:text-gray-100 dark:border-gray-700 whitespace-pre-wrap break-words ${
+            className || ''
+          }`}
+          {...props}
+        >
+          {children}
+        </code>
+      );
+    }
+    const textToCopy = raw;
+
+    const handleCopy = () => {
+      const doSet = () => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      };
+      try {
+        if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(textToCopy).then(doSet).catch(() => {
+            // Fallback
+            const ta = document.createElement('textarea');
+            ta.value = textToCopy;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand('copy'); } catch {}
+            document.body.removeChild(ta);
+            doSet();
+          });
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = textToCopy;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          try { document.execCommand('copy'); } catch {}
+          document.body.removeChild(ta);
+          doSet();
+        }
+      } catch {}
+    };
+
+    return (
+      <div className="relative group my-2">
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 focus:opacity-100 active:opacity-100 transition-opacity text-xs px-2 py-1 rounded-md bg-gray-700/80 hover:bg-gray-700 text-white border border-gray-600"
+          title={copied ? 'Copied' : 'Copy code'}
+          aria-label={copied ? 'Copied' : 'Copy code'}
+        >
+          {copied ? (
+            <span className="flex items-center gap-1">
+              <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
+              Copied
+            </span>
+          ) : (
+            <span className="flex items-center gap-1">
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
+              </svg>
+              Copy
+            </span>
+          )}
+        </button>
+        <pre className="bg-gray-900 dark:bg-gray-900 border border-gray-700/40 rounded-lg p-3 overflow-x-auto">
+          <code className={`text-gray-100 dark:text-gray-100 text-sm font-mono ${className || ''}`} {...props}>
+            {children}
+          </code>
+        </pre>
+      </div>
+    );
+  },
+  blockquote: ({ children }) => (
+    <blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-4 italic text-gray-600 dark:text-gray-400 my-2">
+      {children}
+    </blockquote>
+  ),
+  a: ({ href, children }) => (
+    <a href={href} className="text-blue-600 dark:text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">
+      {children}
+    </a>
+  ),
+  p: ({ children }) => <div className="mb-2 last:mb-0">{children}</div>,
+  // GFM tables
+  table: ({ children }) => (
+    <div className="overflow-x-auto my-2">
+      <table className="min-w-full border-collapse border border-gray-200 dark:border-gray-700">
+        {children}
+      </table>
+    </div>
+  ),
+  thead: ({ children }) => (
+    <thead className="bg-gray-50 dark:bg-gray-800">{children}</thead>
+  ),
+  th: ({ children }) => (
+    <th className="px-3 py-2 text-left text-sm font-semibold border border-gray-200 dark:border-gray-700">{children}</th>
+  ),
+  td: ({ children }) => (
+    <td className="px-3 py-2 align-top text-sm border border-gray-200 dark:border-gray-700">{children}</td>
+  )
 };
 
 // Memoized message component to prevent unnecessary re-renders
@@ -692,9 +836,9 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                               </svg>
                               📋 View implementation plan
                             </summary>
-                            <div className="mt-3 prose prose-sm max-w-none dark:prose-invert">
-                              <ReactMarkdown>{planContent}</ReactMarkdown>
-                            </div>
+                            <Markdown className="mt-3 prose prose-sm max-w-none dark:prose-invert">
+                              {planContent}
+                            </Markdown>
                           </details>
                         );
                       }
@@ -802,9 +946,9 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                                   <div className="flex items-center gap-2 mb-3">
                                     <span className="font-medium">Implementation Plan</span>
                                   </div>
-                                  <div className="prose prose-sm max-w-none dark:prose-invert">
-                                    <ReactMarkdown>{planContent}</ReactMarkdown>
-                                  </div>
+                                  <Markdown className="prose prose-sm max-w-none dark:prose-invert">
+                                    {planContent}
+                                  </Markdown>
                                 </div>
                               );
                             }
@@ -1034,17 +1178,17 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                                 </svg>
                                 View full output ({content.length} chars)
                               </summary>
-                              <div className="mt-2 prose prose-sm max-w-none prose-green dark:prose-invert">
-                                <ReactMarkdown>{content}</ReactMarkdown>
-                              </div>
+                              <Markdown className="mt-2 prose prose-sm max-w-none prose-green dark:prose-invert">
+                                {content}
+                              </Markdown>
                             </details>
                           );
                         }
                         
                         return (
-                          <div className="prose prose-sm max-w-none prose-green dark:prose-invert">
-                            <ReactMarkdown>{content}</ReactMarkdown>
-                          </div>
+                          <Markdown className="prose prose-sm max-w-none prose-green dark:prose-invert">
+                            {content}
+                          </Markdown>
                         );
                       })()}
                     </div>
@@ -1240,42 +1384,9 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
 
                   // Normal rendering for non-JSON content
                   return message.type === 'assistant' ? (
-                    <div className="prose prose-sm max-w-none dark:prose-invert prose-gray [&_code]:!bg-transparent [&_code]:!p-0 [&_pre]:!bg-transparent [&_pre]:!border-0 [&_pre]:!p-0">
-                      <ReactMarkdown
-                        components={{
-                          code: ({node, inline, className, children, ...props}) => {
-                            return inline ? (
-                              <strong className="text-blue-600 dark:text-blue-400 font-bold not-prose" {...props}>
-                                {children}
-                              </strong>
-                            ) : (
-                              <div className="bg-gray-800 dark:bg-gray-800 border border-gray-600/30 dark:border-gray-600/30 p-3 rounded-lg overflow-hidden my-2">
-                                <code className="text-gray-100 dark:text-gray-200 text-sm font-mono block whitespace-pre-wrap break-words" {...props}>
-                                  {children}
-                                </code>
-                              </div>
-                            );
-                          },
-                          blockquote: ({children}) => (
-                            <blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-4 italic text-gray-600 dark:text-gray-400 my-2">
-                              {children}
-                            </blockquote>
-                          ),
-                          a: ({href, children}) => (
-                            <a href={href} className="text-blue-600 dark:text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">
-                              {children}
-                            </a>
-                          ),
-                          p: ({children}) => (
-                            <div className="mb-2 last:mb-0">
-                              {children}
-                            </div>
-                          )
-                        }}
-                      >
-                        {content}
-                      </ReactMarkdown>
-                    </div>
+                    <Markdown className="prose prose-sm max-w-none dark:prose-invert prose-gray">
+                      {content}
+                    </Markdown>
                   ) : (
                     <div className="whitespace-pre-wrap">
                       {content}
