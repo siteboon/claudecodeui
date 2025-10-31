@@ -550,6 +550,24 @@
                                         <td><span class="badge badge-optional">Optional</span></td>
                                         <td>GitHub token for private repos</td>
                                     </tr>
+                                    <tr>
+                                        <td><code>branchName</code></td>
+                                        <td>string</td>
+                                        <td><span class="badge badge-optional">Optional</span></td>
+                                        <td>Custom branch name to use. If provided, <code>createBranch</code> is automatically enabled. Branch names are validated against Git naming rules. Works with <code>githubUrl</code> or <code>projectPath</code> (if it has a GitHub remote).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>createBranch</code></td>
+                                        <td>boolean</td>
+                                        <td><span class="badge badge-optional">Optional</span></td>
+                                        <td>Create a new branch after successful completion (default: <code>false</code>). Automatically set to <code>true</code> if <code>branchName</code> is provided. Works with <code>githubUrl</code> or <code>projectPath</code> (if it has a GitHub remote).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>createPR</code></td>
+                                        <td>boolean</td>
+                                        <td><span class="badge badge-optional">Optional</span></td>
+                                        <td>Create a pull request after successful completion (default: <code>false</code>). PR title and description auto-generated from commit messages. Works with <code>githubUrl</code> or <code>projectPath</code> (if it has a GitHub remote).</td>
+                                    </tr>
                                 </tbody>
                             </table>
 
@@ -669,7 +687,15 @@ data: {"type":"done"}</code></pre>
     "cacheCreationTokens": 0,
     "totalTokens": 200
   },
-  "projectPath": "/path/to/project"
+  "projectPath": "/path/to/project",
+  "branch": {
+    "name": "fix-authentication-bug-abc123",
+    "url": "https://github.com/user/repo/tree/fix-authentication-bug-abc123"
+  },
+  "pullRequest": {
+    "number": 42,
+    "url": "https://github.com/user/repo/pull/42"
+  }
 }</code></pre>
                     </div>
 
@@ -700,6 +726,9 @@ data: {"type":"done"}</code></pre>
 
                         <h3>CI/CD Integration</h3>
                         <p>Integrate with GitHub Actions or other CI/CD pipelines.</p>
+
+                        <h3>Create Branch and Pull Request</h3>
+                        <p>Automatically create a new branch and pull request after the agent completes its work. Branch names are auto-generated from the message, and PR title/description are auto-generated from commit messages.</p>
                     </section>
                 </div>
 
@@ -740,6 +769,49 @@ data: {"type":"done"}</code></pre>
         "message": "Review for security",
         "githubToken": "${{ secrets.GITHUB_TOKEN }}"
       }'</code></pre>
+                    </div>
+
+                    <div class="example-block">
+                        <h4>Create Branch and PR</h4>
+<pre><code class="language-bash">curl -X POST <span class="api-url">http://localhost:3001</span>/api/agent \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: ck_..." \
+  -d '{
+    "githubUrl": "https://github.com/user/repo",
+    "message": "Fix authentication bug",
+    "createBranch": true,
+    "createPR": true,
+    "stream": false
+  }'</code></pre>
+                    </div>
+
+                    <div class="example-block">
+                        <h4>Custom Branch Name</h4>
+<pre><code class="language-bash">curl -X POST <span class="api-url">http://localhost:3001</span>/api/agent \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: ck_..." \
+  -d '{
+    "githubUrl": "https://github.com/user/repo",
+    "message": "Add user authentication",
+    "branchName": "feature/user-auth",
+    "createPR": true,
+    "stream": false
+  }'</code></pre>
+                    </div>
+
+                    <div class="example-block">
+                        <h4>Branch & PR Response</h4>
+<pre><code class="language-json">{
+  "success": true,
+  "branch": {
+    "name": "feature/user-auth",
+    "url": "https://github.com/user/repo/tree/feature/user-auth"
+  },
+  "pullRequest": {
+    "number": 42,
+    "url": "https://github.com/user/repo/pull/42"
+  }
+}</code></pre>
                     </div>
                 </div>
             </div>
