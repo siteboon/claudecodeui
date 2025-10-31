@@ -63,6 +63,7 @@ function MainContent({
   const [showTaskDetail, setShowTaskDetail] = useState(false);
   const [editorWidth, setEditorWidth] = useState(600);
   const [isResizing, setIsResizing] = useState(false);
+  const [editorExpanded, setEditorExpanded] = useState(false);
   const resizeRef = useRef(null);
   
   // PRD Editor state
@@ -130,6 +131,11 @@ function MainContent({
 
   const handleCloseEditor = () => {
     setEditingFile(null);
+    setEditorExpanded(false);
+  };
+
+  const handleToggleEditorExpand = () => {
+    setEditorExpanded(!editorExpanded);
   };
 
   const handleTaskClick = (task) => {
@@ -461,7 +467,7 @@ function MainContent({
       {/* Content Area with Right Sidebar */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
         {/* Main Content */}
-        <div className={`flex-1 flex flex-col min-h-0 overflow-hidden ${editingFile ? 'mr-0' : ''}`}>
+        <div className={`flex-1 flex flex-col min-h-0 overflow-hidden ${editingFile ? 'mr-0' : ''} ${editorExpanded ? 'hidden' : ''}`}>
           <div className={`h-full ${activeTab === 'chat' ? 'block' : 'hidden'}`}>
             <ErrorBoundary showDetails={true}>
               <ChatInterface
@@ -569,27 +575,31 @@ function MainContent({
         {/* Code Editor Right Sidebar - Desktop only, Mobile uses modal */}
         {editingFile && !isMobile && (
           <>
-            {/* Resize Handle */}
-            <div
-              ref={resizeRef}
-              onMouseDown={handleMouseDown}
-              className="flex-shrink-0 w-1 bg-gray-200 dark:bg-gray-700 hover:bg-blue-500 dark:hover:bg-blue-600 cursor-col-resize transition-colors relative group"
-              title="Drag to resize"
-            >
-              {/* Visual indicator on hover */}
-              <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-1 bg-blue-500 dark:bg-blue-600 opacity-0 group-hover:opacity-100 transition-opacity" />
-            </div>
+            {/* Resize Handle - Hidden when expanded */}
+            {!editorExpanded && (
+              <div
+                ref={resizeRef}
+                onMouseDown={handleMouseDown}
+                className="flex-shrink-0 w-1 bg-gray-200 dark:bg-gray-700 hover:bg-blue-500 dark:hover:bg-blue-600 cursor-col-resize transition-colors relative group"
+                title="Drag to resize"
+              >
+                {/* Visual indicator on hover */}
+                <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-1 bg-blue-500 dark:bg-blue-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+            )}
 
             {/* Editor Sidebar */}
             <div
-              className="flex-shrink-0 border-l border-gray-200 dark:border-gray-700 h-full overflow-hidden"
-              style={{ width: `${editorWidth}px` }}
+              className={`flex-shrink-0 border-l border-gray-200 dark:border-gray-700 h-full overflow-hidden ${editorExpanded ? 'flex-1' : ''}`}
+              style={editorExpanded ? {} : { width: `${editorWidth}px` }}
             >
               <CodeEditor
                 file={editingFile}
                 onClose={handleCloseEditor}
                 projectPath={selectedProject?.path}
                 isSidebar={true}
+                isExpanded={editorExpanded}
+                onToggleExpand={handleToggleEditorExpand}
               />
             </div>
           </>

@@ -55,6 +55,7 @@ function AppContent() {
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState('tools');
   const [showQuickSettings, setShowQuickSettings] = useState(false);
   const [autoExpandTools, setAutoExpandTools] = useLocalStorage('autoExpandTools', false);
   const [showRawParameters, setShowRawParameters] = useLocalStorage('showRawParameters', false);
@@ -307,6 +308,12 @@ function AppContent() {
 
   // Expose fetchProjects globally for component access
   window.refreshProjects = fetchProjects;
+
+  // Expose openSettings function globally for component access
+  window.openSettings = useCallback((tab = 'tools') => {
+    setSettingsInitialTab(tab);
+    setShowSettings(true);
+  }, []);
 
   // Handle URL-based session loading
   useEffect(() => {
@@ -927,6 +934,7 @@ function AppContent() {
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
         projects={projects}
+        initialTab={settingsInitialTab}
       />
 
       {/* Version Upgrade Modal */}

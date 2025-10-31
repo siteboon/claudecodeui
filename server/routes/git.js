@@ -502,16 +502,16 @@ router.post('/generate-commit-message', async (req, res) => {
  */
 async function generateCommitMessageWithAI(files, diffContext, provider, projectPath) {
   // Create the prompt
-  const prompt = `You are a git commit message generator. Based on the following file changes and diffs, generate a commit message in conventional commit format.
+  const prompt = `Generate a conventional commit message for these changes.
 
 REQUIREMENTS:
-- Use conventional commit format: type(scope): subject
-- Include a body that explains what changed and why
-- Valid types: feat, fix, docs, style, refactor, perf, test, build, ci, chore
-- Keep subject line under 50 characters
-- Wrap body at 72 characters
-- Be specific and descriptive
-- Return ONLY the commit message, nothing else - no markdown, no explanations, no code blocks
+- Format: type(scope): subject
+- Include body explaining what changed and why
+- Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore
+- Subject under 50 chars, body wrapped at 72 chars
+- Focus on user-facing changes, not implementation details
+- Consider what's being added AND removed
+- Return ONLY the commit message (no markdown, explanations, or code blocks)
 
 FILES CHANGED:
 ${files.map(f => `- ${f}`).join('\n')}
@@ -519,7 +519,7 @@ ${files.map(f => `- ${f}`).join('\n')}
 DIFFS:
 ${diffContext.substring(0, 4000)}
 
-Generate the commit message now:`;
+Generate the commit message:`;
 
   try {
     // Create a simple writer that collects the response

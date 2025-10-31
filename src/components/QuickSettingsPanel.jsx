@@ -112,7 +112,7 @@ const QuickSettingsPanel = ({
                   type="checkbox"
                   checked={autoExpandTools}
                   onChange={(e) => onAutoExpandChange(e.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 dark:focus:ring-blue-400 dark:bg-gray-800 dark:checked:bg-blue-600"
+                  className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 focus:ring-2 dark:focus:ring-blue-400 bg-gray-100 dark:bg-gray-800 checked:bg-blue-600 dark:checked:bg-blue-600"
                 />
               </label>
 
@@ -125,7 +125,7 @@ const QuickSettingsPanel = ({
                   type="checkbox"
                   checked={showRawParameters}
                   onChange={(e) => onShowRawParametersChange(e.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 dark:focus:ring-blue-400 dark:bg-gray-800 dark:checked:bg-blue-600"
+                  className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 focus:ring-2 dark:focus:ring-blue-400 bg-gray-100 dark:bg-gray-800 checked:bg-blue-600 dark:checked:bg-blue-600"
                 />
               </label>
 
@@ -138,7 +138,7 @@ const QuickSettingsPanel = ({
                   type="checkbox"
                   checked={showThinking}
                   onChange={(e) => onShowThinkingChange(e.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 dark:focus:ring-blue-400 dark:bg-gray-800 dark:checked:bg-blue-600"
+                  className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 focus:ring-2 dark:focus:ring-blue-400 bg-gray-100 dark:bg-gray-800 checked:bg-blue-600 dark:checked:bg-blue-600"
                 />
               </label>
             </div>
@@ -155,7 +155,7 @@ const QuickSettingsPanel = ({
                   type="checkbox"
                   checked={autoScrollToBottom}
                   onChange={(e) => onAutoScrollChange(e.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 dark:focus:ring-blue-400 dark:bg-gray-800 dark:checked:bg-blue-600"
+                  className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 focus:ring-2 dark:focus:ring-blue-400 bg-gray-100 dark:bg-gray-800 checked:bg-blue-600 dark:checked:bg-blue-600"
                 />
               </label>
             </div>
@@ -173,7 +173,7 @@ const QuickSettingsPanel = ({
                   type="checkbox"
                   checked={sendByCtrlEnter}
                   onChange={(e) => onSendByCtrlEnterChange(e.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 dark:focus:ring-blue-400 dark:bg-gray-800 dark:checked:bg-blue-600"
+                  className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 focus:ring-2 dark:focus:ring-blue-400 bg-gray-100 dark:bg-gray-800 checked:bg-blue-600 dark:checked:bg-blue-600"
                 />
               </label>
               <p className="text-xs text-gray-500 dark:text-gray-400 ml-3">

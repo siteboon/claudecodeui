@@ -10,23 +10,37 @@ import { oneDark } from '@codemirror/theme-one-dark';
 import { EditorView, showPanel, ViewPlugin } from '@codemirror/view';
 import { unifiedMergeView, getChunks } from '@codemirror/merge';
 import { showMinimap } from '@replit/codemirror-minimap';
-import { X, Save, Download, Maximize2, Minimize2, Eye, EyeOff } from 'lucide-react';
+import { X, Save, Download, Maximize2, Minimize2 } from 'lucide-react';
 import { api } from '../utils/api';
 
-function CodeEditor({ file, onClose, projectPath, isSidebar = false }) {
+function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded = false, onToggleExpand = null }) {
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(true);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const savedTheme = localStorage.getItem('codeEditorTheme');
+    return savedTheme ? savedTheme === 'dark' : true;
+  });
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [showDiff, setShowDiff] = useState(!!file.diffInfo);
-  const [wordWrap, setWordWrap] = useState(false);
+  const [wordWrap, setWordWrap] = useState(() => {
+    return localStorage.getItem('codeEditorWordWrap') === 'true';
+  });
+  const [minimapEnabled, setMinimapEnabled] = useState(() => {
+    return localStorage.getItem('codeEditorShowMinimap') !== 'false';
+  });
+  const [showLineNumbers, setShowLineNumbers] = useState(() => {
+    return localStorage.getItem('codeEditorLineNumbers') !== 'false';
+  });
+  const [fontSize, setFontSize] = useState(() => {
+    return localStorage.getItem('codeEditorFontSize') || '14';
+  });
   const editorRef = useRef(null);
 
   // Create minimap extension with chunk-based gutters
   const minimapExtension = useMemo(() => {
-    if (!file.diffInfo || !showDiff) return [];
+    if (!file.diffInfo || !showDiff || !minimapEnabled) return [];
 
     const gutters = {};
 
@@ -58,7 +72,7 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false }) {
         };
       })
     ];
-  }, [file.diffInfo, showDiff, isDarkMode]);
+  }, [file.diffInfo, showDiff, minimapEnabled, isDarkMode]);
 
   // Create extension to scroll to first chunk on mount
   const scrollToFirstChunkExtension = useMemo(() => {
@@ -89,24 +103,28 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false }) {
     ];
   }, [file.diffInfo, showDiff]);
 
-  // Create diff navigation panel extension
-  const diffNavigationPanel = useMemo(() => {
-    if (!file.diffInfo || !showDiff) return [];
-
+  // Create editor toolbar panel - always visible
+  const editorToolbarPanel = useMemo(() => {
     const createPanel = (view) => {
       const dom = document.createElement('div');
-      dom.className = 'cm-diff-navigation-panel';
+      dom.className = 'cm-editor-toolbar-panel';
 
       let currentIndex = 0;
 
       const updatePanel = () => {
-        // Use getChunks API to get ALL chunks regardless of viewport
-        const chunksData = getChunks(view.state);
+        // Check if we have diff info and it's enabled
+        const hasDiff = file.diffInfo && showDiff;
+        const chunksData = hasDiff ? getChunks(view.state) : null;
         const chunks = chunksData?.chunks || [];
         const chunkCount = chunks.length;
 
-        dom.innerHTML = `
-          <div style="display: flex; align-items: center; gap: 8px;">
+        // Build the toolbar HTML
+        let toolbarHTML = '<div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">';
+
+        // Left side - diff navigation (if applicable)
+        toolbarHTML += '<div style="display: flex; align-items: center; gap: 8px;">';
+        if (hasDiff) {
+          toolbarHTML += `
             <span style="font-weight: 500;">${chunkCount > 0 ? `${currentIndex + 1}/${chunkCount}` : '0'} changes</span>
             <button class="cm-diff-nav-btn cm-diff-nav-prev" title="Previous change" ${chunkCount === 0 ? 'disabled' : ''}>
               <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -118,41 +136,110 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false }) {
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
               </svg>
             </button>
-          </div>
+          `;
+        }
+        toolbarHTML += '</div>';
+
+        // Right side - action buttons
+        toolbarHTML += '<div style="display: flex; align-items: center; gap: 4px;">';
+
+        // Show/hide diff button (only if there's diff info)
+        if (file.diffInfo) {
+          toolbarHTML += `
+            <button class="cm-toolbar-btn cm-toggle-diff-btn" title="${showDiff ? 'Hide diff highlighting' : 'Show diff highlighting'}">
+              <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                ${showDiff ?
+                  '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />' :
+                  '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />'
+                }
+              </svg>
+            </button>
+          `;
+        }
+
+        // Settings button
+        toolbarHTML += `
+          <button class="cm-toolbar-btn cm-settings-btn" title="Editor Settings">
+            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </button>
         `;
 
-        const prevBtn = dom.querySelector('.cm-diff-nav-prev');
-        const nextBtn = dom.querySelector('.cm-diff-nav-next');
+        // Expand button (only in sidebar mode)
+        if (isSidebar && onToggleExpand) {
+          toolbarHTML += `
+            <button class="cm-toolbar-btn cm-expand-btn" title="${isExpanded ? 'Collapse editor' : 'Expand editor to full width'}">
+              <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                ${isExpanded ?
+                  '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />' :
+                  '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />'
+                }
+              </svg>
+            </button>
+          `;
+        }
 
-        prevBtn?.addEventListener('click', () => {
-          if (chunks.length === 0) return;
-          currentIndex = currentIndex > 0 ? currentIndex - 1 : chunks.length - 1;
+        toolbarHTML += '</div>';
+        toolbarHTML += '</div>';
 
-          // Navigate to the chunk - use fromB which is the position in the current document
-          const chunk = chunks[currentIndex];
-          if (chunk) {
-            // Scroll to the start of the chunk in the B side (current document)
-            view.dispatch({
-              effects: EditorView.scrollIntoView(chunk.fromB, { y: 'center' })
-            });
+        dom.innerHTML = toolbarHTML;
+
+        // Attach event listeners for diff navigation
+        if (hasDiff) {
+          const prevBtn = dom.querySelector('.cm-diff-nav-prev');
+          const nextBtn = dom.querySelector('.cm-diff-nav-next');
+
+          prevBtn?.addEventListener('click', () => {
+            if (chunks.length === 0) return;
+            currentIndex = currentIndex > 0 ? currentIndex - 1 : chunks.length - 1;
+
+            const chunk = chunks[currentIndex];
+            if (chunk) {
+              view.dispatch({
+                effects: EditorView.scrollIntoView(chunk.fromB, { y: 'center' })
+              });
+            }
+            updatePanel();
+          });
+
+          nextBtn?.addEventListener('click', () => {
+            if (chunks.length === 0) return;
+            currentIndex = currentIndex < chunks.length - 1 ? currentIndex + 1 : 0;
+
+            const chunk = chunks[currentIndex];
+            if (chunk) {
+              view.dispatch({
+                effects: EditorView.scrollIntoView(chunk.fromB, { y: 'center' })
+              });
+            }
+            updatePanel();
+          });
+        }
+
+        // Attach event listener for toggle diff button
+        if (file.diffInfo) {
+          const toggleDiffBtn = dom.querySelector('.cm-toggle-diff-btn');
+          toggleDiffBtn?.addEventListener('click', () => {
+            setShowDiff(!showDiff);
+          });
+        }
+
+        // Attach event listener for settings button
+        const settingsBtn = dom.querySelector('.cm-settings-btn');
+        settingsBtn?.addEventListener('click', () => {
+          if (window.openSettings) {
+            window.openSettings('appearance');
           }
-          updatePanel();
         });
 
-        nextBtn?.addEventListener('click', () => {
-          if (chunks.length === 0) return;
-          currentIndex = currentIndex < chunks.length - 1 ? currentIndex + 1 : 0;
-
-          // Navigate to the chunk - use fromB which is the position in the current document
-          const chunk = chunks[currentIndex];
-          if (chunk) {
-            // Scroll to the start of the chunk in the B side (current document)
-            view.dispatch({
-              effects: EditorView.scrollIntoView(chunk.fromB, { y: 'center' })
-            });
-          }
-          updatePanel();
-        });
+        // Attach event listener for expand button
+        if (isSidebar && onToggleExpand) {
+          const expandBtn = dom.querySelector('.cm-expand-btn');
+          expandBtn?.addEventListener('click', () => {
+            onToggleExpand();
+          });
+        }
       };
 
       updatePanel();
@@ -165,7 +252,7 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false }) {
     };
 
     return [showPanel.of(createPanel)];
-  }, [file.diffInfo, showDiff]);
+  }, [file.diffInfo, showDiff, isSidebar, isExpanded, onToggleExpand]);
 
   // Get language extension based on file extension
   const getLanguageExtension = (filename) => {
@@ -290,6 +377,57 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false }) {
     setIsFullscreen(!isFullscreen);
   };
 
+  // Save theme preference to localStorage
+  useEffect(() => {
+    localStorage.setItem('codeEditorTheme', isDarkMode ? 'dark' : 'light');
+  }, [isDarkMode]);
+
+  // Save word wrap preference to localStorage
+  useEffect(() => {
+    localStorage.setItem('codeEditorWordWrap', wordWrap.toString());
+  }, [wordWrap]);
+
+  // Listen for settings changes from the Settings modal
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const newTheme = localStorage.getItem('codeEditorTheme');
+      if (newTheme) {
+        setIsDarkMode(newTheme === 'dark');
+      }
+
+      const newWordWrap = localStorage.getItem('codeEditorWordWrap');
+      if (newWordWrap !== null) {
+        setWordWrap(newWordWrap === 'true');
+      }
+
+      const newShowMinimap = localStorage.getItem('codeEditorShowMinimap');
+      if (newShowMinimap !== null) {
+        setMinimapEnabled(newShowMinimap !== 'false');
+      }
+
+      const newShowLineNumbers = localStorage.getItem('codeEditorLineNumbers');
+      if (newShowLineNumbers !== null) {
+        setShowLineNumbers(newShowLineNumbers !== 'false');
+      }
+
+      const newFontSize = localStorage.getItem('codeEditorFontSize');
+      if (newFontSize) {
+        setFontSize(newFontSize);
+      }
+    };
+
+    // Listen for storage events (changes from other tabs/windows)
+    window.addEventListener('storage', handleStorageChange);
+
+    // Custom event for same-window updates
+    window.addEventListener('codeEditorSettingsChanged', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('codeEditorSettingsChanged', handleStorageChange);
+    };
+  }, []);
+
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -329,7 +467,7 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false }) {
             </div>
           </div>
         ) : (
-          <div className="fixed inset-0 z-50 md:bg-black/50 md:flex md:items-center md:justify-center">
+          <div className="fixed inset-0 z-40 md:bg-black/50 md:flex md:items-center md:justify-center">
             <div className="code-editor-loading w-full h-full md:rounded-lg md:w-auto md:h-auto p-8 flex items-center justify-center">
               <div className="flex items-center gap-3">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
@@ -381,8 +519,8 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false }) {
             background-color: ${isDarkMode ? '#1e1e1e' : '#f5f5f5'};
           }
 
-          /* Diff navigation panel styling */
-          .cm-diff-navigation-panel {
+          /* Editor toolbar panel styling */
+          .cm-editor-toolbar-panel {
             padding: 8px 12px;
             background-color: ${isDarkMode ? '#1f2937' : '#ffffff'};
             border-bottom: 1px solid ${isDarkMode ? '#374151' : '#e5e7eb'};
@@ -390,7 +528,8 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false }) {
             font-size: 14px;
           }
 
-          .cm-diff-nav-btn {
+          .cm-diff-nav-btn,
+          .cm-toolbar-btn {
             padding: 4px;
             background: transparent;
             border: none;
@@ -400,9 +539,11 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false }) {
             align-items: center;
             justify-content: center;
             color: inherit;
+            transition: background-color 0.2s;
           }
 
-          .cm-diff-nav-btn:hover {
+          .cm-diff-nav-btn:hover,
+          .cm-toolbar-btn:hover {
             background-color: ${isDarkMode ? '#374151' : '#f3f4f6'};
           }
 
@@ -414,7 +555,7 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false }) {
       </style>
       <div className={isSidebar ?
         'w-full h-full flex flex-col' :
-        `fixed inset-0 z-50 ${
+        `fixed inset-0 z-40 ${
           // Mobile: native fullscreen, Desktop: modal with backdrop
           'md:bg-black/50 md:flex md:items-center md:justify-center md:p-4'
         } ${isFullscreen ? 'md:p-0' : ''}`}>
@@ -433,7 +574,7 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false }) {
                 <h3 className="font-medium text-gray-900 dark:text-white truncate">{file.name}</h3>
                 {file.diffInfo && (
                   <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 px-2 py-1 rounded whitespace-nowrap">
-                    📝 Has changes
+                    Showing changes
                   </span>
                 )}
               </div>
@@ -442,36 +583,6 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false }) {
           </div>
 
           <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
-            {file.diffInfo && (
-              <button
-                onClick={() => setShowDiff(!showDiff)}
-                className="p-2 md:p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
-                title={showDiff ? "Hide diff highlighting" : "Show diff highlighting"}
-              >
-                {showDiff ? <EyeOff className="w-5 h-5 md:w-4 md:h-4" /> : <Eye className="w-5 h-5 md:w-4 md:h-4" />}
-              </button>
-            )}
-
-            <button
-              onClick={() => setWordWrap(!wordWrap)}
-              className={`p-2 md:p-2 rounded-md hover:bg-gray-100 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center ${
-                wordWrap
-                  ? 'text-blue-600 bg-blue-50'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-              title={wordWrap ? 'Disable word wrap' : 'Enable word wrap'}
-            >
-              <span className="text-sm md:text-xs font-mono font-bold">↵</span>
-            </button>
-
-            <button
-              onClick={() => setIsDarkMode(!isDarkMode)}
-              className="p-2 md:p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
-              title="Toggle theme"
-            >
-              <span className="text-lg md:text-base">{isDarkMode ? '☀️' : '🌙'}</span>
-            </button>
-
             <button
               onClick={handleDownload}
               className="p-2 md:p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
@@ -532,6 +643,9 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false }) {
             onChange={setContent}
             extensions={[
               ...getLanguageExtension(file.name),
+              // Always show the toolbar
+              ...editorToolbarPanel,
+              // Only show diff-related extensions when diff is enabled
               ...(file.diffInfo && showDiff && file.diffInfo.old_string !== undefined
                 ? [
                     unifiedMergeView({
@@ -543,8 +657,7 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false }) {
                       // NOTE: NO collapseUnchanged - this shows the full file!
                     }),
                     ...minimapExtension,
-                    ...scrollToFirstChunkExtension,
-                    ...diffNavigationPanel
+                    ...scrollToFirstChunkExtension
                   ]
                 : []),
               ...(wordWrap ? [EditorView.lineWrapping] : [])
@@ -552,11 +665,11 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false }) {
             theme={isDarkMode ? oneDark : undefined}
             height="100%"
             style={{
-              fontSize: '14px',
+              fontSize: `${fontSize}px`,
               height: '100%',
             }}
             basicSetup={{
-              lineNumbers: true,
+              lineNumbers: showLineNumbers,
               foldGutter: true,
               dropCursor: false,
               allowMultipleSelections: false,

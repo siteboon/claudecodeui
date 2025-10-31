@@ -10,7 +10,7 @@ import ClaudeLogo from './ClaudeLogo';
 import CursorLogo from './CursorLogo';
 import CredentialsSettings from './CredentialsSettings';
 
-function Settings({ isOpen, onClose, projects = [] }) {
+function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
   const { isDarkMode, toggleDarkMode } = useTheme();
   const { 
     tasksEnabled, 
@@ -52,9 +52,26 @@ function Settings({ isOpen, onClose, projects = [] }) {
   const [mcpTestResults, setMcpTestResults] = useState({});
   const [mcpServerTools, setMcpServerTools] = useState({});
   const [mcpToolsLoading, setMcpToolsLoading] = useState({});
-  const [activeTab, setActiveTab] = useState('tools');
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [jsonValidationError, setJsonValidationError] = useState('');
   const [toolsProvider, setToolsProvider] = useState('claude'); // 'claude' or 'cursor'
+
+  // Code Editor settings
+  const [codeEditorTheme, setCodeEditorTheme] = useState(() =>
+    localStorage.getItem('codeEditorTheme') || 'dark'
+  );
+  const [codeEditorWordWrap, setCodeEditorWordWrap] = useState(() =>
+    localStorage.getItem('codeEditorWordWrap') === 'true'
+  );
+  const [codeEditorShowMinimap, setCodeEditorShowMinimap] = useState(() =>
+    localStorage.getItem('codeEditorShowMinimap') !== 'false' // Default true
+  );
+  const [codeEditorLineNumbers, setCodeEditorLineNumbers] = useState(() =>
+    localStorage.getItem('codeEditorLineNumbers') !== 'false' // Default true
+  );
+  const [codeEditorFontSize, setCodeEditorFontSize] = useState(() =>
+    localStorage.getItem('codeEditorFontSize') || '14'
+  );
   
   // Cursor-specific states
   const [cursorAllowedCommands, setCursorAllowedCommands] = useState([]);
@@ -327,8 +344,36 @@ function Settings({ isOpen, onClose, projects = [] }) {
   useEffect(() => {
     if (isOpen) {
       loadSettings();
+      // Set the active tab when the modal opens
+      setActiveTab(initialTab);
     }
-  }, [isOpen]);
+  }, [isOpen, initialTab]);
+
+  // Persist code editor settings to localStorage
+  useEffect(() => {
+    localStorage.setItem('codeEditorTheme', codeEditorTheme);
+    window.dispatchEvent(new Event('codeEditorSettingsChanged'));
+  }, [codeEditorTheme]);
+
+  useEffect(() => {
+    localStorage.setItem('codeEditorWordWrap', codeEditorWordWrap.toString());
+    window.dispatchEvent(new Event('codeEditorSettingsChanged'));
+  }, [codeEditorWordWrap]);
+
+  useEffect(() => {
+    localStorage.setItem('codeEditorShowMinimap', codeEditorShowMinimap.toString());
+    window.dispatchEvent(new Event('codeEditorSettingsChanged'));
+  }, [codeEditorShowMinimap]);
+
+  useEffect(() => {
+    localStorage.setItem('codeEditorLineNumbers', codeEditorLineNumbers.toString());
+    window.dispatchEvent(new Event('codeEditorSettingsChanged'));
+  }, [codeEditorLineNumbers]);
+
+  useEffect(() => {
+    localStorage.setItem('codeEditorFontSize', codeEditorFontSize);
+    window.dispatchEvent(new Event('codeEditorSettingsChanged'));
+  }, [codeEditorFontSize]);
 
   const loadSettings = async () => {
     try {
@@ -625,7 +670,7 @@ function Settings({ isOpen, onClose, projects = [] }) {
   if (!isOpen) return null;
 
   return (
-    <div className="modal-backdrop fixed inset-0 flex items-center justify-center z-[100] md:p-4 bg-background/95">
+    <div className="modal-backdrop fixed inset-0 flex items-center justify-center z-[9999] md:p-4 bg-background/95">
       <div className="bg-background border border-border md:rounded-lg shadow-xl w-full md:max-w-4xl h-full md:h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-4 md:p-6 border-b border-border flex-shrink-0">
           <div className="flex items-center gap-3">
@@ -758,6 +803,158 @@ function Settings({ isOpen, onClose, projects = [] }) {
         </div>
       </div>
     </div>
+
+    {/* Code Editor Settings */}
+    <div className="space-y-4">
+      <h3 className="text-lg font-semibold text-foreground">Code Editor</h3>
+
+      {/* Editor Theme */}
+      <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="font-medium text-foreground">
+              Editor Theme
+            </div>
+            <div className="text-sm text-muted-foreground">
+              Default theme for the code editor
+            </div>
+          </div>
+          <button
+            onClick={() => setCodeEditorTheme(codeEditorTheme === 'dark' ? 'light' : 'dark')}
+            className="relative inline-flex h-8 w-14 items-center rounded-full bg-gray-200 dark:bg-gray-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
+            role="switch"
+            aria-checked={codeEditorTheme === 'dark'}
+            aria-label="Toggle editor theme"
+          >
+            <span className="sr-only">Toggle editor theme</span>
+            <span
+              className={`${
+                codeEditorTheme === 'dark' ? 'translate-x-7' : 'translate-x-1'
+              } inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-200 flex items-center justify-center`}
+            >
+              {codeEditorTheme === 'dark' ? (
+                <Moon className="w-3.5 h-3.5 text-gray-700" />
+              ) : (
+                <Sun className="w-3.5 h-3.5 text-yellow-500" />
+              )}
+            </span>
+          </button>
+        </div>
+      </div>
+
+      {/* Word Wrap */}
+      <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="font-medium text-foreground">
+              Word Wrap
+            </div>
+            <div className="text-sm text-muted-foreground">
+              Enable word wrapping by default in the editor
+            </div>
+          </div>
+          <button
+            onClick={() => setCodeEditorWordWrap(!codeEditorWordWrap)}
+            className="relative inline-flex h-8 w-14 items-center rounded-full bg-gray-200 dark:bg-gray-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
+            role="switch"
+            aria-checked={codeEditorWordWrap}
+            aria-label="Toggle word wrap"
+          >
+            <span className="sr-only">Toggle word wrap</span>
+            <span
+              className={`${
+                codeEditorWordWrap ? 'translate-x-7' : 'translate-x-1'
+              } inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-200`}
+            />
+          </button>
+        </div>
+      </div>
+
+      {/* Show Minimap */}
+      <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="font-medium text-foreground">
+              Show Minimap
+            </div>
+            <div className="text-sm text-muted-foreground">
+              Display a minimap for easier navigation in diff view
+            </div>
+          </div>
+          <button
+            onClick={() => setCodeEditorShowMinimap(!codeEditorShowMinimap)}
+            className="relative inline-flex h-8 w-14 items-center rounded-full bg-gray-200 dark:bg-gray-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
+            role="switch"
+            aria-checked={codeEditorShowMinimap}
+            aria-label="Toggle minimap"
+          >
+            <span className="sr-only">Toggle minimap</span>
+            <span
+              className={`${
+                codeEditorShowMinimap ? 'translate-x-7' : 'translate-x-1'
+              } inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-200`}
+            />
+          </button>
+        </div>
+      </div>
+
+      {/* Show Line Numbers */}
+      <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="font-medium text-foreground">
+              Show Line Numbers
+            </div>
+            <div className="text-sm text-muted-foreground">
+              Display line numbers in the editor
+            </div>
+          </div>
+          <button
+            onClick={() => setCodeEditorLineNumbers(!codeEditorLineNumbers)}
+            className="relative inline-flex h-8 w-14 items-center rounded-full bg-gray-200 dark:bg-gray-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
+            role="switch"
+            aria-checked={codeEditorLineNumbers}
+            aria-label="Toggle line numbers"
+          >
+            <span className="sr-only">Toggle line numbers</span>
+            <span
+              className={`${
+                codeEditorLineNumbers ? 'translate-x-7' : 'translate-x-1'
+              } inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-200`}
+            />
+          </button>
+        </div>
+      </div>
+
+      {/* Font Size */}
+      <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="font-medium text-foreground">
+              Font Size
+            </div>
+            <div className="text-sm text-muted-foreground">
+              Editor font size in pixels
+            </div>
+          </div>
+          <select
+            value={codeEditorFontSize}
+            onChange={(e) => setCodeEditorFontSize(e.target.value)}
+            className="text-sm bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 w-24"
+          >
+            <option value="10">10px</option>
+            <option value="11">11px</option>
+            <option value="12">12px</option>
+            <option value="13">13px</option>
+            <option value="14">14px</option>
+            <option value="15">15px</option>
+            <option value="16">16px</option>
+            <option value="18">18px</option>
+            <option value="20">20px</option>
+          </select>
+        </div>
+      </div>
+    </div>
   </div>
 )}
 
@@ -818,7 +1015,7 @@ function Settings({ isOpen, onClose, projects = [] }) {
                     type="checkbox"
                     checked={skipPermissions}
                     onChange={(e) => setSkipPermissions(e.target.checked)}
-                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                    className="w-4 h-4 text-blue-600 bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500 focus:ring-2 checked:bg-blue-600 dark:checked:bg-blue-600"
                   />
                   <div>
                     <div className="font-medium text-orange-900 dark:text-orange-100">
@@ -1578,7 +1775,7 @@ function Settings({ isOpen, onClose, projects = [] }) {
                         type="checkbox"
                         checked={cursorSkipPermissions}
                         onChange={(e) => setCursorSkipPermissions(e.target.checked)}
-                        className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                        className="w-4 h-4 text-blue-600 bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500 focus:ring-2 checked:bg-blue-600 dark:checked:bg-blue-600"
                       />
                       <div>
                         <div className="font-medium text-orange-900 dark:text-orange-100">
