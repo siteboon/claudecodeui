@@ -416,21 +416,76 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
           <div className="w-full">
             
             {message.isToolUse && !['Read', 'TodoWrite', 'TodoRead'].includes(message.toolName) ? (
-              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-2 sm:p-3 mb-2">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 bg-blue-600 rounded flex items-center justify-center">
-                      <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              (() => {
+                // Minimize Grep and Glob tools since they happen frequently
+                const isSearchTool = ['Grep', 'Glob'].includes(message.toolName);
+
+                if (isSearchTool) {
+                  return (
+                    <>
+                      <div className="group relative bg-gray-50/50 dark:bg-gray-800/30 border-l-2 border-blue-400 dark:border-blue-500 pl-3 py-2 my-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 flex-1 min-w-0">
+                            <svg className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                            <span className="font-medium flex-shrink-0">{message.toolName}</span>
+                            <span className="text-gray-400 dark:text-gray-500 flex-shrink-0">•</span>
+                            {message.toolInput && (() => {
+                              try {
+                                const input = JSON.parse(message.toolInput);
+                                return (
+                                  <span className="font-mono truncate flex-1 min-w-0">
+                                    {input.pattern && <span>pattern: <span className="text-blue-600 dark:text-blue-400">{input.pattern}</span></span>}
+                                    {input.path && <span className="ml-2">in: {input.path}</span>}
+                                  </span>
+                                );
+                              } catch (e) {
+                                return null;
+                              }
+                            })()}
+                          </div>
+                          {message.toolResult && (
+                            <a
+                              href={`#tool-result-${message.toolId}`}
+                              className="flex-shrink-0 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium transition-colors flex items-center gap-1"
+                            >
+                              <span>results</span>
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  );
+                }
+
+                // Full display for other tools
+                return (
+              <div className="group relative bg-gradient-to-br from-blue-50/50 to-indigo-50/50 dark:from-blue-950/20 dark:to-indigo-950/20 border border-blue-100/30 dark:border-blue-800/30 rounded-lg p-3 mb-2">
+                {/* Decorative gradient overlay */}
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/3 to-indigo-500/3 dark:from-blue-400/3 dark:to-indigo-400/3 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+
+                <div className="relative flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="relative w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 dark:from-blue-400 dark:to-indigo-500 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20 dark:shadow-blue-400/20">
+                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                       </svg>
+                      {/* Subtle pulse animation */}
+                      <div className="absolute inset-0 rounded-lg bg-blue-500 dark:bg-blue-400 animate-pulse opacity-20"></div>
                     </div>
-                    <span className="font-medium text-blue-900 dark:text-blue-100">
-                      Using {message.toolName}
-                    </span>
-                    <span className="text-xs text-blue-600 dark:text-blue-400 font-mono">
-                      {message.toolId}
-                    </span>
+                    <div className="flex flex-col">
+                      <span className="font-semibold text-gray-900 dark:text-white text-sm">
+                        {message.toolName}
+                      </span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+                        {message.toolId}
+                      </span>
+                    </div>
                   </div>
                   {onShowSettings && (
                     <button
@@ -438,10 +493,10 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                         e.stopPropagation();
                         onShowSettings();
                       }}
-                      className="p-1 rounded hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
+                      className="p-2 rounded-lg hover:bg-white/60 dark:hover:bg-gray-800/60 transition-all duration-200 group/btn backdrop-blur-sm"
                       title="Tool Settings"
                     >
-                      <svg className="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-4 h-4 text-gray-600 dark:text-gray-400 group-hover/btn:text-blue-600 dark:group-hover/btn:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                       </svg>
@@ -453,12 +508,15 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     const input = JSON.parse(message.toolInput);
                     if (input.file_path && input.old_string && input.new_string) {
                       return (
-                        <details className="mt-2" open={autoExpandTools}>
-                          <summary className="text-sm text-blue-700 dark:text-blue-300 cursor-pointer hover:text-blue-800 dark:hover:text-blue-200 flex items-center gap-2">
-                            <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <details className="relative mt-3 group/details" open={autoExpandTools}>
+                          <summary className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 p-2.5 rounded-lg hover:bg-white/50 dark:hover:bg-gray-800/50">
+                            <svg className="w-4 h-4 transition-transform duration-200 group-open/details:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                             </svg>
-                            📝 View edit diff for 
+                            <span className="flex items-center gap-2">
+                              <span className="text-lg leading-none">📝</span>
+                              <span>View edit diff for</span>
+                            </span> 
                             <button
                               onClick={async (e) => {
                                 e.preventDefault();
@@ -491,14 +549,14 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                                   onFileOpen(input.file_path);
                                 }
                               }}
-                              className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline font-mono"
+                              className="px-2.5 py-1 rounded-md bg-white/60 dark:bg-gray-800/60 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 font-mono text-xs font-medium transition-all duration-200 shadow-sm"
                             >
                               {input.file_path.split('/').pop()}
                             </button>
                           </summary>
-                          <div className="mt-3">
-                            <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-                              <div className="flex items-center justify-between px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+                          <div className="mt-3 pl-6">
+                            <div className="bg-white dark:bg-gray-900/50 border border-gray-200/60 dark:border-gray-700/60 rounded-lg overflow-hidden shadow-sm">
+                              <div className="flex items-center justify-between px-4 py-2.5 bg-gradient-to-r from-gray-50 to-gray-100/50 dark:from-gray-800/80 dark:to-gray-800/40 border-b border-gray-200/60 dark:border-gray-700/60 backdrop-blur-sm">
                                 <button
                                   onClick={async () => {
                                     if (!onFileOpen) return;
@@ -528,11 +586,11 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                                       onFileOpen(input.file_path);
                                     }
                                   }}
-                                  className="text-xs font-mono text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 truncate underline cursor-pointer"
+                                  className="text-xs font-mono text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 truncate cursor-pointer font-medium transition-colors"
                                 >
                                   {input.file_path}
                                 </button>
-                                <span className="text-xs text-gray-500 dark:text-gray-400">
+                                <span className="text-xs text-gray-500 dark:text-gray-400 font-medium px-2 py-0.5 bg-gray-100 dark:bg-gray-700/50 rounded">
                                   Diff
                                 </span>
                               </div>
@@ -558,11 +616,14 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                               </div>
                             </div>
                             {showRawParameters && (
-                              <details className="mt-2" open={autoExpandTools}>
-                                <summary className="text-xs text-blue-600 dark:text-blue-400 cursor-pointer hover:text-blue-700 dark:hover:text-blue-300">
+                              <details className="relative mt-3 pl-6 group/raw" open={autoExpandTools}>
+                                <summary className="flex items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-400 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 p-2 rounded-lg hover:bg-white/50 dark:hover:bg-gray-800/50">
+                                  <svg className="w-3 h-3 transition-transform duration-200 group-open/raw:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                  </svg>
                                   View raw parameters
                                 </summary>
-                                <pre className="mt-2 text-xs bg-blue-100 dark:bg-blue-800/30 p-2 rounded whitespace-pre-wrap break-words overflow-hidden text-blue-900 dark:text-blue-100">
+                                <pre className="mt-2 text-xs bg-gray-50 dark:bg-gray-800/50 border border-gray-200/60 dark:border-gray-700/60 p-3 rounded-lg whitespace-pre-wrap break-words overflow-hidden text-gray-700 dark:text-gray-300 font-mono">
                                   {message.toolInput}
                                 </pre>
                               </details>
@@ -575,11 +636,14 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     // Fall back to raw display if parsing fails
                   }
                   return (
-                    <details className="mt-2" open={autoExpandTools}>
-                      <summary className="text-sm text-blue-700 dark:text-blue-300 cursor-pointer hover:text-blue-800 dark:hover:text-blue-200">
+                    <details className="relative mt-3 group/params" open={autoExpandTools}>
+                      <summary className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 p-2.5 rounded-lg hover:bg-white/50 dark:hover:bg-gray-800/50">
+                        <svg className="w-4 h-4 transition-transform duration-200 group-open/params:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
                         View input parameters
                       </summary>
-                      <pre className="mt-2 text-xs bg-blue-100 dark:bg-blue-800/30 p-2 rounded whitespace-pre-wrap break-words overflow-hidden text-blue-900 dark:text-blue-100">
+                      <pre className="mt-3 text-xs bg-gray-50 dark:bg-gray-800/50 border border-gray-200/60 dark:border-gray-700/60 p-3 rounded-lg whitespace-pre-wrap break-words overflow-hidden text-gray-700 dark:text-gray-300 font-mono">
                         {message.toolInput}
                       </pre>
                     </details>
@@ -602,12 +666,15 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                       
                       if (input.file_path && input.content !== undefined) {
                         return (
-                          <details className="mt-2" open={autoExpandTools}>
-                            <summary className="text-sm text-blue-700 dark:text-blue-300 cursor-pointer hover:text-blue-800 dark:hover:text-blue-200 flex items-center gap-2">
-                              <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <details className="relative mt-3 group/details" open={autoExpandTools}>
+                            <summary className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 p-2.5 rounded-lg hover:bg-white/50 dark:hover:bg-gray-800/50">
+                              <svg className="w-4 h-4 transition-transform duration-200 group-open/details:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                               </svg>
-                              📄 Creating new file:
+                              <span className="flex items-center gap-2">
+                                <span className="text-lg leading-none">📄</span>
+                                <span>Creating new file:</span>
+                              </span>
                               <button
                                 onClick={async (e) => {
                                   e.preventDefault();
@@ -635,14 +702,14 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                                     });
                                   }
                                 }}
-                                className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline font-mono"
+                                className="px-2.5 py-1 rounded-md bg-white/60 dark:bg-gray-800/60 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 font-mono text-xs font-medium transition-all duration-200 shadow-sm"
                               >
                                 {input.file_path.split('/').pop()}
                               </button>
                             </summary>
-                            <div className="mt-3">
-                              <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-                                <div className="flex items-center justify-between px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+                            <div className="mt-3 pl-6">
+                              <div className="bg-white dark:bg-gray-900/50 border border-gray-200/60 dark:border-gray-700/60 rounded-lg overflow-hidden shadow-sm">
+                                <div className="flex items-center justify-between px-4 py-2.5 bg-gradient-to-r from-gray-50 to-gray-100/50 dark:from-gray-800/80 dark:to-gray-800/40 border-b border-gray-200/60 dark:border-gray-700/60 backdrop-blur-sm">
                                   <button
                                     onClick={async () => {
                                       if (!onFileOpen) return;
@@ -668,11 +735,11 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                                         });
                                       }
                                     }}
-                                    className="text-xs font-mono text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 truncate underline cursor-pointer"
+                                    className="text-xs font-mono text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 truncate cursor-pointer font-medium transition-colors"
                                   >
                                     {input.file_path}
                                   </button>
-                                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                                  <span className="text-xs text-gray-500 dark:text-gray-400 font-medium px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded">
                                     New File
                                   </span>
                                 </div>
@@ -698,11 +765,14 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                                 </div>
                               </div>
                               {showRawParameters && (
-                                <details className="mt-2" open={autoExpandTools}>
-                                  <summary className="text-xs text-blue-600 dark:text-blue-400 cursor-pointer hover:text-blue-700 dark:hover:text-blue-300">
+                                <details className="relative mt-3 pl-6 group/raw" open={autoExpandTools}>
+                                  <summary className="flex items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-400 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 p-2 rounded-lg hover:bg-white/50 dark:hover:bg-gray-800/50">
+                                    <svg className="w-3 h-3 transition-transform duration-200 group-open/raw:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
                                     View raw parameters
                                   </summary>
-                                  <pre className="mt-2 text-xs bg-blue-100 dark:bg-blue-800/30 p-2 rounded whitespace-pre-wrap break-words overflow-hidden text-blue-900 dark:text-blue-100">
+                                  <pre className="mt-2 text-xs bg-gray-50 dark:bg-gray-800/50 border border-gray-200/60 dark:border-gray-700/60 p-3 rounded-lg whitespace-pre-wrap break-words overflow-hidden text-gray-700 dark:text-gray-300 font-mono">
                                     {message.toolInput}
                                   </pre>
                                 </details>
@@ -722,21 +792,27 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                       const input = JSON.parse(message.toolInput);
                       if (input.todos && Array.isArray(input.todos)) {
                         return (
-                          <details className="mt-2" open={autoExpandTools}>
-                            <summary className="text-sm text-blue-700 dark:text-blue-300 cursor-pointer hover:text-blue-800 dark:hover:text-blue-200 flex items-center gap-2">
-                              <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <details className="relative mt-3 group/todo" open={autoExpandTools}>
+                            <summary className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 p-2.5 rounded-lg hover:bg-white/50 dark:hover:bg-gray-800/50">
+                              <svg className="w-4 h-4 transition-transform duration-200 group-open/todo:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                               </svg>
-                              Updating Todo List
+                              <span className="flex items-center gap-2">
+                                <span className="text-lg leading-none">✓</span>
+                                <span>Updating Todo List</span>
+                              </span>
                             </summary>
                             <div className="mt-3">
                               <TodoList todos={input.todos} />
                               {showRawParameters && (
-                                <details className="mt-3" open={autoExpandTools}>
-                                  <summary className="text-xs text-blue-600 dark:text-blue-400 cursor-pointer hover:text-blue-700 dark:hover:text-blue-300">
+                                <details className="relative mt-3 group/raw" open={autoExpandTools}>
+                                  <summary className="flex items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-400 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 p-2 rounded-lg hover:bg-white/50 dark:hover:bg-gray-800/50">
+                                    <svg className="w-3 h-3 transition-transform duration-200 group-open/raw:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
                                     View raw parameters
                                   </summary>
-                                  <pre className="mt-2 text-xs bg-blue-100 dark:bg-blue-800/30 p-2 rounded overflow-x-auto text-blue-900 dark:text-blue-100">
+                                  <pre className="mt-2 text-xs bg-gray-50 dark:bg-gray-800/50 border border-gray-200/60 dark:border-gray-700/60 p-3 rounded-lg overflow-x-auto text-gray-700 dark:text-gray-300 font-mono">
                                     {message.toolInput}
                                   </pre>
                                 </details>
@@ -755,42 +831,17 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     try {
                       const input = JSON.parse(message.toolInput);
                       return (
-                        <details className="mt-2" open={autoExpandTools}>
-                          <summary className="text-sm text-blue-700 dark:text-blue-300 cursor-pointer hover:text-blue-800 dark:hover:text-blue-200 flex items-center gap-2">
-                            <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
-                            Running command
-                          </summary>
-                          <div className="mt-3 space-y-2">
-                            <div className="bg-gray-900 dark:bg-gray-950 text-gray-100 rounded-lg p-3 font-mono text-sm">
-                              <div className="flex items-center gap-2 mb-2 text-gray-400">
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                </svg>
-                                <span className="text-xs">Terminal</span>
-                              </div>
-                              <div className="whitespace-pre-wrap break-all text-green-400">
-                                $ {input.command}
-                              </div>
-                            </div>
-                            {input.description && (
-                              <div className="text-xs text-gray-600 dark:text-gray-400 italic">
-                                {input.description}
-                              </div>
-                            )}
-                            {showRawParameters && (
-                              <details className="mt-2">
-                                <summary className="text-xs text-blue-600 dark:text-blue-400 cursor-pointer hover:text-blue-700 dark:hover:text-blue-300">
-                                  View raw parameters
-                                </summary>
-                                <pre className="mt-2 text-xs bg-blue-100 dark:bg-blue-800/30 p-2 rounded whitespace-pre-wrap break-words overflow-hidden text-blue-900 dark:text-blue-100">
-                                  {message.toolInput}
-                                </pre>
-                              </details>
-                            )}
+                        <div className="my-2">
+                          <div className="bg-gray-900 dark:bg-gray-950 rounded-md px-3 py-2 font-mono text-sm">
+                            <span className="text-green-400">$</span>
+                            <span className="text-gray-100 ml-2">{input.command}</span>
                           </div>
-                        </details>
+                          {input.description && (
+                            <div className="mt-1 text-xs text-gray-500 dark:text-gray-400 italic ml-1">
+                              {input.description}
+                            </div>
+                          )}
+                        </div>
                       );
                     } catch (e) {
                       // Fall back to regular display
@@ -849,14 +900,14 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                   
                   // Regular tool input display for other tools
                   return (
-                    <details className="mt-2" open={autoExpandTools}>
-                      <summary className="text-sm text-blue-700 dark:text-blue-300 cursor-pointer hover:text-blue-800 dark:hover:text-blue-200 flex items-center gap-2">
-                        <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <details className="relative mt-3 group/params" open={autoExpandTools}>
+                      <summary className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 p-2.5 rounded-lg hover:bg-white/50 dark:hover:bg-gray-800/50">
+                        <svg className="w-4 h-4 transition-transform duration-200 group-open/params:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
                         View input parameters
                       </summary>
-                      <pre className="mt-2 text-xs bg-blue-100 dark:bg-blue-800/30 p-2 rounded whitespace-pre-wrap break-words overflow-hidden text-blue-900 dark:text-blue-100">
+                      <pre className="mt-3 text-xs bg-gray-50 dark:bg-gray-800/50 border border-gray-200/60 dark:border-gray-700/60 p-3 rounded-lg whitespace-pre-wrap break-words overflow-hidden text-gray-700 dark:text-gray-300 font-mono">
                         {message.toolInput}
                       </pre>
                     </details>
@@ -864,35 +915,57 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 })()}
                 
                 {/* Tool Result Section */}
-                {message.toolResult && (
-                  <div className="mt-3 border-t border-blue-200 dark:border-blue-700 pt-3">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className={`w-4 h-4 rounded flex items-center justify-center ${
-                        message.toolResult.isError 
-                          ? 'bg-red-500' 
-                          : 'bg-green-500'
+                {message.toolResult && (() => {
+                  // Hide tool results for Edit/Write/Bash unless there's an error
+                  const shouldHideResult = !message.toolResult.isError &&
+                    (message.toolName === 'Edit' || message.toolName === 'Write' || message.toolName === 'ApplyPatch' || message.toolName === 'Bash');
+
+                  if (shouldHideResult) {
+                    return null;
+                  }
+
+                  return (
+                  <div
+                    id={`tool-result-${message.toolId}`}
+                    className={`relative mt-4 p-4 rounded-lg border backdrop-blur-sm scroll-mt-4 ${
+                    message.toolResult.isError
+                      ? 'bg-gradient-to-br from-red-50 to-rose-50 dark:from-red-950/20 dark:to-rose-950/20 border-red-200/60 dark:border-red-800/60'
+                      : 'bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 border-green-200/60 dark:border-green-800/60'
+                  }`}>
+                    {/* Decorative gradient overlay */}
+                    <div className={`absolute inset-0 rounded-lg opacity-50 ${
+                      message.toolResult.isError
+                        ? 'bg-gradient-to-br from-red-500/5 to-rose-500/5 dark:from-red-400/5 dark:to-rose-400/5'
+                        : 'bg-gradient-to-br from-green-500/5 to-emerald-500/5 dark:from-green-400/5 dark:to-emerald-400/5'
+                    }`}></div>
+
+                    <div className="relative flex items-center gap-2.5 mb-3">
+                      <div className={`w-6 h-6 rounded-lg flex items-center justify-center shadow-md ${
+                        message.toolResult.isError
+                          ? 'bg-gradient-to-br from-red-500 to-rose-600 dark:from-red-400 dark:to-rose-500 shadow-red-500/20'
+                          : 'bg-gradient-to-br from-green-500 to-emerald-600 dark:from-green-400 dark:to-emerald-500 shadow-green-500/20'
                       }`}>
-                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           {message.toolResult.isError ? (
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                           ) : (
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                           )}
                         </svg>
                       </div>
-                      <span className={`text-sm font-medium ${
-                        message.toolResult.isError 
-                          ? 'text-red-700 dark:text-red-300' 
-                          : 'text-green-700 dark:text-green-300'
+                      <span className={`text-sm font-semibold ${
+                        message.toolResult.isError
+                          ? 'text-red-800 dark:text-red-200'
+                          : 'text-green-800 dark:text-green-200'
                       }`}>
                         {message.toolResult.isError ? 'Tool Error' : 'Tool Result'}
                       </span>
                     </div>
-                    
-                    <div className={`text-sm ${
-                      message.toolResult.isError 
-                        ? 'text-red-800 dark:text-red-200' 
-                        : 'text-green-800 dark:text-green-200'
+
+                    <div className={`relative text-sm ${
+                      message.toolResult.isError
+                        ? 'text-red-900 dark:text-red-100'
+                        : 'text-green-900 dark:text-green-100'
                     }`}>
                       {(() => {
                         const content = String(message.toolResult.content || '');
@@ -954,6 +1027,57 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                             }
                           } catch (e) {
                             // Fall through to regular handling
+                          }
+                        }
+
+                        // Special handling for Grep/Glob results with structured data
+                        if ((message.toolName === 'Grep' || message.toolName === 'Glob') && message.toolResult?.toolUseResult) {
+                          const toolData = message.toolResult.toolUseResult;
+
+                          // Handle files_with_matches mode or any tool result with filenames array
+                          if (toolData.filenames && Array.isArray(toolData.filenames) && toolData.filenames.length > 0) {
+                            return (
+                              <div>
+                                <div className="flex items-center gap-2 mb-3">
+                                  <span className="font-medium">
+                                    Found {toolData.numFiles || toolData.filenames.length} {(toolData.numFiles === 1 || toolData.filenames.length === 1) ? 'file' : 'files'}
+                                  </span>
+                                </div>
+                                <div className="space-y-1 max-h-96 overflow-y-auto">
+                                  {toolData.filenames.map((filePath, index) => {
+                                    const fileName = filePath.split('/').pop();
+                                    const dirPath = filePath.substring(0, filePath.lastIndexOf('/'));
+
+                                    return (
+                                      <div
+                                        key={index}
+                                        onClick={() => {
+                                          if (onFileOpen) {
+                                            onFileOpen(filePath);
+                                          }
+                                        }}
+                                        className="group flex items-center gap-2 px-2 py-1.5 rounded hover:bg-green-100/50 dark:hover:bg-green-800/20 cursor-pointer transition-colors"
+                                      >
+                                        <svg className="w-4 h-4 text-green-600 dark:text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                        <div className="flex-1 min-w-0">
+                                          <div className="font-mono text-sm font-medium text-green-800 dark:text-green-200 truncate group-hover:text-green-900 dark:group-hover:text-green-100">
+                                            {fileName}
+                                          </div>
+                                          <div className="font-mono text-xs text-green-600/70 dark:text-green-400/70 truncate">
+                                            {dirPath}
+                                          </div>
+                                        </div>
+                                        <svg className="w-4 h-4 text-green-600 dark:text-green-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                        </svg>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
                           }
                         }
 
@@ -1193,8 +1317,11 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                       })()}
                     </div>
                   </div>
-                )}
+                  );
+                })()}
               </div>
+                );
+              })()
             ) : message.isInteractivePrompt ? (
               // Special handling for interactive prompts
               <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
@@ -1286,21 +1413,31 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                   if (input.file_path) {
                     const filename = input.file_path.split('/').pop();
                     return (
-                      <div className="bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-300 dark:border-blue-600 pl-3 py-1 mb-2 text-sm text-blue-700 dark:text-blue-300">
-                        📖 Read{' '}
-                        <button
-                          onClick={() => onFileOpen && onFileOpen(input.file_path)}
-                          className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline font-mono"
-                        >
-                          {filename}
-                        </button>
+                      <div className="bg-gray-50/50 dark:bg-gray-800/30 border-l-2 border-gray-400 dark:border-gray-500 pl-3 py-2 my-2">
+                        <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                          <svg className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                          </svg>
+                          <span className="font-medium">Read</span>
+                          <button
+                            onClick={() => onFileOpen && onFileOpen(input.file_path)}
+                            className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-mono transition-colors"
+                          >
+                            {filename}
+                          </button>
+                        </div>
                       </div>
                     );
                   }
                 } catch (e) {
                   return (
-                    <div className="bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-300 dark:border-blue-600 pl-3 py-1 mb-2 text-sm text-blue-700 dark:text-blue-300">
-                      📖 Read file
+                    <div className="bg-gray-50/50 dark:bg-gray-800/30 border-l-2 border-gray-400 dark:border-gray-500 pl-3 py-2 my-2">
+                      <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                        <svg className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                        </svg>
+                        <span className="font-medium">Read file</span>
+                      </div>
                     </div>
                   );
                 }
@@ -1312,9 +1449,12 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                   const input = JSON.parse(message.toolInput);
                   if (input.todos && Array.isArray(input.todos)) {
                     return (
-                      <div className="bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-300 dark:border-blue-600 pl-3 py-1 mb-2">
-                        <div className="text-sm text-blue-700 dark:text-blue-300 mb-2">
-                          📝 Update todo list
+                      <div className="bg-gray-50/50 dark:bg-gray-800/30 border-l-2 border-gray-400 dark:border-gray-500 pl-3 py-2 my-2">
+                        <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 mb-2">
+                          <svg className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                          </svg>
+                          <span className="font-medium">Update todo list</span>
                         </div>
                         <TodoList todos={input.todos} />
                       </div>
@@ -1322,16 +1462,26 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                   }
                 } catch (e) {
                   return (
-                    <div className="bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-300 dark:border-blue-600 pl-3 py-1 mb-2 text-sm text-blue-700 dark:text-blue-300">
-                      📝 Update todo list
+                    <div className="bg-gray-50/50 dark:bg-gray-800/30 border-l-2 border-gray-400 dark:border-gray-500 pl-3 py-2 my-2">
+                      <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                        <svg className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                        </svg>
+                        <span className="font-medium">Update todo list</span>
+                      </div>
                     </div>
                   );
                 }
               })()
             ) : message.isToolUse && message.toolName === 'TodoRead' ? (
               // Simple TodoRead tool indicator
-              <div className="bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-300 dark:border-blue-600 pl-3 py-1 mb-2 text-sm text-blue-700 dark:text-blue-300">
-                📋 Read todo list
+              <div className="bg-gray-50/50 dark:bg-gray-800/30 border-l-2 border-gray-400 dark:border-gray-500 pl-3 py-2 my-2">
+                <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                  <svg className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                  <span className="font-medium">Read todo list</span>
+                </div>
               </div>
             ) : (
               <div className="text-sm text-gray-700 dark:text-gray-300">
@@ -2328,7 +2478,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             toolResults.set(part.tool_use_id, {
               content: part.content,
               isError: part.is_error,
-              timestamp: new Date(msg.timestamp || Date.now())
+              timestamp: new Date(msg.timestamp || Date.now()),
+              // Extract structured tool result data (e.g., for Grep, Glob)
+              toolUseResult: msg.toolUseResult || null
             });
           }
         }
@@ -2404,7 +2556,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             } else if (part.type === 'tool_use') {
               // Get the corresponding tool result
               const toolResult = toolResults.get(part.id);
-              
+
               converted.push({
                 type: 'assistant',
                 content: '',
@@ -2412,7 +2564,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 isToolUse: true,
                 toolName: part.name,
                 toolInput: JSON.stringify(part.input),
-                toolResult: toolResult ? (typeof toolResult.content === 'string' ? toolResult.content : JSON.stringify(toolResult.content)) : null,
+                toolResult: toolResult ? {
+                  content: typeof toolResult.content === 'string' ? toolResult.content : JSON.stringify(toolResult.content),
+                  isError: toolResult.isError,
+                  toolUseResult: toolResult.toolUseResult
+                } : null,
                 toolError: toolResult?.isError || false,
                 toolResultTimestamp: toolResult?.timestamp || new Date()
               });
@@ -4549,19 +4705,20 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 />
               </svg>
             </button>
-          </div>
-          {/* Hint text */}
-          <div className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2 hidden sm:block">
-            {sendByCtrlEnter
-              ? "Ctrl+Enter to send (IME safe) • Shift+Enter for new line • Tab to change modes • Type / for slash commands"
-              : "Press Enter to send • Shift+Enter for new line • Tab to change modes • Type / for slash commands"}
-          </div>
-          <div className={`text-xs text-gray-500 dark:text-gray-400 text-center mt-2 sm:hidden transition-opacity duration-200 ${
-            isInputFocused ? 'opacity-100' : 'opacity-0'
-          }`}>
-            {sendByCtrlEnter
-              ? "Ctrl+Enter to send (IME safe) • Tab for modes • @ for files • / for commands"
-              : "Enter to send • Tab for modes • @ for files • / for commands"}
+
+            {/* Hint text inside input box at bottom */}
+            <div className="absolute bottom-1 left-12 right-14 sm:right-40 text-xs text-gray-400 dark:text-gray-500 pointer-events-none hidden sm:block">
+              {sendByCtrlEnter
+                ? "Ctrl+Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands"
+                : "Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands"}
+            </div>
+            <div className={`absolute bottom-1 left-12 right-14 text-xs text-gray-400 dark:text-gray-500 pointer-events-none sm:hidden transition-opacity duration-200 ${
+              isInputFocused ? 'opacity-100' : 'opacity-0'
+            }`}>
+              {sendByCtrlEnter
+                ? "Ctrl+Enter to send • Tab for modes • / for commands"
+                : "Enter to send • Tab for modes • / for commands"}
+            </div>
           </div>
         </form>
       </div>
