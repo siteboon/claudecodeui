@@ -15,11 +15,14 @@ function ClaudeStatus({ status, onAbort, isLoading, provider = 'claude' }) {
     }
 
     const startTime = Date.now();
+    // Calculate random token rate once (30-50 tokens per second)
+    const tokenRate = 30 + Math.random() * 20;
+
     const timer = setInterval(() => {
       const elapsed = Math.floor((Date.now() - startTime) / 1000);
       setElapsedTime(elapsed);
-      // Simulate token count increasing over time (roughly 30-50 tokens per second)
-      setFakeTokens(Math.floor(elapsed * (30 + Math.random() * 20)));
+      // Simulate token count increasing over time
+      setFakeTokens(Math.floor(elapsed * tokenRate));
     }, 1000);
 
     return () => clearInterval(timer);

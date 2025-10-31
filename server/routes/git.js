@@ -21,6 +21,35 @@ async function getActualProjectPath(projectName) {
   }
 }
 
+// Helper function to strip git diff headers
+function stripDiffHeaders(diff) {
+  if (!diff) return '';
+
+  const lines = diff.split('\n');
+  const filteredLines = [];
+  let startIncluding = false;
+
+  for (const line of lines) {
+    // Skip all header lines including diff --git, index, file mode, and --- / +++ file paths
+    if (line.startsWith('diff --git') ||
+        line.startsWith('index ') ||
+        line.startsWith('new file mode') ||
+        line.startsWith('deleted file mode') ||
+        line.startsWith('---') ||
+        line.startsWith('+++')) {
+      continue;
+    }
+
+    // Start including lines from @@ hunk headers onwards
+    if (line.startsWith('@@') || startIncluding) {
+      startIncluding = true;
+      filteredLines.push(line);
+    }
+  }
+
+  return filteredLines.join('\n');
+}
+
 // Helper function to validate git repository
 async function validateGitRepository(projectPath) {
   try {
@@ -124,35 +153,97 @@ router.get('/diff', async (req, res) => {
     // Validate git repository
     await validateGitRepository(projectPath);
     
-    // Check if file is untracked
+    // Check if file is untracked or deleted
     const { stdout: statusOutput } = await execAsync(`git status --porcelain "${file}"`, { cwd: projectPath });
     const isUntracked = statusOutput.startsWith('??');
-    
+    const isDeleted = statusOutput.trim().startsWith('D ') || statusOutput.trim().startsWith(' D');
+
     let diff;
     if (isUntracked) {
       // For untracked files, show the entire file content as additions
       const fileContent = await fs.readFile(path.join(projectPath, file), 'utf-8');
       const lines = fileContent.split('\n');
-      diff = `--- /dev/null\n+++ b/${file}\n@@ -0,0 +1,${lines.length} @@\n` + 
+      diff = `--- /dev/null\n+++ b/${file}\n@@ -0,0 +1,${lines.length} @@\n` +
              lines.map(line => `+${line}`).join('\n');
+    } else if (isDeleted) {
+      // For deleted files, show the entire file content from HEAD as deletions
+      const { stdout: fileContent } = await execAsync(`git show HEAD:"${file}"`, { cwd: projectPath });
+      const lines = fileContent.split('\n');
+      diff = `--- a/${file}\n+++ /dev/null\n@@ -1,${lines.length} +0,0 @@\n` +
+             lines.map(line => `-${line}`).join('\n');
     } else {
       // Get diff for tracked files
       // First check for unstaged changes (working tree vs index)
       const { stdout: unstagedDiff } = await execAsync(`git diff -- "${file}"`, { cwd: projectPath });
-      
+
       if (unstagedDiff) {
         // Show unstaged changes if they exist
-        diff = unstagedDiff;
+        diff = stripDiffHeaders(unstagedDiff);
       } else {
         // If no unstaged changes, check for staged changes (index vs HEAD)
         const { stdout: stagedDiff } = await execAsync(`git diff --cached -- "${file}"`, { cwd: projectPath });
-        diff = stagedDiff || '';
+        diff = stripDiffHeaders(stagedDiff) || '';
       }
     }
-    
+
     res.json({ diff });
   } catch (error) {
     console.error('Git diff error:', error);
+    res.json({ error: error.message });
+  }
+});
+
+// Get file content with diff information for CodeEditor
+router.get('/file-with-diff', async (req, res) => {
+  const { project, file } = req.query;
+
+  if (!project || !file) {
+    return res.status(400).json({ error: 'Project name and file path are required' });
+  }
+
+  try {
+    const projectPath = await getActualProjectPath(project);
+
+    // Validate git repository
+    await validateGitRepository(projectPath);
+
+    // Check file status
+    const { stdout: statusOutput } = await execAsync(`git status --porcelain "${file}"`, { cwd: projectPath });
+    const isUntracked = statusOutput.startsWith('??');
+    const isDeleted = statusOutput.trim().startsWith('D ') || statusOutput.trim().startsWith(' D');
+
+    let currentContent = '';
+    let oldContent = '';
+
+    if (isDeleted) {
+      // For deleted files, get content from HEAD
+      const { stdout: headContent } = await execAsync(`git show HEAD:"${file}"`, { cwd: projectPath });
+      oldContent = headContent;
+      currentContent = headContent; // Show the deleted content in editor
+    } else {
+      // Get current file content
+      currentContent = await fs.readFile(path.join(projectPath, file), 'utf-8');
+
+      if (!isUntracked) {
+        // Get the old content from HEAD for tracked files
+        try {
+          const { stdout: headContent } = await execAsync(`git show HEAD:"${file}"`, { cwd: projectPath });
+          oldContent = headContent;
+        } catch (error) {
+          // File might be newly added to git (staged but not committed)
+          oldContent = '';
+        }
+      }
+    }
+
+    res.json({
+      currentContent,
+      oldContent,
+      isDeleted,
+      isUntracked
+    });
+  } catch (error) {
+    console.error('Git file-with-diff error:', error);
     res.json({ error: error.message });
   }
 });
