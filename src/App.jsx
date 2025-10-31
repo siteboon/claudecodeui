@@ -184,11 +184,7 @@ function AppContent() {
 
               if (!isSessionActive) {
                 // Session is not active - safe to reload messages
-                console.log('🔄 External CLI update detected for current session:', changedSessionId);
                 setExternalMessageUpdate(prev => prev + 1);
-              } else {
-                // Session is active - skip reload to avoid interrupting user
-                console.log('⏸️ External update paused - session is active:', changedSessionId);
               }
             }
           }

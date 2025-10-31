@@ -451,7 +451,7 @@ function MainContent({
           />
         </div>
         <div className={`h-full overflow-hidden ${activeTab === 'git' ? 'block' : 'hidden'}`}>
-          <GitPanel selectedProject={selectedProject} isMobile={isMobile} />
+          <GitPanel selectedProject={selectedProject} isMobile={isMobile} onFileOpen={handleFileOpen} />
         </div>
         {shouldShowTasksTab && (
           <div className={`h-full ${activeTab === 'tasks' ? 'block' : 'hidden'}`}>
