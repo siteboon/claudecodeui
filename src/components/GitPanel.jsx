@@ -4,7 +4,7 @@ import { MicButton } from './MicButton.jsx';
 import { authenticatedFetch } from '../utils/api';
 import DiffViewer from './DiffViewer.jsx';
 
-function GitPanel({ selectedProject, isMobile }) {
+function GitPanel({ selectedProject, isMobile, onFileOpen }) {
   const [gitStatus, setGitStatus] = useState(null);
   const [gitDiff, setGitDiff] = useState({});
   const [isLoading, setIsLoading] = useState(false);
@@ -105,6 +105,12 @@ function GitPanel({ selectedProject, isMobile }) {
           fetchFileDiff(file);
         }
         for (const file of data.added || []) {
+          fetchFileDiff(file);
+        }
+        for (const file of data.deleted || []) {
+          fetchFileDiff(file);
+        }
+        for (const file of data.untracked || []) {
           fetchFileDiff(file);
         }
       }
@@ -402,7 +408,7 @@ function GitPanel({ selectedProject, isMobile }) {
     try {
       const response = await authenticatedFetch(`/api/git/diff?project=${encodeURIComponent(selectedProject.name)}&file=${encodeURIComponent(filePath)}`);
       const data = await response.json();
-      
+
       if (!data.error && data.diff) {
         setGitDiff(prev => ({
           ...prev,
@@ -411,6 +417,36 @@ function GitPanel({ selectedProject, isMobile }) {
       }
     } catch (error) {
       console.error('Error fetching file diff:', error);
+    }
+  };
+
+  const handleFileOpen = async (filePath) => {
+    if (!onFileOpen) return;
+
+    try {
+      // Fetch file content with diff information
+      const response = await authenticatedFetch(`/api/git/file-with-diff?project=${encodeURIComponent(selectedProject.name)}&file=${encodeURIComponent(filePath)}`);
+      const data = await response.json();
+
+      if (data.error) {
+        console.error('Error fetching file with diff:', data.error);
+        // Fallback: open without diff info
+        onFileOpen(filePath);
+        return;
+      }
+
+      // Create diffInfo object for CodeEditor
+      const diffInfo = {
+        old_string: data.oldContent || '',
+        new_string: data.currentContent || ''
+      };
+
+      // Open file with diff information
+      onFileOpen(filePath, diffInfo);
+    } catch (error) {
+      console.error('Error opening file:', error);
+      // Fallback: open without diff info
+      onFileOpen(filePath);
     }
   };
 
@@ -610,14 +646,28 @@ function GitPanel({ selectedProject, isMobile }) {
             onClick={(e) => e.stopPropagation()}
             className={`rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 dark:focus:ring-blue-400 dark:bg-gray-800 dark:checked:bg-blue-600 ${isMobile ? 'mr-1.5' : 'mr-2'}`}
           />
-          <div 
-            className="flex items-center flex-1 cursor-pointer"
-            onClick={() => toggleFileExpanded(filePath)}
+          <div
+            className="flex items-center flex-1"
           >
-            <div className={`p-0.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded ${isMobile ? 'mr-1' : 'mr-2'}`}>
+            <div
+              className={`p-0.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded cursor-pointer ${isMobile ? 'mr-1' : 'mr-2'}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleFileExpanded(filePath);
+              }}
+            >
               <ChevronRight className={`w-3 h-3 transition-transform duration-200 ease-in-out ${isExpanded ? 'rotate-90' : 'rotate-0'}`} />
             </div>
-            <span className={`flex-1 truncate ${isMobile ? 'text-xs' : 'text-sm'}`}>{filePath}</span>
+            <span
+              className={`flex-1 truncate ${isMobile ? 'text-xs' : 'text-sm'} cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 hover:underline`}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleFileOpen(filePath);
+              }}
+              title="Click to open file"
+            >
+              {filePath}
+            </span>
             <div className="flex items-center gap-1">
               {(status === 'M' || status === 'D') && (
                 <button

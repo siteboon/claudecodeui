@@ -314,7 +314,7 @@ const markdownComponents = {
 };
 
 // Memoized message component to prevent unnecessary re-renders
-const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFileOpen, onShowSettings, autoExpandTools, showRawParameters, showThinking }) => {
+const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFileOpen, onShowSettings, autoExpandTools, showRawParameters, showThinking, selectedProject }) => {
   const isGrouped = prevMessage && prevMessage.type === message.type &&
                    ((prevMessage.type === 'assistant') ||
                     (prevMessage.type === 'user') ||
@@ -459,14 +459,37 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                             </svg>
                             📝 View edit diff for 
-                            <button 
-                              onClick={(e) => {
+                            <button
+                              onClick={async (e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                onFileOpen && onFileOpen(input.file_path, {
-                                  old_string: input.old_string,
-                                  new_string: input.new_string
-                                });
+                                if (!onFileOpen) return;
+
+                                try {
+                                  // Fetch the current file (after the edit)
+                                  const response = await api.readFile(selectedProject?.name, input.file_path);
+                                  const data = await response.json();
+
+                                  if (!response.ok || data.error) {
+                                    console.error('Failed to fetch file:', data.error);
+                                    onFileOpen(input.file_path);
+                                    return;
+                                  }
+
+                                  const currentContent = data.content || '';
+
+                                  // Reverse apply the edit: replace new_string back to old_string to get the file BEFORE the edit
+                                  const oldContent = currentContent.replace(input.new_string, input.old_string);
+
+                                  // Pass the full file before and after the edit
+                                  onFileOpen(input.file_path, {
+                                    old_string: oldContent,
+                                    new_string: currentContent
+                                  });
+                                } catch (error) {
+                                  console.error('Error preparing diff:', error);
+                                  onFileOpen(input.file_path);
+                                }
                               }}
                               className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline font-mono"
                             >
@@ -476,11 +499,35 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                           <div className="mt-3">
                             <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
                               <div className="flex items-center justify-between px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-                                <button 
-                                  onClick={() => onFileOpen && onFileOpen(input.file_path, {
-                                    old_string: input.old_string,
-                                    new_string: input.new_string
-                                  })}
+                                <button
+                                  onClick={async () => {
+                                    if (!onFileOpen) return;
+
+                                    try {
+                                      // Fetch the current file (after the edit)
+                                      const response = await api.readFile(selectedProject?.name, input.file_path);
+                                      const data = await response.json();
+
+                                      if (!response.ok || data.error) {
+                                        console.error('Failed to fetch file:', data.error);
+                                        onFileOpen(input.file_path);
+                                        return;
+                                      }
+
+                                      const currentContent = data.content || '';
+                                      // Reverse apply the edit: replace new_string back to old_string
+                                      const oldContent = currentContent.replace(input.new_string, input.old_string);
+
+                                      // Pass the full file before and after the edit
+                                      onFileOpen(input.file_path, {
+                                        old_string: oldContent,
+                                        new_string: currentContent
+                                      });
+                                    } catch (error) {
+                                      console.error('Error preparing diff:', error);
+                                      onFileOpen(input.file_path);
+                                    }
+                                  }}
                                   className="text-xs font-mono text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 truncate underline cursor-pointer"
                                 >
                                   {input.file_path}
@@ -560,15 +607,33 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                               <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                               </svg>
-                              📄 Creating new file: 
-                              <button 
-                                onClick={(e) => {
+                              📄 Creating new file:
+                              <button
+                                onClick={async (e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
-                                  onFileOpen && onFileOpen(input.file_path, {
-                                    old_string: '',
-                                    new_string: input.content
-                                  });
+                                  if (!onFileOpen) return;
+
+                                  try {
+                                    // Fetch the written file from disk
+                                    const response = await api.readFile(selectedProject?.name, input.file_path);
+                                    const data = await response.json();
+
+                                    const newContent = (response.ok && !data.error) ? data.content || '' : input.content || '';
+
+                                    // New file: old_string is empty, new_string is the full file
+                                    onFileOpen(input.file_path, {
+                                      old_string: '',
+                                      new_string: newContent
+                                    });
+                                  } catch (error) {
+                                    console.error('Error preparing diff:', error);
+                                    // Fallback to tool input content
+                                    onFileOpen(input.file_path, {
+                                      old_string: '',
+                                      new_string: input.content || ''
+                                    });
+                                  }
                                 }}
                                 className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline font-mono"
                               >
@@ -578,11 +643,31 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                             <div className="mt-3">
                               <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
                                 <div className="flex items-center justify-between px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-                                  <button 
-                                    onClick={() => onFileOpen && onFileOpen(input.file_path, {
-                                      old_string: '',
-                                      new_string: input.content
-                                    })}
+                                  <button
+                                    onClick={async () => {
+                                      if (!onFileOpen) return;
+
+                                      try {
+                                        // Fetch the written file from disk
+                                        const response = await api.readFile(selectedProject?.name, input.file_path);
+                                        const data = await response.json();
+
+                                        const newContent = (response.ok && !data.error) ? data.content || '' : input.content || '';
+
+                                        // New file: old_string is empty, new_string is the full file
+                                        onFileOpen(input.file_path, {
+                                          old_string: '',
+                                          new_string: newContent
+                                        });
+                                      } catch (error) {
+                                        console.error('Error preparing diff:', error);
+                                        // Fallback to tool input content
+                                        onFileOpen(input.file_path, {
+                                          old_string: '',
+                                          new_string: input.content || ''
+                                        });
+                                      }
+                                    }}
                                     className="text-xs font-mono text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 truncate underline cursor-pointer"
                                   >
                                     {input.file_path}
@@ -722,7 +807,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                         return (
                           <div className="mt-2 text-sm text-blue-700 dark:text-blue-300">
                             Read{' '}
-                            <button 
+                            <button
                               onClick={() => onFileOpen && onFileOpen(input.file_path)}
                               className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline font-mono"
                             >
@@ -979,8 +1064,28 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                               <div className="flex items-center gap-2 mb-2">
                                 <span className="font-medium">File updated successfully</span>
                               </div>
-                              <button 
-                                onClick={() => onFileOpen && onFileOpen(fileEditMatch[1])}
+                              <button
+                                onClick={async () => {
+                                  if (!onFileOpen) return;
+
+                                  // Fetch FULL file content with diff from git
+                                  try {
+                                    const response = await authenticatedFetch(`/api/git/file-with-diff?project=${encodeURIComponent(selectedProject?.name)}&file=${encodeURIComponent(fileEditMatch[1])}`);
+                                    const data = await response.json();
+
+                                    if (!data.error && data.oldContent !== undefined && data.currentContent !== undefined) {
+                                      onFileOpen(fileEditMatch[1], {
+                                        old_string: data.oldContent || '',
+                                        new_string: data.currentContent || ''
+                                      });
+                                    } else {
+                                      onFileOpen(fileEditMatch[1]);
+                                    }
+                                  } catch (error) {
+                                    console.error('Error fetching file diff:', error);
+                                    onFileOpen(fileEditMatch[1]);
+                                  }
+                                }}
                                 className="text-xs font-mono bg-green-100 dark:bg-green-800/30 px-2 py-1 rounded text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline cursor-pointer"
                               >
                                 {fileEditMatch[1]}
@@ -997,8 +1102,28 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                               <div className="flex items-center gap-2 mb-2">
                                 <span className="font-medium">File created successfully</span>
                               </div>
-                              <button 
-                                onClick={() => onFileOpen && onFileOpen(fileCreateMatch[1])}
+                              <button
+                                onClick={async () => {
+                                  if (!onFileOpen) return;
+
+                                  // Fetch FULL file content with diff from git
+                                  try {
+                                    const response = await authenticatedFetch(`/api/git/file-with-diff?project=${encodeURIComponent(selectedProject?.name)}&file=${encodeURIComponent(fileCreateMatch[1])}`);
+                                    const data = await response.json();
+
+                                    if (!data.error && data.oldContent !== undefined && data.currentContent !== undefined) {
+                                      onFileOpen(fileCreateMatch[1], {
+                                        old_string: data.oldContent || '',
+                                        new_string: data.currentContent || ''
+                                      });
+                                    } else {
+                                      onFileOpen(fileCreateMatch[1]);
+                                    }
+                                  } catch (error) {
+                                    console.error('Error fetching file diff:', error);
+                                    onFileOpen(fileCreateMatch[1]);
+                                  }
+                                }}
                                 className="text-xs font-mono bg-green-100 dark:bg-green-800/30 px-2 py-1 rounded text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline cursor-pointer"
                               >
                                 {fileCreateMatch[1]}
@@ -1163,7 +1288,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     return (
                       <div className="bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-300 dark:border-blue-600 pl-3 py-1 mb-2 text-sm text-blue-700 dark:text-blue-300">
                         📖 Read{' '}
-                        <button 
+                        <button
                           onClick={() => onFileOpen && onFileOpen(input.file_path)}
                           className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline font-mono"
                         >
@@ -2481,8 +2606,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   // Only reloads if the session is NOT active (respecting Session Protection System)
   useEffect(() => {
     if (externalMessageUpdate > 0 && selectedSession && selectedProject) {
-      console.log('🔄 Reloading messages due to external CLI update');
-
       const reloadExternalMessages = async () => {
         try {
           const provider = localStorage.getItem('selected-provider') || 'claude';
@@ -2578,7 +2701,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     // Handle WebSocket messages
     if (messages.length > 0) {
       const latestMessage = messages[messages.length - 1];
-      console.log('🔵 WebSocket message received:', latestMessage.type, latestMessage);
 
       // Filter messages by session ID to prevent cross-session interference
       // Skip filtering for global messages that apply to all sessions
@@ -2998,16 +3120,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           // Get session ID from message or fall back to current session
           const completedSessionId = latestMessage.sessionId || currentSessionId || sessionStorage.getItem('pendingSessionId');
 
-          console.log('🎯 claude-complete received:', {
-            completedSessionId,
-            currentSessionId,
-            match: completedSessionId === currentSessionId,
-            isNew: !currentSessionId
-          });
-
           // Update UI state if this is the current session OR if we don't have a session ID yet (new session)
           if (completedSessionId === currentSessionId || !currentSessionId) {
-            console.log('✅ Stopping loading state');
             setIsLoading(false);
             setCanAbortSession(false);
             setClaudeStatus(null);
@@ -3315,16 +3429,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     const fetchInitialTokenUsage = async () => {
       try {
         const url = `/api/projects/${selectedProject.name}/sessions/${selectedSession.id}/token-usage`;
-        console.log('📊 Fetching initial token usage from:', url);
 
         const response = await authenticatedFetch(url);
 
         if (response.ok) {
           const data = await response.json();
-          console.log('✅ Initial token usage loaded:', data);
           setTokenBudget(data);
         } else {
-          console.log('⚠️ No token usage data available for this session yet');
           setTokenBudget(null);
         }
       } catch (error) {
@@ -4089,6 +4200,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   autoExpandTools={autoExpandTools}
                   showRawParameters={showRawParameters}
                   showThinking={showThinking}
+                  selectedProject={selectedProject}
                 />
               );
             })}

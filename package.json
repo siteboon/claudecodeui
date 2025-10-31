@@ -46,11 +46,15 @@
     "@codemirror/lang-json": "^6.0.1",
     "@codemirror/lang-markdown": "^6.3.3",
     "@codemirror/lang-python": "^6.2.1",
+    "@codemirror/merge": "^6.11.1",
     "@codemirror/theme-one-dark": "^6.1.2",
+    "@replit/codemirror-minimap": "^0.5.2",
     "@tailwindcss/typography": "^0.5.16",
     "@uiw/react-codemirror": "^4.23.13",
     "@xterm/addon-clipboard": "^0.1.0",
+    "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-webgl": "^0.18.0",
+    "@xterm/xterm": "^5.5.0",
     "bcrypt": "^6.0.0",
     "better-sqlite3": "^12.2.0",
     "chokidar": "^4.0.3",
@@ -76,9 +80,7 @@
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",
     "tailwind-merge": "^3.3.1",
-    "ws": "^8.14.2",
-    "@xterm/xterm": "^5.5.0",
-    "@xterm/addon-fit": "^0.10.0"
+    "ws": "^8.14.2"
   },
   "devDependencies": {
     "@types/react": "^18.2.43",

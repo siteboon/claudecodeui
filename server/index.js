@@ -172,7 +172,8 @@ const wss = new WebSocketServer({
 app.locals.wss = wss;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Optional API key validation (if configured)
 app.use('/api', validateApiKey);
@@ -408,7 +409,10 @@ app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) =
             return res.status(404).json({ error: 'Project not found' });
         }
 
-        const resolved = path.resolve(filePath);
+        // Handle both absolute and relative paths
+        const resolved = path.isAbsolute(filePath)
+            ? path.resolve(filePath)
+            : path.resolve(projectRoot, filePath);
         const normalizedRoot = path.resolve(projectRoot) + path.sep;
         if (!resolved.startsWith(normalizedRoot)) {
             return res.status(403).json({ error: 'Path must be under project root' });
@@ -504,19 +508,13 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
             return res.status(404).json({ error: 'Project not found' });
         }
 
-        const resolved = path.resolve(filePath);
+        // Handle both absolute and relative paths
+        const resolved = path.isAbsolute(filePath)
+            ? path.resolve(filePath)
+            : path.resolve(projectRoot, filePath);
         const normalizedRoot = path.resolve(projectRoot) + path.sep;
         if (!resolved.startsWith(normalizedRoot)) {
             return res.status(403).json({ error: 'Path must be under project root' });
-        }
-
-        // Create backup of original file
-        try {
-            const backupPath = resolved + '.backup.' + Date.now();
-            await fsPromises.copyFile(resolved, backupPath);
-            console.log('📋 Created backup:', backupPath);
-        } catch (backupError) {
-            console.warn('Could not create backup:', backupError.message);
         }
 
         // Write the new content
