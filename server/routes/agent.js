@@ -90,13 +90,13 @@ function normalizeGitHubUrl(url) {
 function parseGitHubUrl(url) {
   // Handle HTTPS URLs: https://github.com/owner/repo or https://github.com/owner/repo.git
   // Handle SSH URLs: git@github.com:owner/repo or git@github.com:owner/repo.git
-  const match = url.match(/github\.com[:/]([^/]+)\/([^/.]+)/);
+  const match = url.match(/github\.com[:/]([^/]+)\/([^/]+?)(?:\.git)?$/);
   if (!match) {
     throw new Error('Invalid GitHub URL format');
   }
   return {
     owner: match[1],
-    repo: match[2].replace('.git', '')
+    repo: match[2].replace(/\.git$/, '')
   };
 }
 
@@ -114,14 +114,37 @@ function autogenerateBranchName(message) {
     .replace(/-+/g, '-') // Replace multiple hyphens with single
     .replace(/^-|-$/g, ''); // Remove leading/trailing hyphens
 
-  // Limit length to 50 characters
-  if (branchName.length > 50) {
-    branchName = branchName.substring(0, 50).replace(/-$/, '');
+  // Ensure non-empty fallback
+  if (!branchName) {
+    branchName = 'task';
   }
 
-  // Add timestamp suffix to ensure uniqueness
-  const timestamp = Date.now().toString(36).substring(-6);
-  branchName = `${branchName}-${timestamp}`;
+  // Generate timestamp suffix (last 6 chars of base36 timestamp)
+  const timestamp = Date.now().toString(36).slice(-6);
+  const suffix = `-${timestamp}`;
+
+  // Limit length to ensure total length including suffix fits within 50 characters
+  const maxBaseLength = 50 - suffix.length;
+  if (branchName.length > maxBaseLength) {
+    branchName = branchName.substring(0, maxBaseLength);
+  }
+
+  // Remove any trailing hyphen after truncation and ensure no leading hyphen
+  branchName = branchName.replace(/-$/, '').replace(/^-+/, '');
+
+  // If still empty or starts with hyphen after cleanup, use fallback
+  if (!branchName || branchName.startsWith('-')) {
+    branchName = 'task';
+  }
+
+  // Combine base name with timestamp suffix
+  branchName = `${branchName}${suffix}`;
+
+  // Final validation: ensure it matches safe pattern
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(branchName)) {
+    // Fallback to deterministic safe name
+    return `branch-${timestamp}`;
+  }
 
   return branchName;
 }
