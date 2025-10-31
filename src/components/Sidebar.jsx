@@ -39,12 +39,12 @@ const formatTimeAgo = (dateString, currentTime) => {
   return date.toLocaleDateString();
 };
 
-function Sidebar({ 
-  projects, 
-  selectedProject, 
-  selectedSession, 
-  onProjectSelect, 
-  onSessionSelect, 
+function Sidebar({
+  projects,
+  selectedProject,
+  selectedSession,
+  onProjectSelect,
+  onSessionSelect,
   onNewSession,
   onSessionDelete,
   onProjectDelete,
@@ -54,6 +54,7 @@ function Sidebar({
   updateAvailable,
   latestVersion,
   currentVersion,
+  releaseInfo,
   onShowVersionModal,
   isPWA,
   isMobile
@@ -1611,8 +1612,10 @@ function Sidebar({
                 <div className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium text-blue-700 dark:text-blue-300">Update Available</div>
-                <div className="text-xs text-blue-600 dark:text-blue-400">Version {latestVersion} is ready</div>
+                <div className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                  {releaseInfo?.title || `Version ${latestVersion}`}
+                </div>
+                <div className="text-xs text-blue-600 dark:text-blue-400">Update available</div>
               </div>
             </Button>
           </div>
@@ -1630,8 +1633,10 @@ function Sidebar({
                 <div className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
               </div>
               <div className="min-w-0 flex-1 text-left">
-                <div className="text-sm font-medium text-blue-700 dark:text-blue-300">Update Available</div>
-                <div className="text-xs text-blue-600 dark:text-blue-400">Version {latestVersion} is ready</div>
+                <div className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                  {releaseInfo?.title || `Version ${latestVersion}`}
+                </div>
+                <div className="text-xs text-blue-600 dark:text-blue-400">Update available</div>
               </div>
             </button>
           </div>
