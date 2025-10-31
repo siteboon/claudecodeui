@@ -27,7 +27,10 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "npm run build && npm run server",
-    "release": "release-it"
+    "release": "release-it",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage"
   },
   "keywords": [
     "claude coode",
