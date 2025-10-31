@@ -18,7 +18,7 @@
  * Handles both existing sessions (with real IDs) and new sessions (with temporary IDs).
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import MainContent from './components/MainContent';
@@ -478,14 +478,14 @@ function AppContent() {
   
   // markSessionAsActive: Called when user sends a message to mark session as protected
   // This includes both real session IDs and temporary "new-session-*" identifiers
-  const markSessionAsActive = (sessionId) => {
+  const markSessionAsActive = useCallback((sessionId) => {
     if (sessionId) {
       setActiveSessions(prev => new Set([...prev, sessionId]));
     }
-  };
+  }, []);
 
   // markSessionAsInactive: Called when conversation completes/aborts to re-enable project updates
-  const markSessionAsInactive = (sessionId) => {
+  const markSessionAsInactive = useCallback((sessionId) => {
     if (sessionId) {
       setActiveSessions(prev => {
         const newSet = new Set(prev);
@@ -493,19 +493,19 @@ function AppContent() {
         return newSet;
       });
     }
-  };
+  }, []);
 
   // Processing Session Functions: Track which sessions are currently thinking/processing
 
   // markSessionAsProcessing: Called when Claude starts thinking/processing
-  const markSessionAsProcessing = (sessionId) => {
+  const markSessionAsProcessing = useCallback((sessionId) => {
     if (sessionId) {
       setProcessingSessions(prev => new Set([...prev, sessionId]));
     }
-  };
+  }, []);
 
   // markSessionAsNotProcessing: Called when Claude finishes thinking/processing
-  const markSessionAsNotProcessing = (sessionId) => {
+  const markSessionAsNotProcessing = useCallback((sessionId) => {
     if (sessionId) {
       setProcessingSessions(prev => {
         const newSet = new Set(prev);
@@ -513,12 +513,12 @@ function AppContent() {
         return newSet;
       });
     }
-  };
+  }, []);
 
   // replaceTemporarySession: Called when WebSocket provides real session ID for new sessions
   // Removes temporary "new-session-*" identifiers and adds the real session ID
   // This maintains protection continuity during the transition from temporary to real session
-  const replaceTemporarySession = (realSessionId) => {
+  const replaceTemporarySession = useCallback((realSessionId) => {
     if (realSessionId) {
       setActiveSessions(prev => {
         const newSet = new Set();
@@ -532,7 +532,7 @@ function AppContent() {
         return newSet;
       });
     }
-  };
+  }, []);
 
   // Version Upgrade Modal Component
   const VersionUpgradeModal = () => {
