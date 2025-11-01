@@ -1,32 +1,38 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare, User, Key } from 'lucide-react';
 
 const LoginForm = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  
-  const { login } = useAuth();
+  const [authMode, setAuthMode] = useState('local'); // 'local' or 'pam'
+
+  const { login, pamLogin, pamAvailable } = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    
+
     if (!username || !password) {
       setError('Please enter both username and password');
       return;
     }
-    
+
     setIsLoading(true);
-    
-    const result = await login(username, password);
-    
+
+    let result;
+    if (authMode === 'pam' && pamAvailable) {
+      result = await pamLogin(username, password);
+    } else {
+      result = await login(username, password);
+    }
+
     if (!result.success) {
       setError(result.error);
     }
-    
+
     setIsLoading(false);
   };
 
@@ -46,6 +52,36 @@ const LoginForm = () => {
               Sign in to your Claude Code UI account
             </p>
           </div>
+
+          {/* Authentication Mode Selector */}
+          {pamAvailable && (
+            <div className="flex rounded-md shadow-sm">
+              <button
+                type="button"
+                onClick={() => setAuthMode('local')}
+                className={`flex-1 py-2 px-4 text-sm font-medium rounded-l-md border ${
+                  authMode === 'local'
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-background text-muted-foreground border-border hover:bg-muted'
+                }`}
+              >
+                <User className="w-4 h-4 inline mr-2" />
+                Local Account
+              </button>
+              <button
+                type="button"
+                onClick={() => setAuthMode('pam')}
+                className={`flex-1 py-2 px-4 text-sm font-medium rounded-r-md border ${
+                  authMode === 'pam'
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-background text-muted-foreground border-border hover:bg-muted'
+                }`}
+              >
+                <Key className="w-4 h-4 inline mr-2" />
+                Linux PAM
+              </button>
+            </div>
+          )}
 
           {/* Login Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -92,14 +128,27 @@ const LoginForm = () => {
               disabled={isLoading}
               className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium py-2 px-4 rounded-md transition-colors duration-200"
             >
-              {isLoading ? 'Signing in...' : 'Sign In'}
+              {isLoading
+                ? 'Signing in...'
+                : authMode === 'pam'
+                  ? 'Sign in with Linux PAM'
+                  : 'Sign In'
+              }
             </button>
           </form>
 
           <div className="text-center">
             <p className="text-sm text-muted-foreground">
-              Enter your credentials to access Claude Code UI
+              {authMode === 'pam'
+                ? 'Enter your Linux system credentials'
+                : 'Enter your Claude Code UI account credentials'
+              }
             </p>
+            {authMode === 'pam' && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Uses system authentication via Linux PAM
+              </p>
+            )}
           </div>
         </div>
       </div>
