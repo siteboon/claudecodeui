@@ -79,6 +79,16 @@ function mapCliOptionsToSDK(options = {}) {
   // Map model (default to sonnet)
   sdkOptions.model = options.model || 'sonnet';
 
+  // Map system prompt configuration
+  sdkOptions.systemPrompt = {
+    type: 'preset',
+    preset: 'claude_code'  // Required to use CLAUDE.md
+  };
+
+  // Map setting sources for CLAUDE.md loading
+  // This loads CLAUDE.md from project, user (~/.config/claude/CLAUDE.md), and local directories
+  sdkOptions.settingSources = ['project', 'user', 'local'];
+
   // Map resume session
   if (sessionId) {
     sdkOptions.resume = sessionId;
@@ -374,7 +384,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
     for await (const message of queryInstance) {
       // Capture session ID from first message
       if (message.session_id && !capturedSessionId) {
-        console.log('📝 Captured session ID:', message.session_id);
+
         capturedSessionId = message.session_id;
         addSession(capturedSessionId, queryInstance, tempImagePaths, tempDir);
 
