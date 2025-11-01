@@ -2603,7 +2603,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const scrollToBottom = useCallback(() => {
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
-      setIsUserScrolledUp(false);
+      // Don't reset isUserScrolledUp here - let the scroll handler manage it
+      // This prevents fighting with user's scroll position during streaming
     }
   }, []);
 
@@ -3522,7 +3523,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         const prevTop = scrollPositionRef.current.top;
         const newHeight = container.scrollHeight;
         const heightDiff = newHeight - prevHeight;
-        
+
         // If content was added above the current view, adjust scroll position
         if (heightDiff > 0 && prevTop > 0) {
           container.scrollTop = prevTop + heightDiff;
@@ -3536,9 +3537,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     if (scrollContainerRef.current && chatMessages.length > 0 && !isLoadingSessionRef.current) {
       // Only scroll if we're not in the middle of loading a session
       // This prevents the "double scroll" effect during session switching
-      // Also reset scroll state
+      // Reset scroll state when switching sessions
       setIsUserScrolledUp(false);
-      setTimeout(() => scrollToBottom(), 200); // Delay to ensure full rendering
+      setTimeout(() => {
+        scrollToBottom();
+        // After scrolling, the scroll event handler will naturally set isUserScrolledUp based on position
+      }, 200); // Delay to ensure full rendering
     }
   }, [selectedSession?.id, selectedProject?.name]); // Only trigger when session/project changes
 
