@@ -8,6 +8,20 @@ import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// ANSI color codes for terminal output
+const colors = {
+    reset: '\x1b[0m',
+    bright: '\x1b[1m',
+    cyan: '\x1b[36m',
+    dim: '\x1b[2m',
+};
+
+const c = {
+    info: (text) => `${colors.cyan}${text}${colors.reset}`,
+    bright: (text) => `${colors.bright}${text}${colors.reset}`,
+    dim: (text) => `${colors.dim}${text}${colors.reset}`,
+};
+
 // Use DATABASE_PATH environment variable if set, otherwise use default location
 const DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, 'auth.db');
 const INIT_SQL_PATH = path.join(__dirname, 'init.sql');
@@ -28,7 +42,18 @@ if (process.env.DATABASE_PATH) {
 
 // Create database connection
 const db = new Database(DB_PATH);
-console.log(`Connected to SQLite database at: ${DB_PATH}`);
+
+// Show app installation path prominently
+const appInstallPath = path.join(__dirname, '../..');
+console.log('');
+console.log(c.dim('═'.repeat(60)));
+console.log(`${c.info('[INFO]')} App Installation: ${c.bright(appInstallPath)}`);
+console.log(`${c.info('[INFO]')} Database: ${c.dim(path.relative(appInstallPath, DB_PATH))}`);
+if (process.env.DATABASE_PATH) {
+  console.log(`       ${c.dim('(Using custom DATABASE_PATH from environment)')}`);
+}
+console.log(c.dim('═'.repeat(60)));
+console.log('');
 
 // Initialize database with schema
 const initializeDatabase = async () => {

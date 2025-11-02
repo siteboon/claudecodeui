@@ -8,6 +8,26 @@ import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// ANSI color codes for terminal output
+const colors = {
+    reset: '\x1b[0m',
+    bright: '\x1b[1m',
+    cyan: '\x1b[36m',
+    green: '\x1b[32m',
+    yellow: '\x1b[33m',
+    blue: '\x1b[34m',
+    dim: '\x1b[2m',
+};
+
+const c = {
+    info: (text) => `${colors.cyan}${text}${colors.reset}`,
+    ok: (text) => `${colors.green}${text}${colors.reset}`,
+    warn: (text) => `${colors.yellow}${text}${colors.reset}`,
+    tip: (text) => `${colors.blue}${text}${colors.reset}`,
+    bright: (text) => `${colors.bright}${text}${colors.reset}`,
+    dim: (text) => `${colors.dim}${text}${colors.reset}`,
+};
+
 try {
     const envPath = path.join(__dirname, '../.env');
     const envFile = fs.readFileSync(envPath, 'utf8');
@@ -116,7 +136,7 @@ async function setupProjectsWatcher() {
                     });
 
                 } catch (error) {
-                    console.error('❌ Error handling project changes:', error);
+                    console.error('[ERROR] Error handling project changes:', error);
                 }
             }, 300); // 300ms debounce (slightly faster than before)
         };
@@ -129,13 +149,13 @@ async function setupProjectsWatcher() {
             .on('addDir', (dirPath) => debouncedUpdate('addDir', dirPath))
             .on('unlinkDir', (dirPath) => debouncedUpdate('unlinkDir', dirPath))
             .on('error', (error) => {
-                console.error('❌ Chokidar watcher error:', error);
+                console.error('[ERROR] Chokidar watcher error:', error);
             })
             .on('ready', () => {
             });
 
     } catch (error) {
-        console.error('❌ Failed to setup projects watcher:', error);
+        console.error('[ERROR] Failed to setup projects watcher:', error);
     }
 }
 
@@ -157,13 +177,13 @@ const wss = new WebSocketServer({
         // Verify token
         const user = authenticateWebSocket(token);
         if (!user) {
-            console.log('❌ WebSocket authentication failed');
+            console.log('[WARN] WebSocket authentication failed');
             return false;
         }
 
         // Store user info in the request for later use
         info.req.user = user;
-        console.log('✅ WebSocket authenticated for user:', user.username);
+        console.log('[OK] WebSocket authenticated for user:', user.username);
         return true;
     }
 });
@@ -462,7 +482,7 @@ app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) =
         const { projectName } = req.params;
         const { filePath } = req.query;
 
-        console.log('📄 File read request:', projectName, filePath);
+        console.log('[DEBUG] File read request:', projectName, filePath);
 
         // Security: ensure the requested path is inside the project root
         if (!filePath) {
@@ -503,7 +523,7 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
         const { projectName } = req.params;
         const { path: filePath } = req.query;
 
-        console.log('🖼️ Binary file serve request:', projectName, filePath);
+        console.log('[DEBUG] Binary file serve request:', projectName, filePath);
 
         // Security: ensure the requested path is inside the project root
         if (!filePath) {
@@ -557,7 +577,7 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
         const { projectName } = req.params;
         const { filePath, content } = req.body;
 
-        console.log('💾 File save request:', projectName, filePath);
+        console.log('[DEBUG] File save request:', projectName, filePath);
 
         // Security: ensure the requested path is inside the project root
         if (!filePath) {
@@ -628,7 +648,7 @@ app.get('/api/projects/:projectName/files', authenticateToken, async (req, res) 
         const hiddenFiles = files.filter(f => f.name.startsWith('.'));
         res.json(files);
     } catch (error) {
-        console.error('❌ File tree error:', error.message);
+        console.error('[ERROR] File tree error:', error.message);
         res.status(500).json({ error: error.message });
     }
 });
@@ -636,7 +656,7 @@ app.get('/api/projects/:projectName/files', authenticateToken, async (req, res) 
 // WebSocket connection handler that routes based on URL path
 wss.on('connection', (ws, request) => {
     const url = request.url;
-    console.log('🔗 Client connected to:', url);
+    console.log('[INFO] Client connected to:', url);
 
     // Parse URL to get pathname without query parameters
     const urlObj = new URL(url, 'http://localhost');
@@ -647,14 +667,14 @@ wss.on('connection', (ws, request) => {
     } else if (pathname === '/ws') {
         handleChatConnection(ws);
     } else {
-        console.log('❌ Unknown WebSocket path:', pathname);
+        console.log('[WARN] Unknown WebSocket path:', pathname);
         ws.close();
     }
 });
 
 // Handle chat WebSocket connections
 function handleChatConnection(ws) {
-    console.log('💬 Chat WebSocket connected');
+    console.log('[INFO] Chat WebSocket connected');
 
     // Add to connected clients for project updates
     connectedClients.add(ws);
@@ -664,28 +684,28 @@ function handleChatConnection(ws) {
             const data = JSON.parse(message);
 
             if (data.type === 'claude-command') {
-                console.log('💬 User message:', data.command || '[Continue/Resume]');
+                console.log('[DEBUG] User message:', data.command || '[Continue/Resume]');
                 console.log('📁 Project:', data.options?.projectPath || 'Unknown');
                 console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
 
                 // Use Claude Agents SDK
                 await queryClaudeSDK(data.command, data.options, ws);
             } else if (data.type === 'cursor-command') {
-                console.log('🖱️ Cursor message:', data.command || '[Continue/Resume]');
+                console.log('[DEBUG] Cursor message:', data.command || '[Continue/Resume]');
                 console.log('📁 Project:', data.options?.cwd || 'Unknown');
                 console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
                 console.log('🤖 Model:', data.options?.model || 'default');
                 await spawnCursor(data.command, data.options, ws);
             } else if (data.type === 'cursor-resume') {
                 // Backward compatibility: treat as cursor-command with resume and no prompt
-                console.log('🖱️ Cursor resume session (compat):', data.sessionId);
+                console.log('[DEBUG] Cursor resume session (compat):', data.sessionId);
                 await spawnCursor('', {
                     sessionId: data.sessionId,
                     resume: true,
                     cwd: data.options?.cwd
                 }, ws);
             } else if (data.type === 'abort-session') {
-                console.log('🛑 Abort session request:', data.sessionId);
+                console.log('[DEBUG] Abort session request:', data.sessionId);
                 const provider = data.provider || 'claude';
                 let success;
 
@@ -703,7 +723,7 @@ function handleChatConnection(ws) {
                     success
                 }));
             } else if (data.type === 'cursor-abort') {
-                console.log('🛑 Abort Cursor session:', data.sessionId);
+                console.log('[DEBUG] Abort Cursor session:', data.sessionId);
                 const success = abortCursorSession(data.sessionId);
                 ws.send(JSON.stringify({
                     type: 'session-aborted',
@@ -742,7 +762,7 @@ function handleChatConnection(ws) {
                 }));
             }
         } catch (error) {
-            console.error('❌ Chat WebSocket error:', error.message);
+            console.error('[ERROR] Chat WebSocket error:', error.message);
             ws.send(JSON.stringify({
                 type: 'error',
                 error: error.message
@@ -776,7 +796,7 @@ function handleShellConnection(ws) {
                 const initialCommand = data.initialCommand;
                 const isPlainShell = data.isPlainShell || (!!initialCommand && !hasSession) || provider === 'plain-shell';
 
-                console.log('🚀 Starting shell in:', projectPath);
+                console.log('[INFO] Starting shell in:', projectPath);
                 console.log('📋 Session info:', hasSession ? `Resume session ${sessionId}` : (isPlainShell ? 'Plain shell mode' : 'New session'));
                 console.log('🤖 Provider:', isPlainShell ? 'plain-shell' : provider);
                 if (initialCommand) {
@@ -889,7 +909,7 @@ function handleShellConnection(ws) {
                                 let match;
                                 while ((match = pattern.exec(data)) !== null) {
                                     const url = match[1];
-                                    console.log('🔗 Detected URL for opening:', url);
+                                    console.log('[DEBUG] Detected URL for opening:', url);
 
                                     // Send URL opening message to client
                                     ws.send(JSON.stringify({
@@ -899,7 +919,7 @@ function handleShellConnection(ws) {
 
                                     // Replace the OPEN_URL pattern with a user-friendly message
                                     if (pattern.source.includes('OPEN_URL')) {
-                                        outputData = outputData.replace(match[0], `🌐 Opening in browser: ${url}`);
+                                        outputData = outputData.replace(match[0], `[INFO] Opening in browser: ${url}`);
                                     }
                                 }
                             });
@@ -925,7 +945,7 @@ function handleShellConnection(ws) {
                     });
 
                 } catch (spawnError) {
-                    console.error('❌ Error spawning process:', spawnError);
+                    console.error('[ERROR] Error spawning process:', spawnError);
                     ws.send(JSON.stringify({
                         type: 'output',
                         data: `\r\n\x1b[31mError: ${spawnError.message}\x1b[0m\r\n`
@@ -951,7 +971,7 @@ function handleShellConnection(ws) {
                 }
             }
         } catch (error) {
-            console.error('❌ Shell WebSocket error:', error.message);
+            console.error('[ERROR] Shell WebSocket error:', error.message);
             if (ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({
                     type: 'output',
@@ -970,7 +990,7 @@ function handleShellConnection(ws) {
     });
 
     ws.on('error', (error) => {
-        console.error('❌ Shell WebSocket error:', error);
+        console.error('[ERROR] Shell WebSocket error:', error);
     });
 }
 // Audio transcription endpoint
@@ -1411,28 +1431,37 @@ async function startServer() {
     try {
         // Initialize authentication database
         await initializeDatabase();
-        console.log('✅ Database initialization skipped (testing)');
 
         // Check if running in production mode (dist folder exists)
         const distIndexPath = path.join(__dirname, '../dist/index.html');
         const isProduction = fs.existsSync(distIndexPath);
 
         // Log Claude implementation mode
-        console.log('🚀 Using Claude Agents SDK for Claude integration');
-        console.log(`📦 Running in ${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'} mode`);
+        console.log(`${c.info('[INFO]')} Using Claude Agents SDK for Claude integration`);
+        console.log(`${c.info('[INFO]')} Running in ${c.bright(isProduction ? 'PRODUCTION' : 'DEVELOPMENT')} mode`);
 
         if (!isProduction) {
-            console.log(`⚠️  Note: Requests will be proxied to Vite dev server at http://localhost:${process.env.VITE_PORT || 5173}`);
+            console.log(`${c.warn('[WARN]')} Note: Requests will be proxied to Vite dev server at ${c.dim('http://localhost:' + (process.env.VITE_PORT || 5173))}`);
         }
 
         server.listen(PORT, '0.0.0.0', async () => {
-            console.log(`Claude Code UI server running on http://0.0.0.0:${PORT}`);
+            const appInstallPath = path.join(__dirname, '..');
+
+            console.log('');
+            console.log(c.dim('═'.repeat(63)));
+            console.log(`  ${c.bright('Claude Code UI Server - Ready')}`);
+            console.log(c.dim('═'.repeat(63)));
+            console.log('');
+            console.log(`${c.info('[INFO]')} Server URL:  ${c.bright('http://0.0.0.0:' + PORT)}`);
+            console.log(`${c.info('[INFO]')} Installed at: ${c.dim(appInstallPath)}`);
+            console.log(`${c.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
+            console.log('');
 
             // Start watching the projects folder for changes
             await setupProjectsWatcher();
         });
     } catch (error) {
-        console.error('❌ Failed to start server:', error);
+        console.error('[ERROR] Failed to start server:', error);
         process.exit(1);
     }
 }
