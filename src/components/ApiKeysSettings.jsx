@@ -33,11 +33,11 @@ function ApiKeysSettings() {
       setApiKeys(apiKeysData.apiKeys || []);
 
       // Fetch GitHub tokens
-      const githubRes = await fetch('/api/settings/github-tokens', {
+      const githubRes = await fetch('/api/settings/credentials?type=github_token', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const githubData = await githubRes.json();
-      setGithubTokens(githubData.tokens || []);
+      setGithubTokens(githubData.credentials || []);
     } catch (error) {
       console.error('Error fetching settings:', error);
     } finally {
@@ -108,15 +108,16 @@ function ApiKeysSettings() {
 
     try {
       const token = localStorage.getItem('auth-token');
-      const res = await fetch('/api/settings/github-tokens', {
+      const res = await fetch('/api/settings/credentials', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          tokenName: newTokenName,
-          githubToken: newGithubToken
+          credentialName: newTokenName,
+          credentialType: 'github_token',
+          credentialValue: newGithubToken
         })
       });
 
@@ -137,7 +138,7 @@ function ApiKeysSettings() {
 
     try {
       const token = localStorage.getItem('auth-token');
-      await fetch(`/api/settings/github-tokens/${tokenId}`, {
+      await fetch(`/api/settings/credentials/${tokenId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -150,7 +151,7 @@ function ApiKeysSettings() {
   const toggleGithubToken = async (tokenId, isActive) => {
     try {
       const token = localStorage.getItem('auth-token');
-      await fetch(`/api/settings/github-tokens/${tokenId}/toggle`, {
+      await fetch(`/api/settings/credentials/${tokenId}/toggle`, {
         method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -349,7 +350,7 @@ function ApiKeysSettings() {
                 className="flex items-center justify-between p-3 border rounded-lg"
               >
                 <div className="flex-1">
-                  <div className="font-medium">{token.token_name}</div>
+                  <div className="font-medium">{token.credential_name}</div>
                   <div className="text-xs text-muted-foreground mt-1">
                     Added: {new Date(token.created_at).toLocaleDateString()}
                   </div>

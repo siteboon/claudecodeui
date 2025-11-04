@@ -13,7 +13,7 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
   const [workspacePath, setWorkspacePath] = useState('');
   const [githubUrl, setGithubUrl] = useState('');
   const [selectedGithubToken, setSelectedGithubToken] = useState('');
-  const [useExistingToken, setUseExistingToken] = useState(true);
+  const [tokenMode, setTokenMode] = useState('stored'); // 'stored' | 'new' | 'none'
   const [newGithubToken, setNewGithubToken] = useState('');
 
   // UI state
@@ -44,10 +44,10 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
   const loadGithubTokens = async () => {
     try {
       setLoadingTokens(true);
-      const response = await api.get('/settings/github-tokens');
+      const response = await api.get('/settings/credentials?type=github_token');
       const data = await response.json();
 
-      const activeTokens = (data.tokens || []).filter(t => t.is_active);
+      const activeTokens = (data.credentials || []).filter(t => t.is_active);
       setAvailableTokens(activeTokens);
 
       // Auto-select first token if available
@@ -122,9 +122,9 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
       if (workspaceType === 'new' && githubUrl) {
         payload.githubUrl = githubUrl.trim();
 
-        if (useExistingToken && selectedGithubToken) {
+        if (tokenMode === 'stored' && selectedGithubToken) {
           payload.githubTokenId = parseInt(selectedGithubToken);
-        } else if (!useExistingToken && newGithubToken) {
+        } else if (tokenMode === 'new' && newGithubToken) {
           payload.newGithubToken = newGithubToken.trim();
         }
       }
@@ -364,9 +364,9 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
                           {/* Token Selection Tabs */}
                           <div className="grid grid-cols-3 gap-2 mb-4">
                             <button
-                              onClick={() => setUseExistingToken(true)}
+                              onClick={() => setTokenMode('stored')}
                               className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                                useExistingToken
+                                tokenMode === 'stored'
                                   ? 'bg-blue-500 text-white'
                                   : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
                               }`}
@@ -374,9 +374,9 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
                               Stored Token
                             </button>
                             <button
-                              onClick={() => setUseExistingToken(false)}
+                              onClick={() => setTokenMode('new')}
                               className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                                !useExistingToken && (selectedGithubToken || newGithubToken)
+                                tokenMode === 'new'
                                   ? 'bg-blue-500 text-white'
                                   : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
                               }`}
@@ -385,12 +385,12 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
                             </button>
                             <button
                               onClick={() => {
-                                setUseExistingToken(true);
+                                setTokenMode('none');
                                 setSelectedGithubToken('');
                                 setNewGithubToken('');
                               }}
                               className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                                !selectedGithubToken && !newGithubToken
+                                tokenMode === 'none'
                                   ? 'bg-green-500 text-white'
                                   : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
                               }`}
@@ -399,7 +399,7 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
                             </button>
                           </div>
 
-                          {useExistingToken ? (
+                          {tokenMode === 'stored' ? (
                             <div>
                               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                 Select Token
@@ -412,12 +412,12 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
                                 <option value="">-- Select a token --</option>
                                 {availableTokens.map((token) => (
                                   <option key={token.id} value={token.id}>
-                                    {token.token_name}
+                                    {token.credential_name}
                                   </option>
                                 ))}
                               </select>
                             </div>
-                          ) : (
+                          ) : tokenMode === 'new' ? (
                             <div>
                               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                 GitHub Token
@@ -433,7 +433,7 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
                                 This token will be used only for this operation
                               </p>
                             </div>
-                          )}
+                          ) : null}
                         </>
                       ) : (
                         <div className="space-y-4">
@@ -498,9 +498,9 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-600 dark:text-gray-400">Authentication:</span>
                         <span className="text-xs text-gray-900 dark:text-white">
-                          {useExistingToken && selectedGithubToken
-                            ? `Using stored token: ${availableTokens.find(t => t.id.toString() === selectedGithubToken)?.token_name || 'Unknown'}`
-                            : newGithubToken
+                          {tokenMode === 'stored' && selectedGithubToken
+                            ? `Using stored token: ${availableTokens.find(t => t.id.toString() === selectedGithubToken)?.credential_name || 'Unknown'}`
+                            : tokenMode === 'new' && newGithubToken
                             ? 'Using provided token'
                             : 'No authentication'}
                         </span>
