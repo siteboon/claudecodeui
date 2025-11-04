@@ -20,6 +20,22 @@ const validateApiKey = (req, res, next) => {
 
 // JWT authentication middleware
 const authenticateToken = async (req, res, next) => {
+  // Platform mode:  use single database user
+  if (process.env.VITE_IS_PLATFORM === 'true') {
+    try {
+      const user = userDb.getFirstUser();
+      if (!user) {
+        return res.status(500).json({ error: 'Platform mode: No user found in database' });
+      }
+      req.user = user;
+      return next();
+    } catch (error) {
+      console.error('Platform mode error:', error);
+      return res.status(500).json({ error: 'Platform mode: Failed to fetch user' });
+    }
+  }
+
+  // Normal OSS JWT validation
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
@@ -29,13 +45,13 @@ const authenticateToken = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    
+
     // Verify user still exists and is active
     const user = userDb.getUserById(decoded.userId);
     if (!user) {
       return res.status(401).json({ error: 'Invalid token. User not found.' });
     }
-    
+
     req.user = user;
     next();
   } catch (error) {
@@ -58,10 +74,25 @@ const generateToken = (user) => {
 
 // WebSocket authentication function
 const authenticateWebSocket = (token) => {
+  // Platform mode: bypass token validation, return first user
+  if (process.env.VITE_IS_PLATFORM === 'true') {
+    try {
+      const user = userDb.getFirstUser();
+      if (user) {
+        return { userId: user.id, username: user.username };
+      }
+      return null;
+    } catch (error) {
+      console.error('Platform mode WebSocket error:', error);
+      return null;
+    }
+  }
+
+  // Normal OSS JWT validation
   if (!token) {
     return null;
   }
-  
+
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     return decoded;
