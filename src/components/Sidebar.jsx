@@ -344,6 +344,48 @@ function Sidebar({
     }
   };
 
+  const createNewProject = async () => {
+    if (!newProjectPath.trim()) {
+      alert('Please enter a project path');
+      return;
+    }
+
+    setCreatingProject(true);
+    
+    try {
+      const response = await api.createProject(newProjectPath.trim());
+
+      if (response.ok) {
+        const result = await response.json();
+        
+        // Save the path to recent paths before clearing
+        saveToRecentPaths(newProjectPath.trim());
+        
+        setShowNewProject(false);
+        setNewProjectPath('');
+        
+        // Refresh projects to show the new one
+        if (window.refreshProjects) {
+          window.refreshProjects();
+        } else {
+          window.location.reload();
+        }
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Failed to create project. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error creating project:', error);
+      alert('Error creating project. Please try again.');
+    } finally {
+      setCreatingProject(false);
+    }
+  };
+
+  const cancelNewProject = () => {
+    setShowNewProject(false);
+    setNewProjectPath('');
+  };
 
   const loadMoreSessions = async (project) => {
     // Check if we can load more sessions
