@@ -59,6 +59,37 @@ function normalizeInlineCodeFences(text) {
   }
 }
 
+// Unescape \n, \t, \r while protecting LaTeX formulas ($...$ and $$...$$) from being corrupted
+function unescapeWithMathProtection(text) {
+  if (!text || typeof text !== 'string') return text;
+
+  const mathBlocks = [];
+  const PLACEHOLDER_PREFIX = '__MATH_BLOCK_';
+  const PLACEHOLDER_SUFFIX = '__';
+
+  // Extract and protect math formulas
+  let processedText = text.replace(/\$\$([\s\S]*?)\$\$|\$([^\$\n]+?)\$/g, (match) => {
+    const index = mathBlocks.length;
+    mathBlocks.push(match);
+    return `${PLACEHOLDER_PREFIX}${index}${PLACEHOLDER_SUFFIX}`;
+  });
+
+  // Process escape sequences on non-math content
+  processedText = processedText.replace(/\\n/g, '\n')
+                               .replace(/\\t/g, '\t')
+                               .replace(/\\r/g, '\r');
+
+  // Restore math formulas
+  processedText = processedText.replace(
+    new RegExp(`${PLACEHOLDER_PREFIX}(\\d+)${PLACEHOLDER_SUFFIX}`, 'g'),
+    (match, index) => {
+      return mathBlocks[parseInt(index)];
+    }
+  );
+
+  return processedText;
+}
+
 // Small wrapper to keep markdown behavior consistent in one place
 const Markdown = ({ children, className }) => {
   const content = normalizeInlineCodeFences(String(children ?? ''));
@@ -2532,10 +2563,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                           content.startsWith('[Request interrupted');
 
         if (!shouldSkip) {
-          // Unescape double-escaped newlines and other escape sequences
-          content = content.replace(/\\n/g, '\n')
-                           .replace(/\\t/g, '\t')
-                           .replace(/\\r/g, '\r');
+          // Unescape with math formula protection
+          content = unescapeWithMathProtection(content);
           converted.push({
             type: messageType,
             content: content,
@@ -2549,12 +2578,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         if (Array.isArray(msg.message.content)) {
           for (const part of msg.message.content) {
             if (part.type === 'text') {
-              // Unescape double-escaped newlines and other escape sequences
+              // Unescape with math formula protection
               let text = part.text;
               if (typeof text === 'string') {
-                text = text.replace(/\\n/g, '\n')
-                           .replace(/\\t/g, '\t')
-                           .replace(/\\r/g, '\r');
+                text = unescapeWithMathProtection(text);
               }
               converted.push({
                 type: 'assistant',
@@ -2583,11 +2610,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             }
           }
         } else if (typeof msg.message.content === 'string') {
-          // Unescape double-escaped newlines and other escape sequences
+          // Unescape with math formula protection
           let text = msg.message.content;
-          text = text.replace(/\\n/g, '\n')
-                     .replace(/\\t/g, '\t')
-                     .replace(/\\r/g, '\r');
+          text = unescapeWithMathProtection(text);
           converted.push({
             type: 'assistant',
             content: text,
