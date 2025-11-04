@@ -34,12 +34,14 @@ export const AuthProvider = ({ children }) => {
 
   const checkAuthStatus = async () => {
     try {
+      console.log('[AuthContext] Checking auth status...');
       setIsLoading(true);
       setError(null);
-      
+
       // Check if system needs setup
       const statusResponse = await api.auth.status();
       const statusData = await statusResponse.json();
+      console.log('[AuthContext] Status response:', statusData);
       
       if (statusData.needsSetup) {
         setNeedsSetup(true);
@@ -70,9 +72,10 @@ export const AuthProvider = ({ children }) => {
         }
       }
     } catch (error) {
-      console.error('Auth status check failed:', error);
+      console.error('[AuthContext] Auth status check failed:', error);
       setError('Failed to check authentication status');
     } finally {
+      console.log('[AuthContext] Auth check complete, isLoading=false');
       setIsLoading(false);
     }
   };

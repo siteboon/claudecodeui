@@ -4744,13 +4744,15 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             </button>
 
             {/* Hint text inside input box at bottom */}
-            <div className="absolute bottom-1 left-12 right-14 sm:right-40 text-xs text-gray-400 dark:text-gray-500 pointer-events-none hidden sm:block">
+            <div className={`absolute bottom-1 left-12 right-14 sm:right-40 text-xs text-gray-400 dark:text-gray-500 pointer-events-none hidden sm:block transition-opacity duration-200 ${
+              input.trim() ? 'opacity-0' : 'opacity-100'
+            }`}>
               {sendByCtrlEnter
                 ? "Ctrl+Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands"
                 : "Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands"}
             </div>
             <div className={`absolute bottom-1 left-12 right-14 text-xs text-gray-400 dark:text-gray-500 pointer-events-none sm:hidden transition-opacity duration-200 ${
-              isInputFocused ? 'opacity-100' : 'opacity-0'
+              isInputFocused && !input.trim() ? 'opacity-100' : 'opacity-0'
             }`}>
               {sendByCtrlEnter
                 ? "Ctrl+Enter to send • Tab for modes • / for commands"

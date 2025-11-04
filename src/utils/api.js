@@ -71,6 +71,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ path }),
     }),
+  createWorkspace: (workspaceData) =>
+    authenticatedFetch('/api/projects/create-workspace', {
+      method: 'POST',
+      body: JSON.stringify(workspaceData),
+    }),
   readFile: (projectName, filePath) =>
     authenticatedFetch(`/api/projects/${projectName}/file?filePath=${encodeURIComponent(filePath)}`),
   saveFile: (projectName, filePath, content) =>
