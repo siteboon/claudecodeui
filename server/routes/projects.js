@@ -251,7 +251,12 @@ router.post('/create-workspace', async (req, res) => {
           await cloneGitHubRepository(githubUrl, absolutePath, githubToken);
         } catch (error) {
           // Clean up created directory on failure
-          await fs.rm(absolutePath, { recursive: true, force: true });
+          try {
+            await fs.rm(absolutePath, { recursive: true, force: true });
+          } catch (cleanupError) {
+            console.error('Failed to clean up directory after clone failure:', cleanupError);
+            // Continue to throw original error
+          }
           throw new Error(`Failed to clone repository: ${error.message}`);
         }
       }
