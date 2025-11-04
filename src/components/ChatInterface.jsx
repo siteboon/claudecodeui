@@ -4485,6 +4485,51 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               total={tokenBudget?.total || parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 160000}
             />
 
+            {/* Slash commands button */}
+            <button
+              type="button"
+              onClick={() => {
+                const isOpening = !showCommandMenu;
+                setShowCommandMenu(isOpening);
+                setCommandQuery('');
+                setSelectedCommandIndex(-1);
+
+                // When opening, ensure all commands are shown
+                if (isOpening) {
+                  setFilteredCommands(slashCommands);
+                }
+
+                if (textareaRef.current) {
+                  textareaRef.current.focus();
+                }
+              }}
+              className="relative w-8 h-8 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-full flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:ring-offset-gray-800"
+              title="Show all commands"
+            >
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"
+                />
+              </svg>
+              {/* Command count badge */}
+              {slashCommands.length > 0 && (
+                <span
+                  className="absolute -top-1 -right-1 bg-blue-600 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center"
+                  style={{ fontSize: '10px' }}
+                >
+                  {slashCommands.length}
+                </span>
+              )}
+            </button>
+
             {/* Clear input button - positioned to the right of token pie, only shows when there's input */}
             {input.trim() && (
               <button
@@ -4663,56 +4708,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             
             {/* Mic button - HIDDEN */}
             <div className="absolute right-16 sm:right-16 top-1/2 transform -translate-y-1/2" style={{ display: 'none' }}>
-              <MicButton 
+              <MicButton
                 onTranscript={handleTranscript}
                 className="w-10 h-10 sm:w-10 sm:h-10"
               />
             </div>
-
-            {/* Slash commands button */}
-            <button
-              type="button"
-              onClick={() => {
-                const isOpening = !showCommandMenu;
-                setShowCommandMenu(isOpening);
-                setCommandQuery('');
-                setSelectedCommandIndex(-1);
-
-                // When opening, ensure all commands are shown
-                if (isOpening) {
-                  setFilteredCommands(slashCommands);
-                }
-
-                if (textareaRef.current) {
-                  textareaRef.current.focus();
-                }
-              }}
-              className="absolute right-14 sm:right-36 top-1/2 transform -translate-y-1/2 w-10 h-10 sm:w-10 sm:h-10 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-full flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:ring-offset-gray-800 relative z-10"
-              title="Show all commands"
-            >
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"
-                />
-              </svg>
-              {/* Command count badge */}
-              {slashCommands.length > 0 && (
-                <span
-                  className="absolute -top-1 -right-1 bg-blue-600 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center"
-                  style={{ fontSize: '10px' }}
-                >
-                  {slashCommands.length}
-                </span>
-              )}
-            </button>
 
             {/* Send button */}
             <button

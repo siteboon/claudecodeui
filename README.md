@@ -69,8 +69,7 @@ npx @siteboon/claude-code-ui
 
 The server will start and be accessible at `http://localhost:3001` (or your configured PORT).
 
-**To restart**: Simply run the same `npx` command again after stopping the server (Ctrl+C or Cmd+C).
-
+**To restart**: Simply run the same `npx` command again after stopping the server
 ### Global Installation (For Regular Use)
 
 For frequent use, install globally once:
@@ -85,31 +84,70 @@ Then start with a simple command:
 claude-code-ui
 ```
 
-**Benefits**:
-- Faster startup (no download/cache check)
-- Simple command to remember
-- Same experience every time
 
 **To restart**: Stop with Ctrl+C and run `claude-code-ui` again.
 
-### Run as Background Service (Optional)
+### CLI Commands
 
-To keep the server running in the background, use PM2:
+After global installation, you have access to both `claude-code-ui` and `cloudcli` commands:
 
 ```bash
-# Install PM2 globally (one-time)
-npm install -g pm2
+# Start the server (default command)
+claude-code-ui
+cloudcli start
 
-# Start the server
-pm2 start claude-code-ui --name "claude-ui"
+# Show configuration and data locations
+cloudcli status
 
-# Manage the service
-pm2 list             # View status
-pm2 restart claude-ui # Restart
-pm2 stop claude-ui   # Stop
-pm2 logs claude-ui   # View logs
-pm2 startup          # Auto-start on system boot
+# Show help information
+cloudcli help
+
+# Show version
+cloudcli version
 ```
+
+**The `cloudcli status` command shows you:**
+- Installation directory location
+- Database location (where credentials are stored)
+- Current configuration (PORT, DATABASE_PATH, etc.)
+- Claude projects folder location
+- Configuration file location
+
+```
+
+### Run as Background Service (Recommended for Production)
+
+For production use, run Claude Code UI as a background service using PM2 (Process Manager 2):
+
+#### Install PM2
+
+```bash
+npm install -g pm2
+```
+
+#### Start as Background Service
+
+```bash
+# Start the server in background
+pm2 start claude-code-ui --name "claude-code-ui"
+
+# Or using the shorter alias
+pm2 start cloudcli --name "claude-code-ui"
+```
+
+
+#### Auto-Start on System Boot
+
+To make Claude Code UI start automatically when your system boots:
+
+```bash
+# Generate startup script for your platform
+pm2 startup
+
+# Save current process list
+pm2 save
+```
+
 
 ### Local Development Installation
 
