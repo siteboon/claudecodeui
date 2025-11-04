@@ -484,7 +484,6 @@ function Sidebar({
         
         setShowNewProject(false);
         setNewProjectPath('');
-        setShowSuggestions(false);
         
         // Refresh projects to show the new one
         if (window.refreshProjects) {
@@ -507,7 +506,6 @@ function Sidebar({
   const cancelNewProject = () => {
     setShowNewProject(false);
     setNewProjectPath('');
-    setShowSuggestions(false);
   };
 
   const loadMoreSessions = async (project) => {
