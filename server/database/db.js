@@ -117,6 +117,15 @@ const userDb = {
     } catch (err) {
       throw err;
     }
+  },
+
+  getFirstUser: () => {
+    try {
+      const row = db.prepare('SELECT id, username, created_at, last_login FROM users WHERE is_active = 1 LIMIT 1').get();
+      return row;
+    } catch (err) {
+      throw err;
+    }
   }
 };
 

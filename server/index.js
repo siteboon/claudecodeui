@@ -170,6 +170,19 @@ const wss = new WebSocketServer({
     verifyClient: (info) => {
         console.log('WebSocket connection attempt to:', info.req.url);
 
+        // Platform mode: always allow connection
+        if (process.env.VITE_IS_PLATFORM === 'true') {
+            const user = authenticateWebSocket(null); // Will return first user
+            if (!user) {
+                console.log('[WARN] Platform mode: No user found in database');
+                return false;
+            }
+            info.req.user = user;
+            console.log('[OK] Platform mode WebSocket authenticated for user:', user.username);
+            return true;
+        }
+
+        // Normal mode: verify token
         // Extract token from query parameters or headers
         const url = new URL(info.req.url, 'http://localhost');
         const token = url.searchParams.get('token') ||
@@ -195,6 +208,14 @@ app.locals.wss = wss;
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Public health check endpoint (no authentication required)
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString()
+  });
+});
 
 // Optional API key validation (if configured)
 app.use('/api', validateApiKey);

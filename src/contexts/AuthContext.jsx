@@ -29,31 +29,38 @@ export const AuthProvider = ({ children }) => {
 
   // Check authentication status on mount
   useEffect(() => {
+    // Platform mode: skip all auth checks, set dummy user
+    if (import.meta.env.VITE_IS_PLATFORM === 'true') {
+      setUser({ username: 'platform-user' });
+      setNeedsSetup(false);
+      setIsLoading(false);
+      return;
+    }
+
+    // Normal OSS mode: check auth status
     checkAuthStatus();
   }, []);
 
   const checkAuthStatus = async () => {
     try {
-      console.log('[AuthContext] Checking auth status...');
       setIsLoading(true);
       setError(null);
 
       // Check if system needs setup
       const statusResponse = await api.auth.status();
       const statusData = await statusResponse.json();
-      console.log('[AuthContext] Status response:', statusData);
-      
+
       if (statusData.needsSetup) {
         setNeedsSetup(true);
         setIsLoading(false);
         return;
       }
-      
+
       // If we have a token, verify it
       if (token) {
         try {
           const userResponse = await api.auth.user();
-          
+
           if (userResponse.ok) {
             const userData = await userResponse.json();
             setUser(userData.user);
@@ -75,7 +82,6 @@ export const AuthProvider = ({ children }) => {
       console.error('[AuthContext] Auth status check failed:', error);
       setError('Failed to check authentication status');
     } finally {
-      console.log('[AuthContext] Auth check complete, isLoading=false');
       setIsLoading(false);
     }
   };

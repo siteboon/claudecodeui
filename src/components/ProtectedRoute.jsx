@@ -26,6 +26,12 @@ const LoadingScreen = () => (
 const ProtectedRoute = ({ children }) => {
   const { user, isLoading, needsSetup } = useAuth();
 
+  // Platform mode: skip all auth UI and directly render children
+  if (import.meta.env.VITE_IS_PLATFORM === 'true') {
+    return children;
+  }
+
+  // Normal OSS mode: standard auth flow
   if (isLoading) {
     return <LoadingScreen />;
   }
