@@ -49,6 +49,11 @@
     --safe-area-inset-right: env(safe-area-inset-right);
     --safe-area-inset-bottom: env(safe-area-inset-bottom);
     --safe-area-inset-left: env(safe-area-inset-left);
+
+    /* Mobile navigation dimensions - Single source of truth */
+    --mobile-nav-height: 60px;
+    --mobile-nav-padding: 12px;
+    --mobile-nav-total: calc(var(--mobile-nav-height) + max(env(safe-area-inset-bottom, 0px), var(--mobile-nav-padding)));
   }
   
   /* Fallback for older iOS versions */

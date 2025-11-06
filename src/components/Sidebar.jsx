@@ -1308,7 +1308,7 @@ function Sidebar({
       {/* Settings Section */}
       <div className="md:p-2 md:border-t md:border-border flex-shrink-0">
         {/* Mobile Settings */}
-        <div className="md:hidden p-4 pb-20 border-t border-border/50">
+        <div className="md:hidden p-4 pb-mobile-nav border-t border-border/50">
           <button
             className="w-full h-14 bg-muted/50 hover:bg-muted/70 rounded-2xl flex items-center justify-start gap-4 px-4 active:scale-[0.98] transition-all duration-150"
             onClick={onShowSettings}
