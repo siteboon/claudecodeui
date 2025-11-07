@@ -769,7 +769,7 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
   }
 
   return (
-    <div className="h-full flex flex-col bg-white dark:bg-gray-900">
+    <div className="h-full flex flex-col bg-background">
       {/* Header */}
       <div className={`flex items-center justify-between border-b border-gray-200 dark:border-gray-700 ${isMobile ? 'px-3 py-2' : 'px-4 py-3'}`}>
         <div className="relative" ref={dropdownRef}>

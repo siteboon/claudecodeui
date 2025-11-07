@@ -71,7 +71,7 @@ const QuickSettingsPanel = ({
 
       {/* Panel */}
       <div
-        className={`fixed top-0 right-0 h-full w-64 bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-700 shadow-xl transform transition-transform duration-150 ease-out z-40 ${
+        className={`fixed top-0 right-0 h-full w-64 bg-background border-l border-border shadow-xl transform transition-transform duration-150 ease-out z-40 ${
           localIsOpen ? 'translate-x-0' : 'translate-x-full'
         } ${isMobile ? 'h-screen' : ''}`}
       >
@@ -85,7 +85,7 @@ const QuickSettingsPanel = ({
           </div>
 
           {/* Settings Content */}
-          <div className={`flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-6 bg-white dark:bg-gray-900 ${isMobile ? 'pb-mobile-nav' : ''}`}>
+          <div className={`flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-6 bg-background ${isMobile ? 'pb-mobile-nav' : ''}`}>
             {/* Appearance Settings */}
             <div className="space-y-2">
               <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Appearance</h4>

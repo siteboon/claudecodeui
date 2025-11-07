@@ -213,12 +213,12 @@ function MainContent({
       <div className="h-full flex flex-col">
         {/* Header with menu button for mobile */}
         {isMobile && (
-          <div 
-            className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-3 sm:p-4 pwa-header-safe flex-shrink-0"
+          <div
+            className="bg-background border-b border-border p-2 sm:p-3 pwa-header-safe flex-shrink-0"
           >
             <button
               onClick={onMenuClick}
-              className="p-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 pwa-menu-button"
+              className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 pwa-menu-button"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -251,12 +251,12 @@ function MainContent({
       <div className="h-full flex flex-col">
         {/* Header with menu button for mobile */}
         {isMobile && (
-          <div 
-            className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-3 sm:p-4 pwa-header-safe flex-shrink-0"
+          <div
+            className="bg-background border-b border-border p-2 sm:p-3 pwa-header-safe flex-shrink-0"
           >
             <button
               onClick={onMenuClick}
-              className="p-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 pwa-menu-button"
+              className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 pwa-menu-button"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -290,10 +290,10 @@ function MainContent({
     <div className="h-full flex flex-col">
       {/* Header with tabs */}
       <div
-        className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-3 sm:p-4 pwa-header-safe flex-shrink-0"
+        className="bg-background border-b border-border p-2 sm:p-3 pwa-header-safe flex-shrink-0"
       >
         <div className="flex items-center justify-between relative">
-          <div className="flex items-center space-x-2 sm:space-x-3">
+          <div className="flex items-center space-x-2 min-w-0 flex-1">
             {isMobile && (
               <button
                 onClick={onMenuClick}
@@ -301,36 +301,36 @@ function MainContent({
                   e.preventDefault();
                   onMenuClick();
                 }}
-                className="p-2.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 touch-manipulation active:scale-95 pwa-menu-button"
+                className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 touch-manipulation active:scale-95 pwa-menu-button flex-shrink-0"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
               </button>
             )}
-            <div className="min-w-0 flex items-center gap-2">
+            <div className="min-w-0 flex items-center gap-2 flex-1 overflow-x-auto scrollbar-hide">
               {activeTab === 'chat' && selectedSession && (
-                <div className="w-6 h-6 flex-shrink-0 flex items-center justify-center">
+                <div className="w-5 h-5 flex-shrink-0 flex items-center justify-center">
                   {selectedSession.__provider === 'cursor' ? (
-                    <CursorLogo className="w-5 h-5" />
+                    <CursorLogo className="w-4 h-4" />
                   ) : (
-                    <ClaudeLogo className="w-5 h-5" />
+                    <ClaudeLogo className="w-4 h-4" />
                   )}
                 </div>
               )}
-              <div className="flex-1 min-w-0">
+              <div className="min-w-0 flex-1">
                 {activeTab === 'chat' && selectedSession ? (
-                  <div>
-                    <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white truncate">
+                  <div className="min-w-0">
+                    <h2 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white whitespace-nowrap overflow-x-auto scrollbar-hide">
                       {selectedSession.__provider === 'cursor' ? (selectedSession.name || 'Untitled Session') : (selectedSession.summary || 'New Session')}
                     </h2>
                     <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                      {selectedProject.displayName} <span className="hidden sm:inline">• {selectedSession.id}</span>
+                      {selectedProject.displayName}
                     </div>
                   </div>
                 ) : activeTab === 'chat' && !selectedSession ? (
-                  <div>
-                    <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
+                  <div className="min-w-0">
+                    <h2 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white">
                       New Session
                     </h2>
                     <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
@@ -338,11 +338,11 @@ function MainContent({
                     </div>
                   </div>
                 ) : (
-                  <div>
-                    <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
-                      {activeTab === 'files' ? 'Project Files' : 
-                       activeTab === 'git' ? 'Source Control' : 
-                       (activeTab === 'tasks' && shouldShowTasksTab) ? 'TaskMaster' : 
+                  <div className="min-w-0">
+                    <h2 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white">
+                      {activeTab === 'files' ? 'Project Files' :
+                       activeTab === 'git' ? 'Source Control' :
+                       (activeTab === 'tasks' && shouldShowTasksTab) ? 'TaskMaster' :
                        'Project'}
                     </h2>
                     <div className="text-xs text-gray-500 dark:text-gray-400 truncate">

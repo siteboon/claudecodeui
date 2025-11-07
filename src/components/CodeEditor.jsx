@@ -460,7 +460,7 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
           `}
         </style>
         {isSidebar ? (
-          <div className="w-full h-full flex items-center justify-center bg-white dark:bg-gray-900">
+          <div className="w-full h-full flex items-center justify-center bg-background">
             <div className="flex items-center gap-3">
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
               <span className="text-gray-900 dark:text-white">Loading {file.name}...</span>
@@ -560,14 +560,14 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
           'md:bg-black/50 md:flex md:items-center md:justify-center md:p-4'
         } ${isFullscreen ? 'md:p-0' : ''}`}>
         <div className={isSidebar ?
-          'bg-white dark:bg-gray-900 flex flex-col w-full h-full' :
-          `bg-white shadow-2xl flex flex-col ${
+          'bg-background flex flex-col w-full h-full' :
+          `bg-background shadow-2xl flex flex-col ${
           // Mobile: always fullscreen, Desktop: modal sizing
           'w-full h-full md:rounded-lg md:shadow-2xl' +
           (isFullscreen ? ' md:w-full md:h-full md:rounded-none' : ' md:w-full md:max-w-6xl md:h-[80vh] md:max-h-[80vh]')
         }`}>
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 min-w-0">
+        <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0 min-w-0">
           <div className="flex items-center gap-3 min-w-0 flex-1">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 min-w-0">
@@ -684,7 +684,7 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between p-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 flex-shrink-0">
+        <div className="flex items-center justify-between p-3 border-t border-border bg-muted flex-shrink-0">
           <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
             <span>Lines: {content.split('\n').length}</span>
             <span>Characters: {content.length}</span>
