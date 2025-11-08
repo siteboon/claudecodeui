@@ -16,6 +16,8 @@ import { query } from '@anthropic-ai/claude-agent-sdk';
 import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
+import crypto from 'crypto';
+import { getPermissionManager } from './services/permissionManager.js';
 
 // Session tracking: Map of session IDs to active query instances
 const activeSessions = new Map();
@@ -23,9 +25,10 @@ const activeSessions = new Map();
 /**
  * Maps CLI options to SDK-compatible options format
  * @param {Object} options - CLI options
+ * @param {Object} ws - WebSocket connection for permission communication
  * @returns {Object} SDK-compatible options
  */
-function mapCliOptionsToSDK(options = {}) {
+function mapCliOptionsToSDK(options = {}, ws = null) {
   const { sessionId, cwd, toolsSettings, permissionMode, images } = options;
 
   const sdkOptions = {};
@@ -92,6 +95,70 @@ function mapCliOptionsToSDK(options = {}) {
   // Map resume session
   if (sessionId) {
     sdkOptions.resume = sessionId;
+  }
+
+  // Add canUseTool callback for permission handling
+  // Only if not in bypassPermissions mode
+  if (permissionMode !== 'bypassPermissions' && ws) {
+    const permissionManager = getPermissionManager();
+
+    sdkOptions.canUseTool = async ({ toolName, input }, { abortSignal }) => {
+      // Generate unique request ID
+      const requestId = crypto.randomUUID();
+
+      // Check permission mode-specific rules
+      if (permissionMode === 'acceptEdits') {
+        // In acceptEdits mode, auto-allow Read, Write, and Edit operations
+        const autoAllowTools = ['Read', 'Write', 'Edit'];
+        if (autoAllowTools.includes(toolName)) {
+          console.log(`✅ Auto-allowing ${toolName} in acceptEdits mode`);
+          return { behavior: 'allow' };
+        }
+      }
+
+      if (permissionMode === 'plan') {
+        // In plan mode, only allow specific tools
+        const planModeTools = ['Read', 'Task', 'ExitPlanMode', 'TodoRead', 'TodoWrite'];
+        if (!planModeTools.includes(toolName)) {
+          console.log(`❌ Denying ${toolName} in plan mode (not in allowed list)`);
+          return { behavior: 'deny' };
+        }
+      }
+
+      // Log the permission request
+      console.log(`🔐 Permission request ${requestId} for tool: ${toolName}`);
+      if (process.env.DEBUG && process.env.DEBUG.includes('permissions')) {
+        console.log(`   Input: ${JSON.stringify(input).substring(0, 200)}...`);
+      }
+
+      try {
+        // Check if WebSocket is connected
+        if (!ws || ws.readyState !== 1) {
+          console.warn('⚠️ No WebSocket connection, auto-denying permission');
+          return { behavior: 'deny' };
+        }
+
+        // Send permission request to frontend via WebSocket
+        ws.send(JSON.stringify({
+          type: 'permission-request',
+          requestId,
+          toolName,
+          input,
+          timestamp: Date.now()
+        }));
+
+        // Add request to queue and await response
+        const result = await permissionManager.addRequest(requestId, toolName, input, abortSignal);
+
+        console.log(`🔐 Permission ${requestId} resolved: ${result.behavior}`);
+        return result;
+
+      } catch (error) {
+        console.error(`❌ Permission request ${requestId} error:`, error.message);
+        // On error, deny the permission
+        return { behavior: 'deny' };
+      }
+    };
   }
 
   return sdkOptions;
@@ -353,8 +420,8 @@ async function queryClaudeSDK(command, options = {}, ws) {
   let tempDir = null;
 
   try {
-    // Map CLI options to SDK format
-    const sdkOptions = mapCliOptionsToSDK(options);
+    // Map CLI options to SDK format (pass ws for permission handling)
+    const sdkOptions = mapCliOptionsToSDK(options, ws);
 
     // Load MCP configuration
     const mcpServers = await loadMcpConfig(options.cwd);

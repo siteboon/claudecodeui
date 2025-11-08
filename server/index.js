@@ -60,6 +60,8 @@ import mime from 'mime-types';
 import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
 import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions } from './claude-sdk.js';
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
+import { getPermissionManager } from './services/permissionManager.js';
+import { setupConsoleApproval } from './services/consoleApproval.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
 import mcpRoutes from './routes/mcp.js';
@@ -785,6 +787,23 @@ function handleChatConnection(ws) {
                     type: 'active-sessions',
                     sessions: activeSessions
                 }));
+            } else if (data.type === 'permission-response') {
+                // Handle permission response from frontend
+                console.log('[DEBUG] Permission response:', data.requestId, data.decision);
+
+                const permissionManager = getPermissionManager();
+                const success = permissionManager.resolveRequest(
+                    data.requestId,
+                    data.decision,
+                    data.updatedInput
+                );
+
+                // Send acknowledgment back to frontend
+                ws.send(JSON.stringify({
+                    type: 'permission-response-ack',
+                    requestId: data.requestId,
+                    success
+                }));
             }
         } catch (error) {
             console.error('[ERROR] Chat WebSocket error:', error.message);
@@ -1484,6 +1503,10 @@ async function startServer() {
 
             // Start watching the projects folder for changes
             await setupProjectsWatcher();
+
+            // Initialize console approval for testing (if enabled)
+            const permissionManager = getPermissionManager();
+            setupConsoleApproval(permissionManager);
         });
     } catch (error) {
         console.error('[ERROR] Failed to start server:', error);
