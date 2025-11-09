@@ -4789,15 +4789,41 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     {/* Permission Queue Indicator */}
     <PermissionQueueIndicator />
 
-    {/* Test button for development */}
-
+    {/* Test buttons for development */}
     {process.env.NODE_ENV === 'development' && (
-      <button
-        onClick={() => mockPermissionRequest('bash', 'execute')}
-        className="fixed bottom-20 left-4 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-lg shadow-lg z-50"
-      >
-        Test Permission
-      </button>
+      <>
+        <button
+          onClick={() => {
+            console.log('🧪 [Test] Triggering mock permission request');
+            console.log('📊 [Test] Current permissions:', {
+              permanent: JSON.parse(localStorage.getItem('permanentPermissions') || '[]'),
+              session: 'See sessionPermissions Map in PermissionContext'
+            });
+            mockPermissionRequest('bash', 'execute');
+          }}
+          className="fixed bottom-20 left-4 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-lg shadow-lg z-50"
+        >
+          Test Permission
+        </button>
+
+        <button
+          onClick={() => {
+            console.log('🧹 [Test] Clearing all permissions...');
+            console.log('📊 [Test] Before clear:', {
+              permanent: JSON.parse(localStorage.getItem('permanentPermissions') || '[]'),
+              history: JSON.parse(localStorage.getItem('permissionHistory') || '[]').length + ' entries'
+            });
+            localStorage.removeItem('permanentPermissions');
+            localStorage.removeItem('permissionHistory');
+            console.log('✅ [Test] Permissions cleared! Reloading page...');
+            setTimeout(() => window.location.reload(), 500);
+          }}
+          className="fixed bottom-20 left-40 px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm rounded-lg shadow-lg z-50"
+          title="Clear all session and permanent permissions, then reload"
+        >
+          Reset Permissions
+        </button>
+      </>
     )}
     </>
   );

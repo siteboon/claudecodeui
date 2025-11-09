@@ -43,18 +43,45 @@ export const PermissionProvider = ({ children }) => {
 
   // Add a new permission request to the queue
   const enqueueRequest = useCallback((request) => {
-    // Check if this tool has permanent permission
     const toolKey = `${request.tool}:${request.operation || 'default'}`;
+
+    console.log('🔐 [Permission] Enqueue request:', {
+      id: request.id,
+      tool: request.tool,
+      operation: request.operation,
+      toolKey,
+      timestamp: new Date(request.timestamp).toISOString()
+    });
+
+    // Check if this tool has permanent permission
     if (permanentPermissions.has(toolKey)) {
       const decision = permanentPermissions.get(toolKey);
+      console.log('✅ [Permission] Auto-approved (PERMANENT):', {
+        toolKey,
+        decision,
+        storedCount: permanentPermissions.size,
+        allPermanent: Array.from(permanentPermissions.keys())
+      });
       return { autoApproved: true, decision };
     }
 
     // Check if this tool has session permission
     if (sessionPermissions.has(toolKey)) {
       const decision = sessionPermissions.get(toolKey);
+      console.log('✅ [Permission] Auto-approved (SESSION):', {
+        toolKey,
+        decision,
+        storedCount: sessionPermissions.size,
+        allSession: Array.from(sessionPermissions.keys())
+      });
       return { autoApproved: true, decision };
     }
+
+    console.log('📋 [Permission] Queuing for user approval:', {
+      toolKey,
+      hasActiveRequest: !!activeRequest,
+      queueLength: pendingRequests.length
+    });
 
     // If no active request, set this as active
     if (!activeRequest) {
@@ -88,9 +115,18 @@ export const PermissionProvider = ({ children }) => {
       : pendingRequests.find(req => req.id === requestId);
 
     if (!request) {
-      console.error('Request not found:', requestId);
+      console.error('❌ [Permission] Request not found:', requestId);
       return null;
     }
+
+    const toolKey = `${request.tool}:${request.operation || 'default'}`;
+
+    console.log('👤 [Permission] User decision:', {
+      requestId,
+      toolKey,
+      decision,
+      hasUpdatedInput: !!updatedInput
+    });
 
     // Add to history
     setPermissionHistory(prev => [...prev, {
@@ -101,13 +137,14 @@ export const PermissionProvider = ({ children }) => {
     }]);
 
     // Handle session and permanent permissions
-    const toolKey = `${request.tool}:${request.operation || 'default'}`;
-
     if (decision === PERMISSION_DECISIONS.ALLOW_SESSION) {
+      console.log('💾 [Permission] Storing SESSION permission:', toolKey);
       setSessionPermissions(prev => new Map(prev).set(toolKey, PERMISSION_DECISIONS.ALLOW));
     } else if (decision === PERMISSION_DECISIONS.ALLOW_ALWAYS) {
+      console.log('💾 [Permission] Storing PERMANENT permission:', toolKey);
       setPermanentPermissions(prev => new Map(prev).set(toolKey, PERMISSION_DECISIONS.ALLOW));
     } else if (decision === 'never') {
+      console.log('💾 [Permission] Storing PERMANENT deny:', toolKey);
       setPermanentPermissions(prev => new Map(prev).set(toolKey, PERMISSION_DECISIONS.DENY));
     }
 

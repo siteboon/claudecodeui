@@ -46,31 +46,47 @@ const usePermissions = () => {
     if (!wsClient) return;
 
     const handlePermissionRequest = (message) => {
+      console.log('📥 [WS] Received message:', {
+        type: message.type,
+        requestId: message.requestId || message.id,
+        toolName: message.toolName || message.tool,
+        timestamp: message.timestamp ? new Date(message.timestamp).toISOString() : 'now'
+      });
+
       if (message.type === WS_MESSAGE_TYPES.PERMISSION_REQUEST) {
         const request = {
-          id: message.id,
-          tool: message.tool,
-          operation: message.operation,
-          description: message.description,
+          id: message.requestId || message.id,
+          tool: message.toolName || message.tool,
+          operation: message.operation || 'execute',
+          description: message.description || `Use ${message.toolName || message.tool}`,
           input: message.input,
-          timestamp: Date.now(),
+          timestamp: message.timestamp || Date.now(),
         };
+
+        console.log('📥 [Permission] Processing WS request:', request);
 
         // Check if auto-approved (session or permanent permission)
         const result = enqueueRequest(request);
 
         if (result.autoApproved) {
+          console.log('⚡ [Permission] WS request auto-approved, sending response:', {
+            id: request.id,
+            decision: result.decision
+          });
           // Send auto-approval response
           sendPermissionResponse(request.id, result.decision);
         } else {
+          console.log('🔔 [Permission] Showing dialog for:', request.id);
           // Show dialog for manual approval
           setCurrentRequest(request);
           setIsDialogOpen(true);
         }
       } else if (message.type === WS_MESSAGE_TYPES.PERMISSION_TIMEOUT) {
+        const reqId = message.requestId || message.id;
+        console.log('⏱️ [Permission] Timeout received for:', reqId);
         // Handle timeout from server
-        handleDecision(message.id, PERMISSION_DECISIONS.DENY);
-        if (currentRequest?.id === message.id) {
+        handleDecision(reqId, PERMISSION_DECISIONS.DENY);
+        if (currentRequest?.id === reqId) {
           setIsDialogOpen(false);
           setCurrentRequest(null);
         }
@@ -103,12 +119,13 @@ const usePermissions = () => {
     try {
       const response = {
         type: WS_MESSAGE_TYPES.PERMISSION_RESPONSE,
-        id: requestId,
+        requestId,
         decision,
         updatedInput,
         timestamp: Date.now(),
       };
 
+      console.log('📤 Sending permission response:', response);
       wsClient.send(response);
 
       // Execute any registered callbacks

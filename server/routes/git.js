@@ -161,10 +161,27 @@ router.get('/diff', async (req, res) => {
     let diff;
     if (isUntracked) {
       // For untracked files, show the entire file content as additions
-      const fileContent = await fs.readFile(path.join(projectPath, file), 'utf-8');
-      const lines = fileContent.split('\n');
-      diff = `--- /dev/null\n+++ b/${file}\n@@ -0,0 +1,${lines.length} @@\n` +
-             lines.map(line => `+${line}`).join('\n');
+      const fullPath = path.join(projectPath, file);
+      try {
+        const stats = await fs.stat(fullPath);
+
+        if (stats.isDirectory()) {
+          console.warn(`[Git] Attempted to read directory as file: ${file}`);
+          diff = `Directory: ${file}\n(Use git status to see directory contents)`;
+        } else {
+          const fileContent = await fs.readFile(fullPath, 'utf-8');
+          const lines = fileContent.split('\n');
+          diff = `--- /dev/null\n+++ b/${file}\n@@ -0,0 +1,${lines.length} @@\n` +
+                 lines.map(line => `+${line}`).join('\n');
+        }
+      } catch (readError) {
+        if (readError.code === 'EISDIR') {
+          console.warn(`[Git] EISDIR error for: ${file}`);
+          diff = `Directory: ${file}\n(Cannot show diff for directories)`;
+        } else {
+          throw readError;
+        }
+      }
     } else if (isDeleted) {
       // For deleted files, show the entire file content from HEAD as deletions
       const { stdout: fileContent } = await execAsync(`git show HEAD:"${file}"`, { cwd: projectPath });
@@ -188,8 +205,22 @@ router.get('/diff', async (req, res) => {
 
     res.json({ diff });
   } catch (error) {
-    console.error('Git diff error:', error);
-    res.json({ error: error.message });
+    console.error('[Git] Diff error:', {
+      file,
+      project,
+      errorCode: error.code,
+      errorMessage: error.message,
+      stack: error.stack?.split('\n')[0]
+    });
+
+    if (error.code === 'EISDIR') {
+      res.json({
+        error: 'Cannot show diff for directories',
+        isDirectory: true
+      });
+    } else {
+      res.json({ error: error.message });
+    }
   }
 });
 
