@@ -56,12 +56,12 @@ export const PermissionProvider = ({ children }) => {
       return { autoApproved: true, decision };
     }
 
-    // Add to pending requests queue
-    setPendingRequests(prev => [...prev, { ...request, timestamp: Date.now() }]);
-
     // If no active request, set this as active
     if (!activeRequest) {
-      setActiveRequest({ ...request, timestamp: Date.now() });
+      setActiveRequest({ ...request, timestamp: request.timestamp || Date.now() });
+    } else {
+      // Otherwise add to pending requests queue
+      setPendingRequests(prev => [...prev, { ...request, timestamp: request.timestamp || Date.now() }]);
     }
 
     return { autoApproved: false };

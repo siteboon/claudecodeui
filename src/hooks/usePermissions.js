@@ -3,6 +3,33 @@ import { usePermission } from '../contexts/PermissionContext';
 import { useWebSocketContext } from '../contexts/WebSocketContext';
 import { WS_MESSAGE_TYPES, PERMISSION_DECISIONS } from '../utils/permissionWebSocketClient';
 
+// Analytics logging helper
+const logPermissionDecision = (requestId, decision) => {
+  // Track permission decisions for analytics
+  if (typeof window !== 'undefined' && window.gtag) {
+    window.gtag('event', 'permission_decision', {
+      request_id: requestId,
+      decision,
+      timestamp: Date.now(),
+    });
+  }
+
+  // Store in local history
+  const history = JSON.parse(localStorage.getItem('permissionHistory') || '[]');
+  history.push({
+    requestId,
+    decision,
+    timestamp: Date.now(),
+  });
+
+  // Keep only last 100 entries
+  if (history.length > 100) {
+    history.splice(0, history.length - 100);
+  }
+
+  localStorage.setItem('permissionHistory', JSON.stringify(history));
+};
+
 /**
  * Custom hook for managing permission requests and responses
  * Integrates WebSocket messaging with the permission UI system
@@ -61,6 +88,13 @@ const usePermissions = () => {
 
   // Send permission response via WebSocket
   const sendPermissionResponse = useCallback((requestId, decision, updatedInput = null) => {
+    // For mock requests, just log and return
+    if (requestId?.startsWith('mock-')) {
+      console.log('Mock permission decision:', { requestId, decision, updatedInput });
+      logPermissionDecision(requestId, decision);
+      return true;
+    }
+
     if (!wsClient || !isConnected) {
       console.error('WebSocket not connected');
       return false;
@@ -128,60 +162,27 @@ const usePermissions = () => {
   // Mock a permission request for testing
   const mockPermissionRequest = useCallback((tool = 'bash', operation = 'execute') => {
     const mockRequest = {
-      type: WS_MESSAGE_TYPES.PERMISSION_REQUEST,
       id: `mock-${Date.now()}`,
       tool,
       operation,
       description: `Mock permission request for ${tool} ${operation}`,
       input: { command: 'ls -la', path: '/home/user' },
+      timestamp: Date.now(),
     };
 
-    if (wsClient) {
-      // Simulate receiving a WebSocket message
-      wsClient.simulateMessage?.(mockRequest);
-    } else {
-      // Direct handling for testing without WebSocket
-      const request = {
-        id: mockRequest.id,
-        tool: mockRequest.tool,
-        operation: mockRequest.operation,
-        description: mockRequest.description,
-        input: mockRequest.input,
-        timestamp: Date.now(),
-      };
+    // Add the request to the queue
+    const result = enqueueRequest(mockRequest);
 
-      enqueueRequest(request);
-      setCurrentRequest(request);
+    if (!result.autoApproved) {
+      // Show dialog for manual approval
+      setCurrentRequest(mockRequest);
       setIsDialogOpen(true);
+    } else {
+      // Auto-approved based on session/permanent permissions
+      console.log('Request auto-approved:', mockRequest.id, result.decision);
     }
-  }, [wsClient, enqueueRequest]);
+  }, [enqueueRequest]);
 
-  // Analytics logging
-  const logPermissionDecision = (requestId, decision) => {
-    // Track permission decisions for analytics
-    if (typeof window !== 'undefined' && window.gtag) {
-      window.gtag('event', 'permission_decision', {
-        request_id: requestId,
-        decision,
-        timestamp: Date.now(),
-      });
-    }
-
-    // Store in local history
-    const history = JSON.parse(localStorage.getItem('permissionHistory') || '[]');
-    history.push({
-      requestId,
-      decision,
-      timestamp: Date.now(),
-    });
-
-    // Keep only last 100 entries
-    if (history.length > 100) {
-      history.splice(0, history.length - 100);
-    }
-
-    localStorage.setItem('permissionHistory', JSON.stringify(history));
-  };
 
   // Get permission statistics
   const getPermissionStats = useCallback(() => {

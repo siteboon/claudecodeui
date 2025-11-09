@@ -31,6 +31,7 @@ import PermissionDialog from './PermissionDialog';
 import PermissionQueueIndicator from './PermissionQueueIndicator';
 import { usePermission } from '../contexts/PermissionContext';
 import usePermissions from '../hooks/usePermissions';
+import { PERMISSION_DECISIONS } from '../utils/permissionWebSocketClient';
 
 import ClaudeStatus from './ClaudeStatus';
 import TokenUsagePie from './TokenUsagePie';
@@ -1654,6 +1655,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     sendPermissionResponse,
     mockPermissionRequest
   } = usePermissions();
+  console.log('process.env.NODE_ENV',process.env.NODE_ENV)
   const [input, setInput] = useState(() => {
     if (typeof window !== 'undefined' && selectedProject) {
       return safeLocalStorage.getItem(`draft_input_${selectedProject.name}`) || '';
@@ -4779,7 +4781,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     {isDialogOpen && currentRequest && (
       <PermissionDialog
         request={currentRequest}
-        onClose={() => handleDialogDecision(currentRequest.id, 'deny')}
+        onClose={() => handleDialogDecision(currentRequest.id, PERMISSION_DECISIONS.DENY)}
         sendResponse={sendPermissionResponse}
       />
     )}
@@ -4788,6 +4790,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     <PermissionQueueIndicator />
 
     {/* Test button for development */}
+
     {process.env.NODE_ENV === 'development' && (
       <button
         onClick={() => mockPermissionRequest('bash', 'execute')}

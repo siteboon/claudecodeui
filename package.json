@@ -22,10 +22,10 @@
     "url": "https://github.com/siteboon/claudecodeui/issues"
   },
   "scripts": {
-    "dev": "concurrently --kill-others \"npm run server\" \"npm run client\"",
+    "dev": "concurrently --kill-others \"npm run server\" \"NODE_ENV=development  npm run client\"",
     "server": "node server/index.js",
     "client": "vite --host",
-    "build": "vite build",
+    "build": "NODE_ENV=development vite build",
     "preview": "vite preview",
     "start": "npm run build && npm run server",
     "start:ngrok": "node scripts/start-with-ngrok.js",
