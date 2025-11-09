@@ -27,6 +27,10 @@ import ClaudeLogo from './ClaudeLogo.jsx';
 import CursorLogo from './CursorLogo.jsx';
 import NextTaskBanner from './NextTaskBanner.jsx';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
+import PermissionDialog from './PermissionDialog';
+import PermissionQueueIndicator from './PermissionQueueIndicator';
+import { usePermission } from '../contexts/PermissionContext';
+import usePermissions from '../hooks/usePermissions';
 
 import ClaudeStatus from './ClaudeStatus';
 import TokenUsagePie from './TokenUsagePie';
@@ -1642,6 +1646,14 @@ const ImageAttachment = ({ file, onRemove, uploadProgress, error }) => {
 // This ensures uninterrupted chat experience by pausing sidebar refreshes during conversations.
 function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, messages, onFileOpen, onInputFocusChange, onSessionActive, onSessionInactive, onSessionProcessing, onSessionNotProcessing, processingSessions, onReplaceTemporarySession, onNavigateToSession, onShowSettings, autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter, externalMessageUpdate, onTaskClick, onShowAllTasks }) {
   const { tasksEnabled } = useTasksSettings();
+  const { activeRequest } = usePermission();
+  const {
+    isDialogOpen,
+    currentRequest,
+    handleDialogDecision,
+    sendPermissionResponse,
+    mockPermissionRequest
+  } = usePermissions();
   const [input, setInput] = useState(() => {
     if (typeof window !== 'undefined' && selectedProject) {
       return safeLocalStorage.getItem(`draft_input_${selectedProject.name}`) || '';
@@ -4762,6 +4774,28 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         </form>
       </div>
     </div>
+
+    {/* Permission Dialog */}
+    {isDialogOpen && currentRequest && (
+      <PermissionDialog
+        request={currentRequest}
+        onClose={() => handleDialogDecision(currentRequest.id, 'deny')}
+        sendResponse={sendPermissionResponse}
+      />
+    )}
+
+    {/* Permission Queue Indicator */}
+    <PermissionQueueIndicator />
+
+    {/* Test button for development */}
+    {process.env.NODE_ENV === 'development' && (
+      <button
+        onClick={() => mockPermissionRequest('bash', 'execute')}
+        className="fixed bottom-20 left-4 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-lg shadow-lg z-50"
+      >
+        Test Permission
+      </button>
+    )}
     </>
   );
 }

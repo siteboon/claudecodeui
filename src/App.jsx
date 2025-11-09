@@ -32,6 +32,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { TaskMasterProvider } from './contexts/TaskMasterContext';
 import { TasksSettingsProvider } from './contexts/TasksSettingsContext';
 import { WebSocketProvider, useWebSocketContext } from './contexts/WebSocketContext';
+import { PermissionProvider } from './contexts/PermissionContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import { useVersionCheck } from './hooks/useVersionCheck';
 import useLocalStorage from './hooks/useLocalStorage';
@@ -949,18 +950,20 @@ function App() {
     <ThemeProvider>
       <AuthProvider>
         <WebSocketProvider>
-          <TasksSettingsProvider>
-            <TaskMasterProvider>
-              <ProtectedRoute>
-                <Router>
-                  <Routes>
-                    <Route path="/" element={<AppContent />} />
-                    <Route path="/session/:sessionId" element={<AppContent />} />
-                  </Routes>
-                </Router>
-              </ProtectedRoute>
-            </TaskMasterProvider>
-          </TasksSettingsProvider>
+          <PermissionProvider>
+            <TasksSettingsProvider>
+              <TaskMasterProvider>
+                <ProtectedRoute>
+                  <Router>
+                    <Routes>
+                      <Route path="/" element={<AppContent />} />
+                      <Route path="/session/:sessionId" element={<AppContent />} />
+                    </Routes>
+                  </Router>
+                </ProtectedRoute>
+              </TaskMasterProvider>
+            </TasksSettingsProvider>
+          </PermissionProvider>
         </WebSocketProvider>
       </AuthProvider>
     </ThemeProvider>
