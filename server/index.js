@@ -62,6 +62,7 @@ import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getAct
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
 import { getPermissionManager } from './services/permissionManager.js';
 import { setupConsoleApproval } from './services/consoleApproval.js';
+import PermissionWebSocketHandler from './services/permissionWebSocketHandler.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
 import mcpRoutes from './routes/mcp.js';
@@ -78,6 +79,9 @@ import { validateApiKey, authenticateToken, authenticateWebSocket } from './midd
 // File system watcher for projects folder
 let projectsWatcher = null;
 const connectedClients = new Set();
+
+// Initialize permission WebSocket handler
+const permissionWebSocketHandler = new PermissionWebSocketHandler();
 
 // Setup file system watcher for Claude projects folder using chokidar
 async function setupProjectsWatcher() {
@@ -706,9 +710,22 @@ function handleChatConnection(ws) {
     // Add to connected clients for project updates
     connectedClients.add(ws);
 
+    // Add client to permission WebSocket handler
+    const clientId = `client-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    ws.clientId = clientId;
+    permissionWebSocketHandler.addClient(ws, clientId);
+
     ws.on('message', async (message) => {
         try {
             const data = JSON.parse(message);
+
+            // Handle permission response messages
+            if (data.type === 'permission-response') {
+                console.log('📨 Received permission response from client');
+                const clientId = ws.clientId || `client-${Date.now()}`;
+                permissionWebSocketHandler.handlePermissionResponse(clientId, data);
+                return;
+            }
 
             if (data.type === 'claude-command') {
                 console.log('[DEBUG] User message:', data.command || '[Continue/Resume]');
@@ -1490,6 +1507,32 @@ async function startServer() {
 
         server.listen(PORT, '0.0.0.0', async () => {
             const appInstallPath = path.join(__dirname, '..');
+
+            // Initialize permission WebSocket handler with the WebSocket server
+            permissionWebSocketHandler.initialize(wss);
+
+            // Connect permission manager events to WebSocket handler
+            const permissionManager = getPermissionManager();
+
+            permissionManager.on('permission-request', (request) => {
+                console.log('🔐 Broadcasting permission request:', request.id);
+                permissionWebSocketHandler.broadcastPermissionRequest(request);
+            });
+
+            permissionManager.on('permission-timeout', (requestId) => {
+                console.log('⏱️ Broadcasting permission timeout:', requestId);
+                permissionWebSocketHandler.broadcastPermissionTimeout(requestId, 'Unknown');
+            });
+
+            // Listen for permission responses from WebSocket handler
+            permissionWebSocketHandler.on('permission-response', (response) => {
+                console.log('📝 Received permission response:', response);
+                permissionManager.resolveRequest(
+                    response.requestId,
+                    response.decision,
+                    response.updatedInput
+                );
+            });
 
             console.log('');
             console.log(c.dim('═'.repeat(63)));

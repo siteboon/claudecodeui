@@ -210,3 +210,150 @@ export function createSdkPermissionResult(decision, updatedInput = null) {
 
   return result;
 }
+
+/**
+ * WebSocket message types for permission communication
+ */
+export const WS_MESSAGE_TYPES = {
+  PERMISSION_REQUEST: 'permission-request',
+  PERMISSION_RESPONSE: 'permission-response',
+  PERMISSION_TIMEOUT: 'permission-timeout',
+  PERMISSION_QUEUE_STATUS: 'permission-queue-status',
+  PERMISSION_CANCELLED: 'permission-cancelled',
+  PERMISSION_ERROR: 'permission-error'
+};
+
+/**
+ * Creates a WebSocket permission request message
+ */
+export function createPermissionRequestMessage(request) {
+  return {
+    type: WS_MESSAGE_TYPES.PERMISSION_REQUEST,
+    id: request.id,
+    toolName: request.toolName,
+    input: request.input,
+    context: request.context,
+    timestamp: request.timestamp,
+    expiresAt: request.expiresAt || request.timestamp + PERMISSION_TIMEOUT_MS,
+    riskLevel: TOOL_RISK_LEVELS[request.toolName] || RiskLevel.MEDIUM,
+    category: TOOL_CATEGORIES[request.toolName] || ToolCategory.OTHER,
+    summary: formatPermissionRequest(request.id, request.toolName, request.input).summary
+  };
+}
+
+/**
+ * Creates a WebSocket permission response message
+ */
+export function createPermissionResponseMessage(requestId, decision, updatedInput = null) {
+  return {
+    type: WS_MESSAGE_TYPES.PERMISSION_RESPONSE,
+    requestId,
+    decision,
+    updatedInput,
+    timestamp: Date.now()
+  };
+}
+
+/**
+ * Creates a WebSocket permission timeout message
+ */
+export function createPermissionTimeoutMessage(requestId, toolName) {
+  return {
+    type: WS_MESSAGE_TYPES.PERMISSION_TIMEOUT,
+    requestId,
+    toolName,
+    timestamp: Date.now()
+  };
+}
+
+/**
+ * Creates a WebSocket permission queue status message
+ */
+export function createPermissionQueueStatusMessage(pending, processing) {
+  return {
+    type: WS_MESSAGE_TYPES.PERMISSION_QUEUE_STATUS,
+    pending,
+    processing,
+    timestamp: Date.now()
+  };
+}
+
+/**
+ * Creates a WebSocket permission cancelled message
+ */
+export function createPermissionCancelledMessage(requestId, reason) {
+  return {
+    type: WS_MESSAGE_TYPES.PERMISSION_CANCELLED,
+    requestId,
+    reason,
+    timestamp: Date.now()
+  };
+}
+
+/**
+ * Creates a WebSocket permission error message
+ */
+export function createPermissionErrorMessage(requestId, error) {
+  return {
+    type: WS_MESSAGE_TYPES.PERMISSION_ERROR,
+    requestId,
+    error: error.message || error,
+    timestamp: Date.now()
+  };
+}
+
+/**
+ * Validates a WebSocket permission response message
+ */
+export function validatePermissionResponse(message) {
+  if (!message || typeof message !== 'object') {
+    throw new Error('Invalid message format');
+  }
+
+  if (message.type !== WS_MESSAGE_TYPES.PERMISSION_RESPONSE) {
+    throw new Error('Invalid message type for permission response');
+  }
+
+  if (!message.requestId || typeof message.requestId !== 'string') {
+    throw new Error('Invalid or missing requestId');
+  }
+
+  if (!Object.values(PermissionDecision).includes(message.decision)) {
+    throw new Error(`Invalid decision: ${message.decision}`);
+  }
+
+  if (message.decision === PermissionDecision.ALLOW && message.updatedInput) {
+    if (typeof message.updatedInput !== 'object') {
+      throw new Error('updatedInput must be an object');
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Validates a WebSocket permission request message
+ */
+export function validatePermissionRequest(message) {
+  if (!message || typeof message !== 'object') {
+    throw new Error('Invalid message format');
+  }
+
+  if (message.type !== WS_MESSAGE_TYPES.PERMISSION_REQUEST) {
+    throw new Error('Invalid message type for permission request');
+  }
+
+  if (!message.id || typeof message.id !== 'string') {
+    throw new Error('Invalid or missing request id');
+  }
+
+  if (!message.toolName || typeof message.toolName !== 'string') {
+    throw new Error('Invalid or missing toolName');
+  }
+
+  if (!message.input || typeof message.input !== 'object') {
+    throw new Error('Invalid or missing input');
+  }
+
+  return true;
+}

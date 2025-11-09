@@ -1,14 +1,33 @@
 import { useState, useEffect, useRef } from 'react';
+import permissionWebSocketClient from './permissionWebSocketClient';
 
 export function useWebSocket() {
   const [ws, setWs] = useState(null);
   const [messages, setMessages] = useState([]);
   const [isConnected, setIsConnected] = useState(false);
+  const [pendingPermissions, setPendingPermissions] = useState([]);
+  const [permissionQueueStatus, setPermissionQueueStatus] = useState({ pending: 0, processing: 0 });
   const reconnectTimeoutRef = useRef(null);
 
   useEffect(() => {
+    // Set up permission client handlers
+    permissionWebSocketClient.setHandlers({
+      onRequestReceived: (request) => {
+        setPendingPermissions(prev => [...prev, request]);
+      },
+      onRequestTimeout: (request) => {
+        setPendingPermissions(prev => prev.filter(r => r.id !== request.id));
+      },
+      onQueueStatusUpdate: (status) => {
+        setPermissionQueueStatus(status);
+      },
+      onError: (error) => {
+        console.error('Permission error:', error);
+      }
+    });
+
     connect();
-    
+
     return () => {
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
@@ -16,6 +35,7 @@ export function useWebSocket() {
       if (ws) {
         ws.close();
       }
+      permissionWebSocketClient.cleanup();
     };
   }, []); // Keep dependency array but add proper cleanup
 
@@ -61,11 +81,19 @@ export function useWebSocket() {
       websocket.onopen = () => {
         setIsConnected(true);
         setWs(websocket);
+
+        // Initialize permission WebSocket client
+        permissionWebSocketClient.initialize(websocket);
       };
 
       websocket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+
+          // Let permission client handle permission-related messages
+          permissionWebSocketClient.handleMessage(data);
+
+          // Continue to pass all messages to the main messages state
           setMessages(prev => [...prev, data]);
         } catch (error) {
           console.error('Error parsing WebSocket message:', error);
@@ -75,7 +103,10 @@ export function useWebSocket() {
       websocket.onclose = () => {
         setIsConnected(false);
         setWs(null);
-        
+
+        // Clean up permission client
+        permissionWebSocketClient.handleConnectionStateChange('disconnected');
+
         // Attempt to reconnect after 3 seconds
         reconnectTimeoutRef.current = setTimeout(() => {
           connect();
@@ -99,10 +130,28 @@ export function useWebSocket() {
     }
   };
 
+  const sendPermissionResponse = (requestId, decision, updatedInput = null) => {
+    const success = permissionWebSocketClient.sendResponse(requestId, decision, updatedInput);
+    if (success) {
+      // Remove from pending permissions
+      setPendingPermissions(prev => prev.filter(r => r.id !== requestId));
+    }
+    return success;
+  };
+
+  const clearPermissionRequest = (requestId) => {
+    permissionWebSocketClient.clearRequest(requestId);
+    setPendingPermissions(prev => prev.filter(r => r.id !== requestId));
+  };
+
   return {
     ws,
     sendMessage,
     messages,
-    isConnected
+    isConnected,
+    pendingPermissions,
+    permissionQueueStatus,
+    sendPermissionResponse,
+    clearPermissionRequest
   };
 }
