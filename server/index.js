@@ -1548,7 +1548,6 @@ async function startServer() {
             await setupProjectsWatcher();
 
             // Initialize console approval for testing (if enabled)
-            const permissionManager = getPermissionManager();
             setupConsoleApproval(permissionManager);
         });
     } catch (error) {

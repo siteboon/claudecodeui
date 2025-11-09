@@ -1,5 +1,5 @@
-const EventEmitter = require('events');
-const {
+import { EventEmitter } from 'events';
+import {
   WS_MESSAGE_TYPES,
   createPermissionRequestMessage,
   createPermissionTimeoutMessage,
@@ -7,7 +7,7 @@ const {
   createPermissionCancelledMessage,
   createPermissionErrorMessage,
   validatePermissionResponse
-} = require('./permissionTypes');
+} from './permissionTypes.js';
 
 class PermissionWebSocketHandler extends EventEmitter {
   constructor() {
@@ -309,4 +309,4 @@ class PermissionWebSocketHandler extends EventEmitter {
   }
 }
 
-module.exports = PermissionWebSocketHandler;
+export default PermissionWebSocketHandler;
