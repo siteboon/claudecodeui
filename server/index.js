@@ -1530,11 +1530,13 @@ async function startServer() {
             // Listen for permission responses from WebSocket handler
             permissionWebSocketHandler.on('permission-response', (response) => {
                 console.log('📝 Received permission response:', response);
-                permissionManager.resolveRequest(
+                console.log('🔍 [Index] Calling permissionManager.resolveRequest...');
+                const success = permissionManager.resolveRequest(
                     response.requestId,
                     response.decision,
                     response.updatedInput
                 );
+                console.log('🔍 [Index] resolveRequest returned:', success);
             });
 
             console.log('');

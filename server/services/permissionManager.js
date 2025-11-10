@@ -93,6 +93,7 @@ export class PermissionManager extends EventEmitter {
 
       // Set up timeout
       request.timeoutId = setTimeout(() => {
+        console.warn(`⏱️ Permission request ${id} timed out`);
         this.handleTimeout(id);
       }, PERMISSION_TIMEOUT_MS);
 
@@ -138,20 +139,27 @@ export class PermissionManager extends EventEmitter {
    * @returns {boolean} True if request was resolved, false if not found
    */
   resolveRequest(requestId, decision, updatedInput = null) {
+    console.log(`🔍 [PermissionManager] resolveRequest called:`, { requestId, decision, hasPendingRequest: this.pendingRequests.has(requestId) });
+
     const request = this.pendingRequests.get(requestId);
 
     if (!request) {
-      console.warn(`⚠️ Permission request ${requestId} not found`);
+      console.warn(`⚠️ Permission request ${requestId} not found in pendingRequests`);
+      console.warn(`   Current pending requests:`, Array.from(this.pendingRequests.keys()));
       return false;
     }
+
+    console.log(`✅ [PermissionManager] Found request ${requestId}, resolving with ${decision}`);
 
     // Clear timeout
     if (request.timeoutId) {
       clearTimeout(request.timeoutId);
+      console.log(`🔍 [PermissionManager] Cleared timeout for ${requestId}`);
     }
 
     // Remove from pending
     this.pendingRequests.delete(requestId);
+    console.log(`🔍 [PermissionManager] Removed ${requestId} from pending, remaining: ${this.pendingRequests.size}`);
 
     // Handle session-level caching
     if (decision === PermissionDecision.ALLOW_SESSION) {
@@ -170,14 +178,22 @@ export class PermissionManager extends EventEmitter {
     }
 
     // Create SDK-compatible result
-    const result = createSdkPermissionResult(decision, updatedInput);
+    // If user didn't modify input (updatedInput is null), use the original input
+    const result = createSdkPermissionResult(decision, updatedInput ?? request.input);
+    console.log(`🔍 [PermissionManager] Created SDK result:`, result);
 
     if (this.debugMode) {
       console.log(`🔐 Resolved permission ${requestId}: ${decision}`);
     }
 
     // Resolve the promise
-    request.resolver(result);
+    console.log(`🔍 [PermissionManager] Calling resolver for ${requestId}`);
+    try {
+      request.resolver(result);
+      console.log(`✅ [PermissionManager] Resolver called successfully for ${requestId}`);
+    } catch (error) {
+      console.error(`❌ [PermissionManager] Error calling resolver:`, error);
+    }
 
     return true;
   }

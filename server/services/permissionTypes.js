@@ -47,7 +47,7 @@ export const ToolCategory = {
 /**
  * Constants for permission system
  */
-export const PERMISSION_TIMEOUT_MS = 30000; // 30 seconds
+export const PERMISSION_TIMEOUT_MS = 30000000; // 30 seconds
 export const DEFAULT_QUEUE_CLEANUP_INTERVAL_MS = 60000; // 1 minute
 export const MAX_QUEUE_SIZE = 100; // Maximum pending permission requests
 
@@ -198,10 +198,14 @@ export function createSdkPermissionResult(decision, updatedInput = null) {
 
   const result = { behavior };
 
-  if (updatedInput) {
-    result.updatedInput = updatedInput;
+  // For ALLOW behavior, updatedInput is required and should always be provided
+  if (behavior === PermissionBehavior.ALLOW) {
+    if (!updatedInput || Object.keys(updatedInput).length === 0) {
+      console.error('⚠️ [PermissionTypes] ALLOW result with empty updatedInput!');
+      console.error('   This should not happen - original input should have been passed');
+    }
+    result.updatedInput = updatedInput || {};
   }
-
   // For future: Add updatedPermissions for allow-always decisions
   if (decision === PermissionDecision.ALLOW_ALWAYS) {
     // This will be implemented in Phase 4 (Memory & Patterns)
