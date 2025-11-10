@@ -117,16 +117,10 @@ const usePermissions = () => {
     }
 
     try {
-      const response = {
-        type: WS_MESSAGE_TYPES.PERMISSION_RESPONSE,
-        requestId,
-        decision,
-        updatedInput,
-        timestamp: Date.now(),
-      };
+      console.log('📤 Sending permission response:', { requestId, decision, updatedInput });
 
-      console.log('📤 Sending permission response:', response);
-      wsClient.send(response);
+      // Use the wsClient's sendResponse method which properly cleans up pending requests
+      const success = wsClient.sendResponse(requestId, decision, updatedInput);
 
       // Execute any registered callbacks
       const callback = responseCallbacksRef.current.get(requestId);
@@ -138,7 +132,7 @@ const usePermissions = () => {
       // Log for analytics
       logPermissionDecision(requestId, decision);
 
-      return true;
+      return success;
     } catch (error) {
       console.error('Failed to send permission response:', error);
       return false;

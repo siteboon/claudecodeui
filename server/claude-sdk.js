@@ -157,19 +157,12 @@ function mapCliOptionsToSDK(options = {}, ws = null) {
           return { behavior: 'deny' };
         }
 
-        // Send permission request to frontend via WebSocket
-        ws.send(JSON.stringify({
-          type: 'permission-request',
-          requestId,
-          toolName,
-          input,
-          timestamp: Date.now()
-        }));
-
         // Add request to queue and await response
+        // Note: permissionManager will emit an event that broadcasts the request
         const result = await permissionManager.addRequest(requestId, toolName, input, abortSignal);
 
         console.log(`🔐 Permission ${requestId} resolved: ${result.behavior}`);
+        console.log(`✅ [SDK] Returning result to SDK:`, JSON.stringify(result));
         return result;
 
       } catch (error) {
@@ -476,6 +469,23 @@ async function queryClaudeSDK(command, options = {}, ws) {
     // Process streaming messages
     console.log('🔄 Starting async generator loop for session:', capturedSessionId || 'NEW');
     for await (const message of queryInstance) {
+      // Log message type for debugging
+      if (message.type) {
+        console.log(`📨 [SDK] Received message type: ${message.type}`);
+
+        // Log tool-related messages for debugging
+        if (message.type === 'user' && message.content) {
+          const toolResults = message.content.filter(c => c.type === 'tool_result');
+          if (toolResults.length > 0) {
+            console.log(`🔧 [SDK] Tool results:`, toolResults.map(tr => ({
+              tool_use_id: tr.tool_use_id,
+              is_error: tr.is_error,
+              content_preview: JSON.stringify(tr.content).substring(0, 200)
+            })));
+          }
+        }
+      }
+
       // Capture session ID from first message
       if (message.session_id && !capturedSessionId) {
 
