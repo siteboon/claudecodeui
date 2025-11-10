@@ -484,6 +484,18 @@ async function queryClaudeSDK(command, options = {}, ws) {
             })));
           }
         }
+
+        // Log assistant messages for debugging
+        if (message.type === 'assistant') {
+          const hasToolUse = message.content?.some(c => c.type === 'tool_use');
+          const hasText = message.content?.some(c => c.type === 'text');
+          console.log(`🤖 [SDK] Assistant message:`, {
+            hasToolUse,
+            hasText,
+            contentTypes: message.content?.map(c => c.type),
+            textPreview: message.content?.find(c => c.type === 'text')?.text?.substring(0, 100)
+          });
+        }
       }
 
       // Capture session ID from first message
@@ -520,6 +532,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
       // Extract and send token budget updates from result messages
       if (message.type === 'result') {
+        console.log('🏁 [SDK] Received result message, conversation should be complete');
         const tokenBudget = extractTokenBudget(message);
         if (tokenBudget) {
           console.log('📊 Token budget from modelUsage:', tokenBudget);
@@ -530,6 +543,8 @@ async function queryClaudeSDK(command, options = {}, ws) {
         }
       }
     }
+
+    console.log('🔄 [SDK] Generator loop completed');
 
     // Clean up session on completion
     if (capturedSessionId) {
