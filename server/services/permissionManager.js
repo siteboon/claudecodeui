@@ -98,9 +98,21 @@ export class PermissionManager extends EventEmitter {
 
       // Set up abort signal handler if provided
       if (abortSignal) {
-        abortSignal.addEventListener('abort', () => {
-          this.handleAbort(id);
-        }, { once: true });
+        try {
+          if (typeof abortSignal.addEventListener === 'function') {
+            abortSignal.addEventListener('abort', () => {
+              this.handleAbort(id);
+            }, { once: true });
+          } else if (typeof abortSignal.on === 'function') {
+            abortSignal.once('abort', () => {
+              this.handleAbort(id);
+            });
+          } else {
+            console.warn('⚠️ [Permission] abortSignal does not support event listeners');
+          }
+        } catch (error) {
+          console.warn('⚠️ [Permission] Failed to attach abort listener:', error.message);
+        }
       }
 
       // Add to pending requests

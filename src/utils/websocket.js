@@ -146,6 +146,7 @@ export function useWebSocket() {
 
   return {
     ws,
+    wsClient: permissionWebSocketClient,
     sendMessage,
     messages,
     isConnected,

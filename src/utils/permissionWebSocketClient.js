@@ -117,7 +117,10 @@ class PermissionWebSocketClient {
       receivedAt: Date.now()
     });
 
-    // Notify handler
+    // Notify all listeners
+    this.notifyListeners(request);
+
+    // Notify handler (legacy)
     if (this.onRequestReceived) {
       this.onRequestReceived(request);
     }
@@ -303,11 +306,67 @@ class PermissionWebSocketClient {
   }
 
   /**
+   * Send a message via WebSocket
+   */
+  send(message) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      try {
+        this.ws.send(JSON.stringify(message));
+        return true;
+      } catch (error) {
+        console.error('Failed to send message:', error);
+        this.queueMessage(message);
+        return false;
+      }
+    } else {
+      console.warn('WebSocket not connected, queuing message');
+      this.queueMessage(message);
+      return false;
+    }
+  }
+
+  /**
+   * Add a message listener
+   */
+  addMessageListener(listener) {
+    const listenerId = Symbol('listener');
+    this.messageHandlers.set(listenerId, listener);
+    return listenerId;
+  }
+
+  /**
+   * Remove a message listener
+   */
+  removeMessageListener(listener) {
+    // Find and remove the listener
+    for (const [id, handler] of this.messageHandlers.entries()) {
+      if (handler === listener) {
+        this.messageHandlers.delete(id);
+        break;
+      }
+    }
+  }
+
+  /**
+   * Send message to all listeners
+   */
+  notifyListeners(message) {
+    for (const handler of this.messageHandlers.values()) {
+      try {
+        handler(message);
+      } catch (error) {
+        console.error('Error in message listener:', error);
+      }
+    }
+  }
+
+  /**
    * Clean up
    */
   cleanup() {
     this.pendingRequests.clear();
     this.messageQueue = [];
+    this.messageHandlers.clear();
     this.ws = null;
     this.connectionState = 'disconnected';
   }

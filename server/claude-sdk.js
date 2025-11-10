@@ -31,6 +31,14 @@ const activeSessions = new Map();
 function mapCliOptionsToSDK(options = {}, ws = null) {
   const { sessionId, cwd, toolsSettings, permissionMode, images } = options;
 
+  console.log('🔍 [SDK] Mapping CLI options to SDK:', {
+    permissionMode: permissionMode || 'UNDEFINED',
+    hasWebSocket: !!ws,
+    wsReadyState: ws ? ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][ws.readyState] : 'NO_WS',
+    skipPermissions: toolsSettings?.skipPermissions ?? 'UNDEFINED',
+    sessionId: sessionId || 'NEW_SESSION'
+  });
+
   const sdkOptions = {};
 
   // Map working directory
@@ -53,6 +61,7 @@ function mapCliOptionsToSDK(options = {}, ws = null) {
   // Handle tool permissions
   if (settings.skipPermissions && permissionMode !== 'plan') {
     // When skipping permissions, use bypassPermissions mode
+    console.log('⚠️  [SDK] skipPermissions=true, overriding permissionMode to bypassPermissions');
     sdkOptions.permissionMode = 'bypassPermissions';
   } else {
     // Map allowed tools
@@ -100,9 +109,19 @@ function mapCliOptionsToSDK(options = {}, ws = null) {
   // Add canUseTool callback for permission handling
   // Only if not in bypassPermissions mode
   if (permissionMode !== 'bypassPermissions' && ws) {
+    console.log('✅ [SDK] Attaching canUseTool callback for interactive permissions');
     const permissionManager = getPermissionManager();
 
-    sdkOptions.canUseTool = async ({ toolName, input }, { abortSignal }) => {
+    sdkOptions.canUseTool = async (toolName, input, abortSignal) => {
+      // Log what the SDK is actually passing
+      console.log('🔧 [SDK] canUseTool called with:', {
+        toolName: toolName,
+        toolNameType: typeof toolName,
+        input: input ? Object.keys(input) : 'none',
+        inputType: typeof input,
+        hasAbortSignal: !!abortSignal
+      });
+
       // Generate unique request ID
       const requestId = crypto.randomUUID();
 
@@ -159,6 +178,14 @@ function mapCliOptionsToSDK(options = {}, ws = null) {
         return { behavior: 'deny' };
       }
     };
+  } else {
+    console.log('⚠️  [SDK] NOT attaching canUseTool callback');
+    console.log('    Reason:', {
+      permissionMode: permissionMode || 'UNDEFINED',
+      isBypassMode: permissionMode === 'bypassPermissions',
+      hasWebSocket: !!ws,
+      wsReadyState: ws ? ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][ws.readyState] : 'NO_WS'
+    });
   }
 
   return sdkOptions;

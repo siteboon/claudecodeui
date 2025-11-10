@@ -1655,7 +1655,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     sendPermissionResponse,
     mockPermissionRequest
   } = usePermissions();
-  console.log('process.env.NODE_ENV',process.env.NODE_ENV)
   const [input, setInput] = useState(() => {
     if (typeof window !== 'undefined' && selectedProject) {
       return safeLocalStorage.getItem(`draft_input_${selectedProject.name}`) || '';

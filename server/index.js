@@ -731,6 +731,9 @@ function handleChatConnection(ws) {
                 console.log('[DEBUG] User message:', data.command || '[Continue/Resume]');
                 console.log('📁 Project:', data.options?.projectPath || 'Unknown');
                 console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
+                console.log('🔐 Permission Mode:', data.options?.permissionMode || 'UNDEFINED');
+                console.log('🔐 Skip Permissions:', data.options?.toolsSettings?.skipPermissions ?? 'UNDEFINED');
+                console.log('🌐 WebSocket State:', ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][ws.readyState] || 'UNKNOWN');
 
                 // Use Claude Agents SDK
                 await queryClaudeSDK(data.command, data.options, ws);
