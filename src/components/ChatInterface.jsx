@@ -1652,6 +1652,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     isDialogOpen,
     currentRequest,
     handleDialogDecision,
+    closeDialog,
     sendPermissionResponse,
     mockPermissionRequest
   } = usePermissions();
@@ -4780,8 +4781,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     {isDialogOpen && currentRequest && (
       <PermissionDialog
         request={currentRequest}
-        onClose={() => handleDialogDecision(currentRequest.id, PERMISSION_DECISIONS.DENY)}
-        sendResponse={sendPermissionResponse}
+        onClose={closeDialog}
+        onDecision={handleDialogDecision}
       />
     )}
 

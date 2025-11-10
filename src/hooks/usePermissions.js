@@ -147,6 +147,8 @@ const usePermissions = () => {
 
   // Handle dialog decision
   const handleDialogDecision = useCallback((requestId, decision, updatedInput = null) => {
+    console.log('👤 [Permission] User decision:', { requestId, decision, updatedInput });
+
     // Update context state
     const result = handleDecision(requestId, decision, updatedInput);
 
@@ -156,8 +158,8 @@ const usePermissions = () => {
 
       // Close dialog if this was the current request
       if (currentRequest?.id === requestId) {
-        setIsDialogOpen(false);
         setCurrentRequest(null);
+        setIsDialogOpen(false);
       }
     }
   }, [handleDecision, sendPermissionResponse, currentRequest]);
@@ -167,13 +169,16 @@ const usePermissions = () => {
     responseCallbacksRef.current.set(requestId, callback);
   }, []);
 
-  // Close dialog
+  // Close dialog (called when user closes dialog via X button without making a decision)
   const closeDialog = useCallback(() => {
     if (currentRequest) {
+      console.log('🚫 [Permission] Dialog closed without decision, sending deny');
       handleDialogDecision(currentRequest.id, PERMISSION_DECISIONS.DENY);
+    } else {
+      console.log('✓ [Permission] Dialog closed, no current request');
+      setIsDialogOpen(false);
+      setCurrentRequest(null);
     }
-    setIsDialogOpen(false);
-    setCurrentRequest(null);
   }, [currentRequest, handleDialogDecision]);
 
   // Mock a permission request for testing

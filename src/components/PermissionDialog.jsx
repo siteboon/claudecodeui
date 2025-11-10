@@ -32,8 +32,8 @@ const getToolIcon = (tool) => {
   return Shield;
 };
 
-const PermissionDialog = ({ request, onClose, sendResponse }) => {
-  const { handleDecision, moveToNextRequest, queueCount } = usePermission();
+const PermissionDialog = ({ request, onClose, onDecision }) => {
+  const { moveToNextRequest, queueCount } = usePermission();
   const [selectedDecision, setSelectedDecision] = useState(null);
   const [editedInput, setEditedInput] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -100,20 +100,18 @@ const PermissionDialog = ({ request, onClose, sendResponse }) => {
   const handleSubmit = useCallback((decision) => {
     if (!request) return;
 
-    const result = handleDecision(request.id, decision, editedInput);
+    console.log('🎯 [Dialog] handleSubmit called with decision:', decision);
 
-    // Send WebSocket response
-    if (sendResponse && result) {
-      sendResponse(result.id, result.decision, result.updatedInput);
+    // Call the decision handler (from usePermissions)
+    if (onDecision) {
+      onDecision(request.id, decision, editedInput);
     }
 
-    // Move to next request or close
+    // Move to next request or close (but don't call onClose, let the decision handler manage that)
     if (queueCount > 1) {
       moveToNextRequest();
-    } else {
-      onClose();
     }
-  }, [request, editedInput, handleDecision, sendResponse, queueCount, moveToNextRequest, onClose]);
+  }, [request, editedInput, onDecision, queueCount, moveToNextRequest]);
 
   const handleParameterEdit = () => {
     setIsEditing(true);
@@ -165,9 +163,9 @@ const PermissionDialog = ({ request, onClose, sendResponse }) => {
             </div>
           </div>
           <button
-            onClick={() => handleSubmit(PERMISSION_DECISIONS.DENY)}
+            onClick={onClose}
             className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-            aria-label="Deny and close"
+            aria-label="Close without decision"
           >
             <X className="w-5 h-5" />
           </button>
