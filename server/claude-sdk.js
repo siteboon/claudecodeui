@@ -487,14 +487,21 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
         // Log assistant messages for debugging
         if (message.type === 'assistant') {
-          const hasToolUse = message.content?.some(c => c.type === 'tool_use');
-          const hasText = message.content?.some(c => c.type === 'text');
-          console.log(`🤖 [SDK] Assistant message:`, {
-            hasToolUse,
-            hasText,
-            contentTypes: message.content?.map(c => c.type),
-            textPreview: message.content?.find(c => c.type === 'text')?.text?.substring(0, 100)
-          });
+          if (message.content && Array.isArray(message.content)) {
+            const hasToolUse = message.content.some(c => c.type === 'tool_use');
+            const hasText = message.content.some(c => c.type === 'text');
+            console.log(`🤖 [SDK] Assistant message:`, {
+              hasToolUse,
+              hasText,
+              contentTypes: message.content.map(c => c.type),
+              textPreview: message.content.find(c => c.type === 'text')?.text?.substring(0, 100)
+            });
+          } else {
+            console.log(`🤖 [SDK] Assistant message (no content):`, {
+              hasContent: !!message.content,
+              messageKeys: Object.keys(message).join(', ')
+            });
+          }
         }
       }
 

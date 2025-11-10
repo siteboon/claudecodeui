@@ -35,7 +35,7 @@ const logPermissionDecision = (requestId, decision) => {
  * Integrates WebSocket messaging with the permission UI system
  */
 const usePermissions = () => {
-  const { enqueueRequest, handleDecision } = usePermission();
+  const { enqueueRequest, handleDecision, activeRequest } = usePermission();
   const { wsClient, isConnected } = useWebSocketContext();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [currentRequest, setCurrentRequest] = useState(null);
@@ -101,6 +101,19 @@ const usePermissions = () => {
       wsClient.removeMessageListener(handlePermissionRequest);
     };
   }, [wsClient, enqueueRequest, handleDecision, currentRequest]);
+
+  // Sync currentRequest with activeRequest from context
+  // This ensures the dialog shows the next queued request after the current one is handled
+  useEffect(() => {
+    if (activeRequest && !currentRequest) {
+      console.log('🔄 [Permission] Syncing with next queued request:', activeRequest.id);
+      setCurrentRequest(activeRequest);
+      setIsDialogOpen(true);
+    } else if (!activeRequest && currentRequest) {
+      // No active request but we have a current one - this shouldn't normally happen
+      console.log('⚠️ [Permission] currentRequest exists but no activeRequest');
+    }
+  }, [activeRequest, currentRequest]);
 
   // Send permission response via WebSocket
   const sendPermissionResponse = useCallback((requestId, decision, updatedInput = null) => {
