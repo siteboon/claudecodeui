@@ -179,7 +179,7 @@ export class PermissionManager extends EventEmitter {
 
     // Create SDK-compatible result
     // If user didn't modify input (updatedInput is null), use the original input
-    const result = createSdkPermissionResult(decision, updatedInput ?? request.input);
+    const result = createSdkPermissionResult(decision, updatedInput ?? request.input,"Denied by user");
     console.log(`🔍 [PermissionManager] Created SDK result:`, result);
 
     if (this.debugMode) {
@@ -217,7 +217,7 @@ export class PermissionManager extends EventEmitter {
     console.warn(`⏱️ Permission request ${requestId} timed out after ${PERMISSION_TIMEOUT_MS}ms`);
 
     // Auto-deny on timeout
-    const result = createSdkPermissionResult(PermissionDecision.DENY);
+    const result = createSdkPermissionResult(PermissionDecision.DENY,null, "Request timed out", false);
     request.resolver(result);
 
     // Emit timeout event

@@ -187,9 +187,11 @@ export function formatPermissionRequest(id, toolName, input) {
  * Creates an SDK permission result from a user decision
  * @param {string} decision - User decision
  * @param {Object} [updatedInput] - Optional modified input
+ * @param message - Deny message
+ * @param interrupt - Whether to interrupt execution on deny
  * @returns {Object} SDK-compatible permission result
  */
-export function createSdkPermissionResult(decision, updatedInput = null) {
+export function createSdkPermissionResult(decision, updatedInput = null, message = null, interrupt = false) {
   const behavior = (decision === PermissionDecision.ALLOW ||
                     decision === PermissionDecision.ALLOW_SESSION ||
                     decision === PermissionDecision.ALLOW_ALWAYS)
@@ -210,6 +212,12 @@ export function createSdkPermissionResult(decision, updatedInput = null) {
   if (decision === PermissionDecision.ALLOW_ALWAYS) {
     // This will be implemented in Phase 4 (Memory & Patterns)
     // result.updatedPermissions = { ... };
+  }
+  if (behavior === PermissionBehavior.DENY) {
+    result.message = message || 'Permission denied by user';
+    if (interrupt) {
+      result.interrupt = interrupt;
+    }
   }
 
   return result;
