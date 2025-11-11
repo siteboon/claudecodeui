@@ -69,7 +69,16 @@ function mapCliOptionsToSDK(options = {}, ws = null) {
 
     // Add plan mode default tools
     if (permissionMode === 'plan') {
-      const planModeTools = ['Read', 'Task', 'exit_plan_mode', 'TodoRead', 'TodoWrite'];
+      const planModeTools = [
+            'Read',             // Read files for context
+            'Glob',             // Search for files by pattern
+            'Grep',             // Search code content
+            'Task',             // Launch subagents
+            'ExitPlanMode',     // Exit planning mode
+            'TodoRead',         // Read todos
+            'TodoWrite',        // Write todos
+            'AskUserQuestion'   // Ask clarifying questions
+      ];
       for (const tool of planModeTools) {
         if (!allowedTools.includes(tool)) {
           allowedTools.push(tool);
@@ -136,8 +145,17 @@ function mapCliOptionsToSDK(options = {}, ws = null) {
       }
 
       if (permissionMode === 'plan') {
-        // In plan mode, only allow specific tools
-        const planModeTools = ['Read', 'Task', 'ExitPlanMode', 'TodoRead', 'TodoWrite'];
+        // In plan mode, only allow specific tools for exploration and planning
+        const planModeTools = [
+                    'Read',             // Read files for context
+                    'Glob',             // Search for files by pattern
+                    'Grep',             // Search code content
+                    'Task',             // Launch subagents
+                    'ExitPlanMode',     // Exit planning mode
+                    'TodoRead',         // Read todos
+                    'TodoWrite',        // Write todos
+                    'AskUserQuestion'   // Ask clarifying questions
+        ];
         if (!planModeTools.includes(toolName)) {
           console.log(`❌ Denying ${toolName} in plan mode (not in allowed list)`);
           return { behavior: 'deny' };
