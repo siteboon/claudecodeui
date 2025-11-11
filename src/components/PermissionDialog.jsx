@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { X, Shield, AlertTriangle, Terminal, Code, FileText, Globe, Database, Lock, Clock, CheckCircle, XCircle } from 'lucide-react';
+import { X, Shield, AlertTriangle, Terminal, Code, FileText, Globe, Database, Lock, CheckCircle, XCircle } from 'lucide-react';
 import { PERMISSION_DECISIONS } from '../utils/permissionWebSocketClient';
 import { usePermission } from '../contexts/PermissionContext';
 
@@ -37,7 +37,6 @@ const PermissionDialog = ({ request, onClose, onDecision }) => {
   const [selectedDecision, setSelectedDecision] = useState(null);
   const [editedInput, setEditedInput] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [timeRemaining, setTimeRemaining] = useState(30);
   const [showDetails, setShowDetails] = useState(false);
   const dialogRef = useRef(null);
   const firstButtonRef = useRef(null);
@@ -46,24 +45,6 @@ const PermissionDialog = ({ request, onClose, onDecision }) => {
   useEffect(() => {
     firstButtonRef.current?.focus();
   }, []);
-
-  // Countdown timer
-  useEffect(() => {
-    if (!request) return;
-
-    const timer = setInterval(() => {
-      setTimeRemaining(prev => {
-        if (prev <= 1) {
-          // Auto-deny on timeout
-          handleSubmit(PERMISSION_DECISIONS.DENY);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [request]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -171,15 +152,6 @@ const PermissionDialog = ({ request, onClose, onDecision }) => {
           </button>
         </div>
 
-        {/* Timeout indicator */}
-        <div className="relative h-1 bg-gray-200 dark:bg-gray-700">
-          <div
-            className={`absolute left-0 top-0 h-full transition-all duration-1000 ${
-              timeRemaining > 10 ? 'bg-blue-500' : timeRemaining > 5 ? 'bg-yellow-500' : 'bg-red-500'
-            }`}
-            style={{ width: `${(timeRemaining / 30) * 100}%` }}
-          />
-        </div>
 
         {/* Content */}
         <div className="p-6 space-y-4">
@@ -285,17 +257,6 @@ const PermissionDialog = ({ request, onClose, onDecision }) => {
               </div>
             )}
 
-            {/* Timeout warning */}
-            {timeRemaining <= 5 && (
-              <div className="p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                <div className="flex items-center space-x-2">
-                  <Clock className="w-4 h-4 text-red-600 dark:text-red-400 animate-pulse" />
-                  <span className="text-sm font-medium text-red-700 dark:text-red-300">
-                    Auto-deny in {timeRemaining} seconds
-                  </span>
-                </div>
-              </div>
-            )}
           </div>
         </div>
 
