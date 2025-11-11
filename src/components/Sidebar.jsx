@@ -467,20 +467,37 @@ function Sidebar({
 
       <div
         className="h-full flex flex-col bg-card md:select-none"
+        style={isPWA && isMobile ? { paddingTop: '44px' } : {}}
       >
       {/* Header */}
       <div className="md:p-4 md:border-b md:border-border">
         {/* Desktop Header */}
         <div className="hidden md:flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shadow-sm">
-              <MessageSquare className="w-4 h-4 text-primary-foreground" />
+          {import.meta.env.VITE_IS_PLATFORM === 'true' ? (
+            <a
+              href="https://cloudcli.ai/dashboard"
+              className="flex items-center gap-3 hover:opacity-80 transition-opacity group"
+              title="View Environments"
+            >
+              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow">
+                <MessageSquare className="w-4 h-4 text-primary-foreground" />
+              </div>
+              <div>
+                <h1 className="text-lg font-bold text-foreground">Claude Code UI</h1>
+                <p className="text-sm text-muted-foreground">AI coding assistant interface</p>
+              </div>
+            </a>
+          ) : (
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shadow-sm">
+                <MessageSquare className="w-4 h-4 text-primary-foreground" />
+              </div>
+              <div>
+                <h1 className="text-lg font-bold text-foreground">Claude Code UI</h1>
+                <p className="text-sm text-muted-foreground">AI coding assistant interface</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-lg font-bold text-foreground">Claude Code UI</h1>
-              <p className="text-sm text-muted-foreground">AI coding assistant interface</p>
-            </div>
-          </div>
+          )}
           {onToggleSidebar && (
             <Button
               variant="ghost"
@@ -500,21 +517,38 @@ function Sidebar({
             </Button>
           )}
         </div>
-
+        
         {/* Mobile Header */}
         <div
           className="md:hidden p-3 border-b border-border"
+          style={isPWA && isMobile ? { paddingTop: '16px' } : {}}
         >
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <MessageSquare className="w-4 h-4 text-primary-foreground" />
+            {import.meta.env.VITE_IS_PLATFORM === 'true' ? (
+              <a
+                href="https://cloudcli.ai/dashboard"
+                className="flex items-center gap-3 active:opacity-70 transition-opacity"
+                title="View Environments"
+              >
+                <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                  <MessageSquare className="w-4 h-4 text-primary-foreground" />
+                </div>
+                <div>
+                  <h1 className="text-lg font-semibold text-foreground">Claude Code UI</h1>
+                  <p className="text-sm text-muted-foreground">Projects</p>
+                </div>
+              </a>
+            ) : (
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                  <MessageSquare className="w-4 h-4 text-primary-foreground" />
+                </div>
+                <div>
+                  <h1 className="text-lg font-semibold text-foreground">Claude Code UI</h1>
+                  <p className="text-sm text-muted-foreground">Projects</p>
+                </div>
               </div>
-              <div>
-                <h1 className="text-lg font-semibold text-foreground">Claude Code UI</h1>
-                <p className="text-sm text-muted-foreground">Projects</p>
-              </div>
-            </div>
+            )}
             <div className="flex gap-2">
               <button
                 className="w-8 h-8 rounded-md bg-background border border-border flex items-center justify-center active:scale-95 transition-all duration-150"
@@ -1306,7 +1340,7 @@ function Sidebar({
       {/* Settings Section */}
       <div className="md:p-2 md:border-t md:border-border flex-shrink-0">
         {/* Mobile Settings */}
-        <div className="md:hidden p-4 pb-mobile-nav border-t border-border/50">
+        <div className="md:hidden p-4 pb-20 border-t border-border/50">
           <button
             className="w-full h-14 bg-muted/50 hover:bg-muted/70 rounded-2xl flex items-center justify-start gap-4 px-4 active:scale-[0.98] transition-all duration-150"
             onClick={onShowSettings}
