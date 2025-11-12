@@ -28,7 +28,10 @@ export function useWebSocket() {
       if (!isPlatform) {
         token = localStorage.getItem('auth-token');
         if (!token) {
-          console.warn('No authentication token found for WebSocket connection');
+          // Silently retry after a delay - auth might not be ready yet
+          reconnectTimeoutRef.current = setTimeout(() => {
+            connect();
+          }, 1000);
           return;
         }
       }

@@ -894,23 +894,88 @@ async function renameProject(projectName, newDisplayName) {
 // Delete a session from a project
 async function deleteSession(projectName, sessionId) {
   const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
-  
+
   try {
     const files = await fs.readdir(projectDir);
     const jsonlFiles = files.filter(file => file.endsWith('.jsonl'));
-    
+
     if (jsonlFiles.length === 0) {
       throw new Error('No session files found for this project');
     }
-    
-    // Check all JSONL files to find which one contains the session
+
+    let sessionsDeleted = false;
+    let totalEntriesRemoved = 0;
+    const filesModified = [];
+
+    // Process ALL JSONL files to ensure complete cleanup
     for (const file of jsonlFiles) {
       const jsonlFile = path.join(projectDir, file);
       const content = await fs.readFile(jsonlFile, 'utf8');
       const lines = content.split('\n').filter(line => line.trim());
-      
-      // Check if this file contains the session
-      const hasSession = lines.some(line => {
+
+      // Count how many entries this session has in this file
+      const sessionEntries = [];
+      const otherEntries = [];
+
+      for (const line of lines) {
+        try {
+          const data = JSON.parse(line);
+          if (data.sessionId === sessionId) {
+            sessionEntries.push(line);
+          } else {
+            otherEntries.push(line);
+          }
+        } catch {
+          // Keep malformed lines that aren't related to the session
+          otherEntries.push(line);
+        }
+      }
+
+      // If this file contains entries for the session, update it
+      if (sessionEntries.length > 0) {
+        console.log(`Found ${sessionEntries.length} entries for session ${sessionId} in ${file}`);
+
+        // Write back the filtered content
+        const newContent = otherEntries.join('\n') + (otherEntries.length > 0 ? '\n' : '');
+        await fs.writeFile(jsonlFile, newContent);
+
+        sessionsDeleted = true;
+        totalEntriesRemoved += sessionEntries.length;
+        filesModified.push(file);
+      }
+    }
+
+    if (!sessionsDeleted) {
+      throw new Error(`Session ${sessionId} not found in any files`);
+    }
+
+    console.log(`Successfully deleted session ${sessionId}. Removed ${totalEntriesRemoved} entries from ${filesModified.length} files: ${filesModified.join(', ')}`);
+
+    // Clean up session-specific files and directories
+    await cleanupSessionFiles(sessionId);
+
+    // Validate that the session is completely deleted
+    await validateSessionDeletion(projectDir, sessionId);
+
+    return true;
+  } catch (error) {
+    console.error(`Error deleting session ${sessionId} from project ${projectName}:`, error);
+    throw error;
+  }
+}
+
+// Helper function to validate that a session is completely deleted
+async function validateSessionDeletion(projectDir, sessionId) {
+  try {
+    const files = await fs.readdir(projectDir);
+    const jsonlFiles = files.filter(file => file.endsWith('.jsonl'));
+
+    for (const file of jsonlFiles) {
+      const jsonlFile = path.join(projectDir, file);
+      const content = await fs.readFile(jsonlFile, 'utf8');
+      const lines = content.split('\n').filter(line => line.trim());
+
+      const hasRemainingEntries = lines.some(line => {
         try {
           const data = JSON.parse(line);
           return data.sessionId === sessionId;
@@ -918,29 +983,90 @@ async function deleteSession(projectName, sessionId) {
           return false;
         }
       });
-      
-      if (hasSession) {
-        // Filter out all entries for this session
-        const filteredLines = lines.filter(line => {
-          try {
-            const data = JSON.parse(line);
-            return data.sessionId !== sessionId;
-          } catch {
-            return true; // Keep malformed lines
-          }
-        });
-        
-        // Write back the filtered content
-        await fs.writeFile(jsonlFile, filteredLines.join('\n') + (filteredLines.length > 0 ? '\n' : ''));
-        return true;
+
+      if (hasRemainingEntries) {
+        console.error(`Validation failed: Session ${sessionId} still has entries in ${file}`);
+        throw new Error(`Session deletion validation failed - remaining entries found in ${file}`);
       }
     }
-    
-    throw new Error(`Session ${sessionId} not found in any files`);
+
+    console.log(`Validation successful: Session ${sessionId} completely deleted from all files`);
   } catch (error) {
-    console.error(`Error deleting session ${sessionId} from project ${projectName}:`, error);
+    console.error(`Session deletion validation error:`, error);
     throw error;
   }
+}
+
+// Helper function to clean up session-specific files and directories
+async function cleanupSessionFiles(sessionId) {
+  const claudeDir = path.join(process.env.HOME, '.claude');
+  const cleanupPaths = [
+    path.join(claudeDir, 'session-env', sessionId),
+    path.join(claudeDir, 'debug', `${sessionId}.txt`),
+    path.join(claudeDir, 'file-history', sessionId),
+  ];
+
+  // Clean up session-specific JSONL files in all project directories
+  try {
+    const projectsDir = path.join(claudeDir, 'projects');
+    const projects = await fs.readdir(projectsDir);
+
+    for (const project of projects) {
+      const projectDir = path.join(projectsDir, project);
+      const stat = await fs.stat(projectDir);
+
+      if (stat.isDirectory()) {
+        const sessionJsonlFile = path.join(projectDir, `${sessionId}.jsonl`);
+        try {
+          await fs.access(sessionJsonlFile);
+          await fs.unlink(sessionJsonlFile);
+          console.log(`Deleted session-specific JSONL file: ${sessionJsonlFile}`);
+          cleanupPaths.push(sessionJsonlFile);
+        } catch {
+          // File doesn't exist, which is fine
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('Error cleaning up session JSONL files from projects:', error.message);
+  }
+
+  // Clean up todo files for this session
+  try {
+    const todosDir = path.join(claudeDir, 'todos');
+    const todoFiles = await fs.readdir(todosDir);
+    const sessionTodoFiles = todoFiles.filter(file => file.includes(sessionId));
+
+    for (const todoFile of sessionTodoFiles) {
+      const todoPath = path.join(todosDir, todoFile);
+      await fs.unlink(todoPath);
+      console.log(`Deleted todo file: ${todoPath}`);
+      cleanupPaths.push(todoPath);
+    }
+  } catch (error) {
+    console.warn('Error cleaning up session todo files:', error.message);
+  }
+
+  // Clean up directories and files
+  for (const cleanupPath of cleanupPaths) {
+    try {
+      const stat = await fs.stat(cleanupPath);
+      if (stat.isDirectory()) {
+        await fs.rmdir(cleanupPath, { recursive: true });
+        console.log(`Deleted session directory: ${cleanupPath}`);
+      } else if (stat.isFile()) {
+        await fs.unlink(cleanupPath);
+        console.log(`Deleted session file: ${cleanupPath}`);
+      }
+    } catch (error) {
+      // Path doesn't exist or can't be deleted, which is fine
+      if (error.code !== 'ENOENT') {
+        console.warn(`Warning: Could not delete ${cleanupPath}:`, error.message);
+      }
+    }
+  }
+
+  console.log(`Session file cleanup completed for ${sessionId}`);
 }
 
 // Check if a project is empty (has no sessions)

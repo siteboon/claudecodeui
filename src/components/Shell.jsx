@@ -598,22 +598,29 @@ function Shell({ selectedProject, selectedSession, isActive, initialCommand, isP
 
       {/* Terminal */}
       <div className="flex-1 p-2 overflow-hidden relative">
-        <div ref={terminalRef} className="h-full w-full focus:outline-none" style={{ outline: 'none' }} />
+        <div
+          ref={terminalRef}
+          className="h-full w-full focus:outline-none"
+          style={{
+            outline: 'none',
+            display: (!isInitialized) || (isInitialized && !isConnected && !isConnecting) || isConnecting ? 'none' : 'block'
+          }}
+        />
         
         {/* Loading state */}
         {!isInitialized && (
-          <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90">
+          <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90 z-20">
             <div className="text-white">Loading terminal...</div>
           </div>
         )}
         
         {/* Connect button when not connected */}
         {isInitialized && !isConnected && !isConnecting && (
-          <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90 p-4">
+          <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90 p-4 z-20">
             <div className="text-center max-w-sm w-full">
               <button
                 onClick={connectToShell}
-                className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center space-x-2 text-base font-medium w-full sm:w-auto"
+                className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center space-x-2 text-base font-medium w-full sm:w-auto relative"
                 title="Connect to shell"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -640,7 +647,7 @@ function Shell({ selectedProject, selectedSession, isActive, initialCommand, isP
         
         {/* Connecting state */}
         {isConnecting && (
-          <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90 p-4">
+          <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90 p-4 z-20">
             <div className="text-center max-w-sm w-full">
               <div className="flex items-center justify-center space-x-3 text-yellow-400">
                 <div className="w-6 h-6 animate-spin rounded-full border-2 border-yellow-400 border-t-transparent"></div>

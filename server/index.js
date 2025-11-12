@@ -168,8 +168,6 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({
     server,
     verifyClient: (info) => {
-        console.log('WebSocket connection attempt to:', info.req.url);
-
         // Platform mode: always allow connection
         if (process.env.VITE_IS_PLATFORM === 'true') {
             const user = authenticateWebSocket(null); // Will return first user
@@ -282,6 +280,133 @@ app.get('/api/config', authenticateToken, (req, res) => {
     });
 });
 
+// Claude CLI login status endpoint
+app.get('/api/claude/status', authenticateToken, async (req, res) => {
+    try {
+        const { spawn } = await import('child_process');
+
+        // Try to get Claude CLI version with proper timeout handling
+        const claudeProcess = spawn('claude', ['--version'], {
+            stdio: ['pipe', 'pipe', 'pipe']
+        });
+
+        let stdout = '';
+        let stderr = '';
+        let claudeInstalled = false;
+        let version = null;
+        let responseHandled = false;
+
+        // Set up timeout handler
+        const timeoutId = setTimeout(() => {
+            if (!responseHandled) {
+                responseHandled = true;
+                claudeProcess.kill();
+                res.json({
+                    isLoggedIn: false,
+                    claudeInstalled: false,
+                    version: null,
+                    error: 'Timeout checking Claude CLI status'
+                });
+            }
+        }, 5000);
+
+        claudeProcess.stdout.on('data', (data) => {
+            stdout += data.toString();
+        });
+
+        claudeProcess.stderr.on('data', (data) => {
+            stderr += data.toString();
+        });
+
+        claudeProcess.on('close', async (code) => {
+            if (responseHandled) return;
+
+            clearTimeout(timeoutId);
+
+            try {
+                claudeInstalled = code === 0;
+                version = stdout.trim() || null;
+
+                let isLoggedIn = false;
+
+                // If claude is installed, check if user is logged in using async operations
+                if (claudeInstalled) {
+                    const homeDir = os.homedir();
+                    const claudeDir = path.join(homeDir, '.claude');
+                    const sessionsDir = path.join(claudeDir, 'sessions');
+
+                    try {
+                        await fsPromises.access(sessionsDir);
+                        const sessionFiles = await fsPromises.readdir(sessionsDir);
+                        isLoggedIn = sessionFiles.length > 0;
+                    } catch (err) {
+                        // Session check failed, continue with isLoggedIn = false
+                    }
+                }
+
+                const response = {
+                    isLoggedIn,
+                    claudeInstalled,
+                    version,
+                    error: !claudeInstalled ? stderr.trim() : null
+                };
+
+                responseHandled = true;
+                res.json(response);
+
+            } catch (jsonError) {
+                console.error('Error creating JSON response:', jsonError);
+                if (!responseHandled) {
+                    responseHandled = true;
+                    res.status(500).json({
+                        isLoggedIn: false,
+                        claudeInstalled: false,
+                        version: null,
+                        error: `Internal error: ${jsonError.message}`
+                    });
+                }
+            }
+        });
+
+        claudeProcess.on('error', (err) => {
+            if (responseHandled) return;
+
+            clearTimeout(timeoutId);
+            console.log('Claude process error:', err);
+
+            try {
+                responseHandled = true;
+                res.json({
+                    isLoggedIn: false,
+                    claudeInstalled: false,
+                    version: null,
+                    error: err.message
+                });
+            } catch (jsonError) {
+                console.error('Error creating error JSON response:', jsonError);
+                if (!responseHandled) {
+                    responseHandled = true;
+                    res.status(500).send('Error checking Claude status');
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error('Unexpected error in /api/claude/status:', error);
+        try {
+            res.status(500).json({
+                isLoggedIn: false,
+                claudeInstalled: false,
+                version: null,
+                error: error.message
+            });
+        } catch (jsonError) {
+            console.error('Error creating final error JSON response:', jsonError);
+            res.status(500).send('Internal server error');
+        }
+    }
+});
+
 // System update endpoint
 app.post('/api/system/update', authenticateToken, async (req, res) => {
     try {
@@ -371,13 +496,13 @@ app.get('/api/projects/:projectName/sessions/:sessionId/messages', authenticateT
     try {
         const { projectName, sessionId } = req.params;
         const { limit, offset } = req.query;
-        
+
         // Parse limit and offset if provided
         const parsedLimit = limit ? parseInt(limit, 10) : null;
         const parsedOffset = offset ? parseInt(offset, 10) : 0;
-        
+
         const result = await getSessionMessages(projectName, sessionId, parsedLimit, parsedOffset);
-        
+
         // Handle both old and new response formats
         if (Array.isArray(result)) {
             // Backward compatibility: no pagination parameters were provided
@@ -442,32 +567,32 @@ app.post('/api/projects/create', authenticateToken, async (req, res) => {
 });
 
 // Browse filesystem endpoint for project suggestions - uses existing getFileTree
-app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {    
+app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
     try {
         const { path: dirPath } = req.query;
-        
+
         // Default to home directory if no path provided
         const homeDir = os.homedir();
         let targetPath = dirPath ? dirPath.replace('~', homeDir) : homeDir;
-        
+
         // Resolve and normalize the path
         targetPath = path.resolve(targetPath);
-        
+
         // Security check - ensure path is accessible
         try {
             await fs.promises.access(targetPath);
             const stats = await fs.promises.stat(targetPath);
-            
+
             if (!stats.isDirectory()) {
                 return res.status(400).json({ error: 'Path is not a directory' });
             }
         } catch (err) {
             return res.status(404).json({ error: 'Directory not accessible' });
         }
-        
+
         // Use existing getFileTree function with shallow depth (only direct children)
         const fileTree = await getFileTree(targetPath, 1, 0, false); // maxDepth=1, showHidden=false
-        
+
         // Filter only directories and format for suggestions
         const directories = fileTree
             .filter(item => item.type === 'directory')
@@ -477,24 +602,24 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
                 type: 'directory'
             }))
             .slice(0, 20); // Limit results
-            
+
         // Add common directories if browsing home directory
         const suggestions = [];
         if (targetPath === homeDir) {
             const commonDirs = ['Desktop', 'Documents', 'Projects', 'Development', 'Dev', 'Code', 'workspace'];
             const existingCommon = directories.filter(dir => commonDirs.includes(dir.name));
             const otherDirs = directories.filter(dir => !commonDirs.includes(dir.name));
-            
+
             suggestions.push(...existingCommon, ...otherDirs);
         } else {
             suggestions.push(...directories);
         }
-        
-        res.json({ 
+
+        res.json({
             path: targetPath,
-            suggestions: suggestions 
+            suggestions: suggestions
         });
-        
+
     } catch (error) {
         console.error('Error browsing filesystem:', error);
         res.status(500).json({ error: 'Failed to browse filesystem' });
@@ -507,7 +632,6 @@ app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) =
         const { projectName } = req.params;
         const { filePath } = req.query;
 
-        console.log('[DEBUG] File read request:', projectName, filePath);
 
         // Security: ensure the requested path is inside the project root
         if (!filePath) {
@@ -548,7 +672,6 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
         const { projectName } = req.params;
         const { path: filePath } = req.query;
 
-        console.log('[DEBUG] Binary file serve request:', projectName, filePath);
 
         // Security: ensure the requested path is inside the project root
         if (!filePath) {
@@ -602,7 +725,6 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
         const { projectName } = req.params;
         const { filePath, content } = req.body;
 
-        console.log('[DEBUG] File save request:', projectName, filePath);
 
         // Security: ensure the requested path is inside the project root
         if (!filePath) {
@@ -709,28 +831,19 @@ function handleChatConnection(ws) {
             const data = JSON.parse(message);
 
             if (data.type === 'claude-command') {
-                console.log('[DEBUG] User message:', data.command || '[Continue/Resume]');
-                console.log('📁 Project:', data.options?.projectPath || 'Unknown');
-                console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
 
                 // Use Claude Agents SDK
                 await queryClaudeSDK(data.command, data.options, ws);
             } else if (data.type === 'cursor-command') {
-                console.log('[DEBUG] Cursor message:', data.command || '[Continue/Resume]');
-                console.log('📁 Project:', data.options?.cwd || 'Unknown');
-                console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
-                console.log('🤖 Model:', data.options?.model || 'default');
                 await spawnCursor(data.command, data.options, ws);
             } else if (data.type === 'cursor-resume') {
                 // Backward compatibility: treat as cursor-command with resume and no prompt
-                console.log('[DEBUG] Cursor resume session (compat):', data.sessionId);
                 await spawnCursor('', {
                     sessionId: data.sessionId,
                     resume: true,
                     cwd: data.options?.cwd
                 }, ws);
             } else if (data.type === 'abort-session') {
-                console.log('[DEBUG] Abort session request:', data.sessionId);
                 const provider = data.provider || 'claude';
                 let success;
 
@@ -748,7 +861,6 @@ function handleChatConnection(ws) {
                     success
                 }));
             } else if (data.type === 'cursor-abort') {
-                console.log('[DEBUG] Abort Cursor session:', data.sessionId);
                 const success = abortCursorSession(data.sessionId);
                 ws.send(JSON.stringify({
                     type: 'session-aborted',
@@ -858,15 +970,15 @@ function handleShellConnection(ws) {
                         // Use cursor-agent command
                         if (os.platform() === 'win32') {
                             if (hasSession && sessionId) {
-                                shellCommand = `Set-Location -Path "${projectPath}"; cursor-agent --resume="${sessionId}"`;
+                shellCommand = `Set-Location -Path "${projectPath}"; cursor-agent --resume="${sessionId}"`;
                             } else {
-                                shellCommand = `Set-Location -Path "${projectPath}"; cursor-agent`;
+                shellCommand = `Set-Location -Path "${projectPath}"; cursor-agent`;
                             }
                         } else {
                             if (hasSession && sessionId) {
-                                shellCommand = `cd "${projectPath}" && cursor-agent --resume="${sessionId}"`;
+                shellCommand = `cd "${projectPath}" && cursor-agent --resume="${sessionId}"`;
                             } else {
-                                shellCommand = `cd "${projectPath}" && cursor-agent`;
+                shellCommand = `cd "${projectPath}" && cursor-agent`;
                             }
                         }
                     } else {
@@ -874,16 +986,16 @@ function handleShellConnection(ws) {
                         const command = initialCommand || 'claude';
                         if (os.platform() === 'win32') {
                             if (hasSession && sessionId) {
-                                // Try to resume session, but with fallback to new session if it fails
-                                shellCommand = `Set-Location -Path "${projectPath}"; claude --resume ${sessionId}; if ($LASTEXITCODE -ne 0) { claude }`;
+                // Try to resume session, but with fallback to new session if it fails
+                shellCommand = `Set-Location -Path "${projectPath}"; claude --resume ${sessionId}; if ($LASTEXITCODE -ne 0) { claude }`;
                             } else {
-                                shellCommand = `Set-Location -Path "${projectPath}"; ${command}`;
+                shellCommand = `Set-Location -Path "${projectPath}"; ${command}`;
                             }
                         } else {
                             if (hasSession && sessionId) {
-                                shellCommand = `cd "${projectPath}" && claude --resume ${sessionId} || claude`;
+                shellCommand = `cd "${projectPath}" && claude --resume ${sessionId} || claude`;
                             } else {
-                                shellCommand = `cd "${projectPath}" && ${command}`;
+                shellCommand = `cd "${projectPath}" && ${command}`;
                             }
                         }
                     }
@@ -918,41 +1030,40 @@ function handleShellConnection(ws) {
 
                             // Check for various URL opening patterns
                             const patterns = [
-                                // Direct browser opening commands
-                                /(?:xdg-open|open|start)\s+(https?:\/\/[^\s\x1b\x07]+)/g,
-                                // BROWSER environment variable override
-                                /OPEN_URL:\s*(https?:\/\/[^\s\x1b\x07]+)/g,
-                                // Git and other tools opening URLs
-                                /Opening\s+(https?:\/\/[^\s\x1b\x07]+)/gi,
-                                // General URL patterns that might be opened
-                                /Visit:\s*(https?:\/\/[^\s\x1b\x07]+)/gi,
-                                /View at:\s*(https?:\/\/[^\s\x1b\x07]+)/gi,
-                                /Browse to:\s*(https?:\/\/[^\s\x1b\x07]+)/gi
+                // Direct browser opening commands
+                /(?:xdg-open|open|start)\s+(https?:\/\/[^\s\x1b\x07]+)/g,
+                // BROWSER environment variable override
+                /OPEN_URL:\s*(https?:\/\/[^\s\x1b\x07]+)/g,
+                // Git and other tools opening URLs
+                /Opening\s+(https?:\/\/[^\s\x1b\x07]+)/gi,
+                // General URL patterns that might be opened
+                /Visit:\s*(https?:\/\/[^\s\x1b\x07]+)/gi,
+                /View at:\s*(https?:\/\/[^\s\x1b\x07]+)/gi,
+                /Browse to:\s*(https?:\/\/[^\s\x1b\x07]+)/gi
                             ];
 
                             patterns.forEach(pattern => {
-                                let match;
-                                while ((match = pattern.exec(data)) !== null) {
-                                    const url = match[1];
-                                    console.log('[DEBUG] Detected URL for opening:', url);
+                let match;
+                while ((match = pattern.exec(data)) !== null) {
+                    const url = match[1];
 
-                                    // Send URL opening message to client
-                                    ws.send(JSON.stringify({
-                                        type: 'url_open',
-                                        url: url
-                                    }));
+                    // Send URL opening message to client
+                    ws.send(JSON.stringify({
+                        type: 'url_open',
+                        url: url
+                    }));
 
-                                    // Replace the OPEN_URL pattern with a user-friendly message
-                                    if (pattern.source.includes('OPEN_URL')) {
-                                        outputData = outputData.replace(match[0], `[INFO] Opening in browser: ${url}`);
-                                    }
-                                }
+                    // Replace the OPEN_URL pattern with a user-friendly message
+                    if (pattern.source.includes('OPEN_URL')) {
+                        outputData = outputData.replace(match[0], `[INFO] Opening in browser: ${url}`);
+                    }
+                }
                             });
 
                             // Send regular output
                             ws.send(JSON.stringify({
-                                type: 'output',
-                                data: outputData
+                type: 'output',
+                data: outputData
                             }));
                         }
                     });
@@ -962,8 +1073,8 @@ function handleShellConnection(ws) {
                         console.log('🔚 Shell process exited with code:', exitCode.exitCode, 'signal:', exitCode.signal);
                         if (ws.readyState === WebSocket.OPEN) {
                             ws.send(JSON.stringify({
-                                type: 'output',
-                                data: `\r\n\x1b[33mProcess exited with code ${exitCode.exitCode}${exitCode.signal ? ` (${exitCode.signal})` : ''}\x1b[0m\r\n`
+                type: 'output',
+                data: `\r\n\x1b[33mProcess exited with code ${exitCode.exitCode}${exitCode.signal ? ` (${exitCode.signal})` : ''}\x1b[0m\r\n`
                             }));
                         }
                         shellProcess = null;
@@ -1139,8 +1250,8 @@ Agent instructions:`;
                         const completion = await openai.chat.completions.create({
                             model: 'gpt-4o-mini',
                             messages: [
-                                { role: 'system', content: systemMessage },
-                                { role: 'user', content: prompt }
+                { role: 'system', content: systemMessage },
+                { role: 'user', content: prompt }
                             ],
                             temperature: temperature,
                             max_tokens: maxTokens

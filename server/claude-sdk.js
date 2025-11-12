@@ -59,9 +59,9 @@ function mapCliOptionsToSDK(options = {}) {
     if (permissionMode === 'plan') {
       const planModeTools = ['Read', 'Task', 'exit_plan_mode', 'TodoRead', 'TodoWrite'];
       for (const tool of planModeTools) {
-        if (!allowedTools.includes(tool)) {
-          allowedTools.push(tool);
-        }
+    if (!allowedTools.includes(tool)) {
+      allowedTools.push(tool);
+    }
       }
     }
 
@@ -218,8 +218,8 @@ async function handleImages(command, images, cwd) {
       // Extract base64 data and mime type
       const matches = image.data.match(/^data:([^;]+);base64,(.+)$/);
       if (!matches) {
-        console.error('Invalid image data format');
-        continue;
+    console.error('Invalid image data format');
+    continue;
       }
 
       const [, mimeType, base64Data] = matches;
@@ -261,14 +261,14 @@ async function cleanupTempFiles(tempImagePaths, tempDir) {
     // Delete individual temp files
     for (const imagePath of tempImagePaths) {
       await fs.unlink(imagePath).catch(err =>
-        console.error(`Failed to delete temp image ${imagePath}:`, err)
+    console.error(`Failed to delete temp image ${imagePath}:`, err)
       );
     }
 
     // Delete temp directory
     if (tempDir) {
       await fs.rm(tempDir, { recursive: true, force: true }).catch(err =>
-        console.error(`Failed to delete temp directory ${tempDir}:`, err)
+    console.error(`Failed to delete temp directory ${tempDir}:`, err)
       );
     }
 
@@ -319,8 +319,8 @@ async function loadMcpConfig(cwd) {
     if (claudeConfig.claudeProjects && cwd) {
       const projectConfig = claudeConfig.claudeProjects[cwd];
       if (projectConfig && projectConfig.mcpServers && typeof projectConfig.mcpServers === 'object') {
-        mcpServers = { ...mcpServers, ...projectConfig.mcpServers };
-        console.log(`📡 Loaded ${Object.keys(projectConfig.mcpServers).length} project-specific MCP servers`);
+    mcpServers = { ...mcpServers, ...projectConfig.mcpServers };
+    console.log(`📡 Loaded ${Object.keys(projectConfig.mcpServers).length} project-specific MCP servers`);
       }
     }
 
@@ -382,48 +382,45 @@ async function queryClaudeSDK(command, options = {}, ws) {
     // Process streaming messages
     console.log('🔄 Starting async generator loop for session:', capturedSessionId || 'NEW');
     for await (const message of queryInstance) {
-      // Capture session ID from first message
+      // Capture session ID from first message only
       if (message.session_id && !capturedSessionId) {
+    capturedSessionId = message.session_id;
+    addSession(capturedSessionId, queryInstance, tempImagePaths, tempDir);
 
-        capturedSessionId = message.session_id;
-        addSession(capturedSessionId, queryInstance, tempImagePaths, tempDir);
+    // Set session ID on writer
+    if (ws.setSessionId && typeof ws.setSessionId === 'function') {
+      ws.setSessionId(capturedSessionId);
+    }
 
-        // Set session ID on writer
-        if (ws.setSessionId && typeof ws.setSessionId === 'function') {
-          ws.setSessionId(capturedSessionId);
-        }
-
-        // Send session-created event only once for new sessions
-        if (!sessionId && !sessionCreatedSent) {
-          sessionCreatedSent = true;
-          ws.send(JSON.stringify({
-            type: 'session-created',
-            sessionId: capturedSessionId
-          }));
-        } else {
-          console.log('⚠️ Not sending session-created. sessionId:', sessionId, 'sessionCreatedSent:', sessionCreatedSent);
-        }
-      } else {
-        console.log('⚠️ No session_id in message or already captured. message.session_id:', message.session_id, 'capturedSessionId:', capturedSessionId);
+    // Send session-created event only once for new sessions
+    if (!sessionId && !sessionCreatedSent) {
+      sessionCreatedSent = true;
+      ws.send(JSON.stringify({
+        type: 'session-created',
+        sessionId: capturedSessionId
+      }));
+    } else {
+      console.log('⚠️ Not sending session-created. sessionId:', sessionId, 'sessionCreatedSent:', sessionCreatedSent);
+    }
       }
 
       // Transform and send message to WebSocket
       const transformedMessage = transformMessage(message);
       ws.send(JSON.stringify({
-        type: 'claude-response',
-        data: transformedMessage
+    type: 'claude-response',
+    data: transformedMessage
       }));
 
       // Extract and send token budget updates from result messages
       if (message.type === 'result') {
-        const tokenBudget = extractTokenBudget(message);
-        if (tokenBudget) {
-          console.log('📊 Token budget from modelUsage:', tokenBudget);
-          ws.send(JSON.stringify({
-            type: 'token-budget',
-            data: tokenBudget
-          }));
-        }
+    const tokenBudget = extractTokenBudget(message);
+    if (tokenBudget) {
+      console.log('📊 Token budget from modelUsage:', tokenBudget);
+      ws.send(JSON.stringify({
+        type: 'token-budget',
+        data: tokenBudget
+      }));
+    }
       }
     }
 

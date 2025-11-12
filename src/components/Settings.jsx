@@ -12,13 +12,13 @@ import CredentialsSettings from './CredentialsSettings';
 
 function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
   const { isDarkMode, toggleDarkMode } = useTheme();
-  const { 
-    tasksEnabled, 
-    setTasksEnabled, 
-    isTaskMasterInstalled, 
-    isTaskMasterReady, 
-    installationStatus, 
-    isCheckingInstallation 
+  const {
+    tasksEnabled,
+    setTasksEnabled,
+    isTaskMasterInstalled,
+    isTaskMasterReady,
+    installationStatus,
+    isCheckingInstallation
   } = useTasksSettings();
   const [allowedTools, setAllowedTools] = useState([]);
   const [disallowedTools, setDisallowedTools] = useState([]);
@@ -72,7 +72,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
   const [codeEditorFontSize, setCodeEditorFontSize] = useState(() =>
     localStorage.getItem('codeEditorFontSize') || '14'
   );
-  
+
   // Cursor-specific states
   const [cursorAllowedCommands, setCursorAllowedCommands] = useState([]);
   const [cursorDisallowedCommands, setCursorDisallowedCommands] = useState([]);
@@ -85,6 +85,15 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginProvider, setLoginProvider] = useState(''); // 'claude' or 'cursor'
   const [selectedProject, setSelectedProject] = useState(null);
+
+  // Claude CLI login status
+  const [claudeLoginStatus, setClaudeLoginStatus] = useState({
+    isLoggedIn: false,
+    claudeInstalled: false,
+    version: null,
+    error: null,
+    loading: true
+  });
   // Common tool patterns for Claude
   const commonTools = [
     'Bash(git log:*)',
@@ -102,7 +111,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
     'WebFetch',
     'WebSearch'
   ];
-  
+
   // Common shell commands for Cursor
   const commonCursorCommands = [
     'Shell(ls)',
@@ -119,6 +128,51 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
     'Shell(node)'
   ];
 
+  // Check Claude CLI login status
+  useEffect(() => {
+    const checkClaudeLoginStatus = async () => {
+      try {
+        const token = localStorage.getItem('auth-token');
+        const response = await fetch('/api/claude/status', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setClaudeLoginStatus({
+            ...data,
+            loading: false
+          });
+        } else {
+          console.error('Response not ok:', response.status, response.statusText);
+          const errorText = await response.text();
+          console.error('Error response body:', errorText);
+          setClaudeLoginStatus({
+            isLoggedIn: false,
+            claudeInstalled: false,
+            version: null,
+            error: `Failed to check Claude status (${response.status}): ${errorText}`,
+            loading: false
+          });
+        }
+      } catch (error) {
+        console.error('Error checking Claude login status:', error);
+        setClaudeLoginStatus({
+          isLoggedIn: false,
+          claudeInstalled: false,
+          version: null,
+          error: `Network error: ${error.message}`,
+          loading: false
+        });
+      }
+    };
+
+    checkClaudeLoginStatus();
+  }, []); // Only check on mount
+
   // Fetch Cursor MCP servers
   const fetchCursorMcpServers = async () => {
     try {
@@ -129,7 +183,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
           'Content-Type': 'application/json'
         }
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         setCursorMcpServers(data.servers || []);
@@ -140,12 +194,12 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
       console.error('Error fetching Cursor MCP servers:', error);
     }
   };
-  
+
   // MCP API functions
   const fetchMcpServers = async () => {
     try {
       const token = localStorage.getItem('auth-token');
-      
+
       // Try to read directly from config files for complete details
       const configResponse = await fetch('/api/mcp/config/read', {
         headers: {
@@ -153,7 +207,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
           'Content-Type': 'application/json'
         }
       });
-      
+
       if (configResponse.ok) {
         const configData = await configResponse.json();
         if (configData.success && configData.servers) {
@@ -161,7 +215,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
           return;
         }
       }
-      
+
       // Fallback to Claude CLI
       const cliResponse = await fetch('/api/mcp/cli/list', {
         headers: {
@@ -169,7 +223,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
           'Content-Type': 'application/json'
         }
       });
-      
+
       if (cliResponse.ok) {
         const cliData = await cliResponse.json();
         if (cliData.success && cliData.servers) {
@@ -194,7 +248,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
           return;
         }
       }
-      
+
       // Final fallback to direct config reading
       const response = await fetch('/api/mcp/servers?scope=user', {
         headers: {
@@ -202,7 +256,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
           'Content-Type': 'application/json'
         }
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         setMcpServers(data.servers || []);
@@ -217,12 +271,12 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
   const saveMcpServer = async (serverData) => {
     try {
       const token = localStorage.getItem('auth-token');
-      
+
       if (editingMcpServer) {
         // For editing, remove old server and add new one
         await deleteMcpServer(editingMcpServer.id, 'user');
       }
-      
+
       // Use Claude CLI to add the server
       const response = await fetch('/api/mcp/cli/add', {
         method: 'POST',
@@ -242,7 +296,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
           env: serverData.config?.env || {}
         })
       });
-      
+
       if (response.ok) {
         const result = await response.json();
         if (result.success) {
@@ -264,7 +318,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
   const deleteMcpServer = async (serverId, scope = 'user') => {
     try {
       const token = localStorage.getItem('auth-token');
-      
+
       // Use Claude CLI to remove the server with proper scope
       const response = await fetch(`/api/mcp/cli/remove/${serverId}?scope=${scope}`, {
         method: 'DELETE',
@@ -273,7 +327,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
           'Content-Type': 'application/json'
         }
       });
-      
+
       if (response.ok) {
         const result = await response.json();
         if (result.success) {
@@ -302,7 +356,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
           'Content-Type': 'application/json'
         }
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         return data.testResult;
@@ -327,7 +381,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
           'Content-Type': 'application/json'
         }
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         return data.toolsResult;
@@ -377,10 +431,10 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
 
   const loadSettings = async () => {
     try {
-      
+
       // Load Claude settings from localStorage
       const savedSettings = localStorage.getItem('claude-settings');
-      
+
       if (savedSettings) {
         const settings = JSON.parse(savedSettings);
         setAllowedTools(settings.allowedTools || []);
@@ -394,10 +448,10 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
         setSkipPermissions(false);
         setProjectSortOrder('name');
       }
-      
+
       // Load Cursor settings from localStorage
       const savedCursorSettings = localStorage.getItem('cursor-tools-settings');
-      
+
       if (savedCursorSettings) {
         const cursorSettings = JSON.parse(savedCursorSettings);
         setCursorAllowedCommands(cursorSettings.allowedCommands || []);
@@ -412,7 +466,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
 
       // Load MCP servers from API
       await fetchMcpServers();
-      
+
       // Load Cursor MCP servers
       await fetchCursorMcpServers();
     } catch (error) {
@@ -448,7 +502,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
   const saveSettings = () => {
     setIsSaving(true);
     setSaveStatus(null);
-    
+
     try {
       // Save Claude settings
       const claudeSettings = {
@@ -458,7 +512,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
         projectSortOrder,
         lastUpdated: new Date().toISOString()
       };
-      
+
       // Save Cursor settings
       const cursorSettings = {
         allowedCommands: cursorAllowedCommands,
@@ -466,13 +520,13 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
         skipPermissions: cursorSkipPermissions,
         lastUpdated: new Date().toISOString()
       };
-      
+
       // Save to localStorage
       localStorage.setItem('claude-settings', JSON.stringify(claudeSettings));
       localStorage.setItem('cursor-tools-settings', JSON.stringify(cursorSettings));
-      
+
       setSaveStatus('success');
-      
+
       setTimeout(() => {
         onClose();
       }, 1000);
@@ -550,9 +604,9 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
 
   const handleMcpSubmit = async (e) => {
     e.preventDefault();
-    
+
     setMcpLoading(true);
-    
+
     try {
       if (mcpFormData.importMode === 'json') {
         // Use JSON import endpoint
@@ -570,7 +624,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
             projectPath: mcpFormData.projectPath
           })
         });
-        
+
         if (response.ok) {
           const result = await response.json();
           if (result.success) {
@@ -616,13 +670,13 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
       const result = await testMcpServer(serverId, scope);
       setMcpTestResults({ ...mcpTestResults, [serverId]: result });
     } catch (error) {
-      setMcpTestResults({ 
-        ...mcpTestResults, 
-        [serverId]: { 
-          success: false, 
+      setMcpTestResults({
+        ...mcpTestResults,
+        [serverId]: {
+          success: false,
           message: error.message,
           details: []
-        } 
+        }
       });
     }
   };
@@ -633,14 +687,14 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
       const result = await discoverMcpTools(serverId, scope);
       setMcpServerTools({ ...mcpServerTools, [serverId]: result });
     } catch (error) {
-      setMcpServerTools({ 
-        ...mcpServerTools, 
-        [serverId]: { 
-          success: false, 
-          tools: [], 
-          resources: [], 
-          prompts: [] 
-        } 
+      setMcpServerTools({
+        ...mcpServerTools,
+        [serverId]: {
+          success: false,
+          tools: [],
+          resources: [],
+          prompts: []
+        }
       });
     } finally {
       setMcpToolsLoading({ ...mcpToolsLoading, [serverId]: false });
@@ -738,7 +792,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
           </div>
 
           <div className="p-4 md:p-6 space-y-6 md:space-y-8 pb-safe-area-inset-bottom">
-            
+
             {/* Appearance Tab */}
             {activeTab === 'appearance' && (
               <div className="space-y-6 md:space-y-8">
@@ -964,7 +1018,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
             {/* Tools Tab */}
             {activeTab === 'tools' && (
               <div className="space-y-6 md:space-y-8">
-            
+
             {/* Provider Tabs */}
             <div className="border-b border-gray-300 dark:border-gray-600">
               <div className="flex gap-4">
@@ -996,11 +1050,11 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                 </button>
               </div>
             </div>
-            
+
             {/* Claude Content */}
             {toolsProvider === 'claude' && (
               <div className="space-y-6 md:space-y-8">
-            
+
             {/* Skip Permissions */}
             <div className="space-y-4">
               <div className="flex items-center gap-3">
@@ -1037,26 +1091,87 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                   Authentication
                 </h3>
               </div>
-              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="font-medium text-blue-900 dark:text-blue-100">
-                      Claude CLI Login
+
+              {claudeLoginStatus.loading ? (
+                <div className="bg-gray-50 dark:bg-gray-900/20 border border-gray-200 dark:border-gray-800 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium text-gray-900 dark:text-gray-100">
+                        Checking Claude CLI Status...
+                      </div>
+                      <div className="text-sm text-gray-700 dark:text-gray-300">
+                        Please wait while we check your authentication status
+                      </div>
                     </div>
-                    <div className="text-sm text-blue-700 dark:text-blue-300">
-                      Sign in to your Claude account to enable AI features
+                    <div className="w-4 h-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+                  </div>
+                </div>
+              ) : !claudeLoginStatus.claudeInstalled ? (
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium text-red-900 dark:text-red-100">
+                        Claude CLI Not Installed
+                      </div>
+                      <div className="text-sm text-red-700 dark:text-red-300">
+                        Install Claude CLI to enable AI features
+                      </div>
+                      {claudeLoginStatus.error && (
+                        <div className="text-xs text-red-600 dark:text-red-400 mt-1">
+                          Error: {claudeLoginStatus.error}
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-red-500">
+                      <LogIn className="w-4 h-4" />
                     </div>
                   </div>
-                  <Button
-                    onClick={handleClaudeLogin}
-                    className="bg-blue-600 hover:bg-blue-700 text-white"
-                    size="sm"
-                  >
-                    <LogIn className="w-4 h-4 mr-2" />
-                    Login
-                  </Button>
                 </div>
-              </div>
+              ) : claudeLoginStatus.isLoggedIn ? (
+                <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium text-green-900 dark:text-green-100">
+                        Claude CLI - Logged In
+                      </div>
+                      <div className="text-sm text-green-700 dark:text-green-300">
+                        {claudeLoginStatus.version ? `Version ${claudeLoginStatus.version}` : 'Successfully authenticated'}
+                      </div>
+                    </div>
+                    <div className="text-green-500">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium text-blue-900 dark:text-blue-100">
+                        Claude CLI Login
+                      </div>
+                      <div className="text-sm text-blue-700 dark:text-blue-300">
+                        Sign in to your Claude account to enable AI features
+                      </div>
+                      {claudeLoginStatus.error && (
+                        <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                          Note: {claudeLoginStatus.error}
+                        </div>
+                      )}
+                    </div>
+                    <Button
+                      onClick={handleClaudeLogin}
+                      className="bg-blue-600 hover:bg-blue-700 text-white"
+                      size="sm"
+                    >
+                      <LogIn className="w-4 h-4 mr-2" />
+                      Login
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Allowed Tools */}
@@ -1070,7 +1185,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
               <p className="text-sm text-muted-foreground">
                 Tools that are automatically allowed without prompting for permission
               </p>
-              
+
               <div className="flex flex-col sm:flex-row gap-2">
                 <Input
                   value={newAllowedTool}
@@ -1151,7 +1266,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
               <p className="text-sm text-muted-foreground">
                 Tools that are automatically blocked without prompting for permission
               </p>
-              
+
               <div className="flex flex-col sm:flex-row gap-2">
                 <Input
                   value={newDisallowedTool}
@@ -1227,7 +1342,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                   Model Context Protocol servers provide additional tools and data sources to Claude
                 </p>
               </div>
-              
+
               <div className="flex justify-between items-center">
                 <Button
                   onClick={() => openMcpForm()}
@@ -1260,7 +1375,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                             </Badge>
                           )}
                         </div>
-                        
+
                         <div className="text-sm text-muted-foreground space-y-1">
                           {server.type === 'stdio' && server.config.command && (
                             <div>Command: <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded text-xs">{server.config.command}</code></div>
@@ -1287,8 +1402,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                         {/* Test Results */}
                         {mcpTestResults[server.id] && (
                           <div className={`mt-2 p-2 rounded text-xs ${
-                            mcpTestResults[server.id].success 
-                              ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200' 
+                            mcpTestResults[server.id].success
+                              ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200'
                               : 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200'
                           }`}>
                             <div className="font-medium">{mcpTestResults[server.id].message}</div>
@@ -1306,7 +1421,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                         {mcpServerTools[server.id] && (
                           <div className="mt-2 p-2 rounded text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200 border border-blue-200 dark:border-blue-800">
                             <div className="font-medium mb-2">Available Tools & Resources</div>
-                            
+
                             {mcpServerTools[server.id].tools && mcpServerTools[server.id].tools.length > 0 && (
                               <div className="mb-2">
                                 <div className="font-medium text-xs mb-1">Tools ({mcpServerTools[server.id].tools.length}):</div>
@@ -1372,7 +1487,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                           </div>
                         )}
                       </div>
-                      
+
                       <div className="flex items-center gap-2 ml-4">
                         <Button
                           onClick={() => openMcpForm(server)}
@@ -1416,7 +1531,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                       <X className="w-4 h-4" />
                     </Button>
                   </div>
-                  
+
                   <form onSubmit={handleMcpSubmit} className="p-4 space-y-4">
 
                     {!editingMcpServer && (
@@ -1507,7 +1622,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                             </button>
                           </div>
                           <p className="text-xs text-muted-foreground mt-2">
-                            {mcpFormData.scope === 'user' 
+                            {mcpFormData.scope === 'user'
                               ? 'User scope: Available across all projects on your machine'
                               : 'Local scope: Only available in the selected project'
                             }
@@ -1558,7 +1673,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                           required
                         />
                       </div>
-                      
+
                       {mcpFormData.importMode === 'form' && (
                         <div>
                           <label className="block text-sm font-medium text-foreground mb-2">
@@ -1657,7 +1772,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                             required
                           />
                         </div>
-                        
+
                         <div>
                           <label className="block text-sm font-medium text-foreground mb-2">
                             Arguments (one per line)
@@ -1742,9 +1857,9 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                       <Button type="button" variant="outline" onClick={resetMcpForm}>
                         Cancel
                       </Button>
-                      <Button 
-                        type="submit" 
-                        disabled={mcpLoading} 
+                      <Button
+                        type="submit"
+                        disabled={mcpLoading}
                         className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50"
                       >
                         {mcpLoading ? 'Saving...' : (editingMcpServer ? 'Update Server' : 'Add Server')}
@@ -1756,11 +1871,11 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
             )}
               </div>
             )}
-            
+
             {/* Cursor Content */}
             {toolsProvider === 'cursor' && (
               <div className="space-y-6 md:space-y-8">
-                
+
                 {/* Skip Permissions for Cursor */}
                 <div className="space-y-4">
                   <div className="flex items-center gap-3">
@@ -1830,7 +1945,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                   <p className="text-sm text-muted-foreground">
                     Shell commands that are automatically allowed without prompting for permission
                   </p>
-                  
+
                   <div className="flex flex-col sm:flex-row gap-2">
                     <Input
                       value={newCursorCommand}
@@ -1911,7 +2026,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                     )}
                   </div>
                 </div>
-                
+
                 {/* Disallowed Shell Commands */}
                 <div className="space-y-4">
                   <div className="flex items-center gap-3">
@@ -1923,7 +2038,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                   <p className="text-sm text-muted-foreground">
                     Shell commands that should always be denied
                   </p>
-                  
+
                   <div className="flex flex-col sm:flex-row gap-2">
                     <Input
                       value={newCursorDisallowedCommand}
@@ -2025,12 +2140,12 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                             </div>
                             <div className="text-sm text-orange-800 dark:text-orange-200 space-y-3">
                               <p>TaskMaster CLI is required to use task management features. Install it to get started:</p>
-                              
+
                               <div className="bg-orange-100 dark:bg-orange-900/50 rounded-lg p-3 font-mono text-sm">
                                 <code>npm install -g task-master-ai</code>
-                               <a 
-                                  href="https://github.com/eyaltoledano/claude-task-master" 
-                                  target="_blank" 
+                               <a
+                                  href="https://github.com/eyaltoledano/claude-task-master"
+                                  target="_blank"
                                   rel="noopener noreferrer"
                                   className="inline-flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium"
                                 >
@@ -2043,7 +2158,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                                   </svg>
                                 </a>
                               </div>
-                              
+
                               <div className="space-y-2">
                                 <p className="font-medium">After installation:</p>
                                 <ol className="list-decimal list-inside space-y-1 text-xs">
@@ -2105,7 +2220,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                           <p><strong>Progress Visualization:</strong> Kanban boards, and detailed task views</p>
                         </div>
                       </div>
-                      
+
                       {/* GitHub Link and Resources */}
                       <div className="mt-4 pt-4 border-t border-blue-200 dark:border-blue-700">
                         <div className="flex items-start gap-3">
@@ -2121,9 +2236,9 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                             <div className="text-sm text-blue-800 dark:text-blue-200 space-y-2">
                               <p>TaskMaster AI (aka <strong>claude-task-master</strong> ) is an advanced AI-powered task management system built for developers.</p>
                               <div className="flex flex-col gap-2">
-                                <a 
-                                  href="https://github.com/eyaltoledano/claude-task-master" 
-                                  target="_blank" 
+                                <a
+                                  href="https://github.com/eyaltoledano/claude-task-master"
+                                  target="_blank"
                                   rel="noopener noreferrer"
                                   className="inline-flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium"
                                 >
@@ -2180,16 +2295,16 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
             )}
           </div>
           <div className="flex items-center gap-3 order-1 sm:order-2">
-            <Button 
-              variant="outline" 
-              onClick={onClose} 
+            <Button
+              variant="outline"
+              onClick={onClose}
               disabled={isSaving}
               className="flex-1 sm:flex-none h-10 touch-manipulation"
             >
               Cancel
             </Button>
-            <Button 
-              onClick={saveSettings} 
+            <Button
+              onClick={saveSettings}
               disabled={isSaving}
               className="flex-1 sm:flex-none h-10 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 touch-manipulation"
             >

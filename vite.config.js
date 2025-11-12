@@ -10,6 +10,9 @@ export default defineConfig(({ command, mode }) => {
     plugins: [react()],
     server: {
       port: parseInt(env.VITE_PORT) || 5173,
+      allowedHosts: env.VITE_ALLOWED_HOSTS
+        ? env.VITE_ALLOWED_HOSTS.split(',').map(host => host.trim())
+        : [],
       proxy: {
         '/api': `http://localhost:${env.PORT || 3001}`,
         '/ws': {
@@ -17,7 +20,7 @@ export default defineConfig(({ command, mode }) => {
           ws: true
         },
         '/shell': {
-          target: `ws://localhost:${env.PORT || 3002}`,
+          target: `ws://localhost:${env.PORT || 3001}`,
           ws: true
         }
       }
