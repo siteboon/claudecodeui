@@ -4789,8 +4789,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     {/* Permission Queue Indicator */}
     <PermissionQueueIndicator />
 
-    {/* Test buttons for development */}
-    {process.env.NODE_ENV === 'development' && (
+    {/* Test buttons for development - Hidden by default, enable via VITE_SHOW_DEBUG_BUTTONS=true in .env */}
+    {import.meta.env.VITE_SHOW_DEBUG_BUTTONS === 'true' && (
       <>
         <button
           onClick={() => {

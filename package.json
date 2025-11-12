@@ -29,6 +29,8 @@
     "preview": "vite preview",
     "start": "npm run build && npm run server",
     "start:ngrok": "node scripts/start-with-ngrok.js",
+    "restart": "bash restart.sh",
+    "restart:prod": "bash restart.sh prod",
     "release": "./release.sh"
   },
   "keywords": [
