@@ -268,17 +268,8 @@ app.use(express.static(path.join(__dirname, '../dist'), {
 }));
 
 // API Routes (protected)
-app.get('/api/config', authenticateToken, (req, res) => {
-    const host = req.headers.host || `${req.hostname}:${PORT}`;
-    const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'wss' : 'ws';
-
-    console.log('Config API called - Returning host:', host, 'Protocol:', protocol);
-
-    res.json({
-        serverPort: PORT,
-        wsUrl: `${protocol}://${host}`
-    });
-});
+// /api/config endpoint removed - no longer needed
+// Frontend now uses window.location for WebSocket URLs
 
 // Claude CLI login status endpoint
 app.get('/api/claude/status', authenticateToken, async (req, res) => {
