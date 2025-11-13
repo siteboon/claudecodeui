@@ -1050,8 +1050,8 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                           }
                         }
 
-                        // Special handling for exit_plan_mode tool results
-                        if (message.toolName === 'exit_plan_mode') {
+                        // Special handling for ExitPlanMode tool results
+                        if (message.toolName === 'ExitPlanMode') {
                           try {
                             // The content should be JSON with a "plan" field
                             const parsed = JSON.parse(content);
@@ -1059,11 +1059,16 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                               // Replace escaped newlines with actual newlines
                               const planContent = parsed.plan.replace(/\\n/g, '\n');
                               return (
-                                <div>
-                                  <div className="flex items-center gap-2 mb-3">
-                                    <span className="font-medium">Implementation Plan</span>
+                                <div className="bg-gradient-to-br from-blue-50/50 to-indigo-50/50 dark:from-blue-950/30 dark:to-indigo-950/30 rounded-lg p-6 border border-blue-200/50 dark:border-blue-800/50">
+                                  <div className="flex items-center gap-3 mb-4 pb-3 border-b border-blue-200/50 dark:border-blue-800/50">
+                                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 dark:from-blue-400 dark:to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
+                                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                                      </svg>
+                                    </div>
+                                    <span className="text-lg font-semibold text-blue-900 dark:text-blue-100">Implementation Plan</span>
                                   </div>
-                                  <Markdown className="prose prose-sm max-w-none dark:prose-invert">
+                                  <Markdown className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-blue-900 dark:prose-headings:text-blue-100 prose-p:text-gray-700 dark:prose-p:text-gray-300 prose-li:text-gray-700 dark:prose-li:text-gray-300 prose-strong:text-blue-800 dark:prose-strong:text-blue-200">
                                     {planContent}
                                   </Markdown>
                                 </div>
@@ -1552,6 +1557,33 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                       (trimmedContent.endsWith('}') || trimmedContent.endsWith(']'))) {
                     try {
                       const parsed = JSON.parse(trimmedContent);
+
+                      // Special handling for plan JSON (array with type:"text" and text containing plan)
+                      if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].type === 'text' && parsed[0].text) {
+                        const textContent = parsed[0].text;
+
+                        // Check if text contains an implementation plan
+                        if (textContent.includes('## ') || textContent.includes('### ') ||
+                            (textContent.includes('Phase') && textContent.includes('implement'))) {
+                          return (
+                            <div className="bg-gradient-to-br from-blue-50/50 to-indigo-50/50 dark:from-blue-950/30 dark:to-indigo-950/30 rounded-lg p-6 border border-blue-200/50 dark:border-blue-800/50">
+                              <div className="flex items-center gap-3 mb-4 pb-3 border-b border-blue-200/50 dark:border-blue-800/50">
+                                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 dark:from-blue-400 dark:to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
+                                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                                  </svg>
+                                </div>
+                                <span className="text-lg font-semibold text-blue-900 dark:text-blue-100">Implementation Plan</span>
+                              </div>
+                              <Markdown className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-blue-900 dark:prose-headings:text-blue-100 prose-p:text-gray-700 dark:prose-p:text-gray-300 prose-li:text-gray-700 dark:prose-li:text-gray-300 prose-strong:text-blue-800 dark:prose-strong:text-blue-200">
+                                {textContent}
+                              </Markdown>
+                            </div>
+                          );
+                        }
+                      }
+
+                      // Default JSON rendering for other JSON content
                       const formatted = JSON.stringify(parsed, null, 2);
 
                       return (
