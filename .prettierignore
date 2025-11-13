@@ -1,0 +1,7 @@
+node_modules
+dist
+build
+.taskmaster
+*.log
+package-lock.json
+CHANGELOG.md
