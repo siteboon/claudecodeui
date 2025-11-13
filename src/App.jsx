@@ -947,9 +947,9 @@ function AppContent() {
 
 // Wrapper to provide WebSocket to PlanApprovalProvider
 function PlanApprovalProviderWrapper({ children }) {
-  const { websocket } = useWebSocketContext();
+  const { ws } = useWebSocketContext();
   return (
-    <PlanApprovalProvider websocket={websocket}>
+    <PlanApprovalProvider websocket={ws}>
       {children}
     </PlanApprovalProvider>
   );

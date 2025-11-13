@@ -506,24 +506,52 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
         // Log assistant messages for debugging
         if (message.type === 'assistant') {
-          if (message.content && Array.isArray(message.content)) {
-            const hasToolUse = message.content.some(c => c.type === 'tool_use');
-            const hasText = message.content.some(c => c.type === 'text');
+          // SDK messages have structure: message.message.content (not message.content)
+          const content = message.message?.content || message.content;
+
+          if (content && Array.isArray(content)) {
+            const hasToolUse = content.some(c => c.type === 'tool_use');
+            const hasText = content.some(c => c.type === 'text');
             console.log(`🤖 [SDK] Assistant message:`, {
               hasToolUse,
               hasText,
-              contentTypes: message.content.map(c => c.type),
-              textPreview: message.content.find(c => c.type === 'text')?.text?.substring(0, 100)
+              contentTypes: content.map(c => c.type),
+              textPreview: content.find(c => c.type === 'text')?.text?.substring(0, 100)
+            });
+
+            // 🔍 DEBUG: Extensive logging for ExitPlanMode detection
+            console.log('🔍 [DEBUG] Message structure:', {
+              type: message.type,
+              hasMessage: !!message.message,
+              hasContent: !!content,
+              isArray: Array.isArray(content),
+              contentLength: Array.isArray(content) ? content.length : 'N/A',
+              contentTypes: Array.isArray(content)
+                ? content.map(c => ({ type: c.type, name: c.name, id: c.id }))
+                : 'N/A',
+              rawContentPreview: JSON.stringify(message).substring(0, 500)
             });
 
             // Detect ExitPlanMode tool usage
-            const exitPlanModeTool = message.content.find(c => c.type === 'tool_use' && c.name === 'ExitPlanMode');
+            const exitPlanModeTool = content.find(c => c.type === 'tool_use' && c.name === 'ExitPlanMode');
+
+            // 🔍 DEBUG: Log detection result
+            console.log('🔍 [DEBUG] ExitPlanMode detection:', {
+              found: !!exitPlanModeTool,
+              toolName: exitPlanModeTool?.name,
+              toolId: exitPlanModeTool?.id,
+              hasInput: !!exitPlanModeTool?.input,
+              hasPlan: !!exitPlanModeTool?.input?.plan,
+              planLength: exitPlanModeTool?.input?.plan?.length || 0,
+              inputKeys: exitPlanModeTool?.input ? Object.keys(exitPlanModeTool.input).join(', ') : 'N/A'
+            });
             if (exitPlanModeTool && exitPlanModeTool.input && exitPlanModeTool.input.plan) {
               console.log(`📋 [SDK] ExitPlanMode detected! Plan content length: ${exitPlanModeTool.input.plan.length}`);
 
               // Request plan approval from user
               const planApprovalManager = getPlanApprovalManager();
               try {
+                console.log('✅ [DEBUG] Requesting plan approval NOW!');
                 console.log(`📋 [SDK] Requesting plan approval from user...`);
                 const approvalResult = await planApprovalManager.requestPlanApproval(
                   exitPlanModeTool.input.plan,
