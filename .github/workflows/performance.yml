@@ -193,7 +193,7 @@ jobs:
           kill $SERVER_PID || true
 
       - name: Upload profiling results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: memory-profile
