@@ -1,0 +1,200 @@
+name: Performance Monitoring
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # Run daily at 2 AM UTC
+  workflow_dispatch:
+    inputs:
+      run_full_tests:
+        description: 'Run full performance test suite'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  bundle-analysis:
+    name: Bundle Size Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+
+      - name: Analyze bundle size
+        run: |
+          echo "## Bundle Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| File | Size | Gzipped |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|------|---------|" >> $GITHUB_STEP_SUMMARY
+
+          cd dist
+          for file in $(find . -name "*.js" -o -name "*.css" -o -name "*.html"); do
+            size=$(stat -c%s "$file")
+            gzipped=$(gzip -c "$file" | wc -c)
+            echo "| $file | ${size} bytes | ${gzipped} bytes |" >> $GITHUB_STEP_SUMMARY
+          done
+
+      - name: Check bundle size limits
+        run: |
+          max_js_size=2097152  # 2MB
+          max_css_size=1048576 # 1MB
+
+          cd dist
+          js_size=$(find . -name "*.js" -exec stat -c%s {} + | awk '{sum+=$1} END {print sum}')
+          css_size=$(find . -name "*.css" -exec stat -c%s {} + | awk '{sum+=$1} END {print sum}')
+
+          if [ "$js_size" -gt "$max_js_size" ]; then
+            echo "JavaScript bundle size ($js_size bytes) exceeds limit ($max_js_size bytes)"
+            exit 1
+          fi
+
+          if [ "$css_size" -gt "$max_css_size" ]; then
+            echo "CSS bundle size ($css_size bytes) exceeds limit ($max_css_size bytes)"
+            exit 1
+          fi
+
+  lighthouse:
+    name: Lighthouse CI
+    runs-on: ubuntu-latest
+    if: github.event.inputs.run_full_tests == 'true' || github.event_name == 'schedule'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+
+      - name: Run Lighthouse CI
+        uses: treosh/lighthouse-ci-action@v10
+        with:
+          configPath: './lighthouserc.json'
+          uploadArtifacts: true
+          temporaryPublicStorage: true
+
+  load-testing:
+    name: Load Testing
+    runs-on: ubuntu-latest
+    if: github.event.inputs.run_full_tests == 'true' || github.event_name == 'schedule'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+
+      - name: Start application
+        run: |
+          npm start &
+          sleep 30  # Wait for server to start
+
+      - name: Install Artillery
+        run: npm install -g artillery
+
+      - name: Run load tests
+        run: |
+          cat > load-test.yml << EOF
+          config:
+            target: 'http://localhost:3001'
+            phases:
+              - duration: 60
+                arrivalRate: 5
+              - duration: 120
+                arrivalRate: 10
+              - duration: 60
+                arrivalRate: 5
+            processor: './tests/performance/processor.js'
+          scenarios:
+            - name: 'Load test main pages'
+              weight: 70
+              flow:
+                - get:
+                    url: '/'
+                - think: 1
+                - get:
+                    url: '/dashboard'
+                - think: 1
+            - name: 'API load test'
+              weight: 30
+              flow:
+                - post:
+                    url: '/api/auth/login'
+                    json:
+                      username: 'testuser'
+                      password: 'testpass'
+          EOF
+
+          artillery run load-test.yml
+
+  memory-profiling:
+    name: Memory Profiling
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+
+      - name: Run memory profiling
+        run: |
+          node --inspect=0.0.0.0:9229 server/index.js &
+          SERVER_PID=$!
+          sleep 10
+
+          # Install clinic.js for profiling
+          npm install -g clinic
+
+          # Run clinic bubbleprof for 30 seconds
+          timeout 30s clinic bubbleprof --port 3001 -- node server/index.js || true
+
+          # Kill the server
+          kill $SERVER_PID || true
+
+      - name: Upload profiling results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: memory-profile
+          path: clinic/

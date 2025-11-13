@@ -1,0 +1,204 @@
+name: Publish Package
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g., 1.2.3)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Dry run (don\'t actually publish)'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  test:
+    name: Run Tests Before Publishing
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # TODO: Enable when test:complete script is added
+      # - name: Run all tests
+      #   run: npm run test:complete
+
+      - name: Build application
+        run: npm run build
+
+  publish-npm:
+    name: Publish to NPM
+    runs-on: ubuntu-latest
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.version
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+
+      - name: Set version from tag
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          VERSION=$(echo ${{ github.ref_name }} | sed 's/^v//')
+          npm version $VERSION --no-git-tag-version
+
+      - name: Set version from input
+        if: github.event.inputs.version
+        run: npm version ${{ github.event.inputs.version }} --no-git-tag-version
+
+      - name: Check if package exists
+        if: github.event.inputs.dry_run == 'true'
+        run: |
+          PACKAGE_NAME=@siteboon/claude-code-ui
+          VERSION=$(node -p "require('./package.json').version")
+          echo "Checking if $PACKAGE_NAME@$VERSION exists on NPM..."
+
+          if npm view $PACKAGE_NAME@$VERSION version; then
+            echo "Package already exists, skipping publish"
+            echo "skip_publish=true" >> $GITHUB_ENV
+          else
+            echo "Package does not exist, ready to publish"
+          fi
+
+      - name: Publish to NPM
+        if: env.skip_publish != 'true' && github.event.inputs.dry_run != 'true'
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Dry run publish
+        if: github.event.inputs.dry_run == 'true'
+        run: npm publish --access public --dry-run
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  create-github-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [test, publish-npm]
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get the previous tag
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          VERSION=$(echo ${{ github.ref_name }} | sed 's/^v//')
+
+          if [ -n "$PREVIOUS_TAG" ]; then
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" $PREVIOUS_TAG..HEAD)
+          else
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)")
+          fi
+
+          # Add version header
+          CHANGELOG="## Version $VERSION\n\n$CHANGELOG"
+
+          # Save to file and environment
+          echo "$CHANGELOG" > CHANGELOG.md
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: Release ${{ github.ref_name }}
+          body: ${{ steps.changelog.outputs.changelog }}
+          draft: false
+          prerelease: false
+
+      - name: Upload build artifacts
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./CHANGELOG.md
+          asset_name: CHANGELOG.md
+          asset_content_type: text/markdown
+
+  update-docker-tags:
+    name: Update Docker Tags
+    runs-on: ubuntu-latest
+    needs: [test, publish-npm]
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Update Docker Hub description
+        uses: peter-evans/dockerhub-description@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          repository: siteboon/claude-code-ui
+          short-description: ${{ github.event.repository.description }}
+          readme-filepath: ./README.md
+
+  notify-release:
+    name: Notify Release
+    runs-on: ubuntu-latest
+    needs: [test, publish-npm, create-github-release]
+    if: always()
+
+    steps:
+      - name: Send notification on success
+        if: needs.publish-npm.result == 'success'
+        run: |
+          echo "✅ Release ${{ github.ref_name }} published successfully!"
+          echo "📦 Available on NPM: https://www.npmjs.com/package/@siteboon/claude-code-ui"
+          echo "🚀 GitHub Release: https://github.com/maksm/claudecodeui/releases/tag/${{ github.ref_name }}"
+
+      - name: Send notification on failure
+        if: needs.publish-npm.result == 'failure'
+        run: |
+          echo "❌ Release ${{ github.ref_name }} failed to publish"
+          echo "Please check the logs and retry manually"

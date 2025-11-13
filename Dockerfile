@@ -3,16 +3,19 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+# Install build dependencies for native modules
+RUN apk add --no-cache python3 make g++
+
 # Copy package files
 COPY package*.json ./
 
 # Install dependencies
 RUN npm ci
 
-# Copy source files
+# Copy source code
 COPY . .
 
-# Build the application
+# Build the frontend
 RUN npm run build
 
 # Production stage
@@ -20,24 +23,23 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+# Install build dependencies for native modules
+RUN apk add --no-cache python3 make g++
+
 # Install production dependencies only
 COPY package*.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+RUN npm ci --only=production && apk del python3 make g++
 
-# Copy built assets from builder
+# Copy built assets and server code
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/server ./server
 
-# Create data directory
-RUN mkdir -p /data
-
-# Expose the port
+# Expose port
 EXPOSE 3001
 
 # Set environment variables
-ENV PORT=3001
-ENV DATABASE_PATH=/data/database.db
 ENV NODE_ENV=production
+ENV PORT=3001
 
-# Run the application
+# Run the server
 CMD ["node", "server/index.js"]
