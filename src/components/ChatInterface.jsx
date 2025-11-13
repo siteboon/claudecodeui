@@ -29,7 +29,9 @@ import NextTaskBanner from './NextTaskBanner.jsx';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
 import PermissionDialog from './PermissionDialog';
 import PermissionQueueIndicator from './PermissionQueueIndicator';
+import PlanApprovalDialog from './PlanApprovalDialog';
 import { usePermission } from '../contexts/PermissionContext';
+import { usePlanApproval } from '../contexts/PlanApprovalContext';
 import usePermissions from '../hooks/usePermissions';
 import { PERMISSION_DECISIONS } from '../utils/permissionWebSocketClient';
 
@@ -715,32 +717,12 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                             </Markdown>
                           </div>
 
-                          {/* Approval buttons */}
-                          <div className="flex items-center gap-3 mt-4">
-                            <button
-                              onClick={() => {
-                                // TODO: Handle plan approval
-                                console.log('Plan approved for tool:', message.toolId);
-                              }}
-                              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-lg font-medium transition-all duration-200 shadow-md hover:shadow-lg"
-                            >
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                              Approve Plan
-                            </button>
-                            <button
-                              onClick={() => {
-                                // TODO: Handle plan rejection
-                                console.log('Plan rejected for tool:', message.toolId);
-                              }}
-                              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white rounded-lg font-medium transition-all duration-200 shadow-md hover:shadow-lg"
-                            >
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                              Reject Plan
-                            </button>
+                          {/* Approval message - dialog will handle actual approval */}
+                          <div className="flex items-center gap-2 mt-4 p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg text-sm text-blue-800 dark:text-blue-200">
+                            <svg className="w-5 h-5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span className="font-medium">Awaiting your approval...</span>
                           </div>
                         </div>
                       );
@@ -4846,6 +4828,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         onDecision={handleDialogDecision}
       />
     )}
+
+    {/* Plan Approval Dialog */}
+    <PlanApprovalDialog />
 
     {/* Permission Queue Indicator */}
     <PermissionQueueIndicator />

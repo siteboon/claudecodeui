@@ -33,6 +33,7 @@ import { TaskMasterProvider } from './contexts/TaskMasterContext';
 import { TasksSettingsProvider } from './contexts/TasksSettingsContext';
 import { WebSocketProvider, useWebSocketContext } from './contexts/WebSocketContext';
 import { PermissionProvider } from './contexts/PermissionContext';
+import { PlanApprovalProvider } from './contexts/PlanApprovalContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import { useVersionCheck } from './hooks/useVersionCheck';
 import useLocalStorage from './hooks/useLocalStorage';
@@ -944,6 +945,16 @@ function AppContent() {
   );
 }
 
+// Wrapper to provide WebSocket to PlanApprovalProvider
+function PlanApprovalProviderWrapper({ children }) {
+  const { websocket } = useWebSocketContext();
+  return (
+    <PlanApprovalProvider websocket={websocket}>
+      {children}
+    </PlanApprovalProvider>
+  );
+}
+
 // Root App component with router
 function App() {
   return (
@@ -951,18 +962,20 @@ function App() {
       <AuthProvider>
         <WebSocketProvider>
           <PermissionProvider>
-            <TasksSettingsProvider>
-              <TaskMasterProvider>
-                <ProtectedRoute>
-                  <Router>
-                    <Routes>
-                      <Route path="/" element={<AppContent />} />
-                      <Route path="/session/:sessionId" element={<AppContent />} />
-                    </Routes>
-                  </Router>
-                </ProtectedRoute>
-              </TaskMasterProvider>
-            </TasksSettingsProvider>
+            <PlanApprovalProviderWrapper>
+              <TasksSettingsProvider>
+                <TaskMasterProvider>
+                  <ProtectedRoute>
+                    <Router>
+                      <Routes>
+                        <Route path="/" element={<AppContent />} />
+                        <Route path="/session/:sessionId" element={<AppContent />} />
+                      </Routes>
+                    </Router>
+                  </ProtectedRoute>
+                </TaskMasterProvider>
+              </TasksSettingsProvider>
+            </PlanApprovalProviderWrapper>
           </PermissionProvider>
         </WebSocketProvider>
       </AuthProvider>

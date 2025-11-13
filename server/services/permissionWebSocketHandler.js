@@ -152,6 +152,64 @@ class PermissionWebSocketHandler extends EventEmitter {
   }
 
   /**
+   * Broadcast a plan approval request to all connected clients
+   */
+  broadcastPlanApprovalRequest(planRequest) {
+    const message = {
+      type: 'plan-approval-request',
+      planId: planRequest.planId,
+      content: planRequest.content,
+      sessionId: planRequest.sessionId,
+      timestamp: planRequest.timestamp,
+      expiresAt: planRequest.expiresAt
+    };
+    message.sequenceNumber = ++this.sequenceNumber;
+
+    console.log(`📋 [WebSocket] Broadcasting plan approval request ${planRequest.planId}`);
+
+    this.broadcastToAll(message);
+
+    if (this.clients.size === 0) {
+      console.warn('No clients connected to receive plan approval request');
+      this.emit('no-clients', planRequest);
+    }
+  }
+
+  /**
+   * Handle a plan approval response from a client
+   */
+  handlePlanApprovalResponse(clientId, message) {
+    console.log(`📋 [WebSocket] Received plan approval response from client ${clientId}:`, {
+      planId: message.planId,
+      decision: message.decision,
+      permissionMode: message.permissionMode
+    });
+
+    this.emit('plan-approval-response', {
+      clientId,
+      planId: message.planId,
+      decision: message.decision,
+      permissionMode: message.permissionMode,
+      reason: message.reason
+    });
+  }
+
+  /**
+   * Broadcast a plan approval timeout notification
+   */
+  broadcastPlanApprovalTimeout(planId) {
+    const message = {
+      type: 'plan-approval-timeout',
+      planId,
+      timestamp: Date.now()
+    };
+
+    console.log(`⏱️  [WebSocket] Broadcasting plan approval timeout for ${planId}`);
+
+    this.broadcastToAll(message);
+  }
+
+  /**
    * Send queue status update to all clients
    */
   sendQueueStatus() {

@@ -18,6 +18,7 @@ import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
 import { getPermissionManager } from './services/permissionManager.js';
+import { getPlanApprovalManager } from './services/planApprovalManager.js';
 
 // Session tracking: Map of session IDs to active query instances
 const activeSessions = new Map();
@@ -514,6 +515,50 @@ async function queryClaudeSDK(command, options = {}, ws) {
               contentTypes: message.content.map(c => c.type),
               textPreview: message.content.find(c => c.type === 'text')?.text?.substring(0, 100)
             });
+
+            // Detect ExitPlanMode tool usage
+            const exitPlanModeTool = message.content.find(c => c.type === 'tool_use' && c.name === 'ExitPlanMode');
+            if (exitPlanModeTool && exitPlanModeTool.input && exitPlanModeTool.input.plan) {
+              console.log(`📋 [SDK] ExitPlanMode detected! Plan content length: ${exitPlanModeTool.input.plan.length}`);
+
+              // Request plan approval from user
+              const planApprovalManager = getPlanApprovalManager();
+              try {
+                console.log(`📋 [SDK] Requesting plan approval from user...`);
+                const approvalResult = await planApprovalManager.requestPlanApproval(
+                  exitPlanModeTool.input.plan,
+                  capturedSessionId || 'unknown'
+                );
+
+                console.log(`✅ [SDK] Plan approved! Switching to mode: ${approvalResult.permissionMode}`);
+
+                // Plan was approved - update permission mode for continued execution
+                // The mode will be applied to subsequent tool calls
+                // Note: We need to update the current options to reflect the new mode
+                // This will affect subsequent canUseTool calls
+
+              } catch (error) {
+                console.log(`❌ [SDK] Plan rejected or timed out: ${error.message}`);
+
+                // Plan was rejected - abort the conversation
+                ws.send(JSON.stringify({
+                  type: 'claude-response',
+                  data: {
+                    type: 'assistant',
+                    content: [{
+                      type: 'text',
+                      text: `Plan was ${error.message.includes('timeout') ? 'not approved in time' : 'rejected'}. Conversation aborted.`
+                    }]
+                  }
+                }));
+
+                // Stop processing
+                if (queryInstance && queryInstance.interrupt) {
+                  await queryInstance.interrupt();
+                }
+                return;
+              }
+            }
           } else {
             console.log(`🤖 [SDK] Assistant message (no content):`, {
               hasContent: !!message.content,

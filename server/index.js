@@ -61,6 +61,7 @@ import { getProjects, getSessions, getSessionMessages, renameProject, deleteSess
 import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions } from './claude-sdk.js';
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
 import { getPermissionManager } from './services/permissionManager.js';
+import { getPlanApprovalManager } from './services/planApprovalManager.js';
 import { setupConsoleApproval } from './services/consoleApproval.js';
 import PermissionWebSocketHandler from './services/permissionWebSocketHandler.js';
 import gitRoutes from './routes/git.js';
@@ -724,6 +725,14 @@ function handleChatConnection(ws) {
                 console.log('📨 Received permission response from client');
                 const clientId = ws.clientId || `client-${Date.now()}`;
                 permissionWebSocketHandler.handlePermissionResponse(clientId, data);
+                return;
+            }
+
+            // Handle plan approval response messages
+            if (data.type === 'plan-approval-response') {
+                console.log('📋 Received plan approval response from client');
+                const clientId = ws.clientId || `client-${Date.now()}`;
+                permissionWebSocketHandler.handlePlanApprovalResponse(clientId, data);
                 return;
             }
 
@@ -1537,6 +1546,29 @@ async function startServer() {
                     response.updatedInput
                 );
                 console.log('🔍 [Index] resolveRequest returned:', success);
+            });
+
+            // Connect plan approval manager events to WebSocket handler
+            const planApprovalManager = getPlanApprovalManager();
+
+            planApprovalManager.on('plan-request', (request) => {
+                console.log('📋 Broadcasting plan approval request:', request.planId);
+                permissionWebSocketHandler.broadcastPlanApprovalRequest(request);
+            });
+
+            planApprovalManager.on('plan-timeout', ({ planId }) => {
+                console.log('⏱️  Broadcasting plan approval timeout:', planId);
+                permissionWebSocketHandler.broadcastPlanApprovalTimeout(planId);
+            });
+
+            // Listen for plan approval responses from WebSocket handler
+            permissionWebSocketHandler.on('plan-approval-response', (response) => {
+                console.log('📋 Received plan approval response:', response);
+                if (response.decision === 'approve') {
+                    planApprovalManager.resolvePlanApproval(response.planId, response.permissionMode);
+                } else {
+                    planApprovalManager.rejectPlanApproval(response.planId, response.reason || 'Plan rejected by user');
+                }
             });
 
             console.log('');
