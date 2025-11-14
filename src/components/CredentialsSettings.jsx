@@ -419,17 +419,14 @@ function CredentialsSettings() {
       {/* Version Information */}
       <div className="pt-6 border-t border-border/50">
         <div className="flex items-center justify-between text-xs italic text-muted-foreground/60">
-          <div className="flex items-center gap-2">
-            <span>Claude Code UI</span>
-            <a
-              href={releaseInfo?.htmlUrl || 'https://github.com/siteboon/claudecodeui/releases'}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-muted-foreground transition-colors"
-            >
-              v{version}
-            </a>
-          </div>
+          <a
+            href={releaseInfo?.htmlUrl || 'https://github.com/siteboon/claudecodeui/releases'}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-muted-foreground transition-colors"
+          >
+            v{version}
+          </a>
           {updateAvailable && latestVersion && (
             <a
               href={releaseInfo?.htmlUrl || 'https://github.com/siteboon/claudecodeui/releases'}
