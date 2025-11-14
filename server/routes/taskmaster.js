@@ -331,15 +331,6 @@ router.get('/detect/:projectName', async (req, res) => {
             timestamp: new Date().toISOString()
         };
 
-        // Broadcast TaskMaster project update via WebSocket
-        if (req.app.locals.wss) {
-            broadcastTaskMasterProjectUpdate(
-                req.app.locals.wss, 
-                projectName, 
-                taskMasterResult
-            );
-        }
-
         res.json(responseData);
 
     } catch (error) {

@@ -133,36 +133,14 @@ export const TaskMasterProvider = ({ children }) => {
   const setCurrentProject = useCallback(async (project) => {
     try {
       setCurrentProjectState(project);
-      
-      // Clear previous project's data immediately when switching projects
+
       setTasks([]);
       setNextTask(null);
-      setProjectTaskMaster(null); // Clear previous TaskMaster data
-      
-      // Try to fetch fresh TaskMaster detection data for the project
-      if (project?.name) {
-        try {
-          const response = await api.get(`/taskmaster/detect/${encodeURIComponent(project.name)}`);
-          if (response.ok) {
-            const detectionData = await response.json();
-            setProjectTaskMaster(detectionData.taskmaster);
-          } else {
-            // If individual detection fails, fall back to project data from /api/projects
-            console.warn('Individual TaskMaster detection failed, using project data:', response.status);
-            setProjectTaskMaster(project.taskmaster || null);
-          }
-        } catch (detectionError) {
-          // If individual detection fails, fall back to project data from /api/projects  
-          console.warn('TaskMaster detection error, using project data:', detectionError.message);
-          setProjectTaskMaster(project.taskmaster || null);
-        }
-      } else {
-        setProjectTaskMaster(null);
-      }
+
+      setProjectTaskMaster(project?.taskmaster || null);
     } catch (err) {
       console.error('Error in setCurrentProject:', err);
       handleError(err, 'set current project');
-      // Fall back to project data if available
       setProjectTaskMaster(project?.taskmaster || null);
     }
   }, []);
