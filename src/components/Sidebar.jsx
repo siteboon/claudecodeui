@@ -303,19 +303,25 @@ function Sidebar({
     }
 
     try {
+      console.log('[Sidebar] Deleting session:', { projectName, sessionId });
       const response = await api.deleteSession(projectName, sessionId);
+      console.log('[Sidebar] Delete response:', { ok: response.ok, status: response.status });
 
       if (response.ok) {
+        console.log('[Sidebar] Session deleted successfully, calling callback');
         // Call parent callback if provided
         if (onSessionDelete) {
           onSessionDelete(sessionId);
+        } else {
+          console.warn('[Sidebar] No onSessionDelete callback provided');
         }
       } else {
-        console.error('Failed to delete session');
+        const errorText = await response.text();
+        console.error('[Sidebar] Failed to delete session:', { status: response.status, error: errorText });
         alert('Failed to delete session. Please try again.');
       }
     } catch (error) {
-      console.error('Error deleting session:', error);
+      console.error('[Sidebar] Error deleting session:', error);
       alert('Error deleting session. Please try again.');
     }
   };

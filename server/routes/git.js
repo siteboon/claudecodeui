@@ -161,10 +161,18 @@ router.get('/diff', async (req, res) => {
     let diff;
     if (isUntracked) {
       // For untracked files, show the entire file content as additions
-      const fileContent = await fs.readFile(path.join(projectPath, file), 'utf-8');
-      const lines = fileContent.split('\n');
-      diff = `--- /dev/null\n+++ b/${file}\n@@ -0,0 +1,${lines.length} @@\n` +
-             lines.map(line => `+${line}`).join('\n');
+      const filePath = path.join(projectPath, file);
+      const stats = await fs.stat(filePath);
+
+      if (stats.isDirectory()) {
+        // For directories, show a simple message
+        diff = `Directory: ${file}\n(Cannot show diff for directories)`;
+      } else {
+        const fileContent = await fs.readFile(filePath, 'utf-8');
+        const lines = fileContent.split('\n');
+        diff = `--- /dev/null\n+++ b/${file}\n@@ -0,0 +1,${lines.length} @@\n` +
+               lines.map(line => `+${line}`).join('\n');
+      }
     } else if (isDeleted) {
       // For deleted files, show the entire file content from HEAD as deletions
       const { stdout: fileContent } = await execAsync(`git show HEAD:"${file}"`, { cwd: projectPath });
@@ -222,7 +230,15 @@ router.get('/file-with-diff', async (req, res) => {
       currentContent = headContent; // Show the deleted content in editor
     } else {
       // Get current file content
-      currentContent = await fs.readFile(path.join(projectPath, file), 'utf-8');
+      const filePath = path.join(projectPath, file);
+      const stats = await fs.stat(filePath);
+
+      if (stats.isDirectory()) {
+        // Cannot show content for directories
+        return res.status(400).json({ error: 'Cannot show diff for directories' });
+      }
+
+      currentContent = await fs.readFile(filePath, 'utf-8');
 
       if (!isUntracked) {
         // Get the old content from HEAD for tracked files
@@ -474,8 +490,14 @@ router.post('/generate-commit-message', async (req, res) => {
       for (const file of files) {
         try {
           const filePath = path.join(projectPath, file);
-          const content = await fs.readFile(filePath, 'utf-8');
-          diffContext += `\n--- ${file} (new file) ---\n${content.substring(0, 1000)}\n`;
+          const stats = await fs.stat(filePath);
+
+          if (!stats.isDirectory()) {
+            const content = await fs.readFile(filePath, 'utf-8');
+            diffContext += `\n--- ${file} (new file) ---\n${content.substring(0, 1000)}\n`;
+          } else {
+            diffContext += `\n--- ${file} (new directory) ---\n`;
+          }
         } catch (error) {
           console.error(`Error reading file ${file}:`, error);
         }
@@ -976,10 +998,17 @@ router.post('/discard', async (req, res) => {
     }
 
     const status = statusOutput.substring(0, 2);
-    
+
     if (status === '??') {
-      // Untracked file - delete it
-      await fs.unlink(path.join(projectPath, file));
+      // Untracked file or directory - delete it
+      const filePath = path.join(projectPath, file);
+      const stats = await fs.stat(filePath);
+
+      if (stats.isDirectory()) {
+        await fs.rm(filePath, { recursive: true, force: true });
+      } else {
+        await fs.unlink(filePath);
+      }
     } else if (status.includes('M') || status.includes('D')) {
       // Modified or deleted file - restore from HEAD
       await execAsync(`git restore "${file}"`, { cwd: projectPath });
@@ -1020,10 +1049,18 @@ router.post('/delete-untracked', async (req, res) => {
       return res.status(400).json({ error: 'File is not untracked. Use discard for tracked files.' });
     }
 
-    // Delete the untracked file
-    await fs.unlink(path.join(projectPath, file));
-    
-    res.json({ success: true, message: `Untracked file ${file} deleted successfully` });
+    // Delete the untracked file or directory
+    const filePath = path.join(projectPath, file);
+    const stats = await fs.stat(filePath);
+
+    if (stats.isDirectory()) {
+      // Use rm with recursive option for directories
+      await fs.rm(filePath, { recursive: true, force: true });
+      res.json({ success: true, message: `Untracked directory ${file} deleted successfully` });
+    } else {
+      await fs.unlink(filePath);
+      res.json({ success: true, message: `Untracked file ${file} deleted successfully` });
+    }
   } catch (error) {
     console.error('Git delete untracked error:', error);
     res.status(500).json({ error: error.message });
