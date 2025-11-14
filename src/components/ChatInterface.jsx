@@ -3850,6 +3850,21 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           toolsSettings: toolsSettings
         }
       });
+    } else if (provider === 'zai') {
+      // Send Zai command (similar to Claude)
+      sendMessage({
+        type: 'zai-command',
+        command: input,
+        options: {
+          projectPath: selectedProject.path,
+          cwd: selectedProject.fullPath,
+          sessionId: currentSessionId,
+          resume: !!currentSessionId,
+          toolsSettings: toolsSettings,
+          permissionMode: permissionMode,
+          images: uploadedImages // Pass images to backend
+        }
+      });
     } else {
       // Send Claude command (existing code)
       sendMessage({

@@ -1,5 +1,6 @@
 import express from 'express';
 import { apiKeysDb, credentialsDb } from '../database/db.js';
+import { getAvailableProviders, getDefaultProvider, setDefaultProvider } from '../provider-router.js';
 
 const router = express.Router();
 
@@ -172,6 +173,52 @@ router.patch('/credentials/:credentialId/toggle', async (req, res) => {
   } catch (error) {
     console.error('Error toggling credential:', error);
     res.status(500).json({ error: 'Failed to toggle credential' });
+  }
+});
+
+// ===============================
+// Provider Configuration
+// ===============================
+
+// Get available providers and default provider
+router.get('/providers', async (req, res) => {
+  try {
+    const providersInfo = getAvailableProviders();
+    res.json(providersInfo);
+  } catch (error) {
+    console.error('Error fetching providers:', error);
+    res.status(500).json({ error: 'Failed to fetch providers' });
+  }
+});
+
+// Get current default provider
+router.get('/providers/default', async (req, res) => {
+  try {
+    const defaultProvider = getDefaultProvider();
+    res.json({ defaultProvider });
+  } catch (error) {
+    console.error('Error fetching default provider:', error);
+    res.status(500).json({ error: 'Failed to fetch default provider' });
+  }
+});
+
+// Set default provider
+router.post('/providers/default', async (req, res) => {
+  try {
+    const { provider } = req.body;
+
+    if (!provider || !provider.trim()) {
+      return res.status(400).json({ error: 'Provider name is required' });
+    }
+
+    setDefaultProvider(provider.trim());
+    res.json({
+      success: true,
+      defaultProvider: provider.trim()
+    });
+  } catch (error) {
+    console.error('Error setting default provider:', error);
+    res.status(500).json({ error: error.message || 'Failed to set default provider' });
   }
 });
 

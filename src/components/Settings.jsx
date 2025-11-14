@@ -1019,6 +1019,75 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
             {activeTab === 'tools' && (
               <div className="space-y-6 md:space-y-8">
 
+            {/* Default Provider Selection */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <Settings className="w-5 h-5 text-blue-500" />
+                <h3 className="text-lg font-medium text-foreground">
+                  Default Provider
+                </h3>
+              </div>
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                <div className="space-y-3">
+                  <p className="text-sm text-blue-700 dark:text-blue-300">
+                    Select the default AI provider for new chat sessions. You can switch providers at any time during a session.
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => {
+                        localStorage.setItem('selected-provider', 'claude');
+                        window.location.reload();
+                      }}
+                      className={`flex-1 px-4 py-3 rounded-lg border-2 transition-all ${
+                        (localStorage.getItem('selected-provider') || 'claude') === 'claude'
+                          ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/30'
+                          : 'border-gray-300 dark:border-gray-600 hover:border-blue-400'
+                      }`}
+                    >
+                      <div className="flex items-center justify-center gap-2">
+                        <ClaudeLogo className="w-5 h-5" />
+                        <span className="font-medium">Claude</span>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => {
+                        localStorage.setItem('selected-provider', 'cursor');
+                        window.location.reload();
+                      }}
+                      className={`flex-1 px-4 py-3 rounded-lg border-2 transition-all ${
+                        localStorage.getItem('selected-provider') === 'cursor'
+                          ? 'border-purple-600 bg-purple-50 dark:bg-purple-900/30'
+                          : 'border-gray-300 dark:border-gray-600 hover:border-purple-400'
+                      }`}
+                    >
+                      <div className="flex items-center justify-center gap-2">
+                        <CursorLogo className="w-5 h-5" />
+                        <span className="font-medium">Cursor</span>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => {
+                        localStorage.setItem('selected-provider', 'zai');
+                        window.location.reload();
+                      }}
+                      className={`flex-1 px-4 py-3 rounded-lg border-2 transition-all ${
+                        localStorage.getItem('selected-provider') === 'zai'
+                          ? 'border-green-600 bg-green-50 dark:bg-green-900/30'
+                          : 'border-gray-300 dark:border-gray-600 hover:border-green-400'
+                      }`}
+                    >
+                      <div className="flex items-center justify-center gap-2">
+                        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z"/>
+                        </svg>
+                        <span className="font-medium">Zai</span>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Provider Tabs */}
             <div className="border-b border-gray-300 dark:border-gray-600">
               <div className="flex gap-4">
@@ -1046,6 +1115,21 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                   <div className="flex items-center gap-2">
                     <CursorLogo className="w-4 h-4" />
                     <span>Cursor</span>
+                  </div>
+                </button>
+                <button
+                  onClick={() => setToolsProvider('zai')}
+                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                    toolsProvider === 'zai'
+                      ? 'border-green-600 text-green-600 dark:text-green-400'
+                      : 'border-transparent text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z"/>
+                    </svg>
+                    <span>Zai</span>
                   </div>
                 </button>
               </div>
@@ -2106,6 +2190,114 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                     <li><code className="bg-purple-100 dark:bg-purple-800 px-1 rounded">"Shell(mkdir)"</code> - Allow mkdir command</li>
                     <li><code className="bg-purple-100 dark:bg-purple-800 px-1 rounded">"-f"</code> flag - Skip all permission prompts (dangerous)</li>
                   </ul>
+                </div>
+              </div>
+            )}
+
+            {/* Zai Content */}
+            {toolsProvider === 'zai' && (
+              <div className="space-y-6 md:space-y-8">
+                {/* API Configuration */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <Settings className="w-5 h-5 text-green-500" />
+                    <h3 className="text-lg font-medium text-foreground">
+                      Zai Configuration
+                    </h3>
+                  </div>
+                  <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+                    <p className="text-sm text-green-700 dark:text-green-300 mb-4">
+                      Configure your Zai API settings. You can set these in your environment variables:
+                    </p>
+                    <div className="space-y-3 font-mono text-xs">
+                      <div className="bg-green-100 dark:bg-green-900/40 p-3 rounded">
+                        <span className="text-green-700 dark:text-green-300">ZAI_API_KEY</span>
+                        <span className="text-gray-600 dark:text-gray-400"> = your-api-key</span>
+                      </div>
+                      <div className="bg-green-100 dark:bg-green-900/40 p-3 rounded">
+                        <span className="text-green-700 dark:text-green-300">ZAI_BASE_URL</span>
+                        <span className="text-gray-600 dark:text-gray-400"> = https://api.zai.com/v1</span>
+                      </div>
+                      <div className="bg-green-100 dark:bg-green-900/40 p-3 rounded">
+                        <span className="text-green-700 dark:text-green-300">ZAI_MODEL</span>
+                        <span className="text-gray-600 dark:text-gray-400"> = claude-sonnet-4-20250514</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Permission Settings */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <AlertTriangle className="w-5 h-5 text-orange-500" />
+                    <h3 className="text-lg font-medium text-foreground">
+                      Permission Settings
+                    </h3>
+                  </div>
+                  <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
+                    <label className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={skipPermissions}
+                        onChange={(e) => setSkipPermissions(e.target.checked)}
+                        className="w-4 h-4 text-blue-600 bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500 focus:ring-2 checked:bg-blue-600 dark:checked:bg-blue-600"
+                      />
+                      <div>
+                        <div className="font-medium text-orange-900 dark:text-orange-100">
+                          Skip permission prompts (use with caution)
+                        </div>
+                        <div className="text-sm text-orange-700 dark:text-orange-300">
+                          Bypass permission requirements for tool usage
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Features & Benefits */}
+                <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+                  <h4 className="font-medium text-green-900 dark:text-green-100 mb-3">
+                    Zai Provider Features:
+                  </h4>
+                  <ul className="text-sm text-green-800 dark:text-green-200 space-y-2">
+                    <li className="flex items-start gap-2">
+                      <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                      <span>Anthropic-compatible API for seamless integration</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                      <span>Streaming responses for real-time interaction</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                      <span>Support for image attachments and multimodal inputs</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                      <span>Configurable model selection and API endpoints</span>
+                    </li>
+                  </ul>
+                </div>
+
+                {/* Setup Instructions */}
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                  <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-3">
+                    Getting Started with Zai:
+                  </h4>
+                  <ol className="text-sm text-blue-800 dark:text-blue-200 space-y-2 list-decimal list-inside">
+                    <li>Set your Zai API key in the environment variables</li>
+                    <li>Configure the base URL if using a custom endpoint</li>
+                    <li>Select Zai as your default provider above</li>
+                    <li>Start chatting with the Zai-powered assistant</li>
+                  </ol>
                 </div>
               </div>
             )}

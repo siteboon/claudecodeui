@@ -60,6 +60,7 @@ import mime from 'mime-types';
 import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
 import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions } from './claude-sdk.js';
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
+import { routeQuery, abortSession, isSessionActive, getDefaultProvider, setDefaultProvider, getAvailableProviders, PROVIDERS } from './provider-router.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
 import mcpRoutes from './routes/mcp.js';
@@ -822,28 +823,28 @@ function handleChatConnection(ws) {
             const data = JSON.parse(message);
 
             if (data.type === 'claude-command') {
-
-                // Use Claude Agents SDK
-                await queryClaudeSDK(data.command, data.options, ws);
+                // Route through provider router with Claude provider
+                await routeQuery(data.command, data.options, ws, PROVIDERS.CLAUDE);
             } else if (data.type === 'cursor-command') {
-                await spawnCursor(data.command, data.options, ws);
+                // Route through provider router with Cursor provider
+                await routeQuery(data.command, data.options, ws, PROVIDERS.CURSOR);
+            } else if (data.type === 'zai-command') {
+                // Route through provider router with Zai provider
+                await routeQuery(data.command, data.options, ws, PROVIDERS.ZAI);
+            } else if (data.type === 'provider-command') {
+                // Generic provider command - uses specified provider or default
+                await routeQuery(data.command, data.options, ws, data.provider);
             } else if (data.type === 'cursor-resume') {
                 // Backward compatibility: treat as cursor-command with resume and no prompt
-                await spawnCursor('', {
+                await routeQuery('', {
                     sessionId: data.sessionId,
                     resume: true,
                     cwd: data.options?.cwd
-                }, ws);
+                }, ws, PROVIDERS.CURSOR);
             } else if (data.type === 'abort-session') {
+                // Use provider router for unified abort
+                const success = await abortSession(data.sessionId);
                 const provider = data.provider || 'claude';
-                let success;
-
-                if (provider === 'cursor') {
-                    success = abortCursorSession(data.sessionId);
-                } else {
-                    // Use Claude Agents SDK
-                    success = await abortClaudeSDKSession(data.sessionId);
-                }
 
                 ws.send(JSON.stringify({
                     type: 'session-aborted',
@@ -852,7 +853,8 @@ function handleChatConnection(ws) {
                     success
                 }));
             } else if (data.type === 'cursor-abort') {
-                const success = abortCursorSession(data.sessionId);
+                // Backward compatibility
+                const success = await abortSession(data.sessionId);
                 ws.send(JSON.stringify({
                     type: 'session-aborted',
                     sessionId: data.sessionId,
@@ -860,29 +862,21 @@ function handleChatConnection(ws) {
                     success
                 }));
             } else if (data.type === 'check-session-status') {
-                // Check if a specific session is currently processing
-                const provider = data.provider || 'claude';
+                // Use provider router for unified session status check
                 const sessionId = data.sessionId;
-                let isActive;
-
-                if (provider === 'cursor') {
-                    isActive = isCursorSessionActive(sessionId);
-                } else {
-                    // Use Claude Agents SDK
-                    isActive = isClaudeSDKSessionActive(sessionId);
-                }
+                const isActive = isSessionActive(sessionId);
 
                 ws.send(JSON.stringify({
                     type: 'session-status',
                     sessionId,
-                    provider,
                     isProcessing: isActive
                 }));
             } else if (data.type === 'get-active-sessions') {
                 // Get all currently active sessions
                 const activeSessions = {
                     claude: getActiveClaudeSDKSessions(),
-                    cursor: getActiveCursorSessions()
+                    cursor: getActiveCursorSessions(),
+                    zai: [] // Zai sessions will be tracked by provider router
                 };
                 ws.send(JSON.stringify({
                     type: 'active-sessions',
