@@ -60,8 +60,9 @@ async function checkClaudeCredentials() {
     const content = await fs.readFile(credPath, 'utf8');
     const creds = JSON.parse(content);
 
-    if (creds.accessToken) {
-      const isExpired = creds.expiresAt && Date.now() >= creds.expiresAt;
+    const oauth = creds.claudeAiOauth;
+    if (oauth && oauth.accessToken) {
+      const isExpired = oauth.expiresAt && Date.now() >= oauth.expiresAt;
 
       if (!isExpired) {
         return {
