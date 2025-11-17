@@ -14,6 +14,7 @@ import ProjectCreationWizard from './ProjectCreationWizard';
 import { api } from '../utils/api';
 import { useTaskMaster } from '../contexts/TaskMasterContext';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
+import { useTranslation } from '../i18n';
 
 // Move formatTimeAgo outside component to avoid recreation on every render
 const formatTimeAgo = (dateString, currentTime) => {
@@ -80,6 +81,7 @@ function Sidebar({
   // TaskMaster context
   const { setCurrentProject, mcpServerStatus } = useTaskMaster();
   const { tasksEnabled } = useTasksSettings();
+  const { t } = useTranslation();
 
   
   // Starred projects state - persisted in localStorage
@@ -1021,7 +1023,7 @@ function Sidebar({
                           const isActive = diffInMinutes < 10;
                           
                           // Get session display values
-                          const sessionName = isCursorSession ? (session.name || 'Untitled Session') : (session.summary || 'New Session');
+                          const sessionName = isCursorSession ? (session.name || 'Untitled Session') : (session.summary || t('sidebar.newSession'));
                           const sessionTime = isCursorSession ? session.createdAt : session.lastActivity;
                           const messageCount = session.messageCount || 0;
                           
@@ -1213,7 +1215,7 @@ function Sidebar({
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         setEditingSession(session.id);
-                                        setEditingSessionName(session.summary || 'New Session');
+                                        setEditingSessionName(session.summary || t('sidebar.newSession'));
                                       }}
                                       title="Manually edit session name"
                                     >
@@ -1252,12 +1254,12 @@ function Sidebar({
                           {loadingSessions[project.name] ? (
                             <>
                               <div className="w-3 h-3 animate-spin rounded-full border border-muted-foreground border-t-transparent" />
-                              Loading...
+                              {t('common.loading')}
                             </>
                           ) : (
                             <>
                               <ChevronDown className="w-3 h-3" />
-                              Show more sessions
+                              {t('sidebar.showMoreSessions')}
                             </>
                           )}
                         </Button>
@@ -1267,25 +1269,25 @@ function Sidebar({
                       <div className="md:hidden px-3 pb-2">
                         <button
                           className="w-full h-8 bg-primary hover:bg-primary/90 text-primary-foreground rounded-md flex items-center justify-center gap-2 font-medium text-xs active:scale-[0.98] transition-all duration-150"
-                          onClick={() => {
-                            handleProjectSelect(project);
-                            onNewSession(project);
-                          }}
-                        >
-                          <Plus className="w-3 h-3" />
-                          New Session
-                        </button>
-                      </div>
-                      
-                      <Button
-                        variant="default"
-                        size="sm"
-                        className="hidden md:flex w-full justify-start gap-2 mt-1 h-8 text-xs font-medium bg-primary hover:bg-primary/90 text-primary-foreground transition-colors"
-                        onClick={() => onNewSession(project)}
+                        onClick={() => {
+                          handleProjectSelect(project);
+                          onNewSession(project);
+                        }}
                       >
                         <Plus className="w-3 h-3" />
-                        New Session
-                      </Button>
+                        {t('sidebar.newSession')}
+                      </button>
+                    </div>
+
+                    <Button
+                        variant="default"
+                        size="sm"
+                      className="hidden md:flex w-full justify-start gap-2 mt-1 h-8 text-xs font-medium bg-primary hover:bg-primary/90 text-primary-foreground transition-colors"
+                      onClick={() => onNewSession(project)}
+                    >
+                      <Plus className="w-3 h-3" />
+                      {t('sidebar.newSession')}
+                    </Button>
                     </div>
                   )}
                 </div>

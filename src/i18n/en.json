@@ -1,0 +1,19 @@
+{
+  "navigation": {
+    "project": "Project",
+    "projectFiles": "Project Files",
+    "sourceControl": "Source Control",
+    "chat": "Chat",
+    "shell": "Shell",
+    "files": "Files",
+    "git": "Source Control",
+    "tasks": "TaskMaster"
+  },
+  "sidebar": {
+    "newSession": "New Session",
+    "showMoreSessions": "Show more sessions"
+  },
+  "common": {
+    "loading": "Loading..."
+  }
+}
