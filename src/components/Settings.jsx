@@ -357,10 +357,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
   useEffect(() => {
     if (isOpen) {
       loadSettings();
-      // Check CLI authentication status
       checkClaudeAuthStatus();
       checkCursorAuthStatus();
-      // Set the active tab when the modal opens
       setActiveTab(initialTab);
     }
   }, [isOpen, initialTab]);
@@ -441,7 +439,6 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
     }
   };
 
-  // CLI Authentication status checking functions
   const checkClaudeAuthStatus = async () => {
     try {
       const token = localStorage.getItem('auth-token');
@@ -515,8 +512,6 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
       });
     }
   };
-
-  // Login handlers
   const handleClaudeLogin = () => {
     setLoginProvider('claude');
     setSelectedProject(projects?.[0] || { name: 'default', fullPath: process.cwd() });
@@ -531,17 +526,14 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
 
   const handleLoginComplete = (exitCode) => {
     if (exitCode === 0) {
-      // Login successful - refresh authentication status
       setSaveStatus('success');
 
-      // Refresh auth status based on which provider was used
       if (loginProvider === 'claude') {
         checkClaudeAuthStatus();
       } else if (loginProvider === 'cursor') {
         checkCursorAuthStatus();
       }
     }
-    // Modal will close itself via the LoginModal component
   };
 
   const saveSettings = () => {
@@ -1128,7 +1120,6 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
               </div>
             </div>
 
-            {/* Claude Login */}
             <div className="space-y-4">
               <div className="flex items-center gap-3">
                 <LogIn className="w-5 h-5 text-blue-500" />
@@ -1138,7 +1129,6 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
               </div>
               <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
                 <div className="space-y-3">
-                  {/* Authentication Status */}
                   <div className="flex items-center gap-2">
                     {claudeAuthStatus.loading ? (
                       <span className="text-sm text-blue-700 dark:text-blue-300">
@@ -1162,7 +1152,6 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                     )}
                   </div>
 
-                  {/* Login Button and Description */}
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="font-medium text-blue-900 dark:text-blue-100">
@@ -1917,7 +1906,6 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                   </div>
                 </div>
 
-                {/* Cursor Login */}
                 <div className="space-y-4">
                   <div className="flex items-center gap-3">
                     <LogIn className="w-5 h-5 text-purple-500" />
@@ -1927,7 +1915,6 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                   </div>
                   <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
                     <div className="space-y-3">
-                      {/* Authentication Status */}
                       <div className="flex items-center gap-2">
                         {cursorAuthStatus.loading ? (
                           <span className="text-sm text-purple-700 dark:text-purple-300">
@@ -1951,7 +1938,6 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                         )}
                       </div>
 
-                      {/* Login Button and Description */}
                       <div className="flex items-center justify-between">
                         <div>
                           <div className="font-medium text-purple-900 dark:text-purple-100">
