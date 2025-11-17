@@ -1,6 +1,7 @@
 import express from 'express';
 import { userDb } from '../database/db.js';
 import { authenticateToken } from '../middleware/auth.js';
+import { getSystemGitConfig } from '../utils/gitConfig.js';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 
@@ -10,7 +11,19 @@ const router = express.Router();
 router.get('/git-config', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
-    const gitConfig = userDb.getGitConfig(userId);
+    let gitConfig = userDb.getGitConfig(userId);
+
+    // If database is empty, try to get from system git config
+    if (!gitConfig || (!gitConfig.git_name && !gitConfig.git_email)) {
+      const systemConfig = await getSystemGitConfig();
+
+      // If system has values, save them to database for this user
+      if (systemConfig.git_name || systemConfig.git_email) {
+        userDb.updateGitConfig(userId, systemConfig.git_name, systemConfig.git_email);
+        gitConfig = systemConfig;
+        console.log(`Auto-populated git config from system for user ${userId}: ${systemConfig.git_name} <${systemConfig.git_email}>`);
+      }
+    }
 
     res.json({
       success: true,
