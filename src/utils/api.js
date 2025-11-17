@@ -138,8 +138,23 @@ export const api = {
   browseFilesystem: (dirPath = null) => {
     const params = new URLSearchParams();
     if (dirPath) params.append('path', dirPath);
-    
+
     return authenticatedFetch(`/api/browse-filesystem?${params}`);
+  },
+
+  // User endpoints
+  user: {
+    gitConfig: () => authenticatedFetch('/api/user/git-config'),
+    updateGitConfig: (gitName, gitEmail) =>
+      authenticatedFetch('/api/user/git-config', {
+        method: 'POST',
+        body: JSON.stringify({ gitName, gitEmail }),
+      }),
+    onboardingStatus: () => authenticatedFetch('/api/user/onboarding-status'),
+    completeOnboarding: () =>
+      authenticatedFetch('/api/user/complete-onboarding', {
+        method: 'POST',
+      }),
   },
 
   // Generic GET method for any endpoint

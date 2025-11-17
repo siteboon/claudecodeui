@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Badge } from './ui/badge';
-import { X, Plus, Settings as SettingsIcon, Shield, AlertTriangle, Moon, Sun, Server, Edit3, Trash2, Globe, Terminal, Zap, FolderOpen, LogIn, Key } from 'lucide-react';
+import { X, Plus, Settings as SettingsIcon, Shield, AlertTriangle, Moon, Sun, Server, Edit3, Trash2, Globe, Terminal, Zap, FolderOpen, LogIn, Key, GitBranch, Check } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
 import ClaudeLogo from './ClaudeLogo';
 import CursorLogo from './CursorLogo';
 import CredentialsSettings from './CredentialsSettings';
+import GitSettings from './GitSettings';
 import LoginModal from './LoginModal';
 import { authenticatedFetch } from '../utils/api';
 
@@ -387,7 +388,6 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
       await fetchCursorMcpServers();
     } catch (error) {
       console.error('Error loading tool settings:', error);
-      // Set defaults on error
       setAllowedTools([]);
       setDisallowedTools([]);
       setSkipPermissions(false);
@@ -744,6 +744,17 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                 Appearance
               </button>
               <button
+                onClick={() => setActiveTab('git')}
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'git'
+                    ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <GitBranch className="w-4 h-4 inline mr-2" />
+                Git
+              </button>
+              <button
                 onClick={() => setActiveTab('tasks')}
                 className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
                   activeTab === 'tasks'
@@ -990,6 +1001,9 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
 
               </div>
             )}
+
+            {/* Git Tab */}
+            {activeTab === 'git' && <GitSettings />}
 
             {/* Tools Tab */}
             {activeTab === 'tools' && (

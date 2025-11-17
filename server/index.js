@@ -71,6 +71,7 @@ import settingsRoutes from './routes/settings.js';
 import agentRoutes from './routes/agent.js';
 import projectsRoutes from './routes/projects.js';
 import cliAuthRoutes from './routes/cli-auth.js';
+import userRoutes from './routes/user.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 
@@ -253,6 +254,9 @@ app.use('/api/settings', authenticateToken, settingsRoutes);
 
 // CLI Authentication API Routes (protected)
 app.use('/api/cli', authenticateToken, cliAuthRoutes);
+
+// User API Routes (protected)
+app.use('/api/user', authenticateToken, userRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
