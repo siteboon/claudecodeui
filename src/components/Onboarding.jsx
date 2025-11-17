@@ -16,7 +16,7 @@ const Onboarding = ({ onComplete }) => {
   // CLI authentication states
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginProvider, setLoginProvider] = useState('');
-  const [selectedProject, setSelectedProject] = useState({ name: 'default', fullPath: process.cwd() });
+  const [selectedProject, setSelectedProject] = useState({ name: 'default', fullPath: '' });
 
   const [claudeAuthStatus, setClaudeAuthStatus] = useState({
     authenticated: false,
