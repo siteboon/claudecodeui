@@ -1728,11 +1728,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   // Load Cursor default model from config
   useEffect(() => {
     if (provider === 'cursor') {
-      fetch('/api/cursor/config', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth-token')}`
-        }
-      })
+      authenticatedFetch('/api/cursor/config')
       .then(res => res.json())
       .then(data => {
         if (data.success && data.config?.model?.modelId) {
@@ -3752,15 +3748,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       });
       
       try {
-        const token = safeLocalStorage.getItem('auth-token');
-        const headers = {};
-        if (token) {
-          headers['Authorization'] = `Bearer ${token}`;
-        }
-        
-        const response = await fetch(`/api/projects/${selectedProject.name}/upload-images`, {
+        const response = await authenticatedFetch(`/api/projects/${selectedProject.name}/upload-images`, {
           method: 'POST',
-          headers: headers,
+          headers: {}, // Let browser set Content-Type for FormData
           body: formData
         });
         

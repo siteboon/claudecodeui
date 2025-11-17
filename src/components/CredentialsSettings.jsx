@@ -4,6 +4,7 @@ import { Input } from './ui/input';
 import { Key, Plus, Trash2, Eye, EyeOff, Copy, Check, Github, ExternalLink } from 'lucide-react';
 import { useVersionCheck } from '../hooks/useVersionCheck';
 import { version } from '../../package.json';
+import { authenticatedFetch } from '../utils/api';
 
 function CredentialsSettings() {
   const [apiKeys, setApiKeys] = useState([]);
@@ -29,19 +30,14 @@ function CredentialsSettings() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('auth-token');
 
       // Fetch API keys
-      const apiKeysRes = await fetch('/api/settings/api-keys', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const apiKeysRes = await authenticatedFetch('/api/settings/api-keys');
       const apiKeysData = await apiKeysRes.json();
       setApiKeys(apiKeysData.apiKeys || []);
 
       // Fetch GitHub credentials only
-      const credentialsRes = await fetch('/api/settings/credentials?type=github_token', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const credentialsRes = await authenticatedFetch('/api/settings/credentials?type=github_token');
       const credentialsData = await credentialsRes.json();
       setGithubCredentials(credentialsData.credentials || []);
     } catch (error) {
@@ -55,13 +51,8 @@ function CredentialsSettings() {
     if (!newKeyName.trim()) return;
 
     try {
-      const token = localStorage.getItem('auth-token');
-      const res = await fetch('/api/settings/api-keys', {
+      const res = await authenticatedFetch('/api/settings/api-keys', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify({ keyName: newKeyName })
       });
 
@@ -81,10 +72,8 @@ function CredentialsSettings() {
     if (!confirm('Are you sure you want to delete this API key?')) return;
 
     try {
-      const token = localStorage.getItem('auth-token');
-      await fetch(`/api/settings/api-keys/${keyId}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
+      await authenticatedFetch(`/api/settings/api-keys/${keyId}`, {
+        method: 'DELETE'
       });
       fetchData();
     } catch (error) {
@@ -94,13 +83,8 @@ function CredentialsSettings() {
 
   const toggleApiKey = async (keyId, isActive) => {
     try {
-      const token = localStorage.getItem('auth-token');
-      await fetch(`/api/settings/api-keys/${keyId}/toggle`, {
+      await authenticatedFetch(`/api/settings/api-keys/${keyId}/toggle`, {
         method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify({ isActive: !isActive })
       });
       fetchData();
@@ -113,13 +97,8 @@ function CredentialsSettings() {
     if (!newGithubName.trim() || !newGithubToken.trim()) return;
 
     try {
-      const token = localStorage.getItem('auth-token');
-      const res = await fetch('/api/settings/credentials', {
+      const res = await authenticatedFetch('/api/settings/credentials', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify({
           credentialName: newGithubName,
           credentialType: 'github_token',
@@ -145,10 +124,8 @@ function CredentialsSettings() {
     if (!confirm('Are you sure you want to delete this GitHub token?')) return;
 
     try {
-      const token = localStorage.getItem('auth-token');
-      await fetch(`/api/settings/credentials/${credentialId}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
+      await authenticatedFetch(`/api/settings/credentials/${credentialId}`, {
+        method: 'DELETE'
       });
       fetchData();
     } catch (error) {
@@ -158,13 +135,8 @@ function CredentialsSettings() {
 
   const toggleGithubCredential = async (credentialId, isActive) => {
     try {
-      const token = localStorage.getItem('auth-token');
-      await fetch(`/api/settings/credentials/${credentialId}/toggle`, {
+      await authenticatedFetch(`/api/settings/credentials/${credentialId}/toggle`, {
         method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify({ isActive: !isActive })
       });
       fetchData();

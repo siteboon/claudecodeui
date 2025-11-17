@@ -1,15 +1,16 @@
 // Utility function for authenticated API calls
 export const authenticatedFetch = (url, options = {}) => {
+  const isPlatform = import.meta.env.VITE_IS_PLATFORM === 'true';
   const token = localStorage.getItem('auth-token');
-  
+
   const defaultHeaders = {
     'Content-Type': 'application/json',
   };
-  
-  if (token) {
+
+  if (!isPlatform && token) {
     defaultHeaders['Authorization'] = `Bearer ${token}`;
   }
-  
+
   return fetch(url, {
     ...options,
     headers: {

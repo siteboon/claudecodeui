@@ -528,7 +528,8 @@ router.get('/next/:projectName', async (req, res) => {
             console.warn('Failed to execute task-master CLI:', cliError.message);
             
             // Fallback to loading tasks and finding next one locally
-            const tasksResponse = await fetch(`${req.protocol}://${req.get('host')}/api/taskmaster/tasks/${encodeURIComponent(projectName)}`, {
+            // Use localhost to bypass proxy for internal server-to-server calls
+            const tasksResponse = await fetch(`http://localhost:${process.env.PORT || 3001}/api/taskmaster/tasks/${encodeURIComponent(projectName)}`, {
                 headers: {
                     'Authorization': req.headers.authorization
                 }
