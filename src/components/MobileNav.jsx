@@ -1,35 +1,42 @@
 import React from 'react';
 import { MessageSquare, Folder, Terminal, GitBranch, Globe, CheckSquare } from 'lucide-react';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
+import { useTranslation } from '../i18n';
 
 function MobileNav({ activeTab, setActiveTab, isInputFocused }) {
   const { tasksEnabled } = useTasksSettings();
+  const { t } = useTranslation();
   const navItems = [
     {
       id: 'chat',
       icon: MessageSquare,
-      onClick: () => setActiveTab('chat')
+      onClick: () => setActiveTab('chat'),
+      label: t('navigation.chat')
     },
     {
       id: 'shell',
       icon: Terminal,
-      onClick: () => setActiveTab('shell')
+      onClick: () => setActiveTab('shell'),
+      label: t('navigation.shell')
     },
     {
       id: 'files',
       icon: Folder,
-      onClick: () => setActiveTab('files')
+      onClick: () => setActiveTab('files'),
+      label: t('navigation.files')
     },
     {
       id: 'git',
       icon: GitBranch,
-      onClick: () => setActiveTab('git')
+      onClick: () => setActiveTab('git'),
+      label: t('navigation.sourceControl')
     },
     // Conditionally add tasks tab if enabled
     ...(tasksEnabled ? [{
       id: 'tasks',
       icon: CheckSquare,
-      onClick: () => setActiveTab('tasks')
+      onClick: () => setActiveTab('tasks'),
+      label: t('navigation.tasks')
     }] : [])
   ];
 
@@ -57,7 +64,7 @@ function MobileNav({ activeTab, setActiveTab, isInputFocused }) {
                   ? 'text-blue-600 dark:text-blue-400'
                   : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
               }`}
-              aria-label={item.id}
+              aria-label={item.label || item.id}
             >
               <Icon className="w-5 h-5" />
               {isActive && (

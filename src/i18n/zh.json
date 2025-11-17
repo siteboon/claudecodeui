@@ -1,0 +1,19 @@
+{
+  "navigation": {
+    "project": "项目",
+    "projectFiles": "项目文件",
+    "sourceControl": "源代码管理",
+    "chat": "聊天",
+    "shell": "终端",
+    "files": "文件",
+    "git": "源代码管理",
+    "tasks": "任务管理"
+  },
+  "sidebar": {
+    "newSession": "新会话",
+    "showMoreSessions": "显示更多会话"
+  },
+  "common": {
+    "loading": "加载中..."
+  }
+}
