@@ -34,11 +34,30 @@ const Onboarding = ({ onComplete }) => {
 
   const { user } = useAuth();
 
+  // Load existing git config on mount
+  useEffect(() => {
+    loadGitConfig();
+  }, []);
+
   // Check authentication status on mount and when modal closes
   useEffect(() => {
     checkClaudeAuthStatus();
     checkCursorAuthStatus();
   }, []);
+
+  const loadGitConfig = async () => {
+    try {
+      const response = await authenticatedFetch('/api/user/git-config');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.gitName) setGitName(data.gitName);
+        if (data.gitEmail) setGitEmail(data.gitEmail);
+      }
+    } catch (error) {
+      console.error('Error loading git config:', error);
+      // Silently fail - user can still enter config manually
+    }
+  };
 
   // Auto-check authentication status periodically when on CLI steps
   useEffect(() => {
