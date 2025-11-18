@@ -695,6 +695,8 @@ wss.on('connection', (ws, request) => {
     if (pathname === '/shell') {
         handleShellConnection(ws);
     } else if (pathname === '/ws') {
+        // Attach authenticated user to the WebSocket connection for downstream handlers
+        ws.user = request.user;
         handleChatConnection(ws);
     } else {
         console.log('[WARN] Unknown WebSocket path:', pathname);
@@ -705,6 +707,7 @@ wss.on('connection', (ws, request) => {
 // Handle chat WebSocket connections
 function handleChatConnection(ws) {
     console.log('[INFO] Chat WebSocket connected');
+    const userId = ws.user?.id;
 
     // Add to connected clients for project updates
     connectedClients.add(ws);
@@ -719,7 +722,7 @@ function handleChatConnection(ws) {
                 console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
 
                 // Use Claude Agents SDK
-                await queryClaudeSDK(data.command, data.options, ws);
+                await queryClaudeSDK(data.command, { ...data.options, userId }, ws);
             } else if (data.type === 'cursor-command') {
                 console.log('[DEBUG] Cursor message:', data.command || '[Continue/Resume]');
                 console.log('📁 Project:', data.options?.cwd || 'Unknown');

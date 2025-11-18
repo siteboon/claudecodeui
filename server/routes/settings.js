@@ -1,5 +1,5 @@
 import express from 'express';
-import { apiKeysDb, credentialsDb } from '../database/db.js';
+import { apiKeysDb, credentialsDb, modelProvidersDb } from '../database/db.js';
 
 const router = express.Router();
 
@@ -172,6 +172,85 @@ router.patch('/credentials/:credentialId/toggle', async (req, res) => {
   } catch (error) {
     console.error('Error toggling credential:', error);
     res.status(500).json({ error: 'Failed to toggle credential' });
+  }
+});
+
+// ===============================
+// Model Provider Management
+// ===============================
+
+// List all configured model providers (API replacement)
+router.get('/model-providers', async (req, res) => {
+  try {
+    const providers = modelProvidersDb.getProviders(req.user.id);
+    const active = modelProvidersDb.getActiveProvider(req.user.id);
+
+    res.json({
+      providers,
+      activeProviderId: active?.id || null
+    });
+  } catch (error) {
+    console.error('Error fetching model providers:', error);
+    res.status(500).json({ error: 'Failed to fetch model providers' });
+  }
+});
+
+// Create a new provider entry
+router.post('/model-providers', async (req, res) => {
+  try {
+    const { providerName, apiBaseUrl, apiKey, modelId, description } = req.body;
+
+    if (!providerName?.trim() || !apiBaseUrl?.trim() || !apiKey?.trim()) {
+      return res.status(400).json({ error: 'Provider name, API base URL, and API key are required' });
+    }
+
+    const result = modelProvidersDb.createProvider(
+      req.user.id,
+      providerName.trim(),
+      apiBaseUrl.trim(),
+      apiKey.trim(),
+      modelId?.trim() || null,
+      description?.trim() || null
+    );
+
+    res.json({ success: true, provider: result });
+  } catch (error) {
+    console.error('Error creating model provider:', error);
+    res.status(500).json({ error: 'Failed to create model provider' });
+  }
+});
+
+// Set active provider
+router.patch('/model-providers/:providerId/activate', async (req, res) => {
+  try {
+    const { providerId } = req.params;
+    const success = modelProvidersDb.setActiveProvider(req.user.id, parseInt(providerId));
+
+    if (success) {
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ error: 'Provider not found' });
+    }
+  } catch (error) {
+    console.error('Error activating model provider:', error);
+    res.status(500).json({ error: 'Failed to activate model provider' });
+  }
+});
+
+// Delete provider
+router.delete('/model-providers/:providerId', async (req, res) => {
+  try {
+    const { providerId } = req.params;
+    const success = modelProvidersDb.deleteProvider(req.user.id, parseInt(providerId));
+
+    if (success) {
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ error: 'Provider not found' });
+    }
+  } catch (error) {
+    console.error('Error deleting model provider:', error);
+    res.status(500).json({ error: 'Failed to delete model provider' });
   }
 });
 

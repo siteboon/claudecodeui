@@ -16,6 +16,7 @@ import { query } from '@anthropic-ai/claude-agent-sdk';
 import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
+import { modelProvidersDb } from './database/db.js';
 
 // Session tracking: Map of session IDs to active query instances
 const activeSessions = new Map();
@@ -346,15 +347,36 @@ async function loadMcpConfig(cwd) {
  * @returns {Promise<void>}
  */
 async function queryClaudeSDK(command, options = {}, ws) {
-  const { sessionId } = options;
+  const runtimeOptions = { ...options };
+  const { sessionId } = runtimeOptions;
   let capturedSessionId = sessionId;
   let sessionCreatedSent = false;
   let tempImagePaths = [];
   let tempDir = null;
 
   try {
+    // Apply user-selected model provider overrides if available
+    if (runtimeOptions.userId) {
+      try {
+        const provider = modelProvidersDb.getActiveProvider(runtimeOptions.userId);
+        if (provider) {
+          if (provider.api_key) {
+            process.env.ANTHROPIC_API_KEY = provider.api_key;
+          }
+          if (provider.api_base_url) {
+            process.env.ANTHROPIC_API_URL = provider.api_base_url;
+          }
+          if (provider.model_id && !runtimeOptions.model) {
+            runtimeOptions.model = provider.model_id;
+          }
+        }
+      } catch (error) {
+        console.error('[ERROR] Unable to load active model provider:', error);
+      }
+    }
+
     // Map CLI options to SDK format
-    const sdkOptions = mapCliOptionsToSDK(options);
+    const sdkOptions = mapCliOptionsToSDK(runtimeOptions);
 
     // Load MCP configuration
     const mcpServers = await loadMcpConfig(options.cwd);
