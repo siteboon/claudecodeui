@@ -112,8 +112,6 @@ cloudcli version
 - Claude projects folder location
 - Configuration file location
 
-````
-
 ### Run as Background Service (Recommended for Production)
 
 For production use, run Claude Code UI as a background service using PM2 (Process Manager 2):
@@ -122,7 +120,7 @@ For production use, run Claude Code UI as a background service using PM2 (Proces
 
 ```bash
 npm install -g pm2
-````
+```
 
 #### Start as Background Service
 
