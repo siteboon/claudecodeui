@@ -5,7 +5,7 @@ import { Badge } from './ui/badge';
 import { useTheme } from '../contexts/ThemeContext';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
 import { useTranslation } from '../i18n';
-import { X, Plus, Settings as SettingsIcon, Shield, AlertTriangle, Moon, Sun, Server, Edit3, Trash2, Globe, Terminal, Zap, FolderOpen, LogIn, Key,Languages, GitBranch, Check } from 'lucide-react';
+import { X, Plus, Settings as SettingsIcon, Shield, AlertTriangle, Moon, Sun, Server, Edit3, Trash2, Globe, Terminal, Zap, FolderOpen, LogIn, Key, GitBranch, Check } from 'lucide-react';
 import ClaudeLogo from './ClaudeLogo';
 import CursorLogo from './CursorLogo';
 import CredentialsSettings from './CredentialsSettings';
@@ -755,7 +755,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                 }`}
               >
                 <GitBranch className="w-4 h-4 inline mr-2" />
-                Git
+                {t('settings.tabs.git')}
               </button>
               <button
                 onClick={() => setActiveTab('api')}
@@ -776,7 +776,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                     : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
               >
-                Tasks
+                {t('settings.tabs.tasks')}
               </button>
             </div>
           </div>
@@ -828,7 +828,6 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="font-medium text-foreground flex items-center gap-2">
-                          <Languages className="w-4 h-4" />
                           {t('settings.appearance.language')}
                         </div>
                         <div className="text-sm text-muted-foreground">
@@ -1108,22 +1107,22 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                   <div className="flex items-center gap-2">
                     {claudeAuthStatus.loading ? (
                       <span className="text-sm text-blue-700 dark:text-blue-300">
-                        Checking authentication...
+                        {t('settings.auth.checkingAuth')}
                       </span>
                     ) : claudeAuthStatus.authenticated ? (
                       <div className="flex items-center gap-2">
                         <Badge variant="success" className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
-                          ✓ Logged in
+                          ✓ {t('settings.auth.loggedIn')}
                         </Badge>
                         {claudeAuthStatus.email && (
                           <span className="text-sm text-blue-700 dark:text-blue-300">
-                            as {claudeAuthStatus.email}
+                            {t('settings.auth.asUser')} {claudeAuthStatus.email}
                           </span>
                         )}
                       </div>
                     ) : (
                       <Badge variant="secondary" className="bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300">
-                        Not authenticated
+                        {t('settings.auth.notAuthenticated')}
                       </Badge>
                     )}
                   </div>
@@ -1135,8 +1134,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                       </div>
                       <div className="text-sm text-blue-700 dark:text-blue-300">
                         {claudeAuthStatus.authenticated
-                          ? 'Re-authenticate or switch accounts'
-                          : 'Sign in to your Claude account to enable AI features'}
+                          ? t('settings.auth.reAuthenticate')
+                          : t('settings.auth.signInClaude')}
                       </div>
                     </div>
                     <Button
@@ -1894,22 +1893,22 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                       <div className="flex items-center gap-2">
                         {cursorAuthStatus.loading ? (
                           <span className="text-sm text-purple-700 dark:text-purple-300">
-                            Checking authentication...
+                            {t('settings.auth.checkingAuth')}
                           </span>
                         ) : cursorAuthStatus.authenticated ? (
                           <div className="flex items-center gap-2">
                             <Badge variant="success" className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
-                              ✓ Logged in
+                              ✓ {t('settings.auth.loggedIn')}
                             </Badge>
                             {cursorAuthStatus.email && (
                               <span className="text-sm text-purple-700 dark:text-purple-300">
-                                as {cursorAuthStatus.email}
+                                {t('settings.auth.asUser')} {cursorAuthStatus.email}
                               </span>
                             )}
                           </div>
                         ) : (
                           <Badge variant="secondary" className="bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300">
-                            Not authenticated
+                            {t('settings.auth.notAuthenticated')}
                           </Badge>
                         )}
                       </div>
@@ -1921,8 +1920,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                           </div>
                           <div className="text-sm text-purple-700 dark:text-purple-300">
                             {cursorAuthStatus.authenticated
-                              ? 'Re-authenticate or switch accounts'
-                              : 'Sign in to your Cursor account to enable AI features'}
+                              ? t('settings.auth.reAuthenticate')
+                              : t('settings.auth.signInCursor')}
                           </div>
                         </div>
                         <Button
@@ -2139,7 +2138,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
-                Settings saved successfully!
+                {t('settings.saveSuccess')}
               </div>
             )}
             {saveStatus === 'error' && (
@@ -2147,7 +2146,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                 </svg>
-                Failed to save settings
+                {t('settings.saveError')}
               </div>
             )}
           </div>

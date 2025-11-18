@@ -31,10 +31,26 @@
     "tabs": {
       "tools": "Tools",
       "appearance": "Appearance",
-      "tasks": "Tasks",
       "mcpServers": "MCP Servers",
-      "api": "API & Tokens"
+      "codeEditor": "Code Editor",
+      "api": "API Keys",
+      "git": "Git",
+      "tasks": "Tasks"
     },
+    "auth": {
+      "checkingAuth": "Checking authentication...",
+      "loggedIn": "Logged in",
+      "notAuthenticated": "Not authenticated",
+      "asUser": "as",
+      "reAuthenticate": "Re-authenticate or switch accounts",
+      "signInClaude": "Sign in to your Claude account to enable AI features",
+      "signInCursor": "Sign in to your Cursor account to enable AI features",
+      "notLoggedIn": "Not logged in",
+      "loggedInAs": "Logged in as",
+      "loginDesc": "Authenticate with your provider to access projects"
+    },
+    "saveSuccess": "Settings saved successfully!",
+    "saveError": "Failed to save settings",
     "appearance": {
       "darkMode": "Dark Mode",
       "darkModeDesc": "Toggle between light and dark themes",
@@ -87,11 +103,6 @@
       "noDisallowedCommands": "No disallowed shell commands configured",
       "commandPlaceholder": "e.g., \"Shell(ls)\" or \"Shell(git status)\"",
       "disallowedCommandPlaceholder": "e.g., \"Shell(rm -rf)\" or \"Shell(sudo)\""
-    },
-    "auth": {
-      "notLoggedIn": "Not logged in",
-      "loggedInAs": "Logged in as",
-      "loginDesc": "Authenticate with your provider to access projects"
     },
     "mcpServers": {
       "title": "MCP Servers",
@@ -220,7 +231,12 @@
     "newSession": "Start a new session",
     "deleteSession": "Delete session",
     "renameSession": "Rename session",
-    "loadMore": "Load more"
+    "loadMore": "Load more",
+    "chooseProject": "Choose Your Project",
+    "chooseProjectDesc": "Select a project from the sidebar to start coding with Claude. Each project contains your chat sessions and file history.",
+    "tip": "Tip:",
+    "tipMobile": "Tap the menu button above to access projects",
+    "tipDesktop": "Create a new project by clicking the folder icon in the sidebar"
   },
   "common": {
     "loading": "Loading...",
@@ -247,5 +263,170 @@
     "quickAddCommon": "Quick add common tools:",
     "quickAddCommonCommands": "Quick add common commands:",
     "deleteConfirm": "Are you sure you want to delete this MCP server?"
+  },
+  "gitSettings": {
+    "title": "Git Configuration",
+    "description": "Configure your git identity for commits. These settings will be applied globally via",
+    "gitName": "Git Name",
+    "gitNameDesc": "Your name for git commits",
+    "gitNamePlaceholder": "John Doe",
+    "gitEmail": "Git Email",
+    "gitEmailDesc": "Your email for git commits",
+    "gitEmailPlaceholder": "john@example.com",
+    "saveConfig": "Save Configuration",
+    "savedSuccess": "Saved successfully"
+  },
+  "onboarding": {
+    "steps": {
+      "gitConfig": "Git Configuration",
+      "gitConfigDesc": "Set up your git identity for commits",
+      "claudeCli": "Claude Code CLI",
+      "claudeCliDesc": "Connect your Claude Code account",
+      "cursorCli": "Cursor CLI",
+      "cursorCliDesc": "Connect your Cursor account"
+    },
+    "gitStep": {
+      "title": "Git Configuration",
+      "description": "Configure your git identity to ensure proper attribution for your commits",
+      "nameLabel": "Git Name",
+      "nameHelper": "This will be used as: git config --global user.name",
+      "emailLabel": "Git Email",
+      "emailHelper": "This will be used as: git config --global user.email",
+      "required": "*"
+    },
+    "claudeStep": {
+      "title": "Claude Code CLI",
+      "description": "Connect your Claude Code account to enable AI-powered features",
+      "checkingAuth": "Checking authentication status...",
+      "authenticated": "Authenticated",
+      "notAuthenticated": "Not authenticated",
+      "loginButton": "Login to Claude",
+      "skipButton": "Skip for now",
+      "continueButton": "Continue"
+    },
+    "cursorStep": {
+      "title": "Cursor CLI",
+      "description": "Connect your Cursor account to enable AI-powered features",
+      "checkingAuth": "Checking authentication status...",
+      "authenticated": "Authenticated",
+      "notAuthenticated": "Not authenticated",
+      "loginButton": "Login to Cursor",
+      "skipButton": "Skip for now",
+      "finishButton": "Finish Setup"
+    },
+    "errors": {
+      "authCheckFailed": "Failed to check authentication status",
+      "nameEmailRequired": "Both git name and email are required",
+      "invalidEmail": "Please enter a valid email address",
+      "saveFailed": "Failed to save git configuration",
+      "completeFailed": "Failed to complete onboarding"
+    },
+    "navigation": {
+      "back": "Back",
+      "next": "Next",
+      "skip": "Skip",
+      "finish": "Finish"
+    }
+  },
+  "chatInterface": {
+    "loadingMessages": "Loading session messages...",
+    "chooseAssistant": "Choose Your AI Assistant",
+    "selectProvider": "Select a provider to start a new conversation",
+    "readyClaude": "Ready to use Claude AI. Start typing your message below.",
+    "readyCursor": "Ready to use Cursor with {{model}}. Start typing your message below.",
+    "selectProviderPrompt": "Select a provider above to begin"
+  },
+  "shell": {
+    "selectProject": "Select a Project",
+    "selectProjectDesc": "Choose a project to open an interactive shell in that directory"
+  },
+  "loginForm": {
+    "welcomeBack": "Welcome Back",
+    "signInDesc": "Sign in to your Claude Code UI account",
+    "username": "Username",
+    "password": "Password",
+    "enterUsername": "Enter your username",
+    "enterPassword": "Enter your password",
+    "signingIn": "Signing in...",
+    "signIn": "Sign In",
+    "enterCredentials": "Enter your credentials to access Claude Code UI",
+    "errorBothRequired": "Please enter both username and password"
+  },
+  "setupForm": {
+    "welcomeTitle": "Welcome to Claude Code UI",
+    "setupDesc": "Set up your account to get started",
+    "username": "Username",
+    "password": "Password",
+    "confirmPassword": "Confirm Password",
+    "enterUsername": "Enter your username",
+    "enterPassword": "Enter your password",
+    "confirmYourPassword": "Confirm your password",
+    "settingUp": "Setting up...",
+    "createAccount": "Create Account",
+    "singleUserNote": "This is a single-user system. Only one account can be created.",
+    "errorPasswordMismatch": "Passwords do not match",
+    "errorUsernameLength": "Username must be at least 3 characters long",
+    "errorPasswordLength": "Password must be at least 6 characters long"
+  },
+  "taskBanner": {
+    "notConfigured": "TaskMaster AI is not configured",
+    "initializeButton": "Initialize TaskMaster AI",
+    "whatIsTaskMaster": "What is TaskMaster?",
+    "aiPowered": "AI-Powered Task Management:",
+    "aiPoweredDesc": "Break complex projects into manageable subtasks",
+    "prdTemplates": "PRD Templates:",
+    "prdTemplatesDesc": "Generate tasks from Product Requirements Documents",
+    "dependencyTracking": "Dependency Tracking:",
+    "dependencyTrackingDesc": "Understand task relationships and execution order",
+    "progressVisualization": "Progress Visualization:",
+    "progressVisualizationDesc": "Kanban boards and detailed task analytics",
+    "cliIntegration": "CLI Integration:",
+    "cliIntegrationDesc": "Use taskmaster commands for advanced workflows",
+    "initializeTaskMaster": "Initialize TaskMaster",
+    "addMoreTasks": "Add more tasks:",
+    "addMoreTasksDesc": "Create additional tasks manually or generate them from a PRD template",
+    "createManualTask": "Create a new task manually",
+    "generateFromPRD": "Generate tasks from PRD template",
+    "parsing": "Parsing...",
+    "task": "Task",
+    "highPriority": "High Priority",
+    "mediumPriority": "Medium Priority",
+    "lowPriority": "Low Priority",
+    "startTask": "Start Task",
+    "viewDetails": "View task details",
+    "viewAllTasks": "View all tasks",
+    "allDone": "All done! 🎉",
+    "noPendingTasks": "No pending tasks",
+    "review": "Review",
+    "taskmasterSetup": "TaskMaster Setup",
+    "interactiveCLI": "Interactive CLI for",
+    "initWillStart": "TaskMaster initialization will start automatically",
+    "close": "Close",
+    "createNewTask": "Create New Task",
+    "useAI": "Use AI to generate task details",
+    "taskDescAI": "Task Description (AI will generate details)",
+    "describeTask": "Describe what you want to accomplish...",
+    "taskTitle": "Task Title",
+    "enterTaskTitle": "Enter task title...",
+    "description": "Description",
+    "describeTheTask": "Describe the task...",
+    "priority": "Priority",
+    "low": "Low",
+    "medium": "Medium",
+    "high": "High",
+    "cancel": "Cancel",
+    "creating": "Creating...",
+    "createTask": "Create Task",
+    "selectPRDTemplate": "Select PRD Template",
+    "customizeTemplate": "Customize Template",
+    "generatingTasks": "Generating Tasks",
+    "loadingTemplates": "Loading templates...",
+    "fileName": "File Name",
+    "customizeTemplateLabel": "Customize Template",
+    "back": "Back",
+    "applying": "Applying...",
+    "applyGenerate": "Apply & Generate Tasks",
+    "templateApplied": "Template Applied Successfully!",
+    "prdCreated": "Your PRD has been created and tasks are being generated..."
   }
 }

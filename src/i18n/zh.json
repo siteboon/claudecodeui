@@ -31,10 +31,26 @@
     "tabs": {
       "tools": "工具",
       "appearance": "外观",
-      "tasks": "任务",
       "mcpServers": "MCP 服务器",
-      "api": "API 与令牌"
+      "codeEditor": "代码编辑器",
+      "api": "API 密钥",
+      "git": "Git",
+      "tasks": "任务"
     },
+    "auth": {
+      "checkingAuth": "正在检查身份验证...",
+      "loggedIn": "已登录",
+      "notAuthenticated": "未认证",
+      "asUser": "为",
+      "reAuthenticate": "重新认证或切换账户",
+      "signInClaude": "登录您的 Claude 账户以启用 AI 功能",
+      "signInCursor": "登录您的 Cursor 账户以启用 AI 功能",
+      "notLoggedIn": "未登录",
+      "loggedInAs": "已登录为",
+      "loginDesc": "使用您的提供商进行身份验证以访问项目"
+    },
+    "saveSuccess": "设置保存成功！",
+    "saveError": "保存设置失败",
     "appearance": {
       "darkMode": "深色模式",
       "darkModeDesc": "在浅色和深色主题之间切换",
@@ -87,11 +103,6 @@
       "noDisallowedCommands": "未配置禁止的 Shell 命令",
       "commandPlaceholder": "例如：\"Shell(ls)\" 或 \"Shell(git status)\"",
       "disallowedCommandPlaceholder": "例如：\"Shell(rm -rf)\" 或 \"Shell(sudo)\""
-    },
-    "auth": {
-      "notLoggedIn": "未登录",
-      "loggedInAs": "已登录为",
-      "loginDesc": "使用您的提供商进行身份验证以访问项目"
     },
     "mcpServers": {
       "title": "MCP 服务器",
@@ -220,7 +231,12 @@
     "newSession": "开始新会话",
     "deleteSession": "删除会话",
     "renameSession": "重命名会话",
-    "loadMore": "加载更多"
+    "loadMore": "加载更多",
+    "chooseProject": "选择您的项目",
+    "chooseProjectDesc": "从侧边栏选择一个项目开始使用 Claude Code。每个项目包含您的聊天会话和文件历史。",
+    "tip": "提示：",
+    "tipMobile": "点击上方菜单按钮访问项目",
+    "tipDesktop": "点击侧边栏中的文件夹图标创建新项目"
   },
   "common": {
     "loading": "加载中...",
@@ -247,5 +263,170 @@
     "quickAddCommon": "快速添加常用工具：",
     "quickAddCommonCommands": "快速添加常用命令：",
     "deleteConfirm": "确定要删除此 MCP 服务器吗？"
+  },
+  "gitSettings": {
+    "title": "Git 配置",
+    "description": "配置您的 git 身份信息用于提交。这些设置将通过以下命令全局应用",
+    "gitName": "Git 用户名",
+    "gitNameDesc": "您的 git 提交用户名",
+    "gitNamePlaceholder": "张三",
+    "gitEmail": "Git 邮箱",
+    "gitEmailDesc": "您的 git 提交邮箱",
+    "gitEmailPlaceholder": "zhangsan@example.com",
+    "saveConfig": "保存配置",
+    "savedSuccess": "保存成功"
+  },
+  "onboarding": {
+    "steps": {
+      "gitConfig": "Git 配置",
+      "gitConfigDesc": "设置您的 git 身份信息用于提交",
+      "claudeCli": "Claude Code CLI",
+      "claudeCliDesc": "连接您的 Claude Code 账户",
+      "cursorCli": "Cursor CLI",
+      "cursorCliDesc": "连接您的 Cursor 账户"
+    },
+    "gitStep": {
+      "title": "Git 配置",
+      "description": "配置您的 git 身份信息以确保提交的正确归属",
+      "nameLabel": "Git 用户名",
+      "nameHelper": "将用于：git config --global user.name",
+      "emailLabel": "Git 邮箱",
+      "emailHelper": "将用于：git config --global user.email",
+      "required": "*"
+    },
+    "claudeStep": {
+      "title": "Claude Code CLI",
+      "description": "连接您的 Claude Code 账户以启用 AI 功能",
+      "checkingAuth": "正在检查身份验证状态...",
+      "authenticated": "已认证",
+      "notAuthenticated": "未认证",
+      "loginButton": "登录 Claude",
+      "skipButton": "暂时跳过",
+      "continueButton": "继续"
+    },
+    "cursorStep": {
+      "title": "Cursor CLI",
+      "description": "连接您的 Cursor 账户以启用 AI 功能",
+      "checkingAuth": "正在检查身份验证状态...",
+      "authenticated": "已认证",
+      "notAuthenticated": "未认证",
+      "loginButton": "登录 Cursor",
+      "skipButton": "暂时跳过",
+      "finishButton": "完成设置"
+    },
+    "errors": {
+      "authCheckFailed": "检查身份验证状态失败",
+      "nameEmailRequired": "Git 用户名和邮箱都是必填项",
+      "invalidEmail": "请输入有效的邮箱地址",
+      "saveFailed": "保存 git 配置失败",
+      "completeFailed": "完成引导失败"
+    },
+    "navigation": {
+      "back": "返回",
+      "next": "下一步",
+      "skip": "跳过",
+      "finish": "完成"
+    }
+  },
+  "chatInterface": {
+    "loadingMessages": "加载会话消息中...",
+    "chooseAssistant": "选择您的 AI 助手",
+    "selectProvider": "选择一个提供商开始新对话",
+    "readyClaude": "准备使用 Claude AI。在下方开始输入您的消息。",
+    "readyCursor": "准备使用 Cursor 与 {{model}}。在下方开始输入您的消息。",
+    "selectProviderPrompt": "在上方选择一个提供商开始"
+  },
+  "shell": {
+    "selectProject": "选择项目",
+    "selectProjectDesc": "选择一个项目以在该目录中打开交互式终端"
+  },
+  "loginForm": {
+    "welcomeBack": "欢迎回来",
+    "signInDesc": "登录您的 Claude Code UI 账户",
+    "username": "用户名",
+    "password": "密码",
+    "enterUsername": "输入您的用户名",
+    "enterPassword": "输入您的密码",
+    "signingIn": "登录中...",
+    "signIn": "登录",
+    "enterCredentials": "输入您的凭据以访问 Claude Code UI",
+    "errorBothRequired": "请输入用户名和密码"
+  },
+  "setupForm": {
+    "welcomeTitle": "欢迎使用 Claude Code UI",
+    "setupDesc": "设置您的账户以开始使用",
+    "username": "用户名",
+    "password": "密码",
+    "confirmPassword": "确认密码",
+    "enterUsername": "输入您的用户名",
+    "enterPassword": "输入您的密码",
+    "confirmYourPassword": "确认您的密码",
+    "settingUp": "设置中...",
+    "createAccount": "创建账户",
+    "singleUserNote": "这是一个单用户系统。只能创建一个账户。",
+    "errorPasswordMismatch": "密码不匹配",
+    "errorUsernameLength": "用户名至少需要 3 个字符",
+    "errorPasswordLength": "密码至少需要 6 个字符"
+  },
+  "taskBanner": {
+    "notConfigured": "TaskMaster AI 未配置",
+    "initializeButton": "初始化 TaskMaster AI",
+    "whatIsTaskMaster": "什么是 TaskMaster？",
+    "aiPowered": "AI 驱动的任务管理：",
+    "aiPoweredDesc": "将复杂项目分解为可管理的子任务",
+    "prdTemplates": "PRD 模板：",
+    "prdTemplatesDesc": "从产品需求文档生成任务",
+    "dependencyTracking": "依赖跟踪：",
+    "dependencyTrackingDesc": "了解任务关系和执行顺序",
+    "progressVisualization": "进度可视化：",
+    "progressVisualizationDesc": "看板和详细的任务分析",
+    "cliIntegration": "CLI 集成：",
+    "cliIntegrationDesc": "使用 taskmaster 命令进行高级工作流",
+    "initializeTaskMaster": "初始化 TaskMaster",
+    "addMoreTasks": "添加更多任务：",
+    "addMoreTasksDesc": "手动创建额外任务或从 PRD 模板生成",
+    "createManualTask": "手动创建新任务",
+    "generateFromPRD": "从 PRD 模板生成任务",
+    "parsing": "解析中...",
+    "task": "任务",
+    "highPriority": "高优先级",
+    "mediumPriority": "中优先级",
+    "lowPriority": "低优先级",
+    "startTask": "开始任务",
+    "viewDetails": "查看任务详情",
+    "viewAllTasks": "查看所有任务",
+    "allDone": "全部完成！🎉",
+    "noPendingTasks": "没有待处理任务",
+    "review": "查看",
+    "taskmasterSetup": "TaskMaster 设置",
+    "interactiveCLI": "交互式 CLI 用于",
+    "initWillStart": "TaskMaster 初始化将自动开始",
+    "close": "关闭",
+    "createNewTask": "创建新任务",
+    "useAI": "使用 AI 生成任务详情",
+    "taskDescAI": "任务描述（AI 将生成详情）",
+    "describeTask": "描述您想要完成的内容...",
+    "taskTitle": "任务标题",
+    "enterTaskTitle": "输入任务标题...",
+    "description": "描述",
+    "describeTheTask": "描述任务...",
+    "priority": "优先级",
+    "low": "低",
+    "medium": "中",
+    "high": "高",
+    "cancel": "取消",
+    "creating": "创建中...",
+    "createTask": "创建任务",
+    "selectPRDTemplate": "选择 PRD 模板",
+    "customizeTemplate": "自定义模板",
+    "generatingTasks": "生成任务中",
+    "loadingTemplates": "加载模板中...",
+    "fileName": "文件名",
+    "customizeTemplateLabel": "自定义模板",
+    "back": "返回",
+    "applying": "应用中...",
+    "applyGenerate": "应用并生成任务",
+    "templateApplied": "模板应用成功！",
+    "prdCreated": "您的 PRD 已创建，任务正在生成中..."
   }
 }

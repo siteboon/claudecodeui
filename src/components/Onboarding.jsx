@@ -5,8 +5,10 @@ import CursorLogo from './CursorLogo';
 import LoginModal from './LoginModal';
 import { authenticatedFetch } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
+import { useTranslation } from '../i18n';
 
 const Onboarding = ({ onComplete }) => {
+  const { t } = useTranslation();
   const [currentStep, setCurrentStep] = useState(0);
   const [gitName, setGitName] = useState('');
   const [gitEmail, setGitEmail] = useState('');
@@ -90,7 +92,7 @@ const Onboarding = ({ onComplete }) => {
           authenticated: false,
           email: null,
           loading: false,
-          error: 'Failed to check authentication status'
+          error: t('onboarding.errors.authCheckFailed')
         });
       }
     } catch (error) {
@@ -120,7 +122,7 @@ const Onboarding = ({ onComplete }) => {
           authenticated: false,
           email: null,
           loading: false,
-          error: 'Failed to check authentication status'
+          error: t('onboarding.errors.authCheckFailed')
         });
       }
     } catch (error) {
@@ -160,14 +162,14 @@ const Onboarding = ({ onComplete }) => {
     // Step 0: Git config validation and submission
     if (currentStep === 0) {
       if (!gitName.trim() || !gitEmail.trim()) {
-        setError('Both git name and email are required');
+        setError(t('onboarding.errors.nameEmailRequired'));
         return;
       }
 
       // Validate email format
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(gitEmail)) {
-        setError('Please enter a valid email address');
+        setError(t('onboarding.errors.invalidEmail'));
         return;
       }
 
@@ -182,7 +184,7 @@ const Onboarding = ({ onComplete }) => {
 
         if (!response.ok) {
           const data = await response.json();
-          throw new Error(data.error || 'Failed to save git configuration');
+          throw new Error(data.error || t('onboarding.errors.saveFailed'));
         }
 
         setCurrentStep(currentStep + 1);
@@ -215,7 +217,7 @@ const Onboarding = ({ onComplete }) => {
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || 'Failed to complete onboarding');
+        throw new Error(data.error || t('onboarding.errors.completeFailed'));
       }
 
       // Call the onComplete callback
@@ -231,20 +233,20 @@ const Onboarding = ({ onComplete }) => {
 
   const steps = [
     {
-      title: 'Git Configuration',
-      description: 'Set up your git identity for commits',
+      title: t('onboarding.steps.gitConfig'),
+      description: t('onboarding.steps.gitConfigDesc'),
       icon: GitBranch,
       required: true
     },
     {
-      title: 'Claude Code CLI',
-      description: 'Connect your Claude Code account',
+      title: t('onboarding.steps.claudeCli'),
+      description: t('onboarding.steps.claudeCliDesc'),
       icon: () => <ClaudeLogo size={24} />,
       required: false
     },
     {
-      title: 'Cursor CLI',
-      description: 'Connect your Cursor account',
+      title: t('onboarding.steps.cursorCli'),
+      description: t('onboarding.steps.cursorCliDesc'),
       icon: () => <CursorLogo size={24} />,
       required: false
     }
@@ -259,9 +261,9 @@ const Onboarding = ({ onComplete }) => {
               <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
                 <GitBranch className="w-8 h-8 text-blue-600 dark:text-blue-400" />
               </div>
-              <h2 className="text-2xl font-bold text-foreground mb-2">Git Configuration</h2>
+              <h2 className="text-2xl font-bold text-foreground mb-2">{t('onboarding.gitStep.title')}</h2>
               <p className="text-muted-foreground">
-                Configure your git identity to ensure proper attribution for your commits
+                {t('onboarding.gitStep.description')}
               </p>
             </div>
 
@@ -269,7 +271,7 @@ const Onboarding = ({ onComplete }) => {
               <div>
                 <label htmlFor="gitName" className="flex items-center gap-2 text-sm font-medium text-foreground mb-2">
                   <User className="w-4 h-4" />
-                  Git Name <span className="text-red-500">*</span>
+                  {t('onboarding.gitStep.nameLabel')} <span className="text-red-500">{t('onboarding.gitStep.required')}</span>
                 </label>
                 <input
                   type="text"
@@ -277,19 +279,19 @@ const Onboarding = ({ onComplete }) => {
                   value={gitName}
                   onChange={(e) => setGitName(e.target.value)}
                   className="w-full px-4 py-3 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="John Doe"
+                  placeholder={t('gitSettings.gitNamePlaceholder')}
                   required
                   disabled={isSubmitting}
                 />
                 <p className="mt-1 text-xs text-muted-foreground">
-                  This will be used as: git config --global user.name
+                  {t('onboarding.gitStep.nameHelper')}
                 </p>
               </div>
 
               <div>
                 <label htmlFor="gitEmail" className="flex items-center gap-2 text-sm font-medium text-foreground mb-2">
                   <Mail className="w-4 h-4" />
-                  Git Email <span className="text-red-500">*</span>
+                  {t('onboarding.gitStep.emailLabel')} <span className="text-red-500">{t('onboarding.gitStep.required')}</span>
                 </label>
                 <input
                   type="email"
@@ -297,12 +299,12 @@ const Onboarding = ({ onComplete }) => {
                   value={gitEmail}
                   onChange={(e) => setGitEmail(e.target.value)}
                   className="w-full px-4 py-3 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="john@example.com"
+                  placeholder={t('gitSettings.gitEmailPlaceholder')}
                   required
                   disabled={isSubmitting}
                 />
                 <p className="mt-1 text-xs text-muted-foreground">
-                  This will be used as: git config --global user.email
+                  {t('onboarding.gitStep.emailHelper')}
                 </p>
               </div>
             </div>
@@ -316,9 +318,9 @@ const Onboarding = ({ onComplete }) => {
               <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
                 <ClaudeLogo size={32} />
               </div>
-              <h2 className="text-2xl font-bold text-foreground mb-2">Claude Code CLI</h2>
+              <h2 className="text-2xl font-bold text-foreground mb-2">{t('onboarding.claudeStep.title')}</h2>
               <p className="text-muted-foreground">
-                Connect your Claude account to enable AI-powered coding features
+                {t('onboarding.claudeStep.description')}
               </p>
             </div>
 
@@ -331,8 +333,8 @@ const Onboarding = ({ onComplete }) => {
                     claudeAuthStatus.authenticated ? 'bg-green-500' : 'bg-gray-300'
                   }`} />
                   <span className="font-medium text-foreground">
-                    {claudeAuthStatus.loading ? 'Checking...' :
-                     claudeAuthStatus.authenticated ? 'Connected' : 'Not Connected'}
+                    {claudeAuthStatus.loading ? t('onboarding.claudeStep.checkingAuth') :
+                     claudeAuthStatus.authenticated ? t('onboarding.claudeStep.authenticated') : t('onboarding.claudeStep.notAuthenticated')}
                   </span>
                 </div>
                 {claudeAuthStatus.authenticated && (
@@ -342,21 +344,21 @@ const Onboarding = ({ onComplete }) => {
 
               {claudeAuthStatus.authenticated && claudeAuthStatus.email && (
                 <p className="text-sm text-muted-foreground mb-4">
-                  Signed in as: <span className="text-foreground font-medium">{claudeAuthStatus.email}</span>
+                  {t('settings.auth.asUser')}: <span className="text-foreground font-medium">{claudeAuthStatus.email}</span>
                 </p>
               )}
 
               {!claudeAuthStatus.authenticated && (
                 <>
                   <p className="text-sm text-muted-foreground mb-4">
-                    Click the button below to authenticate with Claude Code CLI. A terminal will open with authentication instructions.
+                    {t('settings.auth.signInClaude')}
                   </p>
                   <button
                     onClick={handleClaudeLogin}
                     className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2"
                   >
                     <LogIn className="w-5 h-5" />
-                    Login to Claude Code
+                    {t('onboarding.claudeStep.loginButton')}
                   </button>
                   <p className="text-xs text-muted-foreground mt-3 text-center">
                     Or manually run: <code className="bg-muted px-2 py-1 rounded">claude auth login</code>
@@ -372,7 +374,7 @@ const Onboarding = ({ onComplete }) => {
             </div>
 
             <div className="text-center text-sm text-muted-foreground">
-              <p>This step is optional. You can skip and configure it later in Settings.</p>
+              <p>{t('onboarding.claudeStep.skipButton')}</p>
             </div>
           </div>
         );
@@ -384,9 +386,9 @@ const Onboarding = ({ onComplete }) => {
               <div className="w-16 h-16 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
                 <CursorLogo size={32} />
               </div>
-              <h2 className="text-2xl font-bold text-foreground mb-2">Cursor CLI</h2>
+              <h2 className="text-2xl font-bold text-foreground mb-2">{t('onboarding.cursorStep.title')}</h2>
               <p className="text-muted-foreground">
-                Connect your Cursor account to enable AI-powered features
+                {t('onboarding.cursorStep.description')}
               </p>
             </div>
 
@@ -399,8 +401,8 @@ const Onboarding = ({ onComplete }) => {
                     cursorAuthStatus.authenticated ? 'bg-green-500' : 'bg-gray-300'
                   }`} />
                   <span className="font-medium text-foreground">
-                    {cursorAuthStatus.loading ? 'Checking...' :
-                     cursorAuthStatus.authenticated ? 'Connected' : 'Not Connected'}
+                    {cursorAuthStatus.loading ? t('onboarding.cursorStep.checkingAuth') :
+                     cursorAuthStatus.authenticated ? t('onboarding.cursorStep.authenticated') : t('onboarding.cursorStep.notAuthenticated')}
                   </span>
                 </div>
                 {cursorAuthStatus.authenticated && (
@@ -410,21 +412,21 @@ const Onboarding = ({ onComplete }) => {
 
               {cursorAuthStatus.authenticated && cursorAuthStatus.email && (
                 <p className="text-sm text-muted-foreground mb-4">
-                  Signed in as: <span className="text-foreground font-medium">{cursorAuthStatus.email}</span>
+                  {t('settings.auth.asUser')}: <span className="text-foreground font-medium">{cursorAuthStatus.email}</span>
                 </p>
               )}
 
               {!cursorAuthStatus.authenticated && (
                 <>
                   <p className="text-sm text-muted-foreground mb-4">
-                    Click the button below to authenticate with Cursor CLI. A terminal will open with authentication instructions.
+                    {t('settings.auth.signInCursor')}
                   </p>
                   <button
                     onClick={handleCursorLogin}
                     className="w-full bg-purple-600 hover:bg-purple-700 text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2"
                   >
                     <LogIn className="w-5 h-5" />
-                    Login to Cursor
+                    {t('onboarding.cursorStep.loginButton')}
                   </button>
                   <p className="text-xs text-muted-foreground mt-3 text-center">
                     Or manually run: <code className="bg-muted px-2 py-1 rounded">cursor auth login</code>
@@ -440,7 +442,7 @@ const Onboarding = ({ onComplete }) => {
             </div>
 
             <div className="text-center text-sm text-muted-foreground">
-              <p>This step is optional. You can skip and configure it later in Settings.</p>
+              <p>{t('onboarding.cursorStep.skipButton')}</p>
             </div>
           </div>
         );
@@ -492,7 +494,7 @@ const Onboarding = ({ onComplete }) => {
                         {step.title}
                       </p>
                       {step.required && (
-                        <span className="text-xs text-red-500">Required</span>
+                        <span className="text-xs text-red-500">{t('onboarding.gitStep.required')}</span>
                       )}
                     </div>
                   </div>
@@ -525,7 +527,7 @@ const Onboarding = ({ onComplete }) => {
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
               >
                 <ChevronLeft className="w-4 h-4" />
-                Previous
+                {t('onboarding.navigation.back')}
               </button>
 
               <div className="flex items-center gap-3">
@@ -538,11 +540,11 @@ const Onboarding = ({ onComplete }) => {
                     {isSubmitting ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        Saving...
+                        {t('common.saving')}
                       </>
                     ) : (
                       <>
-                        Next
+                        {t('onboarding.navigation.next')}
                         <ChevronRight className="w-4 h-4" />
                       </>
                     )}
@@ -556,12 +558,12 @@ const Onboarding = ({ onComplete }) => {
                     {isSubmitting ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        Completing...
+                        {t('common.saving')}
                       </>
                     ) : (
                       <>
                         <Check className="w-4 h-4" />
-                        Complete Setup
+                        {t('onboarding.cursorStep.finishButton')}
                       </>
                     )}
                   </button>

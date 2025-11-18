@@ -273,13 +273,13 @@ function MainContent({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-5l-2-2H5a2 2 0 00-2 2z" />
               </svg>
             </div>
-            <h2 className="text-2xl font-semibold mb-3 text-gray-900 dark:text-white">Choose Your Project</h2>
+            <h2 className="text-2xl font-semibold mb-3 text-gray-900 dark:text-white">{t('mainContent.chooseProject')}</h2>
             <p className="text-gray-600 dark:text-gray-300 mb-6 leading-relaxed">
-              Select a project from the sidebar to start coding with Claude. Each project contains your chat sessions and file history.
+              {t('mainContent.chooseProjectDesc')}
             </p>
             <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
               <p className="text-sm text-blue-700 dark:text-blue-300">
-                💡 <strong>Tip:</strong> {isMobile ? 'Tap the menu button above to access projects' : 'Create a new project by clicking the folder icon in the sidebar'}
+                💡 <strong>{t('mainContent.tip')}</strong> {isMobile ? t('mainContent.tipMobile') : t('mainContent.tipDesktop')}
               </p>
             </div>
           </div>

@@ -4195,16 +4195,16 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           <div className="text-center text-gray-500 dark:text-gray-400 mt-8">
             <div className="flex items-center justify-center space-x-2">
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400"></div>
-              <p>Loading session messages...</p>
+              <p>{t('chatInterface.loadingMessages')}</p>
             </div>
           </div>
         ) : chatMessages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             {!selectedSession && !currentSessionId && (
               <div className="text-center px-6 sm:px-4 py-8">
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">Choose Your AI Assistant</h2>
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">{t('chatInterface.chooseAssistant')}</h2>
                 <p className="text-gray-600 dark:text-gray-400 mb-8">
-                  Select a provider to start a new conversation
+                  {t('chatInterface.selectProvider')}
                 </p>
                 
                 <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-8">
@@ -4296,10 +4296,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   {provider === 'claude' 
-                    ? 'Ready to use Claude AI. Start typing your message below.'
+                    ? t('chatInterface.readyClaude')
                     : provider === 'cursor'
-                    ? `Ready to use Cursor with ${cursorModel}. Start typing your message below.`
-                    : 'Select a provider above to begin'
+                    ? t('chatInterface.readyCursor', { model: cursorModel })
+                    : t('chatInterface.selectProviderPrompt')
                   }
                 </p>
                 
