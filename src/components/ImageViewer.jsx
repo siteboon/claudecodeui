@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Button } from './ui/button';
 import { X } from 'lucide-react';
+import { authenticatedFetch } from '../utils/api';
 
 function ImageViewer({ file, onClose }) {
   const imagePath = `/api/projects/${file.projectName}/files/content?path=${encodeURIComponent(file.path)}`;
@@ -18,16 +19,7 @@ function ImageViewer({ file, onClose }) {
         setError(null);
         setImageUrl(null);
 
-        const token = localStorage.getItem('auth-token');
-        if (!token) {
-          setError('Missing authentication token');
-          return;
-        }
-
-        const response = await fetch(imagePath, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          },
+        const response = await authenticatedFetch(imagePath, {
           signal: controller.signal
         });
 

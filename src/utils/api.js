@@ -1,15 +1,16 @@
 // Utility function for authenticated API calls
 export const authenticatedFetch = (url, options = {}) => {
+  const isPlatform = import.meta.env.VITE_IS_PLATFORM === 'true';
   const token = localStorage.getItem('auth-token');
-  
+
   const defaultHeaders = {
     'Content-Type': 'application/json',
   };
-  
-  if (token) {
+
+  if (!isPlatform && token) {
     defaultHeaders['Authorization'] = `Bearer ${token}`;
   }
-  
+
   return fetch(url, {
     ...options,
     headers: {
@@ -137,8 +138,23 @@ export const api = {
   browseFilesystem: (dirPath = null) => {
     const params = new URLSearchParams();
     if (dirPath) params.append('path', dirPath);
-    
+
     return authenticatedFetch(`/api/browse-filesystem?${params}`);
+  },
+
+  // User endpoints
+  user: {
+    gitConfig: () => authenticatedFetch('/api/user/git-config'),
+    updateGitConfig: (gitName, gitEmail) =>
+      authenticatedFetch('/api/user/git-config', {
+        method: 'POST',
+        body: JSON.stringify({ gitName, gitEmail }),
+      }),
+    onboardingStatus: () => authenticatedFetch('/api/user/onboarding-status'),
+    completeOnboarding: () =>
+      authenticatedFetch('/api/user/complete-onboarding', {
+        method: 'POST',
+      }),
   },
 
   // Generic GET method for any endpoint

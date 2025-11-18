@@ -80,34 +80,47 @@ async function validateGitRepository(projectPath) {
 // Get git status for a project
 router.get('/status', async (req, res) => {
   const { project } = req.query;
-  
+
   if (!project) {
     return res.status(400).json({ error: 'Project name is required' });
   }
 
   try {
     const projectPath = await getActualProjectPath(project);
-    
+
     // Validate git repository
     await validateGitRepository(projectPath);
 
-    // Get current branch
-    const { stdout: branch } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: projectPath });
-    
+    // Get current branch - handle case where there are no commits yet
+    let branch = 'main';
+    let hasCommits = true;
+    try {
+      const { stdout: branchOutput } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: projectPath });
+      branch = branchOutput.trim();
+    } catch (error) {
+      // No HEAD exists - repository has no commits yet
+      if (error.message.includes('unknown revision') || error.message.includes('ambiguous argument')) {
+        hasCommits = false;
+        branch = 'main';
+      } else {
+        throw error;
+      }
+    }
+
     // Get git status
     const { stdout: statusOutput } = await execAsync('git status --porcelain', { cwd: projectPath });
-    
+
     const modified = [];
     const added = [];
     const deleted = [];
     const untracked = [];
-    
+
     statusOutput.split('\n').forEach(line => {
       if (!line.trim()) return;
-      
+
       const status = line.substring(0, 2);
       const file = line.substring(3);
-      
+
       if (status === 'M ' || status === ' M' || status === 'MM') {
         modified.push(file);
       } else if (status === 'A ' || status === 'AM') {
@@ -118,9 +131,10 @@ router.get('/status', async (req, res) => {
         untracked.push(file);
       }
     });
-    
+
     res.json({
-      branch: branch.trim(),
+      branch,
+      hasCommits,
       modified,
       added,
       deleted,
@@ -128,9 +142,9 @@ router.get('/status', async (req, res) => {
     });
   } catch (error) {
     console.error('Git status error:', error);
-    res.json({ 
-      error: error.message.includes('not a git repository') || error.message.includes('Project directory is not a git repository') 
-        ? error.message 
+    res.json({
+      error: error.message.includes('not a git repository') || error.message.includes('Project directory is not a git repository')
+        ? error.message
         : 'Git operation failed',
       details: error.message.includes('not a git repository') || error.message.includes('Project directory is not a git repository')
         ? error.message
@@ -261,6 +275,50 @@ router.get('/file-with-diff', async (req, res) => {
   } catch (error) {
     console.error('Git file-with-diff error:', error);
     res.json({ error: error.message });
+  }
+});
+
+// Create initial commit
+router.post('/initial-commit', async (req, res) => {
+  const { project } = req.body;
+
+  if (!project) {
+    return res.status(400).json({ error: 'Project name is required' });
+  }
+
+  try {
+    const projectPath = await getActualProjectPath(project);
+
+    // Validate git repository
+    await validateGitRepository(projectPath);
+
+    // Check if there are already commits
+    try {
+      await execAsync('git rev-parse HEAD', { cwd: projectPath });
+      return res.status(400).json({ error: 'Repository already has commits. Use regular commit instead.' });
+    } catch (error) {
+      // No HEAD - this is good, we can create initial commit
+    }
+
+    // Add all files
+    await execAsync('git add .', { cwd: projectPath });
+
+    // Create initial commit
+    const { stdout } = await execAsync('git commit -m "Initial commit"', { cwd: projectPath });
+
+    res.json({ success: true, output: stdout, message: 'Initial commit created successfully' });
+  } catch (error) {
+    console.error('Git initial commit error:', error);
+
+    // Handle the case where there's nothing to commit
+    if (error.message.includes('nothing to commit')) {
+      return res.status(400).json({
+        error: 'Nothing to commit',
+        details: 'No files found in the repository. Add some files first.'
+      });
+    }
+
+    res.status(500).json({ error: error.message });
   }
 });
 

@@ -8,7 +8,10 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     last_login DATETIME,
-    is_active BOOLEAN DEFAULT 1
+    is_active BOOLEAN DEFAULT 1,
+    git_name TEXT,
+    git_email TEXT,
+    has_completed_onboarding BOOLEAN DEFAULT 0
 );
 
 -- Indexes for performance
