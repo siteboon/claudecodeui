@@ -32,8 +32,11 @@ const activeSessions = new Map();
 function mapCliOptionsToSDK(options = {}, ws = null) {
   const { sessionId, cwd, toolsSettings, permissionMode, images } = options;
 
+  // Create mutable runtime state for permission mode (can be updated after plan approval)
+  const runtimeState = { permissionMode: permissionMode || 'default' };
+
   console.log('🔍 [SDK] Mapping CLI options to SDK:', {
-    permissionMode: permissionMode || 'UNDEFINED',
+    permissionMode: runtimeState.permissionMode,
     hasWebSocket: !!ws,
     wsReadyState: ws ? ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][ws.readyState] : 'NO_WS',
     skipPermissions: toolsSettings?.skipPermissions ?? 'UNDEFINED',
@@ -48,8 +51,8 @@ function mapCliOptionsToSDK(options = {}, ws = null) {
   }
 
   // Map permission mode
-  if (permissionMode && permissionMode !== 'default') {
-    sdkOptions.permissionMode = permissionMode;
+  if (runtimeState.permissionMode && runtimeState.permissionMode !== 'default') {
+    sdkOptions.permissionMode = runtimeState.permissionMode;
   }
 
   // Map tool settings
@@ -60,16 +63,17 @@ function mapCliOptionsToSDK(options = {}, ws = null) {
   };
 
   // Handle tool permissions
-  if (settings.skipPermissions && permissionMode !== 'plan') {
+  if (settings.skipPermissions && runtimeState.permissionMode !== 'plan') {
     // When skipping permissions, use bypassPermissions mode
     console.log('⚠️  [SDK] skipPermissions=true, overriding permissionMode to bypassPermissions');
     sdkOptions.permissionMode = 'bypassPermissions';
+    runtimeState.permissionMode = 'bypassPermissions';
   } else {
     // Map allowed tools
     let allowedTools = [...(settings.allowedTools || [])];
 
     // Add plan mode default tools
-    if (permissionMode === 'plan') {
+    if (runtimeState.permissionMode === 'plan') {
       const planModeTools = [
             'Read',             // Read files for context
             'Glob',             // Search for files by pattern
@@ -118,7 +122,7 @@ function mapCliOptionsToSDK(options = {}, ws = null) {
 
   // Add canUseTool callback for permission handling
   // Only if not in bypassPermissions mode
-  if (permissionMode !== 'bypassPermissions' && ws) {
+  if (runtimeState.permissionMode !== 'bypassPermissions' && ws) {
     console.log('✅ [SDK] Attaching canUseTool callback for interactive permissions');
     const permissionManager = getPermissionManager();
 
@@ -129,14 +133,15 @@ function mapCliOptionsToSDK(options = {}, ws = null) {
         toolNameType: typeof toolName,
         input: input ? Object.keys(input) : 'none',
         inputType: typeof input,
-        hasAbortSignal: !!abortSignal
+        hasAbortSignal: !!abortSignal,
+        currentPermissionMode: runtimeState.permissionMode
       });
 
       // Generate unique request ID
       const requestId = crypto.randomUUID();
 
       // Check permission mode-specific rules
-      if (permissionMode === 'acceptEdits') {
+      if (runtimeState.permissionMode === 'acceptEdits') {
         // In acceptEdits mode, auto-allow Read, Write, and Edit operations
         const autoAllowTools = ['Read', 'Write', 'Edit'];
         if (autoAllowTools.includes(toolName)) {
@@ -145,7 +150,7 @@ function mapCliOptionsToSDK(options = {}, ws = null) {
         }
       }
 
-      if (permissionMode === 'plan') {
+      if (runtimeState.permissionMode === 'plan') {
         // In plan mode, only allow specific tools for exploration and planning
         const planModeTools = [
                     'Read',             // Read files for context
@@ -200,7 +205,7 @@ function mapCliOptionsToSDK(options = {}, ws = null) {
     });
   }
 
-  return sdkOptions;
+  return { sdkOptions, runtimeState };
 }
 
 /**
@@ -460,7 +465,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
   try {
     // Map CLI options to SDK format (pass ws for permission handling)
-    const sdkOptions = mapCliOptionsToSDK(options, ws);
+    const { sdkOptions, runtimeState } = mapCliOptionsToSDK(options, ws);
 
     // Load MCP configuration
     const mcpServers = await loadMcpConfig(options.cwd);
@@ -560,10 +565,9 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
                 console.log(`✅ [SDK] Plan approved! Switching to mode: ${approvalResult.permissionMode}`);
 
-                // Plan was approved - update permission mode for continued execution
-                // The mode will be applied to subsequent tool calls
-                // Note: We need to update the current options to reflect the new mode
-                // This will affect subsequent canUseTool calls
+                // Plan was approved - update runtime permission mode for subsequent tool calls
+                runtimeState.permissionMode = approvalResult.permissionMode;
+                console.log(`🔄 [SDK] Runtime permission mode updated to: ${runtimeState.permissionMode}`);
 
               } catch (error) {
                 console.log(`❌ [SDK] Plan rejected or timed out: ${error.message}`);
