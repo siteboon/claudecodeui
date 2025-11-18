@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Badge } from './ui/badge';
-import { X, Plus, Settings as SettingsIcon, Shield, AlertTriangle, Moon, Sun, Server, Edit3, Trash2, Globe, Terminal, Zap, FolderOpen, LogIn, Key } from 'lucide-react';
+import { X, Plus, Settings as SettingsIcon, Shield, AlertTriangle, Moon, Sun, Server, Edit3, Trash2, Globe, Terminal, Zap, FolderOpen, LogIn, Key, Languages } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
+import { useTranslation } from '../i18n';
 import ClaudeLogo from './ClaudeLogo';
 import CursorLogo from './CursorLogo';
 import CredentialsSettings from './CredentialsSettings';
@@ -12,6 +13,7 @@ import LoginModal from './LoginModal';
 
 function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
   const { isDarkMode, toggleDarkMode } = useTheme();
+  const { t, i18n } = useTranslation();
   const { 
     tasksEnabled, 
     setTasksEnabled, 
@@ -600,7 +602,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
   };
 
   const handleMcpDelete = async (serverId, scope) => {
-    if (confirm('Are you sure you want to delete this MCP server?')) {
+    if (confirm(t('common.deleteConfirm'))) {
       try {
         await deleteMcpServer(serverId, scope);
         setSaveStatus('success');
@@ -677,7 +679,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
           <div className="flex items-center gap-3">
             <SettingsIcon className="w-5 h-5 md:w-6 md:h-6 text-blue-600" />
             <h2 className="text-lg md:text-xl font-semibold text-foreground">
-              Settings
+              {t('settings.title')}
             </h2>
           </div>
           <Button
@@ -702,7 +704,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                     : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
               >
-                Tools
+                {t('settings.tabs.tools')}
               </button>
               <button
                 onClick={() => setActiveTab('appearance')}
@@ -712,17 +714,17 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                     : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
               >
-                Appearance
+                {t('settings.tabs.appearance')}
               </button>
               <button
                 onClick={() => setActiveTab('tasks')}
                 className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === 'tasks'
+                  activeTab === 'mcpServers'
                     ? 'border-blue-600 text-blue-600 dark:text-blue-400'
                     : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
               >
-                Tasks
+                {t('settings.tabs.mcpServers')}
               </button>
               <button
                 onClick={() => setActiveTab('api')}
@@ -733,7 +735,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                 }`}
               >
                 <Key className="w-4 h-4 inline mr-2" />
-                API & Tokens
+                {t('settings.tabs.api')}
               </button>
             </div>
           </div>
@@ -743,222 +745,242 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
             {/* Appearance Tab */}
             {activeTab === 'appearance' && (
               <div className="space-y-6 md:space-y-8">
-               {activeTab === 'appearance' && (
-  <div className="space-y-6 md:space-y-8">
-    {/* Theme Settings */}
-    <div className="space-y-4">
-      <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="font-medium text-foreground">
-              Dark Mode
-            </div>
-            <div className="text-sm text-muted-foreground">
-              Toggle between light and dark themes
-            </div>
-          </div>
-          <button
-            onClick={toggleDarkMode}
-            className="relative inline-flex h-8 w-14 items-center rounded-full bg-gray-200 dark:bg-gray-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
-            role="switch"
-            aria-checked={isDarkMode}
-            aria-label="Toggle dark mode"
-          >
-            <span className="sr-only">Toggle dark mode</span>
-            <span
-              className={`${
-                isDarkMode ? 'translate-x-7' : 'translate-x-1'
-              } inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-200 flex items-center justify-center`}
-            >
-              {isDarkMode ? (
-                <Moon className="w-3.5 h-3.5 text-gray-700" />
-              ) : (
-                <Sun className="w-3.5 h-3.5 text-yellow-500" />
-              )}
-            </span>
-          </button>
-        </div>
-      </div>
-    </div>
+                {/* Theme Settings */}
+                <div className="space-y-4">
+                  <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium text-foreground">
+                          {t('settings.appearance.darkMode')}
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {t('settings.appearance.darkModeDesc')}
+                        </div>
+                      </div>
+                      <button
+                        onClick={toggleDarkMode}
+                        className="relative inline-flex h-8 w-14 items-center rounded-full bg-gray-200 dark:bg-gray-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
+                        role="switch"
+                        aria-checked={isDarkMode}
+                        aria-label="Toggle dark mode"
+                      >
+                        <span className="sr-only">Toggle dark mode</span>
+                        <span
+                          className={`${
+                            isDarkMode ? 'translate-x-7' : 'translate-x-1'
+                          } inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-200 flex items-center justify-center`}
+                        >
+                          {isDarkMode ? (
+                            <Moon className="w-3.5 h-3.5 text-gray-700" />
+                          ) : (
+                            <Sun className="w-3.5 h-3.5 text-yellow-500" />
+                          )}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
 
-    {/* Project Sorting */}
-    <div className="space-y-4">
-      <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="font-medium text-foreground">
-              Project Sorting
-            </div>
-            <div className="text-sm text-muted-foreground">
-              How projects are ordered in the sidebar
-            </div>
-          </div>
-          <select
-            value={projectSortOrder}
-            onChange={(e) => setProjectSortOrder(e.target.value)}
-            className="text-sm bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 w-32"
-          >
-            <option value="name">Alphabetical</option>
-            <option value="date">Recent Activity</option>
-          </select>
-        </div>
-      </div>
-    </div>
+                {/* Language Settings */}
+                <div className="space-y-4">
+                  <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium text-foreground flex items-center gap-2">
+                          <Languages className="w-4 h-4" />
+                          {t('settings.appearance.language')}
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {t('settings.appearance.languageDesc')}
+                        </div>
+                      </div>
+                      <select
+                        value={i18n.language}
+                        onChange={(e) => i18n.changeLanguage(e.target.value)}
+                        className="text-sm bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 w-32"
+                      >
+                        <option value="en">English</option>
+                        <option value="zh">中文</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
 
-    {/* Code Editor Settings */}
-    <div className="space-y-4">
-      <h3 className="text-lg font-semibold text-foreground">Code Editor</h3>
+                {/* Project Sorting */}
+                <div className="space-y-4">
+                  <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium text-foreground">
+                          {t('settings.appearance.projectSorting')}
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {t('settings.appearance.projectSortingDesc')}
+                        </div>
+                      </div>
+                      <select
+                        value={projectSortOrder}
+                        onChange={(e) => setProjectSortOrder(e.target.value)}
+                        className="text-sm bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 w-32"
+                      >
+                        <option value="name">{t('settings.appearance.alphabetical')}</option>
+                        <option value="date">{t('settings.appearance.recentActivity')}</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
 
-      {/* Editor Theme */}
-      <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="font-medium text-foreground">
-              Editor Theme
-            </div>
-            <div className="text-sm text-muted-foreground">
-              Default theme for the code editor
-            </div>
-          </div>
-          <button
-            onClick={() => setCodeEditorTheme(codeEditorTheme === 'dark' ? 'light' : 'dark')}
-            className="relative inline-flex h-8 w-14 items-center rounded-full bg-gray-200 dark:bg-gray-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
-            role="switch"
-            aria-checked={codeEditorTheme === 'dark'}
-            aria-label="Toggle editor theme"
-          >
-            <span className="sr-only">Toggle editor theme</span>
-            <span
-              className={`${
-                codeEditorTheme === 'dark' ? 'translate-x-7' : 'translate-x-1'
-              } inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-200 flex items-center justify-center`}
-            >
-              {codeEditorTheme === 'dark' ? (
-                <Moon className="w-3.5 h-3.5 text-gray-700" />
-              ) : (
-                <Sun className="w-3.5 h-3.5 text-yellow-500" />
-              )}
-            </span>
-          </button>
-        </div>
-      </div>
+                {/* Code Editor Settings */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-foreground">{t('settings.codeEditor.title')}</h3>
 
-      {/* Word Wrap */}
-      <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="font-medium text-foreground">
-              Word Wrap
-            </div>
-            <div className="text-sm text-muted-foreground">
-              Enable word wrapping by default in the editor
-            </div>
-          </div>
-          <button
-            onClick={() => setCodeEditorWordWrap(!codeEditorWordWrap)}
-            className="relative inline-flex h-8 w-14 items-center rounded-full bg-gray-200 dark:bg-gray-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
-            role="switch"
-            aria-checked={codeEditorWordWrap}
-            aria-label="Toggle word wrap"
-          >
-            <span className="sr-only">Toggle word wrap</span>
-            <span
-              className={`${
-                codeEditorWordWrap ? 'translate-x-7' : 'translate-x-1'
-              } inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-200`}
-            />
-          </button>
-        </div>
-      </div>
+                  {/* Editor Theme */}
+                  <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium text-foreground">
+                          {t('settings.codeEditor.theme')}
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {t('settings.codeEditor.themeDesc')}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setCodeEditorTheme(codeEditorTheme === 'dark' ? 'light' : 'dark')}
+                        className="relative inline-flex h-8 w-14 items-center rounded-full bg-gray-200 dark:bg-gray-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
+                        role="switch"
+                        aria-checked={codeEditorTheme === 'dark'}
+                        aria-label="Toggle editor theme"
+                      >
+                        <span className="sr-only">Toggle editor theme</span>
+                        <span
+                          className={`${
+                            codeEditorTheme === 'dark' ? 'translate-x-7' : 'translate-x-1'
+                          } inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-200 flex items-center justify-center`}
+                        >
+                          {codeEditorTheme === 'dark' ? (
+                            <Moon className="w-3.5 h-3.5 text-gray-700" />
+                          ) : (
+                            <Sun className="w-3.5 h-3.5 text-yellow-500" />
+                          )}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
 
-      {/* Show Minimap */}
-      <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="font-medium text-foreground">
-              Show Minimap
-            </div>
-            <div className="text-sm text-muted-foreground">
-              Display a minimap for easier navigation in diff view
-            </div>
-          </div>
-          <button
-            onClick={() => setCodeEditorShowMinimap(!codeEditorShowMinimap)}
-            className="relative inline-flex h-8 w-14 items-center rounded-full bg-gray-200 dark:bg-gray-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
-            role="switch"
-            aria-checked={codeEditorShowMinimap}
-            aria-label="Toggle minimap"
-          >
-            <span className="sr-only">Toggle minimap</span>
-            <span
-              className={`${
-                codeEditorShowMinimap ? 'translate-x-7' : 'translate-x-1'
-              } inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-200`}
-            />
-          </button>
-        </div>
-      </div>
+                  {/* Word Wrap */}
+                  <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium text-foreground">
+                          {t('settings.codeEditor.wordWrap')}
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {t('settings.codeEditor.wordWrapDesc')}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setCodeEditorWordWrap(!codeEditorWordWrap)}
+                        className="relative inline-flex h-8 w-14 items-center rounded-full bg-gray-200 dark:bg-gray-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
+                        role="switch"
+                        aria-checked={codeEditorWordWrap}
+                        aria-label="Toggle word wrap"
+                      >
+                        <span className="sr-only">Toggle word wrap</span>
+                        <span
+                          className={`${
+                            codeEditorWordWrap ? 'translate-x-7' : 'translate-x-1'
+                          } inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-200`}
+                        />
+                      </button>
+                    </div>
+                  </div>
 
-      {/* Show Line Numbers */}
-      <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="font-medium text-foreground">
-              Show Line Numbers
-            </div>
-            <div className="text-sm text-muted-foreground">
-              Display line numbers in the editor
-            </div>
-          </div>
-          <button
-            onClick={() => setCodeEditorLineNumbers(!codeEditorLineNumbers)}
-            className="relative inline-flex h-8 w-14 items-center rounded-full bg-gray-200 dark:bg-gray-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
-            role="switch"
-            aria-checked={codeEditorLineNumbers}
-            aria-label="Toggle line numbers"
-          >
-            <span className="sr-only">Toggle line numbers</span>
-            <span
-              className={`${
-                codeEditorLineNumbers ? 'translate-x-7' : 'translate-x-1'
-              } inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-200`}
-            />
-          </button>
-        </div>
-      </div>
+                  {/* Show Minimap */}
+                  <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium text-foreground">
+                          {t('settings.codeEditor.showMinimap')}
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {t('settings.codeEditor.showMinimapDesc')}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setCodeEditorShowMinimap(!codeEditorShowMinimap)}
+                        className="relative inline-flex h-8 w-14 items-center rounded-full bg-gray-200 dark:bg-gray-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
+                        role="switch"
+                        aria-checked={codeEditorShowMinimap}
+                        aria-label="Toggle minimap"
+                      >
+                        <span className="sr-only">Toggle minimap</span>
+                        <span
+                          className={`${
+                            codeEditorShowMinimap ? 'translate-x-7' : 'translate-x-1'
+                          } inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-200`}
+                        />
+                      </button>
+                    </div>
+                  </div>
 
-      {/* Font Size */}
-      <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="font-medium text-foreground">
-              Font Size
-            </div>
-            <div className="text-sm text-muted-foreground">
-              Editor font size in pixels
-            </div>
-          </div>
-          <select
-            value={codeEditorFontSize}
-            onChange={(e) => setCodeEditorFontSize(e.target.value)}
-            className="text-sm bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 w-24"
-          >
-            <option value="10">10px</option>
-            <option value="11">11px</option>
-            <option value="12">12px</option>
-            <option value="13">13px</option>
-            <option value="14">14px</option>
-            <option value="15">15px</option>
-            <option value="16">16px</option>
-            <option value="18">18px</option>
-            <option value="20">20px</option>
-          </select>
-        </div>
-      </div>
-    </div>
-  </div>
-)}
+                  {/* Show Line Numbers */}
+                  <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium text-foreground">
+                          {t('settings.codeEditor.showLineNumbers')}
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {t('settings.codeEditor.showLineNumbersDesc')}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setCodeEditorLineNumbers(!codeEditorLineNumbers)}
+                        className="relative inline-flex h-8 w-14 items-center rounded-full bg-gray-200 dark:bg-gray-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
+                        role="switch"
+                        aria-checked={codeEditorLineNumbers}
+                        aria-label="Toggle line numbers"
+                      >
+                        <span className="sr-only">Toggle line numbers</span>
+                        <span
+                          className={`${
+                            codeEditorLineNumbers ? 'translate-x-7' : 'translate-x-1'
+                          } inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-200`}
+                        />
+                      </button>
+                    </div>
+                  </div>
 
+                  {/* Font Size */}
+                  <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium text-foreground">
+                          {t('settings.codeEditor.fontSize')}
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {t('settings.codeEditor.fontSizeDesc')}
+                        </div>
+                      </div>
+                      <select
+                        value={codeEditorFontSize}
+                        onChange={(e) => setCodeEditorFontSize(e.target.value)}
+                        className="text-sm bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 w-24"
+                      >
+                        <option value="10">10px</option>
+                        <option value="11">11px</option>
+                        <option value="12">12px</option>
+                        <option value="13">13px</option>
+                        <option value="14">14px</option>
+                        <option value="15">15px</option>
+                        <option value="16">16px</option>
+                        <option value="18">18px</option>
+                        <option value="20">20px</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -1007,7 +1029,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
               <div className="flex items-center gap-3">
                 <AlertTriangle className="w-5 h-5 text-orange-500" />
                 <h3 className="text-lg font-medium text-foreground">
-                  Permission Settings
+                  {t('settings.tools.permissionSettings')}
                 </h3>
               </div>
               <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
@@ -1020,10 +1042,10 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                   />
                   <div>
                     <div className="font-medium text-orange-900 dark:text-orange-100">
-                      Skip permission prompts (use with caution)
+                      {t('settings.tools.skipPermissions')}
                     </div>
                     <div className="text-sm text-orange-700 dark:text-orange-300">
-                      Equivalent to --dangerously-skip-permissions flag
+                      {t('settings.tools.skipPermissionsDesc')}
                     </div>
                   </div>
                 </label>
@@ -1035,7 +1057,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
               <div className="flex items-center gap-3">
                 <LogIn className="w-5 h-5 text-blue-500" />
                 <h3 className="text-lg font-medium text-foreground">
-                  Authentication
+                  {t('settings.tools.authentication')}
                 </h3>
               </div>
               <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
@@ -1054,7 +1076,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                     size="sm"
                   >
                     <LogIn className="w-4 h-4 mr-2" />
-                    Login
+                    {t('settings.tools.login')}
                   </Button>
                 </div>
               </div>
@@ -1065,11 +1087,11 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
               <div className="flex items-center gap-3">
                 <Shield className="w-5 h-5 text-green-500" />
                 <h3 className="text-lg font-medium text-foreground">
-                  Allowed Tools
+                  {t('settings.tools.allowedTools')}
                 </h3>
               </div>
               <p className="text-sm text-muted-foreground">
-                Tools that are automatically allowed without prompting for permission
+                {t('settings.tools.allowedToolsDesc')}
               </p>
               
               <div className="flex flex-col sm:flex-row gap-2">
@@ -1092,14 +1114,14 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                   className="h-10 px-4 touch-manipulation"
                 >
                   <Plus className="w-4 h-4 mr-2 sm:mr-0" />
-                  <span className="sm:hidden">Add Tool</span>
+                  <span className="sm:hidden">{t('common.addTool')}</span>
                 </Button>
               </div>
 
               {/* Common tools quick add */}
               <div className="space-y-2">
                 <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Quick add common tools:
+                  {t('common.quickAddCommon')}
                 </p>
                 <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
                   {commonTools.map(tool => (
@@ -1135,7 +1157,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                 ))}
                 {allowedTools.length === 0 && (
                   <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                    No allowed tools configured
+                    {t('settings.tools.noAllowedTools')}
                   </div>
                 )}
               </div>
@@ -1146,11 +1168,11 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
               <div className="flex items-center gap-3">
                 <AlertTriangle className="w-5 h-5 text-red-500" />
                 <h3 className="text-lg font-medium text-foreground">
-                  Disallowed Tools
+                  {t('settings.tools.disallowedTools')}
                 </h3>
               </div>
               <p className="text-sm text-muted-foreground">
-                Tools that are automatically blocked without prompting for permission
+                {t('settings.tools.disallowedToolsDesc')}
               </p>
               
               <div className="flex flex-col sm:flex-row gap-2">
@@ -1173,7 +1195,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                   className="h-10 px-4 touch-manipulation"
                 >
                   <Plus className="w-4 h-4 mr-2 sm:mr-0" />
-                  <span className="sm:hidden">Add Tool</span>
+                  <span className="sm:hidden">{t('common.addTool')}</span>
                 </Button>
               </div>
 
@@ -1195,7 +1217,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                 ))}
                 {disallowedTools.length === 0 && (
                   <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                    No disallowed tools configured
+                    {t('settings.tools.noDisallowedTools')}
                   </div>
                 )}
               </div>
@@ -1741,14 +1763,14 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
 
                     <div className="flex justify-end gap-2 pt-4">
                       <Button type="button" variant="outline" onClick={resetMcpForm}>
-                        Cancel
+                        {t('common.cancel')}
                       </Button>
                       <Button 
                         type="submit" 
                         disabled={mcpLoading} 
                         className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50"
                       >
-                        {mcpLoading ? 'Saving...' : (editingMcpServer ? 'Update Server' : 'Add Server')}
+                        {mcpLoading ? t('common.saving') : (editingMcpServer ? t('settings.mcpServers.updateServer') : t('settings.mcpServers.addServer'))}
                       </Button>
                     </div>
                   </form>
@@ -1767,7 +1789,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                   <div className="flex items-center gap-3">
                     <AlertTriangle className="w-5 h-5 text-orange-500" />
                     <h3 className="text-lg font-medium text-foreground">
-                      Cursor Permission Settings
+                      {t('cursor.permissionSettings')}
                     </h3>
                   </div>
                   <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
@@ -1780,10 +1802,10 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                       />
                       <div>
                         <div className="font-medium text-orange-900 dark:text-orange-100">
-                          Skip permission prompts (use with caution)
+                          {t('cursor.skipPermissions')}
                         </div>
                         <div className="text-sm text-orange-700 dark:text-orange-300">
-                          Equivalent to -f flag in Cursor CLI
+                          {t('cursor.skipPermissionsDesc')}
                         </div>
                       </div>
                     </label>
@@ -1795,17 +1817,17 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                   <div className="flex items-center gap-3">
                     <LogIn className="w-5 h-5 text-purple-500" />
                     <h3 className="text-lg font-medium text-foreground">
-                      Authentication
+                      {t('cursor.authentication')}
                     </h3>
                   </div>
                   <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="font-medium text-purple-900 dark:text-purple-100">
-                          Cursor CLI Login
+                          {t('cursor.cursorLogin')}
                         </div>
                         <div className="text-sm text-purple-700 dark:text-purple-300">
-                          Sign in to your Cursor account to enable AI features
+                          {t('cursor.cursorLoginDesc')}
                         </div>
                       </div>
                       <Button
@@ -1814,7 +1836,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                         size="sm"
                       >
                         <LogIn className="w-4 h-4 mr-2" />
-                        Login
+                        {t('cursor.login')}
                       </Button>
                     </div>
                   </div>
@@ -1825,18 +1847,18 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                   <div className="flex items-center gap-3">
                     <Shield className="w-5 h-5 text-green-500" />
                     <h3 className="text-lg font-medium text-foreground">
-                      Allowed Shell Commands
+                      {t('cursor.allowedCommands')}
                     </h3>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    Shell commands that are automatically allowed without prompting for permission
+                    {t('cursor.allowedCommandsDesc')}
                   </p>
                   
                   <div className="flex flex-col sm:flex-row gap-2">
                     <Input
                       value={newCursorCommand}
                       onChange={(e) => setNewCursorCommand(e.target.value)}
-                      placeholder='e.g., "Shell(ls)" or "Shell(git status)"'
+                      placeholder={t('cursor.commandPlaceholder')}
                       onKeyPress={(e) => {
                         if (e.key === 'Enter') {
                           if (newCursorCommand && !cursorAllowedCommands.includes(newCursorCommand)) {
@@ -1860,14 +1882,14 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                       className="h-10 px-4 touch-manipulation"
                     >
                       <Plus className="w-4 h-4 mr-2 sm:mr-0" />
-                      <span className="sm:hidden">Add Command</span>
+                      <span className="sm:hidden">{t('common.addCommand')}</span>
                     </Button>
                   </div>
 
                   {/* Common commands quick add */}
                   <div className="space-y-2">
                     <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                      Quick add common commands:
+                      {t('common.quickAddCommonCommands')}
                     </p>
                     <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
                       {commonCursorCommands.map(cmd => (
@@ -1907,7 +1929,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                     ))}
                     {cursorAllowedCommands.length === 0 && (
                       <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                        No allowed shell commands configured
+                        {t('cursor.noAllowedCommands')}
                       </div>
                     )}
                   </div>
@@ -1918,18 +1940,18 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                   <div className="flex items-center gap-3">
                     <Shield className="w-5 h-5 text-red-500" />
                     <h3 className="text-lg font-medium text-foreground">
-                      Disallowed Shell Commands
+                      {t('cursor.disallowedCommands')}
                     </h3>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    Shell commands that should always be denied
+                    {t('cursor.disallowedCommandsDesc')}
                   </p>
                   
                   <div className="flex flex-col sm:flex-row gap-2">
                     <Input
                       value={newCursorDisallowedCommand}
                       onChange={(e) => setNewCursorDisallowedCommand(e.target.value)}
-                      placeholder='e.g., "Shell(rm -rf)" or "Shell(sudo)"'
+                      placeholder={t('cursor.disallowedCommandPlaceholder')}
                       onKeyPress={(e) => {
                         if (e.key === 'Enter') {
                           if (newCursorDisallowedCommand && !cursorDisallowedCommands.includes(newCursorDisallowedCommand)) {
@@ -1953,7 +1975,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                       className="h-10 px-4 touch-manipulation"
                     >
                       <Plus className="w-4 h-4 mr-2 sm:mr-0" />
-                      <span className="sm:hidden">Add Command</span>
+                      <span className="sm:hidden">{t('common.addCommand')}</span>
                     </Button>
                   </div>
 
@@ -1975,7 +1997,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                     ))}
                     {cursorDisallowedCommands.length === 0 && (
                       <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                        No disallowed shell commands configured
+                        {t('cursor.noDisallowedCommands')}
                       </div>
                     )}
                   </div>
@@ -2187,7 +2209,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
               disabled={isSaving}
               className="flex-1 sm:flex-none h-10 touch-manipulation"
             >
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button 
               onClick={saveSettings} 
@@ -2197,10 +2219,10 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
               {isSaving ? (
                 <div className="flex items-center gap-2">
                   <div className="w-4 h-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  Saving...
+                  {t('common.saving')}
                 </div>
               ) : (
-                'Save Settings'
+                t('settings.save')
               )}
             </Button>
           </div>

@@ -543,7 +543,7 @@ function Sidebar({
                 </div>
                 <div>
                   <h1 className="text-lg font-semibold text-foreground">Claude Code UI</h1>
-                  <p className="text-sm text-muted-foreground">Projects</p>
+                  <p className="text-sm text-muted-foreground">{t('sidebar.title')}</p>
                 </div>
               </a>
             ) : (
@@ -553,7 +553,7 @@ function Sidebar({
                 </div>
                 <div>
                   <h1 className="text-lg font-semibold text-foreground">Claude Code UI</h1>
-                  <p className="text-sm text-muted-foreground">Projects</p>
+                  <p className="text-sm text-muted-foreground">{t('sidebar.title')}</p>
                 </div>
               </div>
             )}
@@ -590,7 +590,7 @@ function Sidebar({
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               type="text"
-              placeholder="Search projects..."
+              placeholder={t('sidebar.searchPlaceholder')}
               value={searchFilter}
               onChange={(e) => setSearchFilter(e.target.value)}
               className="pl-9 h-9 text-sm bg-muted/50 border-0 focus:bg-background focus:ring-1 focus:ring-primary/20"
@@ -613,10 +613,10 @@ function Sidebar({
                 size="sm"
                 className="flex-1 h-8 text-xs bg-primary hover:bg-primary/90 transition-all duration-200"
                 onClick={() => setShowNewProject(true)}
-                title="Create new project (Ctrl+N)"
+                title={t('sidebar.createNewProject')}
               >
                 <FolderPlus className="w-3.5 h-3.5 mr-1.5" />
-                New Project
+                {t('sidebar.newProject')}
               </Button>
               <Button
                 variant="outline"
@@ -648,9 +648,9 @@ function Sidebar({
               <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-4 md:mb-3">
                 <div className="w-6 h-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
               </div>
-              <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">Loading projects...</h3>
+              <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">{t('common.loading')}</h3>
               <p className="text-sm text-muted-foreground">
-                Fetching your Claude projects and sessions
+                {t('sidebar.noProjectsDesc')}
               </p>
             </div>
           ) : projects.length === 0 ? (
@@ -658,9 +658,9 @@ function Sidebar({
               <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-4 md:mb-3">
                 <Folder className="w-6 h-6 text-muted-foreground" />
               </div>
-              <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">No projects found</h3>
+              <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">{t('sidebar.noProjects')}</h3>
               <p className="text-sm text-muted-foreground">
-                Run Claude CLI in a project directory to get started
+                {t('sidebar.noProjectsDesc')}
               </p>
             </div>
           ) : filteredProjects.length === 0 ? (
@@ -668,9 +668,9 @@ function Sidebar({
               <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-4 md:mb-3">
                 <Search className="w-6 h-6 text-muted-foreground" />
               </div>
-              <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">No matching projects</h3>
+              <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">{t('sidebar.noSearchResults')}</h3>
               <p className="text-sm text-muted-foreground">
-                Try adjusting your search term
+                {t('sidebar.noSearchResultsDesc')}
               </p>
             </div>
           ) : (
@@ -1356,7 +1356,7 @@ function Sidebar({
             <div className="w-10 h-10 rounded-2xl bg-background/80 flex items-center justify-center">
               <Settings className="w-5 h-5 text-muted-foreground" />
             </div>
-            <span className="text-lg font-medium text-foreground">Settings</span>
+            <span className="text-lg font-medium text-foreground">{t('sidebar.settings')}</span>
           </button>
         </div>
         
@@ -1367,7 +1367,7 @@ function Sidebar({
           onClick={onShowSettings}
         >
           <Settings className="w-3 h-3" />
-          <span className="text-xs">Settings</span>
+          <span className="text-xs">{t('sidebar.settings')}</span>
         </Button>
       </div>
     </div>

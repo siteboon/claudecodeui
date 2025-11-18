@@ -31,22 +31,22 @@ const resolveKeyPath = (key, language) => {
 };
 
 export function I18nProvider({ children, defaultLanguage = 'en' }) {
-  const [language, setLanguage] = useState(defaultLanguage);
-
-  useEffect(() => {
+  // Initialize language from localStorage first, to avoid overwriting saved preference
+  const [language, setLanguage] = useState(() => {
     const savedLanguage = localStorage.getItem('claudecodeui-language');
+    console.log('[i18n] Initializing with saved language:', savedLanguage);
     if (savedLanguage && resources[savedLanguage]) {
-      setLanguage(savedLanguage);
-      return;
+      return savedLanguage;
     }
-
+    
     const browserLanguage = navigator.language?.toLowerCase().startsWith('zh') ? 'zh' : 'en';
-    if (resources[browserLanguage]) {
-      setLanguage(browserLanguage);
-    }
-  }, []);
+    console.log('[i18n] No saved language, using browser language:', browserLanguage);
+    return resources[browserLanguage] ? browserLanguage : defaultLanguage;
+  });
 
+  // Save language to localStorage whenever it changes
   useEffect(() => {
+    console.log('[i18n] Saving language to localStorage:', language);
     localStorage.setItem('claudecodeui-language', language);
   }, [language]);
 

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { useTranslation } from '../i18n';
 
 /**
  * CommandMenu - Autocomplete dropdown for slash commands
@@ -12,6 +13,7 @@ import React, { useEffect, useRef } from 'react';
  * @param {Array} frequentCommands - Array of frequently used command objects
  */
 const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, position = { top: 0, left: 0 }, isOpen = false, frequentCommands = [] }) => {
+  const { t } = useTranslation();
   const menuRef = useRef(null);
   const selectedItemRef = useRef(null);
 
@@ -103,7 +105,7 @@ const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, pos
           textAlign: 'center'
         }}
       >
-        No commands available
+        {t('commands.noCommands', { defaultValue: 'No commands available' })}
       </div>
     );
   }
@@ -133,11 +135,11 @@ const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, pos
   const orderedNamespaces = namespaceOrder.filter(ns => groupedCommands[ns]);
 
   const namespaceLabels = {
-    frequent: '⭐ Frequently Used',
-    builtin: 'Built-in Commands',
-    project: 'Project Commands',
-    user: 'User Commands',
-    other: 'Other Commands'
+    frequent: `⭐ ${t('commands.frequentlyUsed', { defaultValue: 'Frequently Used' })}`,
+    builtin: t('commands.builtinCommands', { defaultValue: 'Built-in Commands' }),
+    project: t('commands.projectCommands', { defaultValue: 'Project Commands' }),
+    user: t('commands.userCommands', { defaultValue: 'User Commands' }),
+    other: t('commands.otherCommands', { defaultValue: 'Other Commands' })
   };
 
   // Calculate global index for each command
@@ -277,7 +279,9 @@ const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, pos
                         textOverflow: 'ellipsis'
                       }}
                     >
-                      {command.description}
+                      {command.namespace === 'builtin' && command.name.startsWith('/')
+                        ? t(`commands.${command.name}`, { defaultValue: command.description })
+                        : command.description}
                     </div>
                   )}
                 </div>
