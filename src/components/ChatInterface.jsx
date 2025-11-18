@@ -4229,7 +4229,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       localStorage.setItem(`permissionMode-${selectedSession.id}`, newMode);
     }
   };
-  console.log(import.meta.env.VITE_SHOW_DEBUG_BUTTONS);
+   // console.log(import.meta.env.VITE_SHOW_DEBUG_BUTTONS);
   // Don't render if no project is selected
   if (!selectedProject) {
     return (
