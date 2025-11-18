@@ -11,32 +11,32 @@ function MobileNav({ activeTab, setActiveTab, isInputFocused }) {
       id: 'chat',
       icon: MessageSquare,
       onClick: () => setActiveTab('chat'),
-      label: t('navigation.chat')
+      label: translate('navigation.chat')
     },
     {
       id: 'shell',
       icon: Terminal,
       onClick: () => setActiveTab('shell'),
-      label: t('navigation.shell')
+      label: translate('navigation.shell')
     },
     {
       id: 'files',
       icon: Folder,
       onClick: () => setActiveTab('files'),
-      label: t('navigation.files')
+      label: translate('navigation.files')
     },
     {
       id: 'git',
       icon: GitBranch,
       onClick: () => setActiveTab('git'),
-      label: t('navigation.sourceControl')
+      label: translate('navigation.sourceControl')
     },
     // Conditionally add tasks tab if enabled
     ...(tasksEnabled ? [{
       id: 'tasks',
       icon: CheckSquare,
       onClick: () => setActiveTab('tasks'),
-      label: t('navigation.tasks')
+      label: translate('navigation.tasks')
     }] : [])
   ];
 

@@ -13,7 +13,7 @@ import { useTranslation } from '../i18n';
  * @param {Array} frequentCommands - Array of frequently used command objects
  */
 const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, position = { top: 0, left: 0 }, isOpen = false, frequentCommands = [] }) => {
-  const { t } = useTranslation();
+  const { translate } = useTranslation();
   const menuRef = useRef(null);
   const selectedItemRef = useRef(null);
 
@@ -105,7 +105,7 @@ const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, pos
           textAlign: 'center'
         }}
       >
-        {t('commands.noCommands', { defaultValue: 'No commands available' })}
+        {translate('commands.noCommands', { defaultValue: 'No commands available' })}
       </div>
     );
   }
@@ -135,11 +135,11 @@ const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, pos
   const orderedNamespaces = namespaceOrder.filter(ns => groupedCommands[ns]);
 
   const namespaceLabels = {
-    frequent: `⭐ ${t('commands.frequentlyUsed', { defaultValue: 'Frequently Used' })}`,
-    builtin: t('commands.builtinCommands', { defaultValue: 'Built-in Commands' }),
-    project: t('commands.projectCommands', { defaultValue: 'Project Commands' }),
-    user: t('commands.userCommands', { defaultValue: 'User Commands' }),
-    other: t('commands.otherCommands', { defaultValue: 'Other Commands' })
+    frequent: `⭐ ${translate('commands.frequentlyUsed', { defaultValue: 'Frequently Used' })}`,
+    builtin: translate('commands.builtinCommands', { defaultValue: 'Built-in Commands' }),
+    project: translate('commands.projectCommands', { defaultValue: 'Project Commands' }),
+    user: translate('commands.userCommands', { defaultValue: 'User Commands' }),
+    other: translate('commands.otherCommands', { defaultValue: 'Other Commands' })
   };
 
   // Calculate global index for each command
@@ -280,7 +280,7 @@ const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, pos
                       }}
                     >
                       {command.namespace === 'builtin' && command.name.startsWith('/')
-                        ? t(`commands.${command.name}`, { defaultValue: command.description })
+                        ? translate(`commands.${command.name}`, { defaultValue: command.description })
                         : command.description}
                     </div>
                   )}

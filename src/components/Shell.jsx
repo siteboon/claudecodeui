@@ -26,7 +26,7 @@ if (typeof document !== 'undefined') {
 }
 
 function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell = false, onProcessComplete, minimal = false, autoConnect = false }) {
-  const { t } = useTranslation();
+  const { translate } = useTranslation();
   const terminalRef = useRef(null);
   const terminal = useRef(null);
   const fitAddon = useRef(null);
@@ -376,8 +376,8 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z" />
             </svg>
           </div>
-          <h3 className="text-lg font-semibold mb-2">{t('shell.selectProject')}</h3>
-          <p>{t('shell.selectProjectDesc')}</p>
+          <h3 className="text-lg font-semibold mb-2">{translate('shell.selectProject')}</h3>
+          <p>{translate('shell.selectProjectDesc')}</p>
         </div>
       </div>
     );

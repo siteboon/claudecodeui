@@ -16,7 +16,7 @@ import { authenticatedFetch } from '../utils/api';
 
 function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
   const { isDarkMode, toggleDarkMode } = useTheme();
-  const { t, i18n } = useTranslation();
+  const { translate, i18n } = useTranslation();
   const { 
     tasksEnabled, 
     setTasksEnabled, 
@@ -709,7 +709,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
           <div className="flex items-center gap-3">
             <SettingsIcon className="w-5 h-5 md:w-6 md:h-6 text-blue-600" />
             <h2 className="text-lg md:text-xl font-semibold text-foreground">
-              {t('settings.title')}
+              {translate('settings.title')}
             </h2>
           </div>
           <Button
@@ -734,7 +734,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                     : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
               >
-                {t('settings.tabs.tools')}
+                {translate('settings.tabs.tools')}
               </button>
               <button
                 onClick={() => setActiveTab('appearance')}
@@ -744,7 +744,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                     : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
               >
-                {t('settings.tabs.appearance')}
+                {translate('settings.tabs.appearance')}
               </button>
               <button
                 onClick={() => setActiveTab('git')}
@@ -755,7 +755,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                 }`}
               >
                 <GitBranch className="w-4 h-4 inline mr-2" />
-                {t('settings.tabs.git')}
+                {translate('settings.tabs.git')}
               </button>
               <button
                 onClick={() => setActiveTab('api')}
@@ -766,7 +766,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                 }`}
               >
                 <Key className="w-4 h-4 inline mr-2" />
-                {t('settings.tabs.api')}
+                {translate('settings.tabs.api')}
               </button>
               <button
                 onClick={() => setActiveTab('tasks')}
@@ -776,7 +776,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                     : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
               >
-                {t('settings.tabs.tasks')}
+                {translate('settings.tabs.tasks')}
               </button>
             </div>
           </div>
@@ -792,10 +792,10 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="font-medium text-foreground">
-                          {t('settings.appearance.darkMode')}
+                          {translate('settings.appearance.darkMode')}
                         </div>
                         <div className="text-sm text-muted-foreground">
-                          {t('settings.appearance.darkModeDesc')}
+                          {translate('settings.appearance.darkModeDesc')}
                         </div>
                       </div>
                       <button
@@ -828,10 +828,10 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="font-medium text-foreground flex items-center gap-2">
-                          {t('settings.appearance.language')}
+                          {translate('settings.appearance.language')}
                         </div>
                         <div className="text-sm text-muted-foreground">
-                          {t('settings.appearance.languageDesc')}
+                          {translate('settings.appearance.languageDesc')}
                         </div>
                       </div>
                       <select
@@ -852,10 +852,10 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="font-medium text-foreground">
-                          {t('settings.appearance.projectSorting')}
+                          {translate('settings.appearance.projectSorting')}
                         </div>
                         <div className="text-sm text-muted-foreground">
-                          {t('settings.appearance.projectSortingDesc')}
+                          {translate('settings.appearance.projectSortingDesc')}
                         </div>
                       </div>
                       <select
@@ -863,8 +863,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                         onChange={(e) => setProjectSortOrder(e.target.value)}
                         className="text-sm bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 w-32"
                       >
-                        <option value="name">{t('settings.appearance.alphabetical')}</option>
-                        <option value="date">{t('settings.appearance.recentActivity')}</option>
+                        <option value="name">{translate('settings.appearance.alphabetical')}</option>
+                        <option value="date">{translate('settings.appearance.recentActivity')}</option>
                       </select>
                     </div>
                   </div>
@@ -872,17 +872,17 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
 
                 {/* Code Editor Settings */}
                 <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-foreground">{t('settings.codeEditor.title')}</h3>
+                  <h3 className="text-lg font-semibold text-foreground">{translate('settings.codeEditor.title')}</h3>
 
                   {/* Editor Theme */}
                   <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="font-medium text-foreground">
-                          {t('settings.codeEditor.theme')}
+                          {translate('settings.codeEditor.theme')}
                         </div>
                         <div className="text-sm text-muted-foreground">
-                          {t('settings.codeEditor.themeDesc')}
+                          {translate('settings.codeEditor.themeDesc')}
                         </div>
                       </div>
                       <button
@@ -913,10 +913,10 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="font-medium text-foreground">
-                          {t('settings.codeEditor.wordWrap')}
+                          {translate('settings.codeEditor.wordWrap')}
                         </div>
                         <div className="text-sm text-muted-foreground">
-                          {t('settings.codeEditor.wordWrapDesc')}
+                          {translate('settings.codeEditor.wordWrapDesc')}
                         </div>
                       </div>
                       <button
@@ -941,10 +941,10 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="font-medium text-foreground">
-                          {t('settings.codeEditor.showMinimap')}
+                          {translate('settings.codeEditor.showMinimap')}
                         </div>
                         <div className="text-sm text-muted-foreground">
-                          {t('settings.codeEditor.showMinimapDesc')}
+                          {translate('settings.codeEditor.showMinimapDesc')}
                         </div>
                       </div>
                       <button
@@ -969,10 +969,10 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="font-medium text-foreground">
-                          {t('settings.codeEditor.showLineNumbers')}
+                          {translate('settings.codeEditor.showLineNumbers')}
                         </div>
                         <div className="text-sm text-muted-foreground">
-                          {t('settings.codeEditor.showLineNumbersDesc')}
+                          {translate('settings.codeEditor.showLineNumbersDesc')}
                         </div>
                       </div>
                       <button
@@ -997,10 +997,10 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="font-medium text-foreground">
-                          {t('settings.codeEditor.fontSize')}
+                          {translate('settings.codeEditor.fontSize')}
                         </div>
                         <div className="text-sm text-muted-foreground">
-                          {t('settings.codeEditor.fontSizeDesc')}
+                          {translate('settings.codeEditor.fontSizeDesc')}
                         </div>
                       </div>
                       <select
@@ -1072,7 +1072,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
               <div className="flex items-center gap-3">
                 <AlertTriangle className="w-5 h-5 text-orange-500" />
                 <h3 className="text-lg font-medium text-foreground">
-                  {t('settings.tools.permissionSettings')}
+                  {translate('settings.tools.permissionSettings')}
                 </h3>
               </div>
               <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
@@ -1085,10 +1085,10 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                   />
                   <div>
                     <div className="font-medium text-orange-900 dark:text-orange-100">
-                      {t('settings.tools.skipPermissions')}
+                      {translate('settings.tools.skipPermissions')}
                     </div>
                     <div className="text-sm text-orange-700 dark:text-orange-300">
-                      {t('settings.tools.skipPermissionsDesc')}
+                      {translate('settings.tools.skipPermissionsDesc')}
                     </div>
                   </div>
                 </label>
@@ -1099,7 +1099,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
               <div className="flex items-center gap-3">
                 <LogIn className="w-5 h-5 text-blue-500" />
                 <h3 className="text-lg font-medium text-foreground">
-                  {t('settings.tools.authentication')}
+                  {translate('settings.tools.authentication')}
                 </h3>
               </div>
               <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
@@ -1107,22 +1107,22 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                   <div className="flex items-center gap-2">
                     {claudeAuthStatus.loading ? (
                       <span className="text-sm text-blue-700 dark:text-blue-300">
-                        {t('settings.auth.checkingAuth')}
+                        {translate('settings.auth.checkingAuth')}
                       </span>
                     ) : claudeAuthStatus.authenticated ? (
                       <div className="flex items-center gap-2">
                         <Badge variant="success" className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
-                          ✓ {t('settings.auth.loggedIn')}
+                          ✓ {translate('settings.auth.loggedIn')}
                         </Badge>
                         {claudeAuthStatus.email && (
                           <span className="text-sm text-blue-700 dark:text-blue-300">
-                            {t('settings.auth.asUser')} {claudeAuthStatus.email}
+                            {translate('settings.auth.asUser')} {claudeAuthStatus.email}
                           </span>
                         )}
                       </div>
                     ) : (
                       <Badge variant="secondary" className="bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300">
-                        {t('settings.auth.notAuthenticated')}
+                        {translate('settings.auth.notAuthenticated')}
                       </Badge>
                     )}
                   </div>
@@ -1134,8 +1134,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                       </div>
                       <div className="text-sm text-blue-700 dark:text-blue-300">
                         {claudeAuthStatus.authenticated
-                          ? t('settings.auth.reAuthenticate')
-                          : t('settings.auth.signInClaude')}
+                          ? translate('settings.auth.reAuthenticate')
+                          : translate('settings.auth.signInClaude')}
                       </div>
                     </div>
                     <Button
@@ -1156,11 +1156,11 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
               <div className="flex items-center gap-3">
                 <Shield className="w-5 h-5 text-green-500" />
                 <h3 className="text-lg font-medium text-foreground">
-                  {t('settings.tools.allowedTools')}
+                  {translate('settings.tools.allowedTools')}
                 </h3>
               </div>
               <p className="text-sm text-muted-foreground">
-                {t('settings.tools.allowedToolsDesc')}
+                {translate('settings.tools.allowedToolsDesc')}
               </p>
               
               <div className="flex flex-col sm:flex-row gap-2">
@@ -1183,14 +1183,14 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                   className="h-10 px-4 touch-manipulation"
                 >
                   <Plus className="w-4 h-4 mr-2 sm:mr-0" />
-                  <span className="sm:hidden">{t('common.addTool')}</span>
+                  <span className="sm:hidden">{translate('common.addTool')}</span>
                 </Button>
               </div>
 
               {/* Common tools quick add */}
               <div className="space-y-2">
                 <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  {t('common.quickAddCommon')}
+                  {translate('common.quickAddCommon')}
                 </p>
                 <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
                   {commonTools.map(tool => (
@@ -1226,7 +1226,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                 ))}
                 {allowedTools.length === 0 && (
                   <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                    {t('settings.tools.noAllowedTools')}
+                    {translate('settings.tools.noAllowedTools')}
                   </div>
                 )}
               </div>
@@ -1237,11 +1237,11 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
               <div className="flex items-center gap-3">
                 <AlertTriangle className="w-5 h-5 text-red-500" />
                 <h3 className="text-lg font-medium text-foreground">
-                  {t('settings.tools.disallowedTools')}
+                  {translate('settings.tools.disallowedTools')}
                 </h3>
               </div>
               <p className="text-sm text-muted-foreground">
-                {t('settings.tools.disallowedToolsDesc')}
+                {translate('settings.tools.disallowedToolsDesc')}
               </p>
               
               <div className="flex flex-col sm:flex-row gap-2">
@@ -1264,7 +1264,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                   className="h-10 px-4 touch-manipulation"
                 >
                   <Plus className="w-4 h-4 mr-2 sm:mr-0" />
-                  <span className="sm:hidden">{t('common.addTool')}</span>
+                  <span className="sm:hidden">{translate('common.addTool')}</span>
                 </Button>
               </div>
 
@@ -1286,7 +1286,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                 ))}
                 {disallowedTools.length === 0 && (
                   <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                    {t('settings.tools.noDisallowedTools')}
+                    {translate('settings.tools.noDisallowedTools')}
                   </div>
                 )}
               </div>
@@ -1832,14 +1832,14 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
 
                     <div className="flex justify-end gap-2 pt-4">
                       <Button type="button" variant="outline" onClick={resetMcpForm}>
-                        {t('common.cancel')}
+                        {translate('common.cancel')}
                       </Button>
                       <Button 
                         type="submit" 
                         disabled={mcpLoading} 
                         className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50"
                       >
-                        {mcpLoading ? t('common.saving') : (editingMcpServer ? t('settings.mcpServers.updateServer') : t('settings.mcpServers.addServer'))}
+                        {mcpLoading ? translate('common.saving') : (editingMcpServer ? translate('settings.mcpServers.updateServer') : translate('settings.mcpServers.addServer'))}
                       </Button>
                     </div>
                   </form>
@@ -1858,7 +1858,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                   <div className="flex items-center gap-3">
                     <AlertTriangle className="w-5 h-5 text-orange-500" />
                     <h3 className="text-lg font-medium text-foreground">
-                      {t('cursor.permissionSettings')}
+                      {translate('cursor.permissionSettings')}
                     </h3>
                   </div>
                   <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
@@ -1871,10 +1871,10 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                       />
                       <div>
                         <div className="font-medium text-orange-900 dark:text-orange-100">
-                          {t('cursor.skipPermissions')}
+                          {translate('cursor.skipPermissions')}
                         </div>
                         <div className="text-sm text-orange-700 dark:text-orange-300">
-                          {t('cursor.skipPermissionsDesc')}
+                          {translate('cursor.skipPermissionsDesc')}
                         </div>
                       </div>
                     </label>
@@ -1885,7 +1885,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                   <div className="flex items-center gap-3">
                     <LogIn className="w-5 h-5 text-purple-500" />
                     <h3 className="text-lg font-medium text-foreground">
-                      {t('cursor.authentication')}
+                      {translate('cursor.authentication')}
                     </h3>
                   </div>
                   <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
@@ -1893,22 +1893,22 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                       <div className="flex items-center gap-2">
                         {cursorAuthStatus.loading ? (
                           <span className="text-sm text-purple-700 dark:text-purple-300">
-                            {t('settings.auth.checkingAuth')}
+                            {translate('settings.auth.checkingAuth')}
                           </span>
                         ) : cursorAuthStatus.authenticated ? (
                           <div className="flex items-center gap-2">
                             <Badge variant="success" className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
-                              ✓ {t('settings.auth.loggedIn')}
+                              ✓ {translate('settings.auth.loggedIn')}
                             </Badge>
                             {cursorAuthStatus.email && (
                               <span className="text-sm text-purple-700 dark:text-purple-300">
-                                {t('settings.auth.asUser')} {cursorAuthStatus.email}
+                                {translate('settings.auth.asUser')} {cursorAuthStatus.email}
                               </span>
                             )}
                           </div>
                         ) : (
                           <Badge variant="secondary" className="bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300">
-                            {t('settings.auth.notAuthenticated')}
+                            {translate('settings.auth.notAuthenticated')}
                           </Badge>
                         )}
                       </div>
@@ -1920,8 +1920,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                           </div>
                           <div className="text-sm text-purple-700 dark:text-purple-300">
                             {cursorAuthStatus.authenticated
-                              ? t('settings.auth.reAuthenticate')
-                              : t('settings.auth.signInCursor')}
+                              ? translate('settings.auth.reAuthenticate')
+                              : translate('settings.auth.signInCursor')}
                           </div>
                         </div>
                         <Button
@@ -1942,18 +1942,18 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                   <div className="flex items-center gap-3">
                     <Shield className="w-5 h-5 text-green-500" />
                     <h3 className="text-lg font-medium text-foreground">
-                      {t('cursor.allowedCommands')}
+                      {translate('cursor.allowedCommands')}
                     </h3>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    {t('cursor.allowedCommandsDesc')}
+                    {translate('cursor.allowedCommandsDesc')}
                   </p>
                   
                   <div className="flex flex-col sm:flex-row gap-2">
                     <Input
                       value={newCursorCommand}
                       onChange={(e) => setNewCursorCommand(e.target.value)}
-                      placeholder={t('cursor.commandPlaceholder')}
+                      placeholder={translate('cursor.commandPlaceholder')}
                       onKeyPress={(e) => {
                         if (e.key === 'Enter') {
                           if (newCursorCommand && !cursorAllowedCommands.includes(newCursorCommand)) {
@@ -1977,14 +1977,14 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                       className="h-10 px-4 touch-manipulation"
                     >
                       <Plus className="w-4 h-4 mr-2 sm:mr-0" />
-                      <span className="sm:hidden">{t('common.addCommand')}</span>
+                      <span className="sm:hidden">{translate('common.addCommand')}</span>
                     </Button>
                   </div>
 
                   {/* Common commands quick add */}
                   <div className="space-y-2">
                     <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                      {t('common.quickAddCommonCommands')}
+                      {translate('common.quickAddCommonCommands')}
                     </p>
                     <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
                       {commonCursorCommands.map(cmd => (
@@ -2024,7 +2024,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                     ))}
                     {cursorAllowedCommands.length === 0 && (
                       <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                        {t('cursor.noAllowedCommands')}
+                        {translate('cursor.noAllowedCommands')}
                       </div>
                     )}
                   </div>
@@ -2035,18 +2035,18 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                   <div className="flex items-center gap-3">
                     <Shield className="w-5 h-5 text-red-500" />
                     <h3 className="text-lg font-medium text-foreground">
-                      {t('cursor.disallowedCommands')}
+                      {translate('cursor.disallowedCommands')}
                     </h3>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    {t('cursor.disallowedCommandsDesc')}
+                    {translate('cursor.disallowedCommandsDesc')}
                   </p>
                   
                   <div className="flex flex-col sm:flex-row gap-2">
                     <Input
                       value={newCursorDisallowedCommand}
                       onChange={(e) => setNewCursorDisallowedCommand(e.target.value)}
-                      placeholder={t('cursor.disallowedCommandPlaceholder')}
+                      placeholder={translate('cursor.disallowedCommandPlaceholder')}
                       onKeyPress={(e) => {
                         if (e.key === 'Enter') {
                           if (newCursorDisallowedCommand && !cursorDisallowedCommands.includes(newCursorDisallowedCommand)) {
@@ -2070,7 +2070,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                       className="h-10 px-4 touch-manipulation"
                     >
                       <Plus className="w-4 h-4 mr-2 sm:mr-0" />
-                      <span className="sm:hidden">{t('common.addCommand')}</span>
+                      <span className="sm:hidden">{translate('common.addCommand')}</span>
                     </Button>
                   </div>
 
@@ -2092,7 +2092,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                     ))}
                     {cursorDisallowedCommands.length === 0 && (
                       <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                        {t('cursor.noDisallowedCommands')}
+                        {translate('cursor.noDisallowedCommands')}
                       </div>
                     )}
                   </div>
@@ -2138,7 +2138,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
-                {t('settings.saveSuccess')}
+                {translate('settings.saveSuccess')}
               </div>
             )}
             {saveStatus === 'error' && (
@@ -2146,7 +2146,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                 </svg>
-                {t('settings.saveError')}
+                {translate('settings.saveError')}
               </div>
             )}
           </div>
@@ -2157,7 +2157,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
               disabled={isSaving}
               className="flex-1 sm:flex-none h-10 touch-manipulation"
             >
-              {t('common.cancel')}
+              {translate('common.cancel')}
             </Button>
             <Button 
               onClick={saveSettings} 
@@ -2167,10 +2167,10 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
               {isSaving ? (
                 <div className="flex items-center gap-2">
                   <div className="w-4 h-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  {t('common.saving')}
+                  {translate('common.saving')}
                 </div>
               ) : (
-                t('settings.save')
+                translate('settings.save')
               )}
             </Button>
           </div>

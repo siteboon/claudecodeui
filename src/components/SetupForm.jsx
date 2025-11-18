@@ -4,7 +4,7 @@ import ClaudeLogo from './ClaudeLogo';
 import { useTranslation } from '../i18n';
 
 const SetupForm = () => {
-  const { t } = useTranslation();
+  const { translate } = useTranslation();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -52,9 +52,9 @@ const SetupForm = () => {
             <div className="flex justify-center mb-4">
               <ClaudeLogo size={64} />
             </div>
-            <h1 className="text-2xl font-bold text-foreground">{t('setupForm.welcomeTitle')}</h1>
+            <h1 className="text-2xl font-bold text-foreground">{translate('setupForm.welcomeTitle')}</h1>
             <p className="text-muted-foreground mt-2">
-              {t('setupForm.setupDesc')}
+              {translate('setupForm.setupDesc')}
             </p>
           </div>
 
@@ -62,7 +62,7 @@ const SetupForm = () => {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label htmlFor="username" className="block text-sm font-medium text-foreground mb-1">
-                {t('setupForm.username')}
+                {translate('setupForm.username')}
               </label>
               <input
                 type="text"
@@ -70,7 +70,7 @@ const SetupForm = () => {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder={t('setupForm.enterUsername')}
+                placeholder={translate('setupForm.enterUsername')}
                 required
                 disabled={isLoading}
               />
@@ -78,7 +78,7 @@ const SetupForm = () => {
 
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-foreground mb-1">
-                {t('setupForm.password')}
+                {translate('setupForm.password')}
               </label>
               <input
                 type="password"
@@ -86,7 +86,7 @@ const SetupForm = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder={t('setupForm.enterPassword')}
+                placeholder={translate('setupForm.enterPassword')}
                 required
                 disabled={isLoading}
               />
@@ -94,7 +94,7 @@ const SetupForm = () => {
 
             <div>
               <label htmlFor="confirmPassword" className="block text-sm font-medium text-foreground mb-1">
-                {t('setupForm.confirmPassword')}
+                {translate('setupForm.confirmPassword')}
               </label>
               <input
                 type="password"
@@ -102,7 +102,7 @@ const SetupForm = () => {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder={t('setupForm.confirmYourPassword')}
+                placeholder={translate('setupForm.confirmYourPassword')}
                 required
                 disabled={isLoading}
               />
@@ -119,13 +119,13 @@ const SetupForm = () => {
               disabled={isLoading}
               className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium py-2 px-4 rounded-md transition-colors duration-200"
             >
-              {isLoading ? t('setupForm.settingUp') : t('setupForm.createAccount')}
+              {isLoading ? translate('setupForm.settingUp') : translate('setupForm.createAccount')}
             </button>
           </form>
 
           <div className="text-center">
             <p className="text-sm text-muted-foreground">
-              {t('setupForm.singleUserNote')}
+              {translate('setupForm.singleUserNote')}
             </p>
           </div>
         </div>

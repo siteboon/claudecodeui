@@ -77,6 +77,7 @@ export function I18nProvider({ children, defaultLanguage = 'en' }) {
 export function useTranslation() {
   const context = useContext(I18nContext);
   return {
+    translate: context.t,
     t: context.t,
     i18n: context.i18n
   };

@@ -8,7 +8,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTranslation } from '../i18n';
 
 const Onboarding = ({ onComplete }) => {
-  const { t } = useTranslation();
+  const { translate } = useTranslation();
   const [currentStep, setCurrentStep] = useState(0);
   const [gitName, setGitName] = useState('');
   const [gitEmail, setGitEmail] = useState('');
@@ -92,7 +92,7 @@ const Onboarding = ({ onComplete }) => {
           authenticated: false,
           email: null,
           loading: false,
-          error: t('onboarding.errors.authCheckFailed')
+          error: translate('onboarding.errors.authCheckFailed')
         });
       }
     } catch (error) {
@@ -122,7 +122,7 @@ const Onboarding = ({ onComplete }) => {
           authenticated: false,
           email: null,
           loading: false,
-          error: t('onboarding.errors.authCheckFailed')
+          error: translate('onboarding.errors.authCheckFailed')
         });
       }
     } catch (error) {
@@ -184,7 +184,7 @@ const Onboarding = ({ onComplete }) => {
 
         if (!response.ok) {
           const data = await response.json();
-          throw new Error(data.error || t('onboarding.errors.saveFailed'));
+          throw new Error(data.error || translate('onboarding.errors.saveFailed'));
         }
 
         setCurrentStep(currentStep + 1);
@@ -217,7 +217,7 @@ const Onboarding = ({ onComplete }) => {
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || t('onboarding.errors.completeFailed'));
+        throw new Error(data.error || translate('onboarding.errors.completeFailed'));
       }
 
       // Call the onComplete callback
@@ -233,20 +233,20 @@ const Onboarding = ({ onComplete }) => {
 
   const steps = [
     {
-      title: t('onboarding.steps.gitConfig'),
-      description: t('onboarding.steps.gitConfigDesc'),
+      title: translate('onboarding.steps.gitConfig'),
+      description: translate('onboarding.steps.gitConfigDesc'),
       icon: GitBranch,
       required: true
     },
     {
-      title: t('onboarding.steps.claudeCli'),
-      description: t('onboarding.steps.claudeCliDesc'),
+      title: translate('onboarding.steps.claudeCli'),
+      description: translate('onboarding.steps.claudeCliDesc'),
       icon: () => <ClaudeLogo size={24} />,
       required: false
     },
     {
-      title: t('onboarding.steps.cursorCli'),
-      description: t('onboarding.steps.cursorCliDesc'),
+      title: translate('onboarding.steps.cursorCli'),
+      description: translate('onboarding.steps.cursorCliDesc'),
       icon: () => <CursorLogo size={24} />,
       required: false
     }
@@ -261,9 +261,9 @@ const Onboarding = ({ onComplete }) => {
               <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
                 <GitBranch className="w-8 h-8 text-blue-600 dark:text-blue-400" />
               </div>
-              <h2 className="text-2xl font-bold text-foreground mb-2">{t('onboarding.gitStep.title')}</h2>
+              <h2 className="text-2xl font-bold text-foreground mb-2">{translate('onboarding.gitStep.title')}</h2>
               <p className="text-muted-foreground">
-                {t('onboarding.gitStep.description')}
+                {translate('onboarding.gitStep.description')}
               </p>
             </div>
 
@@ -271,7 +271,7 @@ const Onboarding = ({ onComplete }) => {
               <div>
                 <label htmlFor="gitName" className="flex items-center gap-2 text-sm font-medium text-foreground mb-2">
                   <User className="w-4 h-4" />
-                  {t('onboarding.gitStep.nameLabel')} <span className="text-red-500">{t('onboarding.gitStep.required')}</span>
+                  {translate('onboarding.gitStep.nameLabel')} <span className="text-red-500">{translate('onboarding.gitStep.required')}</span>
                 </label>
                 <input
                   type="text"
@@ -279,19 +279,19 @@ const Onboarding = ({ onComplete }) => {
                   value={gitName}
                   onChange={(e) => setGitName(e.target.value)}
                   className="w-full px-4 py-3 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder={t('gitSettings.gitNamePlaceholder')}
+                  placeholder={translate('gitSettings.gitNamePlaceholder')}
                   required
                   disabled={isSubmitting}
                 />
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {t('onboarding.gitStep.nameHelper')}
+                  {translate('onboarding.gitStep.nameHelper')}
                 </p>
               </div>
 
               <div>
                 <label htmlFor="gitEmail" className="flex items-center gap-2 text-sm font-medium text-foreground mb-2">
                   <Mail className="w-4 h-4" />
-                  {t('onboarding.gitStep.emailLabel')} <span className="text-red-500">{t('onboarding.gitStep.required')}</span>
+                  {translate('onboarding.gitStep.emailLabel')} <span className="text-red-500">{translate('onboarding.gitStep.required')}</span>
                 </label>
                 <input
                   type="email"
@@ -299,12 +299,12 @@ const Onboarding = ({ onComplete }) => {
                   value={gitEmail}
                   onChange={(e) => setGitEmail(e.target.value)}
                   className="w-full px-4 py-3 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder={t('gitSettings.gitEmailPlaceholder')}
+                  placeholder={translate('gitSettings.gitEmailPlaceholder')}
                   required
                   disabled={isSubmitting}
                 />
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {t('onboarding.gitStep.emailHelper')}
+                  {translate('onboarding.gitStep.emailHelper')}
                 </p>
               </div>
             </div>
@@ -318,9 +318,9 @@ const Onboarding = ({ onComplete }) => {
               <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
                 <ClaudeLogo size={32} />
               </div>
-              <h2 className="text-2xl font-bold text-foreground mb-2">{t('onboarding.claudeStep.title')}</h2>
+              <h2 className="text-2xl font-bold text-foreground mb-2">{translate('onboarding.claudeStep.title')}</h2>
               <p className="text-muted-foreground">
-                {t('onboarding.claudeStep.description')}
+                {translate('onboarding.claudeStep.description')}
               </p>
             </div>
 
@@ -333,8 +333,8 @@ const Onboarding = ({ onComplete }) => {
                     claudeAuthStatus.authenticated ? 'bg-green-500' : 'bg-gray-300'
                   }`} />
                   <span className="font-medium text-foreground">
-                    {claudeAuthStatus.loading ? t('onboarding.claudeStep.checkingAuth') :
-                     claudeAuthStatus.authenticated ? t('onboarding.claudeStep.authenticated') : t('onboarding.claudeStep.notAuthenticated')}
+                    {claudeAuthStatus.loading ? translate('onboarding.claudeStep.checkingAuth') :
+                     claudeAuthStatus.authenticated ? translate('onboarding.claudeStep.authenticated') : translate('onboarding.claudeStep.notAuthenticated')}
                   </span>
                 </div>
                 {claudeAuthStatus.authenticated && (
@@ -344,21 +344,21 @@ const Onboarding = ({ onComplete }) => {
 
               {claudeAuthStatus.authenticated && claudeAuthStatus.email && (
                 <p className="text-sm text-muted-foreground mb-4">
-                  {t('settings.auth.asUser')}: <span className="text-foreground font-medium">{claudeAuthStatus.email}</span>
+                  {translate('settings.auth.asUser')}: <span className="text-foreground font-medium">{claudeAuthStatus.email}</span>
                 </p>
               )}
 
               {!claudeAuthStatus.authenticated && (
                 <>
                   <p className="text-sm text-muted-foreground mb-4">
-                    {t('settings.auth.signInClaude')}
+                    {translate('settings.auth.signInClaude')}
                   </p>
                   <button
                     onClick={handleClaudeLogin}
                     className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2"
                   >
                     <LogIn className="w-5 h-5" />
-                    {t('onboarding.claudeStep.loginButton')}
+                    {translate('onboarding.claudeStep.loginButton')}
                   </button>
                   <p className="text-xs text-muted-foreground mt-3 text-center">
                     Or manually run: <code className="bg-muted px-2 py-1 rounded">claude auth login</code>
@@ -374,7 +374,7 @@ const Onboarding = ({ onComplete }) => {
             </div>
 
             <div className="text-center text-sm text-muted-foreground">
-              <p>{t('onboarding.claudeStep.skipButton')}</p>
+              <p>{translate('onboarding.claudeStep.skipButton')}</p>
             </div>
           </div>
         );
@@ -386,9 +386,9 @@ const Onboarding = ({ onComplete }) => {
               <div className="w-16 h-16 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
                 <CursorLogo size={32} />
               </div>
-              <h2 className="text-2xl font-bold text-foreground mb-2">{t('onboarding.cursorStep.title')}</h2>
+              <h2 className="text-2xl font-bold text-foreground mb-2">{translate('onboarding.cursorStep.title')}</h2>
               <p className="text-muted-foreground">
-                {t('onboarding.cursorStep.description')}
+                {translate('onboarding.cursorStep.description')}
               </p>
             </div>
 
@@ -401,8 +401,8 @@ const Onboarding = ({ onComplete }) => {
                     cursorAuthStatus.authenticated ? 'bg-green-500' : 'bg-gray-300'
                   }`} />
                   <span className="font-medium text-foreground">
-                    {cursorAuthStatus.loading ? t('onboarding.cursorStep.checkingAuth') :
-                     cursorAuthStatus.authenticated ? t('onboarding.cursorStep.authenticated') : t('onboarding.cursorStep.notAuthenticated')}
+                    {cursorAuthStatus.loading ? translate('onboarding.cursorStep.checkingAuth') :
+                     cursorAuthStatus.authenticated ? translate('onboarding.cursorStep.authenticated') : translate('onboarding.cursorStep.notAuthenticated')}
                   </span>
                 </div>
                 {cursorAuthStatus.authenticated && (
@@ -412,21 +412,21 @@ const Onboarding = ({ onComplete }) => {
 
               {cursorAuthStatus.authenticated && cursorAuthStatus.email && (
                 <p className="text-sm text-muted-foreground mb-4">
-                  {t('settings.auth.asUser')}: <span className="text-foreground font-medium">{cursorAuthStatus.email}</span>
+                  {translate('settings.auth.asUser')}: <span className="text-foreground font-medium">{cursorAuthStatus.email}</span>
                 </p>
               )}
 
               {!cursorAuthStatus.authenticated && (
                 <>
                   <p className="text-sm text-muted-foreground mb-4">
-                    {t('settings.auth.signInCursor')}
+                    {translate('settings.auth.signInCursor')}
                   </p>
                   <button
                     onClick={handleCursorLogin}
                     className="w-full bg-purple-600 hover:bg-purple-700 text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2"
                   >
                     <LogIn className="w-5 h-5" />
-                    {t('onboarding.cursorStep.loginButton')}
+                    {translate('onboarding.cursorStep.loginButton')}
                   </button>
                   <p className="text-xs text-muted-foreground mt-3 text-center">
                     Or manually run: <code className="bg-muted px-2 py-1 rounded">cursor auth login</code>
@@ -442,7 +442,7 @@ const Onboarding = ({ onComplete }) => {
             </div>
 
             <div className="text-center text-sm text-muted-foreground">
-              <p>{t('onboarding.cursorStep.skipButton')}</p>
+              <p>{translate('onboarding.cursorStep.skipButton')}</p>
             </div>
           </div>
         );
@@ -494,7 +494,7 @@ const Onboarding = ({ onComplete }) => {
                         {step.title}
                       </p>
                       {step.required && (
-                        <span className="text-xs text-red-500">{t('onboarding.gitStep.required')}</span>
+                        <span className="text-xs text-red-500">{translate('onboarding.gitStep.required')}</span>
                       )}
                     </div>
                   </div>
@@ -527,7 +527,7 @@ const Onboarding = ({ onComplete }) => {
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
               >
                 <ChevronLeft className="w-4 h-4" />
-                {t('onboarding.navigation.back')}
+                {translate('onboarding.navigation.back')}
               </button>
 
               <div className="flex items-center gap-3">
@@ -540,11 +540,11 @@ const Onboarding = ({ onComplete }) => {
                     {isSubmitting ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        {t('common.saving')}
+                        {translate('common.saving')}
                       </>
                     ) : (
                       <>
-                        {t('onboarding.navigation.next')}
+                        {translate('onboarding.navigation.next')}
                         <ChevronRight className="w-4 h-4" />
                       </>
                     )}
@@ -558,12 +558,12 @@ const Onboarding = ({ onComplete }) => {
                     {isSubmitting ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        {t('common.saving')}
+                        {translate('common.saving')}
                       </>
                     ) : (
                       <>
                         <Check className="w-4 h-4" />
-                        {t('onboarding.cursorStep.finishButton')}
+                        {translate('onboarding.cursorStep.finishButton')}
                       </>
                     )}
                   </button>

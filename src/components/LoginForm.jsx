@@ -4,7 +4,7 @@ import { MessageSquare } from 'lucide-react';
 import { useTranslation } from '../i18n';
 
 const LoginForm = () => {
-  const { t } = useTranslation();
+  const { translate } = useTranslation();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -43,9 +43,9 @@ const LoginForm = () => {
                 <MessageSquare className="w-8 h-8 text-primary-foreground" />
               </div>
             </div>
-            <h1 className="text-2xl font-bold text-foreground">{t('loginForm.welcomeBack')}</h1>
+            <h1 className="text-2xl font-bold text-foreground">{translate('loginForm.welcomeBack')}</h1>
             <p className="text-muted-foreground mt-2">
-              {t('loginForm.signInDesc')}
+              {translate('loginForm.signInDesc')}
             </p>
           </div>
 
@@ -53,7 +53,7 @@ const LoginForm = () => {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label htmlFor="username" className="block text-sm font-medium text-foreground mb-1">
-                {t('loginForm.username')}
+                {translate('loginForm.username')}
               </label>
               <input
                 type="text"
@@ -61,7 +61,7 @@ const LoginForm = () => {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder={t('loginForm.enterUsername')}
+                placeholder={translate('loginForm.enterUsername')}
                 required
                 disabled={isLoading}
               />
@@ -69,7 +69,7 @@ const LoginForm = () => {
 
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-foreground mb-1">
-                {t('loginForm.password')}
+                {translate('loginForm.password')}
               </label>
               <input
                 type="password"
@@ -77,7 +77,7 @@ const LoginForm = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder={t('loginForm.enterPassword')}
+                placeholder={translate('loginForm.enterPassword')}
                 required
                 disabled={isLoading}
               />
@@ -94,13 +94,13 @@ const LoginForm = () => {
               disabled={isLoading}
               className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium py-2 px-4 rounded-md transition-colors duration-200"
             >
-              {isLoading ? t('loginForm.signingIn') : t('loginForm.signIn')}
+              {isLoading ? translate('loginForm.signingIn') : translate('loginForm.signIn')}
             </button>
           </form>
 
           <div className="text-center">
             <p className="text-sm text-muted-foreground">
-              {t('loginForm.enterCredentials')}
+              {translate('loginForm.enterCredentials')}
             </p>
           </div>
         </div>

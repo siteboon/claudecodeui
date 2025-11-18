@@ -8,7 +8,7 @@ import TaskDetail from './TaskDetail';
 import { useTranslation } from '../i18n';
 
 const NextTaskBanner = ({ onShowAllTasks, onStartTask, className = '' }) => {
-  const { t } = useTranslation();
+  const { translate } = useTranslation();
   const { nextTask, tasks, currentProject, isLoadingTasks, projectTaskMaster, refreshTasks, refreshProjects } = useTaskMaster();
   const [showDetails, setShowDetails] = useState(false);
   const [showTaskOptions, setShowTaskOptions] = useState(false);
@@ -70,7 +70,7 @@ const NextTaskBanner = ({ onShowAllTasks, onStartTask, className = '' }) => {
             <List className="w-4 h-4 text-blue-600 dark:text-blue-400" />
             <div>
               <div className="text-sm font-medium text-gray-900 dark:text-white">
-                {t('taskBanner.notConfigured')}
+                {translate('taskBanner.notConfigured')}
               </div>
               <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
               </div>
@@ -82,7 +82,7 @@ const NextTaskBanner = ({ onShowAllTasks, onStartTask, className = '' }) => {
               className="text-xs px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors flex items-center gap-1"
             >
               <Settings className="w-3 h-3" />
-              {t('taskBanner.initializeButton')}
+              {translate('taskBanner.initializeButton')}
             </button>
           </div>
         </div>
@@ -92,14 +92,14 @@ const NextTaskBanner = ({ onShowAllTasks, onStartTask, className = '' }) => {
             {!projectTaskMaster?.hasTaskmaster && (
               <div className="mb-3 p-3 bg-blue-50 dark:bg-blue-900/50 rounded-lg">
                 <h4 className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-2">
-                  🎯 {t('taskBanner.whatIsTaskMaster')}
+                  🎯 {translate('taskBanner.whatIsTaskMaster')}
                 </h4>
                 <div className="text-xs text-blue-800 dark:text-blue-200 space-y-1">
-                  <p>• <strong>{t('taskBanner.aiPowered')}</strong> {t('taskBanner.aiPoweredDesc')}</p>
-                  <p>• <strong>{t('taskBanner.prdTemplates')}</strong> {t('taskBanner.prdTemplatesDesc')}</p>
-                  <p>• <strong>{t('taskBanner.dependencyTracking')}</strong> {t('taskBanner.dependencyTrackingDesc')}</p>
-                  <p>• <strong>{t('taskBanner.progressVisualization')}</strong> {t('taskBanner.progressVisualizationDesc')}</p>
-                  <p>• <strong>{t('taskBanner.cliIntegration')}</strong> {t('taskBanner.cliIntegrationDesc')}</p>
+                  <p>• <strong>{translate('taskBanner.aiPowered')}</strong> {translate('taskBanner.aiPoweredDesc')}</p>
+                  <p>• <strong>{translate('taskBanner.prdTemplates')}</strong> {translate('taskBanner.prdTemplatesDesc')}</p>
+                  <p>• <strong>{translate('taskBanner.dependencyTracking')}</strong> {translate('taskBanner.dependencyTrackingDesc')}</p>
+                  <p>• <strong>{translate('taskBanner.progressVisualization')}</strong> {translate('taskBanner.progressVisualizationDesc')}</p>
+                  <p>• <strong>{translate('taskBanner.cliIntegration')}</strong> {translate('taskBanner.cliIntegrationDesc')}</p>
                 </div>
               </div>
             )}
@@ -110,12 +110,12 @@ const NextTaskBanner = ({ onShowAllTasks, onStartTask, className = '' }) => {
                   onClick={() => setShowCLI(true)}
                 >
                   <Terminal className="w-3 h-3" />
-                  {t('taskBanner.initializeTaskMaster')}
+                  {translate('taskBanner.initializeTaskMaster')}
                 </button>
               ) : (
                 <>
                   <div className="mb-2 p-2 bg-green-50 dark:bg-green-900/30 rounded text-xs text-green-800 dark:text-green-200">
-                    <strong>{t('taskBanner.addMoreTasks')}</strong> {t('taskBanner.addMoreTasksDesc')}
+                    <strong>{translate('taskBanner.addMoreTasks')}</strong> {translate('taskBanner.addMoreTasksDesc')}
                   </div>
                   <button
                     className="text-xs px-3 py-2 bg-green-100 dark:bg-green-900 hover:bg-green-200 dark:hover:bg-green-800 text-green-800 dark:text-green-200 rounded transition-colors text-left flex items-center gap-2 disabled:opacity-50"
@@ -123,7 +123,7 @@ const NextTaskBanner = ({ onShowAllTasks, onStartTask, className = '' }) => {
                     disabled={isLoading}
                   >
                     <Plus className="w-3 h-3" />
-                    {t('taskBanner.createManualTask')}
+                    {translate('taskBanner.createManualTask')}
                   </button>
                   <button
                     className="text-xs px-3 py-2 bg-purple-100 dark:bg-purple-900 hover:bg-purple-200 dark:hover:bg-purple-800 text-purple-800 dark:text-purple-200 rounded transition-colors text-left flex items-center gap-2 disabled:opacity-50"
@@ -131,7 +131,7 @@ const NextTaskBanner = ({ onShowAllTasks, onStartTask, className = '' }) => {
                     disabled={isLoading}
                   >
                     <FileText className="w-3 h-3" />
-                    {isLoading ? t('taskBanner.parsing') : t('taskBanner.generateFromPRD')}
+                    {isLoading ? translate('taskBanner.parsing') : translate('taskBanner.generateFromPRD')}
                   </button>
                 </>
               )}
@@ -153,19 +153,19 @@ const NextTaskBanner = ({ onShowAllTasks, onStartTask, className = '' }) => {
               <div className="w-5 h-5 bg-blue-100 dark:bg-blue-900/50 rounded-full flex items-center justify-center flex-shrink-0">
                 <Target className="w-3 h-3 text-blue-600 dark:text-blue-400" />
               </div>
-              <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">{t('taskBanner.task')} {nextTask.id}</span>
+              <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">{translate('taskBanner.task')} {nextTask.id}</span>
               {nextTask.priority === 'high' && (
-                <div className="w-4 h-4 rounded bg-red-100 dark:bg-red-900/50 flex items-center justify-center" title={t('taskBanner.highPriority')}>
+                <div className="w-4 h-4 rounded bg-red-100 dark:bg-red-900/50 flex items-center justify-center" title={translate('taskBanner.highPriority')}>
                   <Zap className="w-2.5 h-2.5 text-red-600 dark:text-red-400" />
                 </div>
               )}
               {nextTask.priority === 'medium' && (
-                <div className="w-4 h-4 rounded bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center" title={t('taskBanner.mediumPriority')}>
+                <div className="w-4 h-4 rounded bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center" title={translate('taskBanner.mediumPriority')}>
                   <Flag className="w-2.5 h-2.5 text-amber-600 dark:text-amber-400" />
                 </div>
               )}
               {nextTask.priority === 'low' && (
-                <div className="w-4 h-4 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center" title={t('taskBanner.lowPriority')}>
+                <div className="w-4 h-4 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center" title={translate('taskBanner.lowPriority')}>
                   <Circle className="w-2.5 h-2.5 text-gray-400 dark:text-gray-500" />
                 </div>
               )}
@@ -181,12 +181,12 @@ const NextTaskBanner = ({ onShowAllTasks, onStartTask, className = '' }) => {
               className="text-xs px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-medium transition-colors shadow-sm flex items-center gap-1"
             >
               <Play className="w-3 h-3" />
-              {t('taskBanner.startTask')}
+              {translate('taskBanner.startTask')}
             </button>
             <button
               onClick={() => setShowTaskDetail(true)}
               className="text-xs px-2 py-1.5 border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-md transition-colors flex items-center gap-1"
-              title={t('taskBanner.viewDetails')}
+              title={translate('taskBanner.viewDetails')}
             >
               <Eye className="w-3 h-3" />
             </button>
@@ -194,7 +194,7 @@ const NextTaskBanner = ({ onShowAllTasks, onStartTask, className = '' }) => {
               <button
                 onClick={onShowAllTasks}
                 className="text-xs px-2 py-1.5 border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-md transition-colors flex items-center gap-1"
-                title={t('taskBanner.viewAllTasks')}
+                title={translate('taskBanner.viewAllTasks')}
               >
                 <List className="w-3 h-3" />
               </button>
@@ -218,7 +218,7 @@ const NextTaskBanner = ({ onShowAllTasks, onStartTask, className = '' }) => {
         <div className="flex items-center gap-2">
           <CheckCircle className="w-4 h-4 text-purple-600 dark:text-purple-400" />
           <span className="text-sm font-medium text-gray-900 dark:text-white">
-            {completedTasks === totalTasks ? t('taskBanner.allDone') : t('taskBanner.noPendingTasks')}
+            {completedTasks === totalTasks ? translate('taskBanner.allDone') : translate('taskBanner.noPendingTasks')}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -229,7 +229,7 @@ const NextTaskBanner = ({ onShowAllTasks, onStartTask, className = '' }) => {
             onClick={onShowAllTasks}
             className="text-xs px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
           >
-            {t('taskBanner.review')}
+            {translate('taskBanner.review')}
           </button>
         </div>
       </div>
@@ -279,8 +279,8 @@ const NextTaskBanner = ({ onShowAllTasks, onStartTask, className = '' }) => {
                   <Terminal className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white text-left">{t('taskBanner.taskmasterSetup')}</h2>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">{t('taskBanner.interactiveCLI')} {currentProject?.displayName}</p>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white text-left">{translate('taskBanner.taskmasterSetup')}</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{translate('taskBanner.interactiveCLI')} {currentProject?.displayName}</p>
                 </div>
               </div>
               <button
@@ -308,13 +308,13 @@ const NextTaskBanner = ({ onShowAllTasks, onStartTask, className = '' }) => {
             <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
               <div className="flex items-center justify-between">
                 <div className="text-sm text-gray-600 dark:text-gray-400">
-                  {t('taskBanner.initWillStart')}
+                  {translate('taskBanner.initWillStart')}
                 </div>
                 <button
                   onClick={() => setShowCLI(false)}
                   className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
                 >
-                  {t('taskBanner.close')}
+                  {translate('taskBanner.close')}
                 </button>
               </div>
             </div>
@@ -379,7 +379,7 @@ const CreateTaskModal = ({ currentProject, onClose, onTaskCreated }) => {
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{t('taskBanner.createNewTask')}</h3>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{translate('taskBanner.createNewTask')}</h3>
           <button
             onClick={onClose}
             className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
@@ -396,21 +396,21 @@ const CreateTaskModal = ({ currentProject, onClose, onTaskCreated }) => {
                 checked={formData.useAI}
                 onChange={(e) => setFormData(prev => ({ ...prev, useAI: e.target.checked }))}
               />
-              {t('taskBanner.useAI')}
+              {translate('taskBanner.useAI')}
             </label>
           </div>
 
           {formData.useAI ? (
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                {t('taskBanner.taskDescAI')}
+                {translate('taskBanner.taskDescAI')}
               </label>
               <textarea
                 value={formData.prompt}
                 onChange={(e) => setFormData(prev => ({ ...prev, prompt: e.target.value }))}
                 className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
                 rows="3"
-                placeholder={t('taskBanner.describeTask')}
+                placeholder={translate('taskBanner.describeTask')}
                 required
               />
             </div>
@@ -418,28 +418,28 @@ const CreateTaskModal = ({ currentProject, onClose, onTaskCreated }) => {
             <>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  {t('taskBanner.taskTitle')}
+                  {translate('taskBanner.taskTitle')}
                 </label>
                 <input
                   type="text"
                   value={formData.title}
                   onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
                   className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
-                  placeholder={t('taskBanner.enterTaskTitle')}
+                  placeholder={translate('taskBanner.enterTaskTitle')}
                   required
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  {t('taskBanner.description')}
+                  {translate('taskBanner.description')}
                 </label>
                 <textarea
                   value={formData.description}
                   onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                   className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
                   rows="3"
-                  placeholder={t('taskBanner.describeTheTask')}
+                  placeholder={translate('taskBanner.describeTheTask')}
                   required
                 />
               </div>
@@ -448,16 +448,16 @@ const CreateTaskModal = ({ currentProject, onClose, onTaskCreated }) => {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              {t('taskBanner.priority')}
+              {translate('taskBanner.priority')}
             </label>
             <select
               value={formData.priority}
               onChange={(e) => setFormData(prev => ({ ...prev, priority: e.target.value }))}
               className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
             >
-              <option value="low">{t('taskBanner.low')}</option>
-              <option value="medium">{t('taskBanner.medium')}</option>
-              <option value="high">{t('taskBanner.high')}</option>
+              <option value="low">{translate('taskBanner.low')}</option>
+              <option value="medium">{translate('taskBanner.medium')}</option>
+              <option value="high">{translate('taskBanner.high')}</option>
             </select>
           </div>
 
@@ -468,14 +468,14 @@ const CreateTaskModal = ({ currentProject, onClose, onTaskCreated }) => {
               className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
               disabled={isSubmitting}
             >
-              {t('taskBanner.cancel')}
+              {translate('taskBanner.cancel')}
             </button>
             <button
               type="submit"
               className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50"
               disabled={isSubmitting || (formData.useAI && !formData.prompt.trim()) || (!formData.useAI && (!formData.title.trim() || !formData.description.trim()))}
             >
-              {isSubmitting ? t('taskBanner.creating') : t('taskBanner.createTask')}
+              {isSubmitting ? translate('taskBanner.creating') : translate('taskBanner.createTask')}
             </button>
           </div>
         </form>
@@ -574,7 +574,7 @@ const TemplateSelector = ({ currentProject, onClose, onTemplateApplied }) => {
         <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
           <div className="flex items-center gap-3">
             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-            <span className="text-gray-900 dark:text-white">{t('taskBanner.loadingTemplates')}</span>
+            <span className="text-gray-900 dark:text-white">{translate('taskBanner.loadingTemplates')}</span>
           </div>
         </div>
       </div>
@@ -586,9 +586,9 @@ const TemplateSelector = ({ currentProject, onClose, onTemplateApplied }) => {
       <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-            {step === 'select' ? t('taskBanner.selectPRDTemplate') : 
-             step === 'customize' ? t('taskBanner.customizeTemplate') : 
-             t('taskBanner.generatingTasks')}
+            {step === 'select' ? translate('taskBanner.selectPRDTemplate') : 
+             step === 'customize' ? translate('taskBanner.customizeTemplate') : 
+             translate('taskBanner.generatingTasks')}
           </h3>
           <button
             onClick={onClose}
@@ -625,7 +625,7 @@ const TemplateSelector = ({ currentProject, onClose, onTemplateApplied }) => {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                {t('taskBanner.fileName')}
+                {translate('taskBanner.fileName')}
               </label>
               <input
                 type="text"
@@ -639,7 +639,7 @@ const TemplateSelector = ({ currentProject, onClose, onTemplateApplied }) => {
             {Object.keys(customizations).length > 0 && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  {t('taskBanner.customizeTemplateLabel')}
+                  {translate('taskBanner.customizeTemplateLabel')}
                 </label>
                 <div className="space-y-3">
                   {Object.entries(customizations).map(([key, value]) => (
@@ -665,14 +665,14 @@ const TemplateSelector = ({ currentProject, onClose, onTemplateApplied }) => {
                 onClick={() => setStep('select')}
                 className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
               >
-                {t('taskBanner.back')}
+                {translate('taskBanner.back')}
               </button>
               <button
                 onClick={handleApplyTemplate}
                 className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded disabled:opacity-50"
                 disabled={isApplying}
               >
-                {isApplying ? t('taskBanner.applying') : t('taskBanner.applyGenerate')}
+                {isApplying ? translate('taskBanner.applying') : translate('taskBanner.applyGenerate')}
               </button>
             </div>
           </div>
@@ -684,10 +684,10 @@ const TemplateSelector = ({ currentProject, onClose, onTemplateApplied }) => {
               <CheckCircle className="w-8 h-8 text-green-600 dark:text-green-400" />
             </div>
             <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-              {t('taskBanner.templateApplied')}
+              {translate('taskBanner.templateApplied')}
             </h4>
             <p className="text-gray-600 dark:text-gray-400">
-              {t('taskBanner.prdCreated')}
+              {translate('taskBanner.prdCreated')}
             </p>
           </div>
         )}
