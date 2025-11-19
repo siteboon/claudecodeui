@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
-import { ClipboardAddon } from '@xterm/addon-clipboard';
 import { WebglAddon } from '@xterm/addon-webgl';
+import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
 
 const xtermStyles = `
@@ -267,11 +267,12 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     });
 
     fitAddon.current = new FitAddon();
-    const clipboardAddon = new ClipboardAddon();
     const webglAddon = new WebglAddon();
-    
+    const webLinksAddon = new WebLinksAddon();
+
     terminal.current.loadAddon(fitAddon.current);
-    terminal.current.loadAddon(clipboardAddon);
+    terminal.current.loadAddon(webLinksAddon);
+    // Note: ClipboardAddon removed - we handle clipboard operations manually in attachCustomKeyEventHandler
 
     try {
       terminal.current.loadAddon(webglAddon);
