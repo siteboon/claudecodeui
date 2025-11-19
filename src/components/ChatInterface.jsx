@@ -34,6 +34,7 @@ import { MicButton } from './MicButton.jsx';
 import { api, authenticatedFetch } from '../utils/api';
 import Fuse from 'fuse.js';
 import CommandMenu from './CommandMenu';
+import { hasRTLCharacters } from '../utils/rtlDetection';
 
 
 // Helper function to decode HTML entities in text
@@ -91,13 +92,13 @@ function unescapeWithMathProtection(text) {
 }
 
 // Small wrapper to keep markdown behavior consistent in one place
-const Markdown = ({ children, className }) => {
+const Markdown = ({ children, className, dir }) => {
   const content = normalizeInlineCodeFences(String(children ?? ''));
   const remarkPlugins = useMemo(() => [remarkGfm, remarkMath], []);
   const rehypePlugins = useMemo(() => [rehypeKatex], []);
 
   return (
-    <div className={className}>
+    <div className={className} dir={dir}>
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
         rehypePlugins={rehypePlugins}
@@ -362,6 +363,12 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     (prevMessage.type === 'error'));
   const messageRef = React.useRef(null);
   const [isExpanded, setIsExpanded] = React.useState(false);
+
+  // Detect RTL characters in message content
+  const isRTL = React.useMemo(() => {
+    if (!message?.content) return false;
+    return hasRTLCharacters(message.content);
+  }, [message?.content]);
   React.useEffect(() => {
     if (!autoExpandTools || !messageRef.current || !message.isToolUse) return;
     
@@ -399,7 +406,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
         /* User message bubble on the right */
         <div className="flex items-end space-x-0 sm:space-x-3 w-full sm:w-auto sm:max-w-[85%] md:max-w-md lg:max-w-lg xl:max-w-xl">
           <div className="bg-blue-600 text-white rounded-2xl rounded-br-md px-3 sm:px-4 py-2 shadow-sm flex-1 sm:flex-initial">
-            <div className="text-sm whitespace-pre-wrap break-words">
+            <div className="text-sm whitespace-pre-wrap break-words" dir={isRTL ? 'rtl' : 'ltr'}>
               {message.content}
             </div>
             {message.images && message.images.length > 0 && (
@@ -1573,11 +1580,11 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
 
                   // Normal rendering for non-JSON content
                   return message.type === 'assistant' ? (
-                    <Markdown className="prose prose-sm max-w-none dark:prose-invert prose-gray">
+                    <Markdown className="prose prose-sm max-w-none dark:prose-invert prose-gray" dir={isRTL ? 'rtl' : 'ltr'}>
                       {content}
                     </Markdown>
                   ) : (
-                    <div className="whitespace-pre-wrap">
+                    <div className="whitespace-pre-wrap" dir={isRTL ? 'rtl' : 'ltr'}>
                       {content}
                     </div>
                   );
@@ -1648,6 +1655,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
     return '';
   });
+
+  // Detect RTL characters in input field
+  const isInputRTL = useMemo(() => hasRTLCharacters(input), [input]);
+
   const [chatMessages, setChatMessages] = useState(() => {
     if (typeof window !== 'undefined' && selectedProject) {
       const saved = safeLocalStorage.getItem(`chat_messages_${selectedProject.name}`);
@@ -4681,6 +4692,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               }}
               placeholder={`Type / for commands, @ for files, or ask ${provider === 'cursor' ? 'Cursor' : 'Claude'} anything...`}
               disabled={isLoading}
+              dir={isInputRTL ? 'rtl' : 'ltr'}
               className="chat-input-placeholder block w-full pl-12 pr-20 sm:pr-40 py-1.5 sm:py-4 bg-transparent rounded-2xl focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 resize-none min-h-[50px] sm:min-h-[80px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base leading-[21px] sm:leading-6 transition-all duration-200"
               style={{ height: '50px' }}
             />
