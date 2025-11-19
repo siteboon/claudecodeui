@@ -14,6 +14,7 @@ import ProjectCreationWizard from './ProjectCreationWizard';
 import { api } from '../utils/api';
 import { useTaskMaster } from '../contexts/TaskMasterContext';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
+import { useTranslation } from '../i18n';
 
 // Move formatTimeAgo outside component to avoid recreation on every render
 const formatTimeAgo = (dateString, currentTime) => {
@@ -80,6 +81,7 @@ function Sidebar({
   // TaskMaster context
   const { setCurrentProject, mcpServerStatus } = useTaskMaster();
   const { tasksEnabled } = useTasksSettings();
+  const { translate } = useTranslation();
 
   
   // Starred projects state - persisted in localStorage
@@ -541,7 +543,7 @@ function Sidebar({
                 </div>
                 <div>
                   <h1 className="text-lg font-semibold text-foreground">Claude Code UI</h1>
-                  <p className="text-sm text-muted-foreground">Projects</p>
+                  <p className="text-sm text-muted-foreground">{translate('sidebar.title')}</p>
                 </div>
               </a>
             ) : (
@@ -551,7 +553,7 @@ function Sidebar({
                 </div>
                 <div>
                   <h1 className="text-lg font-semibold text-foreground">Claude Code UI</h1>
-                  <p className="text-sm text-muted-foreground">Projects</p>
+                  <p className="text-sm text-muted-foreground">{translate('sidebar.title')}</p>
                 </div>
               </div>
             )}
@@ -588,7 +590,7 @@ function Sidebar({
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               type="text"
-              placeholder="Search projects..."
+              placeholder={translate('sidebar.searchPlaceholder')}
               value={searchFilter}
               onChange={(e) => setSearchFilter(e.target.value)}
               className="pl-9 h-9 text-sm bg-muted/50 border-0 focus:bg-background focus:ring-1 focus:ring-primary/20"
@@ -611,10 +613,10 @@ function Sidebar({
                 size="sm"
                 className="flex-1 h-8 text-xs bg-primary hover:bg-primary/90 transition-all duration-200"
                 onClick={() => setShowNewProject(true)}
-                title="Create new project (Ctrl+N)"
+                title={translate('sidebar.createNewProject')}
               >
                 <FolderPlus className="w-3.5 h-3.5 mr-1.5" />
-                New Project
+                {translate('sidebar.newProject')}
               </Button>
               <Button
                 variant="outline"
@@ -646,9 +648,9 @@ function Sidebar({
               <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-4 md:mb-3">
                 <div className="w-6 h-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
               </div>
-              <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">Loading projects...</h3>
+              <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">{translate('common.loading')}</h3>
               <p className="text-sm text-muted-foreground">
-                Fetching your Claude projects and sessions
+                {translate('sidebar.noProjectsDesc')}
               </p>
             </div>
           ) : projects.length === 0 ? (
@@ -656,9 +658,9 @@ function Sidebar({
               <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-4 md:mb-3">
                 <Folder className="w-6 h-6 text-muted-foreground" />
               </div>
-              <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">No projects found</h3>
+              <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">{translate('sidebar.noProjects')}</h3>
               <p className="text-sm text-muted-foreground">
-                Run Claude CLI in a project directory to get started
+                {translate('sidebar.noProjectsDesc')}
               </p>
             </div>
           ) : filteredProjects.length === 0 ? (
@@ -666,9 +668,9 @@ function Sidebar({
               <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-4 md:mb-3">
                 <Search className="w-6 h-6 text-muted-foreground" />
               </div>
-              <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">No matching projects</h3>
+              <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">{translate('sidebar.noSearchResults')}</h3>
               <p className="text-sm text-muted-foreground">
-                Try adjusting your search term
+                {translate('sidebar.noSearchResultsDesc')}
               </p>
             </div>
           ) : (
@@ -1021,7 +1023,7 @@ function Sidebar({
                           const isActive = diffInMinutes < 10;
                           
                           // Get session display values
-                          const sessionName = isCursorSession ? (session.name || 'Untitled Session') : (session.summary || 'New Session');
+                          const sessionName = isCursorSession ? (session.name || 'Untitled Session') : (session.summary || translate('sidebar.newSession'));
                           const sessionTime = isCursorSession ? session.createdAt : session.lastActivity;
                           const messageCount = session.messageCount || 0;
                           
@@ -1213,7 +1215,7 @@ function Sidebar({
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         setEditingSession(session.id);
-                                        setEditingSessionName(session.summary || 'New Session');
+                                        setEditingSessionName(session.summary || translate('sidebar.newSession'));
                                       }}
                                       title="Manually edit session name"
                                     >
@@ -1252,12 +1254,12 @@ function Sidebar({
                           {loadingSessions[project.name] ? (
                             <>
                               <div className="w-3 h-3 animate-spin rounded-full border border-muted-foreground border-t-transparent" />
-                              Loading...
+                              {translate('common.loading')}
                             </>
                           ) : (
                             <>
                               <ChevronDown className="w-3 h-3" />
-                              Show more sessions
+                              {translate('sidebar.showMoreSessions')}
                             </>
                           )}
                         </Button>
@@ -1267,25 +1269,25 @@ function Sidebar({
                       <div className="md:hidden px-3 pb-2">
                         <button
                           className="w-full h-8 bg-primary hover:bg-primary/90 text-primary-foreground rounded-md flex items-center justify-center gap-2 font-medium text-xs active:scale-[0.98] transition-all duration-150"
-                          onClick={() => {
-                            handleProjectSelect(project);
-                            onNewSession(project);
-                          }}
-                        >
-                          <Plus className="w-3 h-3" />
-                          New Session
-                        </button>
-                      </div>
-                      
-                      <Button
-                        variant="default"
-                        size="sm"
-                        className="hidden md:flex w-full justify-start gap-2 mt-1 h-8 text-xs font-medium bg-primary hover:bg-primary/90 text-primary-foreground transition-colors"
-                        onClick={() => onNewSession(project)}
+                        onClick={() => {
+                          handleProjectSelect(project);
+                          onNewSession(project);
+                        }}
                       >
                         <Plus className="w-3 h-3" />
-                        New Session
-                      </Button>
+                        {translate('sidebar.newSession')}
+                      </button>
+                    </div>
+
+                    <Button
+                        variant="default"
+                        size="sm"
+                      className="hidden md:flex w-full justify-start gap-2 mt-1 h-8 text-xs font-medium bg-primary hover:bg-primary/90 text-primary-foreground transition-colors"
+                      onClick={() => onNewSession(project)}
+                    >
+                      <Plus className="w-3 h-3" />
+                      {translate('sidebar.newSession')}
+                    </Button>
                     </div>
                   )}
                 </div>
@@ -1354,7 +1356,7 @@ function Sidebar({
             <div className="w-10 h-10 rounded-2xl bg-background/80 flex items-center justify-center">
               <Settings className="w-5 h-5 text-muted-foreground" />
             </div>
-            <span className="text-lg font-medium text-foreground">Settings</span>
+            <span className="text-lg font-medium text-foreground">{translate('sidebar.settings')}</span>
           </button>
         </div>
         
@@ -1365,7 +1367,7 @@ function Sidebar({
           onClick={onShowSettings}
         >
           <Settings className="w-3 h-3" />
-          <span className="text-xs">Settings</span>
+          <span className="text-xs">{translate('sidebar.settings')}</span>
         </Button>
       </div>
     </div>
