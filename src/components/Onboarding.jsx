@@ -162,14 +162,14 @@ const Onboarding = ({ onComplete }) => {
     // Step 0: Git config validation and submission
     if (currentStep === 0) {
       if (!gitName.trim() || !gitEmail.trim()) {
-        setError(t('onboarding.errors.nameEmailRequired'));
+        setError(translate('onboarding.errors.nameEmailRequired'));
         return;
       }
 
       // Validate email format
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(gitEmail)) {
-        setError(t('onboarding.errors.invalidEmail'));
+        setError(translate('onboarding.errors.invalidEmail'));
         return;
       }
 

@@ -18,17 +18,17 @@ const SetupForm = () => {
     setError('');
     
     if (password !== confirmPassword) {
-      setError(t('setupForm.errorPasswordMismatch'));
+      setError(translate('setupForm.errorPasswordMismatch'));
       return;
     }
     
     if (username.length < 3) {
-      setError(t('setupForm.errorUsernameLength'));
+      setError(translate('setupForm.errorUsernameLength'));
       return;
     }
     
     if (password.length < 6) {
-      setError(t('setupForm.errorPasswordLength'));
+      setError(translate('setupForm.errorPasswordLength'));
       return;
     }
     

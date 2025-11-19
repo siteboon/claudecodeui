@@ -5,7 +5,7 @@ import { useTranslation } from '../i18n';
 
 function MobileNav({ activeTab, setActiveTab, isInputFocused }) {
   const { tasksEnabled } = useTasksSettings();
-  const { t } = useTranslation();
+  const { translate } = useTranslation();
   const navItems = [
     {
       id: 'chat',

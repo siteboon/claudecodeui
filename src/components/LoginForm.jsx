@@ -17,7 +17,7 @@ const LoginForm = () => {
     setError('');
     
     if (!username || !password) {
-      setError(t('loginForm.errorBothRequired'));
+      setError(translate('loginForm.errorBothRequired'));
       return;
     }
     

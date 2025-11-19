@@ -632,7 +632,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
   };
 
   const handleMcpDelete = async (serverId, scope) => {
-    if (confirm(t('common.deleteConfirm'))) {
+    if (confirm(translate('common.deleteConfirm'))) {
       try {
         await deleteMcpServer(serverId, scope);
         setSaveStatus('success');

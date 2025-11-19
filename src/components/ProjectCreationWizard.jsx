@@ -91,13 +91,13 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
 
     if (step === 1) {
       if (!workspaceType) {
-        setError(t('projectWizard.selectTypeError'));
+        setError(translate('projectWizard.selectTypeError'));
         return;
       }
       setStep(2);
     } else if (step === 2) {
       if (!workspacePath.trim()) {
-        setError(t('projectWizard.pathRequiredError'));
+        setError(translate('projectWizard.pathRequiredError'));
         return;
       }
 
