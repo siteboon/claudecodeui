@@ -94,6 +94,13 @@ async function updateClaudeSettingsForProvider(provider) {
       if (settings.env?.ANTHROPIC_AUTH_TOKEN) {
         delete settings.env.ANTHROPIC_AUTH_TOKEN;
       }
+      // Remove model overrides to prevent stale configurations
+      if (settings.env?.ANTHROPIC_MODEL) {
+        delete settings.env.ANTHROPIC_MODEL;
+      }
+      if (settings.env?.ANTHROPIC_SMALL_FAST_MODEL) {
+        delete settings.env.ANTHROPIC_SMALL_FAST_MODEL;
+      }
       // Keep ANTHROPIC_API_KEY if it exists (user might have set it manually)
 
       await writeClaudeSettings(settings);
@@ -108,10 +115,9 @@ async function updateClaudeSettingsForProvider(provider) {
     // Update API key
     if (provider.api_key) {
       // Use ANTHROPIC_AUTH_TOKEN for LLM gateways (per official docs)
-      // Claude Code SDK checks both ANTHROPIC_AUTH_TOKEN and ANTHROPIC_API_KEY
+      // Do NOT overwrite ANTHROPIC_API_KEY to preserve manually-set keys
       settings.env.ANTHROPIC_AUTH_TOKEN = provider.api_key;
-      settings.env.ANTHROPIC_API_KEY = provider.api_key; // For backwards compatibility
-      console.log("🔑 Updated API keys in settings.json");
+      console.log("🔑 Updated ANTHROPIC_AUTH_TOKEN in settings.json");
     }
 
     // Update base URL

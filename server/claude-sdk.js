@@ -401,6 +401,10 @@ async function queryClaudeSDK(command, options = {}, ws) {
   let tempImagePaths = [];
   let tempDir = null;
 
+  // Capture original environment variables to restore later
+  const originalAuthToken = process.env.ANTHROPIC_AUTH_TOKEN;
+  const originalBaseUrl = process.env.ANTHROPIC_BASE_URL;
+
   try {
     // Apply user-selected model provider overrides if available
     if (runtimeOptions.userId) {
@@ -411,8 +415,8 @@ async function queryClaudeSDK(command, options = {}, ws) {
         if (provider) {
           console.log(`🔧 Applying model provider: ${provider.provider_name}`);
           if (provider.api_key) {
-            process.env.ANTHROPIC_API_KEY = provider.api_key;
-            console.log(`🔑 Set ANTHROPIC_API_KEY from provider`);
+            process.env.ANTHROPIC_AUTH_TOKEN = provider.api_key;
+            console.log(`🔑 Set ANTHROPIC_AUTH_TOKEN from provider`);
           }
           if (provider.api_base_url) {
             process.env.ANTHROPIC_BASE_URL = provider.api_base_url;
@@ -420,6 +424,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
               `🌐 Set ANTHROPIC_BASE_URL to: ${provider.api_base_url}`
             );
           }
+          // Model selection precedence: user-provided > provider > default "sonnet"
           if (provider.model_id && !runtimeOptions.model) {
             runtimeOptions.model = provider.model_id;
             console.log(`🤖 Set model to: ${provider.model_id}`);
@@ -569,6 +574,19 @@ async function queryClaudeSDK(command, options = {}, ws) {
     );
 
     throw error;
+  } finally {
+    // Restore original environment variables to prevent cross-request leakage
+    if (originalAuthToken === undefined) {
+      delete process.env.ANTHROPIC_AUTH_TOKEN;
+    } else {
+      process.env.ANTHROPIC_AUTH_TOKEN = originalAuthToken;
+    }
+
+    if (originalBaseUrl === undefined) {
+      delete process.env.ANTHROPIC_BASE_URL;
+    } else {
+      process.env.ANTHROPIC_BASE_URL = originalBaseUrl;
+    }
   }
 }
 
