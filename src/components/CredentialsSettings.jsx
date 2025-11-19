@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { Key, Plus, Trash2, Eye, EyeOff, Copy, Check, Github, ExternalLink } from 'lucide-react';
+import { Key, Plus, Trash2, Eye, EyeOff, Copy, Check, Github, ExternalLink, Server } from 'lucide-react';
 import { useVersionCheck } from '../hooks/useVersionCheck';
 import { version } from '../../package.json';
 import { authenticatedFetch } from '../utils/api';
@@ -16,6 +16,14 @@ function CredentialsSettings() {
   const [newGithubName, setNewGithubName] = useState('');
   const [newGithubToken, setNewGithubToken] = useState('');
   const [newGithubDescription, setNewGithubDescription] = useState('');
+  const [modelProviders, setModelProviders] = useState([]);
+  const [showNewProviderForm, setShowNewProviderForm] = useState(false);
+  const [newProviderName, setNewProviderName] = useState('');
+  const [newProviderBaseUrl, setNewProviderBaseUrl] = useState('');
+  const [newProviderApiKey, setNewProviderApiKey] = useState('');
+  const [newProviderModelId, setNewProviderModelId] = useState('');
+  const [newProviderDescription, setNewProviderDescription] = useState('');
+  const [creatingProvider, setCreatingProvider] = useState(false);
   const [showToken, setShowToken] = useState({});
   const [copiedKey, setCopiedKey] = useState(null);
   const [newlyCreatedKey, setNewlyCreatedKey] = useState(null);
@@ -40,6 +48,11 @@ function CredentialsSettings() {
       const credentialsRes = await authenticatedFetch('/api/settings/credentials?type=github_token');
       const credentialsData = await credentialsRes.json();
       setGithubCredentials(credentialsData.credentials || []);
+
+      // Fetch model providers
+      const providersRes = await authenticatedFetch('/api/settings/model-providers');
+      const providersData = await providersRes.json();
+      setModelProviders(providersData.providers || []);
     } catch (error) {
       console.error('Error fetching settings:', error);
     } finally {
@@ -142,6 +155,63 @@ function CredentialsSettings() {
       fetchData();
     } catch (error) {
       console.error('Error toggling GitHub credential:', error);
+    }
+  };
+
+  const createModelProvider = async () => {
+    if (!newProviderName.trim() || !newProviderBaseUrl.trim() || !newProviderApiKey.trim()) return;
+
+    try {
+      setCreatingProvider(true);
+      const res = await authenticatedFetch('/api/settings/model-providers', {
+        method: 'POST',
+        body: JSON.stringify({
+          providerName: newProviderName,
+          apiBaseUrl: newProviderBaseUrl,
+          apiKey: newProviderApiKey,
+          modelId: newProviderModelId,
+          description: newProviderDescription
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setShowNewProviderForm(false);
+        setNewProviderName('');
+        setNewProviderBaseUrl('');
+        setNewProviderApiKey('');
+        setNewProviderModelId('');
+        setNewProviderDescription('');
+        fetchData();
+      }
+    } catch (error) {
+      console.error('Error creating model provider:', error);
+    } finally {
+      setCreatingProvider(false);
+    }
+  };
+
+  const setActiveProvider = async (providerId) => {
+    try {
+      await authenticatedFetch(`/api/settings/model-providers/${providerId}/activate`, {
+        method: 'PATCH'
+      });
+      fetchData();
+    } catch (error) {
+      console.error('Error activating model provider:', error);
+    }
+  };
+
+  const deleteModelProvider = async (providerId) => {
+    if (!confirm('Delete this model provider?')) return;
+
+    try {
+      await authenticatedFetch(`/api/settings/model-providers/${providerId}`, {
+        method: 'DELETE'
+      });
+      fetchData();
+    } catch (error) {
+      console.error('Error deleting model provider:', error);
     }
   };
 
@@ -381,6 +451,127 @@ function CredentialsSettings() {
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Model Providers for API replacement */}
+      <div className="pt-6 border-t border-border/50">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Server className="h-5 w-5" />
+            <div>
+              <h3 className="text-lg font-semibold">Model Providers</h3>
+              <p className="text-sm text-muted-foreground">Connect third-party model APIs and switch anytime.</p>
+            </div>
+          </div>
+          <Button size="sm" onClick={() => setShowNewProviderForm(!showNewProviderForm)}>
+            <Plus className="h-4 w-4 mr-1" />
+            Add Provider
+          </Button>
+        </div>
+
+        {showNewProviderForm && (
+          <div className="mb-4 p-4 border rounded-lg bg-card space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <Input
+                placeholder="Provider Name (e.g., OpenRouter)"
+                value={newProviderName}
+                onChange={(e) => setNewProviderName(e.target.value)}
+              />
+              <Input
+                placeholder="Default Model ID (optional)"
+                value={newProviderModelId}
+                onChange={(e) => setNewProviderModelId(e.target.value)}
+              />
+            </div>
+
+            <Input
+              placeholder="API Base URL"
+              value={newProviderBaseUrl}
+              onChange={(e) => setNewProviderBaseUrl(e.target.value)}
+            />
+
+            <div className="relative">
+              <Input
+                type={showToken['provider'] ? 'text' : 'password'}
+                placeholder="API Key"
+                value={newProviderApiKey}
+                onChange={(e) => setNewProviderApiKey(e.target.value)}
+                className="pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowToken({ ...showToken, provider: !showToken['provider'] })}
+                className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground"
+              >
+                {showToken['provider'] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+
+            <Input
+              placeholder="Description (optional)"
+              value={newProviderDescription}
+              onChange={(e) => setNewProviderDescription(e.target.value)}
+            />
+
+            <div className="flex gap-2">
+              <Button onClick={createModelProvider} disabled={creatingProvider}>
+                {creatingProvider ? 'Saving...' : 'Save Provider'}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowNewProviderForm(false);
+                  setNewProviderName('');
+                  setNewProviderBaseUrl('');
+                  setNewProviderApiKey('');
+                  setNewProviderModelId('');
+                  setNewProviderDescription('');
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-3">
+          {modelProviders.length === 0 ? (
+            <p className="text-sm text-muted-foreground italic">No model providers configured yet.</p>
+          ) : (
+            modelProviders.map((provider) => (
+              <div key={provider.id} className="p-4 border rounded-lg bg-muted/30">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{provider.provider_name}</span>
+                      {provider.is_active && (
+                        <span className="px-2 py-0.5 text-xs rounded-full bg-green-500/10 text-green-600">Active</span>
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground">{provider.api_base_url}</div>
+                    {provider.model_id && (
+                      <div className="text-xs text-muted-foreground mt-1">Default model: {provider.model_id}</div>
+                    )}
+                    <div className="text-xs text-muted-foreground mt-1">Key: {provider.api_key_preview || '***'}</div>
+                    {provider.description && (
+                      <div className="text-xs text-muted-foreground mt-1">{provider.description}</div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 self-start">
+                    {!provider.is_active && (
+                      <Button size="sm" variant="outline" onClick={() => setActiveProvider(provider.id)}>
+                        Use This Provider
+                      </Button>
+                    )}
+                    <Button size="sm" variant="ghost" onClick={() => deleteModelProvider(provider.id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </div>
             ))

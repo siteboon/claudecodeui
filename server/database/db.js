@@ -75,6 +75,24 @@ const runMigrations = () => {
       db.exec('ALTER TABLE users ADD COLUMN has_completed_onboarding BOOLEAN DEFAULT 0');
     }
 
+    // Ensure model_providers table exists (custom model API replacement)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS model_providers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        provider_name TEXT NOT NULL,
+        api_base_url TEXT NOT NULL,
+        api_key TEXT NOT NULL,
+        model_id TEXT,
+        description TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        is_active BOOLEAN DEFAULT 0,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+    `);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_model_providers_user_id ON model_providers(user_id);');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_model_providers_active ON model_providers(is_active);');
+
     console.log('Database migrations completed successfully');
   } catch (error) {
     console.error('Error running migrations:', error.message);
@@ -351,11 +369,102 @@ const githubTokensDb = {
   }
 };
 
+// Model providers for third-party API replacement
+const modelProvidersDb = {
+  createProvider: (userId, providerName, apiBaseUrl, apiKey, modelId, description) => {
+    try {
+      const existingProviders = modelProvidersDb.getProviders(userId);
+      const isActive = existingProviders.length === 0 ? 1 : 0;
+
+      const stmt = db.prepare(`
+        INSERT INTO model_providers (user_id, provider_name, api_base_url, api_key, model_id, description, is_active)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      const result = stmt.run(userId, providerName, apiBaseUrl, apiKey, modelId || null, description || null, isActive);
+
+      if (isActive) {
+        modelProvidersDb.setActiveProvider(userId, result.lastInsertRowid);
+      }
+
+      return { id: result.lastInsertRowid, providerName, apiBaseUrl, modelId, description, isActive: Boolean(isActive) };
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  getProviders: (userId) => {
+    try {
+      const stmt = db.prepare(`
+        SELECT id, provider_name, api_base_url, model_id, description, created_at, is_active, api_key
+        FROM model_providers
+        WHERE user_id = ?
+        ORDER BY created_at DESC
+      `);
+      const providers = stmt.all(userId) || [];
+
+      return providers.map((provider) => ({
+        ...provider,
+        api_key_preview: provider.api_key ? `${provider.api_key.slice(0, 6)}...${provider.api_key.slice(-4)}` : '',
+        api_key: undefined,
+      }));
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  getActiveProvider: (userId) => {
+    try {
+      const row = db.prepare('SELECT * FROM model_providers WHERE user_id = ? AND is_active = 1 LIMIT 1').get(userId);
+      return row || null;
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  setActiveProvider: (userId, providerId) => {
+    const transaction = db.transaction(() => {
+      db.prepare('UPDATE model_providers SET is_active = 0 WHERE user_id = ?').run(userId);
+      const result = db.prepare('UPDATE model_providers SET is_active = 1 WHERE id = ? AND user_id = ?').run(providerId, userId);
+      return result.changes > 0;
+    });
+
+    return transaction();
+  },
+
+  deleteProvider: (userId, providerId) => {
+    const transaction = db.transaction(() => {
+      const provider = db.prepare('SELECT is_active FROM model_providers WHERE id = ? AND user_id = ?').get(providerId, userId);
+      const result = db.prepare('DELETE FROM model_providers WHERE id = ? AND user_id = ?').run(providerId, userId);
+
+      if (result.changes === 0) return false;
+
+      if (provider?.is_active) {
+        const latest = db.prepare(`
+          SELECT id FROM model_providers
+          WHERE user_id = ?
+          ORDER BY created_at DESC
+          LIMIT 1
+        `).get(userId);
+
+        if (latest) {
+          modelProvidersDb.setActiveProvider(userId, latest.id);
+        }
+      }
+
+      return true;
+    });
+
+    return transaction();
+  }
+};
+
 export {
   db,
   initializeDatabase,
   userDb,
   apiKeysDb,
   credentialsDb,
-  githubTokensDb // Backward compatibility
+  githubTokensDb, // Backward compatibility
+  modelProvidersDb
 };

@@ -50,3 +50,20 @@ CREATE TABLE IF NOT EXISTS user_credentials (
 CREATE INDEX IF NOT EXISTS idx_user_credentials_user_id ON user_credentials(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_credentials_type ON user_credentials(credential_type);
 CREATE INDEX IF NOT EXISTS idx_user_credentials_active ON user_credentials(is_active);
+
+-- Custom model providers for API replacement
+CREATE TABLE IF NOT EXISTS model_providers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    provider_name TEXT NOT NULL,
+    api_base_url TEXT NOT NULL,
+    api_key TEXT NOT NULL,
+    model_id TEXT,
+    description TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    is_active BOOLEAN DEFAULT 0,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_model_providers_user_id ON model_providers(user_id);
+CREATE INDEX IF NOT EXISTS idx_model_providers_active ON model_providers(is_active);

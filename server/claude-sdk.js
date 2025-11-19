@@ -12,10 +12,11 @@
  * - WebSocket message streaming
  */
 
-import { query } from '@anthropic-ai/claude-agent-sdk';
-import { promises as fs } from 'fs';
-import path from 'path';
-import os from 'os';
+import { query } from "@anthropic-ai/claude-agent-sdk";
+import { promises as fs } from "fs";
+import path from "path";
+import os from "os";
+import { modelProvidersDb } from "./database/db.js";
 
 // Session tracking: Map of session IDs to active query instances
 const activeSessions = new Map();
@@ -36,7 +37,7 @@ function mapCliOptionsToSDK(options = {}) {
   }
 
   // Map permission mode
-  if (permissionMode && permissionMode !== 'default') {
+  if (permissionMode && permissionMode !== "default") {
     sdkOptions.permissionMode = permissionMode;
   }
 
@@ -44,20 +45,26 @@ function mapCliOptionsToSDK(options = {}) {
   const settings = toolsSettings || {
     allowedTools: [],
     disallowedTools: [],
-    skipPermissions: false
+    skipPermissions: false,
   };
 
   // Handle tool permissions
-  if (settings.skipPermissions && permissionMode !== 'plan') {
+  if (settings.skipPermissions && permissionMode !== "plan") {
     // When skipping permissions, use bypassPermissions mode
-    sdkOptions.permissionMode = 'bypassPermissions';
+    sdkOptions.permissionMode = "bypassPermissions";
   } else {
     // Map allowed tools
     let allowedTools = [...(settings.allowedTools || [])];
 
     // Add plan mode default tools
-    if (permissionMode === 'plan') {
-      const planModeTools = ['Read', 'Task', 'exit_plan_mode', 'TodoRead', 'TodoWrite'];
+    if (permissionMode === "plan") {
+      const planModeTools = [
+        "Read",
+        "Task",
+        "exit_plan_mode",
+        "TodoRead",
+        "TodoWrite",
+      ];
       for (const tool of planModeTools) {
         if (!allowedTools.includes(tool)) {
           allowedTools.push(tool);
@@ -77,17 +84,17 @@ function mapCliOptionsToSDK(options = {}) {
 
   // Map model (default to sonnet)
   // Map model (default to sonnet)
-  sdkOptions.model = options.model || 'sonnet';
+  sdkOptions.model = options.model || "sonnet";
 
   // Map system prompt configuration
   sdkOptions.systemPrompt = {
-    type: 'preset',
-    preset: 'claude_code'  // Required to use CLAUDE.md
+    type: "preset",
+    preset: "claude_code", // Required to use CLAUDE.md
   };
 
   // Map setting sources for CLAUDE.md loading
   // This loads CLAUDE.md from project, user (~/.config/claude/CLAUDE.md), and local directories
-  sdkOptions.settingSources = ['project', 'user', 'local'];
+  sdkOptions.settingSources = ["project", "user", "local"];
 
   // Map resume session
   if (sessionId) {
@@ -104,13 +111,18 @@ function mapCliOptionsToSDK(options = {}) {
  * @param {Array<string>} tempImagePaths - Temp image file paths for cleanup
  * @param {string} tempDir - Temp directory for cleanup
  */
-function addSession(sessionId, queryInstance, tempImagePaths = [], tempDir = null) {
+function addSession(
+  sessionId,
+  queryInstance,
+  tempImagePaths = [],
+  tempDir = null
+) {
   activeSessions.set(sessionId, {
     instance: queryInstance,
     startTime: Date.now(),
-    status: 'active',
+    status: "active",
     tempImagePaths,
-    tempDir
+    tempDir,
   });
 }
 
@@ -157,7 +169,7 @@ function transformMessage(sdkMessage) {
  * @returns {Object|null} Token budget object or null
  */
 function extractTokenBudget(resultMessage) {
-  if (resultMessage.type !== 'result' || !resultMessage.modelUsage) {
+  if (resultMessage.type !== "result" || !resultMessage.modelUsage) {
     return null;
   }
 
@@ -171,23 +183,36 @@ function extractTokenBudget(resultMessage) {
 
   // Use cumulative tokens if available (tracks total for the session)
   // Otherwise fall back to per-request tokens
-  const inputTokens = modelData.cumulativeInputTokens || modelData.inputTokens || 0;
-  const outputTokens = modelData.cumulativeOutputTokens || modelData.outputTokens || 0;
-  const cacheReadTokens = modelData.cumulativeCacheReadInputTokens || modelData.cacheReadInputTokens || 0;
-  const cacheCreationTokens = modelData.cumulativeCacheCreationInputTokens || modelData.cacheCreationInputTokens || 0;
+  const inputTokens =
+    modelData.cumulativeInputTokens || modelData.inputTokens || 0;
+  const outputTokens =
+    modelData.cumulativeOutputTokens || modelData.outputTokens || 0;
+  const cacheReadTokens =
+    modelData.cumulativeCacheReadInputTokens ||
+    modelData.cacheReadInputTokens ||
+    0;
+  const cacheCreationTokens =
+    modelData.cumulativeCacheCreationInputTokens ||
+    modelData.cacheCreationInputTokens ||
+    0;
 
   // Total used = input + output + cache tokens
-  const totalUsed = inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
+  const totalUsed =
+    inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
 
   // Use configured context window budget from environment (default 160000)
   // This is the user's budget limit, not the model's context window
   const contextWindow = parseInt(process.env.CONTEXT_WINDOW) || 160000;
 
-  console.log(`📊 Token calculation: input=${inputTokens}, output=${outputTokens}, cache=${cacheReadTokens + cacheCreationTokens}, total=${totalUsed}/${contextWindow}`);
+  console.log(
+    `📊 Token calculation: input=${inputTokens}, output=${outputTokens}, cache=${
+      cacheReadTokens + cacheCreationTokens
+    }, total=${totalUsed}/${contextWindow}`
+  );
 
   return {
     used: totalUsed,
-    total: contextWindow
+    total: contextWindow,
   };
 }
 
@@ -210,7 +235,7 @@ async function handleImages(command, images, cwd) {
   try {
     // Create temp directory in the project directory
     const workingDir = cwd || process.cwd();
-    tempDir = path.join(workingDir, '.tmp', 'images', Date.now().toString());
+    tempDir = path.join(workingDir, ".tmp", "images", Date.now().toString());
     await fs.mkdir(tempDir, { recursive: true });
 
     // Save each image to a temp file
@@ -218,31 +243,35 @@ async function handleImages(command, images, cwd) {
       // Extract base64 data and mime type
       const matches = image.data.match(/^data:([^;]+);base64,(.+)$/);
       if (!matches) {
-        console.error('Invalid image data format');
+        console.error("Invalid image data format");
         continue;
       }
 
       const [, mimeType, base64Data] = matches;
-      const extension = mimeType.split('/')[1] || 'png';
+      const extension = mimeType.split("/")[1] || "png";
       const filename = `image_${index}.${extension}`;
       const filepath = path.join(tempDir, filename);
 
       // Write base64 data to file
-      await fs.writeFile(filepath, Buffer.from(base64Data, 'base64'));
+      await fs.writeFile(filepath, Buffer.from(base64Data, "base64"));
       tempImagePaths.push(filepath);
     }
 
     // Include the full image paths in the prompt
     let modifiedCommand = command;
     if (tempImagePaths.length > 0 && command && command.trim()) {
-      const imageNote = `\n\n[Images provided at the following paths:]\n${tempImagePaths.map((p, i) => `${i + 1}. ${p}`).join('\n')}`;
+      const imageNote = `\n\n[Images provided at the following paths:]\n${tempImagePaths
+        .map((p, i) => `${i + 1}. ${p}`)
+        .join("\n")}`;
       modifiedCommand = command + imageNote;
     }
 
-    console.log(`📸 Processed ${tempImagePaths.length} images to temp directory: ${tempDir}`);
+    console.log(
+      `📸 Processed ${tempImagePaths.length} images to temp directory: ${tempDir}`
+    );
     return { modifiedCommand, tempImagePaths, tempDir };
   } catch (error) {
-    console.error('Error processing images for SDK:', error);
+    console.error("Error processing images for SDK:", error);
     return { modifiedCommand: command, tempImagePaths, tempDir };
   }
 }
@@ -260,21 +289,25 @@ async function cleanupTempFiles(tempImagePaths, tempDir) {
   try {
     // Delete individual temp files
     for (const imagePath of tempImagePaths) {
-      await fs.unlink(imagePath).catch(err =>
-        console.error(`Failed to delete temp image ${imagePath}:`, err)
-      );
+      await fs
+        .unlink(imagePath)
+        .catch((err) =>
+          console.error(`Failed to delete temp image ${imagePath}:`, err)
+        );
     }
 
     // Delete temp directory
     if (tempDir) {
-      await fs.rm(tempDir, { recursive: true, force: true }).catch(err =>
-        console.error(`Failed to delete temp directory ${tempDir}:`, err)
-      );
+      await fs
+        .rm(tempDir, { recursive: true, force: true })
+        .catch((err) =>
+          console.error(`Failed to delete temp directory ${tempDir}:`, err)
+        );
     }
 
     console.log(`🧹 Cleaned up ${tempImagePaths.length} temp image files`);
   } catch (error) {
-    console.error('Error during temp file cleanup:', error);
+    console.error("Error during temp file cleanup:", error);
   }
 }
 
@@ -285,24 +318,24 @@ async function cleanupTempFiles(tempImagePaths, tempDir) {
  */
 async function loadMcpConfig(cwd) {
   try {
-    const claudeConfigPath = path.join(os.homedir(), '.claude.json');
+    const claudeConfigPath = path.join(os.homedir(), ".claude.json");
 
     // Check if config file exists
     try {
       await fs.access(claudeConfigPath);
     } catch (error) {
       // File doesn't exist, return null
-      console.log('📡 No ~/.claude.json found, proceeding without MCP servers');
+      console.log("📡 No ~/.claude.json found, proceeding without MCP servers");
       return null;
     }
 
     // Read and parse config file
     let claudeConfig;
     try {
-      const configContent = await fs.readFile(claudeConfigPath, 'utf8');
+      const configContent = await fs.readFile(claudeConfigPath, "utf8");
       claudeConfig = JSON.parse(configContent);
     } catch (error) {
-      console.error('❌ Failed to parse ~/.claude.json:', error.message);
+      console.error("❌ Failed to parse ~/.claude.json:", error.message);
       return null;
     }
 
@@ -310,30 +343,45 @@ async function loadMcpConfig(cwd) {
     let mcpServers = {};
 
     // Add global MCP servers
-    if (claudeConfig.mcpServers && typeof claudeConfig.mcpServers === 'object') {
+    if (
+      claudeConfig.mcpServers &&
+      typeof claudeConfig.mcpServers === "object"
+    ) {
       mcpServers = { ...claudeConfig.mcpServers };
-      console.log(`📡 Loaded ${Object.keys(mcpServers).length} global MCP servers`);
+      console.log(
+        `📡 Loaded ${Object.keys(mcpServers).length} global MCP servers`
+      );
     }
 
     // Add/override with project-specific MCP servers
     if (claudeConfig.claudeProjects && cwd) {
       const projectConfig = claudeConfig.claudeProjects[cwd];
-      if (projectConfig && projectConfig.mcpServers && typeof projectConfig.mcpServers === 'object') {
+      if (
+        projectConfig &&
+        projectConfig.mcpServers &&
+        typeof projectConfig.mcpServers === "object"
+      ) {
         mcpServers = { ...mcpServers, ...projectConfig.mcpServers };
-        console.log(`📡 Loaded ${Object.keys(projectConfig.mcpServers).length} project-specific MCP servers`);
+        console.log(
+          `📡 Loaded ${
+            Object.keys(projectConfig.mcpServers).length
+          } project-specific MCP servers`
+        );
       }
     }
 
     // Return null if no servers found
     if (Object.keys(mcpServers).length === 0) {
-      console.log('📡 No MCP servers configured');
+      console.log("📡 No MCP servers configured");
       return null;
     }
 
-    console.log(`✅ Total MCP servers loaded: ${Object.keys(mcpServers).length}`);
+    console.log(
+      `✅ Total MCP servers loaded: ${Object.keys(mcpServers).length}`
+    );
     return mcpServers;
   } catch (error) {
-    console.error('❌ Error loading MCP config:', error.message);
+    console.error("❌ Error loading MCP config:", error.message);
     return null;
   }
 }
@@ -346,15 +394,53 @@ async function loadMcpConfig(cwd) {
  * @returns {Promise<void>}
  */
 async function queryClaudeSDK(command, options = {}, ws) {
-  const { sessionId } = options;
+  const runtimeOptions = { ...options };
+  const { sessionId } = runtimeOptions;
   let capturedSessionId = sessionId;
   let sessionCreatedSent = false;
   let tempImagePaths = [];
   let tempDir = null;
 
+  // Capture original environment variables to restore later
+  const originalAuthToken = process.env.ANTHROPIC_AUTH_TOKEN;
+  const originalBaseUrl = process.env.ANTHROPIC_BASE_URL;
+
   try {
+    // Apply user-selected model provider overrides if available
+    if (runtimeOptions.userId) {
+      try {
+        const provider = modelProvidersDb.getActiveProvider(
+          runtimeOptions.userId
+        );
+        if (provider) {
+          console.log(`🔧 Applying model provider: ${provider.provider_name}`);
+          if (provider.api_key) {
+            process.env.ANTHROPIC_AUTH_TOKEN = provider.api_key;
+            console.log(`🔑 Set ANTHROPIC_AUTH_TOKEN from provider`);
+          }
+          if (provider.api_base_url) {
+            process.env.ANTHROPIC_BASE_URL = provider.api_base_url;
+            console.log(
+              `🌐 Set ANTHROPIC_BASE_URL to: ${provider.api_base_url}`
+            );
+          }
+          // Model selection precedence: user-provided > provider > default "sonnet"
+          if (provider.model_id && !runtimeOptions.model) {
+            runtimeOptions.model = provider.model_id;
+            console.log(`🤖 Set model to: ${provider.model_id}`);
+          }
+        } else {
+          console.log(
+            "ℹ️ No active model provider configured, using default settings"
+          );
+        }
+      } catch (error) {
+        console.error("[ERROR] Unable to load active model provider:", error);
+      }
+    }
+
     // Map CLI options to SDK format
-    const sdkOptions = mapCliOptionsToSDK(options);
+    const sdkOptions = mapCliOptionsToSDK(runtimeOptions);
 
     // Load MCP configuration
     const mcpServers = await loadMcpConfig(options.cwd);
@@ -363,7 +449,11 @@ async function queryClaudeSDK(command, options = {}, ws) {
     }
 
     // Handle images - save to temp files and modify prompt
-    const imageResult = await handleImages(command, options.images, options.cwd);
+    const imageResult = await handleImages(
+      command,
+      options.images,
+      options.cwd
+    );
     const finalCommand = imageResult.modifiedCommand;
     tempImagePaths = imageResult.tempImagePaths;
     tempDir = imageResult.tempDir;
@@ -371,7 +461,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
     // Create SDK query instance
     const queryInstance = query({
       prompt: finalCommand,
-      options: sdkOptions
+      options: sdkOptions,
     });
 
     // Track the query instance for abort capability
@@ -380,49 +470,67 @@ async function queryClaudeSDK(command, options = {}, ws) {
     }
 
     // Process streaming messages
-    console.log('🔄 Starting async generator loop for session:', capturedSessionId || 'NEW');
+    console.log(
+      "🔄 Starting async generator loop for session:",
+      capturedSessionId || "NEW"
+    );
     for await (const message of queryInstance) {
       // Capture session ID from first message
       if (message.session_id && !capturedSessionId) {
-
         capturedSessionId = message.session_id;
         addSession(capturedSessionId, queryInstance, tempImagePaths, tempDir);
 
         // Set session ID on writer
-        if (ws.setSessionId && typeof ws.setSessionId === 'function') {
+        if (ws.setSessionId && typeof ws.setSessionId === "function") {
           ws.setSessionId(capturedSessionId);
         }
 
         // Send session-created event only once for new sessions
         if (!sessionId && !sessionCreatedSent) {
           sessionCreatedSent = true;
-          ws.send(JSON.stringify({
-            type: 'session-created',
-            sessionId: capturedSessionId
-          }));
+          ws.send(
+            JSON.stringify({
+              type: "session-created",
+              sessionId: capturedSessionId,
+            })
+          );
         } else {
-          console.log('⚠️ Not sending session-created. sessionId:', sessionId, 'sessionCreatedSent:', sessionCreatedSent);
+          console.log(
+            "⚠️ Not sending session-created. sessionId:",
+            sessionId,
+            "sessionCreatedSent:",
+            sessionCreatedSent
+          );
         }
       } else {
-        console.log('⚠️ No session_id in message or already captured. message.session_id:', message.session_id, 'capturedSessionId:', capturedSessionId);
+        console.log(
+          "⚠️ No session_id in message or already captured. message.session_id:",
+          message.session_id,
+          "capturedSessionId:",
+          capturedSessionId
+        );
       }
 
       // Transform and send message to WebSocket
       const transformedMessage = transformMessage(message);
-      ws.send(JSON.stringify({
-        type: 'claude-response',
-        data: transformedMessage
-      }));
+      ws.send(
+        JSON.stringify({
+          type: "claude-response",
+          data: transformedMessage,
+        })
+      );
 
       // Extract and send token budget updates from result messages
-      if (message.type === 'result') {
+      if (message.type === "result") {
         const tokenBudget = extractTokenBudget(message);
         if (tokenBudget) {
-          console.log('📊 Token budget from modelUsage:', tokenBudget);
-          ws.send(JSON.stringify({
-            type: 'token-budget',
-            data: tokenBudget
-          }));
+          console.log("📊 Token budget from modelUsage:", tokenBudget);
+          ws.send(
+            JSON.stringify({
+              type: "token-budget",
+              data: tokenBudget,
+            })
+          );
         }
       }
     }
@@ -436,17 +544,18 @@ async function queryClaudeSDK(command, options = {}, ws) {
     await cleanupTempFiles(tempImagePaths, tempDir);
 
     // Send completion event
-    console.log('✅ Streaming complete, sending claude-complete event');
-    ws.send(JSON.stringify({
-      type: 'claude-complete',
-      sessionId: capturedSessionId,
-      exitCode: 0,
-      isNewSession: !sessionId && !!command
-    }));
-    console.log('📤 claude-complete event sent');
-
+    console.log("✅ Streaming complete, sending claude-complete event");
+    ws.send(
+      JSON.stringify({
+        type: "claude-complete",
+        sessionId: capturedSessionId,
+        exitCode: 0,
+        isNewSession: !sessionId && !!command,
+      })
+    );
+    console.log("📤 claude-complete event sent");
   } catch (error) {
-    console.error('SDK query error:', error);
+    console.error("SDK query error:", error);
 
     // Clean up session on error
     if (capturedSessionId) {
@@ -457,12 +566,27 @@ async function queryClaudeSDK(command, options = {}, ws) {
     await cleanupTempFiles(tempImagePaths, tempDir);
 
     // Send error to WebSocket
-    ws.send(JSON.stringify({
-      type: 'claude-error',
-      error: error.message
-    }));
+    ws.send(
+      JSON.stringify({
+        type: "claude-error",
+        error: error.message,
+      })
+    );
 
     throw error;
+  } finally {
+    // Restore original environment variables to prevent cross-request leakage
+    if (originalAuthToken === undefined) {
+      delete process.env.ANTHROPIC_AUTH_TOKEN;
+    } else {
+      process.env.ANTHROPIC_AUTH_TOKEN = originalAuthToken;
+    }
+
+    if (originalBaseUrl === undefined) {
+      delete process.env.ANTHROPIC_BASE_URL;
+    } else {
+      process.env.ANTHROPIC_BASE_URL = originalBaseUrl;
+    }
   }
 }
 
@@ -486,7 +610,7 @@ async function abortClaudeSDKSession(sessionId) {
     await session.instance.interrupt();
 
     // Update session status
-    session.status = 'aborted';
+    session.status = "aborted";
 
     // Clean up temporary image files
     await cleanupTempFiles(session.tempImagePaths, session.tempDir);
@@ -508,7 +632,7 @@ async function abortClaudeSDKSession(sessionId) {
  */
 function isClaudeSDKSessionActive(sessionId) {
   const session = getSession(sessionId);
-  return session && session.status === 'active';
+  return session && session.status === "active";
 }
 
 /**
@@ -524,5 +648,5 @@ export {
   queryClaudeSDK,
   abortClaudeSDKSession,
   isClaudeSDKSessionActive,
-  getActiveClaudeSDKSessions
+  getActiveClaudeSDKSessions,
 };
