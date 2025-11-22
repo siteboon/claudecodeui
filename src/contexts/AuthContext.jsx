@@ -64,6 +64,14 @@ export const AuthProvider = ({ children }) => {
       setIsLoading(true);
       setError(null);
 
+      if (import.meta.env.VITE_SKIP_AUTH === 'true') {
+        setUser({ username: 'admin', id: 'default-user-id' });
+        setNeedsSetup(false);
+        await checkOnboardingStatus();
+        setIsLoading(false);
+        return;
+      }
+
       // Check if system needs setup
       const statusResponse = await api.auth.status();
       const statusData = await statusResponse.json();
@@ -106,6 +114,15 @@ export const AuthProvider = ({ children }) => {
   };
 
   const login = async (username, password) => {
+    if (import.meta.env.VITE_SKIP_AUTH === 'true') {
+      const mockUser = { username: username || 'admin', id: 'default-user-id' };
+      const mockToken = 'mock-token';
+      setToken(mockToken);
+      setUser(mockUser);
+      localStorage.setItem('auth-token', mockToken);
+      return { success: true };
+    }
+
     try {
       setError(null);
       const response = await api.auth.login(username, password);
@@ -130,6 +147,16 @@ export const AuthProvider = ({ children }) => {
   };
 
   const register = async (username, password) => {
+    if (import.meta.env.VITE_SKIP_AUTH === 'true') {
+      const mockUser = { username: username || 'admin', id: 'default-user-id' };
+      const mockToken = 'mock-token';
+      setToken(mockToken);
+      setUser(mockUser);
+      setNeedsSetup(false);
+      localStorage.setItem('auth-token', mockToken);
+      return { success: true };
+    }
+
     try {
       setError(null);
       const response = await api.auth.register(username, password);
@@ -158,7 +185,7 @@ export const AuthProvider = ({ children }) => {
     setToken(null);
     setUser(null);
     localStorage.removeItem('auth-token');
-    
+
     // Optional: Call logout endpoint for logging
     if (token) {
       api.auth.logout().catch(error => {
