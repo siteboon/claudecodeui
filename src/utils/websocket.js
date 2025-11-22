@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { BASE_URL } from './api';
 
 export function useWebSocket() {
   const [ws, setWs] = useState(null);
@@ -29,7 +30,7 @@ export function useWebSocket() {
       if (isPlatform) {
         // Platform mode: Use same domain as the page (goes through proxy)
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        wsUrl = `${protocol}//${window.location.host}/ws`;
+        wsUrl = `${protocol}//${window.location.host}${BASE_URL}/ws`;
       } else {
         // OSS mode: Connect to same host:port that served the page
         const token = localStorage.getItem('auth-token');
@@ -39,7 +40,7 @@ export function useWebSocket() {
         }
 
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        wsUrl = `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}`;
+        wsUrl = `${protocol}//${window.location.host}${BASE_URL}/ws?token=${encodeURIComponent(token)}`;
       }
 
       const websocket = new WebSocket(wsUrl);
