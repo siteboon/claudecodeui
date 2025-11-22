@@ -163,8 +163,18 @@ async function setupProjectsWatcher() {
 }
 
 
-const app = express();
-const server = http.createServer(app);
+// Define base path for sub-directory deployment
+const APP_BASE_PATH = process.env.APP_BASE_PATH || '/';
+console.log(`[INFO] Application Base Path: ${APP_BASE_PATH}`);
+
+// Create main Express app and server
+const expressApp = express();
+const server = http.createServer(expressApp);
+
+// Create router for all routes (to be mounted at APP_BASE_PATH)
+const router = express.Router();
+// Alias router as app for minimal code changes
+const app = router;
 
 const ptySessionsMap = new Map();
 const PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
@@ -208,11 +218,11 @@ const wss = new WebSocketServer({
 });
 
 // Make WebSocket server available to routes
-app.locals.wss = wss;
+expressApp.locals.wss = wss;
 
-app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+expressApp.use(cors());
+expressApp.use(express.json({ limit: '50mb' }));
+expressApp.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Public health check endpoint (no authentication required)
 app.get('/health', (req, res) => {
@@ -261,12 +271,61 @@ app.use('/api/user', authenticateToken, userRoutes);
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
 
-// Serve public files (like api-docs.html)
+// Dynamic manifest.json with base path injection
+app.get('/manifest.json', async (req, res) => {
+  try {
+    const manifestPath = path.join(__dirname, '../public/manifest.json');
+    let manifest = await fsPromises.readFile(manifestPath, 'utf8');
+
+    // Inject base path for sub-directory deployment
+    if (APP_BASE_PATH && APP_BASE_PATH !== '/') {
+      const basePath = APP_BASE_PATH.endsWith('/') ? APP_BASE_PATH.slice(0, -1) : APP_BASE_PATH;
+      manifest = manifest.replace(/"\//g, `"${basePath}/`);
+    }
+
+    res.set('Content-Type', 'application/json');
+    res.send(manifest);
+  } catch (error) {
+    console.error('Error serving manifest.json:', error);
+    res.status(404).send('Not found');
+  }
+});
+
+// Dynamic HTML files from public directory with base path injection
+app.get('/*.html', async (req, res, next) => {
+  try {
+    const htmlPath = path.join(__dirname, '../public', req.path);
+    if (!fs.existsSync(htmlPath)) {
+      return next(); // File doesn't exist, pass to next middleware
+    }
+
+    let html = await fsPromises.readFile(htmlPath, 'utf8');
+
+    // Inject base path for sub-directory deployment
+    if (APP_BASE_PATH && APP_BASE_PATH !== '/') {
+      const basePath = APP_BASE_PATH.endsWith('/') ? APP_BASE_PATH.slice(0, -1) : APP_BASE_PATH;
+      html = html
+        .replace(/href="\//g, `href="${basePath}/`)
+        .replace(/src="\//g, `src="${basePath}/`)
+        .replace(/'\/sw\.js'/g, `'${basePath}/sw.js'`);
+    }
+
+    res.set('Content-Type', 'text/html');
+    res.send(html);
+  } catch (error) {
+    console.error('Error serving HTML file:', error);
+    next(); // Pass to next middleware on error
+  }
+});
+
+// Serve public files (like images, etc.)
 app.use(express.static(path.join(__dirname, '../public')));
 
 // Static files served after API routes
 // Add cache control: HTML files should not be cached, but assets can be cached
+// Note: index: false to allow manual serving of index.html for base path injection
 app.use(express.static(path.join(__dirname, '../dist'), {
+  index: false,
   setHeaders: (res, filePath) => {
     if (filePath.endsWith('.html')) {
       // Prevent HTML caching to avoid service worker issues after builds
@@ -692,9 +751,14 @@ wss.on('connection', (ws, request) => {
     const urlObj = new URL(url, 'http://localhost');
     const pathname = urlObj.pathname;
 
-    if (pathname === '/shell') {
+    // Construct expected paths based on APP_BASE_PATH
+    const basePath = APP_BASE_PATH.endsWith('/') ? APP_BASE_PATH.slice(0, -1) : APP_BASE_PATH;
+    const shellPath = basePath === '' ? '/shell' : basePath + '/shell';
+    const chatPath = basePath === '' ? '/ws' : basePath + '/ws';
+
+    if (pathname === shellPath) {
         handleShellConnection(ws);
-    } else if (pathname === '/ws') {
+    } else if (pathname === chatPath) {
         handleChatConnection(ws);
     } else {
         console.log('[WARN] Unknown WebSocket path:', pathname);
@@ -1421,28 +1485,51 @@ app.get('/api/projects/:projectName/sessions/:sessionId/token-usage', authentica
 });
 
 // Serve React app for all other routes (excluding static files)
-app.get('*', (req, res) => {
-  // Skip requests for static assets (files with extensions)
-  if (path.extname(req.path)) {
-    return res.status(404).send('Not found');
-  }
+app.get('*', async (req, res) => {
+  // Skip requests for static assets
+  if (path.extname(req.path)) return res.status(404).send('Not found');
 
-  // Only serve index.html for HTML routes, not for static assets
-  // Static assets should already be handled by express.static middleware above
   const indexPath = path.join(__dirname, '../dist/index.html');
 
-  // Check if dist/index.html exists (production build available)
-  if (fs.existsSync(indexPath)) {
-    // Set no-cache headers for HTML to prevent service worker issues
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-    res.sendFile(indexPath);
-  } else {
-    // In development, redirect to Vite dev server only if dist doesn't exist
-    res.redirect(`http://localhost:${process.env.VITE_PORT || 5173}`);
+  // In development, redirect to Vite dev server
+  if (!fs.existsSync(indexPath)) {
+    return res.redirect(`http://localhost:${process.env.VITE_PORT || 5173}`);
+  }
+
+  try {
+    // Read index.html
+    let html = await fsPromises.readFile(indexPath, 'utf8');
+
+    // Inject base path configuration for runtime
+    const basePath = (APP_BASE_PATH && APP_BASE_PATH !== '/')
+      ? (APP_BASE_PATH.endsWith('/') ? APP_BASE_PATH.slice(0, -1) : APP_BASE_PATH)
+      : '';
+
+    // Inject base path as a global variable for client-side use
+    const configScript = `<script>window.__APP_BASE_PATH__='${basePath}';</script>`;
+    html = html.replace('</head>', `${configScript}</head>`);
+
+    // Replace absolute paths in HTML with base-prefixed paths
+    if (basePath) {
+      html = html
+        .replace(/href="\//g, `href="${basePath}/`)
+        .replace(/src="\//g, `src="${basePath}/`)
+        .replace(/'\/sw\.js'/g, `'${basePath}/sw.js'`);
+    }
+
+    // Serve the file
+    res.set({
+      'Content-Type': 'text/html',
+      'Cache-Control': 'no-cache, no-store, must-revalidate'
+    }).send(html);
+  } catch (error) {
+    console.error('Error serving index.html:', error);
+    res.status(500).send('Internal Server Error');
   }
 });
+
+// Mount the router to the specified base path
+expressApp.use(APP_BASE_PATH, router);
 
 // Helper function to convert permissions to rwx format
 function permToRwx(perm) {
