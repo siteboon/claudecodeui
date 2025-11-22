@@ -1,0 +1,59 @@
+networks:
+  claudecodeui:
+    name: claudecodeui
+  public:
+    external: true
+
+services:
+  claudecodeui:
+    container_name: claudecodeui
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: claudecodeui:latest
+    restart: unless-stopped
+    ports:
+      - "${EXTERNAL_PORT:-3002}:3001"
+    env_file:
+      - path: ./.env
+        required: true
+    environment:
+      - PORT=${PORT:-3001}
+      - DATABASE_PATH=${DATABASE_PATH:-/data/auth.db}
+      - CONTEXT_WINDOW=${CONTEXT_WINDOW:-160000}
+      - CLAUDE_CLI_PATH=${CLAUDE_CLI_PATH:-claude}
+      - NODE_ENV=production
+    volumes:
+      # Data persistence
+      - claudecodeui-data:/data
+      - claudecodeui-config:/config
+      # Mount user's .claude directory for project access (read-only)
+      - ${HOME}/.claude:/home/node/.claude:ro
+      # Mount user's home for project access (optional, configure as needed)
+      # Uncomment and adjust if you need access to specific project directories
+      # - ${HOME}/projects:/projects:rw
+    networks:
+      - claudecodeui
+      - public
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.claudecodeui.rule=Host(`claudecodeui.fhijazi.com`)"
+      - "traefik.http.routers.claudecodeui.entrypoints=web"
+      - "traefik.http.services.claudecodeui.loadbalancer.server.port=3001"
+      - "traefik.http.routers.claudecodeui.middlewares=common-headers@file"
+      # WebSocket support
+      - "traefik.http.routers.claudecodeui-ws.rule=Host(`claudecodeui.fhijazi.com`) && PathPrefix(`/ws`)"
+      - "traefik.http.routers.claudecodeui-ws.entrypoints=web"
+      - "traefik.http.services.claudecodeui-ws.loadbalancer.server.port=3001"
+
+volumes:
+  claudecodeui-data:
+    name: claudecodeui_data
+  claudecodeui-config:
+    name: claudecodeui_config
