@@ -5,6 +5,8 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
 
+import { BASE_URL } from '../utils/api';
+
 const xtermStyles = `
   .xterm .xterm-screen {
     outline: none !important;
@@ -58,7 +60,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
 
       if (isPlatform) {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        wsUrl = `${protocol}//${window.location.host}/shell`;
+        wsUrl = `${protocol}//${window.location.host}${BASE_URL}/shell`;
       } else {
         const token = localStorage.getItem('auth-token');
         if (!token) {
@@ -67,7 +69,8 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
         }
 
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        wsUrl = `${protocol}//${window.location.host}/shell?token=${encodeURIComponent(token)}`;
+        const queryParams = (token && !skipAuth) ? `?token=${encodeURIComponent(token)}` : '';
+        wsUrl = `${protocol}//${window.location.host}${BASE_URL}/shell${queryParams}`;
       }
 
       ws.current = new WebSocket(wsUrl);
@@ -296,7 +299,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
               data: text
             }));
           }
-        }).catch(() => {});
+        }).catch(() => { });
         return false;
       }
 
