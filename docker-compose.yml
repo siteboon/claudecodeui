@@ -6,11 +6,10 @@ networks:
 
 services:
   claudecodeui:
-    container_name: claudecodeui
     build:
       context: .
       dockerfile: Dockerfile
-    image: claudecodeui:latest
+        # image: claudecodeui:latest
     restart: unless-stopped
     ports:
       - "${EXTERNAL_PORT:-3002}:3001"
@@ -24,14 +23,14 @@ services:
       - CLAUDE_CLI_PATH=${CLAUDE_CLI_PATH:-claude}
       - NODE_ENV=production
     volumes:
-      # Data persistence
+      # sadly these paths must be hardcoded (no we cannot use $HOME) because claude code uses
+      # hardcoded absolute paths in the ../node/.claude file and Docker must have identical full ones
+      #- /home/faris/Projects/:/home/faris/Projects/
+      - ${HOME}/Projects/:${HOME}/Projects/
+#      - /mnt/d2/Projects/:/mnt/d2/Projects/
+      - ${HOME}/.claude:/home/node/.claude:rw
       - claudecodeui-data:/data
       - claudecodeui-config:/config
-      # Mount user's .claude directory for project access (read-only)
-      - ${HOME}/.claude:/home/node/.claude:ro
-      # Mount user's home for project access (optional, configure as needed)
-      # Uncomment and adjust if you need access to specific project directories
-      # - ${HOME}/projects:/projects:rw
     networks:
       - claudecodeui
       - public
@@ -41,19 +40,10 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.claudecodeui.rule=Host(`claudecodeui.fhijazi.com`)"
-      - "traefik.http.routers.claudecodeui.entrypoints=web"
-      - "traefik.http.services.claudecodeui.loadbalancer.server.port=3001"
-      - "traefik.http.routers.claudecodeui.middlewares=common-headers@file"
-      # WebSocket support
-      - "traefik.http.routers.claudecodeui-ws.rule=Host(`claudecodeui.fhijazi.com`) && PathPrefix(`/ws`)"
-      - "traefik.http.routers.claudecodeui-ws.entrypoints=web"
-      - "traefik.http.services.claudecodeui-ws.loadbalancer.server.port=3001"
 
 volumes:
   claudecodeui-data:
     name: claudecodeui_data
   claudecodeui-config:
     name: claudecodeui_config
+

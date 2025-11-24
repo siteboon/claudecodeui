@@ -41,6 +41,6 @@ Thumbs.db
 .travis.yml
 
 # Docker
-Dockerfile*
-docker-compose*
-.dockerignore
+#Dockerfile*
+#docker-compose*
+#.dockerignore
