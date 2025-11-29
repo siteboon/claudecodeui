@@ -47,7 +47,7 @@ export const ToolCategory = {
 /**
  * Constants for permission system
  */
-export const PERMISSION_TIMEOUT_MS = 30000000; // 30 seconds
+export const PERMISSION_TIMEOUT_MS = 30000; // 30 seconds
 export const DEFAULT_QUEUE_CLEANUP_INTERVAL_MS = 60000; // 1 minute
 export const MAX_QUEUE_SIZE = 100; // Maximum pending permission requests
 

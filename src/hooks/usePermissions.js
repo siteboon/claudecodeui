@@ -4,33 +4,6 @@ import { useWebSocketContext } from '../contexts/WebSocketContext';
 import { WS_MESSAGE_TYPES, PERMISSION_DECISIONS } from '../utils/permissionWebSocketClient';
 import { savePendingRequest, removePendingRequest } from '../utils/permissionStorage';
 
-// Analytics logging helper
-const logPermissionDecision = (requestId, decision) => {
-  // Track permission decisions for analytics
-  if (typeof window !== 'undefined' && window.gtag) {
-    window.gtag('event', 'permission_decision', {
-      request_id: requestId,
-      decision,
-      timestamp: Date.now(),
-    });
-  }
-
-  // Store in local history
-  const history = JSON.parse(localStorage.getItem('permissionHistory') || '[]');
-  history.push({
-    requestId,
-    decision,
-    timestamp: Date.now(),
-  });
-
-  // Keep only last 100 entries
-  if (history.length > 100) {
-    history.splice(0, history.length - 100);
-  }
-
-  localStorage.setItem('permissionHistory', JSON.stringify(history));
-};
-
 /**
  * Custom hook for managing permission requests and responses
  * Integrates WebSocket messaging with the permission UI system
@@ -192,7 +165,6 @@ const usePermissions = () => {
     // For mock requests, just log and return
     if (requestId?.startsWith('mock-')) {
       console.log('Mock permission decision:', { requestId, decision, updatedInput });
-      logPermissionDecision(requestId, decision);
       return true;
     }
 
@@ -213,9 +185,6 @@ const usePermissions = () => {
         callback({ decision, updatedInput });
         responseCallbacksRef.current.delete(requestId);
       }
-
-      // Log for analytics
-      logPermissionDecision(requestId, decision);
 
       return success;
     } catch (error) {
@@ -289,44 +258,6 @@ const usePermissions = () => {
     }
   }, [enqueueRequest]);
 
-
-  // Get permission statistics
-  const getPermissionStats = useCallback(() => {
-    const history = JSON.parse(localStorage.getItem('permissionHistory') || '[]');
-    const stats = {
-      total: history.length,
-      allowed: 0,
-      denied: 0,
-      allowedSession: 0,
-      allowedAlways: 0,
-    };
-
-    history.forEach(entry => {
-      switch (entry.decision) {
-        case PERMISSION_DECISIONS.ALLOW:
-          stats.allowed++;
-          break;
-        case PERMISSION_DECISIONS.DENY:
-          stats.denied++;
-          break;
-        case PERMISSION_DECISIONS.ALLOW_SESSION:
-          stats.allowedSession++;
-          break;
-        case PERMISSION_DECISIONS.ALLOW_ALWAYS:
-          stats.allowedAlways++;
-          break;
-      }
-    });
-
-    return stats;
-  }, []);
-
-  // Clear permission history
-  const clearPermissionHistory = useCallback(() => {
-    localStorage.removeItem('permissionHistory');
-    localStorage.removeItem('permanentPermissions');
-  }, []);
-
   return {
     // State
     isDialogOpen,
@@ -339,10 +270,6 @@ const usePermissions = () => {
     closeDialog,
     onPermissionDecided,
     mockPermissionRequest,
-
-    // Analytics
-    getPermissionStats,
-    clearPermissionHistory,
   };
 };
 
