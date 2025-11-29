@@ -728,6 +728,15 @@ function handleChatConnection(ws) {
                 return;
             }
 
+            // Handle permission sync request (after page refresh)
+            if (data.type === 'permission-sync-request') {
+                console.log('🔄 Received permission sync request for session:', data.sessionId);
+                const clientId = ws.clientId || `client-${Date.now()}`;
+                const permissionManager = getPermissionManager();
+                permissionWebSocketHandler.handlePermissionSyncRequest(clientId, data, permissionManager);
+                return;
+            }
+
             // Handle plan approval response messages
             if (data.type === 'plan-approval-response') {
                 console.log('📋 Received plan approval response from client');

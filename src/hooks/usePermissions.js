@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { usePermission } from '../contexts/PermissionContext';
 import { useWebSocketContext } from '../contexts/WebSocketContext';
 import { WS_MESSAGE_TYPES, PERMISSION_DECISIONS } from '../utils/permissionWebSocketClient';
+import { savePendingRequest, removePendingRequest } from '../utils/permissionStorage';
 
 // Analytics logging helper
 const logPermissionDecision = (requestId, decision) => {
@@ -35,11 +36,37 @@ const logPermissionDecision = (requestId, decision) => {
  * Integrates WebSocket messaging with the permission UI system
  */
 const usePermissions = () => {
-  const { enqueueRequest, handleDecision, activeRequest } = usePermission();
+  const { enqueueRequest, handleDecision, activeRequest, currentSessionId, isRestoring } = usePermission();
   const { wsClient, isConnected } = useWebSocketContext();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [currentRequest, setCurrentRequest] = useState(null);
   const responseCallbacksRef = useRef(new Map());
+  const hasSyncedRef = useRef(false);
+
+  // Send permission sync request when WebSocket connects with a session
+  useEffect(() => {
+    if (!wsClient || !isConnected || !currentSessionId || hasSyncedRef.current) {
+      return;
+    }
+
+    console.log('🔄 [Permission] Sending sync request for session:', currentSessionId);
+    hasSyncedRef.current = true;
+
+    try {
+      wsClient.send({
+        type: 'permission-sync-request',
+        sessionId: currentSessionId
+      });
+    } catch (error) {
+      console.error('Failed to send permission sync request:', error);
+      hasSyncedRef.current = false;
+    }
+  }, [wsClient, isConnected, currentSessionId]);
+
+  // Reset sync flag when session changes
+  useEffect(() => {
+    hasSyncedRef.current = false;
+  }, [currentSessionId]);
 
   // Handle incoming permission requests from WebSocket
   useEffect(() => {
@@ -65,6 +92,11 @@ const usePermissions = () => {
 
         console.log('📥 [Permission] Processing WS request:', request);
 
+        // Save to sessionStorage for persistence
+        if (currentSessionId) {
+          savePendingRequest(currentSessionId, request);
+        }
+
         // Check if auto-approved (session or permanent permission)
         const result = enqueueRequest(request);
 
@@ -75,6 +107,10 @@ const usePermissions = () => {
           });
           // Send auto-approval response
           sendPermissionResponse(request.id, result.decision);
+          // Remove from storage since it was auto-approved
+          if (currentSessionId) {
+            removePendingRequest(currentSessionId, request.id);
+          }
         } else {
           console.log('🔔 [Permission] Showing dialog for:', request.id);
           // Show dialog for manual approval
@@ -86,9 +122,45 @@ const usePermissions = () => {
         console.log('⏱️ [Permission] Timeout received for:', reqId);
         // Handle timeout from server
         handleDecision(reqId, PERMISSION_DECISIONS.DENY);
+        // Remove from storage
+        if (currentSessionId) {
+          removePendingRequest(currentSessionId, reqId);
+        }
         if (currentRequest?.id === reqId) {
           setIsDialogOpen(false);
           setCurrentRequest(null);
+        }
+      } else if (message.type === 'permission-sync-response') {
+        console.log('🔄 [Permission] Received sync response:', {
+          sessionId: message.sessionId,
+          count: message.pendingRequests?.length || 0
+        });
+
+        // Merge server-side pending requests with local state
+        if (message.pendingRequests && message.pendingRequests.length > 0) {
+          message.pendingRequests.forEach(serverRequest => {
+            const request = {
+              id: serverRequest.requestId,
+              tool: serverRequest.toolName,
+              operation: 'execute',
+              description: `Use ${serverRequest.toolName}`,
+              input: serverRequest.input,
+              timestamp: serverRequest.timestamp || Date.now(),
+            };
+
+            // Save to sessionStorage
+            if (currentSessionId) {
+              savePendingRequest(currentSessionId, request);
+            }
+
+            // Add to queue if not already present
+            const result = enqueueRequest(request);
+            if (!result.autoApproved && !currentRequest) {
+              console.log('🔔 [Permission] Showing dialog for synced request:', request.id);
+              setCurrentRequest(request);
+              setIsDialogOpen(true);
+            }
+          });
         }
       }
     };
@@ -100,7 +172,7 @@ const usePermissions = () => {
     return () => {
       wsClient.removeMessageListener(handlePermissionRequest);
     };
-  }, [wsClient, enqueueRequest, handleDecision, currentRequest]);
+  }, [wsClient, enqueueRequest, handleDecision, currentRequest, currentSessionId]);
 
   // Sync currentRequest with activeRequest from context
   // This ensures the dialog shows the next queued request after the current one is handled
@@ -163,13 +235,18 @@ const usePermissions = () => {
       // Send WebSocket response
       sendPermissionResponse(result.id, result.decision, result.updatedInput);
 
+      // Remove from sessionStorage since decision was made
+      if (currentSessionId) {
+        removePendingRequest(currentSessionId, requestId);
+      }
+
       // Close dialog if this was the current request
       if (currentRequest?.id === requestId) {
         setCurrentRequest(null);
         setIsDialogOpen(false);
       }
     }
-  }, [handleDecision, sendPermissionResponse, currentRequest]);
+  }, [handleDecision, sendPermissionResponse, currentRequest, currentSessionId]);
 
   // Register a callback for when a specific permission is decided
   const onPermissionDecided = useCallback((requestId, callback) => {

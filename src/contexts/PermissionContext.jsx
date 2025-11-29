@@ -1,5 +1,6 @@
-import React, { createContext, useState, useContext, useCallback, useEffect } from 'react';
+import React, { createContext, useState, useContext, useCallback, useEffect, useRef } from 'react';
 import { PERMISSION_DECISIONS, WS_MESSAGE_TYPES } from '../utils/permissionWebSocketClient';
+import { getPendingRequests, savePendingRequest, removePendingRequest as removeFromStorage, clearAllRequests as clearStorage } from '../utils/permissionStorage';
 
 const PermissionContext = createContext();
 
@@ -11,12 +12,14 @@ export const usePermission = () => {
   return context;
 };
 
-export const PermissionProvider = ({ children }) => {
+export const PermissionProvider = ({ children, currentSessionId }) => {
   const [pendingRequests, setPendingRequests] = useState([]);
   const [activeRequest, setActiveRequest] = useState(null);
   const [permissionHistory, setPermissionHistory] = useState([]);
   const [sessionPermissions, setSessionPermissions] = useState(new Map());
   const [permanentPermissions, setPermanentPermissions] = useState(new Map());
+  const [isRestoring, setIsRestoring] = useState(false);
+  const lastSessionIdRef = useRef(null);
 
   // Load permanent permissions from localStorage on mount
   useEffect(() => {
@@ -40,6 +43,37 @@ export const PermissionProvider = ({ children }) => {
       );
     }
   }, [permanentPermissions]);
+
+  // Restore pending requests from sessionStorage when session changes
+  useEffect(() => {
+    if (!currentSessionId) {
+      if (lastSessionIdRef.current) {
+        setPendingRequests([]);
+        setActiveRequest(null);
+      }
+      lastSessionIdRef.current = null;
+      return;
+    }
+
+    if (currentSessionId !== lastSessionIdRef.current) {
+      lastSessionIdRef.current = currentSessionId;
+      setIsRestoring(true);
+
+      const restored = getPendingRequests(currentSessionId);
+      console.log('🔄 [Permission] Restoring requests for session:', currentSessionId, 'found:', restored.length);
+
+      if (restored.length > 0) {
+        const [first, ...rest] = restored;
+        setActiveRequest(first);
+        setPendingRequests(rest);
+      } else {
+        setActiveRequest(null);
+        setPendingRequests([]);
+      }
+
+      setIsRestoring(false);
+    }
+  }, [currentSessionId]);
 
   // Add a new permission request to the queue
   const enqueueRequest = useCallback((request) => {
@@ -83,19 +117,31 @@ export const PermissionProvider = ({ children }) => {
       queueLength: pendingRequests.length
     });
 
+    const requestWithTimestamp = { ...request, timestamp: request.timestamp || Date.now() };
+
+    // Persist to sessionStorage
+    if (currentSessionId) {
+      savePendingRequest(currentSessionId, requestWithTimestamp);
+    }
+
     // If no active request, set this as active
     if (!activeRequest) {
-      setActiveRequest({ ...request, timestamp: request.timestamp || Date.now() });
+      setActiveRequest(requestWithTimestamp);
     } else {
       // Otherwise add to pending requests queue
-      setPendingRequests(prev => [...prev, { ...request, timestamp: request.timestamp || Date.now() }]);
+      setPendingRequests(prev => [...prev, requestWithTimestamp]);
     }
 
     return { autoApproved: false };
-  }, [activeRequest, permanentPermissions, sessionPermissions]);
+  }, [activeRequest, permanentPermissions, sessionPermissions, currentSessionId]);
 
   // Remove a request from the queue
   const dequeueRequest = useCallback((requestId) => {
+    // Remove from sessionStorage
+    if (currentSessionId) {
+      removeFromStorage(currentSessionId, requestId);
+    }
+
     setPendingRequests(prev => prev.filter(req => req.id !== requestId));
 
     // If this was the active request, move to next in queue
@@ -106,7 +152,7 @@ export const PermissionProvider = ({ children }) => {
         return next ? remaining : prev;
       });
     }
-  }, [activeRequest]);
+  }, [activeRequest, currentSessionId]);
 
   // Handle user decision on a permission request
   const handleDecision = useCallback((requestId, decision, updatedInput = null) => {
@@ -160,9 +206,12 @@ export const PermissionProvider = ({ children }) => {
 
   // Clear all pending requests
   const clearAllRequests = useCallback(() => {
+    if (currentSessionId) {
+      clearStorage(currentSessionId);
+    }
     setPendingRequests([]);
     setActiveRequest(null);
-  }, []);
+  }, [currentSessionId]);
 
   // Handle batch operations
   const handleBatchDecision = useCallback((requestIds, decision) => {
@@ -221,6 +270,8 @@ export const PermissionProvider = ({ children }) => {
     sessionPermissions,
     permanentPermissions,
     queueCount,
+    isRestoring,
+    currentSessionId,
 
     // Actions
     enqueueRequest,

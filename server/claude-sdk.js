@@ -183,7 +183,7 @@ function mapCliOptionsToSDK(options = {}, ws = null) {
 
         // Add request to queue and await response
         // Note: permissionManager will emit an event that broadcasts the request
-        const result = await permissionManager.addRequest(requestId, toolName, input, abortSignal);
+        const result = await permissionManager.addRequest(requestId, toolName, input, sessionId, abortSignal);
 
         console.log(`🔐 Permission ${requestId} resolved: ${result.behavior}`);
         console.log(`✅ [SDK] Returning result to SDK:`, JSON.stringify(result));

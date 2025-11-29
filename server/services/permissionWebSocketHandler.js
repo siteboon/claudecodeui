@@ -128,6 +128,39 @@ class PermissionWebSocketHandler extends EventEmitter {
   }
 
   /**
+   * Handle a permission sync request from a client (after page refresh)
+   */
+  handlePermissionSyncRequest(clientId, message, permissionManager) {
+    const { sessionId } = message;
+    if (!sessionId) {
+      console.warn('Permission sync request missing sessionId');
+      return;
+    }
+
+    console.log(`🔄 [WebSocket] Permission sync request for session: ${sessionId}`);
+
+    const requests = permissionManager.getRequestsForSession(sessionId);
+    const formattedRequests = requests.map(r => ({
+      requestId: r.id,
+      toolName: r.toolName,
+      input: r.input,
+      timestamp: r.timestamp,
+      sessionId: r.sessionId
+    }));
+
+    const client = this.clients.get(clientId);
+    if (client?.ws?.readyState === client.ws.OPEN) {
+      const response = {
+        type: 'permission-sync-response',
+        sessionId,
+        pendingRequests: formattedRequests
+      };
+      console.log(`🔄 [WebSocket] Sending sync response with ${formattedRequests.length} requests`);
+      client.ws.send(JSON.stringify(response));
+    }
+  }
+
+  /**
    * Broadcast a timeout notification
    */
   broadcastPermissionTimeout(requestId, toolName) {

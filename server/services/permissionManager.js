@@ -26,6 +26,9 @@ export class PermissionManager extends EventEmitter {
     // Map of request ID to pending permission request
     this.pendingRequests = new Map();
 
+    // Map of sessionId to Set of request IDs (for session-aware queries)
+    this.requestsBySession = new Map();
+
     // Session-level permission cache (for allow-session decisions)
     this.sessionPermissions = new Map();
 
@@ -56,10 +59,11 @@ export class PermissionManager extends EventEmitter {
    * @param {string} id - Unique request ID
    * @param {string} toolName - Name of the tool
    * @param {Object} input - Tool input parameters
+   * @param {string} [sessionId] - Optional session identifier
    * @param {AbortSignal} [abortSignal] - Optional abort signal
    * @returns {Promise<Object>} Promise that resolves with permission result
    */
-  async addRequest(id, toolName, input, abortSignal = null) {
+  async addRequest(id, toolName, input, sessionId = null, abortSignal = null) {
     // Check queue size limit
     if (this.pendingRequests.size >= MAX_QUEUE_SIZE) {
       throw new Error(`Permission queue full (max ${MAX_QUEUE_SIZE} requests)`);
@@ -84,6 +88,7 @@ export class PermissionManager extends EventEmitter {
         id,
         toolName,
         input,
+        sessionId,
         timestamp,
         resolver: resolve,
         rejector: reject,
@@ -120,13 +125,22 @@ export class PermissionManager extends EventEmitter {
       this.pendingRequests.set(id, request);
       this.stats.totalRequests++;
 
+      // Track by session for session-aware queries
+      if (sessionId) {
+        if (!this.requestsBySession.has(sessionId)) {
+          this.requestsBySession.set(sessionId, new Set());
+        }
+        this.requestsBySession.get(sessionId).add(id);
+      }
+
       if (this.debugMode) {
-        console.log(`🔐 Added permission request ${id} for tool: ${toolName}`);
+        console.log(`🔐 Added permission request ${id} for tool: ${toolName} (session: ${sessionId || 'none'})`);
         console.log(`   Input preview: ${JSON.stringify(input).substring(0, 200)}...`);
       }
 
-      // Emit event for WebSocket layer to handle
+      // Emit event for WebSocket layer to handle (include sessionId)
       const formattedRequest = formatPermissionRequest(id, toolName, input);
+      formattedRequest.sessionId = sessionId;
       this.emit('permission-request', formattedRequest);
     });
   }
@@ -159,6 +173,15 @@ export class PermissionManager extends EventEmitter {
 
     // Remove from pending
     this.pendingRequests.delete(requestId);
+
+    // Remove from session tracking
+    if (request.sessionId && this.requestsBySession.has(request.sessionId)) {
+      this.requestsBySession.get(request.sessionId).delete(requestId);
+      if (this.requestsBySession.get(request.sessionId).size === 0) {
+        this.requestsBySession.delete(request.sessionId);
+      }
+    }
+
     console.log(`🔍 [PermissionManager] Removed ${requestId} from pending, remaining: ${this.pendingRequests.size}`);
 
     // Handle session-level caching
@@ -335,7 +358,33 @@ export class PermissionManager extends EventEmitter {
   getPendingRequests() {
     const requests = [];
     for (const [id, request] of this.pendingRequests) {
-      requests.push(formatPermissionRequest(id, request.toolName, request.input));
+      const formatted = formatPermissionRequest(id, request.toolName, request.input);
+      formatted.sessionId = request.sessionId;
+      requests.push(formatted);
+    }
+    return requests;
+  }
+
+  /**
+   * Gets pending permission requests for a specific session
+   * @param {string} sessionId - Session identifier
+   * @returns {Array} Array of formatted pending requests for the session
+   */
+  getRequestsForSession(sessionId) {
+    if (!sessionId) return [];
+
+    const requestIds = this.requestsBySession.get(sessionId);
+    if (!requestIds || requestIds.size === 0) return [];
+
+    const requests = [];
+    for (const id of requestIds) {
+      const request = this.pendingRequests.get(id);
+      if (request) {
+        const formatted = formatPermissionRequest(id, request.toolName, request.input);
+        formatted.sessionId = request.sessionId;
+        formatted.timestamp = request.timestamp;
+        requests.push(formatted);
+      }
     }
     return requests;
   }

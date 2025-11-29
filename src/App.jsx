@@ -955,29 +955,54 @@ function PlanApprovalProviderWrapper({ children }) {
   );
 }
 
+// Wrapper to provide sessionId to PermissionProvider
+function PermissionProviderWrapper({ children }) {
+  const { sessionId } = useParams();
+  return (
+    <PermissionProvider currentSessionId={sessionId}>
+      {children}
+    </PermissionProvider>
+  );
+}
+
+// Inner app with route-aware providers
+function AppRoutes() {
+  return (
+    <Routes>
+      <Route path="/" element={
+        <PermissionProviderWrapper>
+          <PlanApprovalProviderWrapper>
+            <AppContent />
+          </PlanApprovalProviderWrapper>
+        </PermissionProviderWrapper>
+      } />
+      <Route path="/session/:sessionId" element={
+        <PermissionProviderWrapper>
+          <PlanApprovalProviderWrapper>
+            <AppContent />
+          </PlanApprovalProviderWrapper>
+        </PermissionProviderWrapper>
+      } />
+    </Routes>
+  );
+}
+
 // Root App component with router
 function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <WebSocketProvider>
-          <PermissionProvider>
-            <PlanApprovalProviderWrapper>
-              <TasksSettingsProvider>
-                <TaskMasterProvider>
-                  <ProtectedRoute>
-                    <Router>
-                      <Routes>
-                        <Route path="/" element={<AppContent />} />
-                        <Route path="/session/:sessionId" element={<AppContent />} />
-                      </Routes>
-                    </Router>
-                  </ProtectedRoute>
-                </TaskMasterProvider>
-              </TasksSettingsProvider>
-            </PlanApprovalProviderWrapper>
-          </PermissionProvider>
-        </WebSocketProvider>
+        <Router>
+          <WebSocketProvider>
+            <TasksSettingsProvider>
+              <TaskMasterProvider>
+                <ProtectedRoute>
+                  <AppRoutes />
+                </ProtectedRoute>
+              </TaskMasterProvider>
+            </TasksSettingsProvider>
+          </WebSocketProvider>
+        </Router>
       </AuthProvider>
     </ThemeProvider>
   );
