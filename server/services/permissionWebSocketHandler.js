@@ -17,6 +17,10 @@ class PermissionWebSocketHandler extends EventEmitter {
     this.messageQueue = new Map();
     this.sequenceNumber = 0;
     this.heartbeatInterval = null;
+
+    // Memory protection limits
+    this.maxQueuedMessagesPerClient = 100;
+    this.maxPendingAcks = 1000;
   }
 
   /**
@@ -30,10 +34,11 @@ class PermissionWebSocketHandler extends EventEmitter {
   /**
    * Add a client connection
    */
-  addClient(ws, clientId) {
+  addClient(ws, clientId, sessionId = null) {
     const clientInfo = {
       ws,
       id: clientId,
+      sessionId,
       isAlive: true,
       lastSeen: Date.now(),
       pendingRequests: new Set()
@@ -69,6 +74,7 @@ class PermissionWebSocketHandler extends EventEmitter {
         this.emit('client-disconnected', { clientId, requestId });
       });
       this.clients.delete(clientId);
+      this.messageQueue.delete(clientId);
     }
   }
 
@@ -104,14 +110,34 @@ class PermissionWebSocketHandler extends EventEmitter {
   /**
    * Handle a permission response from a client
    */
-  handlePermissionResponse(clientId, message) {
+  handlePermissionResponse(clientId, message, permissionManager = null) {
     try {
       validatePermissionResponse(message);
 
       const client = this.clients.get(clientId);
-      if (client) {
-        client.pendingRequests.delete(message.requestId);
+      if (!client) {
+        console.warn(`Permission response from unknown client: ${clientId}`);
+        return;
       }
+
+      // Verify the client actually has this request pending
+      if (!client.pendingRequests.has(message.requestId)) {
+        console.warn(`Client ${clientId} sent response for non-pending request: ${message.requestId}`);
+        this.sendError(clientId, message.requestId, 'Request not found in your pending queue');
+        return;
+      }
+
+      // If permissionManager provided, verify session ownership
+      if (permissionManager) {
+        const request = permissionManager.pendingRequests.get(message.requestId);
+        if (request && request.sessionId && client.sessionId && request.sessionId !== client.sessionId) {
+          console.warn(`Client ${clientId} attempted to respond to request from different session`);
+          this.sendError(clientId, message.requestId, 'Unauthorized: session mismatch');
+          return;
+        }
+      }
+
+      client.pendingRequests.delete(message.requestId);
 
       this.emit('permission-response', {
         clientId,
@@ -294,6 +320,11 @@ class PermissionWebSocketHandler extends EventEmitter {
    * Queue a message for a client that's temporarily unavailable
    */
   queueMessage(clientId, message) {
+    // Only queue for known clients to prevent unbounded growth
+    if (!this.clients.has(clientId)) {
+      return;
+    }
+
     if (!this.messageQueue.has(clientId)) {
       this.messageQueue.set(clientId, []);
     }
@@ -301,7 +332,8 @@ class PermissionWebSocketHandler extends EventEmitter {
     const queue = this.messageQueue.get(clientId);
     queue.push(message);
 
-    if (queue.length > 100) {
+    // Enforce per-client queue limit
+    while (queue.length > this.maxQueuedMessagesPerClient) {
       queue.shift();
     }
   }

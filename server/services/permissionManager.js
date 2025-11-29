@@ -30,7 +30,12 @@ export class PermissionManager extends EventEmitter {
     this.requestsBySession = new Map();
 
     // Session-level permission cache (for allow-session decisions)
+    // Map of sessionId -> Map of cacheKey -> { decision, timestamp }
     this.sessionPermissions = new Map();
+
+    // Cache configuration
+    this.maxSessionCacheEntries = 1000;
+    this.sessionCacheTTL = 60 * 60 * 1000; // 1 hour
 
     // Statistics for monitoring
     this.stats = {
@@ -41,9 +46,10 @@ export class PermissionManager extends EventEmitter {
       abortedRequests: 0
     };
 
-    // Start periodic cleanup of expired requests
+    // Start periodic cleanup of expired requests and stale sessions
     this.cleanupInterval = setInterval(() => {
       this.cleanupExpiredRequests();
+      this.cleanupStaleSessions();
     }, DEFAULT_QUEUE_CLEANUP_INTERVAL_MS);
 
     // Debug mode flag
@@ -70,14 +76,16 @@ export class PermissionManager extends EventEmitter {
     }
 
     // Check if this tool/input combination is in session cache
-    const cacheKey = this.getSessionCacheKey(toolName, input);
-    if (this.sessionPermissions.has(cacheKey)) {
-      const cachedDecision = this.sessionPermissions.get(cacheKey);
-      if (this.debugMode) {
-        console.log(`🔐 Using cached session permission for ${toolName}: ${cachedDecision}`);
+    if (sessionId) {
+      const cacheKey = this.getSessionCacheKey(toolName, input);
+      const cachedDecision = this.getSessionPermission(sessionId, cacheKey);
+      if (cachedDecision) {
+        if (this.debugMode) {
+          console.log(`🔐 Using cached session permission for ${toolName}: ${cachedDecision} (session: ${sessionId})`);
+        }
+        this.stats.approvedRequests++;
+        return createSdkPermissionResult(cachedDecision);
       }
-      this.stats.approvedRequests++;
-      return createSdkPermissionResult(cachedDecision);
     }
 
     return new Promise((resolve, reject) => {
@@ -184,12 +192,12 @@ export class PermissionManager extends EventEmitter {
 
     console.log(`🔍 [PermissionManager] Removed ${requestId} from pending, remaining: ${this.pendingRequests.size}`);
 
-    // Handle session-level caching
-    if (decision === PermissionDecision.ALLOW_SESSION) {
+    // Handle session-level caching (properly isolated per session)
+    if (decision === PermissionDecision.ALLOW_SESSION && request.sessionId) {
       const cacheKey = this.getSessionCacheKey(request.toolName, request.input);
-      this.sessionPermissions.set(cacheKey, decision);
+      this.setSessionPermission(request.sessionId, cacheKey, decision);
       if (this.debugMode) {
-        console.log(`🔐 Cached session permission for ${request.toolName}`);
+        console.log(`🔐 Cached session permission for ${request.toolName} (session: ${request.sessionId})`);
       }
     }
 
@@ -303,6 +311,35 @@ export class PermissionManager extends EventEmitter {
   }
 
   /**
+   * Cleans up stale sessions with no active requests
+   * @private
+   */
+  cleanupStaleSessions() {
+    const staleSessions = [];
+
+    for (const [sessionId, requestIds] of this.requestsBySession) {
+      if (requestIds.size === 0) {
+        staleSessions.push(sessionId);
+      } else {
+        const hasActiveRequests = Array.from(requestIds).some(
+          requestId => this.pendingRequests.has(requestId)
+        );
+        if (!hasActiveRequests) {
+          staleSessions.push(sessionId);
+        }
+      }
+    }
+
+    if (staleSessions.length > 0 && this.debugMode) {
+      console.log(`🧹 Cleaning up ${staleSessions.length} stale sessions`);
+    }
+
+    staleSessions.forEach(sessionId => {
+      this.requestsBySession.delete(sessionId);
+    });
+  }
+
+  /**
    * Gets a cache key for session-level permissions
    * @param {string} toolName - Tool name
    * @param {Object} input - Tool input
@@ -330,7 +367,53 @@ export class PermissionManager extends EventEmitter {
         keyParts.push(JSON.stringify(input));
     }
 
-    return keyParts.join(':');
+    return keyParts.join('\x00');
+  }
+
+  /**
+   * Gets a session-specific cached permission with TTL check
+   * @param {string} sessionId - Session identifier
+   * @param {string} cacheKey - Cache key for the permission
+   * @returns {string|null} Cached permission decision or null if not found/expired
+   * @private
+   */
+  getSessionPermission(sessionId, cacheKey) {
+    const sessionCache = this.sessionPermissions.get(sessionId);
+    if (!sessionCache) return null;
+
+    const entry = sessionCache.get(cacheKey);
+    if (!entry) return null;
+
+    // Check TTL expiration
+    if (Date.now() - entry.timestamp > this.sessionCacheTTL) {
+      sessionCache.delete(cacheKey);
+      return null;
+    }
+
+    return entry.decision;
+  }
+
+  /**
+   * Sets a session-specific cached permission with TTL and size limit
+   * @param {string} sessionId - Session identifier
+   * @param {string} cacheKey - Cache key for the permission
+   * @param {string} permission - Permission decision to cache
+   * @private
+   */
+  setSessionPermission(sessionId, cacheKey, permission) {
+    let sessionCache = this.sessionPermissions.get(sessionId);
+    if (!sessionCache) {
+      sessionCache = new Map();
+      this.sessionPermissions.set(sessionId, sessionCache);
+    }
+
+    // Evict oldest entries if cache is full (simple LRU approximation)
+    if (sessionCache.size >= this.maxSessionCacheEntries) {
+      const oldestKey = sessionCache.keys().next().value;
+      sessionCache.delete(oldestKey);
+    }
+
+    sessionCache.set(cacheKey, { decision: permission, timestamp: Date.now() });
   }
 
   /**
@@ -340,6 +423,32 @@ export class PermissionManager extends EventEmitter {
     this.sessionPermissions.clear();
     if (this.debugMode) {
       console.log('🔐 Cleared session permission cache');
+    }
+  }
+
+  /**
+   * Removes all data for a specific session
+   * @param {string} sessionId - Session identifier to clean up
+   */
+  removeSession(sessionId) {
+    if (!sessionId) return;
+
+    const requestIds = this.requestsBySession.get(sessionId);
+    if (requestIds) {
+      requestIds.forEach(requestId => {
+        const request = this.pendingRequests.get(requestId);
+        if (request && request.timeoutId) {
+          clearTimeout(request.timeoutId);
+        }
+        this.pendingRequests.delete(requestId);
+      });
+      this.requestsBySession.delete(sessionId);
+    }
+
+    this.sessionPermissions.delete(sessionId);
+
+    if (this.debugMode) {
+      console.log(`🔐 Removed session ${sessionId} from permission manager`);
     }
   }
 
@@ -420,6 +529,7 @@ export class PermissionManager extends EventEmitter {
 
     // Clear all data
     this.pendingRequests.clear();
+    this.requestsBySession.clear();
     this.sessionPermissions.clear();
 
     console.log('🔐 PermissionManager shut down');

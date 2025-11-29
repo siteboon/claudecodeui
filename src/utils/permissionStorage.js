@@ -8,8 +8,24 @@ export function getPendingRequests(sessionId) {
     const stored = sessionStorage.getItem(key);
     if (!stored) return [];
     const requests = JSON.parse(stored);
-    return requests.filter(r => Date.now() - r.timestamp < REQUEST_TTL_MS);
-  } catch {
+
+    // Validate the parsed data is an array
+    if (!Array.isArray(requests)) {
+      console.warn('Invalid permission storage format, clearing');
+      sessionStorage.removeItem(key);
+      return [];
+    }
+
+    // Filter and validate each request
+    return requests.filter(r => {
+      if (!r || typeof r !== 'object') return false;
+      if (!r.id || typeof r.id !== 'string') return false;
+      if (typeof r.timestamp !== 'number') return false;
+      return Date.now() - r.timestamp < REQUEST_TTL_MS;
+    });
+  } catch (e) {
+    console.warn('Failed to parse permission storage:', e);
+    sessionStorage.removeItem(key);
     return [];
   }
 }
@@ -49,13 +65,4 @@ export function clearAllRequests(sessionId) {
   if (!sessionId) return;
   const key = `${STORAGE_KEY_PREFIX}${sessionId}`;
   sessionStorage.removeItem(key);
-}
-
-export function isRequestExpired(request) {
-  if (!request || !request.timestamp) return true;
-  return Date.now() - request.timestamp >= REQUEST_TTL_MS;
-}
-
-export function getRequestTTL() {
-  return REQUEST_TTL_MS;
 }
