@@ -32,6 +32,8 @@ import { AuthProvider } from './contexts/AuthContext';
 import { TaskMasterProvider } from './contexts/TaskMasterContext';
 import { TasksSettingsProvider } from './contexts/TasksSettingsContext';
 import { WebSocketProvider, useWebSocketContext } from './contexts/WebSocketContext';
+import { PermissionProvider } from './contexts/PermissionContext';
+import { PlanApprovalProvider } from './contexts/PlanApprovalContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import { useVersionCheck } from './hooks/useVersionCheck';
 import useLocalStorage from './hooks/useLocalStorage';
@@ -942,25 +944,64 @@ function AppContent() {
   );
 }
 
+// Wrapper to provide WebSocket to PlanApprovalProvider
+function PlanApprovalProviderWrapper({ children }) {
+  const { ws } = useWebSocketContext();
+  return (
+    <PlanApprovalProvider websocket={ws}>
+      {children}
+    </PlanApprovalProvider>
+  );
+}
+
+// Wrapper to provide sessionId to PermissionProvider
+function PermissionProviderWrapper({ children }) {
+  const { sessionId } = useParams();
+  return (
+    <PermissionProvider currentSessionId={sessionId}>
+      {children}
+    </PermissionProvider>
+  );
+}
+
+// Inner app with route-aware providers
+function AppRoutes() {
+  return (
+    <Routes>
+      <Route path="/" element={
+        <PermissionProviderWrapper>
+          <PlanApprovalProviderWrapper>
+            <AppContent />
+          </PlanApprovalProviderWrapper>
+        </PermissionProviderWrapper>
+      } />
+      <Route path="/session/:sessionId" element={
+        <PermissionProviderWrapper>
+          <PlanApprovalProviderWrapper>
+            <AppContent />
+          </PlanApprovalProviderWrapper>
+        </PermissionProviderWrapper>
+      } />
+    </Routes>
+  );
+}
+
 // Root App component with router
 function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <WebSocketProvider>
-          <TasksSettingsProvider>
-            <TaskMasterProvider>
-              <ProtectedRoute>
-                <Router>
-                  <Routes>
-                    <Route path="/" element={<AppContent />} />
-                    <Route path="/session/:sessionId" element={<AppContent />} />
-                  </Routes>
-                </Router>
-              </ProtectedRoute>
-            </TaskMasterProvider>
-          </TasksSettingsProvider>
-        </WebSocketProvider>
+        <Router>
+          <WebSocketProvider>
+            <TasksSettingsProvider>
+              <TaskMasterProvider>
+                <ProtectedRoute>
+                  <AppRoutes />
+                </ProtectedRoute>
+              </TaskMasterProvider>
+            </TasksSettingsProvider>
+          </WebSocketProvider>
+        </Router>
       </AuthProvider>
     </ThemeProvider>
   );

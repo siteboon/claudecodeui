@@ -22,12 +22,15 @@
     "url": "https://github.com/siteboon/claudecodeui/issues"
   },
   "scripts": {
-    "dev": "concurrently --kill-others \"npm run server\" \"npm run client\"",
+    "dev": "concurrently --kill-others \"npm run server\" \"NODE_ENV=development  npm run client\"",
     "server": "node server/index.js",
     "client": "vite --host",
-    "build": "vite build",
+    "build": "NODE_ENV=development vite build",
     "preview": "vite preview",
     "start": "npm run build && npm run server",
+    "start:ngrok": "node scripts/start-with-ngrok.js",
+    "restart": "bash restart.sh",
+    "restart:prod": "bash restart.sh prod",
     "release": "./release.sh"
   },
   "keywords": [
@@ -95,6 +98,7 @@
     "auto-changelog": "^2.5.0",
     "autoprefixer": "^10.4.16",
     "concurrently": "^8.2.2",
+    "ngrok": "^4.3.3",
     "node-gyp": "^10.0.0",
     "postcss": "^8.4.32",
     "release-it": "^19.0.5",

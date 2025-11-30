@@ -99,7 +99,6 @@ temp/
 .netlify
 
 # AI specific
-.claude/
 .cursor/
 .roo/
 .taskmaster/
@@ -113,7 +112,7 @@ CLAUDE.md
 # Database files
 *.db
 *.sqlite
-*.sqlite3 
+*.sqlite3
 
 logs
 dev-debug.log
@@ -129,4 +128,5 @@ dev-debug.log
 
 # Task files
 tasks.json
-tasks/ 
+tasks/
+/.claude/settings.local.json

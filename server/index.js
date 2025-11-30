@@ -60,6 +60,10 @@ import mime from 'mime-types';
 import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
 import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions } from './claude-sdk.js';
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
+import { getPermissionManager } from './services/permissionManager.js';
+import { getPlanApprovalManager } from './services/planApprovalManager.js';
+import { setupConsoleApproval } from './services/consoleApproval.js';
+import PermissionWebSocketHandler from './services/permissionWebSocketHandler.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
 import mcpRoutes from './routes/mcp.js';
@@ -78,6 +82,9 @@ import { validateApiKey, authenticateToken, authenticateWebSocket } from './midd
 // File system watcher for projects folder
 let projectsWatcher = null;
 const connectedClients = new Set();
+
+// Initialize permission WebSocket handler
+const permissionWebSocketHandler = new PermissionWebSocketHandler();
 
 // Setup file system watcher for Claude projects folder using chokidar
 async function setupProjectsWatcher() {
@@ -709,14 +716,47 @@ function handleChatConnection(ws) {
     // Add to connected clients for project updates
     connectedClients.add(ws);
 
+    // Add client to permission WebSocket handler
+    const clientId = `client-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    ws.clientId = clientId;
+    permissionWebSocketHandler.addClient(ws, clientId);
+
     ws.on('message', async (message) => {
         try {
             const data = JSON.parse(message);
+
+            // Handle permission response messages
+            if (data.type === 'permission-response') {
+                console.log('📨 Received permission response from client');
+                const clientId = ws.clientId || `client-${Date.now()}`;
+                permissionWebSocketHandler.handlePermissionResponse(clientId, data);
+                return;
+            }
+
+            // Handle permission sync request (after page refresh)
+            if (data.type === 'permission-sync-request') {
+                console.log('🔄 Received permission sync request for session:', data.sessionId);
+                const clientId = ws.clientId || `client-${Date.now()}`;
+                const permissionManager = getPermissionManager();
+                permissionWebSocketHandler.handlePermissionSyncRequest(clientId, data, permissionManager);
+                return;
+            }
+
+            // Handle plan approval response messages
+            if (data.type === 'plan-approval-response') {
+                console.log('📋 Received plan approval response from client');
+                const clientId = ws.clientId || `client-${Date.now()}`;
+                permissionWebSocketHandler.handlePlanApprovalResponse(clientId, data);
+                return;
+            }
 
             if (data.type === 'claude-command') {
                 console.log('[DEBUG] User message:', data.command || '[Continue/Resume]');
                 console.log('📁 Project:', data.options?.projectPath || 'Unknown');
                 console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
+                console.log('🔐 Permission Mode:', data.options?.permissionMode || 'UNDEFINED');
+                console.log('🔐 Skip Permissions:', data.options?.toolsSettings?.skipPermissions ?? 'UNDEFINED');
+                console.log('🌐 WebSocket State:', ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][ws.readyState] || 'UNKNOWN');
 
                 // Use Claude Agents SDK
                 await queryClaudeSDK(data.command, data.options, ws);
@@ -789,6 +829,23 @@ function handleChatConnection(ws) {
                 ws.send(JSON.stringify({
                     type: 'active-sessions',
                     sessions: activeSessions
+                }));
+            } else if (data.type === 'permission-response') {
+                // Handle permission response from frontend
+                console.log('[DEBUG] Permission response:', data.requestId, data.decision);
+
+                const permissionManager = getPermissionManager();
+                const success = permissionManager.resolveRequest(
+                    data.requestId,
+                    data.decision,
+                    data.updatedInput
+                );
+
+                // Send acknowledgment back to frontend
+                ws.send(JSON.stringify({
+                    type: 'permission-response-ack',
+                    requestId: data.requestId,
+                    success
                 }));
             }
         } catch (error) {
@@ -1548,6 +1605,57 @@ async function startServer() {
         server.listen(PORT, '0.0.0.0', async () => {
             const appInstallPath = path.join(__dirname, '..');
 
+            // Initialize permission WebSocket handler with the WebSocket server
+            permissionWebSocketHandler.initialize(wss);
+
+            // Connect permission manager events to WebSocket handler
+            const permissionManager = getPermissionManager();
+
+            permissionManager.on('permission-request', (request) => {
+                console.log('🔐 Broadcasting permission request:', request.id);
+                permissionWebSocketHandler.broadcastPermissionRequest(request);
+            });
+
+            permissionManager.on('permission-timeout', (requestId) => {
+                console.log('⏱️ Broadcasting permission timeout:', requestId);
+                permissionWebSocketHandler.broadcastPermissionTimeout(requestId, 'Unknown');
+            });
+
+            // Listen for permission responses from WebSocket handler
+            permissionWebSocketHandler.on('permission-response', (response) => {
+                console.log('📝 Received permission response:', response);
+                console.log('🔍 [Index] Calling permissionManager.resolveRequest...');
+                const success = permissionManager.resolveRequest(
+                    response.requestId,
+                    response.decision,
+                    response.updatedInput
+                );
+                console.log('🔍 [Index] resolveRequest returned:', success);
+            });
+
+            // Connect plan approval manager events to WebSocket handler
+            const planApprovalManager = getPlanApprovalManager();
+
+            planApprovalManager.on('plan-request', (request) => {
+                console.log('📋 Broadcasting plan approval request:', request.planId);
+                permissionWebSocketHandler.broadcastPlanApprovalRequest(request);
+            });
+
+            planApprovalManager.on('plan-timeout', ({ planId }) => {
+                console.log('⏱️  Broadcasting plan approval timeout:', planId);
+                permissionWebSocketHandler.broadcastPlanApprovalTimeout(planId);
+            });
+
+            // Listen for plan approval responses from WebSocket handler
+            permissionWebSocketHandler.on('plan-approval-response', (response) => {
+                console.log('📋 Received plan approval response:', response);
+                if (response.decision === 'approve') {
+                    planApprovalManager.resolvePlanApproval(response.planId, response.permissionMode);
+                } else {
+                    planApprovalManager.rejectPlanApproval(response.planId, response.reason || 'Plan rejected by user');
+                }
+            });
+
             console.log('');
             console.log(c.dim('═'.repeat(63)));
             console.log(`  ${c.bright('Claude Code UI Server - Ready')}`);
@@ -1560,6 +1668,9 @@ async function startServer() {
 
             // Start watching the projects folder for changes
             await setupProjectsWatcher();
+
+            // Initialize console approval for testing (if enabled)
+            setupConsoleApproval(permissionManager);
         });
     } catch (error) {
         console.error('[ERROR] Failed to start server:', error);
