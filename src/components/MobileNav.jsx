@@ -4,8 +4,6 @@ import { useTasksSettings } from '../contexts/TasksSettingsContext';
 
 function MobileNav({ activeTab, setActiveTab, isInputFocused }) {
   const { tasksEnabled } = useTasksSettings();
-  // Detect dark mode
-  const isDarkMode = document.documentElement.classList.contains('dark');
   const navItems = [
     {
       id: 'chat',
@@ -36,22 +34,11 @@ function MobileNav({ activeTab, setActiveTab, isInputFocused }) {
   ];
 
   return (
-    <>
-      <style>
-        {`
-          .mobile-nav-container {
-            background-color: ${isDarkMode ? '#1f2937' : '#ffffff'} !important;
-          }
-          .mobile-nav-container:hover {
-            background-color: ${isDarkMode ? '#1f2937' : '#ffffff'} !important;
-          }
-        `}
-      </style>
-      <div 
-        className={`mobile-nav-container fixed bottom-0 left-0 right-0 border-t border-gray-200 dark:border-gray-700 z-50 ios-bottom-safe transform transition-transform duration-300 ease-in-out shadow-lg ${
-          isInputFocused ? 'translate-y-full' : 'translate-y-0'
-        }`}
-      >
+    <div
+      className={`fixed bottom-0 left-0 right-0 bg-background border-t border-border z-50 ios-bottom-safe transform transition-transform duration-300 ease-in-out shadow-lg ${
+        isInputFocused ? 'translate-y-full' : 'translate-y-0'
+      }`}
+    >
       <div className="flex items-center justify-around py-1">
         {navItems.map((item) => {
           const Icon = item.icon;
@@ -81,7 +68,6 @@ function MobileNav({ activeTab, setActiveTab, isInputFocused }) {
         })}
       </div>
     </div>
-    </>
   );
 }
 

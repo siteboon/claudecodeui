@@ -32,6 +32,7 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
   const [isPublishing, setIsPublishing] = useState(false);
   const [isCommitAreaCollapsed, setIsCommitAreaCollapsed] = useState(isMobile); // Collapsed by default on mobile
   const [confirmAction, setConfirmAction] = useState(null); // { type: 'discard|commit|pull|push', file?: string, message?: string }
+  const [isCreatingInitialCommit, setIsCreatingInitialCommit] = useState(false);
   const textareaRef = useRef(null);
   const dropdownRef = useRef(null);
 
@@ -547,7 +548,7 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
 
   const handleCommit = async () => {
     if (!commitMessage.trim() || selectedFiles.size === 0) return;
-    
+
     setIsCommitting(true);
     try {
       const response = await authenticatedFetch('/api/git/commit', {
@@ -559,7 +560,7 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
           files: Array.from(selectedFiles)
         })
       });
-      
+
       const data = await response.json();
       if (data.success) {
         // Reset state after successful commit
@@ -577,6 +578,32 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
     }
   };
 
+  const createInitialCommit = async () => {
+    setIsCreatingInitialCommit(true);
+    try {
+      const response = await authenticatedFetch('/api/git/initial-commit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project: selectedProject.name
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        fetchGitStatus();
+        fetchRemoteStatus();
+      } else {
+        console.error('Initial commit failed:', data.error);
+        alert(data.error || 'Failed to create initial commit');
+      }
+    } catch (error) {
+      console.error('Error creating initial commit:', error);
+      alert('Failed to create initial commit');
+    } finally {
+      setIsCreatingInitialCommit(false);
+    }
+  };
 
   const getStatusLabel = (status) => {
     switch (status) {
@@ -769,7 +796,7 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
   }
 
   return (
-    <div className="h-full flex flex-col bg-white dark:bg-gray-900">
+    <div className="h-full flex flex-col bg-background">
       {/* Header */}
       <div className={`flex items-center justify-between border-b border-gray-200 dark:border-gray-700 ${isMobile ? 'px-3 py-2' : 'px-4 py-3'}`}>
         <div className="relative" ref={dropdownRef}>
@@ -1156,10 +1183,35 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
 
       {/* File List - Changes View - Only show when git is available */}
       {activeView === 'changes' && !gitStatus?.error && (
-        <div className={`flex-1 overflow-y-auto ${isMobile ? 'pb-20' : ''}`}>
+        <div className={`flex-1 overflow-y-auto ${isMobile ? 'pb-mobile-nav' : ''}`}>
           {isLoading ? (
             <div className="flex items-center justify-center h-32">
               <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
+            </div>
+          ) : gitStatus?.hasCommits === false ? (
+            <div className="flex flex-col items-center justify-center p-8 text-center">
+              <GitBranch className="w-16 h-16 mb-4 opacity-30 text-gray-400 dark:text-gray-500" />
+              <h3 className="text-lg font-medium mb-2 text-gray-900 dark:text-white">No commits yet</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 max-w-md">
+                This repository doesn't have any commits yet. Create your first commit to start tracking changes.
+              </p>
+              <button
+                onClick={createInitialCommit}
+                disabled={isCreatingInitialCommit}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {isCreatingInitialCommit ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Creating Initial Commit...</span>
+                  </>
+                ) : (
+                  <>
+                    <GitCommit className="w-4 h-4" />
+                    <span>Create Initial Commit</span>
+                  </>
+                )}
+              </button>
             </div>
           ) : !gitStatus || (!gitStatus.modified?.length && !gitStatus.added?.length && !gitStatus.deleted?.length && !gitStatus.untracked?.length) ? (
             <div className="flex flex-col items-center justify-center h-32 text-gray-500 dark:text-gray-400">
@@ -1179,7 +1231,7 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
 
       {/* History View - Only show when git is available */}
       {activeView === 'history' && !gitStatus?.error && (
-        <div className={`flex-1 overflow-y-auto ${isMobile ? 'pb-20' : ''}`}>
+        <div className={`flex-1 overflow-y-auto ${isMobile ? 'pb-mobile-nav' : ''}`}>
           {isLoading ? (
             <div className="flex items-center justify-center h-32">
               <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />

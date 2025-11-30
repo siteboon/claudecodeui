@@ -2,6 +2,7 @@ import React from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import SetupForm from './SetupForm';
 import LoginForm from './LoginForm';
+import Onboarding from './Onboarding';
 import { MessageSquare } from 'lucide-react';
 
 const LoadingScreen = () => (
@@ -24,14 +25,20 @@ const LoadingScreen = () => (
 );
 
 const ProtectedRoute = ({ children }) => {
-  const { user, isLoading, needsSetup } = useAuth();
+  const { user, isLoading, needsSetup, hasCompletedOnboarding, refreshOnboardingStatus } = useAuth();
 
-  // Platform mode: skip all auth UI and directly render children
   if (import.meta.env.VITE_IS_PLATFORM === 'true') {
+    if (isLoading) {
+      return <LoadingScreen />;
+    }
+
+    if (!hasCompletedOnboarding) {
+      return <Onboarding onComplete={refreshOnboardingStatus} />;
+    }
+
     return children;
   }
 
-  // Normal OSS mode: standard auth flow
   if (isLoading) {
     return <LoadingScreen />;
   }
@@ -42,6 +49,10 @@ const ProtectedRoute = ({ children }) => {
 
   if (!user) {
     return <LoginForm />;
+  }
+
+  if (!hasCompletedOnboarding) {
+    return <Onboarding onComplete={refreshOnboardingStatus} />;
   }
 
   return children;

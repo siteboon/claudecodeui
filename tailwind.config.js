@@ -56,6 +56,7 @@ export default {
       },
       spacing: {
         'safe-area-inset-bottom': 'env(safe-area-inset-bottom)',
+        'mobile-nav': 'var(--mobile-nav-total)',
       },
     },
   },

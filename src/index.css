@@ -49,6 +49,16 @@
     --safe-area-inset-right: env(safe-area-inset-right);
     --safe-area-inset-bottom: env(safe-area-inset-bottom);
     --safe-area-inset-left: env(safe-area-inset-left);
+
+    /* Mobile navigation dimensions - Single source of truth */
+    --mobile-nav-height: 60px;
+    --mobile-nav-padding: 12px;
+    --mobile-nav-total: calc(var(--mobile-nav-height) + max(env(safe-area-inset-bottom, 0px), var(--mobile-nav-padding)));
+
+    /* Header safe area dimensions */
+    --header-safe-area-top: env(safe-area-inset-top, 0px);
+    --header-base-padding: 8px;
+    --header-total-padding: calc(var(--header-safe-area-top) + var(--header-base-padding));
   }
   
   /* Fallback for older iOS versions */
@@ -122,34 +132,28 @@
       }
     }
   }
-  
+
   /* PWA mode detected by JavaScript - more reliable */
   html.pwa-mode,
   body.pwa-mode {
     height: 100%;
     overflow: hidden;
-    background-color: rgb(255 255 255); /* white - same as bg-white for safe area */
   }
 
   body.pwa-mode #root {
-    padding-top: calc(env(safe-area-inset-top, 0px) + 8px);
-    padding-left: env(safe-area-inset-left);
-    padding-right: env(safe-area-inset-right);
+    padding-top: var(--header-total-padding);
+    padding-left: var(--safe-area-inset-left);
+    padding-right: var(--safe-area-inset-right);
     height: 100vh;
     overflow: hidden;
   }
 
   /* Adjust fixed inset positioning in PWA mode */
   body.pwa-mode .fixed.inset-0 {
-    top: calc(env(safe-area-inset-top, 0px) + 8px);
-    left: env(safe-area-inset-left);
-    right: env(safe-area-inset-right);
+    top: var(--header-total-padding);
+    left: var(--safe-area-inset-left);
+    right: var(--safe-area-inset-right);
     bottom: 0;
-  }
-
-  /* Dark mode safe area background */
-  html.dark body.pwa-mode {
-    background-color: rgb(31 41 55); /* gray-800 - matches header color */
   }
   
   /* Global transition defaults */
@@ -641,22 +645,21 @@
     padding-bottom: max(env(safe-area-inset-bottom), 12px);
   }
   
-  /* PWA specific header adjustments for iOS */
+  /* PWA specific header adjustments - uses CSS variables for consistency */
   .pwa-header-safe {
-    padding-top: 16px;
+    padding-top: var(--header-base-padding);
   }
-  
+
   /* When PWA mode is detected by JavaScript */
   body.pwa-mode .pwa-header-safe {
     /* Reset padding since #root already handles safe area */
     padding-top: 0px !important;
   }
 
-  /* For mobile PWA, ensure proper header spacing */
+  /* For mobile PWA, add bottom padding for better spacing */
   @media screen and (max-width: 768px) {
     body.pwa-mode .pwa-header-safe {
-      padding-top: 4px !important;
-      padding-bottom: 12px;
+      padding-bottom: 8px;
     }
   }
   
@@ -685,6 +688,16 @@
   .chat-message * {
     max-width: 100%;
     box-sizing: border-box;
+  }
+
+  /* Hide scrollbar utility for horizontal scroll */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
   }
 }
 

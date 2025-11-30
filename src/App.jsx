@@ -746,7 +746,7 @@ function AppContent() {
       {/* Fixed Desktop Sidebar */}
       {!isMobile && (
         <div
-          className={`flex-shrink-0 border-r border-border bg-card transition-all duration-300 ${
+          className={`h-full flex-shrink-0 border-r border-border bg-card transition-all duration-300 ${
             sidebarVisible ? 'w-80' : 'w-14'
           }`}
         >
@@ -839,11 +839,10 @@ function AppContent() {
             }}
             aria-label="Close sidebar"
           />
-          <div 
-            className={`relative w-[85vw] max-w-sm sm:w-80 bg-card border-r border-border transform transition-transform duration-150 ease-out ${
+          <div
+            className={`relative w-[85vw] max-w-sm sm:w-80 h-full bg-card border-r border-border transform transition-transform duration-150 ease-out ${
               sidebarOpen ? 'translate-x-0' : '-translate-x-full'
             }`}
-            style={{ height: 'calc(100vh - 80px)' }}
             onClick={(e) => e.stopPropagation()}
             onTouchStart={(e) => e.stopPropagation()}
           >
@@ -873,7 +872,7 @@ function AppContent() {
       )}
 
       {/* Main Content Area - Flexible */}
-      <div className={`flex-1 flex flex-col min-w-0 ${isMobile && !isInputFocused ? 'pb-16' : ''}`}>
+      <div className={`flex-1 flex flex-col min-w-0 ${isMobile && !isInputFocused ? 'pb-mobile-nav' : ''}`}>
         <MainContent
           selectedProject={selectedProject}
           selectedSession={selectedSession}

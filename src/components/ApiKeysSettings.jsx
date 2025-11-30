@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Key, Plus, Trash2, Eye, EyeOff, Copy, Check, Github } from 'lucide-react';
+import { authenticatedFetch } from '../utils/api';
 
 function ApiKeysSettings() {
   const [apiKeys, setApiKeys] = useState([]);
@@ -23,19 +24,14 @@ function ApiKeysSettings() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('auth-token');
 
       // Fetch API keys
-      const apiKeysRes = await fetch('/api/settings/api-keys', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const apiKeysRes = await authenticatedFetch('/api/settings/api-keys');
       const apiKeysData = await apiKeysRes.json();
       setApiKeys(apiKeysData.apiKeys || []);
 
       // Fetch GitHub tokens
-      const githubRes = await fetch('/api/settings/credentials?type=github_token', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const githubRes = await authenticatedFetch('/api/settings/credentials?type=github_token');
       const githubData = await githubRes.json();
       setGithubTokens(githubData.credentials || []);
     } catch (error) {
@@ -49,13 +45,8 @@ function ApiKeysSettings() {
     if (!newKeyName.trim()) return;
 
     try {
-      const token = localStorage.getItem('auth-token');
-      const res = await fetch('/api/settings/api-keys', {
+      const res = await authenticatedFetch('/api/settings/api-keys', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify({ keyName: newKeyName })
       });
 
@@ -75,10 +66,8 @@ function ApiKeysSettings() {
     if (!confirm('Are you sure you want to delete this API key?')) return;
 
     try {
-      const token = localStorage.getItem('auth-token');
-      await fetch(`/api/settings/api-keys/${keyId}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
+      await authenticatedFetch(`/api/settings/api-keys/${keyId}`, {
+        method: 'DELETE'
       });
       fetchData();
     } catch (error) {
@@ -88,13 +77,8 @@ function ApiKeysSettings() {
 
   const toggleApiKey = async (keyId, isActive) => {
     try {
-      const token = localStorage.getItem('auth-token');
-      await fetch(`/api/settings/api-keys/${keyId}/toggle`, {
+      await authenticatedFetch(`/api/settings/api-keys/${keyId}/toggle`, {
         method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify({ isActive: !isActive })
       });
       fetchData();
@@ -107,13 +91,8 @@ function ApiKeysSettings() {
     if (!newTokenName.trim() || !newGithubToken.trim()) return;
 
     try {
-      const token = localStorage.getItem('auth-token');
-      const res = await fetch('/api/settings/credentials', {
+      const res = await authenticatedFetch('/api/settings/credentials', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify({
           credentialName: newTokenName,
           credentialType: 'github_token',
@@ -137,10 +116,8 @@ function ApiKeysSettings() {
     if (!confirm('Are you sure you want to delete this GitHub token?')) return;
 
     try {
-      const token = localStorage.getItem('auth-token');
-      await fetch(`/api/settings/credentials/${tokenId}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
+      await authenticatedFetch(`/api/settings/credentials/${tokenId}`, {
+        method: 'DELETE'
       });
       fetchData();
     } catch (error) {
@@ -150,13 +127,8 @@ function ApiKeysSettings() {
 
   const toggleGithubToken = async (tokenId, isActive) => {
     try {
-      const token = localStorage.getItem('auth-token');
-      await fetch(`/api/settings/credentials/${tokenId}/toggle`, {
+      await authenticatedFetch(`/api/settings/credentials/${tokenId}/toggle`, {
         method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify({ isActive: !isActive })
       });
       fetchData();

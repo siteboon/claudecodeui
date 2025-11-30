@@ -303,19 +303,25 @@ function Sidebar({
     }
 
     try {
+      console.log('[Sidebar] Deleting session:', { projectName, sessionId });
       const response = await api.deleteSession(projectName, sessionId);
+      console.log('[Sidebar] Delete response:', { ok: response.ok, status: response.status });
 
       if (response.ok) {
+        console.log('[Sidebar] Session deleted successfully, calling callback');
         // Call parent callback if provided
         if (onSessionDelete) {
           onSessionDelete(sessionId);
+        } else {
+          console.warn('[Sidebar] No onSessionDelete callback provided');
         }
       } else {
-        console.error('Failed to delete session');
+        const errorText = await response.text();
+        console.error('[Sidebar] Failed to delete session:', { status: response.status, error: errorText });
         alert('Failed to delete session. Please try again.');
       }
     } catch (error) {
-      console.error('Error deleting session:', error);
+      console.error('[Sidebar] Error deleting session:', error);
       alert('Error deleting session. Please try again.');
     }
   };
@@ -473,15 +479,31 @@ function Sidebar({
       <div className="md:p-4 md:border-b md:border-border">
         {/* Desktop Header */}
         <div className="hidden md:flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shadow-sm">
-              <MessageSquare className="w-4 h-4 text-primary-foreground" />
+          {import.meta.env.VITE_IS_PLATFORM === 'true' ? (
+            <a
+              href="https://cloudcli.ai/dashboard"
+              className="flex items-center gap-3 hover:opacity-80 transition-opacity group"
+              title="View Environments"
+            >
+              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow">
+                <MessageSquare className="w-4 h-4 text-primary-foreground" />
+              </div>
+              <div>
+                <h1 className="text-lg font-bold text-foreground">Claude Code UI</h1>
+                <p className="text-sm text-muted-foreground">AI coding assistant interface</p>
+              </div>
+            </a>
+          ) : (
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shadow-sm">
+                <MessageSquare className="w-4 h-4 text-primary-foreground" />
+              </div>
+              <div>
+                <h1 className="text-lg font-bold text-foreground">Claude Code UI</h1>
+                <p className="text-sm text-muted-foreground">AI coding assistant interface</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-lg font-bold text-foreground">Claude Code UI</h1>
-              <p className="text-sm text-muted-foreground">AI coding assistant interface</p>
-            </div>
-          </div>
+          )}
           {onToggleSidebar && (
             <Button
               variant="ghost"
@@ -503,20 +525,36 @@ function Sidebar({
         </div>
         
         {/* Mobile Header */}
-        <div 
+        <div
           className="md:hidden p-3 border-b border-border"
           style={isPWA && isMobile ? { paddingTop: '16px' } : {}}
         >
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <MessageSquare className="w-4 h-4 text-primary-foreground" />
+            {import.meta.env.VITE_IS_PLATFORM === 'true' ? (
+              <a
+                href="https://cloudcli.ai/dashboard"
+                className="flex items-center gap-3 active:opacity-70 transition-opacity"
+                title="View Environments"
+              >
+                <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                  <MessageSquare className="w-4 h-4 text-primary-foreground" />
+                </div>
+                <div>
+                  <h1 className="text-lg font-semibold text-foreground">Claude Code UI</h1>
+                  <p className="text-sm text-muted-foreground">Projects</p>
+                </div>
+              </a>
+            ) : (
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                  <MessageSquare className="w-4 h-4 text-primary-foreground" />
+                </div>
+                <div>
+                  <h1 className="text-lg font-semibold text-foreground">Claude Code UI</h1>
+                  <p className="text-sm text-muted-foreground">Projects</p>
+                </div>
               </div>
-              <div>
-                <h1 className="text-lg font-semibold text-foreground">Claude Code UI</h1>
-                <p className="text-sm text-muted-foreground">Projects</p>
-              </div>
-            </div>
+            )}
             <div className="flex gap-2">
               <button
                 className="w-8 h-8 rounded-md bg-background border border-border flex items-center justify-center active:scale-95 transition-all duration-150"

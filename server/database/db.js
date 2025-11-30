@@ -55,12 +55,40 @@ if (process.env.DATABASE_PATH) {
 console.log(c.dim('═'.repeat(60)));
 console.log('');
 
+const runMigrations = () => {
+  try {
+    const tableInfo = db.prepare("PRAGMA table_info(users)").all();
+    const columnNames = tableInfo.map(col => col.name);
+
+    if (!columnNames.includes('git_name')) {
+      console.log('Running migration: Adding git_name column');
+      db.exec('ALTER TABLE users ADD COLUMN git_name TEXT');
+    }
+
+    if (!columnNames.includes('git_email')) {
+      console.log('Running migration: Adding git_email column');
+      db.exec('ALTER TABLE users ADD COLUMN git_email TEXT');
+    }
+
+    if (!columnNames.includes('has_completed_onboarding')) {
+      console.log('Running migration: Adding has_completed_onboarding column');
+      db.exec('ALTER TABLE users ADD COLUMN has_completed_onboarding BOOLEAN DEFAULT 0');
+    }
+
+    console.log('Database migrations completed successfully');
+  } catch (error) {
+    console.error('Error running migrations:', error.message);
+    throw error;
+  }
+};
+
 // Initialize database with schema
 const initializeDatabase = async () => {
   try {
     const initSQL = fs.readFileSync(INIT_SQL_PATH, 'utf8');
     db.exec(initSQL);
     console.log('Database initialized successfully');
+    runMigrations();
   } catch (error) {
     console.error('Error initializing database:', error.message);
     throw error;
@@ -123,6 +151,42 @@ const userDb = {
     try {
       const row = db.prepare('SELECT id, username, created_at, last_login FROM users WHERE is_active = 1 LIMIT 1').get();
       return row;
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  updateGitConfig: (userId, gitName, gitEmail) => {
+    try {
+      const stmt = db.prepare('UPDATE users SET git_name = ?, git_email = ? WHERE id = ?');
+      stmt.run(gitName, gitEmail, userId);
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  getGitConfig: (userId) => {
+    try {
+      const row = db.prepare('SELECT git_name, git_email FROM users WHERE id = ?').get(userId);
+      return row;
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  completeOnboarding: (userId) => {
+    try {
+      const stmt = db.prepare('UPDATE users SET has_completed_onboarding = 1 WHERE id = ?');
+      stmt.run(userId);
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  hasCompletedOnboarding: (userId) => {
+    try {
+      const row = db.prepare('SELECT has_completed_onboarding FROM users WHERE id = ?').get(userId);
+      return row?.has_completed_onboarding === 1;
     } catch (err) {
       throw err;
     }

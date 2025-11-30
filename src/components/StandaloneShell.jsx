@@ -1,14 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import Shell from './Shell.jsx';
 
 /**
  * Generic Shell wrapper that can be used in tabs, modals, and other contexts.
  * Provides a flexible API for both standalone and session-based usage.
- * 
+ *
  * @param {Object} project - Project object with name, fullPath/path, displayName
  * @param {Object} session - Session object (optional, for tab usage)
  * @param {string} command - Initial command to run (optional)
- * @param {boolean} isActive - Whether the shell is active (for tab usage, default: true)
  * @param {boolean} isPlainShell - Use plain shell mode vs Claude CLI (default: auto-detect)
  * @param {boolean} autoConnect - Whether to auto-connect when mounted (default: true)
  * @param {function} onComplete - Callback when process completes (receives exitCode)
@@ -17,33 +16,32 @@ import Shell from './Shell.jsx';
  * @param {string} className - Additional CSS classes
  * @param {boolean} showHeader - Whether to show custom header (default: true)
  * @param {boolean} compact - Use compact layout (default: false)
+ * @param {boolean} minimal - Use minimal mode: no header, no overlays, auto-connect (default: false)
  */
 function StandaloneShell({
   project,
   session = null,
   command = null,
-  isActive = true,
-  isPlainShell = null, // Auto-detect: true if command provided, false if session provided
+  isPlainShell = null,
   autoConnect = true,
   onComplete = null,
   onClose = null,
   title = null,
   className = "",
   showHeader = true,
-  compact = false
+  compact = false,
+  minimal = false
 }) {
   const [isCompleted, setIsCompleted] = useState(false);
 
-  // Auto-detect isPlainShell based on props
   const shouldUsePlainShell = isPlainShell !== null ? isPlainShell : (command !== null);
 
-  // Handle process completion
-  const handleProcessComplete = (exitCode) => {
+  const handleProcessComplete = useCallback((exitCode) => {
     setIsCompleted(true);
     if (onComplete) {
       onComplete(exitCode);
     }
-  };
+  }, [onComplete]);
 
   if (!project) {
     return (
@@ -62,9 +60,9 @@ function StandaloneShell({
   }
 
   return (
-    <div className={`h-full flex flex-col ${className}`}>
+    <div className={`h-full w-full flex flex-col ${className}`}>
       {/* Optional custom header */}
-      {showHeader && title && (
+      {!minimal && showHeader && title && (
         <div className="flex-shrink-0 bg-gray-800 border-b border-gray-700 px-4 py-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
@@ -89,14 +87,15 @@ function StandaloneShell({
       )}
 
       {/* Shell component wrapper */}
-      <div className="flex-1">
+      <div className="flex-1 w-full min-h-0">
         <Shell
           selectedProject={project}
           selectedSession={session}
-          isActive={isActive}
           initialCommand={command}
           isPlainShell={shouldUsePlainShell}
           onProcessComplete={handleProcessComplete}
+          minimal={minimal}
+          autoConnect={minimal ? true : autoConnect}
         />
       </div>
     </div>
