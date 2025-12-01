@@ -21,6 +21,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useDropzone } from 'react-dropzone';
 import TodoList from './TodoList';
 import ClaudeLogo from './ClaudeLogo.jsx';
@@ -242,6 +244,8 @@ const markdownComponents = {
     const looksMultiline = /[\r\n]/.test(raw);
     const inlineDetected = inline || (node && node.type === 'inlineCode');
     const shouldInline = inlineDetected || !looksMultiline; // fallback to inline if single-line
+
+    // Inline code rendering
     if (shouldInline) {
       return (
         <code
@@ -254,6 +258,10 @@ const markdownComponents = {
         </code>
       );
     }
+
+    // Extract language from className (format: language-xxx)
+    const match = /language-(\w+)/.exec(className || '');
+    const language = match ? match[1] : 'text';
     const textToCopy = raw;
 
     const handleCopy = () => {
@@ -289,8 +297,17 @@ const markdownComponents = {
       } catch {}
     };
 
+    // Code block with syntax highlighting
     return (
       <div className="relative group my-2">
+        {/* Language label */}
+        {language && language !== 'text' && (
+          <div className="absolute top-2 left-3 z-10 text-xs text-gray-400 font-medium uppercase">
+            {language}
+          </div>
+        )}
+
+        {/* Copy button */}
         <button
           type="button"
           onClick={handleCopy}
@@ -315,11 +332,25 @@ const markdownComponents = {
             </span>
           )}
         </button>
-        <pre className="bg-gray-900 dark:bg-gray-900 border border-gray-700/40 rounded-lg p-3 overflow-x-auto">
-          <code className={`text-gray-100 dark:text-gray-100 text-sm font-mono ${className || ''}`} {...props}>
-            {children}
-          </code>
-        </pre>
+
+        {/* Syntax highlighted code */}
+        <SyntaxHighlighter
+          language={language}
+          style={oneDark}
+          customStyle={{
+            margin: 0,
+            borderRadius: '0.5rem',
+            fontSize: '0.875rem',
+            padding: language && language !== 'text' ? '2rem 1rem 1rem 1rem' : '1rem',
+          }}
+          codeTagProps={{
+            style: {
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+            }
+          }}
+        >
+          {raw}
+        </SyntaxHighlighter>
       </div>
     );
   },
