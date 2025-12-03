@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  claude-code-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: claude-code-ui
+    restart: unless-stopped
+
+    # Coolify will set these automatically, but you can override them
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      # Coolify integration (set these in Coolify's environment variables)
+      - COOLIFY_URL=${COOLIFY_URL:-}
+      - COOLIFY_TOKEN=${COOLIFY_TOKEN:-}
+      # Optional: OpenAI for voice transcription
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      # Optional: Context window size
+      - CONTEXT_WINDOW=${CONTEXT_WINDOW:-160000}
+
+    ports:
+      - "3001:3001"
+
+    volumes:
+      # Persist the SQLite database
+      - claude-data:/app/data
+      # Persist Claude CLI config and sessions
+      - claude-config:/root/.claude
+      # Persist cloned Coolify apps
+      - coolify-apps:/root/coolify-apps
+      # Mount SSH keys from host for git operations (optional)
+      # Uncomment the line below if you need SSH access for private repos
+      # - ~/.ssh:/root/.ssh:ro
+
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    # Coolify labels for Traefik (Coolify will add these automatically)
+    # These are shown for reference if you want to deploy manually
+    labels:
+      - "coolify.managed=true"
+
+volumes:
+  claude-data:
+    driver: local
+  claude-config:
+    driver: local
+  coolify-apps:
+    driver: local

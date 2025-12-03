@@ -5,12 +5,13 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 
-import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2, Star, Search } from 'lucide-react';
+import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2, Star, Search, Cloud } from 'lucide-react';
 import { cn } from '../lib/utils';
 import ClaudeLogo from './ClaudeLogo';
 import CursorLogo from './CursorLogo.jsx';
 import TaskIndicator from './TaskIndicator';
 import ProjectCreationWizard from './ProjectCreationWizard';
+import CoolifySidebar from './CoolifySidebar';
 import { api } from '../utils/api';
 import { useTaskMaster } from '../contexts/TaskMasterContext';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
@@ -66,6 +67,7 @@ function Sidebar({
   const [editingProject, setEditingProject] = useState(null);
   const [showNewProject, setShowNewProject] = useState(false);
   const [editingName, setEditingName] = useState('');
+  const [activeView, setActiveView] = useState('projects'); // 'projects' or 'coolify'
   const [loadingSessions, setLoadingSessions] = useState({});
   const [additionalSessions, setAdditionalSessions] = useState({});
   const [initialSessionsLoaded, setInitialSessionsLoaded] = useState(new Set());
@@ -581,62 +583,108 @@ function Sidebar({
         </div>
       </div>
 
-      {/* Search Filter and Actions */}
-      {projects.length > 0 && !isLoading && (
-        <div className="px-3 md:px-4 py-2 border-b border-border space-y-2">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="Search projects..."
-              value={searchFilter}
-              onChange={(e) => setSearchFilter(e.target.value)}
-              className="pl-9 h-9 text-sm bg-muted/50 border-0 focus:bg-background focus:ring-1 focus:ring-primary/20"
-            />
-            {searchFilter && (
-              <button
-                onClick={() => setSearchFilter('')}
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 hover:bg-accent rounded"
-              >
-                <X className="w-3 h-3 text-muted-foreground" />
-              </button>
+      {/* View Tabs - Projects vs Coolify */}
+      <div className="px-3 md:px-4 py-2 border-b border-border">
+        <div className="flex gap-1 p-1 bg-muted/50 rounded-lg">
+          <button
+            onClick={() => setActiveView('projects')}
+            className={cn(
+              "flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all",
+              activeView === 'projects'
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
             )}
-          </div>
+          >
+            <Folder className="w-3.5 h-3.5" />
+            Projects
+          </button>
+          <button
+            onClick={() => setActiveView('coolify')}
+            className={cn(
+              "flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all",
+              activeView === 'coolify'
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <Cloud className="w-3.5 h-3.5" />
+            Coolify
+          </button>
+        </div>
+      </div>
 
-          {/* Action Buttons - Desktop only */}
-          {!isMobile && (
-            <div className="flex gap-2">
-              <Button
-                variant="default"
-                size="sm"
-                className="flex-1 h-8 text-xs bg-primary hover:bg-primary/90 transition-all duration-200"
-                onClick={() => setShowNewProject(true)}
-                title="Create new project (Ctrl+N)"
-              >
-                <FolderPlus className="w-3.5 h-3.5 mr-1.5" />
-                New Project
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 w-8 px-0 hover:bg-accent transition-colors duration-200 group"
-                onClick={async () => {
-                  setIsRefreshing(true);
-                  try {
-                    await onRefresh();
-                  } finally {
-                    setIsRefreshing(false);
-                  }
-                }}
-                disabled={isRefreshing}
-                title="Refresh projects and sessions (Ctrl+R)"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''} group-hover:rotate-180 transition-transform duration-300`} />
-              </Button>
+      {/* Coolify View */}
+      {activeView === 'coolify' && (
+        <CoolifySidebar
+          onProjectSelect={(path, app) => {
+            // After importing a Coolify app, switch to projects view and refresh
+            setActiveView('projects');
+            onRefresh?.();
+          }}
+          onRefresh={onRefresh}
+          localProjects={projects}
+        />
+      )}
+
+      {/* Projects View */}
+      {activeView === 'projects' && (
+        <>
+          {/* Search Filter and Actions */}
+          {projects.length > 0 && !isLoading && (
+            <div className="px-3 md:px-4 py-2 border-b border-border space-y-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Search projects..."
+                  value={searchFilter}
+                  onChange={(e) => setSearchFilter(e.target.value)}
+                  className="pl-9 h-9 text-sm bg-muted/50 border-0 focus:bg-background focus:ring-1 focus:ring-primary/20"
+                />
+                {searchFilter && (
+                  <button
+                    onClick={() => setSearchFilter('')}
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 hover:bg-accent rounded"
+                  >
+                    <X className="w-3 h-3 text-muted-foreground" />
+                  </button>
+                )}
+              </div>
+
+              {/* Action Buttons - Desktop only */}
+              {!isMobile && (
+                <div className="flex gap-2">
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="flex-1 h-8 text-xs bg-primary hover:bg-primary/90 transition-all duration-200"
+                    onClick={() => setShowNewProject(true)}
+                    title="Create new project (Ctrl+N)"
+                  >
+                    <FolderPlus className="w-3.5 h-3.5 mr-1.5" />
+                    New Project
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 w-8 px-0 hover:bg-accent transition-colors duration-200 group"
+                    onClick={async () => {
+                      setIsRefreshing(true);
+                      try {
+                        await onRefresh();
+                      } finally {
+                        setIsRefreshing(false);
+                      }
+                    }}
+                    disabled={isRefreshing}
+                    title="Refresh projects and sessions (Ctrl+R)"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''} group-hover:rotate-180 transition-transform duration-300`} />
+                  </Button>
+                </div>
+              )}
             </div>
           )}
-        </div>
-      )}
       
       {/* Projects List */}
       <ScrollArea className="flex-1 md:px-2 md:py-3 overflow-y-auto overscroll-contain">
@@ -1294,7 +1342,9 @@ function Sidebar({
           )}
         </div>
       </ScrollArea>
-      
+        </>
+      )}
+
       {/* Version Update Notification */}
       {updateAvailable && (
         <div className="md:p-2 border-t border-border/50 flex-shrink-0">

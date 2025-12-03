@@ -1133,11 +1133,80 @@ async function getCursorSessions(projectPath) {
     
     // Return only the first 5 sessions for performance
     return sessions.slice(0, 5);
-    
+
   } catch (error) {
     console.error('Error fetching Cursor sessions:', error);
     return [];
   }
+}
+
+
+/**
+ * Get git information for a project path
+ * Returns remote URL, current branch, and whether it's a git repository
+ * This is useful for linking local projects with Coolify applications
+ */
+async function getGitInfo(projectPath) {
+  const { exec } = await import('child_process');
+  const { promisify } = await import('util');
+  const execAsync = promisify(exec);
+
+  try {
+    // Check if it's a git repository
+    await execAsync('git rev-parse --git-dir', { cwd: projectPath });
+  } catch {
+    return {
+      isGitRepo: false,
+      remoteUrl: null,
+      branch: null
+    };
+  }
+
+  let remoteUrl = null;
+  let branch = null;
+
+  try {
+    const { stdout: remote } = await execAsync('git remote get-url origin', { cwd: projectPath });
+    remoteUrl = remote.trim();
+  } catch {
+    // No remote configured
+  }
+
+  try {
+    const { stdout: branchOutput } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: projectPath });
+    branch = branchOutput.trim();
+  } catch {
+    // Unable to get branch
+  }
+
+  return {
+    isGitRepo: true,
+    remoteUrl,
+    branch
+  };
+}
+
+
+/**
+ * Get git information for all projects
+ * Used to match local projects with Coolify applications
+ */
+async function getProjectsWithGitInfo() {
+  const projects = await getProjects();
+
+  const projectsWithGit = await Promise.all(
+    projects.map(async (project) => {
+      const gitInfo = await getGitInfo(project.path);
+      return {
+        ...project,
+        gitRemoteUrl: gitInfo.remoteUrl,
+        gitBranch: gitInfo.branch,
+        isGitRepo: gitInfo.isGitRepo
+      };
+    })
+  );
+
+  return projectsWithGit;
 }
 
 
@@ -1154,5 +1223,7 @@ export {
   loadProjectConfig,
   saveProjectConfig,
   extractProjectDirectory,
-  clearProjectDirectoryCache
+  clearProjectDirectoryCache,
+  getGitInfo,
+  getProjectsWithGitInfo
 };

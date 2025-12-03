@@ -157,6 +157,38 @@ export const api = {
       }),
   },
 
+  // Coolify endpoints
+  coolify: {
+    // Check Coolify connection status
+    status: () => authenticatedFetch('/api/coolify/status'),
+
+    // Get all projects with environments
+    getProjects: () => authenticatedFetch('/api/coolify/projects'),
+
+    // Get all applications with git info
+    getApplications: () => authenticatedFetch('/api/coolify/applications'),
+
+    // Get single application details
+    getApplication: (uuid) => authenticatedFetch(`/api/coolify/app/${uuid}`),
+
+    // Get full hierarchy (projects -> environments -> applications)
+    getHierarchy: () => authenticatedFetch('/api/coolify/hierarchy'),
+
+    // Clone/worktree a Coolify application
+    clone: (appUuid, targetPath = null) =>
+      authenticatedFetch('/api/coolify/clone', {
+        method: 'POST',
+        body: JSON.stringify({ appUuid, targetPath }),
+      }),
+
+    // Deploy (auto-commit and push)
+    deploy: (uuid, projectPath, commitMessage = null) =>
+      authenticatedFetch(`/api/coolify/deploy/${uuid}`, {
+        method: 'POST',
+        body: JSON.stringify({ projectPath, commitMessage }),
+      }),
+  },
+
   // Generic GET method for any endpoint
   get: (endpoint) => authenticatedFetch(`/api${endpoint}`),
 };
