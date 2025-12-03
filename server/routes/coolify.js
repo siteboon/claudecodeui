@@ -45,9 +45,16 @@ async function coolifyFetch(endpoint, options = {}) {
     },
   });
 
+  // Check content-type before parsing
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    const text = await response.text();
+    throw new Error(`Coolify API returned non-JSON response (${contentType}). Check COOLIFY_URL is correct. Response: ${text.substring(0, 100)}...`);
+  }
+
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Coolify API error: ${response.status} - ${errorText}`);
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(`Coolify API error: ${response.status} - ${errorData.message || JSON.stringify(errorData)}`);
   }
 
   return response.json();
