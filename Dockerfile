@@ -43,6 +43,9 @@ COPY package*.json ./
 # Install production dependencies only
 RUN npm install --omit=dev
 
+# Install Claude Code CLI globally so 'claude' command is available
+RUN npm install -g @anthropic-ai/claude-code
+
 # Copy built frontend from builder stage
 COPY --from=builder /app/dist ./dist
 
