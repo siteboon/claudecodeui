@@ -40,6 +40,7 @@
   "author": "Claude Code UI Contributors",
   "license": "MIT",
   "dependencies": {
+    "@anthropic-ai/claude-code": "^1.0.3",
     "@anthropic-ai/claude-agent-sdk": "^0.1.29",
     "@codemirror/lang-css": "^6.3.1",
     "@codemirror/lang-html": "^6.4.9",
