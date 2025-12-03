@@ -13,8 +13,9 @@ services:
       - NODE_ENV=production
       - PORT=3001
       # Coolify integration (set these in Coolify's environment variables)
-      - COOLIFY_URL=${COOLIFY_URL:-}
-      - COOLIFY_TOKEN=${COOLIFY_TOKEN:-}
+      # Note: COOLIFY_URL is reserved by Coolify, so we use COOLIFY_API_URL instead
+      - COOLIFY_API_URL=${COOLIFY_API_URL:-}
+      - COOLIFY_API_TOKEN=${COOLIFY_API_TOKEN:-}
       # Optional: OpenAI for voice transcription
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       # Optional: Context window size

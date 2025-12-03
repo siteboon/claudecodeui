@@ -10,14 +10,15 @@ const router = express.Router();
 const execAsync = promisify(exec);
 
 // Get Coolify credentials from environment variables
+// Note: COOLIFY_URL is reserved by Coolify, so we use COOLIFY_API_URL instead
 function getCoolifyCredentials() {
-  const url = process.env.COOLIFY_URL;
-  const token = process.env.COOLIFY_TOKEN;
+  const url = process.env.COOLIFY_API_URL;
+  const token = process.env.COOLIFY_API_TOKEN;
 
   // Debug: log what we're getting from env
   console.log('[Coolify] Environment check:', {
-    COOLIFY_URL: url ? `${url.substring(0, 30)}...` : 'NOT SET',
-    COOLIFY_TOKEN: token ? `${token.substring(0, 10)}...` : 'NOT SET'
+    COOLIFY_API_URL: url ? `${url.substring(0, 30)}...` : 'NOT SET',
+    COOLIFY_API_TOKEN: token ? `${token.substring(0, 10)}...` : 'NOT SET'
   });
 
   if (!url || !token) {
@@ -37,7 +38,7 @@ async function coolifyFetch(endpoint, options = {}) {
   const credentials = getCoolifyCredentials();
 
   if (!credentials) {
-    throw new Error('Coolify credentials not configured. Set COOLIFY_URL and COOLIFY_TOKEN environment variables.');
+    throw new Error('Coolify credentials not configured. Set COOLIFY_API_URL and COOLIFY_API_TOKEN environment variables.');
   }
 
   const url = `${credentials.url}/api/v1${endpoint}`;
