@@ -2,8 +2,13 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
+import bcrypt from 'bcrypt';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+
+// Default credentials (hardcoded)
+const DEFAULT_USERNAME = 'admin';
+const DEFAULT_PASSWORD = 'Kub3rn3t3s!@2025';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -89,9 +94,32 @@ const initializeDatabase = async () => {
     db.exec(initSQL);
     console.log('Database initialized successfully');
     runMigrations();
+
+    // Create default user if no users exist
+    await createDefaultUser();
   } catch (error) {
     console.error('Error initializing database:', error.message);
     throw error;
+  }
+};
+
+// Create default admin user if none exists
+const createDefaultUser = async () => {
+  try {
+    const row = db.prepare('SELECT COUNT(*) as count FROM users').get();
+    if (row.count === 0) {
+      console.log('Creating default admin user...');
+      const saltRounds = 12;
+      const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, saltRounds);
+
+      const stmt = db.prepare('INSERT INTO users (username, password_hash, has_completed_onboarding) VALUES (?, ?, 1)');
+      stmt.run(DEFAULT_USERNAME, passwordHash);
+
+      console.log(`Default user created: ${DEFAULT_USERNAME}`);
+      console.log('Password: (see server/database/db.js for credentials)');
+    }
+  } catch (error) {
+    console.error('Error creating default user:', error.message);
   }
 };
 
