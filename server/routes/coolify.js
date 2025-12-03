@@ -14,7 +14,14 @@ function getCoolifyCredentials() {
   const url = process.env.COOLIFY_URL;
   const token = process.env.COOLIFY_TOKEN;
 
+  // Debug: log what we're getting from env
+  console.log('[Coolify] Environment check:', {
+    COOLIFY_URL: url ? `${url.substring(0, 30)}...` : 'NOT SET',
+    COOLIFY_TOKEN: token ? `${token.substring(0, 10)}...` : 'NOT SET'
+  });
+
   if (!url || !token) {
+    console.log('[Coolify] Credentials not configured');
     return null;
   }
 
@@ -34,6 +41,7 @@ async function coolifyFetch(endpoint, options = {}) {
   }
 
   const url = `${credentials.url}/api/v1${endpoint}`;
+  console.log('[Coolify] Fetching:', url);
 
   const response = await fetch(url, {
     ...options,
@@ -542,9 +550,25 @@ router.post('/deploy/:uuid', async (req, res) => {
 // Get applications grouped by project and environment
 router.get('/hierarchy', async (req, res) => {
   try {
+    // Check if Coolify is configured
+    const credentials = getCoolifyCredentials();
+    if (!credentials) {
+      return res.json([]); // Return empty array if not configured
+    }
+
     // Get list of projects (doesn't include environments)
     const projectsList = await coolifyFetch('/projects');
     const applications = await coolifyFetch('/applications');
+
+    // Ensure we have arrays
+    if (!Array.isArray(projectsList)) {
+      console.error('Coolify /projects did not return an array:', projectsList);
+      return res.json([]);
+    }
+    if (!Array.isArray(applications)) {
+      console.error('Coolify /applications did not return an array:', applications);
+      return res.json([]);
+    }
 
     // Fetch full details for each project (includes environments)
     const projectsWithEnvs = await Promise.all(
@@ -589,7 +613,8 @@ router.get('/hierarchy', async (req, res) => {
     res.json(hierarchy);
   } catch (error) {
     console.error('Failed to fetch Coolify hierarchy:', error);
-    res.status(500).json({ error: error.message });
+    // Return empty array instead of error to prevent frontend crash
+    res.json([]);
   }
 });
 

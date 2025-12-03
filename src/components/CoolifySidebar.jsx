@@ -68,9 +68,18 @@ function CoolifySidebar({
     try {
       const response = await api.coolify.getHierarchy();
       const data = await response.json();
-      setHierarchy(data);
+      // Ensure we always have an array
+      if (Array.isArray(data)) {
+        setHierarchy(data);
+      } else if (data?.error) {
+        setError(data.error);
+        setHierarchy([]);
+      } else {
+        setHierarchy([]);
+      }
     } catch (err) {
       setError(err.message);
+      setHierarchy([]);
     } finally {
       setIsLoading(false);
     }
