@@ -1705,6 +1705,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [cursorModel, setCursorModel] = useState(() => {
     return localStorage.getItem('cursor-model') || 'gpt-5';
   });
+  const [claudeModel, setClaudeModel] = useState(() => {
+    return localStorage.getItem('claude-model') || 'opus';
+  });
   // Load permission mode for the current session
   useEffect(() => {
     if (selectedSession?.id) {
@@ -2036,7 +2039,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         projectName: selectedProject.name,
         sessionId: currentSessionId,
         provider,
-        model: provider === 'cursor' ? cursorModel : 'claude-sonnet-4.5',
+        model: provider === 'cursor' ? cursorModel : claudeModel,
         tokenUsage: tokenBudget
       };
 
@@ -3852,7 +3855,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           resume: !!currentSessionId,
           toolsSettings: toolsSettings,
           permissionMode: permissionMode,
-          images: uploadedImages // Pass images to backend
+          images: uploadedImages, // Pass images to backend
+          model: claudeModel
         }
       });
     }
@@ -3872,7 +3876,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     if (selectedProject) {
       safeLocalStorage.removeItem(`draft_input_${selectedProject.name}`);
     }
-  }, [input, isLoading, selectedProject, attachedImages, currentSessionId, selectedSession, provider, permissionMode, onSessionActive, cursorModel, sendMessage, setInput, setAttachedImages, setUploadingImages, setImageErrors, setIsTextareaExpanded, textareaRef, setChatMessages, setIsLoading, setCanAbortSession, setClaudeStatus, setIsUserScrolledUp, scrollToBottom]);
+  }, [input, isLoading, selectedProject, attachedImages, currentSessionId, selectedSession, provider, permissionMode, onSessionActive, cursorModel, claudeModel, sendMessage, setInput, setAttachedImages, setUploadingImages, setImageErrors, setIsTextareaExpanded, textareaRef, setChatMessages, setIsLoading, setCanAbortSession, setClaudeStatus, setIsUserScrolledUp, scrollToBottom]);
 
   // Store handleSubmit in ref so handleCustomCommand can access it
   useEffect(() => {
@@ -4271,30 +4275,45 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   </button>
                 </div>
                 
-                {/* Model Selection for Cursor - Always reserve space to prevent jumping */}
-                <div className={`mb-6 transition-opacity duration-200 ${provider === 'cursor' ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+                {/* Model Selection - Show for both Claude and Cursor */}
+                <div className={`mb-6 transition-opacity duration-200 ${provider ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    {provider === 'cursor' ? 'Select Model' : '\u00A0'}
+                    Select Model
                   </label>
-                  <select
-                    value={cursorModel}
-                    onChange={(e) => {
-                      const newModel = e.target.value;
-                      setCursorModel(newModel);
-                      localStorage.setItem('cursor-model', newModel);
-                    }}
-                    className="pl-4 pr-10 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 min-w-[140px]"
-                    disabled={provider !== 'cursor'}
-                  >
-                    <option value="gpt-5">GPT-5</option>
-                    <option value="sonnet-4">Sonnet-4</option>
-                    <option value="opus-4.1">Opus 4.1</option>
-                  </select>
+                  {provider === 'claude' ? (
+                    <select
+                      value={claudeModel}
+                      onChange={(e) => {
+                        const newModel = e.target.value;
+                        setClaudeModel(newModel);
+                        localStorage.setItem('claude-model', newModel);
+                      }}
+                      className="pl-4 pr-10 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 min-w-[140px]"
+                    >
+                      <option value="opus">Claude Opus 4.5</option>
+                      <option value="sonnet">Claude Sonnet 4</option>
+                    </select>
+                  ) : (
+                    <select
+                      value={cursorModel}
+                      onChange={(e) => {
+                        const newModel = e.target.value;
+                        setCursorModel(newModel);
+                        localStorage.setItem('cursor-model', newModel);
+                      }}
+                      className="pl-4 pr-10 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 min-w-[140px]"
+                      disabled={provider !== 'cursor'}
+                    >
+                      <option value="gpt-5">GPT-5</option>
+                      <option value="sonnet-4">Sonnet-4</option>
+                      <option value="opus-4.1">Opus 4.1</option>
+                    </select>
+                  )}
                 </div>
-                
+
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {provider === 'claude' 
-                    ? 'Ready to use Claude AI. Start typing your message below.'
+                  {provider === 'claude'
+                    ? `Ready to use Claude with ${claudeModel === 'opus' ? 'Opus 4.5' : 'Sonnet 4'}. Start typing your message below.`
                     : provider === 'cursor'
                     ? `Ready to use Cursor with ${cursorModel}. Start typing your message below.`
                     : 'Select a provider above to begin'
