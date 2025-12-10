@@ -266,8 +266,16 @@ async function extractProjectDirectory(projectName) {
   if (projectDirectoryCache.has(projectName)) {
     return projectDirectoryCache.get(projectName);
   }
-  
-  
+
+  // Check if originalPath is configured in project-config.json
+  // This allows users to override the auto-detected path
+  const config = await loadProjectConfig();
+  if (config[projectName]?.originalPath) {
+    const customPath = config[projectName].originalPath;
+    projectDirectoryCache.set(projectName, customPath);
+    return customPath;
+  }
+
   const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
   const cwdCounts = new Map();
   let latestTimestamp = 0;
