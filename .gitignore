@@ -106,8 +106,13 @@ temp/
 .cline/
 .windsurf/
 .serena/
-CLAUDE.md
 .mcp.json
+CLAUDE.md
+
+# Environment and credentials (use .example files as templates)
+.env
+ngrok.yml
+ngrok.local.yml
 
 
 # Database files

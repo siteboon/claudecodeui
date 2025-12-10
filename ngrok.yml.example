@@ -1,0 +1,40 @@
+# ngrok Pro configuration for Claude Code UI
+# Fixed subdomain setup for consistent access
+
+version: "2"
+
+tunnels:
+  # Main tunnel with fixed subdomain (Pro feature)
+  claude-ui:
+    addr: 5173
+    proto: http
+    subdomain: claude-code-ui  # Change this to your preferred subdomain
+
+    # Security and features
+    inspect: true
+
+    # Support HTTPS and WebSocket
+    schemes:
+      - https
+      - http
+
+    # Optional: Enable basic auth for security
+    # auth: "admin:your-secure-password"
+
+    # Optional: Restrict access by IP (for extra security)
+    # allow_cidr:
+    #   - "your.home.ip.range/24"
+
+# Global configuration
+authtoken: YOUR_NGROK_PRO_AUTHTOKEN_HERE  # Replace with your Pro authtoken
+region: us  # Choose closest region: us, eu, ap, au, sa, jp, in
+
+# Logging
+log_level: info
+log_format: term
+
+# Web interface (ngrok dashboard)
+web_addr: localhost:4040
+
+# Update checking
+update_check: true

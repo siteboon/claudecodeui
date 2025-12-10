@@ -910,9 +910,11 @@ function handleShellConnection(ws) {
                         if (os.platform() === 'win32') {
                             if (hasSession && sessionId) {
                                 // Try to resume session, but with fallback to new session if it fails
-                                shellCommand = `Set-Location -Path "${projectPath}"; claude --resume ${sessionId}; if ($LASTEXITCODE -ne 0) { claude }`;
+                                // Use cmd /c to avoid PowerShell execution policy issues with .ps1 files
+                                shellCommand = `Set-Location -Path "${projectPath}"; cmd /c "claude --resume ${sessionId}"; if ($LASTEXITCODE -ne 0) { cmd /c "claude" }`;
                             } else {
-                                shellCommand = `Set-Location -Path "${projectPath}"; ${command}`;
+                                // Use cmd /c to avoid PowerShell execution policy issues with .ps1 files
+                                shellCommand = `Set-Location -Path "${projectPath}"; cmd /c "${command}"`;
                             }
                         } else {
                             if (hasSession && sessionId) {

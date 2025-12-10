@@ -3,6 +3,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { WebLinksAddon } from '@xterm/addon-web-links';
+import { MicButton } from './MicButton';
 import '@xterm/xterm/css/xterm.css';
 
 const xtermStyles = `
@@ -34,6 +35,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
   const [isRestarting, setIsRestarting] = useState(false);
   const [lastSessionId, setLastSessionId] = useState(null);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [useWebSpeech, setUseWebSpeech] = useState(true); // Default to Web Speech API
 
   const selectedProjectRef = useRef(selectedProject);
   const selectedSessionRef = useRef(selectedSession);
@@ -48,6 +50,78 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     isPlainShellRef.current = isPlainShell;
     onProcessCompleteRef.current = onProcessComplete;
   });
+
+  // Check API configuration on mount for speech mode
+  useEffect(() => {
+    const checkApiConfig = async () => {
+      try {
+        const token = localStorage.getItem('auth-token');
+        if (!token) return;
+
+        const response = await fetch('/api/config', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        const config = await response.json();
+
+        // Use OpenAI if ENABLE_OPENAI_FEATURES is true, otherwise use Web Speech API
+        setUseWebSpeech(!config.enableOpenAIFeatures);
+      } catch (error) {
+        console.log('Could not fetch API config, using Web Speech API by default');
+        setUseWebSpeech(true);
+      }
+    };
+
+    checkApiConfig();
+  }, []);
+
+  // Handle voice input
+  const handleVoiceInput = (transcribedText) => {
+    if (!transcribedText || !ws.current || ws.current.readyState !== WebSocket.OPEN) return;
+
+    ws.current.send(JSON.stringify({
+      type: 'input',
+      data: transcribedText + ' '
+    }));
+  };
+
+  // Handle virtual keyboard input
+  const handleVirtualKey = (key) => {
+    if (!ws.current || ws.current.readyState !== WebSocket.OPEN) return;
+
+    let keyData = '';
+    switch (key) {
+      case 'Enter':
+        keyData = '\r';
+        break;
+      case 'ArrowDown':
+        keyData = '\x1b[B';
+        break;
+      case 'ArrowUp':
+        keyData = '\x1b[A';
+        break;
+      case 'ArrowLeft':
+        keyData = '\x1b[D';
+        break;
+      case 'ArrowRight':
+        keyData = '\x1b[C';
+        break;
+      case 'Backspace':
+        keyData = '\x7f';
+        break;
+      case 'Escape':
+        keyData = '\x1b';
+        break;
+      default:
+        return;
+    }
+
+    ws.current.send(JSON.stringify({
+      type: 'input',
+      data: keyData
+    }));
+  };
 
   const connectWebSocket = useCallback(async () => {
     if (isConnecting || isConnected) return;
@@ -413,16 +487,87 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
           </div>
           <div className="flex items-center space-x-3">
             {isConnected && (
-              <button
-                onClick={disconnectFromShell}
-                className="px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 flex items-center space-x-1"
-                title="Disconnect from shell"
-              >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-                <span>Disconnect</span>
-              </button>
+              <div className="flex items-center space-x-2">
+                {/* Virtual Keyboard Buttons */}
+                <div className="flex items-center space-x-1 border-r border-gray-600 pr-2">
+                  <button
+                    onClick={() => handleVirtualKey('Escape')}
+                    className="w-8 h-8 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600 hover:text-white flex items-center justify-center font-mono"
+                    title="Send Escape key"
+                  >
+                    Esc
+                  </button>
+                  <button
+                    onClick={() => handleVirtualKey('ArrowLeft')}
+                    className="w-8 h-8 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600 hover:text-white flex items-center justify-center"
+                    title="Send Left Arrow key"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => handleVirtualKey('ArrowUp')}
+                    className="w-8 h-8 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600 hover:text-white flex items-center justify-center"
+                    title="Send Up Arrow key"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => handleVirtualKey('ArrowDown')}
+                    className="w-8 h-8 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600 hover:text-white flex items-center justify-center"
+                    title="Send Down Arrow key"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => handleVirtualKey('ArrowRight')}
+                    className="w-8 h-8 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600 hover:text-white flex items-center justify-center"
+                    title="Send Right Arrow key"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => handleVirtualKey('Backspace')}
+                    className="w-8 h-8 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600 hover:text-white flex items-center justify-center"
+                    title="Send Backspace key"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M3 12l6.414 6.414a2 2 0 001.414.586H19a2 2 0 002-2V7a2 2 0 00-2-2h-8.172a2 2 0 00-1.414.586L3 12z" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => handleVirtualKey('Enter')}
+                    className="w-8 h-8 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600 hover:text-white flex items-center justify-center"
+                    title="Send Enter key"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 9l3 3m0 0l-3 3m3-3H8m13 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </button>
+                </div>
+                <MicButton
+                  onTranscript={handleVoiceInput}
+                  className="!w-8 !h-8"
+                  useWebSpeech={useWebSpeech}
+                />
+                <button
+                  onClick={disconnectFromShell}
+                  className="px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 flex items-center space-x-1"
+                  title="Disconnect from shell"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  <span>Disconnect</span>
+                </button>
+              </div>
             )}
 
             <button
