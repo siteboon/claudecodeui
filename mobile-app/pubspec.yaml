@@ -1,0 +1,43 @@
+name: claude_code_mobile
+description: Mobile SSH client for Claude Code UI - Connect to Claude Code CLI from your phone
+
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # SSH Client
+  dartssh2: ^2.9.0
+
+  # Terminal emulator
+  xterm: ^4.0.0
+
+  # State management
+  provider: ^6.1.1
+
+  # Local storage for saved connections
+  shared_preferences: ^2.2.2
+
+  # UI components
+  cupertino_icons: ^1.0.6
+  flutter_secure_storage: ^9.0.0
+
+  # Utilities
+  path_provider: ^2.1.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/

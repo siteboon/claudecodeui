@@ -74,6 +74,7 @@ import cliAuthRoutes from './routes/cli-auth.js';
 import userRoutes from './routes/user.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
+import { startSSHServer } from './ssh-server.js';
 
 // File system watcher for projects folder
 let projectsWatcher = null;
@@ -1534,6 +1535,17 @@ async function startServer() {
     try {
         // Initialize authentication database
         await initializeDatabase();
+
+        // Start SSH server for terminal clients (PuTTY, etc.)
+        const SSH_PORT = parseInt(process.env.SSH_PORT) || 2222;
+        if (process.env.ENABLE_SSH !== 'false') {
+            try {
+                startSSHServer(SSH_PORT);
+            } catch (sshError) {
+                console.error('[WARN] Failed to start SSH server:', sshError.message);
+                console.log('[INFO] SSH server disabled. Web UI still available.');
+            }
+        }
 
         // Check if running in production mode (dist folder exists)
         const distIndexPath = path.join(__dirname, '../dist/index.html');

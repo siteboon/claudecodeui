@@ -134,4 +134,17 @@ dev-debug.log
 
 # Task files
 tasks.json
-tasks/ 
+tasks/
+
+# SSH server keys (auto-generated)
+.ssh-keys/
+
+# Flutter mobile app build outputs
+mobile-app/.dart_tool/
+mobile-app/.packages
+mobile-app/build/
+mobile-app/ios/Pods/
+mobile-app/ios/.symlinks/
+mobile-app/android/.gradle/
+mobile-app/android/app/build/
+mobile-app/*.iml
