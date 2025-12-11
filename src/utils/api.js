@@ -3,9 +3,12 @@ export const authenticatedFetch = (url, options = {}) => {
   const isPlatform = import.meta.env.VITE_IS_PLATFORM === 'true';
   const token = localStorage.getItem('auth-token');
 
-  const defaultHeaders = {
-    'Content-Type': 'application/json',
-  };
+  const defaultHeaders = {};
+
+  // Only set Content-Type if body is not FormData (browser will set it automatically for FormData)
+  if (!(options.body instanceof FormData)) {
+    defaultHeaders['Content-Type'] = 'application/json';
+  }
 
   if (!isPlatform && token) {
     defaultHeaders['Authorization'] = `Bearer ${token}`;
