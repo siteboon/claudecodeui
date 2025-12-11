@@ -2,19 +2,32 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'screens/home_screen.dart';
 import 'screens/terminal_screen.dart';
+import 'screens/settings_screen.dart';
 import 'services/connection_manager.dart';
+import 'services/settings_service.dart';
 
-void main() {
-  runApp(const ClaudeCodeMobileApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize settings service
+  final settingsService = SettingsService();
+  await settingsService.loadSettings();
+
+  runApp(ClaudeCodeMobileApp(settingsService: settingsService));
 }
 
 class ClaudeCodeMobileApp extends StatelessWidget {
-  const ClaudeCodeMobileApp({super.key});
+  final SettingsService settingsService;
+
+  const ClaudeCodeMobileApp({super.key, required this.settingsService});
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => ConnectionManager(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => ConnectionManager()),
+        ChangeNotifierProvider.value(value: settingsService),
+      ],
       child: MaterialApp(
         title: 'Claude Code Mobile',
         debugShowCheckedModeBanner: false,
@@ -44,6 +57,7 @@ class ClaudeCodeMobileApp extends StatelessWidget {
         routes: {
           '/': (context) => const HomeScreen(),
           '/terminal': (context) => const TerminalScreen(),
+          '/settings': (context) => const SettingsScreen(),
         },
       ),
     );

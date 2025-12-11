@@ -3,7 +3,7 @@
  * Allows SSH clients (PuTTY, Terminal, etc.) to connect and use Claude Code CLI
  */
 
-import { Server } from 'ssh2';
+import { Server, utils } from 'ssh2';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -20,6 +20,7 @@ const __dirname = dirname(__filename);
 // SSH Host Key paths
 const SSH_KEYS_DIR = path.join(__dirname, '../.ssh-keys');
 const HOST_KEY_PATH = path.join(SSH_KEYS_DIR, 'host_key');
+const AUTHORIZED_KEYS_DIR = path.join(SSH_KEYS_DIR, 'authorized_keys');
 
 /**
  * Generate SSH host key if it doesn't exist

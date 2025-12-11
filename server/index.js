@@ -72,6 +72,7 @@ import agentRoutes from './routes/agent.js';
 import projectsRoutes from './routes/projects.js';
 import cliAuthRoutes from './routes/cli-auth.js';
 import userRoutes from './routes/user.js';
+import sshRoutes from './routes/ssh.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { startSSHServer } from './ssh-server.js';
@@ -258,6 +259,9 @@ app.use('/api/cli', authenticateToken, cliAuthRoutes);
 
 // User API Routes (protected)
 app.use('/api/user', authenticateToken, userRoutes);
+
+// SSH API Routes (public for mobile app)
+app.use('/api/ssh', sshRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
