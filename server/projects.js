@@ -234,7 +234,7 @@ async function saveProjectConfig(config) {
 // Generate better display name from path
 async function generateDisplayName(projectName, actualProjectDir = null) {
   // Use actual project directory if provided, otherwise decode from project name
-  let projectPath = actualProjectDir || projectName.replace(/-/g, '/');
+  let projectPath = actualProjectDir || await smartDecodeProjectPath(projectName);
   
   // Try to read package.json from the project path
   try {
@@ -261,12 +261,175 @@ async function generateDisplayName(projectName, actualProjectDir = null) {
 }
 
 // Extract the actual project directory from JSONL sessions (with caching)
+// Smart path decoding that handles hyphens in original paths
+// Since Claude CLI encodes / as -, paths with hyphens get ambiguous
+// We try multiple strategies to find the correct path
+async function smartDecodeProjectPath(projectName) {
+  // If the project name doesn't start with -, it's not a Unix absolute path encoding
+  if (!projectName.startsWith('-')) {
+    return projectName.replace(/-/g, '/');
+  }
+  
+  // Remove leading - (represents leading /)
+  const withoutLeading = projectName.substring(1);
+  
+  // Split by - 
+  const parts = withoutLeading.split('-');
+  
+  // Simple decode (all - become /)
+  const simpleDecode = '/' + parts.join('/');
+  
+  // Check if simple decode path exists
+  try {
+    await fs.access(simpleDecode);
+    return simpleDecode;
+  } catch (e) {
+    // Simple decode doesn't exist, try to find the correct path
+  }
+  
+  // Strategy: Find the deepest existing parent directory,
+  // then treat remaining parts as the project name (with hyphens)
+  // This is based on the assumption that directory names rarely contain hyphens,
+  // but project names often do (e.g., AI-Schreiber, my-cool-project)
+  
+  let lastExistingDirIndex = -1;
+  let currentPath = '';
+  
+  // First pass: find the deepest existing parent directory
+  for (let i = 0; i < parts.length; i++) {
+    if (i === 0) {
+      currentPath = '/' + parts[0];
+    } else {
+      currentPath = currentPath + '/' + parts[i];
+    }
+    
+    if (await pathExists(currentPath)) {
+      const isDir = await isDirectory(currentPath);
+      if (isDir) {
+        lastExistingDirIndex = i;
+      } else {
+        // Found the actual target (it's a file, not a directory)
+        return currentPath;
+      }
+    }
+  }
+  
+  if (lastExistingDirIndex >= 0 && lastExistingDirIndex < parts.length - 1) {
+    // We found a parent directory, everything after is the project name
+    const parentPath = '/' + parts.slice(0, lastExistingDirIndex + 1).join('/');
+    const projectNameParts = parts.slice(lastExistingDirIndex + 1);
+    return parentPath + '/' + projectNameParts.join('-');
+  }
+  
+  // No existing parent directory found - use heuristics
+  // Strategy: Look for patterns that indicate where the project name starts
+  // 1. A segment starting with uppercase followed by lowercase (PascalCase like AI-Schreiber)
+  // 2. Common path patterns like /host/dev/PROJECT or /home/user/dev/PROJECT
+  
+  // Detect project name start using naming conventions
+  // Project names often use PascalCase, contain uppercase letters, or are entirely lowercase
+  let projectNameStartIndex = -1;
+  
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    // Check if this part looks like a project name component:
+    // - Contains uppercase letter not at the start (camelCase/PascalCase)
+    // - Is a known project name pattern (2+ uppercase letters like AI)
+    // - Has uppercase letter followed by lowercase (Schreiber)
+    const hasUpperCase = /[A-Z]/.test(part);
+    const startsWithUpper = /^[A-Z]/.test(part);
+    const isShortUpperCase = part.length <= 3 && part === part.toUpperCase(); // AI, API, CLI, etc.
+    
+    // Common directory names (usually lowercase)
+    const commonDirs = ['home', 'host', 'usr', 'var', 'tmp', 'dev', 'opt', 'srv', 'etc', 'root', 'mnt', 'media', 'lib', 'bin'];
+    const isCommonDir = commonDirs.includes(part.toLowerCase());
+    
+    if (!isCommonDir && (startsWithUpper || isShortUpperCase)) {
+      // This might be the start of a project name
+      projectNameStartIndex = i;
+      break;
+    }
+  }
+  
+  if (projectNameStartIndex >= 0 && projectNameStartIndex < parts.length - 1) {
+    // Found a likely project name start
+    const parentPath = '/' + parts.slice(0, projectNameStartIndex).join('/');
+    const projectNameParts = parts.slice(projectNameStartIndex);
+    return parentPath + '/' + projectNameParts.join('-');
+  }
+  
+  // Fallback: common path depths
+  // /host/dev/PROJECT (depth 2) or /home/user/dev/PROJECT (depth 3)
+  if (parts.length >= 3) {
+    // Check if it looks like /host/dev/... pattern (2 common dirs then project)
+    if (parts.length >= 3 && 
+        ['host', 'var', 'opt', 'srv', 'mnt'].includes(parts[0].toLowerCase())) {
+      // Likely /host/dev/PROJECT pattern
+      return '/' + parts.slice(0, 2).join('/') + '/' + parts.slice(2).join('-');
+    }
+    
+    // Check if it looks like /home/user/... pattern
+    if (parts[0].toLowerCase() === 'home') {
+      // /home/user/... - user is at index 1
+      if (parts.length >= 4) {
+        // /home/user/dev/PROJECT or /home/user/projects/PROJECT
+        return '/' + parts.slice(0, 3).join('/') + '/' + parts.slice(3).join('-');
+      } else {
+        // /home/user/PROJECT
+        return '/' + parts.slice(0, 2).join('/') + '/' + parts.slice(2).join('-');
+      }
+    }
+    
+    // Generic: assume last segment(s) form the project name
+    // If 4+ parts: first 3 are dirs
+    if (parts.length >= 4) {
+      return '/' + parts.slice(0, 3).join('/') + '/' + parts.slice(3).join('-');
+    } else {
+      // 3 parts: first 2 are dirs
+      return '/' + parts.slice(0, 2).join('/') + '/' + parts.slice(2).join('-');
+    }
+  }
+  
+  return simpleDecode;
+}
+
+// Helper to check if path exists
+async function pathExists(p) {
+  try {
+    await fs.access(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Helper to check if path is a directory
+async function isDirectory(p) {
+  try {
+    const stat = await fs.stat(p);
+    return stat.isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 async function extractProjectDirectory(projectName) {
   // Check cache first
   if (projectDirectoryCache.has(projectName)) {
     return projectDirectoryCache.get(projectName);
   }
   
+  // First, check if there's a manually configured original path
+  try {
+    const config = await loadProjectConfig();
+    if (config[projectName]?.originalPath) {
+      const originalPath = config[projectName].originalPath;
+      projectDirectoryCache.set(projectName, originalPath);
+      return originalPath;
+    }
+  } catch (e) {
+    // Ignore config errors
+  }
   
   const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
   const cwdCounts = new Map();
@@ -282,8 +445,8 @@ async function extractProjectDirectory(projectName) {
     const jsonlFiles = files.filter(file => file.endsWith('.jsonl'));
     
     if (jsonlFiles.length === 0) {
-      // Fall back to decoded project name if no sessions
-      extractedPath = projectName.replace(/-/g, '/');
+      // Fall back to smart decoded project name if no sessions
+      extractedPath = await smartDecodeProjectPath(projectName);
     } else {
       // Process all JSONL files to collect cwd values
       for (const file of jsonlFiles) {
@@ -319,8 +482,8 @@ async function extractProjectDirectory(projectName) {
       
       // Determine the best cwd to use
       if (cwdCounts.size === 0) {
-        // No cwd found, fall back to decoded project name
-        extractedPath = projectName.replace(/-/g, '/');
+        // No cwd found, fall back to smart decoded project name
+        extractedPath = await smartDecodeProjectPath(projectName);
       } else if (cwdCounts.size === 1) {
         // Only one cwd, use it
         extractedPath = Array.from(cwdCounts.keys())[0];
@@ -344,7 +507,7 @@ async function extractProjectDirectory(projectName) {
         
         // Fallback (shouldn't reach here)
         if (!extractedPath) {
-          extractedPath = latestCwd || projectName.replace(/-/g, '/');
+          extractedPath = latestCwd || await smartDecodeProjectPath(projectName);
         }
       }
     }
@@ -355,13 +518,13 @@ async function extractProjectDirectory(projectName) {
     return extractedPath;
     
   } catch (error) {
-    // If the directory doesn't exist, just use the decoded project name
+    // If the directory doesn't exist, use smart decoded project name
     if (error.code === 'ENOENT') {
-      extractedPath = projectName.replace(/-/g, '/');
+      extractedPath = await smartDecodeProjectPath(projectName);
     } else {
       console.error(`Error extracting project directory for ${projectName}:`, error);
-      // Fall back to decoded project name for other errors
-      extractedPath = projectName.replace(/-/g, '/');
+      // Fall back to smart decoded project name for other errors
+      extractedPath = await smartDecodeProjectPath(projectName);
     }
     
     // Cache the fallback result too
@@ -465,8 +628,8 @@ async function getProjects() {
         try {
           actualProjectDir = await extractProjectDirectory(projectName);
         } catch (error) {
-          // Fall back to decoded project name
-          actualProjectDir = projectName.replace(/-/g, '/');
+          // Fall back to smart decoded project name
+          actualProjectDir = await smartDecodeProjectPath(projectName);
         }
       }
       
@@ -1016,5 +1179,6 @@ export {
   loadProjectConfig,
   saveProjectConfig,
   extractProjectDirectory,
-  clearProjectDirectoryCache
+  clearProjectDirectoryCache,
+  smartDecodeProjectPath
 };

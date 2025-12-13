@@ -3,7 +3,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import { promises as fs } from 'fs';
-import { extractProjectDirectory } from '../projects.js';
+import { extractProjectDirectory, smartDecodeProjectPath } from '../projects.js';
 
 const router = express.Router();
 const execAsync = promisify(exec);
@@ -14,8 +14,8 @@ async function getActualProjectPath(projectName) {
     return await extractProjectDirectory(projectName);
   } catch (error) {
     console.error(`Error extracting project directory for ${projectName}:`, error);
-    // Fallback to the old method
-    return projectName.replace(/-/g, '/');
+    // Fallback to smart path decoding (handles hyphens in original paths)
+    return await smartDecodeProjectPath(projectName);
   }
 }
 

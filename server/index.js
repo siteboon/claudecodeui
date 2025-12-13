@@ -36,7 +36,7 @@ import pty from 'node-pty';
 import fetch from 'node-fetch';
 import mime from 'mime-types';
 
-import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
+import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache, smartDecodeProjectPath } from './projects.js';
 import { spawnClaude, abortClaudeSession } from './claude-cli.js';
 import { spawnCursor, abortCursorSession } from './cursor-cli.js';
 import gitRoutes from './routes/git.js';
@@ -435,8 +435,8 @@ app.get('/api/projects/:projectName/files', authenticateToken, async (req, res) 
             actualPath = await extractProjectDirectory(req.params.projectName);
         } catch (error) {
             console.error('Error extracting project directory:', error);
-            // Fallback to simple dash replacement
-            actualPath = req.params.projectName.replace(/-/g, '/');
+            // Fallback to smart path decoding (handles hyphens in original paths)
+            actualPath = await smartDecodeProjectPath(req.params.projectName);
         }
 
         // Check if path exists
