@@ -1,38 +1,63 @@
 {
-  "name": "claude-code-ui",
-  "version": "1.8.0",
+  "name": "@siteboon/claude-code-ui",
+  "version": "1.12.0",
   "description": "A web-based UI for Claude Code CLI",
   "type": "module",
   "main": "server/index.js",
+  "bin": {
+    "claude-code-ui": "server/cli.js",
+    "cloudcli": "server/cli.js"
+  },
+  "files": [
+    "server/",
+    "dist/",
+    "README.md"
+  ],
+  "homepage": "https://claudecodeui.siteboon.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/siteboon/claudecodeui.git"
+  },
+  "bugs": {
+    "url": "https://github.com/siteboon/claudecodeui/issues"
+  },
   "scripts": {
     "dev": "concurrently --kill-others \"npm run server\" \"npm run client\"",
     "server": "node server/index.js",
     "client": "vite --host",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "npm run build && npm run server"
+    "start": "npm run build && npm run server",
+    "release": "./release.sh"
   },
   "keywords": [
-    "claude",
+    "claude coode",
     "ai",
-    "code",
+    "anthropic",
     "ui",
-    "assistant"
+    "mobile"
   ],
   "author": "Claude Code UI Contributors",
   "license": "MIT",
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.1.29",
     "@codemirror/lang-css": "^6.3.1",
     "@codemirror/lang-html": "^6.4.9",
     "@codemirror/lang-javascript": "^6.2.4",
     "@codemirror/lang-json": "^6.0.1",
     "@codemirror/lang-markdown": "^6.3.3",
     "@codemirror/lang-python": "^6.2.1",
+    "@codemirror/merge": "^6.11.1",
     "@codemirror/theme-one-dark": "^6.1.2",
+    "@octokit/rest": "^22.0.0",
+    "@replit/codemirror-minimap": "^0.5.2",
     "@tailwindcss/typography": "^0.5.16",
     "@uiw/react-codemirror": "^4.23.13",
     "@xterm/addon-clipboard": "^0.1.0",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/addon-web-links": "^0.11.0",
     "@xterm/addon-webgl": "^0.18.0",
+    "@xterm/xterm": "^5.5.0",
     "bcrypt": "^6.0.0",
     "better-sqlite3": "^12.2.0",
     "chokidar": "^4.0.3",
@@ -41,7 +66,10 @@
     "cors": "^2.8.5",
     "cross-spawn": "^7.0.3",
     "express": "^4.18.2",
+    "fuse.js": "^7.0.0",
+    "gray-matter": "^4.0.3",
     "jsonwebtoken": "^9.0.2",
+    "katex": "^0.16.25",
     "lucide-react": "^0.515.0",
     "mime-types": "^3.0.1",
     "multer": "^2.0.1",
@@ -52,21 +80,24 @@
     "react-dropzone": "^14.2.3",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^6.8.1",
+    "rehype-katex": "^7.0.1",
+    "remark-gfm": "^4.0.0",
+    "remark-math": "^6.0.0",
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",
     "tailwind-merge": "^3.3.1",
-    "ws": "^8.14.2",
-    "xterm": "^5.3.0",
-    "xterm-addon-fit": "^0.8.0"
+    "ws": "^8.14.2"
   },
   "devDependencies": {
     "@types/react": "^18.2.43",
     "@types/react-dom": "^18.2.17",
     "@vitejs/plugin-react": "^4.6.0",
+    "auto-changelog": "^2.5.0",
     "autoprefixer": "^10.4.16",
     "concurrently": "^8.2.2",
     "node-gyp": "^10.0.0",
     "postcss": "^8.4.32",
+    "release-it": "^19.0.5",
     "sharp": "^0.34.2",
     "tailwindcss": "^3.4.0",
     "vite": "^7.0.4"

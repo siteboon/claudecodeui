@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claude Code UI - API Documentation</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    
+    <!-- Prism.js for syntax highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-600: #4b5563;
+            --gray-700: #374151;
+            --gray-800: #1f2937;
+            --gray-900: #111827;
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --green: #10b981;
+            --red: #ef4444;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: var(--gray-900);
+            background: var(--gray-50);
+            margin: 0;
+        }
+
+        header {
+            background: white;
+            border-bottom: 1px solid var(--gray-200);
+            padding: 1.5rem 0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-content {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 2rem;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .brand-icon {
+            width: 32px;
+            height: 32px;
+            background: var(--primary);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .brand-icon svg {
+            width: 16px;
+            height: 16px;
+            stroke: white;
+        }
+
+        .brand-text h1 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--gray-900);
+        }
+
+        .brand-text .subtitle {
+            font-size: 0.875rem;
+            color: var(--gray-600);
+        }
+
+        .back-link {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: var(--primary);
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+
+        .back-link:hover {
+            background: var(--primary-dark);
+        }
+
+        .back-link svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .main-layout {
+            display: flex;
+        }
+
+        .sidebar {
+            width: 240px;
+            background: white;
+            border-right: 1px solid var(--gray-200);
+            padding: 2rem 0;
+            position: sticky;
+            top: 73px;
+            height: calc(100vh - 73px);
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+
+        .sidebar-title {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: var(--gray-600);
+            padding: 0 1.5rem;
+            margin: 1.5rem 0 0.5rem;
+        }
+
+        .sidebar a {
+            display: block;
+            padding: 0.625rem 1.5rem;
+            color: var(--gray-700);
+            text-decoration: none;
+            font-size: 0.875rem;
+            transition: all 0.15s;
+            border-left: 3px solid transparent;
+        }
+
+        .sidebar a:hover {
+            background: var(--gray-50);
+            color: var(--primary);
+            border-left-color: var(--primary);
+        }
+
+        .content-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: calc(100vh - 73px);
+        }
+
+        .section-row {
+            display: grid;
+            grid-template-columns: 1fr 600px;
+        }
+
+        .docs-section {
+            padding: 3rem 3rem;
+            background: white;
+            border-right: 1px solid var(--gray-200);
+        }
+
+        .examples-section {
+            padding: 3rem 2rem;
+            background: #0d1117;
+            color: #e6edf3;
+        }
+
+        .examples-section h4 {
+            color: #e6edf3;
+            font-size: 0.875rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        h2 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            color: var(--gray-900);
+        }
+
+        h3 {
+            font-size: 1.375rem;
+            font-weight: 600;
+            margin: 2.5rem 0 1rem;
+            color: var(--gray-900);
+        }
+
+        h4 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin: 1.5rem 0 0.75rem;
+            color: var(--gray-700);
+        }
+
+        p {
+            margin-bottom: 1rem;
+            color: var(--gray-600);
+        }
+
+        .intro {
+            background: linear-gradient(135deg, rgba(37, 99, 235, 0.08) 0%, rgba(59, 130, 246, 0.08) 100%);
+            border: 1px solid rgba(37, 99, 235, 0.2);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .intro p {
+            color: var(--gray-700);
+            margin: 0;
+        }
+
+        .endpoint {
+            margin: 2rem 0;
+            padding: 1.5rem;
+            background: var(--gray-50);
+            border-radius: 8px;
+            border: 1px solid var(--gray-200);
+        }
+
+        .endpoint-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .method {
+            padding: 0.375rem 0.875rem;
+            border-radius: 6px;
+            font-weight: 700;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+        }
+
+        .method-post {
+            background: var(--green);
+            color: white;
+        }
+
+        .endpoint-path {
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.9375rem;
+            font-weight: 600;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            font-size: 0.875rem;
+        }
+
+        th {
+            text-align: left;
+            padding: 0.875rem;
+            background: var(--gray-100);
+            border: 1px solid var(--gray-200);
+            font-weight: 600;
+            color: var(--gray-800);
+        }
+
+        td {
+            padding: 0.875rem;
+            border: 1px solid var(--gray-200);
+            color: var(--gray-700);
+        }
+
+        code {
+            background: rgba(37, 99, 235, 0.08);
+            padding: 0.1875rem 0.5rem;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.875em;
+            color: var(--primary-dark);
+        }
+
+        .api-url {
+            color: #60a5fa;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.1875rem 0.625rem;
+            border-radius: 12px;
+            font-size: 0.6875rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge-required {
+            background: var(--red);
+            color: white;
+        }
+
+        .badge-optional {
+            background: var(--gray-200);
+            color: var(--gray-700);
+        }
+
+        .note {
+            padding: 1.25rem;
+            background: rgba(37, 99, 235, 0.05);
+            border-left: 4px solid var(--primary);
+            border-radius: 8px;
+            margin: 1rem 0;
+            font-size: 0.875rem;
+        }
+
+        /* Code tabs in side panel */
+        .tab-buttons {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .tab-button {
+            padding: 0.5rem 1rem;
+            background: transparent;
+            border: 1px solid #30363d;
+            cursor: pointer;
+            font-size: 0.8125rem;
+            font-weight: 500;
+            color: #7d8590;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+        .tab-button:hover {
+            color: #e6edf3;
+            border-color: #58a6ff;
+        }
+
+        .tab-button.active {
+            color: #e6edf3;
+            background: #1f6feb;
+            border-color: #1f6feb;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        pre[class*="language-"] {
+            margin: 0 0 1.5rem 0;
+            border-radius: 6px;
+            font-size: 0.8125rem;
+        }
+
+        .example-block {
+            margin-bottom: 2rem;
+        }
+
+        @media (max-width: 1400px) {
+            .section-row {
+                grid-template-columns: 1fr 500px;
+            }
+        }
+
+        @media (max-width: 1200px) {
+            .section-row {
+                grid-template-columns: 1fr;
+            }
+
+            .examples-section {
+                border-top: 1px solid #30363d;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .main-layout {
+                flex-direction: column;
+            }
+            
+            .sidebar {
+                width: 100%;
+                position: relative;
+                height: auto;
+                border-right: none;
+                border-bottom: 1px solid var(--gray-200);
+            }
+            
+            .docs-section {
+                padding: 2rem 1.5rem;
+            }
+
+            .examples-section {
+                padding: 2rem 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <div class="brand">
+                <div class="brand-icon">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
+                    </svg>
+                </div>
+                <div class="brand-text">
+                    <h1>Claude Code UI</h1>
+                    <div class="subtitle">API Documentation</div>
+                </div>
+            </div>
+            <a href="/" class="back-link">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                </svg>
+                Back to App
+            </a>
+        </div>
+    </header>
+
+    <div class="main-layout">
+        <nav class="sidebar">
+            <div class="sidebar-title">Getting Started</div>
+            <a href="#authentication">Authentication</a>
+            <a href="#credentials">GitHub Credentials</a>
+
+            <div class="sidebar-title">API Reference</div>
+            <a href="#agent">Agent</a>
+
+            <div class="sidebar-title">Examples</div>
+            <a href="#usage-examples">Usage Patterns</a>
+        </nav>
+
+        <div class="content-wrapper">
+            <!-- Intro Section -->
+            <div class="section-row">
+                <div class="docs-section">
+                    <div class="intro">
+                        <p><strong>Programmatically trigger AI agents to work on projects.</strong> Clone GitHub repositories or use existing project paths. Perfect for CI/CD pipelines, automated code reviews, and bulk processing.</p>
+                    </div>
+
+                    <section id="authentication">
+                        <h2>Authentication</h2>
+                        <p>All API requests require authentication using an API key in the <code>X-API-Key</code> header.</p>
+
+                        <p>Generate API keys in Settings → API & Tokens.</p>
+                    </section>
+
+                    <section id="credentials">
+                        <h3>GitHub Credentials</h3>
+                        <p>For private repositories, store a GitHub token in settings or pass it with each request.</p>
+
+                        <div class="note">
+                            <strong>Note:</strong> GitHub tokens in the request override stored tokens.
+                        </div>
+                    </section>
+                </div>
+
+                <div class="examples-section">
+                    <div class="example-block">
+                        <h4>Authentication Header</h4>
+                        <pre><code class="language-http">X-API-Key: ck_your_api_key_here</code></pre>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Agent API Section -->
+            <div class="section-row">
+                <div class="docs-section">
+                    <section id="agent">
+                        <h2>Agent</h2>
+
+                        <div class="endpoint">
+                            <div class="endpoint-header">
+                                <span class="method method-post">POST</span>
+                                <span class="endpoint-path"><span class="api-url">http://localhost:3001</span>/api/agent</span>
+                            </div>
+
+                            <p>Trigger an AI agent (Claude or Cursor) to work on a project.</p>
+
+                            <h4>Request Body Parameters</h4>
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Required</th>
+                                        <th>Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><code>githubUrl</code></td>
+                                        <td>string</td>
+                                        <td><span class="badge badge-optional">Conditional</span></td>
+                                        <td>GitHub repository URL to clone. If path exists with same repo, reuses it. If path exists with different repo, returns error.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>projectPath</code></td>
+                                        <td>string</td>
+                                        <td><span class="badge badge-optional">Conditional</span></td>
+                                        <td>Path to existing project OR destination for cloning. If omitted with <code>githubUrl</code>, auto-generates path. If used alone, must point to existing project directory.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>message</code></td>
+                                        <td>string</td>
+                                        <td><span class="badge badge-required">Required</span></td>
+                                        <td>Task for the AI agent</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>provider</code></td>
+                                        <td>string</td>
+                                        <td><span class="badge badge-optional">Optional</span></td>
+                                        <td><code>claude</code> or <code>cursor</code> (default: <code>claude</code>)</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>stream</code></td>
+                                        <td>boolean</td>
+                                        <td><span class="badge badge-optional">Optional</span></td>
+                                        <td>Enable streaming (default: <code>true</code>)</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>model</code></td>
+                                        <td>string</td>
+                                        <td><span class="badge badge-optional">Optional</span></td>
+                                        <td>Model to use (for Cursor)</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>cleanup</code></td>
+                                        <td>boolean</td>
+                                        <td><span class="badge badge-optional">Optional</span></td>
+                                        <td>Auto-cleanup after completion (default: <code>true</code>). Only applies when cloning via <code>githubUrl</code>. Existing projects specified via <code>projectPath</code> are never cleaned up.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>githubToken</code></td>
+                                        <td>string</td>
+                                        <td><span class="badge badge-optional">Optional</span></td>
+                                        <td>GitHub token for private repos</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>branchName</code></td>
+                                        <td>string</td>
+                                        <td><span class="badge badge-optional">Optional</span></td>
+                                        <td>Custom branch name to use. If provided, <code>createBranch</code> is automatically enabled. Branch names are validated against Git naming rules. Works with <code>githubUrl</code> or <code>projectPath</code> (if it has a GitHub remote).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>createBranch</code></td>
+                                        <td>boolean</td>
+                                        <td><span class="badge badge-optional">Optional</span></td>
+                                        <td>Create a new branch after successful completion (default: <code>false</code>). Automatically set to <code>true</code> if <code>branchName</code> is provided. Works with <code>githubUrl</code> or <code>projectPath</code> (if it has a GitHub remote).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>createPR</code></td>
+                                        <td>boolean</td>
+                                        <td><span class="badge badge-optional">Optional</span></td>
+                                        <td>Create a pull request after successful completion (default: <code>false</code>). PR title and description auto-generated from commit messages. Works with <code>githubUrl</code> or <code>projectPath</code> (if it has a GitHub remote).</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                            <div class="note">
+                                <strong>Path Handling Behavior:</strong><br><br>
+                                <strong>Scenario 1:</strong> Only <code>githubUrl</code> → Clones to auto-generated temporary path<br>
+                                <strong>Scenario 2:</strong> Only <code>projectPath</code> → Uses existing project at specified path<br>
+                                <strong>Scenario 3:</strong> Both provided → Clones <code>githubUrl</code> to <code>projectPath</code><br><br>
+                                <strong>Validation:</strong> If <code>projectPath</code> exists and contains a git repository, the remote URL is compared with <code>githubUrl</code>. If URLs match, the existing repo is reused. If URLs differ, an error is returned.
+                            </div>
+
+                            <h4>Response (Streaming)</h4>
+                            <p>Server-sent events (SSE) format with real-time updates. Content-Type: <code>text/event-stream</code></p>
+
+                            <h4>Response (Non-Streaming)</h4>
+                            <p>JSON object containing session details, assistant messages only (filtered), and token usage summary. Content-Type: <code>application/json</code></p>
+
+                            <h4>Error Response</h4>
+                            <p>Returns error details with appropriate HTTP status code.</p>
+                        </div>
+                    </section>
+                </div>
+
+                <div class="examples-section">
+                    <div class="example-block">
+                        <h4>Basic Request</h4>
+                        <div class="tab-buttons">
+                            <button class="tab-button active" onclick="showTab('curl-basic')">cURL</button>
+                            <button class="tab-button" onclick="showTab('js-basic')">JavaScript</button>
+                            <button class="tab-button" onclick="showTab('python-basic')">Python</button>
+                        </div>
+
+                        <div class="tab-content active" id="curl-basic">
+<pre><code class="language-bash">curl -X POST <span class="api-url">http://localhost:3001</span>/api/agent \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: ck_..." \
+  -d '{
+    "githubUrl": "https://github.com/user/repo",
+    "message": "Add error handling to main.js"
+  }'</code></pre>
+                        </div>
+
+                        <div class="tab-content" id="js-basic">
+<pre><code class="language-javascript">const response = await fetch('<span class="api-url">http://localhost:3001</span>/api/agent', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-API-Key': process.env.CLAUDE_API_KEY
+  },
+  body: JSON.stringify({
+    githubUrl: 'https://github.com/user/repo',
+    message: 'Add error handling',
+    stream: false
+  })
+});
+
+const result = await response.json();</code></pre>
+                        </div>
+
+                        <div class="tab-content" id="python-basic">
+<pre><code class="language-python">import requests
+import os
+
+response = requests.post(
+    '<span class="api-url">http://localhost:3001</span>/api/agent',
+    headers={
+        'Content-Type': 'application/json',
+        'X-API-Key': os.environ['CLAUDE_API_KEY']
+    },
+    json={
+        'githubUrl': 'https://github.com/user/repo',
+        'message': 'Add error handling',
+        'stream': False
+    }
+)
+
+print(response.json())</code></pre>
+                        </div>
+                    </div>
+
+                    <div class="example-block">
+                        <h4>Streaming Response</h4>
+<pre><code class="language-javascript">data: {"type":"status","message":"Repository cloned"}
+data: {"type":"thinking","content":"Analyzing..."}
+data: {"type":"tool_use","tool":"read_file"}
+data: {"type":"content","content":"Done!"}
+data: {"type":"done"}</code></pre>
+                    </div>
+
+                    <div class="example-block">
+                        <h4>Non-Streaming Response</h4>
+<pre><code class="language-json">{
+  "success": true,
+  "sessionId": "abc123",
+  "messages": [
+    {
+      "type": "assistant",
+      "message": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "I've completed the task..."
+          }
+        ],
+        "usage": {
+          "input_tokens": 150,
+          "output_tokens": 50
+        }
+      }
+    }
+  ],
+  "tokens": {
+    "inputTokens": 150,
+    "outputTokens": 50,
+    "cacheReadTokens": 0,
+    "cacheCreationTokens": 0,
+    "totalTokens": 200
+  },
+  "projectPath": "/path/to/project",
+  "branch": {
+    "name": "fix-authentication-bug-abc123",
+    "url": "https://github.com/user/repo/tree/fix-authentication-bug-abc123"
+  },
+  "pullRequest": {
+    "number": 42,
+    "url": "https://github.com/user/repo/pull/42"
+  }
+}</code></pre>
+                    </div>
+
+                    <div class="example-block">
+                        <h4>Error Response</h4>
+<pre><code class="language-json">{
+  "success": false,
+  "error": "Directory exists with different repo"
+}</code></pre>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Usage Patterns Section -->
+            <div class="section-row">
+                <div class="docs-section">
+                    <section id="usage-examples">
+                        <h2>Usage Patterns</h2>
+
+                        <h3>Clone and Process Repository</h3>
+                        <p>Clone a repository to an auto-generated temporary path and process it.</p>
+
+                        <h3>Use Existing Project</h3>
+                        <p>Work with an existing project at a specific path.</p>
+
+                        <h3>Clone to Specific Path</h3>
+                        <p>Clone a repository to a custom location for later reuse.</p>
+
+                        <h3>CI/CD Integration</h3>
+                        <p>Integrate with GitHub Actions or other CI/CD pipelines.</p>
+
+                        <h3>Create Branch and Pull Request</h3>
+                        <p>Automatically create a new branch and pull request after the agent completes its work. Branch names are auto-generated from the message, and PR title/description are auto-generated from commit messages.</p>
+                    </section>
+                </div>
+
+                <div class="examples-section">
+                    <div class="example-block">
+                        <h4>Use Existing Project</h4>
+<pre><code class="language-bash">curl -X POST <span class="api-url">http://localhost:3001</span>/api/agent \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: ck_..." \
+  -d '{
+    "projectPath": "/home/user/my-project",
+    "message": "Refactor database queries"
+  }'</code></pre>
+                    </div>
+
+                    <div class="example-block">
+                        <h4>Clone to Custom Path</h4>
+<pre><code class="language-bash">curl -X POST <span class="api-url">http://localhost:3001</span>/api/agent \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: ck_..." \
+  -d '{
+    "githubUrl": "https://github.com/user/repo",
+    "projectPath": "/tmp/my-location",
+    "message": "Review security",
+    "cleanup": false
+  }'</code></pre>
+                    </div>
+
+                    <div class="example-block">
+                        <h4>CI/CD (GitHub Actions)</h4>
+<pre><code class="language-yaml">- name: Trigger Agent
+  run: |
+    curl -X POST ${{ secrets.API_URL }}/api/agent \
+      -H "X-API-Key: ${{ secrets.API_KEY }}" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "githubUrl": "${{ github.repository }}",
+        "message": "Review for security",
+        "githubToken": "${{ secrets.GITHUB_TOKEN }}"
+      }'</code></pre>
+                    </div>
+
+                    <div class="example-block">
+                        <h4>Create Branch and PR</h4>
+<pre><code class="language-bash">curl -X POST <span class="api-url">http://localhost:3001</span>/api/agent \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: ck_..." \
+  -d '{
+    "githubUrl": "https://github.com/user/repo",
+    "message": "Fix authentication bug",
+    "createBranch": true,
+    "createPR": true,
+    "stream": false
+  }'</code></pre>
+                    </div>
+
+                    <div class="example-block">
+                        <h4>Custom Branch Name</h4>
+<pre><code class="language-bash">curl -X POST <span class="api-url">http://localhost:3001</span>/api/agent \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: ck_..." \
+  -d '{
+    "githubUrl": "https://github.com/user/repo",
+    "message": "Add user authentication",
+    "branchName": "feature/user-auth",
+    "createPR": true,
+    "stream": false
+  }'</code></pre>
+                    </div>
+
+                    <div class="example-block">
+                        <h4>Branch & PR Response</h4>
+<pre><code class="language-json">{
+  "success": true,
+  "branch": {
+    "name": "feature/user-auth",
+    "url": "https://github.com/user/repo/tree/feature/user-auth"
+  },
+  "pullRequest": {
+    "number": 42,
+    "url": "https://github.com/user/repo/pull/42"
+  }
+}</code></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Dynamic URL replacement
+        const apiUrl = window.location.origin;
+        document.querySelectorAll('.api-url').forEach(el => {
+            el.textContent = apiUrl;
+        });
+
+        // Tab switching
+        function showTab(tabName) {
+            const parentBlock = event.target.closest('.example-block');
+            if (!parentBlock) return;
+            
+            parentBlock.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            parentBlock.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            const targetTab = parentBlock.querySelector('#' + tabName);
+            if (targetTab) {
+                targetTab.classList.add('active');
+                event.target.classList.add('active');
+            }
+        }
+    </script>
+
+    <!-- Prism.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-yaml.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-http.min.js"></script>
+</body>
+</html>

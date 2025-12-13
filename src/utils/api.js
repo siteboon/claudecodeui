@@ -1,15 +1,16 @@
 // Utility function for authenticated API calls
 export const authenticatedFetch = (url, options = {}) => {
+  const isPlatform = import.meta.env.VITE_IS_PLATFORM === 'true';
   const token = localStorage.getItem('auth-token');
-  
+
   const defaultHeaders = {
     'Content-Type': 'application/json',
   };
-  
-  if (token) {
+
+  if (!isPlatform && token) {
     defaultHeaders['Authorization'] = `Bearer ${token}`;
   }
-  
+
   return fetch(url, {
     ...options,
     headers: {
@@ -37,9 +38,9 @@ export const api = {
     user: () => authenticatedFetch('/api/auth/user'),
     logout: () => authenticatedFetch('/api/auth/logout', { method: 'POST' }),
   },
-  
+
   // Protected endpoints
-  config: () => authenticatedFetch('/api/config'),
+  // config endpoint removed - no longer needed (frontend uses window.location)
   projects: () => authenticatedFetch('/api/projects'),
   sessions: (projectName, limit = 5, offset = 0) => 
     authenticatedFetch(`/api/projects/${projectName}/sessions?limit=${limit}&offset=${offset}`),
@@ -70,6 +71,11 @@ export const api = {
     authenticatedFetch('/api/projects/create', {
       method: 'POST',
       body: JSON.stringify({ path }),
+    }),
+  createWorkspace: (workspaceData) =>
+    authenticatedFetch('/api/projects/create-workspace', {
+      method: 'POST',
+      body: JSON.stringify(workspaceData),
     }),
   readFile: (projectName, filePath) =>
     authenticatedFetch(`/api/projects/${projectName}/file?filePath=${encodeURIComponent(filePath)}`),
@@ -128,6 +134,29 @@ export const api = {
       }),
   },
   
+  // Browse filesystem for project suggestions
+  browseFilesystem: (dirPath = null) => {
+    const params = new URLSearchParams();
+    if (dirPath) params.append('path', dirPath);
+
+    return authenticatedFetch(`/api/browse-filesystem?${params}`);
+  },
+
+  // User endpoints
+  user: {
+    gitConfig: () => authenticatedFetch('/api/user/git-config'),
+    updateGitConfig: (gitName, gitEmail) =>
+      authenticatedFetch('/api/user/git-config', {
+        method: 'POST',
+        body: JSON.stringify({ gitName, gitEmail }),
+      }),
+    onboardingStatus: () => authenticatedFetch('/api/user/onboarding-status'),
+    completeOnboarding: () =>
+      authenticatedFetch('/api/user/complete-onboarding', {
+        method: 'POST',
+      }),
+  },
+
   // Generic GET method for any endpoint
   get: (endpoint) => authenticatedFetch(`/api${endpoint}`),
 };

@@ -18,6 +18,9 @@
 
 import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import { useDropzone } from 'react-dropzone';
 import TodoList from './TodoList';
 import ClaudeLogo from './ClaudeLogo.jsx';
@@ -26,9 +29,85 @@ import NextTaskBanner from './NextTaskBanner.jsx';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
 
 import ClaudeStatus from './ClaudeStatus';
+import TokenUsagePie from './TokenUsagePie';
 import { MicButton } from './MicButton.jsx';
 import { api, authenticatedFetch } from '../utils/api';
+import Fuse from 'fuse.js';
+import CommandMenu from './CommandMenu';
 
+
+// Helper function to decode HTML entities in text
+function decodeHtmlEntities(text) {
+  if (!text) return text;
+  return text
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&');
+}
+
+// Normalize markdown text where providers mistakenly wrap short inline code with single-line triple fences.
+// Only convert fences that do NOT contain any newline to avoid touching real code blocks.
+function normalizeInlineCodeFences(text) {
+  if (!text || typeof text !== 'string') return text;
+  try {
+    // ```code```  -> `code`
+    return text.replace(/```\s*([^\n\r]+?)\s*```/g, '`$1`');
+  } catch {
+    return text;
+  }
+}
+
+// Unescape \n, \t, \r while protecting LaTeX formulas ($...$ and $$...$$) from being corrupted
+function unescapeWithMathProtection(text) {
+  if (!text || typeof text !== 'string') return text;
+
+  const mathBlocks = [];
+  const PLACEHOLDER_PREFIX = '__MATH_BLOCK_';
+  const PLACEHOLDER_SUFFIX = '__';
+
+  // Extract and protect math formulas
+  let processedText = text.replace(/\$\$([\s\S]*?)\$\$|\$([^\$\n]+?)\$/g, (match) => {
+    const index = mathBlocks.length;
+    mathBlocks.push(match);
+    return `${PLACEHOLDER_PREFIX}${index}${PLACEHOLDER_SUFFIX}`;
+  });
+
+  // Process escape sequences on non-math content
+  processedText = processedText.replace(/\\n/g, '\n')
+                               .replace(/\\t/g, '\t')
+                               .replace(/\\r/g, '\r');
+
+  // Restore math formulas
+  processedText = processedText.replace(
+    new RegExp(`${PLACEHOLDER_PREFIX}(\\d+)${PLACEHOLDER_SUFFIX}`, 'g'),
+    (match, index) => {
+      return mathBlocks[parseInt(index)];
+    }
+  );
+
+  return processedText;
+}
+
+// Small wrapper to keep markdown behavior consistent in one place
+const Markdown = ({ children, className }) => {
+  const content = normalizeInlineCodeFences(String(children ?? ''));
+  const remarkPlugins = useMemo(() => [remarkGfm, remarkMath], []);
+  const rehypePlugins = useMemo(() => [rehypeKatex], []);
+
+  return (
+    <div className={className}>
+      <ReactMarkdown
+        remarkPlugins={remarkPlugins}
+        rehypePlugins={rehypePlugins}
+        components={markdownComponents}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
+};
 
 // Format "Claude AI usage limit reached|<epoch>" into a local time string
 function formatUsageLimitText(text) {
@@ -155,11 +234,132 @@ const safeLocalStorage = {
   }
 };
 
+// Common markdown components to ensure consistent rendering (tables, inline code, links, etc.)
+const markdownComponents = {
+  code: ({ node, inline, className, children, ...props }) => {
+    const [copied, setCopied] = React.useState(false);
+    const raw = Array.isArray(children) ? children.join('') : String(children ?? '');
+    const looksMultiline = /[\r\n]/.test(raw);
+    const inlineDetected = inline || (node && node.type === 'inlineCode');
+    const shouldInline = inlineDetected || !looksMultiline; // fallback to inline if single-line
+    if (shouldInline) {
+      return (
+        <code
+          className={`font-mono text-[0.9em] px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-900 border border-gray-200 dark:bg-gray-800/60 dark:text-gray-100 dark:border-gray-700 whitespace-pre-wrap break-words ${
+            className || ''
+          }`}
+          {...props}
+        >
+          {children}
+        </code>
+      );
+    }
+    const textToCopy = raw;
+
+    const handleCopy = () => {
+      const doSet = () => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      };
+      try {
+        if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(textToCopy).then(doSet).catch(() => {
+            // Fallback
+            const ta = document.createElement('textarea');
+            ta.value = textToCopy;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand('copy'); } catch {}
+            document.body.removeChild(ta);
+            doSet();
+          });
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = textToCopy;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          try { document.execCommand('copy'); } catch {}
+          document.body.removeChild(ta);
+          doSet();
+        }
+      } catch {}
+    };
+
+    return (
+      <div className="relative group my-2">
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 focus:opacity-100 active:opacity-100 transition-opacity text-xs px-2 py-1 rounded-md bg-gray-700/80 hover:bg-gray-700 text-white border border-gray-600"
+          title={copied ? 'Copied' : 'Copy code'}
+          aria-label={copied ? 'Copied' : 'Copy code'}
+        >
+          {copied ? (
+            <span className="flex items-center gap-1">
+              <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
+              Copied
+            </span>
+          ) : (
+            <span className="flex items-center gap-1">
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
+              </svg>
+              Copy
+            </span>
+          )}
+        </button>
+        <pre className="bg-gray-900 dark:bg-gray-900 border border-gray-700/40 rounded-lg p-3 overflow-x-auto">
+          <code className={`text-gray-100 dark:text-gray-100 text-sm font-mono ${className || ''}`} {...props}>
+            {children}
+          </code>
+        </pre>
+      </div>
+    );
+  },
+  blockquote: ({ children }) => (
+    <blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-4 italic text-gray-600 dark:text-gray-400 my-2">
+      {children}
+    </blockquote>
+  ),
+  a: ({ href, children }) => (
+    <a href={href} className="text-blue-600 dark:text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">
+      {children}
+    </a>
+  ),
+  p: ({ children }) => <div className="mb-2 last:mb-0">{children}</div>,
+  // GFM tables
+  table: ({ children }) => (
+    <div className="overflow-x-auto my-2">
+      <table className="min-w-full border-collapse border border-gray-200 dark:border-gray-700">
+        {children}
+      </table>
+    </div>
+  ),
+  thead: ({ children }) => (
+    <thead className="bg-gray-50 dark:bg-gray-800">{children}</thead>
+  ),
+  th: ({ children }) => (
+    <th className="px-3 py-2 text-left text-sm font-semibold border border-gray-200 dark:border-gray-700">{children}</th>
+  ),
+  td: ({ children }) => (
+    <td className="px-3 py-2 align-top text-sm border border-gray-200 dark:border-gray-700">{children}</td>
+  )
+};
+
 // Memoized message component to prevent unnecessary re-renders
-const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFileOpen, onShowSettings, autoExpandTools, showRawParameters }) => {
-  const isGrouped = prevMessage && prevMessage.type === message.type && 
-                   prevMessage.type === 'assistant' && 
-                   !prevMessage.isToolUse && !message.isToolUse;
+const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFileOpen, onShowSettings, autoExpandTools, showRawParameters, showThinking, selectedProject }) => {
+  const isGrouped = prevMessage && prevMessage.type === message.type &&
+                   ((prevMessage.type === 'assistant') ||
+                    (prevMessage.type === 'user') ||
+                    (prevMessage.type === 'tool') ||
+                    (prevMessage.type === 'error'));
   const messageRef = React.useRef(null);
   const [isExpanded, setIsExpanded] = React.useState(false);
   React.useEffect(() => {
@@ -256,21 +456,76 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
           <div className="w-full">
             
             {message.isToolUse && !['Read', 'TodoWrite', 'TodoRead'].includes(message.toolName) ? (
-              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-2 sm:p-3 mb-2">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 bg-blue-600 rounded flex items-center justify-center">
-                      <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              (() => {
+                // Minimize Grep and Glob tools since they happen frequently
+                const isSearchTool = ['Grep', 'Glob'].includes(message.toolName);
+
+                if (isSearchTool) {
+                  return (
+                    <>
+                      <div className="group relative bg-gray-50/50 dark:bg-gray-800/30 border-l-2 border-blue-400 dark:border-blue-500 pl-3 py-2 my-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 flex-1 min-w-0">
+                            <svg className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                            <span className="font-medium flex-shrink-0">{message.toolName}</span>
+                            <span className="text-gray-400 dark:text-gray-500 flex-shrink-0">•</span>
+                            {message.toolInput && (() => {
+                              try {
+                                const input = JSON.parse(message.toolInput);
+                                return (
+                                  <span className="font-mono truncate flex-1 min-w-0">
+                                    {input.pattern && <span>pattern: <span className="text-blue-600 dark:text-blue-400">{input.pattern}</span></span>}
+                                    {input.path && <span className="ml-2">in: {input.path}</span>}
+                                  </span>
+                                );
+                              } catch (e) {
+                                return null;
+                              }
+                            })()}
+                          </div>
+                          {message.toolResult && (
+                            <a
+                              href={`#tool-result-${message.toolId}`}
+                              className="flex-shrink-0 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium transition-colors flex items-center gap-1"
+                            >
+                              <span>results</span>
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  );
+                }
+
+                // Full display for other tools
+                return (
+              <div className="group relative bg-gradient-to-br from-blue-50/50 to-indigo-50/50 dark:from-blue-950/20 dark:to-indigo-950/20 border border-blue-100/30 dark:border-blue-800/30 rounded-lg p-3 mb-2">
+                {/* Decorative gradient overlay */}
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/3 to-indigo-500/3 dark:from-blue-400/3 dark:to-indigo-400/3 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+
+                <div className="relative flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="relative w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 dark:from-blue-400 dark:to-indigo-500 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20 dark:shadow-blue-400/20">
+                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                       </svg>
+                      {/* Subtle pulse animation */}
+                      <div className="absolute inset-0 rounded-lg bg-blue-500 dark:bg-blue-400 animate-pulse opacity-20"></div>
                     </div>
-                    <span className="font-medium text-blue-900 dark:text-blue-100">
-                      Using {message.toolName}
-                    </span>
-                    <span className="text-xs text-blue-600 dark:text-blue-400 font-mono">
-                      {message.toolId}
-                    </span>
+                    <div className="flex flex-col">
+                      <span className="font-semibold text-gray-900 dark:text-white text-sm">
+                        {message.toolName}
+                      </span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+                        {message.toolId}
+                      </span>
+                    </div>
                   </div>
                   {onShowSettings && (
                     <button
@@ -278,10 +533,10 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                         e.stopPropagation();
                         onShowSettings();
                       }}
-                      className="p-1 rounded hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
+                      className="p-2 rounded-lg hover:bg-white/60 dark:hover:bg-gray-800/60 transition-all duration-200 group/btn backdrop-blur-sm"
                       title="Tool Settings"
                     >
-                      <svg className="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-4 h-4 text-gray-600 dark:text-gray-400 group-hover/btn:text-blue-600 dark:group-hover/btn:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                       </svg>
@@ -293,39 +548,88 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     const input = JSON.parse(message.toolInput);
                     if (input.file_path && input.old_string && input.new_string) {
                       return (
-                        <details className="mt-2" open={autoExpandTools}>
-                          <summary className="text-sm text-blue-700 dark:text-blue-300 cursor-pointer hover:text-blue-800 dark:hover:text-blue-200 flex items-center gap-2">
-                            <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <details className="relative mt-3 group/details" open={autoExpandTools}>
+                          <summary className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 p-2.5 rounded-lg hover:bg-white/50 dark:hover:bg-gray-800/50">
+                            <svg className="w-4 h-4 transition-transform duration-200 group-open/details:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                             </svg>
-                            📝 View edit diff for 
-                            <button 
-                              onClick={(e) => {
+                            <span className="flex items-center gap-2">
+                              <span>View edit diff for</span>
+                            </span> 
+                            <button
+                              onClick={async (e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                onFileOpen && onFileOpen(input.file_path, {
-                                  old_string: input.old_string,
-                                  new_string: input.new_string
-                                });
+                                if (!onFileOpen) return;
+
+                                try {
+                                  // Fetch the current file (after the edit)
+                                  const response = await api.readFile(selectedProject?.name, input.file_path);
+                                  const data = await response.json();
+
+                                  if (!response.ok || data.error) {
+                                    console.error('Failed to fetch file:', data.error);
+                                    onFileOpen(input.file_path);
+                                    return;
+                                  }
+
+                                  const currentContent = data.content || '';
+
+                                  // Reverse apply the edit: replace new_string back to old_string to get the file BEFORE the edit
+                                  const oldContent = currentContent.replace(input.new_string, input.old_string);
+
+                                  // Pass the full file before and after the edit
+                                  onFileOpen(input.file_path, {
+                                    old_string: oldContent,
+                                    new_string: currentContent
+                                  });
+                                } catch (error) {
+                                  console.error('Error preparing diff:', error);
+                                  onFileOpen(input.file_path);
+                                }
                               }}
-                              className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline font-mono"
+                              className="px-2.5 py-1 rounded-md bg-white/60 dark:bg-gray-800/60 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 font-mono text-xs font-medium transition-all duration-200 shadow-sm"
                             >
                               {input.file_path.split('/').pop()}
                             </button>
                           </summary>
-                          <div className="mt-3">
-                            <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-                              <div className="flex items-center justify-between px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-                                <button 
-                                  onClick={() => onFileOpen && onFileOpen(input.file_path, {
-                                    old_string: input.old_string,
-                                    new_string: input.new_string
-                                  })}
-                                  className="text-xs font-mono text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 truncate underline cursor-pointer"
+                          <div className="mt-3 pl-6">
+                            <div className="bg-white dark:bg-gray-900/50 border border-gray-200/60 dark:border-gray-700/60 rounded-lg overflow-hidden shadow-sm">
+                              <div className="flex items-center justify-between px-4 py-2.5 bg-gradient-to-r from-gray-50 to-gray-100/50 dark:from-gray-800/80 dark:to-gray-800/40 border-b border-gray-200/60 dark:border-gray-700/60 backdrop-blur-sm">
+                                <button
+                                  onClick={async () => {
+                                    if (!onFileOpen) return;
+
+                                    try {
+                                      // Fetch the current file (after the edit)
+                                      const response = await api.readFile(selectedProject?.name, input.file_path);
+                                      const data = await response.json();
+
+                                      if (!response.ok || data.error) {
+                                        console.error('Failed to fetch file:', data.error);
+                                        onFileOpen(input.file_path);
+                                        return;
+                                      }
+
+                                      const currentContent = data.content || '';
+                                      // Reverse apply the edit: replace new_string back to old_string
+                                      const oldContent = currentContent.replace(input.new_string, input.old_string);
+
+                                      // Pass the full file before and after the edit
+                                      onFileOpen(input.file_path, {
+                                        old_string: oldContent,
+                                        new_string: currentContent
+                                      });
+                                    } catch (error) {
+                                      console.error('Error preparing diff:', error);
+                                      onFileOpen(input.file_path);
+                                    }
+                                  }}
+                                  className="text-xs font-mono text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 truncate cursor-pointer font-medium transition-colors"
                                 >
                                   {input.file_path}
                                 </button>
-                                <span className="text-xs text-gray-500 dark:text-gray-400">
+                                <span className="text-xs text-gray-500 dark:text-gray-400 font-medium px-2 py-0.5 bg-gray-100 dark:bg-gray-700/50 rounded">
                                   Diff
                                 </span>
                               </div>
@@ -351,11 +655,14 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                               </div>
                             </div>
                             {showRawParameters && (
-                              <details className="mt-2" open={autoExpandTools}>
-                                <summary className="text-xs text-blue-600 dark:text-blue-400 cursor-pointer hover:text-blue-700 dark:hover:text-blue-300">
+                              <details className="relative mt-3 pl-6 group/raw" open={autoExpandTools}>
+                                <summary className="flex items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-400 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 p-2 rounded-lg hover:bg-white/50 dark:hover:bg-gray-800/50">
+                                  <svg className="w-3 h-3 transition-transform duration-200 group-open/raw:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                  </svg>
                                   View raw parameters
                                 </summary>
-                                <pre className="mt-2 text-xs bg-blue-100 dark:bg-blue-800/30 p-2 rounded whitespace-pre-wrap break-words overflow-hidden text-blue-900 dark:text-blue-100">
+                                <pre className="mt-2 text-xs bg-gray-50 dark:bg-gray-800/50 border border-gray-200/60 dark:border-gray-700/60 p-3 rounded-lg whitespace-pre-wrap break-words overflow-hidden text-gray-700 dark:text-gray-300 font-mono">
                                   {message.toolInput}
                                 </pre>
                               </details>
@@ -368,11 +675,14 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     // Fall back to raw display if parsing fails
                   }
                   return (
-                    <details className="mt-2" open={autoExpandTools}>
-                      <summary className="text-sm text-blue-700 dark:text-blue-300 cursor-pointer hover:text-blue-800 dark:hover:text-blue-200">
+                    <details className="relative mt-3 group/params" open={autoExpandTools}>
+                      <summary className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 p-2.5 rounded-lg hover:bg-white/50 dark:hover:bg-gray-800/50">
+                        <svg className="w-4 h-4 transition-transform duration-200 group-open/params:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
                         View input parameters
                       </summary>
-                      <pre className="mt-2 text-xs bg-blue-100 dark:bg-blue-800/30 p-2 rounded whitespace-pre-wrap break-words overflow-hidden text-blue-900 dark:text-blue-100">
+                      <pre className="mt-3 text-xs bg-gray-50 dark:bg-gray-800/50 border border-gray-200/60 dark:border-gray-700/60 p-3 rounded-lg whitespace-pre-wrap break-words overflow-hidden text-gray-700 dark:text-gray-300 font-mono">
                         {message.toolInput}
                       </pre>
                     </details>
@@ -395,39 +705,80 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                       
                       if (input.file_path && input.content !== undefined) {
                         return (
-                          <details className="mt-2" open={autoExpandTools}>
-                            <summary className="text-sm text-blue-700 dark:text-blue-300 cursor-pointer hover:text-blue-800 dark:hover:text-blue-200 flex items-center gap-2">
-                              <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <details className="relative mt-3 group/details" open={autoExpandTools}>
+                            <summary className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 p-2.5 rounded-lg hover:bg-white/50 dark:hover:bg-gray-800/50">
+                              <svg className="w-4 h-4 transition-transform duration-200 group-open/details:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                               </svg>
-                              📄 Creating new file: 
-                              <button 
-                                onClick={(e) => {
+                              <span className="flex items-center gap-2">
+                                <span className="text-lg leading-none">📄</span>
+                                <span>Creating new file:</span>
+                              </span>
+                              <button
+                                onClick={async (e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
-                                  onFileOpen && onFileOpen(input.file_path, {
-                                    old_string: '',
-                                    new_string: input.content
-                                  });
+                                  if (!onFileOpen) return;
+
+                                  try {
+                                    // Fetch the written file from disk
+                                    const response = await api.readFile(selectedProject?.name, input.file_path);
+                                    const data = await response.json();
+
+                                    const newContent = (response.ok && !data.error) ? data.content || '' : input.content || '';
+
+                                    // New file: old_string is empty, new_string is the full file
+                                    onFileOpen(input.file_path, {
+                                      old_string: '',
+                                      new_string: newContent
+                                    });
+                                  } catch (error) {
+                                    console.error('Error preparing diff:', error);
+                                    // Fallback to tool input content
+                                    onFileOpen(input.file_path, {
+                                      old_string: '',
+                                      new_string: input.content || ''
+                                    });
+                                  }
                                 }}
-                                className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline font-mono"
+                                className="px-2.5 py-1 rounded-md bg-white/60 dark:bg-gray-800/60 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 font-mono text-xs font-medium transition-all duration-200 shadow-sm"
                               >
                                 {input.file_path.split('/').pop()}
                               </button>
                             </summary>
-                            <div className="mt-3">
-                              <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-                                <div className="flex items-center justify-between px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-                                  <button 
-                                    onClick={() => onFileOpen && onFileOpen(input.file_path, {
-                                      old_string: '',
-                                      new_string: input.content
-                                    })}
-                                    className="text-xs font-mono text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 truncate underline cursor-pointer"
+                            <div className="mt-3 pl-6">
+                              <div className="bg-white dark:bg-gray-900/50 border border-gray-200/60 dark:border-gray-700/60 rounded-lg overflow-hidden shadow-sm">
+                                <div className="flex items-center justify-between px-4 py-2.5 bg-gradient-to-r from-gray-50 to-gray-100/50 dark:from-gray-800/80 dark:to-gray-800/40 border-b border-gray-200/60 dark:border-gray-700/60 backdrop-blur-sm">
+                                  <button
+                                    onClick={async () => {
+                                      if (!onFileOpen) return;
+
+                                      try {
+                                        // Fetch the written file from disk
+                                        const response = await api.readFile(selectedProject?.name, input.file_path);
+                                        const data = await response.json();
+
+                                        const newContent = (response.ok && !data.error) ? data.content || '' : input.content || '';
+
+                                        // New file: old_string is empty, new_string is the full file
+                                        onFileOpen(input.file_path, {
+                                          old_string: '',
+                                          new_string: newContent
+                                        });
+                                      } catch (error) {
+                                        console.error('Error preparing diff:', error);
+                                        // Fallback to tool input content
+                                        onFileOpen(input.file_path, {
+                                          old_string: '',
+                                          new_string: input.content || ''
+                                        });
+                                      }
+                                    }}
+                                    className="text-xs font-mono text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 truncate cursor-pointer font-medium transition-colors"
                                   >
                                     {input.file_path}
                                   </button>
-                                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                                  <span className="text-xs text-gray-500 dark:text-gray-400 font-medium px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded">
                                     New File
                                   </span>
                                 </div>
@@ -453,11 +804,14 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                                 </div>
                               </div>
                               {showRawParameters && (
-                                <details className="mt-2" open={autoExpandTools}>
-                                  <summary className="text-xs text-blue-600 dark:text-blue-400 cursor-pointer hover:text-blue-700 dark:hover:text-blue-300">
+                                <details className="relative mt-3 pl-6 group/raw" open={autoExpandTools}>
+                                  <summary className="flex items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-400 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 p-2 rounded-lg hover:bg-white/50 dark:hover:bg-gray-800/50">
+                                    <svg className="w-3 h-3 transition-transform duration-200 group-open/raw:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
                                     View raw parameters
                                   </summary>
-                                  <pre className="mt-2 text-xs bg-blue-100 dark:bg-blue-800/30 p-2 rounded whitespace-pre-wrap break-words overflow-hidden text-blue-900 dark:text-blue-100">
+                                  <pre className="mt-2 text-xs bg-gray-50 dark:bg-gray-800/50 border border-gray-200/60 dark:border-gray-700/60 p-3 rounded-lg whitespace-pre-wrap break-words overflow-hidden text-gray-700 dark:text-gray-300 font-mono">
                                     {message.toolInput}
                                   </pre>
                                 </details>
@@ -477,21 +831,27 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                       const input = JSON.parse(message.toolInput);
                       if (input.todos && Array.isArray(input.todos)) {
                         return (
-                          <details className="mt-2" open={autoExpandTools}>
-                            <summary className="text-sm text-blue-700 dark:text-blue-300 cursor-pointer hover:text-blue-800 dark:hover:text-blue-200 flex items-center gap-2">
-                              <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <details className="relative mt-3 group/todo" open={autoExpandTools}>
+                            <summary className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 p-2.5 rounded-lg hover:bg-white/50 dark:hover:bg-gray-800/50">
+                              <svg className="w-4 h-4 transition-transform duration-200 group-open/todo:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                               </svg>
-                              Updating Todo List
+                              <span className="flex items-center gap-2">
+                                <span className="text-lg leading-none">✓</span>
+                                <span>Updating Todo List</span>
+                              </span>
                             </summary>
                             <div className="mt-3">
                               <TodoList todos={input.todos} />
                               {showRawParameters && (
-                                <details className="mt-3" open={autoExpandTools}>
-                                  <summary className="text-xs text-blue-600 dark:text-blue-400 cursor-pointer hover:text-blue-700 dark:hover:text-blue-300">
+                                <details className="relative mt-3 group/raw" open={autoExpandTools}>
+                                  <summary className="flex items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-400 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 p-2 rounded-lg hover:bg-white/50 dark:hover:bg-gray-800/50">
+                                    <svg className="w-3 h-3 transition-transform duration-200 group-open/raw:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
                                     View raw parameters
                                   </summary>
-                                  <pre className="mt-2 text-xs bg-blue-100 dark:bg-blue-800/30 p-2 rounded overflow-x-auto text-blue-900 dark:text-blue-100">
+                                  <pre className="mt-2 text-xs bg-gray-50 dark:bg-gray-800/50 border border-gray-200/60 dark:border-gray-700/60 p-3 rounded-lg overflow-x-auto text-gray-700 dark:text-gray-300 font-mono">
                                     {message.toolInput}
                                   </pre>
                                 </details>
@@ -510,42 +870,17 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     try {
                       const input = JSON.parse(message.toolInput);
                       return (
-                        <details className="mt-2" open={autoExpandTools}>
-                          <summary className="text-sm text-blue-700 dark:text-blue-300 cursor-pointer hover:text-blue-800 dark:hover:text-blue-200 flex items-center gap-2">
-                            <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
-                            Running command
-                          </summary>
-                          <div className="mt-3 space-y-2">
-                            <div className="bg-gray-900 dark:bg-gray-950 text-gray-100 rounded-lg p-3 font-mono text-sm">
-                              <div className="flex items-center gap-2 mb-2 text-gray-400">
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                </svg>
-                                <span className="text-xs">Terminal</span>
-                              </div>
-                              <div className="whitespace-pre-wrap break-all text-green-400">
-                                $ {input.command}
-                              </div>
-                            </div>
-                            {input.description && (
-                              <div className="text-xs text-gray-600 dark:text-gray-400 italic">
-                                {input.description}
-                              </div>
-                            )}
-                            {showRawParameters && (
-                              <details className="mt-2">
-                                <summary className="text-xs text-blue-600 dark:text-blue-400 cursor-pointer hover:text-blue-700 dark:hover:text-blue-300">
-                                  View raw parameters
-                                </summary>
-                                <pre className="mt-2 text-xs bg-blue-100 dark:bg-blue-800/30 p-2 rounded whitespace-pre-wrap break-words overflow-hidden text-blue-900 dark:text-blue-100">
-                                  {message.toolInput}
-                                </pre>
-                              </details>
-                            )}
+                        <div className="my-2">
+                          <div className="bg-gray-900 dark:bg-gray-950 rounded-md px-3 py-2 font-mono text-sm">
+                            <span className="text-green-400">$</span>
+                            <span className="text-gray-100 ml-2">{input.command}</span>
                           </div>
-                        </details>
+                          {input.description && (
+                            <div className="mt-1 text-xs text-gray-500 dark:text-gray-400 italic ml-1">
+                              {input.description}
+                            </div>
+                          )}
+                        </div>
                       );
                     } catch (e) {
                       // Fall back to regular display
@@ -562,7 +897,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                         return (
                           <div className="mt-2 text-sm text-blue-700 dark:text-blue-300">
                             Read{' '}
-                            <button 
+                            <button
                               onClick={() => onFileOpen && onFileOpen(input.file_path)}
                               className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline font-mono"
                             >
@@ -591,9 +926,9 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                               </svg>
                               📋 View implementation plan
                             </summary>
-                            <div className="mt-3 prose prose-sm max-w-none dark:prose-invert">
-                              <ReactMarkdown>{planContent}</ReactMarkdown>
-                            </div>
+                            <Markdown className="mt-3 prose prose-sm max-w-none dark:prose-invert">
+                              {planContent}
+                            </Markdown>
                           </details>
                         );
                       }
@@ -604,14 +939,14 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                   
                   // Regular tool input display for other tools
                   return (
-                    <details className="mt-2" open={autoExpandTools}>
-                      <summary className="text-sm text-blue-700 dark:text-blue-300 cursor-pointer hover:text-blue-800 dark:hover:text-blue-200 flex items-center gap-2">
-                        <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <details className="relative mt-3 group/params" open={autoExpandTools}>
+                      <summary className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 p-2.5 rounded-lg hover:bg-white/50 dark:hover:bg-gray-800/50">
+                        <svg className="w-4 h-4 transition-transform duration-200 group-open/params:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
                         View input parameters
                       </summary>
-                      <pre className="mt-2 text-xs bg-blue-100 dark:bg-blue-800/30 p-2 rounded whitespace-pre-wrap break-words overflow-hidden text-blue-900 dark:text-blue-100">
+                      <pre className="mt-3 text-xs bg-gray-50 dark:bg-gray-800/50 border border-gray-200/60 dark:border-gray-700/60 p-3 rounded-lg whitespace-pre-wrap break-words overflow-hidden text-gray-700 dark:text-gray-300 font-mono">
                         {message.toolInput}
                       </pre>
                     </details>
@@ -619,35 +954,57 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 })()}
                 
                 {/* Tool Result Section */}
-                {message.toolResult && (
-                  <div className="mt-3 border-t border-blue-200 dark:border-blue-700 pt-3">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className={`w-4 h-4 rounded flex items-center justify-center ${
-                        message.toolResult.isError 
-                          ? 'bg-red-500' 
-                          : 'bg-green-500'
+                {message.toolResult && (() => {
+                  // Hide tool results for Edit/Write/Bash unless there's an error
+                  const shouldHideResult = !message.toolResult.isError &&
+                    (message.toolName === 'Edit' || message.toolName === 'Write' || message.toolName === 'ApplyPatch' || message.toolName === 'Bash');
+
+                  if (shouldHideResult) {
+                    return null;
+                  }
+
+                  return (
+                  <div
+                    id={`tool-result-${message.toolId}`}
+                    className={`relative mt-4 p-4 rounded-lg border backdrop-blur-sm scroll-mt-4 ${
+                    message.toolResult.isError
+                      ? 'bg-gradient-to-br from-red-50 to-rose-50 dark:from-red-950/20 dark:to-rose-950/20 border-red-200/60 dark:border-red-800/60'
+                      : 'bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 border-green-200/60 dark:border-green-800/60'
+                  }`}>
+                    {/* Decorative gradient overlay */}
+                    <div className={`absolute inset-0 rounded-lg opacity-50 ${
+                      message.toolResult.isError
+                        ? 'bg-gradient-to-br from-red-500/5 to-rose-500/5 dark:from-red-400/5 dark:to-rose-400/5'
+                        : 'bg-gradient-to-br from-green-500/5 to-emerald-500/5 dark:from-green-400/5 dark:to-emerald-400/5'
+                    }`}></div>
+
+                    <div className="relative flex items-center gap-2.5 mb-3">
+                      <div className={`w-6 h-6 rounded-lg flex items-center justify-center shadow-md ${
+                        message.toolResult.isError
+                          ? 'bg-gradient-to-br from-red-500 to-rose-600 dark:from-red-400 dark:to-rose-500 shadow-red-500/20'
+                          : 'bg-gradient-to-br from-green-500 to-emerald-600 dark:from-green-400 dark:to-emerald-500 shadow-green-500/20'
                       }`}>
-                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           {message.toolResult.isError ? (
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                           ) : (
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                           )}
                         </svg>
                       </div>
-                      <span className={`text-sm font-medium ${
-                        message.toolResult.isError 
-                          ? 'text-red-700 dark:text-red-300' 
-                          : 'text-green-700 dark:text-green-300'
+                      <span className={`text-sm font-semibold ${
+                        message.toolResult.isError
+                          ? 'text-red-800 dark:text-red-200'
+                          : 'text-green-800 dark:text-green-200'
                       }`}>
                         {message.toolResult.isError ? 'Tool Error' : 'Tool Result'}
                       </span>
                     </div>
-                    
-                    <div className={`text-sm ${
-                      message.toolResult.isError 
-                        ? 'text-red-800 dark:text-red-200' 
-                        : 'text-green-800 dark:text-green-200'
+
+                    <div className={`relative text-sm ${
+                      message.toolResult.isError
+                        ? 'text-red-900 dark:text-red-100'
+                        : 'text-green-900 dark:text-green-100'
                     }`}>
                       {(() => {
                         const content = String(message.toolResult.content || '');
@@ -701,14 +1058,65 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                                   <div className="flex items-center gap-2 mb-3">
                                     <span className="font-medium">Implementation Plan</span>
                                   </div>
-                                  <div className="prose prose-sm max-w-none dark:prose-invert">
-                                    <ReactMarkdown>{planContent}</ReactMarkdown>
-                                  </div>
+                                  <Markdown className="prose prose-sm max-w-none dark:prose-invert">
+                                    {planContent}
+                                  </Markdown>
                                 </div>
                               );
                             }
                           } catch (e) {
                             // Fall through to regular handling
+                          }
+                        }
+
+                        // Special handling for Grep/Glob results with structured data
+                        if ((message.toolName === 'Grep' || message.toolName === 'Glob') && message.toolResult?.toolUseResult) {
+                          const toolData = message.toolResult.toolUseResult;
+
+                          // Handle files_with_matches mode or any tool result with filenames array
+                          if (toolData.filenames && Array.isArray(toolData.filenames) && toolData.filenames.length > 0) {
+                            return (
+                              <div>
+                                <div className="flex items-center gap-2 mb-3">
+                                  <span className="font-medium">
+                                    Found {toolData.numFiles || toolData.filenames.length} {(toolData.numFiles === 1 || toolData.filenames.length === 1) ? 'file' : 'files'}
+                                  </span>
+                                </div>
+                                <div className="space-y-1 max-h-96 overflow-y-auto">
+                                  {toolData.filenames.map((filePath, index) => {
+                                    const fileName = filePath.split('/').pop();
+                                    const dirPath = filePath.substring(0, filePath.lastIndexOf('/'));
+
+                                    return (
+                                      <div
+                                        key={index}
+                                        onClick={() => {
+                                          if (onFileOpen) {
+                                            onFileOpen(filePath);
+                                          }
+                                        }}
+                                        className="group flex items-center gap-2 px-2 py-1.5 rounded hover:bg-green-100/50 dark:hover:bg-green-800/20 cursor-pointer transition-colors"
+                                      >
+                                        <svg className="w-4 h-4 text-green-600 dark:text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                        <div className="flex-1 min-w-0">
+                                          <div className="font-mono text-sm font-medium text-green-800 dark:text-green-200 truncate group-hover:text-green-900 dark:group-hover:text-green-100">
+                                            {fileName}
+                                          </div>
+                                          <div className="font-mono text-xs text-green-600/70 dark:text-green-400/70 truncate">
+                                            {dirPath}
+                                          </div>
+                                        </div>
+                                        <svg className="w-4 h-4 text-green-600 dark:text-green-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                        </svg>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
                           }
                         }
 
@@ -819,8 +1227,28 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                               <div className="flex items-center gap-2 mb-2">
                                 <span className="font-medium">File updated successfully</span>
                               </div>
-                              <button 
-                                onClick={() => onFileOpen && onFileOpen(fileEditMatch[1])}
+                              <button
+                                onClick={async () => {
+                                  if (!onFileOpen) return;
+
+                                  // Fetch FULL file content with diff from git
+                                  try {
+                                    const response = await authenticatedFetch(`/api/git/file-with-diff?project=${encodeURIComponent(selectedProject?.name)}&file=${encodeURIComponent(fileEditMatch[1])}`);
+                                    const data = await response.json();
+
+                                    if (!data.error && data.oldContent !== undefined && data.currentContent !== undefined) {
+                                      onFileOpen(fileEditMatch[1], {
+                                        old_string: data.oldContent || '',
+                                        new_string: data.currentContent || ''
+                                      });
+                                    } else {
+                                      onFileOpen(fileEditMatch[1]);
+                                    }
+                                  } catch (error) {
+                                    console.error('Error fetching file diff:', error);
+                                    onFileOpen(fileEditMatch[1]);
+                                  }
+                                }}
                                 className="text-xs font-mono bg-green-100 dark:bg-green-800/30 px-2 py-1 rounded text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline cursor-pointer"
                               >
                                 {fileEditMatch[1]}
@@ -837,8 +1265,28 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                               <div className="flex items-center gap-2 mb-2">
                                 <span className="font-medium">File created successfully</span>
                               </div>
-                              <button 
-                                onClick={() => onFileOpen && onFileOpen(fileCreateMatch[1])}
+                              <button
+                                onClick={async () => {
+                                  if (!onFileOpen) return;
+
+                                  // Fetch FULL file content with diff from git
+                                  try {
+                                    const response = await authenticatedFetch(`/api/git/file-with-diff?project=${encodeURIComponent(selectedProject?.name)}&file=${encodeURIComponent(fileCreateMatch[1])}`);
+                                    const data = await response.json();
+
+                                    if (!data.error && data.oldContent !== undefined && data.currentContent !== undefined) {
+                                      onFileOpen(fileCreateMatch[1], {
+                                        old_string: data.oldContent || '',
+                                        new_string: data.currentContent || ''
+                                      });
+                                    } else {
+                                      onFileOpen(fileCreateMatch[1]);
+                                    }
+                                  } catch (error) {
+                                    console.error('Error fetching file diff:', error);
+                                    onFileOpen(fileCreateMatch[1]);
+                                  }
+                                }}
                                 className="text-xs font-mono bg-green-100 dark:bg-green-800/30 px-2 py-1 rounded text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline cursor-pointer"
                               >
                                 {fileCreateMatch[1]}
@@ -893,23 +1341,26 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                                 </svg>
                                 View full output ({content.length} chars)
                               </summary>
-                              <div className="mt-2 prose prose-sm max-w-none prose-green dark:prose-invert">
-                                <ReactMarkdown>{content}</ReactMarkdown>
-                              </div>
+                              <Markdown className="mt-2 prose prose-sm max-w-none prose-green dark:prose-invert">
+                                {content}
+                              </Markdown>
                             </details>
                           );
                         }
                         
                         return (
-                          <div className="prose prose-sm max-w-none prose-green dark:prose-invert">
-                            <ReactMarkdown>{content}</ReactMarkdown>
-                          </div>
+                          <Markdown className="prose prose-sm max-w-none prose-green dark:prose-invert">
+                            {content}
+                          </Markdown>
                         );
                       })()}
                     </div>
                   </div>
-                )}
+                  );
+                })()}
               </div>
+                );
+              })()
             ) : message.isInteractivePrompt ? (
               // Special handling for interactive prompts
               <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
@@ -1001,21 +1452,31 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                   if (input.file_path) {
                     const filename = input.file_path.split('/').pop();
                     return (
-                      <div className="bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-300 dark:border-blue-600 pl-3 py-1 mb-2 text-sm text-blue-700 dark:text-blue-300">
-                        📖 Read{' '}
-                        <button 
-                          onClick={() => onFileOpen && onFileOpen(input.file_path)}
-                          className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline font-mono"
-                        >
-                          {filename}
-                        </button>
+                      <div className="bg-gray-50/50 dark:bg-gray-800/30 border-l-2 border-gray-400 dark:border-gray-500 pl-3 py-2 my-2">
+                        <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                          <svg className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                          </svg>
+                          <span className="font-medium">Read</span>
+                          <button
+                            onClick={() => onFileOpen && onFileOpen(input.file_path)}
+                            className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-mono transition-colors"
+                          >
+                            {filename}
+                          </button>
+                        </div>
                       </div>
                     );
                   }
                 } catch (e) {
                   return (
-                    <div className="bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-300 dark:border-blue-600 pl-3 py-1 mb-2 text-sm text-blue-700 dark:text-blue-300">
-                      📖 Read file
+                    <div className="bg-gray-50/50 dark:bg-gray-800/30 border-l-2 border-gray-400 dark:border-gray-500 pl-3 py-2 my-2">
+                      <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                        <svg className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                        </svg>
+                        <span className="font-medium">Read file</span>
+                      </div>
                     </div>
                   );
                 }
@@ -1027,9 +1488,12 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                   const input = JSON.parse(message.toolInput);
                   if (input.todos && Array.isArray(input.todos)) {
                     return (
-                      <div className="bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-300 dark:border-blue-600 pl-3 py-1 mb-2">
-                        <div className="text-sm text-blue-700 dark:text-blue-300 mb-2">
-                          📝 Update todo list
+                      <div className="bg-gray-50/50 dark:bg-gray-800/30 border-l-2 border-gray-400 dark:border-gray-500 pl-3 py-2 my-2">
+                        <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 mb-2">
+                          <svg className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                          </svg>
+                          <span className="font-medium">Update todo list</span>
                         </div>
                         <TodoList todos={input.todos} />
                       </div>
@@ -1037,21 +1501,31 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                   }
                 } catch (e) {
                   return (
-                    <div className="bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-300 dark:border-blue-600 pl-3 py-1 mb-2 text-sm text-blue-700 dark:text-blue-300">
-                      📝 Update todo list
+                    <div className="bg-gray-50/50 dark:bg-gray-800/30 border-l-2 border-gray-400 dark:border-gray-500 pl-3 py-2 my-2">
+                      <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                        <svg className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                        </svg>
+                        <span className="font-medium">Update todo list</span>
+                      </div>
                     </div>
                   );
                 }
               })()
             ) : message.isToolUse && message.toolName === 'TodoRead' ? (
               // Simple TodoRead tool indicator
-              <div className="bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-300 dark:border-blue-600 pl-3 py-1 mb-2 text-sm text-blue-700 dark:text-blue-300">
-                📋 Read todo list
+              <div className="bg-gray-50/50 dark:bg-gray-800/30 border-l-2 border-gray-400 dark:border-gray-500 pl-3 py-2 my-2">
+                <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                  <svg className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                  <span className="font-medium">Read todo list</span>
+                </div>
               </div>
             ) : (
               <div className="text-sm text-gray-700 dark:text-gray-300">
                 {/* Thinking accordion for reasoning */}
-                {message.reasoning && (
+                {showThinking && message.reasoning && (
                   <details className="mb-3">
                     <summary className="cursor-pointer text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 font-medium">
                       💭 Thinking...
@@ -1064,48 +1538,50 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                   </details>
                 )}
                 
-                {message.type === 'assistant' ? (
-                  <div className="prose prose-sm max-w-none dark:prose-invert prose-gray [&_code]:!bg-transparent [&_code]:!p-0 [&_pre]:!bg-transparent [&_pre]:!border-0 [&_pre]:!p-0">
-                    <ReactMarkdown
-                      components={{
-                        code: ({node, inline, className, children, ...props}) => {
-                          return inline ? (
-                            <strong className="text-blue-600 dark:text-blue-400 font-bold not-prose" {...props}>
-                              {children}
-                            </strong>
-                          ) : (
-                            <div className="bg-gray-800 dark:bg-gray-800 border border-gray-600/30 dark:border-gray-600/30 p-3 rounded-lg overflow-hidden my-2">
-                              <code className="text-gray-100 dark:text-gray-200 text-sm font-mono block whitespace-pre-wrap break-words" {...props}>
-                                {children}
-                              </code>
-                            </div>
-                          );
-                        },
-                        blockquote: ({children}) => (
-                          <blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-4 italic text-gray-600 dark:text-gray-400 my-2">
-                            {children}
-                          </blockquote>
-                        ),
-                        a: ({href, children}) => (
-                          <a href={href} className="text-blue-600 dark:text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">
-                            {children}
-                          </a>
-                        ),
-                        p: ({children}) => (
-                          <div className="mb-2 last:mb-0">
-                            {children}
+                {(() => {
+                  const content = formatUsageLimitText(String(message.content || ''));
+
+                  // Detect if content is pure JSON (starts with { or [)
+                  const trimmedContent = content.trim();
+                  if ((trimmedContent.startsWith('{') || trimmedContent.startsWith('[')) &&
+                      (trimmedContent.endsWith('}') || trimmedContent.endsWith(']'))) {
+                    try {
+                      const parsed = JSON.parse(trimmedContent);
+                      const formatted = JSON.stringify(parsed, null, 2);
+
+                      return (
+                        <div className="my-2">
+                          <div className="flex items-center gap-2 mb-2 text-sm text-gray-600 dark:text-gray-400">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                            </svg>
+                            <span className="font-medium">JSON Response</span>
                           </div>
-                        )
-                      }}
-                    >
-                      {formatUsageLimitText(String(message.content || ''))}
-                    </ReactMarkdown>
-                  </div>
-                ) : (
-                  <div className="whitespace-pre-wrap">
-                    {formatUsageLimitText(String(message.content || ''))}
-                  </div>
-                )}
+                          <div className="bg-gray-800 dark:bg-gray-900 border border-gray-600/30 dark:border-gray-700 rounded-lg overflow-hidden">
+                            <pre className="p-4 overflow-x-auto">
+                              <code className="text-gray-100 dark:text-gray-200 text-sm font-mono block whitespace-pre">
+                                {formatted}
+                              </code>
+                            </pre>
+                          </div>
+                        </div>
+                      );
+                    } catch (e) {
+                      // Not valid JSON, fall through to normal rendering
+                    }
+                  }
+
+                  // Normal rendering for non-JSON content
+                  return message.type === 'assistant' ? (
+                    <Markdown className="prose prose-sm max-w-none dark:prose-invert prose-gray">
+                      {content}
+                    </Markdown>
+                  ) : (
+                    <div className="whitespace-pre-wrap">
+                      {content}
+                    </div>
+                  );
+                })()}
               </div>
             )}
             
@@ -1164,7 +1640,7 @@ const ImageAttachment = ({ file, onRemove, uploadProgress, error }) => {
 // - onReplaceTemporarySession: Called to replace temporary session ID with real WebSocket session ID
 //
 // This ensures uninterrupted chat experience by pausing sidebar refreshes during conversations.
-function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, messages, onFileOpen, onInputFocusChange, onSessionActive, onSessionInactive, onReplaceTemporarySession, onNavigateToSession, onShowSettings, autoExpandTools, showRawParameters, autoScrollToBottom, sendByCtrlEnter, onTaskClick, onShowAllTasks }) {
+function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, messages, onFileOpen, onInputFocusChange, onSessionActive, onSessionInactive, onSessionProcessing, onSessionNotProcessing, processingSessions, onReplaceTemporarySession, onNavigateToSession, onShowSettings, autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter, externalMessageUpdate, onTaskClick, onShowAllTasks }) {
   const { tasksEnabled } = useTasksSettings();
   const [input, setInput] = useState(() => {
     if (typeof window !== 'undefined' && selectedProject) {
@@ -1196,10 +1672,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [imageErrors, setImageErrors] = useState(new Map());
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
+  const inputContainerRef = useRef(null);
   const scrollContainerRef = useRef(null);
+  const isLoadingSessionRef = useRef(false); // Track session loading to prevent multiple scrolls
   // Streaming throttle buffers
   const streamBufferRef = useRef('');
   const streamTimerRef = useRef(null);
+  const commandQueryTimerRef = useRef(null);
   const [debouncedInput, setDebouncedInput] = useState('');
   const [showFileDropdown, setShowFileDropdown] = useState(false);
   const [fileList, setFileList] = useState([]);
@@ -1213,7 +1692,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [showCommandMenu, setShowCommandMenu] = useState(false);
   const [slashCommands, setSlashCommands] = useState([]);
   const [filteredCommands, setFilteredCommands] = useState([]);
+  const [commandQuery, setCommandQuery] = useState('');
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
+  const [tokenBudget, setTokenBudget] = useState(null);
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(-1);
   const [slashPosition, setSlashPosition] = useState(-1);
   const [visibleMessageCount, setVisibleMessageCount] = useState(100);
@@ -1224,6 +1705,18 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [cursorModel, setCursorModel] = useState(() => {
     return localStorage.getItem('cursor-model') || 'gpt-5';
   });
+  // Load permission mode for the current session
+  useEffect(() => {
+    if (selectedSession?.id) {
+      const savedMode = localStorage.getItem(`permissionMode-${selectedSession.id}`);
+      if (savedMode) {
+        setPermissionMode(savedMode);
+      } else {
+        setPermissionMode('default');
+      }
+    }
+  }, [selectedSession?.id]);
+
   // When selecting a session from Sidebar, auto-switch provider to match session's origin
   useEffect(() => {
     if (selectedSession && selectedSession.__provider && selectedSession.__provider !== provider) {
@@ -1235,11 +1728,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   // Load Cursor default model from config
   useEffect(() => {
     if (provider === 'cursor') {
-      fetch('/api/cursor/config', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth-token')}`
-        }
-      })
+      authenticatedFetch('/api/cursor/config')
       .then(res => res.json())
       .then(data => {
         if (data.success && data.config?.model?.modelId) {
@@ -1260,6 +1749,344 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       .catch(err => console.error('Error loading Cursor config:', err));
     }
   }, [provider]);
+
+  // Fetch slash commands on mount and when project changes
+  useEffect(() => {
+    const fetchCommands = async () => {
+      if (!selectedProject) return;
+
+      try {
+        const response = await authenticatedFetch('/api/commands/list', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            projectPath: selectedProject.path
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch commands');
+        }
+
+        const data = await response.json();
+
+        // Combine built-in and custom commands
+        const allCommands = [
+          ...(data.builtIn || []).map(cmd => ({ ...cmd, type: 'built-in' })),
+          ...(data.custom || []).map(cmd => ({ ...cmd, type: 'custom' }))
+        ];
+
+        setSlashCommands(allCommands);
+
+        // Load command history from localStorage
+        const historyKey = `command_history_${selectedProject.name}`;
+        const history = safeLocalStorage.getItem(historyKey);
+        if (history) {
+          try {
+            const parsedHistory = JSON.parse(history);
+            // Sort commands by usage frequency
+            const sortedCommands = allCommands.sort((a, b) => {
+              const aCount = parsedHistory[a.name] || 0;
+              const bCount = parsedHistory[b.name] || 0;
+              return bCount - aCount;
+            });
+            setSlashCommands(sortedCommands);
+          } catch (e) {
+            console.error('Error parsing command history:', e);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching slash commands:', error);
+        setSlashCommands([]);
+      }
+    };
+
+    fetchCommands();
+  }, [selectedProject]);
+
+  // Create Fuse instance for fuzzy search
+  const fuse = useMemo(() => {
+    if (!slashCommands.length) return null;
+
+    return new Fuse(slashCommands, {
+      keys: [
+        { name: 'name', weight: 2 },
+        { name: 'description', weight: 1 }
+      ],
+      threshold: 0.4,
+      includeScore: true,
+      minMatchCharLength: 1
+    });
+  }, [slashCommands]);
+
+  // Filter commands based on query
+  useEffect(() => {
+    if (!commandQuery) {
+      setFilteredCommands(slashCommands);
+      return;
+    }
+
+    if (!fuse) {
+      setFilteredCommands([]);
+      return;
+    }
+
+    const results = fuse.search(commandQuery);
+    setFilteredCommands(results.map(result => result.item));
+  }, [commandQuery, slashCommands, fuse]);
+
+  // Calculate frequently used commands
+  const frequentCommands = useMemo(() => {
+    if (!selectedProject || slashCommands.length === 0) return [];
+
+    const historyKey = `command_history_${selectedProject.name}`;
+    const history = safeLocalStorage.getItem(historyKey);
+
+    if (!history) return [];
+
+    try {
+      const parsedHistory = JSON.parse(history);
+
+      // Sort commands by usage count
+      const commandsWithUsage = slashCommands
+        .map(cmd => ({
+          ...cmd,
+          usageCount: parsedHistory[cmd.name] || 0
+        }))
+        .filter(cmd => cmd.usageCount > 0)
+        .sort((a, b) => b.usageCount - a.usageCount)
+        .slice(0, 5); // Top 5 most used
+
+      return commandsWithUsage;
+    } catch (e) {
+      console.error('Error parsing command history:', e);
+      return [];
+    }
+  }, [selectedProject, slashCommands]);
+
+  // Command selection callback with history tracking
+  const handleCommandSelect = useCallback((command, index, isHover) => {
+    if (!command || !selectedProject) return;
+
+    // If hovering, just update the selected index
+    if (isHover) {
+      setSelectedCommandIndex(index);
+      return;
+    }
+
+    // Update command history
+    const historyKey = `command_history_${selectedProject.name}`;
+    const history = safeLocalStorage.getItem(historyKey);
+    let parsedHistory = {};
+
+    try {
+      parsedHistory = history ? JSON.parse(history) : {};
+    } catch (e) {
+      console.error('Error parsing command history:', e);
+    }
+
+    parsedHistory[command.name] = (parsedHistory[command.name] || 0) + 1;
+    safeLocalStorage.setItem(historyKey, JSON.stringify(parsedHistory));
+
+    // Execute the command
+    executeCommand(command);
+  }, [selectedProject]);
+
+  // Execute a command
+  const handleBuiltInCommand = useCallback((result) => {
+    const { action, data } = result;
+
+    switch (action) {
+      case 'clear':
+        // Clear conversation history
+        setChatMessages([]);
+        setSessionMessages([]);
+        break;
+
+      case 'help':
+        // Show help content
+        setChatMessages(prev => [...prev, {
+          role: 'assistant',
+          content: data.content,
+          timestamp: Date.now()
+        }]);
+        break;
+
+      case 'model':
+        // Show model information
+        setChatMessages(prev => [...prev, {
+          role: 'assistant',
+          content: `**Current Model**: ${data.current.model}\n\n**Available Models**:\n\nClaude: ${data.available.claude.join(', ')}\n\nCursor: ${data.available.cursor.join(', ')}`,
+          timestamp: Date.now()
+        }]);
+        break;
+
+      case 'cost': {
+        const costMessage = `**Token Usage**: ${data.tokenUsage.used.toLocaleString()} / ${data.tokenUsage.total.toLocaleString()} (${data.tokenUsage.percentage}%)\n\n**Estimated Cost**:\n- Input: $${data.cost.input}\n- Output: $${data.cost.output}\n- **Total**: $${data.cost.total}\n\n**Model**: ${data.model}`;
+        setChatMessages(prev => [...prev, { role: 'assistant', content: costMessage, timestamp: Date.now() }]);
+        break;
+      }
+
+      case 'status': {
+        const statusMessage = `**System Status**\n\n- Version: ${data.version}\n- Uptime: ${data.uptime}\n- Model: ${data.model}\n- Provider: ${data.provider}\n- Node.js: ${data.nodeVersion}\n- Platform: ${data.platform}`;
+        setChatMessages(prev => [...prev, { role: 'assistant', content: statusMessage, timestamp: Date.now() }]);
+        break;
+      }
+      case 'memory':
+        // Show memory file info
+        if (data.error) {
+          setChatMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `⚠️ ${data.message}`,
+            timestamp: Date.now()
+          }]);
+        } else {
+          setChatMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `📝 ${data.message}\n\nPath: \`${data.path}\``,
+            timestamp: Date.now()
+          }]);
+          // Optionally open file in editor
+          if (data.exists && onFileOpen) {
+            onFileOpen(data.path);
+          }
+        }
+        break;
+
+      case 'config':
+        // Open settings
+        if (onShowSettings) {
+          onShowSettings();
+        }
+        break;
+
+      case 'rewind':
+        // Rewind conversation
+        if (data.error) {
+          setChatMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `⚠️ ${data.message}`,
+            timestamp: Date.now()
+          }]);
+        } else {
+          // Remove last N messages
+          setChatMessages(prev => prev.slice(0, -data.steps * 2)); // Remove user + assistant pairs
+          setChatMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `⏪ ${data.message}`,
+            timestamp: Date.now()
+          }]);
+        }
+        break;
+
+      default:
+        console.warn('Unknown built-in command action:', action);
+    }
+  }, [onFileOpen, onShowSettings]);
+
+  // Ref to store handleSubmit so we can call it from handleCustomCommand
+  const handleSubmitRef = useRef(null);
+
+  // Handle custom command execution
+  const handleCustomCommand = useCallback(async (result, args) => {
+    const { content, hasBashCommands, hasFileIncludes } = result;
+
+    // Show confirmation for bash commands
+    if (hasBashCommands) {
+      const confirmed = window.confirm(
+        'This command contains bash commands that will be executed. Do you want to proceed?'
+      );
+      if (!confirmed) {
+        setChatMessages(prev => [...prev, {
+          role: 'assistant',
+          content: '❌ Command execution cancelled',
+          timestamp: Date.now()
+        }]);
+        return;
+      }
+    }
+
+    // Set the input to the command content
+    setInput(content);
+
+    // Wait for state to update, then directly call handleSubmit
+    setTimeout(() => {
+      if (handleSubmitRef.current) {
+        // Create a fake event to pass to handleSubmit
+        const fakeEvent = { preventDefault: () => {} };
+        handleSubmitRef.current(fakeEvent);
+      }
+    }, 50);
+  }, []);
+  const executeCommand = useCallback(async (command) => {
+    if (!command || !selectedProject) return;
+
+    try {
+      // Parse command and arguments from current input
+      const commandMatch = input.match(new RegExp(`${command.name}\\s*(.*)`));
+      const args = commandMatch && commandMatch[1]
+        ? commandMatch[1].trim().split(/\s+/)
+        : [];
+
+      // Prepare context for command execution
+      const context = {
+        projectPath: selectedProject.path,
+        projectName: selectedProject.name,
+        sessionId: currentSessionId,
+        provider,
+        model: provider === 'cursor' ? cursorModel : 'claude-sonnet-4.5',
+        tokenUsage: tokenBudget
+      };
+
+      // Call the execute endpoint
+      const response = await authenticatedFetch('/api/commands/execute', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          commandName: command.name,
+          commandPath: command.path,
+          args,
+          context
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to execute command');
+      }
+
+      const result = await response.json();
+
+      // Handle built-in commands
+      if (result.type === 'builtin') {
+        handleBuiltInCommand(result);
+      } else if (result.type === 'custom') {
+        // Handle custom commands - inject as system message
+        await handleCustomCommand(result, args);
+      }
+
+      // Clear the input after successful execution
+      setInput('');
+      setShowCommandMenu(false);
+      setSlashPosition(-1);
+      setCommandQuery('');
+      setSelectedCommandIndex(-1);
+
+    } catch (error) {
+      console.error('Error executing command:', error);
+      // Show error message to user
+      setChatMessages(prev => [...prev, {
+        role: 'assistant',
+        content: `Error executing command: ${error.message}`,
+        timestamp: Date.now()
+      }]);
+    }
+  }, [input, selectedProject, currentSessionId, provider, cursorModel, tokenBudget]);
+
+  // Handle built-in command actions
 
 
   // Memoized diff calculation to prevent recalculating on every render
@@ -1407,10 +2234,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 
                 for (const part of content.content) {
                   if (part?.type === 'text' && part?.text) {
-                    textParts.push(part.text);
+                    textParts.push(decodeHtmlEntities(part.text));
                   } else if (part?.type === 'reasoning' && part?.text) {
                     // Handle reasoning type - will be displayed in a collapsible section
-                    reasoningText = part.text;
+                    reasoningText = decodeHtmlEntities(part.text);
                   } else if (part?.type === 'tool-call') {
                     // First, add any text/reasoning we've collected so far as a message
                     if (textParts.length > 0 || reasoningText) {
@@ -1686,7 +2513,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             toolResults.set(part.tool_use_id, {
               content: part.content,
               isError: part.is_error,
-              timestamp: new Date(msg.timestamp || Date.now())
+              timestamp: new Date(msg.timestamp || Date.now()),
+              // Extract structured tool result data (e.g., for Grep, Glob)
+              toolUseResult: msg.toolUseResult || null
             });
           }
         }
@@ -1706,20 +2535,32 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           
           for (const part of msg.message.content) {
             if (part.type === 'text') {
-              textParts.push(part.text);
+              textParts.push(decodeHtmlEntities(part.text));
             }
             // Skip tool_result parts - they're handled in the first pass
           }
           
           content = textParts.join('\n');
         } else if (typeof msg.message.content === 'string') {
-          content = msg.message.content;
+          content = decodeHtmlEntities(msg.message.content);
         } else {
-          content = String(msg.message.content);
+          content = decodeHtmlEntities(String(msg.message.content));
         }
         
-        // Skip command messages and empty content
-        if (content && !content.startsWith('<command-name>') && !content.startsWith('[Request interrupted')) {
+        // Skip command messages, system messages, and empty content
+        const shouldSkip = !content ||
+                          content.startsWith('<command-name>') ||
+                          content.startsWith('<command-message>') ||
+                          content.startsWith('<command-args>') ||
+                          content.startsWith('<local-command-stdout>') ||
+                          content.startsWith('<system-reminder>') ||
+                          content.startsWith('Caveat:') ||
+                          content.startsWith('This session is being continued from a previous') ||
+                          content.startsWith('[Request interrupted');
+
+        if (!shouldSkip) {
+          // Unescape with math formula protection
+          content = unescapeWithMathProtection(content);
           converted.push({
             type: messageType,
             content: content,
@@ -1733,15 +2574,20 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         if (Array.isArray(msg.message.content)) {
           for (const part of msg.message.content) {
             if (part.type === 'text') {
+              // Unescape with math formula protection
+              let text = part.text;
+              if (typeof text === 'string') {
+                text = unescapeWithMathProtection(text);
+              }
               converted.push({
                 type: 'assistant',
-                content: part.text,
+                content: text,
                 timestamp: msg.timestamp || new Date().toISOString()
               });
             } else if (part.type === 'tool_use') {
               // Get the corresponding tool result
               const toolResult = toolResults.get(part.id);
-              
+
               converted.push({
                 type: 'assistant',
                 content: '',
@@ -1749,16 +2595,23 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 isToolUse: true,
                 toolName: part.name,
                 toolInput: JSON.stringify(part.input),
-                toolResult: toolResult ? (typeof toolResult.content === 'string' ? toolResult.content : JSON.stringify(toolResult.content)) : null,
+                toolResult: toolResult ? {
+                  content: typeof toolResult.content === 'string' ? toolResult.content : JSON.stringify(toolResult.content),
+                  isError: toolResult.isError,
+                  toolUseResult: toolResult.toolUseResult
+                } : null,
                 toolError: toolResult?.isError || false,
                 toolResultTimestamp: toolResult?.timestamp || new Date()
               });
             }
           }
         } else if (typeof msg.message.content === 'string') {
+          // Unescape with math formula protection
+          let text = msg.message.content;
+          text = unescapeWithMathProtection(text);
           converted.push({
             type: 'assistant',
-            content: msg.message.content,
+            content: text,
             timestamp: msg.timestamp || new Date().toISOString()
           });
         }
@@ -1773,11 +2626,15 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     return convertSessionMessages(sessionMessages);
   }, [sessionMessages]);
 
+  // Note: Token budgets are not saved to JSONL files, only sent via WebSocket
+  // So we don't try to extract them from loaded sessionMessages
+
   // Define scroll functions early to avoid hoisting issues in useEffect dependencies
   const scrollToBottom = useCallback(() => {
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
-      setIsUserScrolledUp(false);
+      // Don't reset isUserScrolledUp here - let the scroll handler manage it
+      // This prevents fighting with user's scroll position during streaming
     }
   }, []);
 
@@ -1830,11 +2687,48 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     const loadMessages = async () => {
       if (selectedSession && selectedProject) {
         const provider = localStorage.getItem('selected-provider') || 'claude';
-        
-        // Reset pagination state when switching sessions
-        setMessagesOffset(0);
-        setHasMoreMessages(false);
-        setTotalMessages(0);
+
+        // Mark that we're loading a session to prevent multiple scroll triggers
+        isLoadingSessionRef.current = true;
+
+        // Only reset state if the session ID actually changed (not initial load)
+        const sessionChanged = currentSessionId !== null && currentSessionId !== selectedSession.id;
+
+        if (sessionChanged) {
+          // Reset pagination state when switching sessions
+          setMessagesOffset(0);
+          setHasMoreMessages(false);
+          setTotalMessages(0);
+          // Reset token budget when switching sessions
+          // It will update when user sends a message and receives new budget from WebSocket
+          setTokenBudget(null);
+          // Reset loading state when switching sessions (unless the new session is processing)
+          // The restore effect will set it back to true if needed
+          setIsLoading(false);
+
+          // Check if the session is currently processing on the backend
+          if (ws && sendMessage) {
+            sendMessage({
+              type: 'check-session-status',
+              sessionId: selectedSession.id,
+              provider
+            });
+          }
+        } else if (currentSessionId === null) {
+          // Initial load - reset pagination but not token budget
+          setMessagesOffset(0);
+          setHasMoreMessages(false);
+          setTotalMessages(0);
+
+          // Check if the session is currently processing on the backend
+          if (ws && sendMessage) {
+            sendMessage({
+              type: 'check-session-status',
+              sessionId: selectedSession.id,
+              provider
+            });
+          }
+        }
         
         if (provider === 'cursor') {
           // For Cursor, set the session ID for resuming
@@ -1863,10 +2757,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             const messages = await loadSessionMessages(selectedProject.name, selectedSession.id, false);
             setSessionMessages(messages);
             // convertedMessages will be automatically updated via useMemo
-            // Scroll to bottom after loading session messages if auto-scroll is enabled
-            if (autoScrollToBottom) {
-              setTimeout(() => scrollToBottom(), 200);
-            }
+            // Scroll will be handled by the main scroll useEffect after messages are rendered
           } else {
             // Reset the flag after handling system session change
             setIsSystemSessionChange(false);
@@ -1885,10 +2776,52 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         setHasMoreMessages(false);
         setTotalMessages(0);
       }
+
+      // Mark loading as complete after messages are set
+      // Use setTimeout to ensure state updates and DOM rendering are complete
+      setTimeout(() => {
+        isLoadingSessionRef.current = false;
+      }, 250);
     };
-    
+
     loadMessages();
   }, [selectedSession, selectedProject, loadCursorSessionMessages, scrollToBottom, isSystemSessionChange]);
+
+  // External Message Update Handler: Reload messages when external CLI modifies current session
+  // This triggers when App.jsx detects a JSONL file change for the currently-viewed session
+  // Only reloads if the session is NOT active (respecting Session Protection System)
+  useEffect(() => {
+    if (externalMessageUpdate > 0 && selectedSession && selectedProject) {
+      const reloadExternalMessages = async () => {
+        try {
+          const provider = localStorage.getItem('selected-provider') || 'claude';
+
+          if (provider === 'cursor') {
+            // Reload Cursor messages from SQLite
+            const projectPath = selectedProject.fullPath || selectedProject.path;
+            const converted = await loadCursorSessionMessages(projectPath, selectedSession.id);
+            setSessionMessages([]);
+            setChatMessages(converted);
+          } else {
+            // Reload Claude messages from API/JSONL
+            const messages = await loadSessionMessages(selectedProject.name, selectedSession.id, false);
+            setSessionMessages(messages);
+            // convertedMessages will be automatically updated via useMemo
+
+            // Smart scroll behavior: only auto-scroll if user is near bottom
+            if (isNearBottom && autoScrollToBottom) {
+              setTimeout(() => scrollToBottom(), 200);
+            }
+            // If user scrolled up, preserve their position (they're reading history)
+          }
+        } catch (error) {
+          console.error('Error reloading messages from external update:', error);
+        }
+      };
+
+      reloadExternalMessages();
+    }
+  }, [externalMessageUpdate, selectedSession, selectedProject, loadCursorSessionMessages, loadSessionMessages, isNearBottom, autoScrollToBottom, scrollToBottom]);
 
   // Update chatMessages when convertedMessages changes
   useEffect(() => {
@@ -1931,12 +2864,42 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, [selectedProject?.name]);
 
+  // Track processing state: notify parent when isLoading becomes true
+  // Note: onSessionNotProcessing is called directly in completion message handlers
+  useEffect(() => {
+    if (currentSessionId && isLoading && onSessionProcessing) {
+      onSessionProcessing(currentSessionId);
+    }
+  }, [isLoading, currentSessionId, onSessionProcessing]);
+
+  // Restore processing state when switching to a processing session
+  useEffect(() => {
+    if (currentSessionId && processingSessions) {
+      const shouldBeProcessing = processingSessions.has(currentSessionId);
+      if (shouldBeProcessing && !isLoading) {
+        setIsLoading(true);
+        setCanAbortSession(true); // Assume processing sessions can be aborted
+      }
+    }
+  }, [currentSessionId, processingSessions]);
 
   useEffect(() => {
     // Handle WebSocket messages
     if (messages.length > 0) {
       const latestMessage = messages[messages.length - 1];
-      
+
+      // Filter messages by session ID to prevent cross-session interference
+      // Skip filtering for global messages that apply to all sessions
+      const globalMessageTypes = ['projects_updated', 'taskmaster-project-updated', 'session-created', 'claude-complete'];
+      const isGlobalMessage = globalMessageTypes.includes(latestMessage.type);
+
+      // For new sessions (currentSessionId is null), allow messages through
+      if (!isGlobalMessage && latestMessage.sessionId && currentSessionId && latestMessage.sessionId !== currentSessionId) {
+        // Message is for a different session, ignore it
+        console.log('⏭️ Skipping message for different session:', latestMessage.sessionId, 'current:', currentSessionId);
+        return;
+      }
+
       switch (latestMessage.type) {
         case 'session-created':
           // New session created by Claude CLI - we receive the real session ID here
@@ -1952,15 +2915,21 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             }
           }
           break;
-          
+
+        case 'token-budget':
+          // Token budget now fetched via API after message completion instead of WebSocket
+          // This case is kept for compatibility but does nothing
+          break;
+
         case 'claude-response':
           const messageData = latestMessage.data.message || latestMessage.data;
           
           // Handle Cursor streaming format (content_block_delta / content_block_stop)
           if (messageData && typeof messageData === 'object' && messageData.type) {
             if (messageData.type === 'content_block_delta' && messageData.delta?.text) {
-              // Buffer deltas and flush periodically to reduce rerenders
-              streamBufferRef.current += messageData.delta.text;
+              // Decode HTML entities and buffer deltas
+              const decodedText = decodeHtmlEntities(messageData.delta.text);
+              streamBufferRef.current += decodedText;
               if (!streamTimerRef.current) {
                 streamTimerRef.current = setTimeout(() => {
                   const chunk = streamBufferRef.current;
@@ -2017,6 +2986,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           // When resuming a session, Claude CLI creates a new session instead of resuming.
           // We detect this by checking for system/init messages with session_id that differs
           // from our current session. When found, we need to switch the user to the new session.
+          // This works exactly like new session detection - preserve messages during navigation.
           if (latestMessage.data.type === 'system' && 
               latestMessage.data.subtype === 'init' && 
               latestMessage.data.session_id && 
@@ -2029,6 +2999,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             });
             
             // Mark this as a system-initiated session change to preserve messages
+            // This works exactly like new session init - messages stay visible during navigation
             setIsSystemSessionChange(true);
             
             // Switch to the new session using React Router navigation
@@ -2086,9 +3057,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   toolResult: null // Will be updated when result comes in
                 }]);
               } else if (part.type === 'text' && part.text?.trim()) {
-                // Normalize usage limit message to local time
-                let content = formatUsageLimitText(part.text);
-                
+                // Decode HTML entities and normalize usage limit message to local time
+                let content = decodeHtmlEntities(part.text);
+                content = formatUsageLimitText(content);
+
                 // Add regular text message
                 setChatMessages(prev => [...prev, {
                   type: 'assistant',
@@ -2098,9 +3070,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               }
             }
           } else if (typeof messageData.content === 'string' && messageData.content.trim()) {
-            // Normalize usage limit message to local time
-            let content = formatUsageLimitText(messageData.content);
-            
+            // Decode HTML entities and normalize usage limit message to local time
+            let content = decodeHtmlEntities(messageData.content);
+            content = formatUsageLimitText(content);
+
             // Add regular text message
             setChatMessages(prev => [...prev, {
               type: 'assistant',
@@ -2233,50 +3206,64 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           break;
           
         case 'cursor-result':
-          // Handle Cursor completion and final result text
-          setIsLoading(false);
-          setCanAbortSession(false);
-          setClaudeStatus(null);
-          try {
-            const r = latestMessage.data || {};
-            const textResult = typeof r.result === 'string' ? r.result : '';
-            // Flush buffered deltas before finalizing
-            if (streamTimerRef.current) {
-              clearTimeout(streamTimerRef.current);
-              streamTimerRef.current = null;
-            }
-            const pendingChunk = streamBufferRef.current;
-            streamBufferRef.current = '';
+          // Get session ID from message or fall back to current session
+          const cursorCompletedSessionId = latestMessage.sessionId || currentSessionId;
 
-            setChatMessages(prev => {
-              const updated = [...prev];
-              // Try to consolidate into the last streaming assistant message
-              const last = updated[updated.length - 1];
-              if (last && last.type === 'assistant' && !last.isToolUse && last.isStreaming) {
-                // Replace streaming content with the final content so deltas don't remain
-                const finalContent = textResult && textResult.trim() ? textResult : (last.content || '') + (pendingChunk || '');
-                last.content = finalContent;
-                last.isStreaming = false;
-              } else if (textResult && textResult.trim()) {
-                updated.push({ type: r.is_error ? 'error' : 'assistant', content: textResult, timestamp: new Date(), isStreaming: false });
+          // Only update UI state if this is the current session
+          if (cursorCompletedSessionId === currentSessionId) {
+            setIsLoading(false);
+            setCanAbortSession(false);
+            setClaudeStatus(null);
+          }
+
+          // Always mark the completed session as inactive and not processing
+          if (cursorCompletedSessionId) {
+            if (onSessionInactive) {
+              onSessionInactive(cursorCompletedSessionId);
+            }
+            if (onSessionNotProcessing) {
+              onSessionNotProcessing(cursorCompletedSessionId);
+            }
+          }
+
+          // Only process result for current session
+          if (cursorCompletedSessionId === currentSessionId) {
+            try {
+              const r = latestMessage.data || {};
+              const textResult = typeof r.result === 'string' ? r.result : '';
+              // Flush buffered deltas before finalizing
+              if (streamTimerRef.current) {
+                clearTimeout(streamTimerRef.current);
+                streamTimerRef.current = null;
               }
-              return updated;
-            });
-          } catch (e) {
-            console.warn('Error handling cursor-result message:', e);
+              const pendingChunk = streamBufferRef.current;
+              streamBufferRef.current = '';
+
+              setChatMessages(prev => {
+                const updated = [...prev];
+                // Try to consolidate into the last streaming assistant message
+                const last = updated[updated.length - 1];
+                if (last && last.type === 'assistant' && !last.isToolUse && last.isStreaming) {
+                  // Replace streaming content with the final content so deltas don't remain
+                  const finalContent = textResult && textResult.trim() ? textResult : (last.content || '') + (pendingChunk || '');
+                  last.content = finalContent;
+                  last.isStreaming = false;
+                } else if (textResult && textResult.trim()) {
+                  updated.push({ type: r.is_error ? 'error' : 'assistant', content: textResult, timestamp: new Date(), isStreaming: false });
+                }
+                return updated;
+              });
+            } catch (e) {
+              console.warn('Error handling cursor-result message:', e);
+            }
           }
-          
-          // Mark session as inactive
-          const cursorSessionId = currentSessionId || sessionStorage.getItem('pendingSessionId');
-          if (cursorSessionId && onSessionInactive) {
-            onSessionInactive(cursorSessionId);
-          }
-          
-          // Store session ID for future use and trigger refresh
-          if (cursorSessionId && !currentSessionId) {
-            setCurrentSessionId(cursorSessionId);
+
+          // Store session ID for future use and trigger refresh (for new sessions)
+          const pendingCursorSessionId = sessionStorage.getItem('pendingSessionId');
+          if (cursorCompletedSessionId && !currentSessionId && cursorCompletedSessionId === pendingCursorSessionId) {
+            setCurrentSessionId(cursorCompletedSessionId);
             sessionStorage.removeItem('pendingSessionId');
-            
+
             // Trigger a project refresh to update the sidebar with the new session
             if (window.refreshProjects) {
               setTimeout(() => window.refreshProjects(), 500);
@@ -2316,17 +3303,41 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           break;
           
         case 'claude-complete':
-          setIsLoading(false);
-          setCanAbortSession(false);
-          setClaudeStatus(null);
+          // Get session ID from message or fall back to current session
+          const completedSessionId = latestMessage.sessionId || currentSessionId || sessionStorage.getItem('pendingSessionId');
 
-          
-          // Session Protection: Mark session as inactive to re-enable automatic project updates
-          // Conversation is complete, safe to allow project updates again
-          // Use real session ID if available, otherwise use pending session ID
-          const activeSessionId = currentSessionId || sessionStorage.getItem('pendingSessionId');
-          if (activeSessionId && onSessionInactive) {
-            onSessionInactive(activeSessionId);
+          // Update UI state if this is the current session OR if we don't have a session ID yet (new session)
+          if (completedSessionId === currentSessionId || !currentSessionId) {
+            setIsLoading(false);
+            setCanAbortSession(false);
+            setClaudeStatus(null);
+
+            // Fetch updated token usage after message completes
+            if (selectedProject && selectedSession?.id) {
+              const fetchUpdatedTokenUsage = async () => {
+                try {
+                  const url = `/api/projects/${selectedProject.name}/sessions/${selectedSession.id}/token-usage`;
+                  const response = await authenticatedFetch(url);
+                  if (response.ok) {
+                    const data = await response.json();
+                    setTokenBudget(data);
+                  }
+                } catch (error) {
+                  console.error('Failed to fetch updated token usage:', error);
+                }
+              };
+              fetchUpdatedTokenUsage();
+            }
+          }
+
+          // Always mark the completed session as inactive and not processing
+          if (completedSessionId) {
+            if (onSessionInactive) {
+              onSessionInactive(completedSessionId);
+            }
+            if (onSessionNotProcessing) {
+              onSessionNotProcessing(completedSessionId);
+            }
           }
           
           // If we have a pending session ID and the conversation completed successfully, use it
@@ -2334,11 +3345,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           if (pendingSessionId && !currentSessionId && latestMessage.exitCode === 0) {
                 setCurrentSessionId(pendingSessionId);
             sessionStorage.removeItem('pendingSessionId');
-            
-            // Trigger a project refresh to update the sidebar with the new session
-            if (window.refreshProjects) {
-              setTimeout(() => window.refreshProjects(), 500);
-            }
+
+            // No need to manually refresh - projects_updated WebSocket message will handle it
+            console.log('✅ New session complete, ID set to:', pendingSessionId);
           }
           
           // Clear persisted chat messages after successful completion
@@ -2347,23 +3356,49 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           }
           break;
           
-        case 'session-aborted':
-          setIsLoading(false);
-          setCanAbortSession(false);
-          setClaudeStatus(null);
-          
-          // Session Protection: Mark session as inactive when aborted
-          // User or system aborted the conversation, re-enable project updates
-          if (currentSessionId && onSessionInactive) {
-            onSessionInactive(currentSessionId);
+        case 'session-aborted': {
+          // Get session ID from message or fall back to current session
+          const abortedSessionId = latestMessage.sessionId || currentSessionId;
+
+          // Only update UI state if this is the current session
+          if (abortedSessionId === currentSessionId) {
+            setIsLoading(false);
+            setCanAbortSession(false);
+            setClaudeStatus(null);
           }
-          
+
+          // Always mark the aborted session as inactive and not processing
+          if (abortedSessionId) {
+            if (onSessionInactive) {
+              onSessionInactive(abortedSessionId);
+            }
+            if (onSessionNotProcessing) {
+              onSessionNotProcessing(abortedSessionId);
+            }
+          }
+
           setChatMessages(prev => [...prev, {
             type: 'assistant',
             content: 'Session interrupted by user.',
             timestamp: new Date()
           }]);
           break;
+        }
+
+        case 'session-status': {
+          const statusSessionId = latestMessage.sessionId;
+          const isCurrentSession = statusSessionId === currentSessionId ||
+                                   (selectedSession && statusSessionId === selectedSession.id);
+          if (isCurrentSession && latestMessage.isProcessing) {
+            // Session is currently processing, restore UI state
+            setIsLoading(true);
+            setCanAbortSession(true);
+            if (onSessionProcessing) {
+              onSessionProcessing(statusSessionId);
+            }
+          }
+          break;
+        }
 
         case 'claude-status':
           // Handle Claude working status messages
@@ -2518,7 +3553,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         const prevTop = scrollPositionRef.current.top;
         const newHeight = container.scrollHeight;
         const heightDiff = newHeight - prevHeight;
-        
+
         // If content was added above the current view, adjust scroll position
         if (heightDiff > 0 && prevTop > 0) {
           container.scrollTop = prevTop + heightDiff;
@@ -2527,15 +3562,19 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, [chatMessages.length, isUserScrolledUp, scrollToBottom, autoScrollToBottom]);
 
-  // Scroll to bottom when component mounts with existing messages or when messages first load
+  // Scroll to bottom when messages first load after session switch
   useEffect(() => {
-    if (scrollContainerRef.current && chatMessages.length > 0) {
-      // Always scroll to bottom when messages first load (user expects to see latest)
-      // Also reset scroll state
+    if (scrollContainerRef.current && chatMessages.length > 0 && !isLoadingSessionRef.current) {
+      // Only scroll if we're not in the middle of loading a session
+      // This prevents the "double scroll" effect during session switching
+      // Reset scroll state when switching sessions
       setIsUserScrolledUp(false);
-      setTimeout(() => scrollToBottom(), 200); // Longer delay to ensure full rendering
+      setTimeout(() => {
+        scrollToBottom();
+        // After scrolling, the scroll event handler will naturally set isUserScrolledUp based on position
+      }, 200); // Delay to ensure full rendering
     }
-  }, [chatMessages.length > 0, scrollToBottom]); // Trigger when messages first appear
+  }, [selectedSession?.id, selectedProject?.name]); // Only trigger when session/project changes
 
   // Add scroll event listener to detect user scrolling
   useEffect(() => {
@@ -2546,7 +3585,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, [handleScroll]);
 
-  // Initial textarea setup
+  // Initial textarea setup - set to 2 rows height
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -2567,24 +3606,53 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, [input]);
 
+  // Load token usage when session changes (but don't poll to avoid conflicts with WebSocket)
+  useEffect(() => {
+    if (!selectedProject || !selectedSession?.id || selectedSession.id.startsWith('new-session-')) {
+      // Reset for new/empty sessions
+      setTokenBudget(null);
+      return;
+    }
+
+    // Fetch token usage once when session loads
+    const fetchInitialTokenUsage = async () => {
+      try {
+        const url = `/api/projects/${selectedProject.name}/sessions/${selectedSession.id}/token-usage`;
+
+        const response = await authenticatedFetch(url);
+
+        if (response.ok) {
+          const data = await response.json();
+          setTokenBudget(data);
+        } else {
+          setTokenBudget(null);
+        }
+      } catch (error) {
+        console.error('Failed to fetch initial token usage:', error);
+      }
+    };
+
+    fetchInitialTokenUsage();
+  }, [selectedSession?.id, selectedProject?.path]);
+
   const handleTranscript = useCallback((text) => {
     if (text.trim()) {
       setInput(prevInput => {
         const newInput = prevInput.trim() ? `${prevInput} ${text}` : text;
-        
+
         // Update textarea height after setting new content
         setTimeout(() => {
           if (textareaRef.current) {
             textareaRef.current.style.height = 'auto';
             textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px';
-            
+
             // Check if expanded after transcript
             const lineHeight = parseInt(window.getComputedStyle(textareaRef.current).lineHeight);
             const isExpanded = textareaRef.current.scrollHeight > lineHeight * 2;
             setIsTextareaExpanded(isExpanded);
           }
         }, 0);
-        
+
         return newInput;
       });
     }
@@ -2667,7 +3735,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     noKeyboard: true
   });
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
     if (!input.trim() || isLoading || !selectedProject) return;
 
@@ -2680,15 +3748,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       });
       
       try {
-        const token = safeLocalStorage.getItem('auth-token');
-        const headers = {};
-        if (token) {
-          headers['Authorization'] = `Bearer ${token}`;
-        }
-        
-        const response = await fetch(`/api/projects/${selectedProject.name}/upload-images`, {
+        const response = await authenticatedFetch(`/api/projects/${selectedProject.name}/upload-images`, {
           method: 'POST',
-          headers: headers,
+          headers: {}, // Let browser set Content-Type for FormData
           body: formData
         });
         
@@ -2743,7 +3805,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     // Get tools settings from localStorage based on provider
     const getToolsSettings = () => {
       try {
-        const settingsKey = provider === 'cursor' ? 'cursor-tools-settings' : 'claude-tools-settings';
+        const settingsKey = provider === 'cursor' ? 'cursor-tools-settings' : 'claude-settings';
         const savedSettings = safeLocalStorage.getItem(settingsKey);
         if (savedSettings) {
           return JSON.parse(savedSettings);
@@ -2800,21 +3862,91 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     setUploadingImages(new Map());
     setImageErrors(new Map());
     setIsTextareaExpanded(false);
-    
+
     // Reset textarea height
-
-
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-    
+
     // Clear the saved draft since message was sent
     if (selectedProject) {
       safeLocalStorage.removeItem(`draft_input_${selectedProject.name}`);
     }
+  }, [input, isLoading, selectedProject, attachedImages, currentSessionId, selectedSession, provider, permissionMode, onSessionActive, cursorModel, sendMessage, setInput, setAttachedImages, setUploadingImages, setImageErrors, setIsTextareaExpanded, textareaRef, setChatMessages, setIsLoading, setCanAbortSession, setClaudeStatus, setIsUserScrolledUp, scrollToBottom]);
+
+  // Store handleSubmit in ref so handleCustomCommand can access it
+  useEffect(() => {
+    handleSubmitRef.current = handleSubmit;
+  }, [handleSubmit]);
+
+  const selectCommand = (command) => {
+    if (!command) return;
+
+    // Prepare the input with command name and any arguments that were already typed
+    const textBeforeSlash = input.slice(0, slashPosition);
+    const textAfterSlash = input.slice(slashPosition);
+    const spaceIndex = textAfterSlash.indexOf(' ');
+    const textAfterQuery = spaceIndex !==-1 ? textAfterSlash.slice(spaceIndex) : '';
+
+    const newInput = textBeforeSlash + command.name + ' ' + textAfterQuery;
+
+    // Update input temporarily so executeCommand can parse arguments
+    setInput(newInput);
+
+    // Hide command menu
+    setShowCommandMenu(false);
+    setSlashPosition(-1);
+    setCommandQuery('');
+    setSelectedCommandIndex(-1);
+
+    // Clear debounce timer
+    if (commandQueryTimerRef.current) {
+      clearTimeout(commandQueryTimerRef.current);
+    }
+
+    // Execute the command (which will load its content and send to Claude)
+    executeCommand(command);
   };
 
   const handleKeyDown = (e) => {
+    // Handle command menu navigation
+    if (showCommandMenu && filteredCommands.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedCommandIndex(prev =>
+          prev < filteredCommands.length - 1 ? prev + 1 : 0
+        );
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedCommandIndex(prev =>
+          prev > 0 ? prev - 1 : filteredCommands.length - 1
+        );
+        return;
+      }
+      if (e.key === 'Tab' || e.key === 'Enter') {
+        e.preventDefault();
+        if (selectedCommandIndex >= 0) {
+          selectCommand(filteredCommands[selectedCommandIndex]);
+        } else if (filteredCommands.length > 0) {
+          selectCommand(filteredCommands[0]);
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowCommandMenu(false);
+        setSlashPosition(-1);
+        setCommandQuery('');
+        setSelectedCommandIndex(-1);
+        if (commandQueryTimerRef.current) {
+          clearTimeout(commandQueryTimerRef.current);
+        }
+        return;
+      }
+    }
+
     // Handle file dropdown navigation
     if (showFileDropdown && filteredFiles.length > 0) {
       if (e.key === 'ArrowDown') {
@@ -2847,13 +3979,19 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       }
     }
     
-    // Handle Tab key for mode switching (only when file dropdown is not showing)
-    if (e.key === 'Tab' && !showFileDropdown) {
+    // Handle Tab key for mode switching (only when dropdowns are not showing)
+    if (e.key === 'Tab' && !showFileDropdown && !showCommandMenu) {
       e.preventDefault();
       const modes = ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
       const currentIndex = modes.indexOf(permissionMode);
       const nextIndex = (currentIndex + 1) % modes.length;
-      setPermissionMode(modes[nextIndex]);
+      const newMode = modes[nextIndex];
+      setPermissionMode(newMode);
+
+      // Save mode for this session
+      if (selectedSession?.id) {
+        localStorage.setItem(`permissionMode-${selectedSession.id}`, newMode);
+      }
       return;
     }
     
@@ -2918,13 +4056,74 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
   const handleInputChange = (e) => {
     const newValue = e.target.value;
+    const cursorPos = e.target.selectionStart;
+
+    // Auto-select Claude provider if no session exists and user starts typing
+    if (!currentSessionId && newValue.trim() && provider === 'claude') {
+      // Provider is already set to 'claude' by default, so no need to change it
+      // The session will be created automatically when they submit
+    }
+
     setInput(newValue);
-    setCursorPosition(e.target.selectionStart);
-    
+    setCursorPosition(cursorPos);
+
     // Handle height reset when input becomes empty
     if (!newValue.trim()) {
       e.target.style.height = 'auto';
       setIsTextareaExpanded(false);
+      setShowCommandMenu(false);
+      setSlashPosition(-1);
+      setCommandQuery('');
+      return;
+    }
+
+    // Detect slash command at cursor position
+    // Look backwards from cursor to find a slash that starts a command
+    const textBeforeCursor = newValue.slice(0, cursorPos);
+
+    // Check if we're in a code block (simple heuristic: between triple backticks)
+    const backticksBefore = (textBeforeCursor.match(/```/g) || []).length;
+    const inCodeBlock = backticksBefore % 2 === 1;
+
+    if (inCodeBlock) {
+      // Don't show command menu in code blocks
+      setShowCommandMenu(false);
+      setSlashPosition(-1);
+      setCommandQuery('');
+      return;
+    }
+
+    // Find the last slash before cursor that could start a command
+    // Slash is valid if it's at the start or preceded by whitespace
+    const slashPattern = /(^|\s)\/(\S*)$/;
+    const match = textBeforeCursor.match(slashPattern);
+
+    if (match) {
+      const slashPos = match.index + match[1].length; // Position of the slash
+      const query = match[2]; // Text after the slash
+
+      // Update states with debouncing for query
+      setSlashPosition(slashPos);
+      setShowCommandMenu(true);
+      setSelectedCommandIndex(-1);
+
+      // Debounce the command query update
+      if (commandQueryTimerRef.current) {
+        clearTimeout(commandQueryTimerRef.current);
+      }
+
+      commandQueryTimerRef.current = setTimeout(() => {
+        setCommandQuery(query);
+      }, 150); // 150ms debounce
+    } else {
+      // No slash command detected
+      setShowCommandMenu(false);
+      setSlashPosition(-1);
+      setCommandQuery('');
+
+      if (commandQueryTimerRef.current) {
+        clearTimeout(commandQueryTimerRef.current);
+      }
     }
   };
 
@@ -2955,7 +4154,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     const modes = ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
     const currentIndex = modes.indexOf(permissionMode);
     const nextIndex = (currentIndex + 1) % modes.length;
-    setPermissionMode(modes[nextIndex]);
+    const newMode = modes[nextIndex];
+    setPermissionMode(newMode);
+
+    // Save mode for this session
+    if (selectedSession?.id) {
+      localStorage.setItem(`permissionMode-${selectedSession.id}`, newMode);
+    }
   };
 
   // Don't render if no project is selected
@@ -3177,6 +4382,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   onShowSettings={onShowSettings}
                   autoExpandTools={autoExpandTools}
                   showRawParameters={showRawParameters}
+                  showThinking={showThinking}
+                  selectedProject={selectedProject}
                 />
               );
             })}
@@ -3215,19 +4422,20 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
       {/* Input Area - Fixed Bottom */}
       <div className={`p-2 sm:p-4 md:p-4 flex-shrink-0 ${
-        isInputFocused ? 'pb-2 sm:pb-4 md:pb-6' : 'pb-16 sm:pb-4 md:pb-6'
+        isInputFocused ? 'pb-2 sm:pb-4 md:pb-6' : 'pb-2 sm:pb-4 md:pb-6'
       }`}>
     
         <div className="flex-1">
-              <ClaudeStatus 
+              <ClaudeStatus
                 status={claudeStatus}
                 isLoading={isLoading}
                 onAbort={handleAbortSession}
                 provider={provider}
+                showThinking={showThinking}
               />
               </div>
         {/* Permission Mode Selector with scroll to bottom button - Above input, clickable for mobile */}
-        <div className="max-w-4xl mx-auto mb-3">
+        <div ref={inputContainerRef} className="max-w-4xl mx-auto mb-3">
           <div className="flex items-center justify-center gap-3">
             <button
               type="button"
@@ -3261,7 +4469,90 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 </span>
               </div>
             </button>
-            
+            {/* Token usage pie chart - positioned next to mode indicator */}
+            <TokenUsagePie
+              used={tokenBudget?.used || 0}
+              total={tokenBudget?.total || parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 160000}
+            />
+
+            {/* Slash commands button */}
+            <button
+              type="button"
+              onClick={() => {
+                const isOpening = !showCommandMenu;
+                setShowCommandMenu(isOpening);
+                setCommandQuery('');
+                setSelectedCommandIndex(-1);
+
+                // When opening, ensure all commands are shown
+                if (isOpening) {
+                  setFilteredCommands(slashCommands);
+                }
+
+                if (textareaRef.current) {
+                  textareaRef.current.focus();
+                }
+              }}
+              className="relative w-8 h-8 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-full flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:ring-offset-gray-800"
+              title="Show all commands"
+            >
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"
+                />
+              </svg>
+              {/* Command count badge */}
+              {slashCommands.length > 0 && (
+                <span
+                  className="absolute -top-1 -right-1 bg-blue-600 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center"
+                  style={{ fontSize: '10px' }}
+                >
+                  {slashCommands.length}
+                </span>
+              )}
+            </button>
+
+            {/* Clear input button - positioned to the right of token pie, only shows when there's input */}
+            {input.trim() && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setInput('');
+                  if (textareaRef.current) {
+                    textareaRef.current.style.height = 'auto';
+                    textareaRef.current.focus();
+                  }
+                  setIsTextareaExpanded(false);
+                }}
+                className="w-8 h-8 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-full flex items-center justify-center transition-all duration-200 group shadow-sm"
+                title="Clear input"
+              >
+                <svg
+                  className="w-4 h-4 text-gray-600 dark:text-gray-300 group-hover:text-gray-800 dark:group-hover:text-gray-100 transition-colors"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            )}
+
             {/* Scroll to bottom button - positioned next to mode indicator */}
             {isUserScrolledUp && chatMessages.length > 0 && (
               <button
@@ -3339,8 +4630,34 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               ))}
             </div>
           )}
-          
-          <div {...getRootProps()} className={`relative bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-600 focus-within:ring-2 focus-within:ring-blue-500 dark:focus-within:ring-blue-500 focus-within:border-blue-500 transition-all duration-200 ${isTextareaExpanded ? 'chat-input-expanded' : ''}`}>
+
+          {/* Command Menu */}
+          <CommandMenu
+            commands={filteredCommands}
+            selectedIndex={selectedCommandIndex}
+            onSelect={handleCommandSelect}
+            onClose={() => {
+              setShowCommandMenu(false);
+              setSlashPosition(-1);
+              setCommandQuery('');
+              setSelectedCommandIndex(-1);
+            }}
+            position={{
+              top: textareaRef.current
+                ? Math.max(16, textareaRef.current.getBoundingClientRect().top - 316)
+                : 0,
+              left: textareaRef.current
+                ? textareaRef.current.getBoundingClientRect().left
+                : 16,
+              bottom: textareaRef.current
+                ? window.innerHeight - textareaRef.current.getBoundingClientRect().top + 8
+                : 90
+            }}
+            isOpen={showCommandMenu}
+            frequentCommands={commandQuery ? [] : frequentCommands}
+          />
+
+          <div {...getRootProps()} className={`relative bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-600 focus-within:ring-2 focus-within:ring-blue-500 dark:focus-within:ring-blue-500 focus-within:border-blue-500 transition-all duration-200 overflow-hidden ${isTextareaExpanded ? 'chat-input-expanded' : ''}`}>
             <input {...getInputProps()} />
             <textarea
               ref={textareaRef}
@@ -3356,65 +4673,22 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 e.target.style.height = 'auto';
                 e.target.style.height = e.target.scrollHeight + 'px';
                 setCursorPosition(e.target.selectionStart);
-                
+
                 // Check if textarea is expanded (more than 2 lines worth of height)
                 const lineHeight = parseInt(window.getComputedStyle(e.target).lineHeight);
                 const isExpanded = e.target.scrollHeight > lineHeight * 2;
                 setIsTextareaExpanded(isExpanded);
               }}
-              placeholder="Ask Claude to help with your code... (@ to reference files)"
+              placeholder={`Type / for commands, @ for files, or ask ${provider === 'cursor' ? 'Cursor' : 'Claude'} anything...`}
               disabled={isLoading}
-              rows={1}
-              className="chat-input-placeholder w-full pl-12 pr-28 sm:pr-40 py-3 sm:py-4 bg-transparent rounded-2xl focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 resize-none min-h-[40px] sm:min-h-[56px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base transition-all duration-200"
-              style={{ height: 'auto' }}
+              className="chat-input-placeholder block w-full pl-12 pr-20 sm:pr-40 py-1.5 sm:py-4 bg-transparent rounded-2xl focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 resize-none min-h-[50px] sm:min-h-[80px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base leading-[21px] sm:leading-6 transition-all duration-200"
+              style={{ height: '50px' }}
             />
-            {/* Clear button - shown when there's text */}
-            {input.trim() && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setInput('');
-                  if (textareaRef.current) {
-                    textareaRef.current.style.height = 'auto';
-                    textareaRef.current.focus();
-                  }
-                  setIsTextareaExpanded(false);
-                }}
-                onTouchEnd={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setInput('');
-                  if (textareaRef.current) {
-                    textareaRef.current.style.height = 'auto';
-                    textareaRef.current.focus();
-                  }
-                  setIsTextareaExpanded(false);
-                }}
-                className="absolute -left-0.5 -top-3 sm:right-28 sm:left-auto sm:top-1/2 sm:-translate-y-1/2 w-6 h-6 sm:w-8 sm:h-8 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 border border-gray-300 dark:border-gray-600 rounded-full flex items-center justify-center transition-all duration-200 group z-10 shadow-sm"
-                title="Clear input"
-              >
-                <svg 
-                  className="w-3 h-3 sm:w-4 sm:h-4 text-gray-600 dark:text-gray-300 group-hover:text-gray-800 dark:group-hover:text-gray-100 transition-colors" 
-                  fill="none" 
-                  stroke="currentColor" 
-                  viewBox="0 0 24 24"
-                >
-                  <path 
-                    strokeLinecap="round" 
-                    strokeLinejoin="round" 
-                    strokeWidth={2} 
-                    d="M6 18L18 6M6 6l12 12" 
-                  />
-                </svg>
-              </button>
-            )}
             {/* Image upload button */}
             <button
               type="button"
               onClick={open}
-              className="absolute left-2 bottom-4 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              className="absolute left-2 top-1/2 transform -translate-y-1/2 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
               title="Attach images"
             >
               <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3424,11 +4698,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             
             {/* Mic button - HIDDEN */}
             <div className="absolute right-16 sm:right-16 top-1/2 transform -translate-y-1/2" style={{ display: 'none' }}>
-              <MicButton 
+              <MicButton
                 onTranscript={handleTranscript}
                 className="w-10 h-10 sm:w-10 sm:h-10"
               />
             </div>
+
             {/* Send button */}
             <button
               type="submit"
@@ -3457,19 +4732,15 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 />
               </svg>
             </button>
-          </div>
-          {/* Hint text */}
-          <div className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2 hidden sm:block">
-            {sendByCtrlEnter 
-              ? "Ctrl+Enter to send (IME safe) • Shift+Enter for new line • Tab to change modes • @ to reference files" 
-              : "Press Enter to send • Shift+Enter for new line • Tab to change modes • @ to reference files"}
-          </div>
-          <div className={`text-xs text-gray-500 dark:text-gray-400 text-center mt-2 sm:hidden transition-opacity duration-200 ${
-            isInputFocused ? 'opacity-100' : 'opacity-0'
-          }`}>
-            {sendByCtrlEnter 
-              ? "Ctrl+Enter to send (IME safe) • Tab for modes • @ for files" 
-              : "Enter to send • Tab for modes • @ for files"}
+
+            {/* Hint text inside input box at bottom - Desktop only */}
+            <div className={`absolute bottom-1 left-12 right-14 sm:right-40 text-xs text-gray-400 dark:text-gray-500 pointer-events-none hidden sm:block transition-opacity duration-200 ${
+              input.trim() ? 'opacity-0' : 'opacity-100'
+            }`}>
+              {sendByCtrlEnter
+                ? "Ctrl+Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands"
+                : "Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands"}
+            </div>
           </div>
         </form>
       </div>

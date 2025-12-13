@@ -9,6 +9,8 @@ const AuthContext = createContext({
   logout: () => {},
   isLoading: true,
   needsSetup: false,
+  hasCompletedOnboarding: true,
+  refreshOnboardingStatus: () => {},
   error: null
 });
 
@@ -25,37 +27,63 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(localStorage.getItem('auth-token'));
   const [isLoading, setIsLoading] = useState(true);
   const [needsSetup, setNeedsSetup] = useState(false);
+  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(true);
   const [error, setError] = useState(null);
 
-  // Check authentication status on mount
   useEffect(() => {
+    if (import.meta.env.VITE_IS_PLATFORM === 'true') {
+      setUser({ username: 'platform-user' });
+      setNeedsSetup(false);
+      checkOnboardingStatus();
+      setIsLoading(false);
+      return;
+    }
+
     checkAuthStatus();
   }, []);
+
+  const checkOnboardingStatus = async () => {
+    try {
+      const response = await api.user.onboardingStatus();
+      if (response.ok) {
+        const data = await response.json();
+        setHasCompletedOnboarding(data.hasCompletedOnboarding);
+      }
+    } catch (error) {
+      console.error('Error checking onboarding status:', error);
+      setHasCompletedOnboarding(true);
+    }
+  };
+
+  const refreshOnboardingStatus = async () => {
+    await checkOnboardingStatus();
+  };
 
   const checkAuthStatus = async () => {
     try {
       setIsLoading(true);
       setError(null);
-      
+
       // Check if system needs setup
       const statusResponse = await api.auth.status();
       const statusData = await statusResponse.json();
-      
+
       if (statusData.needsSetup) {
         setNeedsSetup(true);
         setIsLoading(false);
         return;
       }
-      
+
       // If we have a token, verify it
       if (token) {
         try {
           const userResponse = await api.auth.user();
-          
+
           if (userResponse.ok) {
             const userData = await userResponse.json();
             setUser(userData.user);
             setNeedsSetup(false);
+            await checkOnboardingStatus();
           } else {
             // Token is invalid
             localStorage.removeItem('auth-token');
@@ -70,7 +98,7 @@ export const AuthProvider = ({ children }) => {
         }
       }
     } catch (error) {
-      console.error('Auth status check failed:', error);
+      console.error('[AuthContext] Auth status check failed:', error);
       setError('Failed to check authentication status');
     } finally {
       setIsLoading(false);
@@ -147,6 +175,8 @@ export const AuthProvider = ({ children }) => {
     logout,
     isLoading,
     needsSetup,
+    hasCompletedOnboarding,
+    refreshOnboardingStatus,
     error
   };
 

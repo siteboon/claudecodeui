@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { GitBranch, GitCommit, Plus, Minus, RefreshCw, Check, X, ChevronDown, ChevronRight, Info, History, FileText, Mic, MicOff, Sparkles, Download, RotateCcw, Trash2, AlertTriangle, Upload } from 'lucide-react';
 import { MicButton } from './MicButton.jsx';
 import { authenticatedFetch } from '../utils/api';
+import DiffViewer from './DiffViewer.jsx';
 
-function GitPanel({ selectedProject, isMobile }) {
+function GitPanel({ selectedProject, isMobile, onFileOpen }) {
   const [gitStatus, setGitStatus] = useState(null);
   const [gitDiff, setGitDiff] = useState({});
   const [isLoading, setIsLoading] = useState(false);
@@ -31,8 +32,25 @@ function GitPanel({ selectedProject, isMobile }) {
   const [isPublishing, setIsPublishing] = useState(false);
   const [isCommitAreaCollapsed, setIsCommitAreaCollapsed] = useState(isMobile); // Collapsed by default on mobile
   const [confirmAction, setConfirmAction] = useState(null); // { type: 'discard|commit|pull|push', file?: string, message?: string }
+  const [isCreatingInitialCommit, setIsCreatingInitialCommit] = useState(false);
   const textareaRef = useRef(null);
   const dropdownRef = useRef(null);
+
+  // Get current provider from localStorage (same as ChatInterface does)
+  const [provider, setProvider] = useState(() => {
+    return localStorage.getItem('selected-provider') || 'claude';
+  });
+
+  // Listen for provider changes in localStorage
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const newProvider = localStorage.getItem('selected-provider') || 'claude';
+      setProvider(newProvider);
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
 
   useEffect(() => {
     if (selectedProject) {
@@ -88,6 +106,12 @@ function GitPanel({ selectedProject, isMobile }) {
           fetchFileDiff(file);
         }
         for (const file of data.added || []) {
+          fetchFileDiff(file);
+        }
+        for (const file of data.deleted || []) {
+          fetchFileDiff(file);
+        }
+        for (const file of data.untracked || []) {
           fetchFileDiff(file);
         }
       }
@@ -385,7 +409,7 @@ function GitPanel({ selectedProject, isMobile }) {
     try {
       const response = await authenticatedFetch(`/api/git/diff?project=${encodeURIComponent(selectedProject.name)}&file=${encodeURIComponent(filePath)}`);
       const data = await response.json();
-      
+
       if (!data.error && data.diff) {
         setGitDiff(prev => ({
           ...prev,
@@ -394,6 +418,36 @@ function GitPanel({ selectedProject, isMobile }) {
       }
     } catch (error) {
       console.error('Error fetching file diff:', error);
+    }
+  };
+
+  const handleFileOpen = async (filePath) => {
+    if (!onFileOpen) return;
+
+    try {
+      // Fetch file content with diff information
+      const response = await authenticatedFetch(`/api/git/file-with-diff?project=${encodeURIComponent(selectedProject.name)}&file=${encodeURIComponent(filePath)}`);
+      const data = await response.json();
+
+      if (data.error) {
+        console.error('Error fetching file with diff:', data.error);
+        // Fallback: open without diff info
+        onFileOpen(filePath);
+        return;
+      }
+
+      // Create diffInfo object for CodeEditor
+      const diffInfo = {
+        old_string: data.oldContent || '',
+        new_string: data.currentContent || ''
+      };
+
+      // Open file with diff information
+      onFileOpen(filePath, diffInfo);
+    } catch (error) {
+      console.error('Error opening file:', error);
+      // Fallback: open without diff info
+      onFileOpen(filePath);
     }
   };
 
@@ -434,10 +488,11 @@ function GitPanel({ selectedProject, isMobile }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           project: selectedProject.name,
-          files: Array.from(selectedFiles)
+          files: Array.from(selectedFiles),
+          provider: provider // Pass the current provider (claude or cursor)
         })
       });
-      
+
       const data = await response.json();
       if (data.message) {
         setCommitMessage(data.message);
@@ -493,7 +548,7 @@ function GitPanel({ selectedProject, isMobile }) {
 
   const handleCommit = async () => {
     if (!commitMessage.trim() || selectedFiles.size === 0) return;
-    
+
     setIsCommitting(true);
     try {
       const response = await authenticatedFetch('/api/git/commit', {
@@ -505,7 +560,7 @@ function GitPanel({ selectedProject, isMobile }) {
           files: Array.from(selectedFiles)
         })
       });
-      
+
       const data = await response.json();
       if (data.success) {
         // Reset state after successful commit
@@ -523,26 +578,31 @@ function GitPanel({ selectedProject, isMobile }) {
     }
   };
 
-  const renderDiffLine = (line, index) => {
-    const isAddition = line.startsWith('+') && !line.startsWith('+++');
-    const isDeletion = line.startsWith('-') && !line.startsWith('---');
-    const isHeader = line.startsWith('@@');
-    
-    return (
-      <div
-        key={index}
-        className={`font-mono text-xs ${
-          isMobile && wrapText ? 'whitespace-pre-wrap break-all' : 'whitespace-pre overflow-x-auto'
-        } ${
-          isAddition ? 'bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300' :
-          isDeletion ? 'bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300' :
-          isHeader ? 'bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300' :
-          'text-gray-600 dark:text-gray-400'
-        }`}
-      >
-        {line}
-      </div>
-    );
+  const createInitialCommit = async () => {
+    setIsCreatingInitialCommit(true);
+    try {
+      const response = await authenticatedFetch('/api/git/initial-commit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project: selectedProject.name
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        fetchGitStatus();
+        fetchRemoteStatus();
+      } else {
+        console.error('Initial commit failed:', data.error);
+        alert(data.error || 'Failed to create initial commit');
+      }
+    } catch (error) {
+      console.error('Error creating initial commit:', error);
+      alert('Failed to create initial commit');
+    } finally {
+      setIsCreatingInitialCommit(false);
+    }
   };
 
   const getStatusLabel = (status) => {
@@ -590,7 +650,7 @@ function GitPanel({ selectedProject, isMobile }) {
               <div className="text-xs font-mono text-gray-600 dark:text-gray-400 mb-2">
                 {commit.stats}
               </div>
-              {diff.split('\n').map((line, index) => renderDiffLine(line, index))}
+              <DiffViewer diff={diff} fileName="commit" isMobile={isMobile} wrapText={wrapText} />
             </div>
           </div>
         )}
@@ -613,14 +673,28 @@ function GitPanel({ selectedProject, isMobile }) {
             onClick={(e) => e.stopPropagation()}
             className={`rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 dark:focus:ring-blue-400 dark:bg-gray-800 dark:checked:bg-blue-600 ${isMobile ? 'mr-1.5' : 'mr-2'}`}
           />
-          <div 
-            className="flex items-center flex-1 cursor-pointer"
-            onClick={() => toggleFileExpanded(filePath)}
+          <div
+            className="flex items-center flex-1"
           >
-            <div className={`p-0.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded ${isMobile ? 'mr-1' : 'mr-2'}`}>
+            <div
+              className={`p-0.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded cursor-pointer ${isMobile ? 'mr-1' : 'mr-2'}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleFileExpanded(filePath);
+              }}
+            >
               <ChevronRight className={`w-3 h-3 transition-transform duration-200 ease-in-out ${isExpanded ? 'rotate-90' : 'rotate-0'}`} />
             </div>
-            <span className={`flex-1 truncate ${isMobile ? 'text-xs' : 'text-sm'}`}>{filePath}</span>
+            <span
+              className={`flex-1 truncate ${isMobile ? 'text-xs' : 'text-sm'} cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 hover:underline`}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleFileOpen(filePath);
+              }}
+              title="Click to open file"
+            >
+              {filePath}
+            </span>
             <div className="flex items-center gap-1">
               {(status === 'M' || status === 'D') && (
                 <button
@@ -705,8 +779,8 @@ function GitPanel({ selectedProject, isMobile }) {
                 </button>
               )}
             </div>
-            <div className="max-h-96 overflow-y-auto p-2">
-              {diff && diff.split('\n').map((line, index) => renderDiffLine(line, index))}
+            <div className="max-h-96 overflow-y-auto">
+              {diff && <DiffViewer diff={diff} fileName={filePath} isMobile={isMobile} wrapText={wrapText} />}
             </div>
         </div>
       </div>
@@ -722,7 +796,7 @@ function GitPanel({ selectedProject, isMobile }) {
   }
 
   return (
-    <div className="h-full flex flex-col bg-white dark:bg-gray-900">
+    <div className="h-full flex flex-col bg-background">
       {/* Header */}
       <div className={`flex items-center justify-between border-b border-gray-200 dark:border-gray-700 ${isMobile ? 'px-3 py-2' : 'px-4 py-3'}`}>
         <div className="relative" ref={dropdownRef}>
@@ -1109,10 +1183,35 @@ function GitPanel({ selectedProject, isMobile }) {
 
       {/* File List - Changes View - Only show when git is available */}
       {activeView === 'changes' && !gitStatus?.error && (
-        <div className={`flex-1 overflow-y-auto ${isMobile ? 'pb-20' : ''}`}>
+        <div className={`flex-1 overflow-y-auto ${isMobile ? 'pb-mobile-nav' : ''}`}>
           {isLoading ? (
             <div className="flex items-center justify-center h-32">
               <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
+            </div>
+          ) : gitStatus?.hasCommits === false ? (
+            <div className="flex flex-col items-center justify-center p-8 text-center">
+              <GitBranch className="w-16 h-16 mb-4 opacity-30 text-gray-400 dark:text-gray-500" />
+              <h3 className="text-lg font-medium mb-2 text-gray-900 dark:text-white">No commits yet</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 max-w-md">
+                This repository doesn't have any commits yet. Create your first commit to start tracking changes.
+              </p>
+              <button
+                onClick={createInitialCommit}
+                disabled={isCreatingInitialCommit}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {isCreatingInitialCommit ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Creating Initial Commit...</span>
+                  </>
+                ) : (
+                  <>
+                    <GitCommit className="w-4 h-4" />
+                    <span>Create Initial Commit</span>
+                  </>
+                )}
+              </button>
             </div>
           ) : !gitStatus || (!gitStatus.modified?.length && !gitStatus.added?.length && !gitStatus.deleted?.length && !gitStatus.untracked?.length) ? (
             <div className="flex flex-col items-center justify-center h-32 text-gray-500 dark:text-gray-400">
@@ -1132,7 +1231,7 @@ function GitPanel({ selectedProject, isMobile }) {
 
       {/* History View - Only show when git is available */}
       {activeView === 'history' && !gitStatus?.error && (
-        <div className={`flex-1 overflow-y-auto ${isMobile ? 'pb-20' : ''}`}>
+        <div className={`flex-1 overflow-y-auto ${isMobile ? 'pb-mobile-nav' : ''}`}>
           {isLoading ? (
             <div className="flex items-center justify-center h-32">
               <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />

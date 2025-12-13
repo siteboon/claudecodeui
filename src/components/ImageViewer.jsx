@@ -1,9 +1,55 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button } from './ui/button';
 import { X } from 'lucide-react';
+import { authenticatedFetch } from '../utils/api';
 
 function ImageViewer({ file, onClose }) {
   const imagePath = `/api/projects/${file.projectName}/files/content?path=${encodeURIComponent(file.path)}`;
+  const [imageUrl, setImageUrl] = useState(null);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let objectUrl;
+    const controller = new AbortController();
+
+    const loadImage = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        setImageUrl(null);
+
+        const response = await authenticatedFetch(imagePath, {
+          signal: controller.signal
+        });
+
+        if (!response.ok) {
+          throw new Error(`Request failed with status ${response.status}`);
+        }
+
+        const blob = await response.blob();
+        objectUrl = URL.createObjectURL(blob);
+        setImageUrl(objectUrl);
+      } catch (err) {
+        if (err.name === 'AbortError') {
+          return;
+        }
+        console.error('Error loading image:', err);
+        setError('Unable to load image');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadImage();
+
+    return () => {
+      controller.abort();
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [imagePath]);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -23,22 +69,24 @@ function ImageViewer({ file, onClose }) {
         </div>
 
         <div className="p-4 flex justify-center items-center bg-gray-50 dark:bg-gray-900 min-h-[400px]">
-          <img
-            src={imagePath}
-            alt={file.name}
-            className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-md"
-            onError={(e) => {
-              e.target.style.display = 'none';
-              e.target.nextSibling.style.display = 'block';
-            }}
-          />
-          <div
-            className="text-center text-gray-500 dark:text-gray-400"
-            style={{ display: 'none' }}
-          >
-            <p>Unable to load image</p>
-            <p className="text-sm mt-2">{file.path}</p>
-          </div>
+          {loading && (
+            <div className="text-center text-gray-500 dark:text-gray-400">
+              <p>Loading image…</p>
+            </div>
+          )}
+          {!loading && imageUrl && (
+            <img
+              src={imageUrl}
+              alt={file.name}
+              className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-md"
+            />
+          )}
+          {!loading && !imageUrl && (
+            <div className="text-center text-gray-500 dark:text-gray-400">
+              <p>{error || 'Unable to load image'}</p>
+              <p className="text-sm mt-2 break-all">{file.path}</p>
+            </div>
+          )}
         </div>
 
         <div className="p-4 border-t bg-gray-50 dark:bg-gray-800">

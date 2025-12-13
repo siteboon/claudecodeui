@@ -21,42 +21,27 @@ export function useWebSocket() {
 
   const connect = async () => {
     try {
-      // Get authentication token
-      const token = localStorage.getItem('auth-token');
-      if (!token) {
-        console.warn('No authentication token found for WebSocket connection');
-        return;
-      }
-      
-      // Fetch server configuration to get the correct WebSocket URL
-      let wsBaseUrl;
-      try {
-        const configResponse = await fetch('/api/config', {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        const config = await configResponse.json();
-        wsBaseUrl = config.wsUrl;
-        
-        // If the config returns localhost but we're not on localhost, use current host but with API server port
-        if (wsBaseUrl.includes('localhost') && !window.location.hostname.includes('localhost')) {
-          console.warn('Config returned localhost, using current host with API server port instead');
-          const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-          // For development, API server is typically on port 3002 when Vite is on 3001
-          const apiPort = window.location.port === '3001' ? '3002' : window.location.port;
-          wsBaseUrl = `${protocol}//${window.location.hostname}:${apiPort}`;
-        }
-      } catch (error) {
-        console.warn('Could not fetch server config, falling back to current host with API server port');
+      const isPlatform = import.meta.env.VITE_IS_PLATFORM === 'true';
+
+      // Construct WebSocket URL
+      let wsUrl;
+
+      if (isPlatform) {
+        // Platform mode: Use same domain as the page (goes through proxy)
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        // For development, API server is typically on port 3002 when Vite is on 3001
-        const apiPort = window.location.port === '3001' ? '3002' : window.location.port;
-        wsBaseUrl = `${protocol}//${window.location.hostname}:${apiPort}`;
+        wsUrl = `${protocol}//${window.location.host}/ws`;
+      } else {
+        // OSS mode: Connect to same host:port that served the page
+        const token = localStorage.getItem('auth-token');
+        if (!token) {
+          console.warn('No authentication token found for WebSocket connection');
+          return;
+        }
+
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        wsUrl = `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}`;
       }
-      
-      // Include token in WebSocket URL as query parameter
-      const wsUrl = `${wsBaseUrl}/ws?token=${encodeURIComponent(token)}`;
+
       const websocket = new WebSocket(wsUrl);
 
       websocket.onopen = () => {

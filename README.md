@@ -59,7 +59,97 @@ A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/cla
 - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and configured, and/or
 - [Cursor CLI](https://docs.cursor.com/en/cli/overview) installed and configured
 
-### Installation
+### One-click Operation (Recommended)
+
+No installation required, direct operation:
+
+```bash
+npx @siteboon/claude-code-ui
+```
+
+The server will start and be accessible at `http://localhost:3001` (or your configured PORT).
+
+**To restart**: Simply run the same `npx` command again after stopping the server
+### Global Installation (For Regular Use)
+
+For frequent use, install globally once:
+
+```bash
+npm install -g @siteboon/claude-code-ui
+```
+
+Then start with a simple command:
+
+```bash
+claude-code-ui
+```
+
+
+**To restart**: Stop with Ctrl+C and run `claude-code-ui` again.
+
+### CLI Commands
+
+After global installation, you have access to both `claude-code-ui` and `cloudcli` commands:
+
+```bash
+# Start the server (default command)
+claude-code-ui
+cloudcli start
+
+# Show configuration and data locations
+cloudcli status
+
+# Show help information
+cloudcli help
+
+# Show version
+cloudcli version
+```
+
+**The `cloudcli status` command shows you:**
+- Installation directory location
+- Database location (where credentials are stored)
+- Current configuration (PORT, DATABASE_PATH, etc.)
+- Claude projects folder location
+- Configuration file location
+
+```
+
+### Run as Background Service (Recommended for Production)
+
+For production use, run Claude Code UI as a background service using PM2 (Process Manager 2):
+
+#### Install PM2
+
+```bash
+npm install -g pm2
+```
+
+#### Start as Background Service
+
+```bash
+# Start the server in background
+pm2 start claude-code-ui --name "claude-code-ui"
+
+# Or using the shorter alias
+pm2 start cloudcli --name "claude-code-ui"
+```
+
+
+#### Auto-Start on System Boot
+
+To make Claude Code UI start automatically when your system boots:
+
+```bash
+# Generate startup script for your platform
+pm2 startup
+
+# Save current process list
+pm2 save
+```
+
+
+### Local Development Installation
 
 1. **Clone the repository:**
 ```bash
@@ -226,13 +316,13 @@ We welcome contributions! Please follow these guidelines:
 
 ### Common Issues & Solutions
 
+
 #### "No Claude projects found"
 **Problem**: The UI shows no projects or empty project list
 **Solutions**:
 - Ensure [Claude CLI](https://docs.anthropic.com/en/docs/claude-code) is properly installed
 - Run `claude` command in at least one project directory to initialize
 - Verify `~/.claude/projects/` directory exists and has proper permissions
-d
 
 #### File Explorer Issues
 **Problem**: Files not loading, permission errors, empty directories

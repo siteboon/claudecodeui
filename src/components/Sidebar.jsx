@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import ReactDOM from 'react-dom';
 import { ScrollArea } from './ui/scroll-area';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -9,6 +10,7 @@ import { cn } from '../lib/utils';
 import ClaudeLogo from './ClaudeLogo';
 import CursorLogo from './CursorLogo.jsx';
 import TaskIndicator from './TaskIndicator';
+import ProjectCreationWizard from './ProjectCreationWizard';
 import { api } from '../utils/api';
 import { useTaskMaster } from '../contexts/TaskMasterContext';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
@@ -39,12 +41,12 @@ const formatTimeAgo = (dateString, currentTime) => {
   return date.toLocaleDateString();
 };
 
-function Sidebar({ 
-  projects, 
-  selectedProject, 
-  selectedSession, 
-  onProjectSelect, 
-  onSessionSelect, 
+function Sidebar({
+  projects,
+  selectedProject,
+  selectedSession,
+  onProjectSelect,
+  onSessionSelect,
   onNewSession,
   onSessionDelete,
   onProjectDelete,
@@ -54,14 +56,16 @@ function Sidebar({
   updateAvailable,
   latestVersion,
   currentVersion,
-  onShowVersionModal
+  releaseInfo,
+  onShowVersionModal,
+  isPWA,
+  isMobile,
+  onToggleSidebar
 }) {
   const [expandedProjects, setExpandedProjects] = useState(new Set());
   const [editingProject, setEditingProject] = useState(null);
   const [showNewProject, setShowNewProject] = useState(false);
   const [editingName, setEditingName] = useState('');
-  const [newProjectPath, setNewProjectPath] = useState('');
-  const [creatingProject, setCreatingProject] = useState(false);
   const [loadingSessions, setLoadingSessions] = useState({});
   const [additionalSessions, setAdditionalSessions] = useState({});
   const [initialSessionsLoaded, setInitialSessionsLoaded] = useState(new Set());
@@ -141,7 +145,7 @@ function Sidebar({
   useEffect(() => {
     const loadSortOrder = () => {
       try {
-        const savedSettings = localStorage.getItem('claude-tools-settings');
+        const savedSettings = localStorage.getItem('claude-settings');
         if (savedSettings) {
           const settings = JSON.parse(savedSettings);
           setProjectSortOrder(settings.projectSortOrder || 'name');
@@ -156,7 +160,7 @@ function Sidebar({
 
     // Listen for storage changes
     const handleStorageChange = (e) => {
-      if (e.key === 'claude-tools-settings') {
+      if (e.key === 'claude-settings') {
         loadSortOrder();
       }
     };
@@ -176,14 +180,20 @@ function Sidebar({
     };
   }, []);
 
+
   const toggleProject = (projectName) => {
-    const newExpanded = new Set(expandedProjects);
-    if (newExpanded.has(projectName)) {
-      newExpanded.delete(projectName);
-    } else {
+    const newExpanded = new Set();
+    // If clicking the already-expanded project, collapse it (newExpanded stays empty)
+    // If clicking a different project, expand only that one
+    if (!expandedProjects.has(projectName)) {
       newExpanded.add(projectName);
     }
     setExpandedProjects(newExpanded);
+  };
+
+  // Wrapper to attach project context when session is clicked
+  const handleSessionClick = (session, projectName) => {
+    onSessionSelect({ ...session, __projectName: projectName });
   };
 
   // Starred projects utility functions
@@ -293,19 +303,25 @@ function Sidebar({
     }
 
     try {
+      console.log('[Sidebar] Deleting session:', { projectName, sessionId });
       const response = await api.deleteSession(projectName, sessionId);
+      console.log('[Sidebar] Delete response:', { ok: response.ok, status: response.status });
 
       if (response.ok) {
+        console.log('[Sidebar] Session deleted successfully, calling callback');
         // Call parent callback if provided
         if (onSessionDelete) {
           onSessionDelete(sessionId);
+        } else {
+          console.warn('[Sidebar] No onSessionDelete callback provided');
         }
       } else {
-        console.error('Failed to delete session');
+        const errorText = await response.text();
+        console.error('[Sidebar] Failed to delete session:', { status: response.status, error: errorText });
         alert('Failed to delete session. Please try again.');
       }
     } catch (error) {
-      console.error('Error deleting session:', error);
+      console.error('[Sidebar] Error deleting session:', error);
       alert('Error deleting session. Please try again.');
     }
   };
@@ -347,6 +363,10 @@ function Sidebar({
 
       if (response.ok) {
         const result = await response.json();
+        
+        // Save the path to recent paths before clearing
+        saveToRecentPaths(newProjectPath.trim());
+        
         setShowNewProject(false);
         setNewProjectPath('');
         
@@ -434,62 +454,107 @@ function Sidebar({
   };
 
   return (
-    <div className="h-full flex flex-col bg-card md:select-none">
+    <>
+      {/* Project Creation Wizard Modal - Rendered via Portal at document root for full-screen on mobile */}
+      {showNewProject && ReactDOM.createPortal(
+        <ProjectCreationWizard
+          onClose={() => setShowNewProject(false)}
+          onProjectCreated={(project) => {
+            // Refresh projects list after creation
+            if (window.refreshProjects) {
+              window.refreshProjects();
+            } else {
+              window.location.reload();
+            }
+          }}
+        />,
+        document.body
+      )}
+
+      <div
+        className="h-full flex flex-col bg-card md:select-none"
+        style={isPWA && isMobile ? { paddingTop: '44px' } : {}}
+      >
       {/* Header */}
       <div className="md:p-4 md:border-b md:border-border">
         {/* Desktop Header */}
         <div className="hidden md:flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shadow-sm">
-              <MessageSquare className="w-4 h-4 text-primary-foreground" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold text-foreground">Claude Code UI</h1>
-              <p className="text-sm text-muted-foreground">AI coding assistant interface</p>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-9 w-9 px-0 hover:bg-accent transition-colors duration-200 group"
-              onClick={async () => {
-                setIsRefreshing(true);
-                try {
-                  await onRefresh();
-                } finally {
-                  setIsRefreshing(false);
-                }
-              }}
-              disabled={isRefreshing}
-              title="Refresh projects and sessions (Ctrl+R)"
+          {import.meta.env.VITE_IS_PLATFORM === 'true' ? (
+            <a
+              href="https://cloudcli.ai/dashboard"
+              className="flex items-center gap-3 hover:opacity-80 transition-opacity group"
+              title="View Environments"
             >
-              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''} group-hover:rotate-180 transition-transform duration-300`} />
-            </Button>
-            <Button
-              variant="default"
-              size="sm"
-              className="h-9 w-9 px-0 bg-primary hover:bg-primary/90 transition-all duration-200 shadow-sm hover:shadow-md"
-              onClick={() => setShowNewProject(true)}
-              title="Create new project (Ctrl+N)"
-            >
-              <FolderPlus className="w-4 h-4" />
-            </Button>
-          </div>
-        </div>
-        
-        {/* Mobile Header */}
-        <div className="md:hidden p-3 border-b border-border">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow">
                 <MessageSquare className="w-4 h-4 text-primary-foreground" />
               </div>
               <div>
-                <h1 className="text-lg font-semibold text-foreground">Claude Code UI</h1>
-                <p className="text-sm text-muted-foreground">Projects</p>
+                <h1 className="text-lg font-bold text-foreground">Claude Code UI</h1>
+                <p className="text-sm text-muted-foreground">AI coding assistant interface</p>
+              </div>
+            </a>
+          ) : (
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shadow-sm">
+                <MessageSquare className="w-4 h-4 text-primary-foreground" />
+              </div>
+              <div>
+                <h1 className="text-lg font-bold text-foreground">Claude Code UI</h1>
+                <p className="text-sm text-muted-foreground">AI coding assistant interface</p>
               </div>
             </div>
+          )}
+          {onToggleSidebar && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 px-0 hover:bg-accent transition-colors duration-200"
+              onClick={onToggleSidebar}
+              title="Hide sidebar"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </Button>
+          )}
+        </div>
+        
+        {/* Mobile Header */}
+        <div
+          className="md:hidden p-3 border-b border-border"
+          style={isPWA && isMobile ? { paddingTop: '16px' } : {}}
+        >
+          <div className="flex items-center justify-between">
+            {import.meta.env.VITE_IS_PLATFORM === 'true' ? (
+              <a
+                href="https://cloudcli.ai/dashboard"
+                className="flex items-center gap-3 active:opacity-70 transition-opacity"
+                title="View Environments"
+              >
+                <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                  <MessageSquare className="w-4 h-4 text-primary-foreground" />
+                </div>
+                <div>
+                  <h1 className="text-lg font-semibold text-foreground">Claude Code UI</h1>
+                  <p className="text-sm text-muted-foreground">Projects</p>
+                </div>
+              </a>
+            ) : (
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                  <MessageSquare className="w-4 h-4 text-primary-foreground" />
+                </div>
+                <div>
+                  <h1 className="text-lg font-semibold text-foreground">Claude Code UI</h1>
+                  <p className="text-sm text-muted-foreground">Projects</p>
+                </div>
+              </div>
+            )}
             <div className="flex gap-2">
               <button
                 className="w-8 h-8 rounded-md bg-background border border-border flex items-center justify-center active:scale-95 transition-all duration-150"
@@ -515,112 +580,10 @@ function Sidebar({
           </div>
         </div>
       </div>
-      
 
-      {/* New Project Form */}
-      {showNewProject && (
-        <div className="md:p-3 md:border-b md:border-border md:bg-muted/30">
-          {/* Desktop Form */}
-          <div className="hidden md:block space-y-2">
-            <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-              <FolderPlus className="w-4 h-4" />
-              Create New Project
-            </div>
-            <Input
-              value={newProjectPath}
-              onChange={(e) => setNewProjectPath(e.target.value)}
-              placeholder="/path/to/project or relative/path"
-              className="text-sm focus:ring-2 focus:ring-primary/20"
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') createNewProject();
-                if (e.key === 'Escape') cancelNewProject();
-              }}
-            />
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                onClick={createNewProject}
-                disabled={!newProjectPath.trim() || creatingProject}
-                className="flex-1 h-8 text-xs hover:bg-primary/90 transition-colors"
-              >
-                {creatingProject ? 'Creating...' : 'Create Project'}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={cancelNewProject}
-                disabled={creatingProject}
-                className="h-8 text-xs hover:bg-accent transition-colors"
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-          
-          {/* Mobile Form - Simple Overlay */}
-          <div className="md:hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-sm">
-            <div className="absolute bottom-0 left-0 right-0 bg-card rounded-t-lg border-t border-border p-4 space-y-4 animate-in slide-in-from-bottom duration-300">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 bg-primary/10 rounded-md flex items-center justify-center">
-                    <FolderPlus className="w-3 h-3 text-primary" />
-                  </div>
-                  <div>
-                    <h2 className="text-base font-semibold text-foreground">New Project</h2>
-                  </div>
-                </div>
-                <button
-                  onClick={cancelNewProject}
-                  disabled={creatingProject}
-                  className="w-6 h-6 rounded-md bg-muted flex items-center justify-center active:scale-95 transition-transform"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-              
-              <div className="space-y-3">
-                <Input
-                  value={newProjectPath}
-                  onChange={(e) => setNewProjectPath(e.target.value)}
-                  placeholder="/path/to/project or relative/path"
-                  className="text-sm h-10 rounded-md focus:border-primary transition-colors"
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') createNewProject();
-                    if (e.key === 'Escape') cancelNewProject();
-                  }}
-                />
-                
-                <div className="flex gap-2">
-                  <Button
-                    onClick={cancelNewProject}
-                    disabled={creatingProject}
-                    variant="outline"
-                    className="flex-1 h-9 text-sm rounded-md active:scale-95 transition-transform"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={createNewProject}
-                    disabled={!newProjectPath.trim() || creatingProject}
-                    className="flex-1 h-9 text-sm rounded-md bg-primary hover:bg-primary/90 active:scale-95 transition-all"
-                  >
-                    {creatingProject ? 'Creating...' : 'Create'}
-                  </Button>
-                </div>
-              </div>
-              
-              {/* Safe area for mobile */}
-              <div className="h-4" />
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {/* Search Filter */}
+      {/* Search Filter and Actions */}
       {projects.length > 0 && !isLoading && (
-        <div className="px-3 md:px-4 py-2 border-b border-border">
+        <div className="px-3 md:px-4 py-2 border-b border-border space-y-2">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
@@ -639,6 +602,39 @@ function Sidebar({
               </button>
             )}
           </div>
+
+          {/* Action Buttons - Desktop only */}
+          {!isMobile && (
+            <div className="flex gap-2">
+              <Button
+                variant="default"
+                size="sm"
+                className="flex-1 h-8 text-xs bg-primary hover:bg-primary/90 transition-all duration-200"
+                onClick={() => setShowNewProject(true)}
+                title="Create new project (Ctrl+N)"
+              >
+                <FolderPlus className="w-3.5 h-3.5 mr-1.5" />
+                New Project
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 w-8 px-0 hover:bg-accent transition-colors duration-200 group"
+                onClick={async () => {
+                  setIsRefreshing(true);
+                  try {
+                    await onRefresh();
+                  } finally {
+                    setIsRefreshing(false);
+                  }
+                }}
+                disabled={isRefreshing}
+                title="Refresh projects and sessions (Ctrl+R)"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''} group-hover:rotate-180 transition-transform duration-300`} />
+              </Button>
+            </div>
+          )}
         </div>
       )}
       
@@ -739,7 +735,7 @@ function Sidebar({
                                       {project.displayName}
                                     </h3>
                                     {tasksEnabled && (
-                                      <TaskIndicator 
+                                      <TaskIndicator
                                         status={(() => {
                                           const projectConfigured = project.taskmaster?.hasTaskmaster;
                                           const mcpConfigured = mcpServerStatus?.hasMCPServer && mcpServerStatus?.isConfigured;
@@ -747,9 +743,9 @@ function Sidebar({
                                           if (projectConfigured) return 'taskmaster-only';
                                           if (mcpConfigured) return 'mcp-only';
                                           return 'not-configured';
-                                        })()} 
+                                        })()}
                                         size="xs"
-                                        className="flex-shrink-0 ml-2"
+                                        className="hidden md:inline-flex flex-shrink-0 ml-2"
                                       />
                                     )}
                                   </div>
@@ -1047,11 +1043,11 @@ function Sidebar({
                                 )}
                                 onClick={() => {
                                   handleProjectSelect(project);
-                                  onSessionSelect(session);
+                                  handleSessionClick(session, project.name);
                                 }}
                                 onTouchEnd={handleTouchClick(() => {
                                   handleProjectSelect(project);
-                                  onSessionSelect(session);
+                                  handleSessionClick(session, project.name);
                                 })}
                               >
                                 <div className="flex items-center gap-2">
@@ -1114,8 +1110,8 @@ function Sidebar({
                                   "w-full justify-start p-2 h-auto font-normal text-left hover:bg-accent/50 transition-colors duration-200",
                                   selectedSession?.id === session.id && "bg-accent text-accent-foreground"
                                 )}
-                                onClick={() => onSessionSelect(session)}
-                                onTouchEnd={handleTouchClick(() => onSessionSelect(session))}
+                                onClick={() => handleSessionClick(session, project.name)}
+                                onTouchEnd={handleTouchClick(() => handleSessionClick(session, project.name))}
                               >
                                 <div className="flex items-start gap-2 min-w-0 w-full">
                                   {isCursorSession ? (
@@ -1316,8 +1312,10 @@ function Sidebar({
                 <div className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium text-blue-700 dark:text-blue-300">Update Available</div>
-                <div className="text-xs text-blue-600 dark:text-blue-400">Version {latestVersion} is ready</div>
+                <div className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                  {releaseInfo?.title || `Version ${latestVersion}`}
+                </div>
+                <div className="text-xs text-blue-600 dark:text-blue-400">Update available</div>
               </div>
             </Button>
           </div>
@@ -1335,8 +1333,10 @@ function Sidebar({
                 <div className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
               </div>
               <div className="min-w-0 flex-1 text-left">
-                <div className="text-sm font-medium text-blue-700 dark:text-blue-300">Update Available</div>
-                <div className="text-xs text-blue-600 dark:text-blue-400">Version {latestVersion} is ready</div>
+                <div className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                  {releaseInfo?.title || `Version ${latestVersion}`}
+                </div>
+                <div className="text-xs text-blue-600 dark:text-blue-400">Update available</div>
               </div>
             </button>
           </div>
@@ -1365,10 +1365,11 @@ function Sidebar({
           onClick={onShowSettings}
         >
           <Settings className="w-3 h-3" />
-          <span className="text-xs">Tools Settings</span>
+          <span className="text-xs">Settings</span>
         </Button>
       </div>
     </div>
+    </>
   );
 }
 

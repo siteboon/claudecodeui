@@ -94,6 +94,11 @@ async function spawnCursor(command, options = {}, ws) {
                     activeCursorProcesses.set(capturedSessionId, cursorProcess);
                   }
                   
+                  // Set session ID on writer (for API endpoint compatibility)
+                  if (ws.setSessionId && typeof ws.setSessionId === 'function') {
+                    ws.setSessionId(capturedSessionId);
+                  }
+
                   // Send session-created event only once for new sessions
                   if (!sessionId && !sessionCreatedSent) {
                     sessionCreatedSent = true;
@@ -159,6 +164,7 @@ async function spawnCursor(command, options = {}, ws) {
               // Send completion event
               ws.send(JSON.stringify({
                 type: 'cursor-result',
+                sessionId: capturedSessionId || sessionId,
                 data: response,
                 success: response.subtype === 'success'
               }));
@@ -198,9 +204,10 @@ async function spawnCursor(command, options = {}, ws) {
       // Clean up process reference
       const finalSessionId = capturedSessionId || sessionId || processKey;
       activeCursorProcesses.delete(finalSessionId);
-      
+
       ws.send(JSON.stringify({
         type: 'claude-complete',
+        sessionId: finalSessionId,
         exitCode: code,
         isNewSession: !sessionId && !!command // Flag to indicate this was a new session
       }));
@@ -244,7 +251,17 @@ function abortCursorSession(sessionId) {
   return false;
 }
 
+function isCursorSessionActive(sessionId) {
+  return activeCursorProcesses.has(sessionId);
+}
+
+function getActiveCursorSessions() {
+  return Array.from(activeCursorProcesses.keys());
+}
+
 export {
   spawnCursor,
-  abortCursorSession
+  abortCursorSession,
+  isCursorSessionActive,
+  getActiveCursorSessions
 };

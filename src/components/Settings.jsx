@@ -2,20 +2,18 @@ import { useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Badge } from './ui/badge';
-import { X, Plus, Settings, Shield, AlertTriangle, Moon, Sun, Server, Edit3, Trash2, Globe, Terminal, Zap, FolderOpen } from 'lucide-react';
+import { X, Plus, Settings as SettingsIcon, Shield, AlertTriangle, Moon, Sun, Server, Edit3, Trash2, Globe, Terminal, Zap, FolderOpen, LogIn, Key, GitBranch, Check } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
-import { useTasksSettings } from '../contexts/TasksSettingsContext';
+import ClaudeLogo from './ClaudeLogo';
+import CursorLogo from './CursorLogo';
+import CredentialsSettings from './CredentialsSettings';
+import GitSettings from './GitSettings';
+import TasksSettings from './TasksSettings';
+import LoginModal from './LoginModal';
+import { authenticatedFetch } from '../utils/api';
 
-function ToolsSettings({ isOpen, onClose, projects = [] }) {
+function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
   const { isDarkMode, toggleDarkMode } = useTheme();
-  const { 
-    tasksEnabled, 
-    setTasksEnabled, 
-    isTaskMasterInstalled, 
-    isTaskMasterReady, 
-    installationStatus, 
-    isCheckingInstallation 
-  } = useTasksSettings();
   const [allowedTools, setAllowedTools] = useState([]);
   const [disallowedTools, setDisallowedTools] = useState([]);
   const [newAllowedTool, setNewAllowedTool] = useState('');
@@ -48,9 +46,26 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
   const [mcpTestResults, setMcpTestResults] = useState({});
   const [mcpServerTools, setMcpServerTools] = useState({});
   const [mcpToolsLoading, setMcpToolsLoading] = useState({});
-  const [activeTab, setActiveTab] = useState('tools');
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [jsonValidationError, setJsonValidationError] = useState('');
   const [toolsProvider, setToolsProvider] = useState('claude'); // 'claude' or 'cursor'
+
+  // Code Editor settings
+  const [codeEditorTheme, setCodeEditorTheme] = useState(() =>
+    localStorage.getItem('codeEditorTheme') || 'dark'
+  );
+  const [codeEditorWordWrap, setCodeEditorWordWrap] = useState(() =>
+    localStorage.getItem('codeEditorWordWrap') === 'true'
+  );
+  const [codeEditorShowMinimap, setCodeEditorShowMinimap] = useState(() =>
+    localStorage.getItem('codeEditorShowMinimap') !== 'false' // Default true
+  );
+  const [codeEditorLineNumbers, setCodeEditorLineNumbers] = useState(() =>
+    localStorage.getItem('codeEditorLineNumbers') !== 'false' // Default true
+  );
+  const [codeEditorFontSize, setCodeEditorFontSize] = useState(() =>
+    localStorage.getItem('codeEditorFontSize') || '14'
+  );
   
   // Cursor-specific states
   const [cursorAllowedCommands, setCursorAllowedCommands] = useState([]);
@@ -59,6 +74,24 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
   const [newCursorCommand, setNewCursorCommand] = useState('');
   const [newCursorDisallowedCommand, setNewCursorDisallowedCommand] = useState('');
   const [cursorMcpServers, setCursorMcpServers] = useState([]);
+
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [loginProvider, setLoginProvider] = useState('');
+  const [selectedProject, setSelectedProject] = useState(null);
+
+  const [claudeAuthStatus, setClaudeAuthStatus] = useState({
+    authenticated: false,
+    email: null,
+    loading: true,
+    error: null
+  });
+  const [cursorAuthStatus, setCursorAuthStatus] = useState({
+    authenticated: false,
+    email: null,
+    loading: true,
+    error: null
+  });
+
   // Common tool patterns for Claude
   const commonTools = [
     'Bash(git log:*)',
@@ -96,14 +129,8 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
   // Fetch Cursor MCP servers
   const fetchCursorMcpServers = async () => {
     try {
-      const token = localStorage.getItem('auth-token');
-      const response = await fetch('/api/cursor/mcp', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
+      const response = await authenticatedFetch('/api/cursor/mcp');
+
       if (response.ok) {
         const data = await response.json();
         setCursorMcpServers(data.servers || []);
@@ -118,16 +145,9 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
   // MCP API functions
   const fetchMcpServers = async () => {
     try {
-      const token = localStorage.getItem('auth-token');
-      
       // Try to read directly from config files for complete details
-      const configResponse = await fetch('/api/mcp/config/read', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
+      const configResponse = await authenticatedFetch('/api/mcp/config/read');
+
       if (configResponse.ok) {
         const configData = await configResponse.json();
         if (configData.success && configData.servers) {
@@ -135,15 +155,10 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
           return;
         }
       }
-      
+
       // Fallback to Claude CLI
-      const cliResponse = await fetch('/api/mcp/cli/list', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
+      const cliResponse = await authenticatedFetch('/api/mcp/cli/list');
+
       if (cliResponse.ok) {
         const cliData = await cliResponse.json();
         if (cliData.success && cliData.servers) {
@@ -168,15 +183,10 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
           return;
         }
       }
-      
+
       // Final fallback to direct config reading
-      const response = await fetch('/api/mcp/servers?scope=user', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
+      const response = await authenticatedFetch('/api/mcp/servers?scope=user');
+
       if (response.ok) {
         const data = await response.json();
         setMcpServers(data.servers || []);
@@ -190,20 +200,14 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
 
   const saveMcpServer = async (serverData) => {
     try {
-      const token = localStorage.getItem('auth-token');
-      
       if (editingMcpServer) {
         // For editing, remove old server and add new one
         await deleteMcpServer(editingMcpServer.id, 'user');
       }
-      
+
       // Use Claude CLI to add the server
-      const response = await fetch('/api/mcp/cli/add', {
+      const response = await authenticatedFetch('/api/mcp/cli/add', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify({
           name: serverData.name,
           type: serverData.type,
@@ -216,7 +220,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
           env: serverData.config?.env || {}
         })
       });
-      
+
       if (response.ok) {
         const result = await response.json();
         if (result.success) {
@@ -237,17 +241,11 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
 
   const deleteMcpServer = async (serverId, scope = 'user') => {
     try {
-      const token = localStorage.getItem('auth-token');
-      
       // Use Claude CLI to remove the server with proper scope
-      const response = await fetch(`/api/mcp/cli/remove/${serverId}?scope=${scope}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
+      const response = await authenticatedFetch(`/api/mcp/cli/remove/${serverId}?scope=${scope}`, {
+        method: 'DELETE'
       });
-      
+
       if (response.ok) {
         const result = await response.json();
         if (result.success) {
@@ -268,15 +266,10 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
 
   const testMcpServer = async (serverId, scope = 'user') => {
     try {
-      const token = localStorage.getItem('auth-token');
-      const response = await fetch(`/api/mcp/servers/${serverId}/test?scope=${scope}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
+      const response = await authenticatedFetch(`/api/mcp/servers/${serverId}/test?scope=${scope}`, {
+        method: 'POST'
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         return data.testResult;
@@ -293,15 +286,10 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
 
   const discoverMcpTools = async (serverId, scope = 'user') => {
     try {
-      const token = localStorage.getItem('auth-token');
-      const response = await fetch(`/api/mcp/servers/${serverId}/tools?scope=${scope}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
+      const response = await authenticatedFetch(`/api/mcp/servers/${serverId}/tools?scope=${scope}`, {
+        method: 'POST'
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         return data.toolsResult;
@@ -318,14 +306,43 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
   useEffect(() => {
     if (isOpen) {
       loadSettings();
+      checkClaudeAuthStatus();
+      checkCursorAuthStatus();
+      setActiveTab(initialTab);
     }
-  }, [isOpen]);
+  }, [isOpen, initialTab]);
+
+  // Persist code editor settings to localStorage
+  useEffect(() => {
+    localStorage.setItem('codeEditorTheme', codeEditorTheme);
+    window.dispatchEvent(new Event('codeEditorSettingsChanged'));
+  }, [codeEditorTheme]);
+
+  useEffect(() => {
+    localStorage.setItem('codeEditorWordWrap', codeEditorWordWrap.toString());
+    window.dispatchEvent(new Event('codeEditorSettingsChanged'));
+  }, [codeEditorWordWrap]);
+
+  useEffect(() => {
+    localStorage.setItem('codeEditorShowMinimap', codeEditorShowMinimap.toString());
+    window.dispatchEvent(new Event('codeEditorSettingsChanged'));
+  }, [codeEditorShowMinimap]);
+
+  useEffect(() => {
+    localStorage.setItem('codeEditorLineNumbers', codeEditorLineNumbers.toString());
+    window.dispatchEvent(new Event('codeEditorSettingsChanged'));
+  }, [codeEditorLineNumbers]);
+
+  useEffect(() => {
+    localStorage.setItem('codeEditorFontSize', codeEditorFontSize);
+    window.dispatchEvent(new Event('codeEditorSettingsChanged'));
+  }, [codeEditorFontSize]);
 
   const loadSettings = async () => {
     try {
       
       // Load Claude settings from localStorage
-      const savedSettings = localStorage.getItem('claude-tools-settings');
+      const savedSettings = localStorage.getItem('claude-settings');
       
       if (savedSettings) {
         const settings = JSON.parse(savedSettings);
@@ -363,11 +380,95 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
       await fetchCursorMcpServers();
     } catch (error) {
       console.error('Error loading tool settings:', error);
-      // Set defaults on error
       setAllowedTools([]);
       setDisallowedTools([]);
       setSkipPermissions(false);
       setProjectSortOrder('name');
+    }
+  };
+
+  const checkClaudeAuthStatus = async () => {
+    try {
+      const response = await authenticatedFetch('/api/cli/claude/status');
+
+      if (response.ok) {
+        const data = await response.json();
+        setClaudeAuthStatus({
+          authenticated: data.authenticated,
+          email: data.email,
+          loading: false,
+          error: data.error || null
+        });
+      } else {
+        setClaudeAuthStatus({
+          authenticated: false,
+          email: null,
+          loading: false,
+          error: 'Failed to check authentication status'
+        });
+      }
+    } catch (error) {
+      console.error('Error checking Claude auth status:', error);
+      setClaudeAuthStatus({
+        authenticated: false,
+        email: null,
+        loading: false,
+        error: error.message
+      });
+    }
+  };
+
+  const checkCursorAuthStatus = async () => {
+    try {
+      const response = await authenticatedFetch('/api/cli/cursor/status');
+
+      if (response.ok) {
+        const data = await response.json();
+        setCursorAuthStatus({
+          authenticated: data.authenticated,
+          email: data.email,
+          loading: false,
+          error: data.error || null
+        });
+      } else {
+        setCursorAuthStatus({
+          authenticated: false,
+          email: null,
+          loading: false,
+          error: 'Failed to check authentication status'
+        });
+      }
+    } catch (error) {
+      console.error('Error checking Cursor auth status:', error);
+      setCursorAuthStatus({
+        authenticated: false,
+        email: null,
+        loading: false,
+        error: error.message
+      });
+    }
+  };
+  const handleClaudeLogin = () => {
+    setLoginProvider('claude');
+    setSelectedProject(projects?.[0] || { name: 'default', fullPath: process.cwd() });
+    setShowLoginModal(true);
+  };
+
+  const handleCursorLogin = () => {
+    setLoginProvider('cursor');
+    setSelectedProject(projects?.[0] || { name: 'default', fullPath: process.cwd() });
+    setShowLoginModal(true);
+  };
+
+  const handleLoginComplete = (exitCode) => {
+    if (exitCode === 0) {
+      setSaveStatus('success');
+
+      if (loginProvider === 'claude') {
+        checkClaudeAuthStatus();
+      } else if (loginProvider === 'cursor') {
+        checkCursorAuthStatus();
+      }
     }
   };
 
@@ -394,7 +495,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
       };
       
       // Save to localStorage
-      localStorage.setItem('claude-tools-settings', JSON.stringify(claudeSettings));
+      localStorage.setItem('claude-settings', JSON.stringify(claudeSettings));
       localStorage.setItem('cursor-tools-settings', JSON.stringify(cursorSettings));
       
       setSaveStatus('success');
@@ -482,13 +583,8 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
     try {
       if (mcpFormData.importMode === 'json') {
         // Use JSON import endpoint
-        const token = localStorage.getItem('auth-token');
-        const response = await fetch('/api/mcp/cli/add-json', {
+        const response = await authenticatedFetch('/api/mcp/cli/add-json', {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
           body: JSON.stringify({
             name: mcpFormData.name,
             jsonConfig: mcpFormData.jsonInput,
@@ -496,7 +592,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
             projectPath: mcpFormData.projectPath
           })
         });
-        
+
         if (response.ok) {
           const result = await response.json();
           if (result.success) {
@@ -596,11 +692,11 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
   if (!isOpen) return null;
 
   return (
-    <div className="modal-backdrop fixed inset-0 flex items-center justify-center z-[100] md:p-4 bg-background/95">
+    <div className="modal-backdrop fixed inset-0 flex items-center justify-center z-[9999] md:p-4 bg-background/95">
       <div className="bg-background border border-border md:rounded-lg shadow-xl w-full md:max-w-4xl h-full md:h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-4 md:p-6 border-b border-border flex-shrink-0">
           <div className="flex items-center gap-3">
-            <Settings className="w-5 h-5 md:w-6 md:h-6 text-blue-600" />
+            <SettingsIcon className="w-5 h-5 md:w-6 md:h-6 text-blue-600" />
             <h2 className="text-lg md:text-xl font-semibold text-foreground">
               Settings
             </h2>
@@ -638,6 +734,28 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                 }`}
               >
                 Appearance
+              </button>
+              <button
+                onClick={() => setActiveTab('git')}
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'git'
+                    ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <GitBranch className="w-4 h-4 inline mr-2" />
+                Git
+              </button>
+              <button
+                onClick={() => setActiveTab('api')}
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'api'
+                    ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Key className="w-4 h-4 inline mr-2" />
+                API & Tokens
               </button>
               <button
                 onClick={() => setActiveTab('tasks')}
@@ -718,11 +836,166 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
         </div>
       </div>
     </div>
+
+    {/* Code Editor Settings */}
+    <div className="space-y-4">
+      <h3 className="text-lg font-semibold text-foreground">Code Editor</h3>
+
+      {/* Editor Theme */}
+      <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="font-medium text-foreground">
+              Editor Theme
+            </div>
+            <div className="text-sm text-muted-foreground">
+              Default theme for the code editor
+            </div>
+          </div>
+          <button
+            onClick={() => setCodeEditorTheme(codeEditorTheme === 'dark' ? 'light' : 'dark')}
+            className="relative inline-flex h-8 w-14 items-center rounded-full bg-gray-200 dark:bg-gray-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
+            role="switch"
+            aria-checked={codeEditorTheme === 'dark'}
+            aria-label="Toggle editor theme"
+          >
+            <span className="sr-only">Toggle editor theme</span>
+            <span
+              className={`${
+                codeEditorTheme === 'dark' ? 'translate-x-7' : 'translate-x-1'
+              } inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-200 flex items-center justify-center`}
+            >
+              {codeEditorTheme === 'dark' ? (
+                <Moon className="w-3.5 h-3.5 text-gray-700" />
+              ) : (
+                <Sun className="w-3.5 h-3.5 text-yellow-500" />
+              )}
+            </span>
+          </button>
+        </div>
+      </div>
+
+      {/* Word Wrap */}
+      <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="font-medium text-foreground">
+              Word Wrap
+            </div>
+            <div className="text-sm text-muted-foreground">
+              Enable word wrapping by default in the editor
+            </div>
+          </div>
+          <button
+            onClick={() => setCodeEditorWordWrap(!codeEditorWordWrap)}
+            className="relative inline-flex h-8 w-14 items-center rounded-full bg-gray-200 dark:bg-gray-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
+            role="switch"
+            aria-checked={codeEditorWordWrap}
+            aria-label="Toggle word wrap"
+          >
+            <span className="sr-only">Toggle word wrap</span>
+            <span
+              className={`${
+                codeEditorWordWrap ? 'translate-x-7' : 'translate-x-1'
+              } inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-200`}
+            />
+          </button>
+        </div>
+      </div>
+
+      {/* Show Minimap */}
+      <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="font-medium text-foreground">
+              Show Minimap
+            </div>
+            <div className="text-sm text-muted-foreground">
+              Display a minimap for easier navigation in diff view
+            </div>
+          </div>
+          <button
+            onClick={() => setCodeEditorShowMinimap(!codeEditorShowMinimap)}
+            className="relative inline-flex h-8 w-14 items-center rounded-full bg-gray-200 dark:bg-gray-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
+            role="switch"
+            aria-checked={codeEditorShowMinimap}
+            aria-label="Toggle minimap"
+          >
+            <span className="sr-only">Toggle minimap</span>
+            <span
+              className={`${
+                codeEditorShowMinimap ? 'translate-x-7' : 'translate-x-1'
+              } inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-200`}
+            />
+          </button>
+        </div>
+      </div>
+
+      {/* Show Line Numbers */}
+      <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="font-medium text-foreground">
+              Show Line Numbers
+            </div>
+            <div className="text-sm text-muted-foreground">
+              Display line numbers in the editor
+            </div>
+          </div>
+          <button
+            onClick={() => setCodeEditorLineNumbers(!codeEditorLineNumbers)}
+            className="relative inline-flex h-8 w-14 items-center rounded-full bg-gray-200 dark:bg-gray-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
+            role="switch"
+            aria-checked={codeEditorLineNumbers}
+            aria-label="Toggle line numbers"
+          >
+            <span className="sr-only">Toggle line numbers</span>
+            <span
+              className={`${
+                codeEditorLineNumbers ? 'translate-x-7' : 'translate-x-1'
+              } inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-200`}
+            />
+          </button>
+        </div>
+      </div>
+
+      {/* Font Size */}
+      <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="font-medium text-foreground">
+              Font Size
+            </div>
+            <div className="text-sm text-muted-foreground">
+              Editor font size in pixels
+            </div>
+          </div>
+          <select
+            value={codeEditorFontSize}
+            onChange={(e) => setCodeEditorFontSize(e.target.value)}
+            className="text-sm bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 w-24"
+          >
+            <option value="10">10px</option>
+            <option value="11">11px</option>
+            <option value="12">12px</option>
+            <option value="13">13px</option>
+            <option value="14">14px</option>
+            <option value="15">15px</option>
+            <option value="16">16px</option>
+            <option value="18">18px</option>
+            <option value="20">20px</option>
+          </select>
+        </div>
+      </div>
+    </div>
   </div>
 )}
 
               </div>
             )}
+
+            {/* Git Tab */}
+            {activeTab === 'git' && <GitSettings />}
 
             {/* Tools Tab */}
             {activeTab === 'tools' && (
@@ -739,7 +1012,10 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                       : 'border-transparent text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  Claude Tools
+                  <div className="flex items-center gap-2">
+                    <ClaudeLogo className="w-4 h-4" />
+                    <span>Claude</span>
+                  </div>
                 </button>
                 <button
                   onClick={() => setToolsProvider('cursor')}
@@ -749,12 +1025,15 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                       : 'border-transparent text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  Cursor Tools
+                  <div className="flex items-center gap-2">
+                    <CursorLogo className="w-4 h-4" />
+                    <span>Cursor</span>
+                  </div>
                 </button>
               </div>
             </div>
             
-            {/* Claude Tools Content */}
+            {/* Claude Content */}
             {toolsProvider === 'claude' && (
               <div className="space-y-6 md:space-y-8">
             
@@ -772,7 +1051,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                     type="checkbox"
                     checked={skipPermissions}
                     onChange={(e) => setSkipPermissions(e.target.checked)}
-                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                    className="w-4 h-4 text-blue-600 bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500 focus:ring-2 checked:bg-blue-600 dark:checked:bg-blue-600"
                   />
                   <div>
                     <div className="font-medium text-orange-900 dark:text-orange-100">
@@ -783,6 +1062,62 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                     </div>
                   </div>
                 </label>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <LogIn className="w-5 h-5 text-blue-500" />
+                <h3 className="text-lg font-medium text-foreground">
+                  Authentication
+                </h3>
+              </div>
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    {claudeAuthStatus.loading ? (
+                      <span className="text-sm text-blue-700 dark:text-blue-300">
+                        Checking authentication...
+                      </span>
+                    ) : claudeAuthStatus.authenticated ? (
+                      <div className="flex items-center gap-2">
+                        <Badge variant="success" className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
+                          ✓ Logged in
+                        </Badge>
+                        {claudeAuthStatus.email && (
+                          <span className="text-sm text-blue-700 dark:text-blue-300">
+                            as {claudeAuthStatus.email}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <Badge variant="secondary" className="bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300">
+                        Not authenticated
+                      </Badge>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium text-blue-900 dark:text-blue-100">
+                        Claude CLI Login
+                      </div>
+                      <div className="text-sm text-blue-700 dark:text-blue-300">
+                        {claudeAuthStatus.authenticated
+                          ? 'Re-authenticate or switch accounts'
+                          : 'Sign in to your Claude account to enable AI features'}
+                      </div>
+                    </div>
+                    <Button
+                      onClick={handleClaudeLogin}
+                      className="bg-blue-600 hover:bg-blue-700 text-white"
+                      size="sm"
+                    >
+                      <LogIn className="w-4 h-4 mr-2" />
+                      Login
+                    </Button>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -1484,7 +1819,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
               </div>
             )}
             
-            {/* Cursor Tools Content */}
+            {/* Cursor Content */}
             {toolsProvider === 'cursor' && (
               <div className="space-y-6 md:space-y-8">
                 
@@ -1502,7 +1837,7 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                         type="checkbox"
                         checked={cursorSkipPermissions}
                         onChange={(e) => setCursorSkipPermissions(e.target.checked)}
-                        className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                        className="w-4 h-4 text-blue-600 bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500 focus:ring-2 checked:bg-blue-600 dark:checked:bg-blue-600"
                       />
                       <div>
                         <div className="font-medium text-orange-900 dark:text-orange-100">
@@ -1513,6 +1848,62 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
                         </div>
                       </div>
                     </label>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <LogIn className="w-5 h-5 text-purple-500" />
+                    <h3 className="text-lg font-medium text-foreground">
+                      Authentication
+                    </h3>
+                  </div>
+                  <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        {cursorAuthStatus.loading ? (
+                          <span className="text-sm text-purple-700 dark:text-purple-300">
+                            Checking authentication...
+                          </span>
+                        ) : cursorAuthStatus.authenticated ? (
+                          <div className="flex items-center gap-2">
+                            <Badge variant="success" className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
+                              ✓ Logged in
+                            </Badge>
+                            {cursorAuthStatus.email && (
+                              <span className="text-sm text-purple-700 dark:text-purple-300">
+                                as {cursorAuthStatus.email}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <Badge variant="secondary" className="bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300">
+                            Not authenticated
+                          </Badge>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-medium text-purple-900 dark:text-purple-100">
+                            Cursor CLI Login
+                          </div>
+                          <div className="text-sm text-purple-700 dark:text-purple-300">
+                            {cursorAuthStatus.authenticated
+                              ? 'Re-authenticate or switch accounts'
+                              : 'Sign in to your Cursor account to enable AI features'}
+                          </div>
+                        </div>
+                        <Button
+                          onClick={handleCursorLogin}
+                          className="bg-purple-600 hover:bg-purple-700 text-white"
+                          size="sm"
+                        >
+                          <LogIn className="w-4 h-4 mr-2" />
+                          Login
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -1697,154 +2088,14 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
             {/* Tasks Tab */}
             {activeTab === 'tasks' && (
               <div className="space-y-6 md:space-y-8">
-                {/* Installation Status Check */}
-                {isCheckingInstallation ? (
-                  <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="animate-spin w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full"></div>
-                      <span className="text-sm text-muted-foreground">Checking TaskMaster installation...</span>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    {/* TaskMaster Not Installed Warning */}
-                    {!isTaskMasterInstalled && (
-                      <div className="bg-orange-50 dark:bg-orange-950/50 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
-                        <div className="flex items-start gap-3">
-                          <div className="w-8 h-8 bg-orange-100 dark:bg-orange-900 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                            <svg className="w-4 h-4 text-orange-600 dark:text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                            </svg>
-                          </div>
-                          <div className="flex-1">
-                            <div className="font-medium text-orange-900 dark:text-orange-100 mb-2">
-                              TaskMaster AI CLI Not Installed
-                            </div>
-                            <div className="text-sm text-orange-800 dark:text-orange-200 space-y-3">
-                              <p>TaskMaster CLI is required to use task management features. Install it to get started:</p>
-                              
-                              <div className="bg-orange-100 dark:bg-orange-900/50 rounded-lg p-3 font-mono text-sm">
-                                <code>npm install -g task-master-ai</code>
-                               <a 
-                                  href="https://github.com/eyaltoledano/claude-task-master" 
-                                  target="_blank" 
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium"
-                                >
-                                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M10 0C4.477 0 0 4.484 0 10.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0110 4.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.203 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.942.359.31.678.921.678 1.856 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0020 10.017C20 4.484 15.522 0 10 0z" clipRule="evenodd" />
-                                  </svg>
-                                  View on GitHub
-                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                  </svg>
-                                </a>
-                              </div>
-                              
-                              <div className="space-y-2">
-                                <p className="font-medium">After installation:</p>
-                                <ol className="list-decimal list-inside space-y-1 text-xs">
-                                  <li>Restart this application</li>
-                                  <li>TaskMaster features will automatically become available</li>
-                                  <li>Use <code className="bg-orange-100 dark:bg-orange-800 px-1 rounded">task-master init</code> in your project directory</li>
-                                </ol>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
+                <TasksSettings />
+              </div>
+            )}
 
-                    {/* TaskMaster Settings */}
-                    <div className="space-y-4">
-                      <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="font-medium text-foreground">
-                              Enable TaskMaster Integration
-                            </div>
-                            <div className="text-sm text-muted-foreground mt-1">
-                              Show TaskMaster tasks, banners, and sidebar indicators across the interface
-                            </div>
-                            {!isTaskMasterInstalled && (
-                              <div className="text-xs text-orange-600 dark:text-orange-400 mt-1">
-                                TaskMaster CLI must be installed first
-                              </div>
-                            )}
-                          </div>
-                          <label className="relative inline-flex items-center cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={tasksEnabled}
-                              onChange={(e) => setTasksEnabled(e.target.checked)}
-                              disabled={!isTaskMasterInstalled}
-                              className="sr-only peer"
-                            />
-                            <div className={`w-11 h-6 ${!isTaskMasterInstalled ? 'bg-gray-300 dark:bg-gray-600' : 'bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800'} rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600`}></div>
-                          </label>
-                        </div>
-                      </div>
-
-                      {/* TaskMaster Information */}
-                      <div className="bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                    <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <Zap className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                      </div>
-                      <div>
-                        <div className="font-medium text-blue-900 dark:text-blue-100 mb-2">
-                          🎯 About TaskMaster AI
-                        </div>
-                        <div className="text-sm text-blue-800 dark:text-blue-200 space-y-2">
-                          <p><strong>AI-Powered Task Management:</strong> Break complex projects into manageable subtasks with AI assistance</p>
-                          <p><strong>PRD:</strong> Generate structured tasks from Product Requirements Documents</p>
-                          <p><strong>Dependency Tracking:</strong> Understand task relationships and execution order</p>
-                          <p><strong>Progress Visualization:</strong> Kanban boards, and detailed task views</p>
-                        </div>
-                      </div>
-                      
-                      {/* GitHub Link and Resources */}
-                      <div className="mt-4 pt-4 border-t border-blue-200 dark:border-blue-700">
-                        <div className="flex items-start gap-3">
-                          <div className="w-6 h-6 bg-blue-100 dark:bg-blue-800 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                            <svg className="w-3 h-3 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M12.586 4.586a2 2 0 112.828 2.828l-3 3a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3-3a4 4 0 00-5.656-5.656l-1.5 1.5a1 1 0 101.414 1.414l1.5-1.5zm-5 5a2 2 0 012.828 0 1 1 0 101.414-1.414 4 4 0 00-5.656 0l-3 3a4 4 0 105.656 5.656l1.5-1.5a1 1 0 10-1.414-1.414l-1.5 1.5a2 2 0 11-2.828-2.828l3-3z" clipRule="evenodd" />
-                            </svg>
-                          </div>
-                          <div className="flex-1">
-                            <div className="font-medium text-blue-900 dark:text-blue-100 mb-2">
-                              📚 Learn More & Tutorial
-                            </div>
-                            <div className="text-sm text-blue-800 dark:text-blue-200 space-y-2">
-                              <p>TaskMaster AI (aka <strong>claude-task-master</strong> ) is an advanced AI-powered task management system built for developers.</p>
-                              <div className="flex flex-col gap-2">
-                                <a 
-                                  href="https://github.com/eyaltoledano/claude-task-master" 
-                                  target="_blank" 
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium"
-                                >
-                                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M10 0C4.477 0 0 4.484 0 10.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0110 4.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.203 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.942.359.31.678.921.678 1.856 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0020 10.017C20 4.484 15.522 0 10 0z" clipRule="evenodd" />
-                                  </svg>
-                                  View on GitHub
-                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                  </svg>
-                                </a>
-                                <p className="text-xs text-blue-700 dark:text-blue-300">
-                                  Find documentation, setup guides, and examples for advanced TaskMaster workflows
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                      </div>
-                    </div>
-                  </>
-                )}
+            {/* API & Tokens Tab */}
+            {activeTab === 'api' && (
+              <div className="space-y-6 md:space-y-8">
+                <CredentialsSettings />
               </div>
             )}
           </div>
@@ -1895,8 +2146,17 @@ function ToolsSettings({ isOpen, onClose, projects = [] }) {
           </div>
         </div>
       </div>
+
+      {/* Login Modal */}
+      <LoginModal
+        isOpen={showLoginModal}
+        onClose={() => setShowLoginModal(false)}
+        provider={loginProvider}
+        project={selectedProject}
+        onComplete={handleLoginComplete}
+      />
     </div>
   );
 }
 
-export default ToolsSettings;
+export default Settings;

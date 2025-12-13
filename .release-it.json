@@ -1,0 +1,21 @@
+{
+  "git": {
+    "commitMessage": "Release ${version}",
+    "tagName": "v${version}",
+    "changelog": "git log --pretty=format:\"* %s (%h)\" ${from}...${to}"
+  },
+  "npm": {
+    "publish": true
+  },
+  "github": {
+    "release": true,
+    "releaseName": "Claude Code UI v${version}",
+    "releaseNotes": {
+      "commit": "* ${commit.subject} (${sha}){ - thanks @${author.login}!}",
+      "excludeMatches": ["viper151"]
+    }
+  },
+  "hooks": {
+    "before:init": ["npm run build"]
+  }
+}

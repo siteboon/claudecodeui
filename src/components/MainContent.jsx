@@ -11,11 +11,11 @@
  * No session protection logic is implemented here - it's purely a props bridge.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import ChatInterface from './ChatInterface';
 import FileTree from './FileTree';
 import CodeEditor from './CodeEditor';
-import Shell from './Shell';
+import StandaloneShell from './StandaloneShell';
 import GitPanel from './GitPanel';
 import ErrorBoundary from './ErrorBoundary';
 import ClaudeLogo from './ClaudeLogo';
@@ -28,33 +28,43 @@ import { useTaskMaster } from '../contexts/TaskMasterContext';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
 import { api } from '../utils/api';
 
-function MainContent({ 
-  selectedProject, 
-  selectedSession, 
-  activeTab, 
-  setActiveTab, 
-  ws, 
-  sendMessage, 
+function MainContent({
+  selectedProject,
+  selectedSession,
+  activeTab,
+  setActiveTab,
+  ws,
+  sendMessage,
   messages,
   isMobile,
+  isPWA,
   onMenuClick,
   isLoading,
   onInputFocusChange,
   // Session Protection Props: Functions passed down from App.jsx to manage active session state
   // These functions control when project updates are paused during active conversations
   onSessionActive,        // Mark session as active when user sends message
-  onSessionInactive,      // Mark session as inactive when conversation completes/aborts  
+  onSessionInactive,      // Mark session as inactive when conversation completes/aborts
+  onSessionProcessing,    // Mark session as processing (thinking/working)
+  onSessionNotProcessing, // Mark session as not processing (finished thinking)
+  processingSessions,     // Set of session IDs currently processing
   onReplaceTemporarySession, // Replace temporary session ID with real session ID from WebSocket
   onNavigateToSession,    // Navigate to a specific session (for Claude CLI session duplication workaround)
   onShowSettings,         // Show tools settings panel
   autoExpandTools,        // Auto-expand tool accordions
   showRawParameters,      // Show raw parameters in tool accordions
+  showThinking,           // Show thinking/reasoning sections
   autoScrollToBottom,     // Auto-scroll to bottom when new messages arrive
-  sendByCtrlEnter         // Send by Ctrl+Enter mode for East Asian language input
+  sendByCtrlEnter,        // Send by Ctrl+Enter mode for East Asian language input
+  externalMessageUpdate   // Trigger for external CLI updates to current session
 }) {
   const [editingFile, setEditingFile] = useState(null);
   const [selectedTask, setSelectedTask] = useState(null);
   const [showTaskDetail, setShowTaskDetail] = useState(false);
+  const [editorWidth, setEditorWidth] = useState(600);
+  const [isResizing, setIsResizing] = useState(false);
+  const [editorExpanded, setEditorExpanded] = useState(false);
+  const resizeRef = useRef(null);
   
   // PRD Editor state
   const [showPRDEditor, setShowPRDEditor] = useState(false);
@@ -121,6 +131,11 @@ function MainContent({
 
   const handleCloseEditor = () => {
     setEditingFile(null);
+    setEditorExpanded(false);
+  };
+
+  const handleToggleEditorExpand = () => {
+    setEditorExpanded(!editorExpanded);
   };
 
   const handleTaskClick = (task) => {
@@ -147,15 +162,63 @@ function MainContent({
     console.log('Update task status:', taskId, newStatus);
     refreshTasks?.();
   };
+
+  // Handle resize functionality
+  const handleMouseDown = (e) => {
+    if (isMobile) return; // Disable resize on mobile
+    setIsResizing(true);
+    e.preventDefault();
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (!isResizing) return;
+
+      const container = resizeRef.current?.parentElement;
+      if (!container) return;
+
+      const containerRect = container.getBoundingClientRect();
+      const newWidth = containerRect.right - e.clientX;
+
+      // Min width: 300px, Max width: 80% of container
+      const minWidth = 300;
+      const maxWidth = containerRect.width * 0.8;
+
+      if (newWidth >= minWidth && newWidth <= maxWidth) {
+        setEditorWidth(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizing]);
+
   if (isLoading) {
     return (
       <div className="h-full flex flex-col">
         {/* Header with menu button for mobile */}
         {isMobile && (
-          <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-3 sm:p-4 flex-shrink-0">
+          <div
+            className="bg-background border-b border-border p-2 sm:p-3 pwa-header-safe flex-shrink-0"
+          >
             <button
               onClick={onMenuClick}
-              className="p-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+              className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 pwa-menu-button"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -188,10 +251,12 @@ function MainContent({
       <div className="h-full flex flex-col">
         {/* Header with menu button for mobile */}
         {isMobile && (
-          <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-3 sm:p-4 flex-shrink-0">
+          <div
+            className="bg-background border-b border-border p-2 sm:p-3 pwa-header-safe flex-shrink-0"
+          >
             <button
               onClick={onMenuClick}
-              className="p-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+              className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 pwa-menu-button"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -224,9 +289,11 @@ function MainContent({
   return (
     <div className="h-full flex flex-col">
       {/* Header with tabs */}
-      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-3 sm:p-4 flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2 sm:space-x-3">
+      <div
+        className="bg-background border-b border-border p-2 sm:p-3 pwa-header-safe flex-shrink-0"
+      >
+        <div className="flex items-center justify-between relative">
+          <div className="flex items-center space-x-2 min-w-0 flex-1">
             {isMobile && (
               <button
                 onClick={onMenuClick}
@@ -234,36 +301,36 @@ function MainContent({
                   e.preventDefault();
                   onMenuClick();
                 }}
-                className="p-2.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 touch-manipulation active:scale-95"
+                className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 touch-manipulation active:scale-95 pwa-menu-button flex-shrink-0"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
               </button>
             )}
-            <div className="min-w-0 flex items-center gap-2">
+            <div className="min-w-0 flex items-center gap-2 flex-1 overflow-x-auto scrollbar-hide">
               {activeTab === 'chat' && selectedSession && (
-                <div className="w-6 h-6 flex-shrink-0 flex items-center justify-center">
+                <div className="w-5 h-5 flex-shrink-0 flex items-center justify-center">
                   {selectedSession.__provider === 'cursor' ? (
-                    <CursorLogo className="w-5 h-5" />
+                    <CursorLogo className="w-4 h-4" />
                   ) : (
-                    <ClaudeLogo className="w-5 h-5" />
+                    <ClaudeLogo className="w-4 h-4" />
                   )}
                 </div>
               )}
-              <div className="flex-1 min-w-0">
+              <div className="min-w-0 flex-1">
                 {activeTab === 'chat' && selectedSession ? (
-                  <div>
-                    <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white truncate">
+                  <div className="min-w-0">
+                    <h2 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white whitespace-nowrap overflow-x-auto scrollbar-hide">
                       {selectedSession.__provider === 'cursor' ? (selectedSession.name || 'Untitled Session') : (selectedSession.summary || 'New Session')}
                     </h2>
                     <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                      {selectedProject.displayName} <span className="hidden sm:inline">• {selectedSession.id}</span>
+                      {selectedProject.displayName}
                     </div>
                   </div>
                 ) : activeTab === 'chat' && !selectedSession ? (
-                  <div>
-                    <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
+                  <div className="min-w-0">
+                    <h2 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white">
                       New Session
                     </h2>
                     <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
@@ -271,11 +338,11 @@ function MainContent({
                     </div>
                   </div>
                 ) : (
-                  <div>
-                    <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
-                      {activeTab === 'files' ? 'Project Files' : 
-                       activeTab === 'git' ? 'Source Control' : 
-                       (activeTab === 'tasks' && shouldShowTasksTab) ? 'TaskMaster' : 
+                  <div className="min-w-0">
+                    <h2 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white">
+                      {activeTab === 'files' ? 'Project Files' :
+                       activeTab === 'git' ? 'Source Control' :
+                       (activeTab === 'tasks' && shouldShowTasksTab) ? 'TaskMaster' :
                        'Project'}
                     </h2>
                     <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
@@ -397,11 +464,13 @@ function MainContent({
         </div>
       </div>
 
-      {/* Content Area */}
-      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-        <div className={`h-full ${activeTab === 'chat' ? 'block' : 'hidden'}`}>
-          <ErrorBoundary showDetails={true}>
-            <ChatInterface
+      {/* Content Area with Right Sidebar */}
+      <div className="flex-1 flex min-h-0 overflow-hidden">
+        {/* Main Content */}
+        <div className={`flex-1 flex flex-col min-h-0 overflow-hidden ${editingFile ? 'mr-0' : ''} ${editorExpanded ? 'hidden' : ''}`}>
+          <div className={`h-full ${activeTab === 'chat' ? 'block' : 'hidden'}`}>
+            <ErrorBoundary showDetails={true}>
+              <ChatInterface
               selectedProject={selectedProject}
               selectedSession={selectedSession}
               ws={ws}
@@ -411,30 +480,41 @@ function MainContent({
               onInputFocusChange={onInputFocusChange}
               onSessionActive={onSessionActive}
               onSessionInactive={onSessionInactive}
+              onSessionProcessing={onSessionProcessing}
+              onSessionNotProcessing={onSessionNotProcessing}
+              processingSessions={processingSessions}
               onReplaceTemporarySession={onReplaceTemporarySession}
               onNavigateToSession={onNavigateToSession}
               onShowSettings={onShowSettings}
               autoExpandTools={autoExpandTools}
               showRawParameters={showRawParameters}
+              showThinking={showThinking}
               autoScrollToBottom={autoScrollToBottom}
               sendByCtrlEnter={sendByCtrlEnter}
+              externalMessageUpdate={externalMessageUpdate}
               onShowAllTasks={tasksEnabled ? () => setActiveTab('tasks') : null}
             />
           </ErrorBoundary>
         </div>
-        <div className={`h-full overflow-hidden ${activeTab === 'files' ? 'block' : 'hidden'}`}>
-          <FileTree selectedProject={selectedProject} />
-        </div>
-        <div className={`h-full overflow-hidden ${activeTab === 'shell' ? 'block' : 'hidden'}`}>
-          <Shell 
-            selectedProject={selectedProject} 
-            selectedSession={selectedSession}
-            isActive={activeTab === 'shell'}
-          />
-        </div>
-        <div className={`h-full overflow-hidden ${activeTab === 'git' ? 'block' : 'hidden'}`}>
-          <GitPanel selectedProject={selectedProject} isMobile={isMobile} />
-        </div>
+        {activeTab === 'files' && (
+          <div className="h-full overflow-hidden">
+            <FileTree selectedProject={selectedProject} />
+          </div>
+        )}
+        {activeTab === 'shell' && (
+          <div className="h-full w-full overflow-hidden">
+            <StandaloneShell
+              project={selectedProject}
+              session={selectedSession}
+              showHeader={false}
+            />
+          </div>
+        )}
+        {activeTab === 'git' && (
+          <div className="h-full overflow-hidden">
+            <GitPanel selectedProject={selectedProject} isMobile={isMobile} onFileOpen={handleFileOpen} />
+          </div>
+        )}
         {shouldShowTasksTab && (
           <div className={`h-full ${activeTab === 'tasks' ? 'block' : 'hidden'}`}>
             <div className="h-full flex flex-col overflow-hidden">
@@ -495,14 +575,49 @@ function MainContent({
             onClearLogs={() => setServerLogs([])}
           /> */}
         </div>
+        </div>
+
+        {/* Code Editor Right Sidebar - Desktop only, Mobile uses modal */}
+        {editingFile && !isMobile && (
+          <>
+            {/* Resize Handle - Hidden when expanded */}
+            {!editorExpanded && (
+              <div
+                ref={resizeRef}
+                onMouseDown={handleMouseDown}
+                className="flex-shrink-0 w-1 bg-gray-200 dark:bg-gray-700 hover:bg-blue-500 dark:hover:bg-blue-600 cursor-col-resize transition-colors relative group"
+                title="Drag to resize"
+              >
+                {/* Visual indicator on hover */}
+                <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-1 bg-blue-500 dark:bg-blue-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+            )}
+
+            {/* Editor Sidebar */}
+            <div
+              className={`flex-shrink-0 border-l border-gray-200 dark:border-gray-700 h-full overflow-hidden ${editorExpanded ? 'flex-1' : ''}`}
+              style={editorExpanded ? {} : { width: `${editorWidth}px` }}
+            >
+              <CodeEditor
+                file={editingFile}
+                onClose={handleCloseEditor}
+                projectPath={selectedProject?.path}
+                isSidebar={true}
+                isExpanded={editorExpanded}
+                onToggleExpand={handleToggleEditorExpand}
+              />
+            </div>
+          </>
+        )}
       </div>
 
-      {/* Code Editor Modal */}
-      {editingFile && (
+      {/* Code Editor Modal for Mobile */}
+      {editingFile && isMobile && (
         <CodeEditor
           file={editingFile}
           onClose={handleCloseEditor}
           projectPath={selectedProject?.path}
+          isSidebar={false}
         />
       )}
 

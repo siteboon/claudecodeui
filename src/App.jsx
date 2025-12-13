@@ -18,12 +18,13 @@
  * Handles both existing sessions (with real IDs) and new sessions (with temporary IDs).
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useParams } from 'react-router-dom';
+import { Settings as SettingsIcon, Sparkles } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import MainContent from './components/MainContent';
 import MobileNav from './components/MobileNav';
-import ToolsSettings from './components/ToolsSettings';
+import Settings from './components/Settings';
 import QuickSettingsPanel from './components/QuickSettingsPanel';
 
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -33,6 +34,7 @@ import { TasksSettingsProvider } from './contexts/TasksSettingsContext';
 import { WebSocketProvider, useWebSocketContext } from './contexts/WebSocketContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import { useVersionCheck } from './hooks/useVersionCheck';
+import useLocalStorage from './hooks/useLocalStorage';
 import { api, authenticatedFetch } from './utils/api';
 
 
@@ -41,7 +43,7 @@ function AppContent() {
   const navigate = useNavigate();
   const { sessionId } = useParams();
   
-  const { updateAvailable, latestVersion, currentVersion } = useVersionCheck('siteboon', 'claudecodeui');
+  const { updateAvailable, latestVersion, currentVersion, releaseInfo } = useVersionCheck('siteboon', 'claudecodeui');
   const [showVersionModal, setShowVersionModal] = useState(false);
   
   const [projects, setProjects] = useState([]);
@@ -52,31 +54,62 @@ function AppContent() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [isInputFocused, setIsInputFocused] = useState(false);
-  const [showToolsSettings, setShowToolsSettings] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState('tools');
   const [showQuickSettings, setShowQuickSettings] = useState(false);
-  const [autoExpandTools, setAutoExpandTools] = useState(() => {
-    const saved = localStorage.getItem('autoExpandTools');
-    return saved !== null ? JSON.parse(saved) : false;
-  });
-  const [showRawParameters, setShowRawParameters] = useState(() => {
-    const saved = localStorage.getItem('showRawParameters');
-    return saved !== null ? JSON.parse(saved) : false;
-  });
-  const [autoScrollToBottom, setAutoScrollToBottom] = useState(() => {
-    const saved = localStorage.getItem('autoScrollToBottom');
-    return saved !== null ? JSON.parse(saved) : true;
-  });
-  const [sendByCtrlEnter, setSendByCtrlEnter] = useState(() => {
-    const saved = localStorage.getItem('sendByCtrlEnter');
-    return saved !== null ? JSON.parse(saved) : false;
-  });
+  const [autoExpandTools, setAutoExpandTools] = useLocalStorage('autoExpandTools', false);
+  const [showRawParameters, setShowRawParameters] = useLocalStorage('showRawParameters', false);
+  const [showThinking, setShowThinking] = useLocalStorage('showThinking', true);
+  const [autoScrollToBottom, setAutoScrollToBottom] = useLocalStorage('autoScrollToBottom', true);
+  const [sendByCtrlEnter, setSendByCtrlEnter] = useLocalStorage('sendByCtrlEnter', false);
+  const [sidebarVisible, setSidebarVisible] = useLocalStorage('sidebarVisible', true);
   // Session Protection System: Track sessions with active conversations to prevent
   // automatic project updates from interrupting ongoing chats. When a user sends
   // a message, the session is marked as "active" and project updates are paused
   // until the conversation completes or is aborted.
   const [activeSessions, setActiveSessions] = useState(new Set()); // Track sessions with active conversations
-  
+
+  // Processing Sessions: Track which sessions are currently thinking/processing
+  // This allows us to restore the "Thinking..." banner when switching back to a processing session
+  const [processingSessions, setProcessingSessions] = useState(new Set());
+
+  // External Message Update Trigger: Incremented when external CLI modifies current session's JSONL
+  // Triggers ChatInterface to reload messages without switching sessions
+  const [externalMessageUpdate, setExternalMessageUpdate] = useState(0);
+
   const { ws, sendMessage, messages } = useWebSocketContext();
+  
+  // Detect if running as PWA
+  const [isPWA, setIsPWA] = useState(false);
+  
+  useEffect(() => {
+    // Check if running in standalone mode (PWA)
+    const checkPWA = () => {
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+                          window.navigator.standalone ||
+                          document.referrer.includes('android-app://');
+      setIsPWA(isStandalone);
+        document.addEventListener('touchstart', {});
+
+      // Add class to html and body for CSS targeting
+      if (isStandalone) {
+        document.documentElement.classList.add('pwa-mode');
+        document.body.classList.add('pwa-mode');
+      } else {
+        document.documentElement.classList.remove('pwa-mode');
+        document.body.classList.remove('pwa-mode');
+      }
+    };
+    
+    checkPWA();
+    
+    // Listen for changes
+    window.matchMedia('(display-mode: standalone)').addEventListener('change', checkPWA);
+    
+    return () => {
+      window.matchMedia('(display-mode: standalone)').removeEventListener('change', checkPWA);
+    };
+  }, []);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -139,7 +172,28 @@ function AppContent() {
       const latestMessage = messages[messages.length - 1];
       
       if (latestMessage.type === 'projects_updated') {
-        
+
+        // External Session Update Detection: Check if the changed file is the current session's JSONL
+        // If so, and the session is not active, trigger a message reload in ChatInterface
+        if (latestMessage.changedFile && selectedSession && selectedProject) {
+          // Extract session ID from changedFile (format: "project-name/session-id.jsonl")
+          const changedFileParts = latestMessage.changedFile.split('/');
+          if (changedFileParts.length >= 2) {
+            const filename = changedFileParts[changedFileParts.length - 1];
+            const changedSessionId = filename.replace('.jsonl', '');
+
+            // Check if this is the currently-selected session
+            if (changedSessionId === selectedSession.id) {
+              const isSessionActive = activeSessions.has(selectedSession.id);
+
+              if (!isSessionActive) {
+                // Session is not active - safe to reload messages
+                setExternalMessageUpdate(prev => prev + 1);
+              }
+            }
+          }
+        }
+
         // Session Protection Logic: Allow additions but prevent changes during active conversations
         // This allows new sessions/projects to appear in sidebar while protecting active chat messages
         // We check for two types of active sessions:
@@ -166,13 +220,16 @@ function AppContent() {
         // Update projects state with the new data from WebSocket
         const updatedProjects = latestMessage.projects;
         setProjects(updatedProjects);
-        
+
         // Update selected project if it exists in the updated projects
         if (selectedProject) {
           const updatedSelectedProject = updatedProjects.find(p => p.name === selectedProject.name);
           if (updatedSelectedProject) {
-            setSelectedProject(updatedSelectedProject);
-            
+            // Only update selected project if it actually changed - prevents flickering
+            if (JSON.stringify(updatedSelectedProject) !== JSON.stringify(selectedProject)) {
+              setSelectedProject(updatedSelectedProject);
+            }
+
             // Update selected session only if it was deleted - avoid unnecessary reloads
             if (selectedSession) {
               const updatedSelectedSession = updatedSelectedProject.sessions?.find(s => s.id === selectedSession.id);
@@ -253,6 +310,12 @@ function AppContent() {
   // Expose fetchProjects globally for component access
   window.refreshProjects = fetchProjects;
 
+  // Expose openSettings function globally for component access
+  window.openSettings = useCallback((tab = 'tools') => {
+    setSettingsInitialTab(tab);
+    setShowSettings(true);
+  }, []);
+
   // Handle URL-based session loading
   useEffect(() => {
     if (sessionId && projects.length > 0) {
@@ -304,7 +367,7 @@ function AppContent() {
     if (activeTab !== 'git' && activeTab !== 'preview') {
       setActiveTab('chat');
     }
-    
+
     // For Cursor sessions, we need to set the session ID differently
     // since they're persistent and not created by Claude
     const provider = localStorage.getItem('selected-provider') || 'claude';
@@ -312,9 +375,17 @@ function AppContent() {
       // Cursor sessions have persistent IDs
       sessionStorage.setItem('cursorSessionId', session.id);
     }
-    
+
+    // Only close sidebar on mobile if switching to a different project
     if (isMobile) {
-      setSidebarOpen(false);
+      const sessionProjectName = session.__projectName;
+      const currentProjectName = selectedProject?.name;
+
+      // Close sidebar if clicking a session from a different project
+      // Keep it open if clicking a session from the same project
+      if (sessionProjectName !== currentProjectName) {
+        setSidebarOpen(false);
+      }
     }
     navigate(`/session/${session.id}`);
   };
@@ -417,14 +488,14 @@ function AppContent() {
   
   // markSessionAsActive: Called when user sends a message to mark session as protected
   // This includes both real session IDs and temporary "new-session-*" identifiers
-  const markSessionAsActive = (sessionId) => {
+  const markSessionAsActive = useCallback((sessionId) => {
     if (sessionId) {
       setActiveSessions(prev => new Set([...prev, sessionId]));
     }
-  };
+  }, []);
 
   // markSessionAsInactive: Called when conversation completes/aborts to re-enable project updates
-  const markSessionAsInactive = (sessionId) => {
+  const markSessionAsInactive = useCallback((sessionId) => {
     if (sessionId) {
       setActiveSessions(prev => {
         const newSet = new Set(prev);
@@ -432,12 +503,32 @@ function AppContent() {
         return newSet;
       });
     }
-  };
+  }, []);
+
+  // Processing Session Functions: Track which sessions are currently thinking/processing
+
+  // markSessionAsProcessing: Called when Claude starts thinking/processing
+  const markSessionAsProcessing = useCallback((sessionId) => {
+    if (sessionId) {
+      setProcessingSessions(prev => new Set([...prev, sessionId]));
+    }
+  }, []);
+
+  // markSessionAsNotProcessing: Called when Claude finishes thinking/processing
+  const markSessionAsNotProcessing = useCallback((sessionId) => {
+    if (sessionId) {
+      setProcessingSessions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(sessionId);
+        return newSet;
+      });
+    }
+  }, []);
 
   // replaceTemporarySession: Called when WebSocket provides real session ID for new sessions
   // Removes temporary "new-session-*" identifiers and adds the real session ID
   // This maintains protection continuity during the transition from temporary to real session
-  const replaceTemporarySession = (realSessionId) => {
+  const replaceTemporarySession = useCallback((realSessionId) => {
     if (realSessionId) {
       setActiveSessions(prev => {
         const newSet = new Set();
@@ -451,22 +542,75 @@ function AppContent() {
         return newSet;
       });
     }
-  };
+  }, []);
 
   // Version Upgrade Modal Component
   const VersionUpgradeModal = () => {
+    const [isUpdating, setIsUpdating] = useState(false);
+    const [updateOutput, setUpdateOutput] = useState('');
+    const [updateError, setUpdateError] = useState('');
+
     if (!showVersionModal) return null;
+
+    // Clean up changelog by removing GitHub-specific metadata
+    const cleanChangelog = (body) => {
+      if (!body) return '';
+
+      return body
+        // Remove full commit hashes (40 character hex strings)
+        .replace(/\b[0-9a-f]{40}\b/gi, '')
+        // Remove short commit hashes (7-10 character hex strings at start of line or after dash/space)
+        .replace(/(?:^|\s|-)([0-9a-f]{7,10})\b/gi, '')
+        // Remove "Full Changelog" links
+        .replace(/\*\*Full Changelog\*\*:.*$/gim, '')
+        // Remove compare links (e.g., https://github.com/.../compare/v1.0.0...v1.0.1)
+        .replace(/https?:\/\/github\.com\/[^\/]+\/[^\/]+\/compare\/[^\s)]+/gi, '')
+        // Clean up multiple consecutive empty lines
+        .replace(/\n\s*\n\s*\n/g, '\n\n')
+        // Trim whitespace
+        .trim();
+    };
+
+    const handleUpdateNow = async () => {
+      setIsUpdating(true);
+      setUpdateOutput('Starting update...\n');
+      setUpdateError('');
+
+      try {
+        // Call the backend API to run the update command
+        const response = await authenticatedFetch('/api/system/update', {
+          method: 'POST',
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          setUpdateOutput(prev => prev + data.output + '\n');
+          setUpdateOutput(prev => prev + '\n✅ Update completed successfully!\n');
+          setUpdateOutput(prev => prev + 'Please restart the server to apply changes.\n');
+        } else {
+          setUpdateError(data.error || 'Update failed');
+          setUpdateOutput(prev => prev + '\n❌ Update failed: ' + (data.error || 'Unknown error') + '\n');
+        }
+      } catch (error) {
+        setUpdateError(error.message);
+        setUpdateOutput(prev => prev + '\n❌ Update failed: ' + error.message + '\n');
+      } finally {
+        setIsUpdating(false);
+      }
+    };
 
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
         {/* Backdrop */}
-        <div 
+        <button
           className="fixed inset-0 bg-black/50 backdrop-blur-sm"
           onClick={() => setShowVersionModal(false)}
+          aria-label="Close version upgrade modal"
         />
-        
+
         {/* Modal */}
-        <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 w-full max-w-md mx-4 p-6 space-y-4">
+        <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 w-full max-w-2xl mx-4 p-6 space-y-4 max-h-[90vh] overflow-y-auto">
           {/* Header */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -477,7 +621,9 @@ function AppContent() {
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Update Available</h2>
-                <p className="text-sm text-gray-500 dark:text-gray-400">A new version is ready</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  {releaseInfo?.title || 'A new version is ready'}
+                </p>
               </div>
             </div>
             <button
@@ -502,18 +648,57 @@ function AppContent() {
             </div>
           </div>
 
-          {/* Upgrade Instructions */}
-          <div className="space-y-3">
-            <h3 className="text-sm font-medium text-gray-900 dark:text-white">How to upgrade:</h3>
-            <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3 border">
-              <code className="text-sm text-gray-800 dark:text-gray-200 font-mono">
-                git checkout main && git pull && npm install
-              </code>
+          {/* Changelog */}
+          {releaseInfo?.body && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-medium text-gray-900 dark:text-white">What's New:</h3>
+                {releaseInfo?.htmlUrl && (
+                  <a
+                    href={releaseInfo.htmlUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:underline flex items-center gap-1"
+                  >
+                    View full release
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                  </a>
+                )}
+              </div>
+              <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 border border-gray-200 dark:border-gray-600 max-h-64 overflow-y-auto">
+                <div className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap prose prose-sm dark:prose-invert max-w-none">
+                  {cleanChangelog(releaseInfo.body)}
+                </div>
+              </div>
             </div>
-            <p className="text-xs text-gray-600 dark:text-gray-400">
-              Run this command in your Claude Code UI directory to update to the latest version.
-            </p>
-          </div>
+          )}
+
+          {/* Update Output */}
+          {updateOutput && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium text-gray-900 dark:text-white">Update Progress:</h3>
+              <div className="bg-gray-900 dark:bg-gray-950 rounded-lg p-4 border border-gray-700 max-h-48 overflow-y-auto">
+                <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap">{updateOutput}</pre>
+              </div>
+            </div>
+          )}
+
+          {/* Upgrade Instructions */}
+          {!isUpdating && !updateOutput && (
+            <div className="space-y-3">
+              <h3 className="text-sm font-medium text-gray-900 dark:text-white">Manual upgrade:</h3>
+              <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3 border">
+                <code className="text-sm text-gray-800 dark:text-gray-200 font-mono">
+                  git checkout main && git pull && npm install
+                </code>
+              </div>
+              <p className="text-xs text-gray-600 dark:text-gray-400">
+                Or click "Update Now" to run the update automatically.
+              </p>
+            </div>
+          )}
 
           {/* Actions */}
           <div className="flex gap-2 pt-2">
@@ -521,18 +706,34 @@ function AppContent() {
               onClick={() => setShowVersionModal(false)}
               className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md transition-colors"
             >
-              Later
+              {updateOutput ? 'Close' : 'Later'}
             </button>
-            <button
-              onClick={() => {
-                // Copy command to clipboard
-                navigator.clipboard.writeText('git checkout main && git pull && npm install');
-                setShowVersionModal(false);
-              }}
-              className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
-            >
-              Copy Command
-            </button>
+            {!updateOutput && (
+              <>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText('git checkout main && git pull && npm install');
+                  }}
+                  className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md transition-colors"
+                >
+                  Copy Command
+                </button>
+                <button
+                  onClick={handleUpdateNow}
+                  disabled={isUpdating}
+                  className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed rounded-md transition-colors flex items-center justify-center gap-2"
+                >
+                  {isUpdating ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Updating...
+                    </>
+                  ) : (
+                    'Update Now'
+                  )}
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -543,25 +744,78 @@ function AppContent() {
     <div className="fixed inset-0 flex bg-background">
       {/* Fixed Desktop Sidebar */}
       {!isMobile && (
-        <div className="w-80 flex-shrink-0 border-r border-border bg-card">
+        <div
+          className={`h-full flex-shrink-0 border-r border-border bg-card transition-all duration-300 ${
+            sidebarVisible ? 'w-80' : 'w-14'
+          }`}
+        >
           <div className="h-full overflow-hidden">
-            <Sidebar
-              projects={projects}
-              selectedProject={selectedProject}
-              selectedSession={selectedSession}
-              onProjectSelect={handleProjectSelect}
-              onSessionSelect={handleSessionSelect}
-              onNewSession={handleNewSession}
-              onSessionDelete={handleSessionDelete}
-              onProjectDelete={handleProjectDelete}
-              isLoading={isLoadingProjects}
-              onRefresh={handleSidebarRefresh}
-              onShowSettings={() => setShowToolsSettings(true)}
-              updateAvailable={updateAvailable}
-              latestVersion={latestVersion}
-              currentVersion={currentVersion}
-              onShowVersionModal={() => setShowVersionModal(true)}
-            />
+            {sidebarVisible ? (
+              <Sidebar
+                projects={projects}
+                selectedProject={selectedProject}
+                selectedSession={selectedSession}
+                onProjectSelect={handleProjectSelect}
+                onSessionSelect={handleSessionSelect}
+                onNewSession={handleNewSession}
+                onSessionDelete={handleSessionDelete}
+                onProjectDelete={handleProjectDelete}
+                isLoading={isLoadingProjects}
+                onRefresh={handleSidebarRefresh}
+                onShowSettings={() => setShowSettings(true)}
+                updateAvailable={updateAvailable}
+                latestVersion={latestVersion}
+                currentVersion={currentVersion}
+                releaseInfo={releaseInfo}
+                onShowVersionModal={() => setShowVersionModal(true)}
+                isPWA={isPWA}
+                isMobile={isMobile}
+                onToggleSidebar={() => setSidebarVisible(false)}
+              />
+            ) : (
+              /* Collapsed Sidebar */
+              <div className="h-full flex flex-col items-center py-4 gap-4">
+                {/* Expand Button */}
+                <button
+                  onClick={() => setSidebarVisible(true)}
+                  className="p-2 hover:bg-accent rounded-md transition-colors duration-200 group"
+                  aria-label="Show sidebar"
+                  title="Show sidebar"
+                >
+                  <svg
+                    className="w-5 h-5 text-foreground group-hover:scale-110 transition-transform"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                  </svg>
+                </button>
+
+                {/* Settings Icon */}
+                <button
+                  onClick={() => setShowSettings(true)}
+                  className="p-2 hover:bg-accent rounded-md transition-colors duration-200"
+                  aria-label="Settings"
+                  title="Settings"
+                >
+                  <SettingsIcon className="w-5 h-5 text-muted-foreground hover:text-foreground transition-colors" />
+                </button>
+
+                {/* Update Indicator */}
+                {updateAvailable && (
+                  <button
+                    onClick={() => setShowVersionModal(true)}
+                    className="relative p-2 hover:bg-accent rounded-md transition-colors duration-200"
+                    aria-label="Update available"
+                    title="Update available"
+                  >
+                    <Sparkles className="w-5 h-5 text-blue-500" />
+                    <span className="absolute top-1 right-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -571,7 +825,7 @@ function AppContent() {
         <div className={`fixed inset-0 z-50 flex transition-all duration-150 ease-out ${
           sidebarOpen ? 'opacity-100 visible' : 'opacity-0 invisible'
         }`}>
-          <div 
+          <button
             className="fixed inset-0 bg-background/80 backdrop-blur-sm transition-opacity duration-150 ease-out"
             onClick={(e) => {
               e.stopPropagation();
@@ -582,9 +836,10 @@ function AppContent() {
               e.stopPropagation();
               setSidebarOpen(false);
             }}
+            aria-label="Close sidebar"
           />
-          <div 
-            className={`relative w-[85vw] max-w-sm sm:w-80 bg-card border-r border-border h-full transform transition-transform duration-150 ease-out ${
+          <div
+            className={`relative w-[85vw] max-w-sm sm:w-80 h-full bg-card border-r border-border transform transition-transform duration-150 ease-out ${
               sidebarOpen ? 'translate-x-0' : '-translate-x-full'
             }`}
             onClick={(e) => e.stopPropagation()}
@@ -601,18 +856,22 @@ function AppContent() {
               onProjectDelete={handleProjectDelete}
               isLoading={isLoadingProjects}
               onRefresh={handleSidebarRefresh}
-              onShowSettings={() => setShowToolsSettings(true)}
+              onShowSettings={() => setShowSettings(true)}
               updateAvailable={updateAvailable}
               latestVersion={latestVersion}
               currentVersion={currentVersion}
+              releaseInfo={releaseInfo}
               onShowVersionModal={() => setShowVersionModal(true)}
+              isPWA={isPWA}
+              isMobile={isMobile}
+              onToggleSidebar={() => setSidebarVisible(false)}
             />
           </div>
         </div>
       )}
 
       {/* Main Content Area - Flexible */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className={`flex-1 flex flex-col min-w-0 ${isMobile && !isInputFocused ? 'pb-mobile-nav' : ''}`}>
         <MainContent
           selectedProject={selectedProject}
           selectedSession={selectedSession}
@@ -622,18 +881,24 @@ function AppContent() {
           sendMessage={sendMessage}
           messages={messages}
           isMobile={isMobile}
+          isPWA={isPWA}
           onMenuClick={() => setSidebarOpen(true)}
           isLoading={isLoadingProjects}
           onInputFocusChange={setIsInputFocused}
           onSessionActive={markSessionAsActive}
           onSessionInactive={markSessionAsInactive}
+          onSessionProcessing={markSessionAsProcessing}
+          onSessionNotProcessing={markSessionAsNotProcessing}
+          processingSessions={processingSessions}
           onReplaceTemporarySession={replaceTemporarySession}
           onNavigateToSession={(sessionId) => navigate(`/session/${sessionId}`)}
-          onShowSettings={() => setShowToolsSettings(true)}
+          onShowSettings={() => setShowSettings(true)}
           autoExpandTools={autoExpandTools}
           showRawParameters={showRawParameters}
+          showThinking={showThinking}
           autoScrollToBottom={autoScrollToBottom}
           sendByCtrlEnter={sendByCtrlEnter}
+          externalMessageUpdate={externalMessageUpdate}
         />
       </div>
 
@@ -651,34 +916,25 @@ function AppContent() {
           isOpen={showQuickSettings}
           onToggle={setShowQuickSettings}
           autoExpandTools={autoExpandTools}
-          onAutoExpandChange={(value) => {
-            setAutoExpandTools(value);
-            localStorage.setItem('autoExpandTools', JSON.stringify(value));
-          }}
+          onAutoExpandChange={setAutoExpandTools}
           showRawParameters={showRawParameters}
-          onShowRawParametersChange={(value) => {
-            setShowRawParameters(value);
-            localStorage.setItem('showRawParameters', JSON.stringify(value));
-          }}
+          onShowRawParametersChange={setShowRawParameters}
+          showThinking={showThinking}
+          onShowThinkingChange={setShowThinking}
           autoScrollToBottom={autoScrollToBottom}
-          onAutoScrollChange={(value) => {
-            setAutoScrollToBottom(value);
-            localStorage.setItem('autoScrollToBottom', JSON.stringify(value));
-          }}
+          onAutoScrollChange={setAutoScrollToBottom}
           sendByCtrlEnter={sendByCtrlEnter}
-          onSendByCtrlEnterChange={(value) => {
-            setSendByCtrlEnter(value);
-            localStorage.setItem('sendByCtrlEnter', JSON.stringify(value));
-          }}
+          onSendByCtrlEnterChange={setSendByCtrlEnter}
           isMobile={isMobile}
         />
       )}
 
-      {/* Tools Settings Modal */}
-      <ToolsSettings
-        isOpen={showToolsSettings}
-        onClose={() => setShowToolsSettings(false)}
+      {/* Settings Modal */}
+      <Settings
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
         projects={projects}
+        initialTab={settingsInitialTab}
       />
 
       {/* Version Upgrade Modal */}
