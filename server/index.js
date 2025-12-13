@@ -663,8 +663,8 @@ app.get('/api/projects/:projectName/files', authenticateToken, async (req, res) 
             actualPath = await extractProjectDirectory(req.params.projectName);
         } catch (error) {
             console.error('Error extracting project directory:', error);
-            // Fallback to simple dash replacement
-            actualPath = req.params.projectName.replace(/-/g, '/');
+            // Fallback to smart path decoding (handles hyphens in original paths)
+            actualPath = await smartDecodeProjectPath(req.params.projectName);
         }
 
         // Check if path exists
