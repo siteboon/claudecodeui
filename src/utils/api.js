@@ -1,4 +1,11 @@
 // Utility function for authenticated API calls
+
+// Read base path from server-injected global variable (set in index.html by server)
+// Falls back to empty string for root path deployment
+export const BASE_URL = window.__APP_BASE_PATH__ || '';
+// Router basename (with leading slash, no trailing slash for root)
+export const ROUTER_BASENAME = BASE_URL || '/';
+
 export const authenticatedFetch = (url, options = {}) => {
   const isPlatform = import.meta.env.VITE_IS_PLATFORM === 'true';
   const token = localStorage.getItem('auth-token');
@@ -7,16 +14,29 @@ export const authenticatedFetch = (url, options = {}) => {
     'Content-Type': 'application/json',
   };
 
-  if (!isPlatform && token) {
-    defaultHeaders['Authorization'] = `Bearer ${token}`;
+  // Remove Content-Type if body is FormData to let browser set it with boundary
+  if (options.body instanceof FormData) {
+    delete defaultHeaders['Content-Type'];
   }
 
-  return fetch(url, {
+  const headers = {
+    ...defaultHeaders,
+    ...options.headers,
+  };
+
+  if (!isPlatform && token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  // Prepend BASE_URL to relative paths
+  let finalUrl = url;
+  if (!url.startsWith('http') && url.startsWith('/')) {
+    finalUrl = `${BASE_URL}${url}`;
+  }
+
+  return fetch(finalUrl, {
     ...options,
-    headers: {
-      ...defaultHeaders,
-      ...options.headers,
-    },
+    headers,
   });
 };
 
@@ -24,15 +44,13 @@ export const authenticatedFetch = (url, options = {}) => {
 export const api = {
   // Auth endpoints (no token required)
   auth: {
-    status: () => fetch('/api/auth/status'),
-    login: (username, password) => fetch('/api/auth/login', {
+    status: () => authenticatedFetch('/api/auth/status'),
+    login: (username, password) => authenticatedFetch('/api/auth/login', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
     }),
-    register: (username, password) => fetch('/api/auth/register', {
+    register: (username, password) => authenticatedFetch('/api/auth/register', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
     }),
     user: () => authenticatedFetch('/api/auth/user'),
@@ -42,7 +60,7 @@ export const api = {
   // Protected endpoints
   // config endpoint removed - no longer needed (frontend uses window.location)
   projects: () => authenticatedFetch('/api/projects'),
-  sessions: (projectName, limit = 5, offset = 0) => 
+  sessions: (projectName, limit = 5, offset = 0) =>
     authenticatedFetch(`/api/projects/${projectName}/sessions?limit=${limit}&offset=${offset}`),
   sessionMessages: (projectName, sessionId, limit = null, offset = 0) => {
     const params = new URLSearchParams();
@@ -90,7 +108,7 @@ export const api = {
     authenticatedFetch('/api/transcribe', {
       method: 'POST',
       body: formData,
-      headers: {}, // Let browser set Content-Type for FormData
+      // headers handled automatically for FormData
     }),
 
   // TaskMaster endpoints

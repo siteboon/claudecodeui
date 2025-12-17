@@ -36,6 +36,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import { useVersionCheck } from './hooks/useVersionCheck';
 import useLocalStorage from './hooks/useLocalStorage';
 import { api, authenticatedFetch } from './utils/api';
+import { ROUTER_BASENAME } from './utils/api';
 
 
 // Main App component with routing
@@ -952,7 +953,7 @@ function App() {
           <TasksSettingsProvider>
             <TaskMasterProvider>
               <ProtectedRoute>
-                <Router>
+                <Router basename={ROUTER_BASENAME}>
                   <Routes>
                     <Route path="/" element={<AppContent />} />
                     <Route path="/session/:sessionId" element={<AppContent />} />
