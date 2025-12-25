@@ -575,6 +575,7 @@ const Onboarding = ({ onComplete }) => {
       {/* Login Modal */}
       {showLoginModal && (
         <LoginModal
+          key={loginProvider}
           isOpen={showLoginModal}
           onClose={() => setShowLoginModal(false)}
           provider={loginProvider}

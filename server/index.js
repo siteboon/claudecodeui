@@ -827,9 +827,31 @@ function handleShellConnection(ws) {
                 const initialCommand = data.initialCommand;
                 const isPlainShell = data.isPlainShell || (!!initialCommand && !hasSession) || provider === 'plain-shell';
 
-                ptySessionKey = `${projectPath}_${sessionId || 'default'}`;
+                // Login commands (Claude/Cursor auth) should never reuse cached sessions
+                const isLoginCommand = initialCommand && (
+                    initialCommand.includes('setup-token') ||
+                    initialCommand.includes('cursor-agent login') ||
+                    initialCommand.includes('auth login')
+                );
 
-                const existingSession = ptySessionsMap.get(ptySessionKey);
+                // Include command hash in session key so different commands get separate sessions
+                const commandSuffix = isPlainShell && initialCommand
+                    ? `_cmd_${Buffer.from(initialCommand).toString('base64').slice(0, 16)}`
+                    : '';
+                ptySessionKey = `${projectPath}_${sessionId || 'default'}${commandSuffix}`;
+
+                // Kill any existing login session before starting fresh
+                if (isLoginCommand) {
+                    const oldSession = ptySessionsMap.get(ptySessionKey);
+                    if (oldSession) {
+                        console.log('🧹 Cleaning up existing login session:', ptySessionKey);
+                        if (oldSession.timeoutId) clearTimeout(oldSession.timeoutId);
+                        if (oldSession.pty && oldSession.pty.kill) oldSession.pty.kill();
+                        ptySessionsMap.delete(ptySessionKey);
+                    }
+                }
+
+                const existingSession = isLoginCommand ? null : ptySessionsMap.get(ptySessionKey);
                 if (existingSession) {
                     console.log('♻️  Reconnecting to existing PTY session:', ptySessionKey);
                     shellProcess = existingSession.pty;

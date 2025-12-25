@@ -57,7 +57,7 @@ function mapCliOptionsToSDK(options = {}) {
 
     // Add plan mode default tools
     if (permissionMode === 'plan') {
-      const planModeTools = ['Read', 'Task', 'exit_plan_mode', 'TodoRead', 'TodoWrite'];
+      const planModeTools = ['Read', 'Task', 'exit_plan_mode', 'TodoRead', 'TodoWrite', 'WebFetch', 'WebSearch'];
       for (const tool of planModeTools) {
         if (!allowedTools.includes(tool)) {
           allowedTools.push(tool);
@@ -76,8 +76,9 @@ function mapCliOptionsToSDK(options = {}) {
   }
 
   // Map model (default to sonnet)
-  // Map model (default to sonnet)
+  // Valid models: sonnet, opus, haiku, opusplan, sonnet[1m]
   sdkOptions.model = options.model || 'sonnet';
+  console.log(`🤖 Using model: ${sdkOptions.model}`);
 
   // Map system prompt configuration
   sdkOptions.systemPrompt = {
