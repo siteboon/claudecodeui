@@ -1706,7 +1706,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     return localStorage.getItem('cursor-model') || 'gpt-5';
   });
   const [claudeModel, setClaudeModel] = useState(() => {
-    return localStorage.getItem('claude-model') || 'sonnet';
+    return localStorage.getItem('claude-model') || 'opus';
   });
   // Load permission mode for the current session
   useEffect(() => {

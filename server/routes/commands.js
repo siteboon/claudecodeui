@@ -186,6 +186,8 @@ Custom commands can be created in:
     const availableModels = {
       claude: [
         'claude-sonnet-4.5',
+        'claude-opus-4.5',
+        'claude-haiku-4.5',
         'claude-sonnet-4',
         'claude-opus-4',
         'claude-sonnet-3.5'
@@ -223,6 +225,8 @@ Custom commands can be created in:
 
     const costPerMillion = {
       'claude-sonnet-4.5': { input: 3, output: 15 },
+      'claude-opus-4.5': { input: 15, output: 75 },
+      'claude-haiku-4.5': { input: 1, output: 5 },
       'claude-sonnet-4': { input: 3, output: 15 },
       'claude-opus-4': { input: 15, output: 75 },
       'gpt-5': { input: 5, output: 15 }
