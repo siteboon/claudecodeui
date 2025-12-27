@@ -2,12 +2,12 @@ import { X } from 'lucide-react';
 import StandaloneShell from './StandaloneShell';
 
 /**
- * Reusable login modal component for Claude and Cursor CLI authentication
+ * Reusable login modal component for Claude, Cursor, and Codex CLI authentication
  *
  * @param {Object} props
  * @param {boolean} props.isOpen - Whether the modal is visible
  * @param {Function} props.onClose - Callback when modal is closed
- * @param {'claude'|'cursor'} props.provider - Which CLI provider to authenticate with
+ * @param {'claude'|'cursor'|'codex'} props.provider - Which CLI provider to authenticate with
  * @param {Object} props.project - Project object containing name and path information
  * @param {Function} props.onComplete - Callback when login process completes (receives exitCode)
  * @param {string} props.customCommand - Optional custom command to override defaults
@@ -30,6 +30,8 @@ function LoginModal({
         return 'claude setup-token --dangerously-skip-permissions';
       case 'cursor':
         return 'cursor-agent login';
+      case 'codex':
+        return 'codex login';
       default:
         return 'claude setup-token --dangerously-skip-permissions';
     }
@@ -41,6 +43,8 @@ function LoginModal({
         return 'Claude CLI Login';
       case 'cursor':
         return 'Cursor CLI Login';
+      case 'codex':
+        return 'Codex CLI Login';
       default:
         return 'CLI Login';
     }

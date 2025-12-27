@@ -8,6 +8,7 @@ import { userDb, apiKeysDb, githubTokensDb } from '../database/db.js';
 import { addProjectManually } from '../projects.js';
 import { queryClaudeSDK } from '../claude-sdk.js';
 import { spawnCursor } from '../cursor-cli.js';
+import { queryCodex } from '../openai-codex.js';
 import { Octokit } from '@octokit/rest';
 
 const router = express.Router();
@@ -846,8 +847,8 @@ router.post('/', validateExternalApiKey, async (req, res) => {
     return res.status(400).json({ error: 'message is required' });
   }
 
-  if (!['claude', 'cursor'].includes(provider)) {
-    return res.status(400).json({ error: 'provider must be "claude" or "cursor"' });
+  if (!['claude', 'cursor', 'codex'].includes(provider)) {
+    return res.status(400).json({ error: 'provider must be "claude", "cursor", or "codex"' });
   }
 
   // Validate GitHub branch/PR creation requirements
@@ -950,6 +951,16 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         sessionId: null, // New session
         model: model || undefined,
         skipPermissions: true // Bypass permissions for Cursor
+      }, writer);
+    } else if (provider === 'codex') {
+      console.log('🤖 Starting Codex SDK session');
+
+      await queryCodex(message.trim(), {
+        projectPath: finalProjectPath,
+        cwd: finalProjectPath,
+        sessionId: null,
+        model: model || 'gpt-5.2',
+        permissionMode: 'bypassPermissions'
       }, writer);
     }
 

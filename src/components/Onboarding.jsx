@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ChevronRight, ChevronLeft, Check, GitBranch, User, Mail, LogIn, ExternalLink, Loader2 } from 'lucide-react';
 import ClaudeLogo from './ClaudeLogo';
 import CursorLogo from './CursorLogo';
+import CodexLogo from './CodexLogo';
 import LoginModal from './LoginModal';
 import { authenticatedFetch } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -13,10 +14,8 @@ const Onboarding = ({ onComplete }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  // CLI authentication states
-  const [showLoginModal, setShowLoginModal] = useState(false);
-  const [loginProvider, setLoginProvider] = useState('');
-  const [selectedProject, setSelectedProject] = useState({ name: 'default', fullPath: '' });
+  const [activeLoginProvider, setActiveLoginProvider] = useState(null);
+  const [selectedProject] = useState({ name: 'default', fullPath: '' });
 
   const [claudeAuthStatus, setClaudeAuthStatus] = useState({
     authenticated: false,
@@ -32,17 +31,19 @@ const Onboarding = ({ onComplete }) => {
     error: null
   });
 
+  const [codexAuthStatus, setCodexAuthStatus] = useState({
+    authenticated: false,
+    email: null,
+    loading: true,
+    error: null
+  });
+
   const { user } = useAuth();
 
-  // Load existing git config on mount
+  const prevActiveLoginProviderRef = useRef(undefined);
+
   useEffect(() => {
     loadGitConfig();
-  }, []);
-
-  // Check authentication status on mount and when modal closes
-  useEffect(() => {
-    checkClaudeAuthStatus();
-    checkCursorAuthStatus();
   }, []);
 
   const loadGitConfig = async () => {
@@ -55,24 +56,22 @@ const Onboarding = ({ onComplete }) => {
       }
     } catch (error) {
       console.error('Error loading git config:', error);
-      // Silently fail - user can still enter config manually
     }
   };
 
-  // Auto-check authentication status periodically when on CLI steps
   useEffect(() => {
-    if (currentStep === 1 || currentStep === 2) {
-      const interval = setInterval(() => {
-        if (currentStep === 1) {
-          checkClaudeAuthStatus();
-        } else if (currentStep === 2) {
-          checkCursorAuthStatus();
-        }
-      }, 3000); // Check every 3 seconds
+    const prevProvider = prevActiveLoginProviderRef.current;
+    prevActiveLoginProviderRef.current = activeLoginProvider;
 
-      return () => clearInterval(interval);
+    const isInitialMount = prevProvider === undefined;
+    const isModalClosing = prevProvider !== null && activeLoginProvider === null;
+
+    if (isInitialMount || isModalClosing) {
+      checkClaudeAuthStatus();
+      checkCursorAuthStatus();
+      checkCodexAuthStatus();
     }
-  }, [currentStep]);
+  }, [activeLoginProvider]);
 
   const checkClaudeAuthStatus = async () => {
     try {
@@ -134,22 +133,48 @@ const Onboarding = ({ onComplete }) => {
     }
   };
 
-  const handleClaudeLogin = () => {
-    setLoginProvider('claude');
-    setShowLoginModal(true);
+  const checkCodexAuthStatus = async () => {
+    try {
+      const response = await authenticatedFetch('/api/cli/codex/status');
+      if (response.ok) {
+        const data = await response.json();
+        setCodexAuthStatus({
+          authenticated: data.authenticated,
+          email: data.email,
+          loading: false,
+          error: data.error || null
+        });
+      } else {
+        setCodexAuthStatus({
+          authenticated: false,
+          email: null,
+          loading: false,
+          error: 'Failed to check authentication status'
+        });
+      }
+    } catch (error) {
+      console.error('Error checking Codex auth status:', error);
+      setCodexAuthStatus({
+        authenticated: false,
+        email: null,
+        loading: false,
+        error: error.message
+      });
+    }
   };
 
-  const handleCursorLogin = () => {
-    setLoginProvider('cursor');
-    setShowLoginModal(true);
-  };
+  const handleClaudeLogin = () => setActiveLoginProvider('claude');
+  const handleCursorLogin = () => setActiveLoginProvider('cursor');
+  const handleCodexLogin = () => setActiveLoginProvider('codex');
 
   const handleLoginComplete = (exitCode) => {
     if (exitCode === 0) {
-      if (loginProvider === 'claude') {
+      if (activeLoginProvider === 'claude') {
         checkClaudeAuthStatus();
-      } else if (loginProvider === 'cursor') {
+      } else if (activeLoginProvider === 'cursor') {
         checkCursorAuthStatus();
+      } else if (activeLoginProvider === 'codex') {
+        checkCodexAuthStatus();
       }
     }
   };
@@ -194,7 +219,6 @@ const Onboarding = ({ onComplete }) => {
       return;
     }
 
-    // Other steps: just move forward
     setCurrentStep(currentStep + 1);
   };
 
@@ -208,7 +232,6 @@ const Onboarding = ({ onComplete }) => {
     setError('');
 
     try {
-      // Mark onboarding as complete
       const response = await authenticatedFetch('/api/user/complete-onboarding', {
         method: 'POST'
       });
@@ -218,7 +241,6 @@ const Onboarding = ({ onComplete }) => {
         throw new Error(data.error || 'Failed to complete onboarding');
       }
 
-      // Call the onComplete callback
       if (onComplete) {
         onComplete();
       }
@@ -237,15 +259,9 @@ const Onboarding = ({ onComplete }) => {
       required: true
     },
     {
-      title: 'Claude Code CLI',
-      description: 'Connect your Claude Code account',
-      icon: () => <ClaudeLogo size={24} />,
-      required: false
-    },
-    {
-      title: 'Cursor CLI',
-      description: 'Connect your Cursor account',
-      icon: () => <CursorLogo size={24} />,
+      title: 'Connect Agents',
+      description: 'Connect your AI coding assistants',
+      icon: LogIn,
       required: false
     }
   ];
@@ -312,135 +328,117 @@ const Onboarding = ({ onComplete }) => {
       case 1:
         return (
           <div className="space-y-6">
-            <div className="text-center mb-8">
-              <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
-                <ClaudeLogo size={32} />
-              </div>
-              <h2 className="text-2xl font-bold text-foreground mb-2">Claude Code CLI</h2>
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-bold text-foreground mb-2">Connect Your AI Agents</h2>
               <p className="text-muted-foreground">
-                Connect your Claude account to enable AI-powered coding features
+                Login to one or more AI coding assistants. All are optional.
               </p>
             </div>
 
-            {/* Auth Status Card */}
-            <div className="border border-border rounded-lg p-6 bg-card">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className={`w-3 h-3 rounded-full ${
-                    claudeAuthStatus.loading ? 'bg-gray-400 animate-pulse' :
-                    claudeAuthStatus.authenticated ? 'bg-green-500' : 'bg-gray-300'
-                  }`} />
-                  <span className="font-medium text-foreground">
-                    {claudeAuthStatus.loading ? 'Checking...' :
-                     claudeAuthStatus.authenticated ? 'Connected' : 'Not Connected'}
-                  </span>
+            {/* Agent Cards Grid */}
+            <div className="space-y-3">
+              {/* Claude */}
+              <div className={`border rounded-lg p-4 transition-colors ${
+                claudeAuthStatus.authenticated
+                  ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+                  : 'border-border bg-card'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
+                      <ClaudeLogo size={20} />
+                    </div>
+                    <div>
+                      <div className="font-medium text-foreground flex items-center gap-2">
+                        Claude Code
+                        {claudeAuthStatus.authenticated && <Check className="w-4 h-4 text-green-500" />}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {claudeAuthStatus.loading ? 'Checking...' :
+                         claudeAuthStatus.authenticated ? claudeAuthStatus.email || 'Connected' : 'Not connected'}
+                      </div>
+                    </div>
+                  </div>
+                  {!claudeAuthStatus.authenticated && !claudeAuthStatus.loading && (
+                    <button
+                      onClick={handleClaudeLogin}
+                      className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors"
+                    >
+                      Login
+                    </button>
+                  )}
                 </div>
-                {claudeAuthStatus.authenticated && (
-                  <Check className="w-5 h-5 text-green-500" />
-                )}
               </div>
 
-              {claudeAuthStatus.authenticated && claudeAuthStatus.email && (
-                <p className="text-sm text-muted-foreground mb-4">
-                  Signed in as: <span className="text-foreground font-medium">{claudeAuthStatus.email}</span>
-                </p>
-              )}
-
-              {!claudeAuthStatus.authenticated && (
-                <>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Click the button below to authenticate with Claude Code CLI. A terminal will open with authentication instructions.
-                  </p>
-                  <button
-                    onClick={handleClaudeLogin}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2"
-                  >
-                    <LogIn className="w-5 h-5" />
-                    Login to Claude Code
-                  </button>
-                  <p className="text-xs text-muted-foreground mt-3 text-center">
-                    Or manually run: <code className="bg-muted px-2 py-1 rounded">claude auth login</code>
-                  </p>
-                </>
-              )}
-
-              {claudeAuthStatus.error && !claudeAuthStatus.authenticated && (
-                <div className="mt-4 p-3 bg-yellow-100 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-800 rounded-lg">
-                  <p className="text-sm text-yellow-700 dark:text-yellow-400">{claudeAuthStatus.error}</p>
+              {/* Cursor */}
+              <div className={`border rounded-lg p-4 transition-colors ${
+                cursorAuthStatus.authenticated
+                  ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800'
+                  : 'border-border bg-card'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center">
+                      <CursorLogo size={20} />
+                    </div>
+                    <div>
+                      <div className="font-medium text-foreground flex items-center gap-2">
+                        Cursor
+                        {cursorAuthStatus.authenticated && <Check className="w-4 h-4 text-green-500" />}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {cursorAuthStatus.loading ? 'Checking...' :
+                         cursorAuthStatus.authenticated ? cursorAuthStatus.email || 'Connected' : 'Not connected'}
+                      </div>
+                    </div>
+                  </div>
+                  {!cursorAuthStatus.authenticated && !cursorAuthStatus.loading && (
+                    <button
+                      onClick={handleCursorLogin}
+                      className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors"
+                    >
+                      Login
+                    </button>
+                  )}
                 </div>
-              )}
-            </div>
-
-            <div className="text-center text-sm text-muted-foreground">
-              <p>This step is optional. You can skip and configure it later in Settings.</p>
-            </div>
-          </div>
-        );
-
-      case 2:
-        return (
-          <div className="space-y-6">
-            <div className="text-center mb-8">
-              <div className="w-16 h-16 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
-                <CursorLogo size={32} />
-              </div>
-              <h2 className="text-2xl font-bold text-foreground mb-2">Cursor CLI</h2>
-              <p className="text-muted-foreground">
-                Connect your Cursor account to enable AI-powered features
-              </p>
-            </div>
-
-            {/* Auth Status Card */}
-            <div className="border border-border rounded-lg p-6 bg-card">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className={`w-3 h-3 rounded-full ${
-                    cursorAuthStatus.loading ? 'bg-gray-400 animate-pulse' :
-                    cursorAuthStatus.authenticated ? 'bg-green-500' : 'bg-gray-300'
-                  }`} />
-                  <span className="font-medium text-foreground">
-                    {cursorAuthStatus.loading ? 'Checking...' :
-                     cursorAuthStatus.authenticated ? 'Connected' : 'Not Connected'}
-                  </span>
-                </div>
-                {cursorAuthStatus.authenticated && (
-                  <Check className="w-5 h-5 text-green-500" />
-                )}
               </div>
 
-              {cursorAuthStatus.authenticated && cursorAuthStatus.email && (
-                <p className="text-sm text-muted-foreground mb-4">
-                  Signed in as: <span className="text-foreground font-medium">{cursorAuthStatus.email}</span>
-                </p>
-              )}
-
-              {!cursorAuthStatus.authenticated && (
-                <>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Click the button below to authenticate with Cursor CLI. A terminal will open with authentication instructions.
-                  </p>
-                  <button
-                    onClick={handleCursorLogin}
-                    className="w-full bg-purple-600 hover:bg-purple-700 text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2"
-                  >
-                    <LogIn className="w-5 h-5" />
-                    Login to Cursor
-                  </button>
-                  <p className="text-xs text-muted-foreground mt-3 text-center">
-                    Or manually run: <code className="bg-muted px-2 py-1 rounded">cursor auth login</code>
-                  </p>
-                </>
-              )}
-
-              {cursorAuthStatus.error && !cursorAuthStatus.authenticated && (
-                <div className="mt-4 p-3 bg-yellow-100 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-800 rounded-lg">
-                  <p className="text-sm text-yellow-700 dark:text-yellow-400">{cursorAuthStatus.error}</p>
+              {/* Codex */}
+              <div className={`border rounded-lg p-4 transition-colors ${
+                codexAuthStatus.authenticated
+                  ? 'bg-gray-100 dark:bg-gray-800/50 border-gray-300 dark:border-gray-600'
+                  : 'border-border bg-card'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center">
+                      <CodexLogo className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="font-medium text-foreground flex items-center gap-2">
+                        OpenAI Codex
+                        {codexAuthStatus.authenticated && <Check className="w-4 h-4 text-green-500" />}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {codexAuthStatus.loading ? 'Checking...' :
+                         codexAuthStatus.authenticated ? codexAuthStatus.email || 'Connected' : 'Not connected'}
+                      </div>
+                    </div>
+                  </div>
+                  {!codexAuthStatus.authenticated && !codexAuthStatus.loading && (
+                    <button
+                      onClick={handleCodexLogin}
+                      className="bg-gray-800 hover:bg-gray-900 dark:bg-gray-700 dark:hover:bg-gray-600 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors"
+                    >
+                      Login
+                    </button>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
 
-            <div className="text-center text-sm text-muted-foreground">
-              <p>This step is optional. You can skip and configure it later in Settings.</p>
+            <div className="text-center text-sm text-muted-foreground pt-2">
+              <p>You can configure these later in Settings.</p>
             </div>
           </div>
         );
@@ -455,8 +453,7 @@ const Onboarding = ({ onComplete }) => {
       case 0:
         return gitName.trim() && gitEmail.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(gitEmail);
       case 1:
-      case 2:
-        return true; // CLI steps are optional
+        return true; 
       default:
         return false;
     }
@@ -572,15 +569,13 @@ const Onboarding = ({ onComplete }) => {
         </div>
       </div>
 
-      {/* Login Modal */}
-      {showLoginModal && (
+      {activeLoginProvider && (
         <LoginModal
-          key={loginProvider}
-          isOpen={showLoginModal}
-          onClose={() => setShowLoginModal(false)}
-          provider={loginProvider}
+          isOpen={!!activeLoginProvider}
+          onClose={() => setActiveLoginProvider(null)}
+          provider={activeLoginProvider}
           project={selectedProject}
-          onLoginComplete={handleLoginComplete}
+          onComplete={handleLoginComplete}
         />
       )}
     </>

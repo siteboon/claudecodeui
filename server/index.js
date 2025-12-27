@@ -60,6 +60,7 @@ import mime from 'mime-types';
 import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
 import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions } from './claude-sdk.js';
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
+import { queryCodex, abortCodexSession, isCodexSessionActive, getActiveCodexSessions } from './openai-codex.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
 import mcpRoutes from './routes/mcp.js';
@@ -72,6 +73,7 @@ import agentRoutes from './routes/agent.js';
 import projectsRoutes from './routes/projects.js';
 import cliAuthRoutes from './routes/cli-auth.js';
 import userRoutes from './routes/user.js';
+import codexRoutes from './routes/codex.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 
@@ -211,7 +213,17 @@ const wss = new WebSocketServer({
 app.locals.wss = wss;
 
 app.use(cors());
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({
+  limit: '50mb',
+  type: (req) => {
+    // Skip multipart/form-data requests (for file uploads like images)
+    const contentType = req.headers['content-type'] || '';
+    if (contentType.includes('multipart/form-data')) {
+      return false;
+    }
+    return contentType.includes('json');
+  }
+}));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Public health check endpoint (no authentication required)
@@ -257,6 +269,9 @@ app.use('/api/cli', authenticateToken, cliAuthRoutes);
 
 // User API Routes (protected)
 app.use('/api/user', authenticateToken, userRoutes);
+
+// Codex API Routes (protected)
+app.use('/api/codex', authenticateToken, codexRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
@@ -726,6 +741,12 @@ function handleChatConnection(ws) {
                 console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
                 console.log('🤖 Model:', data.options?.model || 'default');
                 await spawnCursor(data.command, data.options, ws);
+            } else if (data.type === 'codex-command') {
+                console.log('[DEBUG] Codex message:', data.command || '[Continue/Resume]');
+                console.log('📁 Project:', data.options?.projectPath || data.options?.cwd || 'Unknown');
+                console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
+                console.log('🤖 Model:', data.options?.model || 'default');
+                await queryCodex(data.command, data.options, ws);
             } else if (data.type === 'cursor-resume') {
                 // Backward compatibility: treat as cursor-command with resume and no prompt
                 console.log('[DEBUG] Cursor resume session (compat):', data.sessionId);
@@ -741,6 +762,8 @@ function handleChatConnection(ws) {
 
                 if (provider === 'cursor') {
                     success = abortCursorSession(data.sessionId);
+                } else if (provider === 'codex') {
+                    success = abortCodexSession(data.sessionId);
                 } else {
                     // Use Claude Agents SDK
                     success = await abortClaudeSDKSession(data.sessionId);
@@ -769,6 +792,8 @@ function handleChatConnection(ws) {
 
                 if (provider === 'cursor') {
                     isActive = isCursorSessionActive(sessionId);
+                } else if (provider === 'codex') {
+                    isActive = isCodexSessionActive(sessionId);
                 } else {
                     // Use Claude Agents SDK
                     isActive = isClaudeSDKSessionActive(sessionId);
@@ -784,7 +809,8 @@ function handleChatConnection(ws) {
                 // Get all currently active sessions
                 const activeSessions = {
                     claude: getActiveClaudeSDKSessions(),
-                    cursor: getActiveCursorSessions()
+                    cursor: getActiveCursorSessions(),
+                    codex: getActiveCodexSessions()
                 };
                 ws.send(JSON.stringify({
                     type: 'active-sessions',
@@ -1354,8 +1380,98 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
 app.get('/api/projects/:projectName/sessions/:sessionId/token-usage', authenticateToken, async (req, res) => {
   try {
     const { projectName, sessionId } = req.params;
+    const { provider = 'claude' } = req.query;
     const homeDir = os.homedir();
 
+    // Allow only safe characters in sessionId
+    const safeSessionId = String(sessionId).replace(/[^a-zA-Z0-9._-]/g, '');
+    if (!safeSessionId) {
+      return res.status(400).json({ error: 'Invalid sessionId' });
+    }
+
+    // Handle Cursor sessions - they use SQLite and don't have token usage info
+    if (provider === 'cursor') {
+      return res.json({
+        used: 0,
+        total: 0,
+        breakdown: { input: 0, cacheCreation: 0, cacheRead: 0 },
+        unsupported: true,
+        message: 'Token usage tracking not available for Cursor sessions'
+      });
+    }
+
+    // Handle Codex sessions
+    if (provider === 'codex') {
+      const codexSessionsDir = path.join(homeDir, '.codex', 'sessions');
+
+      // Find the session file by searching for the session ID
+      const findSessionFile = async (dir) => {
+        try {
+          const entries = await fsPromises.readdir(dir, { withFileTypes: true });
+          for (const entry of entries) {
+            const fullPath = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+              const found = await findSessionFile(fullPath);
+              if (found) return found;
+            } else if (entry.name.includes(safeSessionId) && entry.name.endsWith('.jsonl')) {
+              return fullPath;
+            }
+          }
+        } catch (error) {
+          // Skip directories we can't read
+        }
+        return null;
+      };
+
+      const sessionFilePath = await findSessionFile(codexSessionsDir);
+
+      if (!sessionFilePath) {
+        return res.status(404).json({ error: 'Codex session file not found', sessionId: safeSessionId });
+      }
+
+      // Read and parse the Codex JSONL file
+      let fileContent;
+      try {
+        fileContent = await fsPromises.readFile(sessionFilePath, 'utf8');
+      } catch (error) {
+        if (error.code === 'ENOENT') {
+          return res.status(404).json({ error: 'Session file not found', path: sessionFilePath });
+        }
+        throw error;
+      }
+      const lines = fileContent.trim().split('\n');
+      let totalTokens = 0;
+      let contextWindow = 200000; // Default for Codex/OpenAI
+
+      // Find the latest token_count event with info (scan from end)
+      for (let i = lines.length - 1; i >= 0; i--) {
+        try {
+          const entry = JSON.parse(lines[i]);
+
+          // Codex stores token info in event_msg with type: "token_count"
+          if (entry.type === 'event_msg' && entry.payload?.type === 'token_count' && entry.payload?.info) {
+            const tokenInfo = entry.payload.info;
+            if (tokenInfo.total_token_usage) {
+              totalTokens = tokenInfo.total_token_usage.total_tokens || 0;
+            }
+            if (tokenInfo.model_context_window) {
+              contextWindow = tokenInfo.model_context_window;
+            }
+            break; // Stop after finding the latest token count
+          }
+        } catch (parseError) {
+          // Skip lines that can't be parsed
+          continue;
+        }
+      }
+
+      return res.json({
+        used: totalTokens,
+        total: contextWindow
+      });
+    }
+
+    // Handle Claude sessions (default)
     // Extract actual project path
     let projectPath;
     try {
@@ -1371,11 +1487,6 @@ app.get('/api/projects/:projectName/sessions/:sessionId/token-usage', authentica
     const encodedPath = projectPath.replace(/[\\/:\s~_]/g, '-');
     const projectDir = path.join(homeDir, '.claude', 'projects', encodedPath);
 
-    // Allow only safe characters in sessionId
-    const safeSessionId = String(sessionId).replace(/[^a-zA-Z0-9._-]/g, '');
-    if (!safeSessionId) {
-      return res.status(400).json({ error: 'Invalid sessionId' });
-    }
     const jsonlPath = path.join(projectDir, `${safeSessionId}.jsonl`);
 
     // Constrain to projectDir
