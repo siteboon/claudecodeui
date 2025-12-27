@@ -4,7 +4,7 @@ import path from 'path';
 import os from 'os';
 import { promises as fs } from 'fs';
 import crypto from 'crypto';
-import { apiKeysDb, githubTokensDb } from '../database/db.js';
+import { userDb, apiKeysDb, githubTokensDb } from '../database/db.js';
 import { addProjectManually } from '../projects.js';
 import { queryClaudeSDK } from '../claude-sdk.js';
 import { spawnCursor } from '../cursor-cli.js';
@@ -12,8 +12,35 @@ import { Octokit } from '@octokit/rest';
 
 const router = express.Router();
 
-// Middleware to validate API key for external requests
+/**
+ * Middleware to authenticate agent API requests.
+ *
+ * Supports two authentication modes:
+ * 1. Platform mode (VITE_IS_PLATFORM=true): For managed/hosted deployments where
+ *    authentication is handled by an external proxy. Requests are trusted and
+ *    the default user context is used.
+ *
+ * 2. API key mode (default): For self-hosted deployments where users authenticate
+ *    via API keys created in the UI. Keys are validated against the local database.
+ */
 const validateExternalApiKey = (req, res, next) => {
+  // Platform mode: Authentication is handled externally (e.g., by a proxy layer).
+  // Trust the request and use the default user context.
+  if (process.env.VITE_IS_PLATFORM === 'true') {
+    try {
+      const user = userDb.getFirstUser();
+      if (!user) {
+        return res.status(500).json({ error: 'Platform mode: No user found in database' });
+      }
+      req.user = user;
+      return next();
+    } catch (error) {
+      console.error('Platform mode error:', error);
+      return res.status(500).json({ error: 'Platform mode: Failed to fetch user' });
+    }
+  }
+
+  // Self-hosted mode: Validate API key from header or query parameter
   const apiKey = req.headers['x-api-key'] || req.query.apiKey;
 
   if (!apiKey) {

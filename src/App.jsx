@@ -89,7 +89,8 @@ function AppContent() {
                           window.navigator.standalone ||
                           document.referrer.includes('android-app://');
       setIsPWA(isStandalone);
-      
+        document.addEventListener('touchstart', {});
+
       // Add class to html and body for CSS targeting
       if (isStandalone) {
         document.documentElement.classList.add('pwa-mode');

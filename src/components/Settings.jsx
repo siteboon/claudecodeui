@@ -2149,6 +2149,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
 
       {/* Login Modal */}
       <LoginModal
+        key={loginProvider}
         isOpen={showLoginModal}
         onClose={() => setShowLoginModal(false)}
         provider={loginProvider}
