@@ -266,8 +266,16 @@ async function extractProjectDirectory(projectName) {
   if (projectDirectoryCache.has(projectName)) {
     return projectDirectoryCache.get(projectName);
   }
-  
-  
+
+  // Check project config for originalPath (manually added projects via UI or platform)
+  // This handles projects with dashes in their directory names correctly
+  const config = await loadProjectConfig();
+  if (config[projectName]?.originalPath) {
+    const originalPath = config[projectName].originalPath;
+    projectDirectoryCache.set(projectName, originalPath);
+    return originalPath;
+  }
+
   const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
   const cwdCounts = new Map();
   let latestTimestamp = 0;
