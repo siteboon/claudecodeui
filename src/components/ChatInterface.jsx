@@ -35,6 +35,7 @@ import { MicButton } from './MicButton.jsx';
 import { api, authenticatedFetch } from '../utils/api';
 import Fuse from 'fuse.js';
 import CommandMenu from './CommandMenu';
+import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '../../shared/modelConstants';
 
 
 // Helper function to decode HTML entities in text
@@ -1723,13 +1724,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     return localStorage.getItem('selected-provider') || 'claude';
   });
   const [cursorModel, setCursorModel] = useState(() => {
-    return localStorage.getItem('cursor-model') || 'gpt-5';
+    return localStorage.getItem('cursor-model') || CURSOR_MODELS.DEFAULT;
   });
   const [claudeModel, setClaudeModel] = useState(() => {
-    return localStorage.getItem('claude-model') || 'sonnet';
+    return localStorage.getItem('claude-model') || CLAUDE_MODELS.DEFAULT;
   });
   const [codexModel, setCodexModel] = useState(() => {
-    return localStorage.getItem('codex-model') || 'gpt-5.2';
+    return localStorage.getItem('codex-model') || CODEX_MODELS.DEFAULT;
   });
   // Load permission mode for the current session
   useEffect(() => {
@@ -1758,17 +1759,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       .then(res => res.json())
       .then(data => {
         if (data.success && data.config?.model?.modelId) {
-          // Map Cursor model IDs to our simplified names
-          const modelMap = {
-            'gpt-5': 'gpt-5',
-            'claude-4-sonnet': 'sonnet-4',
-            'sonnet-4': 'sonnet-4',
-            'claude-4-opus': 'opus-4.1',
-            'opus-4.1': 'opus-4.1'
-          };
-          const mappedModel = modelMap[data.config.model.modelId] || data.config.model.modelId;
+          // Use the model from config directly
+          const modelId = data.config.model.modelId;
           if (!localStorage.getItem('cursor-model')) {
-            setCursorModel(mappedModel);
+            setCursorModel(modelId);
           }
         }
       })
@@ -4547,11 +4541,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                       }}
                       className="pl-4 pr-10 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 min-w-[140px]"
                     >
-                      <option value="sonnet">Sonnet</option>
-                      <option value="opus">Opus</option>
-                      <option value="haiku">Haiku</option>
-                      <option value="opusplan">Opus Plan</option>
-                      <option value="sonnet[1m]">Sonnet [1M]</option>
+                      {CLAUDE_MODELS.OPTIONS.map(({ value, label }) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
                     </select>
                   ) : provider === 'codex' ? (
                     <select
@@ -4563,10 +4555,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                       }}
                       className="pl-4 pr-10 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 min-w-[140px]"
                     >
-                      <option value="gpt-5.2">GPT-5.2</option>
-                      <option value="gpt-5.1-codex-max">GPT-5.1 Codex Max</option>
-                      <option value="o3">O3</option>
-                      <option value="o4-mini">O4-mini</option>
+                      {CODEX_MODELS.OPTIONS.map(({ value, label }) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
                     </select>
                   ) : (
                     <select
@@ -4579,23 +4570,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                       className="pl-4 pr-10 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 min-w-[140px]"
                       disabled={provider !== 'cursor'}
                     >
-                      <option value="gpt-5.2-high">GPT-5.2 High</option>
-                      <option value="gemini-3-pro">Gemini 3 Pro</option>
-                      <option value="opus-4.5-thinking">Claude 4.5 Opus (Thinking)</option>
-                      <option value="gpt-5.2">GPT-5.2</option>
-                      <option value="gpt-5.1">GPT-5.1</option>
-                      <option value="gpt-5.1-high">GPT-5.1 High</option>
-                      <option value="composer-1">Composer 1</option>
-                      <option value="auto">Auto</option>
-                      <option value="sonnet-4.5">Claude 4.5 Sonnet</option>
-                      <option value="sonnet-4.5-thinking">Claude 4.5 Sonnet (Thinking)</option>
-                      <option value="opus-4.5">Claude 4.5 Opus</option>
-                      <option value="gpt-5.1-codex">GPT-5.1 Codex</option>
-                      <option value="gpt-5.1-codex-high">GPT-5.1 Codex High</option>
-                      <option value="gpt-5.1-codex-max">GPT-5.1 Codex Max</option>
-                      <option value="gpt-5.1-codex-max-high">GPT-5.1 Codex Max High</option>
-                      <option value="opus-4.1">Claude 4.1 Opus</option>
-                      <option value="grok">Grok</option>
+                      {CURSOR_MODELS.OPTIONS.map(({ value, label }) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
                     </select>
                   )}
                 </div>

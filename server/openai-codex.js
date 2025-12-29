@@ -213,7 +213,8 @@ export async function queryCodex(command, options = {}, ws) {
       workingDirectory,
       skipGitRepoCheck: true,
       sandboxMode,
-      approvalPolicy
+      approvalPolicy,
+      model
     };
 
     // Start or resume thread

@@ -489,7 +489,7 @@
                                 <span class="endpoint-path"><span class="api-url">http://localhost:3001</span>/api/agent</span>
                             </div>
 
-                            <p>Trigger an AI agent (Claude or Cursor) to work on a project.</p>
+                            <p>Trigger an AI agent (Claude, Cursor, or Codex) to work on a project.</p>
 
                             <h4>Request Body Parameters</h4>
                             <table>
@@ -524,7 +524,7 @@
                                         <td><code>provider</code></td>
                                         <td>string</td>
                                         <td><span class="badge badge-optional">Optional</span></td>
-                                        <td><code>claude</code> or <code>cursor</code> (default: <code>claude</code>)</td>
+                                        <td><code>claude</code>, <code>cursor</code>, or <code>codex</code> (default: <code>claude</code>)</td>
                                     </tr>
                                     <tr>
                                         <td><code>stream</code></td>
@@ -536,7 +536,9 @@
                                         <td><code>model</code></td>
                                         <td>string</td>
                                         <td><span class="badge badge-optional">Optional</span></td>
-                                        <td>Model to use (for Cursor)</td>
+                                        <td id="model-options-cell">
+                                            Model identifier for the AI provider (loading from constants...)
+                                        </td>
                                     </tr>
                                     <tr>
                                         <td><code>cleanup</code></td>
@@ -818,31 +820,51 @@ data: {"type":"done"}</code></pre>
         </div>
     </div>
 
-    <script>
+    <script type="module">
+        // Import model constants
+        import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '/shared/modelConstants.js';
+
         // Dynamic URL replacement
         const apiUrl = window.location.origin;
         document.querySelectorAll('.api-url').forEach(el => {
             el.textContent = apiUrl;
         });
 
+        // Dynamically populate model documentation
+        window.addEventListener('DOMContentLoaded', () => {
+            const modelCell = document.getElementById('model-options-cell');
+            if (modelCell) {
+                const claudeModels = CLAUDE_MODELS.OPTIONS.map(m => `<code>${m.value}</code>`).join(', ');
+                const cursorModels = CURSOR_MODELS.OPTIONS.slice(0, 8).map(m => `<code>${m.value}</code>`).join(', ');
+                const codexModels = CODEX_MODELS.OPTIONS.map(m => `<code>${m.value}</code>`).join(', ');
+
+                modelCell.innerHTML = `
+                    Model identifier for the AI provider:<br><br>
+                    <strong>Claude:</strong> ${claudeModels} (default: <code>${CLAUDE_MODELS.DEFAULT}</code>)<br><br>
+                    <strong>Cursor:</strong> ${cursorModels}, and more (default: <code>${CURSOR_MODELS.DEFAULT}</code>)<br><br>
+                    <strong>Codex:</strong> ${codexModels} (default: <code>${CODEX_MODELS.DEFAULT}</code>)
+                `;
+            }
+        });
+
         // Tab switching
-        function showTab(tabName) {
+        window.showTab = function(tabName) {
             const parentBlock = event.target.closest('.example-block');
             if (!parentBlock) return;
-            
+
             parentBlock.querySelectorAll('.tab-content').forEach(tab => {
                 tab.classList.remove('active');
             });
             parentBlock.querySelectorAll('.tab-button').forEach(btn => {
                 btn.classList.remove('active');
             });
-            
+
             const targetTab = parentBlock.querySelector('#' + tabName);
             if (targetTab) {
                 targetTab.classList.add('active');
                 event.target.classList.add('active');
             }
-        }
+        };
     </script>
 
     <!-- Prism.js -->

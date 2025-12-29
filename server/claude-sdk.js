@@ -16,6 +16,7 @@ import { query } from '@anthropic-ai/claude-agent-sdk';
 import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
+import { CLAUDE_MODELS } from '../shared/modelConstants.js';
 
 // Session tracking: Map of session IDs to active query instances
 const activeSessions = new Map();
@@ -77,7 +78,7 @@ function mapCliOptionsToSDK(options = {}) {
 
   // Map model (default to sonnet)
   // Valid models: sonnet, opus, haiku, opusplan, sonnet[1m]
-  sdkOptions.model = options.model || 'sonnet';
+  sdkOptions.model = options.model || CLAUDE_MODELS.DEFAULT;
   console.log(`Using model: ${sdkOptions.model}`);
 
   // Map system prompt configuration
