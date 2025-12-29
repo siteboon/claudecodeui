@@ -360,12 +360,12 @@ export function getActiveCodexSessions() {
  */
 function sendMessage(ws, data) {
   try {
-    if (typeof ws.send === 'function') {
-      // WebSocket
+    if (ws.isSSEStreamWriter || ws.isWebSocketWriter) {
+      // Writer handles stringification (SSEStreamWriter or WebSocketWriter)
+      ws.send(data);
+    } else if (typeof ws.send === 'function') {
+      // Raw WebSocket - stringify here
       ws.send(JSON.stringify(data));
-    } else if (typeof ws.write === 'function') {
-      // SSE writer (for agent API)
-      ws.write(`data: ${JSON.stringify(data)}\n\n`);
     }
   } catch (error) {
     console.error('[Codex] Error sending message:', error);

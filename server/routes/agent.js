@@ -451,6 +451,7 @@ class SSEStreamWriter {
   constructor(res) {
     this.res = res;
     this.sessionId = null;
+    this.isSSEStreamWriter = true;  // Marker for transport detection
   }
 
   send(data) {
@@ -458,7 +459,7 @@ class SSEStreamWriter {
       return;
     }
 
-    // Format as SSE
+    // Format as SSE - providers send raw objects, we stringify
     this.res.write(`data: ${JSON.stringify(data)}\n\n`);
   }
 
