@@ -88,6 +88,11 @@ claude-code-ui
 
 **To restart**: Stop with Ctrl+C and run `claude-code-ui` again.
 
+**To update**:
+```bash
+cloudcli update
+```
+
 ### CLI Usage
 
 After global installation, you have access to both `claude-code-ui` and `cloudcli` commands:
@@ -97,6 +102,7 @@ After global installation, you have access to both `claude-code-ui` and `cloudcl
 | `cloudcli` or `claude-code-ui` | | Start the server (default) |
 | `cloudcli start` | | Start the server explicitly |
 | `cloudcli status` | | Show configuration and data locations |
+| `cloudcli update` | | Update to the latest version |
 | `cloudcli help` | | Show help information |
 | `cloudcli version` | | Show version information |
 | `--port <port>` | `-p` | Set server port (default: 3001) |
