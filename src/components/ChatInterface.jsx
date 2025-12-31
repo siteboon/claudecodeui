@@ -2971,11 +2971,19 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           if (latestMessage.sessionId && !currentSessionId) {
             sessionStorage.setItem('pendingSessionId', latestMessage.sessionId);
             
+            // Mark as system change to prevent clearing messages when session ID updates
+            setIsSystemSessionChange(true);
+            
             // Session Protection: Replace temporary "new-session-*" identifier with real session ID
             // This maintains protection continuity - no gap between temp ID and real ID
             // The temporary session is removed and real session is marked as active
             if (onReplaceTemporarySession) {
               onReplaceTemporarySession(latestMessage.sessionId);
+            }
+
+            // Navigate to the new session to ensure URL and selectedSession are updated
+            if (onNavigateToSession) {
+              onNavigateToSession(latestMessage.sessionId);
             }
           }
           break;
