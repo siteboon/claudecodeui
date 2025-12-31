@@ -53,7 +53,10 @@ $$
 
 ### Images
 
-![Alt text](https://via.placeholder.com/150)
+![Sample Image](https://picsum.photos/400/200)
+
+You can also use images with specific dimensions:
+![Random Nature Image](https://picsum.photos/seed/nature/600/300)
 
 ---
 
