@@ -10,8 +10,9 @@ import { oneDark } from '@codemirror/theme-one-dark';
 import { EditorView, showPanel, ViewPlugin } from '@codemirror/view';
 import { unifiedMergeView, getChunks } from '@codemirror/merge';
 import { showMinimap } from '@replit/codemirror-minimap';
-import { X, Save, Download, Maximize2, Minimize2 } from 'lucide-react';
+import { X, Save, Download, Maximize2, Minimize2, Eye, Code, PanelLeftClose, PanelLeft } from 'lucide-react';
 import { api } from '../utils/api';
+import { Markdown } from '../utils/markdownUtils';
 
 function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded = false, onToggleExpand = null }) {
   const [content, setContent] = useState('');
@@ -37,6 +38,26 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
     return localStorage.getItem('codeEditorFontSize') || '14';
   });
   const editorRef = useRef(null);
+
+  // Check if this is a markdown file
+  const isMarkdownFile = useMemo(() => {
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    return ext === 'md' || ext === 'markdown';
+  }, [file.name]);
+
+  // Preview mode state (for markdown files)
+  const [previewMode, setPreviewMode] = useState(() => {
+    if (!isMarkdownFile) return 'edit';
+    const savedMode = localStorage.getItem('codeEditorMarkdownMode');
+    return savedMode || 'split'; // Default to split view for markdown
+  });
+
+  // Save preview mode preference
+  useEffect(() => {
+    if (isMarkdownFile) {
+      localStorage.setItem('codeEditorMarkdownMode', previewMode);
+    }
+  }, [previewMode, isMarkdownFile]);
 
   // Create minimap extension with chunk-based gutters
   const minimapExtension = useMemo(() => {
@@ -583,6 +604,48 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
           </div>
 
           <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
+            {/* Markdown preview mode toggles */}
+            {isMarkdownFile && (
+              <div className="flex items-center gap-1 mr-2 border-r border-gray-200 dark:border-gray-700 pr-2">
+                <button
+                  onClick={() => setPreviewMode('edit')}
+                  className={`px-2 py-1.5 text-sm rounded-md flex items-center gap-1 transition-colors ${
+                    previewMode === 'edit'
+                      ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
+                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                  }`}
+                  title="Edit mode"
+                >
+                  <Code className="w-4 h-4" />
+                  <span className="hidden md:inline">Edit</span>
+                </button>
+                <button
+                  onClick={() => setPreviewMode('preview')}
+                  className={`px-2 py-1.5 text-sm rounded-md flex items-center gap-1 transition-colors ${
+                    previewMode === 'preview'
+                      ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
+                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                  }`}
+                  title="Preview mode"
+                >
+                  <Eye className="w-4 h-4" />
+                  <span className="hidden md:inline">Preview</span>
+                </button>
+                <button
+                  onClick={() => setPreviewMode('split')}
+                  className={`px-2 py-1.5 text-sm rounded-md flex items-center gap-1 transition-colors ${
+                    previewMode === 'split'
+                      ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
+                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                  }`}
+                  title="Split view"
+                >
+                  <PanelLeft className="w-4 h-4" />
+                  <span className="hidden md:inline">Split</span>
+                </button>
+              </div>
+            )}
+
             <button
               onClick={handleDownload}
               className="p-2 md:p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
@@ -635,52 +698,121 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
           </div>
         </div>
 
-        {/* Editor */}
+        {/* Editor and/or Preview */}
         <div className="flex-1 overflow-hidden">
-          <CodeMirror
-            ref={editorRef}
-            value={content}
-            onChange={setContent}
-            extensions={[
-              ...getLanguageExtension(file.name),
-              // Always show the toolbar
-              ...editorToolbarPanel,
-              // Only show diff-related extensions when diff is enabled
-              ...(file.diffInfo && showDiff && file.diffInfo.old_string !== undefined
-                ? [
-                    unifiedMergeView({
-                      original: file.diffInfo.old_string,
-                      mergeControls: false,
-                      highlightChanges: true,
-                      syntaxHighlightDeletions: false,
-                      gutter: true
-                      // NOTE: NO collapseUnchanged - this shows the full file!
-                    }),
-                    ...minimapExtension,
-                    ...scrollToFirstChunkExtension
-                  ]
-                : []),
-              ...(wordWrap ? [EditorView.lineWrapping] : [])
-            ]}
-            theme={isDarkMode ? oneDark : undefined}
-            height="100%"
-            style={{
-              fontSize: `${fontSize}px`,
-              height: '100%',
-            }}
-            basicSetup={{
-              lineNumbers: showLineNumbers,
-              foldGutter: true,
-              dropCursor: false,
-              allowMultipleSelections: false,
-              indentOnInput: true,
-              bracketMatching: true,
-              closeBrackets: true,
-              autocompletion: true,
-              highlightSelectionMatches: true,
-              searchKeymap: true,
-            }}
-          />
+          {isMarkdownFile && previewMode === 'preview' ? (
+            /* Preview only mode */
+            <div className="h-full overflow-auto p-6 bg-white dark:bg-gray-900">
+              <div className="max-w-4xl mx-auto">
+                <Markdown prose={true}>
+                  {content}
+                </Markdown>
+              </div>
+            </div>
+          ) : isMarkdownFile && previewMode === 'split' ? (
+            /* Split view mode */
+            <div className="flex h-full">
+              <div className="flex-1 border-r border-gray-200 dark:border-gray-700 overflow-hidden">
+                <CodeMirror
+                  ref={editorRef}
+                  value={content}
+                  onChange={setContent}
+                  extensions={[
+                    ...getLanguageExtension(file.name),
+                    // Always show the toolbar
+                    ...editorToolbarPanel,
+                    // Only show diff-related extensions when diff is enabled
+                    ...(file.diffInfo && showDiff && file.diffInfo.old_string !== undefined
+                      ? [
+                          unifiedMergeView({
+                            original: file.diffInfo.old_string,
+                            mergeControls: false,
+                            highlightChanges: true,
+                            syntaxHighlightDeletions: false,
+                            gutter: true
+                            // NOTE: NO collapseUnchanged - this shows the full file!
+                          }),
+                          ...minimapExtension,
+                          ...scrollToFirstChunkExtension
+                        ]
+                      : []),
+                    ...(wordWrap ? [EditorView.lineWrapping] : [])
+                  ]}
+                  theme={isDarkMode ? oneDark : undefined}
+                  height="100%"
+                  style={{
+                    fontSize: `${fontSize}px`,
+                    height: '100%',
+                  }}
+                  basicSetup={{
+                    lineNumbers: showLineNumbers,
+                    foldGutter: true,
+                    dropCursor: false,
+                    allowMultipleSelections: false,
+                    indentOnInput: true,
+                    bracketMatching: true,
+                    closeBrackets: true,
+                    autocompletion: true,
+                    highlightSelectionMatches: true,
+                    searchKeymap: true,
+                  }}
+                />
+              </div>
+              <div className="flex-1 overflow-auto p-6 bg-white dark:bg-gray-900">
+                <div className="max-w-4xl mx-auto">
+                  <Markdown prose={true}>
+                    {content}
+                  </Markdown>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* Edit only mode (default for non-markdown or when edit mode selected) */
+            <CodeMirror
+              ref={editorRef}
+              value={content}
+              onChange={setContent}
+              extensions={[
+                ...getLanguageExtension(file.name),
+                // Always show the toolbar
+                ...editorToolbarPanel,
+                // Only show diff-related extensions when diff is enabled
+                ...(file.diffInfo && showDiff && file.diffInfo.old_string !== undefined
+                  ? [
+                      unifiedMergeView({
+                        original: file.diffInfo.old_string,
+                        mergeControls: false,
+                        highlightChanges: true,
+                        syntaxHighlightDeletions: false,
+                        gutter: true
+                        // NOTE: NO collapseUnchanged - this shows the full file!
+                      }),
+                      ...minimapExtension,
+                      ...scrollToFirstChunkExtension
+                    ]
+                  : []),
+                ...(wordWrap ? [EditorView.lineWrapping] : [])
+              ]}
+              theme={isDarkMode ? oneDark : undefined}
+              height="100%"
+              style={{
+                fontSize: `${fontSize}px`,
+                height: '100%',
+              }}
+              basicSetup={{
+                lineNumbers: showLineNumbers,
+                foldGutter: true,
+                dropCursor: false,
+                allowMultipleSelections: false,
+                indentOnInput: true,
+                bracketMatching: true,
+                closeBrackets: true,
+                autocompletion: true,
+                highlightSelectionMatches: true,
+                searchKeymap: true,
+              }}
+            />
+          )}
         </div>
 
         {/* Footer */}
