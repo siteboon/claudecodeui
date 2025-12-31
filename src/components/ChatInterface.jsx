@@ -27,6 +27,7 @@ import { useDropzone } from 'react-dropzone';
 import TodoList from './TodoList';
 import ClaudeLogo from './ClaudeLogo.jsx';
 import CursorLogo from './CursorLogo.jsx';
+import CodexLogo from './CodexLogo.jsx';
 import NextTaskBanner from './NextTaskBanner.jsx';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
 
@@ -36,6 +37,7 @@ import { MicButton } from './MicButton.jsx';
 import { api, authenticatedFetch } from '../utils/api';
 import Fuse from 'fuse.js';
 import CommandMenu from './CommandMenu';
+import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '../../shared/modelConstants';
 
 
 // Helper function to decode HTML entities in text
@@ -473,13 +475,15 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0 p-1">
                   {(localStorage.getItem('selected-provider') || 'claude') === 'cursor' ? (
                     <CursorLogo className="w-full h-full" />
+                  ) : (localStorage.getItem('selected-provider') || 'claude') === 'codex' ? (
+                    <CodexLogo className="w-full h-full" />
                   ) : (
                     <ClaudeLogo className="w-full h-full" />
                   )}
                 </div>
               )}
               <div className="text-sm font-medium text-gray-900 dark:text-white">
-                {message.type === 'error' ? 'Error' : message.type === 'tool' ? 'Tool' : ((localStorage.getItem('selected-provider') || 'claude') === 'cursor' ? 'Cursor' : 'Claude')}
+                {message.type === 'error' ? 'Error' : message.type === 'tool' ? 'Tool' : ((localStorage.getItem('selected-provider') || 'claude') === 'cursor' ? 'Cursor' : (localStorage.getItem('selected-provider') || 'claude') === 'codex' ? 'Codex' : 'Claude')}
               </div>
             </div>
           )}
@@ -1553,6 +1557,23 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                   <span className="font-medium">Read todo list</span>
                 </div>
               </div>
+            ) : message.isThinking ? (
+              /* Thinking messages - collapsible by default */
+              <div className="text-sm text-gray-700 dark:text-gray-300">
+                <details className="group">
+                  <summary className="cursor-pointer text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 font-medium flex items-center gap-2">
+                    <svg className="w-3 h-3 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                    <span>💭 Thinking...</span>
+                  </summary>
+                  <div className="mt-2 pl-4 border-l-2 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 text-sm">
+                    <Markdown className="prose prose-sm max-w-none dark:prose-invert prose-gray">
+                      {message.content}
+                    </Markdown>
+                  </div>
+                </details>
+              </div>
             ) : (
               <div className="text-sm text-gray-700 dark:text-gray-300">
                 {/* Thinking accordion for reasoning */}
@@ -1568,7 +1589,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     </div>
                   </details>
                 )}
-                
+
                 {(() => {
                   const content = formatUsageLimitText(String(message.content || ''));
 
@@ -1672,7 +1693,7 @@ const ImageAttachment = ({ file, onRemove, uploadProgress, error }) => {
 //
 // This ensures uninterrupted chat experience by pausing sidebar refreshes during conversations.
 function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, messages, onFileOpen, onInputFocusChange, onSessionActive, onSessionInactive, onSessionProcessing, onSessionNotProcessing, processingSessions, onReplaceTemporarySession, onNavigateToSession, onShowSettings, autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter, externalMessageUpdate, onTaskClick, onShowAllTasks }) {
-  const { tasksEnabled } = useTasksSettings();
+  const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
   const [input, setInput] = useState(() => {
     if (typeof window !== 'undefined' && selectedProject) {
       return safeLocalStorage.getItem(`draft_input_${selectedProject.name}`) || '';
@@ -1734,7 +1755,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     return localStorage.getItem('selected-provider') || 'claude';
   });
   const [cursorModel, setCursorModel] = useState(() => {
-    return localStorage.getItem('cursor-model') || 'gpt-5';
+    return localStorage.getItem('cursor-model') || CURSOR_MODELS.DEFAULT;
+  });
+  const [claudeModel, setClaudeModel] = useState(() => {
+    return localStorage.getItem('claude-model') || CLAUDE_MODELS.DEFAULT;
+  });
+  const [codexModel, setCodexModel] = useState(() => {
+    return localStorage.getItem('codex-model') || CODEX_MODELS.DEFAULT;
   });
   // Load permission mode for the current session
   useEffect(() => {
@@ -1763,17 +1790,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       .then(res => res.json())
       .then(data => {
         if (data.success && data.config?.model?.modelId) {
-          // Map Cursor model IDs to our simplified names
-          const modelMap = {
-            'gpt-5': 'gpt-5',
-            'claude-4-sonnet': 'sonnet-4',
-            'sonnet-4': 'sonnet-4',
-            'claude-4-opus': 'opus-4.1',
-            'opus-4.1': 'opus-4.1'
-          };
-          const mappedModel = modelMap[data.config.model.modelId] || data.config.model.modelId;
+          // Use the model from config directly
+          const modelId = data.config.model.modelId;
           if (!localStorage.getItem('cursor-model')) {
-            setCursorModel(mappedModel);
+            setCursorModel(modelId);
           }
         }
       })
@@ -2067,7 +2087,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         projectName: selectedProject.name,
         sessionId: currentSessionId,
         provider,
-        model: provider === 'cursor' ? cursorModel : 'claude-sonnet-4.5',
+        model: provider === 'cursor' ? cursorModel : claudeModel,
         tokenUsage: tokenBudget
       };
 
@@ -2140,24 +2160,29 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   }, []);
 
   // Load session messages from API with pagination
-  const loadSessionMessages = useCallback(async (projectName, sessionId, loadMore = false) => {
+  const loadSessionMessages = useCallback(async (projectName, sessionId, loadMore = false, provider = 'claude') => {
     if (!projectName || !sessionId) return [];
-    
+
     const isInitialLoad = !loadMore;
     if (isInitialLoad) {
       setIsLoadingSessionMessages(true);
     } else {
       setIsLoadingMoreMessages(true);
     }
-    
+
     try {
       const currentOffset = loadMore ? messagesOffset : 0;
-      const response = await api.sessionMessages(projectName, sessionId, MESSAGES_PER_PAGE, currentOffset);
+      const response = await api.sessionMessages(projectName, sessionId, MESSAGES_PER_PAGE, currentOffset, provider);
       if (!response.ok) {
         throw new Error('Failed to load session messages');
       }
       const data = await response.json();
-      
+
+      // Extract token usage if present (Codex includes it in messages response)
+      if (isInitialLoad && data.tokenUsage) {
+        setTokenBudget(data.tokenUsage);
+      }
+
       // Handle paginated response
       if (data.hasMore !== undefined) {
         setHasMoreMessages(data.hasMore);
@@ -2600,6 +2625,45 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         }
       }
       
+      // Handle thinking messages (Codex reasoning)
+      else if (msg.type === 'thinking' && msg.message?.content) {
+        converted.push({
+          type: 'assistant',
+          content: unescapeWithMathProtection(msg.message.content),
+          timestamp: msg.timestamp || new Date().toISOString(),
+          isThinking: true
+        });
+      }
+
+      // Handle tool_use messages (Codex function calls)
+      else if (msg.type === 'tool_use' && msg.toolName) {
+        converted.push({
+          type: 'assistant',
+          content: '',
+          timestamp: msg.timestamp || new Date().toISOString(),
+          isToolUse: true,
+          toolName: msg.toolName,
+          toolInput: msg.toolInput || '',
+          toolCallId: msg.toolCallId
+        });
+      }
+
+      // Handle tool_result messages (Codex function outputs)
+      else if (msg.type === 'tool_result') {
+        // Find the matching tool_use by callId, or the last tool_use without a result
+        for (let i = converted.length - 1; i >= 0; i--) {
+          if (converted[i].isToolUse && !converted[i].toolResult) {
+            if (!msg.toolCallId || converted[i].toolCallId === msg.toolCallId) {
+              converted[i].toolResult = {
+                content: msg.output || '',
+                isError: false
+              };
+              break;
+            }
+          }
+        }
+      }
+
       // Handle assistant messages
       else if (msg.message?.role === 'assistant' && msg.message?.content) {
         if (Array.isArray(msg.message.content)) {
@@ -2694,7 +2758,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         const previousScrollTop = container.scrollTop;
         
         // Load more messages
-        const moreMessages = await loadSessionMessages(selectedProject.name, selectedSession.id, true);
+        const moreMessages = await loadSessionMessages(selectedProject.name, selectedSession.id, true, selectedSession.__provider || 'claude');
         
         if (moreMessages.length > 0) {
           // Prepend new messages to the existing ones
@@ -2785,7 +2849,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           // Only load messages from API if this is a user-initiated session change
           // For system-initiated changes, preserve existing messages and rely on WebSocket
           if (!isSystemSessionChange) {
-            const messages = await loadSessionMessages(selectedProject.name, selectedSession.id, false);
+            const messages = await loadSessionMessages(selectedProject.name, selectedSession.id, false, selectedSession.__provider || 'claude');
             setSessionMessages(messages);
             // convertedMessages will be automatically updated via useMemo
             // Scroll will be handled by the main scroll useEffect after messages are rendered
@@ -2834,8 +2898,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             setSessionMessages([]);
             setChatMessages(converted);
           } else {
-            // Reload Claude messages from API/JSONL
-            const messages = await loadSessionMessages(selectedProject.name, selectedSession.id, false);
+            // Reload Claude/Codex messages from API/JSONL
+            const messages = await loadSessionMessages(selectedProject.name, selectedSession.id, false, selectedSession.__provider || 'claude');
             setSessionMessages(messages);
             // convertedMessages will be automatically updated via useMemo
 
@@ -2921,7 +2985,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
       // Filter messages by session ID to prevent cross-session interference
       // Skip filtering for global messages that apply to all sessions
-      const globalMessageTypes = ['projects_updated', 'taskmaster-project-updated', 'session-created', 'claude-complete'];
+      const globalMessageTypes = ['projects_updated', 'taskmaster-project-updated', 'session-created', 'claude-complete', 'codex-complete'];
       const isGlobalMessage = globalMessageTypes.includes(latestMessage.type);
 
       // For new sessions (currentSessionId is null), allow messages through
@@ -2948,8 +3012,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           break;
 
         case 'token-budget':
-          // Token budget now fetched via API after message completion instead of WebSocket
-          // This case is kept for compatibility but does nothing
+          // Use token budget from WebSocket for active sessions
+          if (latestMessage.data) {
+            setTokenBudget(latestMessage.data);
+          }
           break;
 
         case 'claude-response':
@@ -3342,23 +3408,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             setIsLoading(false);
             setCanAbortSession(false);
             setClaudeStatus(null);
-
-            // Fetch updated token usage after message completes
-            if (selectedProject && selectedSession?.id) {
-              const fetchUpdatedTokenUsage = async () => {
-                try {
-                  const url = `/api/projects/${selectedProject.name}/sessions/${selectedSession.id}/token-usage`;
-                  const response = await authenticatedFetch(url);
-                  if (response.ok) {
-                    const data = await response.json();
-                    setTokenBudget(data);
-                  }
-                } catch (error) {
-                  console.error('Failed to fetch updated token usage:', error);
-                }
-              };
-              fetchUpdatedTokenUsage();
-            }
           }
 
           // Always mark the completed session as inactive and not processing
@@ -3386,7 +3435,154 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             safeLocalStorage.removeItem(`chat_messages_${selectedProject.name}`);
           }
           break;
-          
+
+        case 'codex-response':
+          // Handle Codex SDK responses
+          const codexData = latestMessage.data;
+          if (codexData) {
+            // Handle item events
+            if (codexData.type === 'item') {
+              switch (codexData.itemType) {
+                case 'agent_message':
+                  if (codexData.message?.content?.trim()) {
+                    const content = decodeHtmlEntities(codexData.message.content);
+                    setChatMessages(prev => [...prev, {
+                      type: 'assistant',
+                      content: content,
+                      timestamp: new Date()
+                    }]);
+                  }
+                  break;
+
+                case 'reasoning':
+                  if (codexData.message?.content?.trim()) {
+                    const content = decodeHtmlEntities(codexData.message.content);
+                    setChatMessages(prev => [...prev, {
+                      type: 'assistant',
+                      content: content,
+                      timestamp: new Date(),
+                      isThinking: true
+                    }]);
+                  }
+                  break;
+
+                case 'command_execution':
+                  if (codexData.command) {
+                    setChatMessages(prev => [...prev, {
+                      type: 'assistant',
+                      content: '',
+                      timestamp: new Date(),
+                      isToolUse: true,
+                      toolName: 'Bash',
+                      toolInput: codexData.command,
+                      toolResult: codexData.output || null,
+                      exitCode: codexData.exitCode
+                    }]);
+                  }
+                  break;
+
+                case 'file_change':
+                  if (codexData.changes?.length > 0) {
+                    const changesList = codexData.changes.map(c => `${c.kind}: ${c.path}`).join('\n');
+                    setChatMessages(prev => [...prev, {
+                      type: 'assistant',
+                      content: '',
+                      timestamp: new Date(),
+                      isToolUse: true,
+                      toolName: 'FileChanges',
+                      toolInput: changesList,
+                      toolResult: `Status: ${codexData.status}`
+                    }]);
+                  }
+                  break;
+
+                case 'mcp_tool_call':
+                  setChatMessages(prev => [...prev, {
+                    type: 'assistant',
+                    content: '',
+                    timestamp: new Date(),
+                    isToolUse: true,
+                    toolName: `${codexData.server}:${codexData.tool}`,
+                    toolInput: JSON.stringify(codexData.arguments, null, 2),
+                    toolResult: codexData.result ? JSON.stringify(codexData.result, null, 2) : (codexData.error?.message || null)
+                  }]);
+                  break;
+
+                case 'error':
+                  if (codexData.message?.content) {
+                    setChatMessages(prev => [...prev, {
+                      type: 'error',
+                      content: codexData.message.content,
+                      timestamp: new Date()
+                    }]);
+                  }
+                  break;
+
+                default:
+                  console.log('[Codex] Unhandled item type:', codexData.itemType, codexData);
+              }
+            }
+
+            // Handle turn complete
+            if (codexData.type === 'turn_complete') {
+              // Turn completed, message stream done
+              setIsLoading(false);
+            }
+
+            // Handle turn failed
+            if (codexData.type === 'turn_failed') {
+              setIsLoading(false);
+              setChatMessages(prev => [...prev, {
+                type: 'error',
+                content: codexData.error?.message || 'Turn failed',
+                timestamp: new Date()
+              }]);
+            }
+          }
+          break;
+
+        case 'codex-complete':
+          // Handle Codex session completion
+          const codexCompletedSessionId = latestMessage.sessionId || currentSessionId || sessionStorage.getItem('pendingSessionId');
+
+          if (codexCompletedSessionId === currentSessionId || !currentSessionId) {
+            setIsLoading(false);
+            setCanAbortSession(false);
+            setClaudeStatus(null);
+          }
+
+          if (codexCompletedSessionId) {
+            if (onSessionInactive) {
+              onSessionInactive(codexCompletedSessionId);
+            }
+            if (onSessionNotProcessing) {
+              onSessionNotProcessing(codexCompletedSessionId);
+            }
+          }
+
+          const codexPendingSessionId = sessionStorage.getItem('pendingSessionId');
+          if (codexPendingSessionId && !currentSessionId) {
+            setCurrentSessionId(codexPendingSessionId);
+            sessionStorage.removeItem('pendingSessionId');
+            console.log('Codex session complete, ID set to:', codexPendingSessionId);
+          }
+
+          if (selectedProject) {
+            safeLocalStorage.removeItem(`chat_messages_${selectedProject.name}`);
+          }
+          break;
+
+        case 'codex-error':
+          // Handle Codex errors
+          setIsLoading(false);
+          setCanAbortSession(false);
+          setChatMessages(prev => [...prev, {
+            type: 'error',
+            content: latestMessage.error || 'An error occurred with Codex',
+            timestamp: new Date()
+          }]);
+          break;
+
         case 'session-aborted': {
           // Get session ID from message or fall back to current session
           const abortedSessionId = latestMessage.sessionId || currentSessionId;
@@ -3637,21 +3833,26 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, [input]);
 
-  // Load token usage when session changes (but don't poll to avoid conflicts with WebSocket)
+  // Load token usage when session changes for Claude sessions only
+  // (Codex token usage is included in messages response, Cursor doesn't support it)
   useEffect(() => {
     if (!selectedProject || !selectedSession?.id || selectedSession.id.startsWith('new-session-')) {
-      // Reset for new/empty sessions
       setTokenBudget(null);
       return;
     }
 
-    // Fetch token usage once when session loads
+    const sessionProvider = selectedSession.__provider || 'claude';
+
+    // Skip for Codex (included in messages) and Cursor (not supported)
+    if (sessionProvider !== 'claude') {
+      return;
+    }
+
+    // Fetch token usage for Claude sessions
     const fetchInitialTokenUsage = async () => {
       try {
         const url = `/api/projects/${selectedProject.name}/sessions/${selectedSession.id}/token-usage`;
-
         const response = await authenticatedFetch(url);
-
         if (response.ok) {
           const data = await response.json();
           setTokenBudget(data);
@@ -3664,7 +3865,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     };
 
     fetchInitialTokenUsage();
-  }, [selectedSession?.id, selectedProject?.path]);
+  }, [selectedSession?.id, selectedSession?.__provider, selectedProject?.path]);
 
   const handleTranscript = useCallback((text) => {
     if (text.trim()) {
@@ -3836,7 +4037,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     // Get tools settings from localStorage based on provider
     const getToolsSettings = () => {
       try {
-        const settingsKey = provider === 'cursor' ? 'cursor-tools-settings' : 'claude-settings';
+        const settingsKey = provider === 'cursor' ? 'cursor-tools-settings' : provider === 'codex' ? 'codex-settings' : 'claude-settings';
         const savedSettings = safeLocalStorage.getItem(settingsKey);
         if (savedSettings) {
           return JSON.parse(savedSettings);
@@ -3871,6 +4072,21 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           toolsSettings: toolsSettings
         }
       });
+    } else if (provider === 'codex') {
+      // Send Codex command
+      sendMessage({
+        type: 'codex-command',
+        command: input,
+        sessionId: effectiveSessionId,
+        options: {
+          cwd: selectedProject.fullPath || selectedProject.path,
+          projectPath: selectedProject.fullPath || selectedProject.path,
+          sessionId: effectiveSessionId,
+          resume: !!effectiveSessionId,
+          model: codexModel,
+          permissionMode: permissionMode === 'plan' ? 'default' : permissionMode
+        }
+      });
     } else {
       // Send Claude command (existing code)
       sendMessage({
@@ -3883,6 +4099,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           resume: !!currentSessionId,
           toolsSettings: toolsSettings,
           permissionMode: permissionMode,
+          model: claudeModel,
           images: uploadedImages // Pass images to backend
         }
       });
@@ -3903,7 +4120,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     if (selectedProject) {
       safeLocalStorage.removeItem(`draft_input_${selectedProject.name}`);
     }
-  }, [input, isLoading, selectedProject, attachedImages, currentSessionId, selectedSession, provider, permissionMode, onSessionActive, cursorModel, sendMessage, setInput, setAttachedImages, setUploadingImages, setImageErrors, setIsTextareaExpanded, textareaRef, setChatMessages, setIsLoading, setCanAbortSession, setClaudeStatus, setIsUserScrolledUp, scrollToBottom]);
+  }, [input, isLoading, selectedProject, attachedImages, currentSessionId, selectedSession, provider, permissionMode, onSessionActive, cursorModel, claudeModel, codexModel, sendMessage, setInput, setAttachedImages, setUploadingImages, setImageErrors, setIsTextareaExpanded, textareaRef, setChatMessages, setIsLoading, setCanAbortSession, setClaudeStatus, setIsUserScrolledUp, scrollToBottom]);
 
   // Store handleSubmit in ref so handleCustomCommand can access it
   useEffect(() => {
@@ -4013,7 +4230,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     // Handle Tab key for mode switching (only when dropdowns are not showing)
     if (e.key === 'Tab' && !showFileDropdown && !showCommandMenu) {
       e.preventDefault();
-      const modes = ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
+      // Codex doesn't support plan mode
+      const modes = provider === 'codex'
+        ? ['default', 'acceptEdits', 'bypassPermissions']
+        : ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
       const currentIndex = modes.indexOf(permissionMode);
       const nextIndex = (currentIndex + 1) % modes.length;
       const newMode = modes[nextIndex];
@@ -4182,7 +4402,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   };
 
   const handleModeSwitch = () => {
-    const modes = ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
+    // Codex doesn't support plan mode
+    const modes = provider === 'codex'
+      ? ['default', 'acceptEdits', 'bypassPermissions']
+      : ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
     const currentIndex = modes.indexOf(permissionMode);
     const nextIndex = (currentIndex + 1) % modes.length;
     const newMode = modes[nextIndex];
@@ -4300,42 +4523,106 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                       </div>
                     )}
                   </button>
-                </div>
-                
-                {/* Model Selection for Cursor - Always reserve space to prevent jumping */}
-                <div className={`mb-6 transition-opacity duration-200 ${provider === 'cursor' ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    {provider === 'cursor' ? 'Select Model' : '\u00A0'}
-                  </label>
-                  <select
-                    value={cursorModel}
-                    onChange={(e) => {
-                      const newModel = e.target.value;
-                      setCursorModel(newModel);
-                      localStorage.setItem('cursor-model', newModel);
+
+                  {/* Codex Button */}
+                  <button
+                    onClick={() => {
+                      setProvider('codex');
+                      localStorage.setItem('selected-provider', 'codex');
+                      // Focus input after selection
+                      setTimeout(() => textareaRef.current?.focus(), 100);
                     }}
-                    className="pl-4 pr-10 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 min-w-[140px]"
-                    disabled={provider !== 'cursor'}
+                    className={`group relative w-64 h-32 bg-white dark:bg-gray-800 rounded-xl border-2 transition-all duration-200 hover:scale-105 hover:shadow-xl ${
+                      provider === 'codex'
+                        ? 'border-gray-800 dark:border-gray-300 shadow-lg ring-2 ring-gray-800/20 dark:ring-gray-300/20'
+                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-500 dark:hover:border-gray-400'
+                    }`}
                   >
-                    <option value="gpt-5">GPT-5</option>
-                    <option value="sonnet-4">Sonnet-4</option>
-                    <option value="opus-4.1">Opus 4.1</option>
-                  </select>
+                    <div className="flex flex-col items-center justify-center h-full gap-3">
+                      <CodexLogo className="w-10 h-10" />
+                      <div>
+                        <p className="font-semibold text-gray-900 dark:text-white">Codex</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">by OpenAI</p>
+                      </div>
+                    </div>
+                    {provider === 'codex' && (
+                      <div className="absolute top-2 right-2">
+                        <div className="w-5 h-5 bg-gray-800 dark:bg-gray-300 rounded-full flex items-center justify-center">
+                          <svg className="w-3 h-3 text-white dark:text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </div>
+                      </div>
+                    )}
+                  </button>
+                </div>
+
+                {/* Model Selection - Always reserve space to prevent jumping */}
+                <div className={`mb-6 transition-opacity duration-200 ${provider ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Select Model
+                  </label>
+                  {provider === 'claude' ? (
+                    <select
+                      value={claudeModel}
+                      onChange={(e) => {
+                        const newModel = e.target.value;
+                        setClaudeModel(newModel);
+                        localStorage.setItem('claude-model', newModel);
+                      }}
+                      className="pl-4 pr-10 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 min-w-[140px]"
+                    >
+                      {CLAUDE_MODELS.OPTIONS.map(({ value, label }) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
+                  ) : provider === 'codex' ? (
+                    <select
+                      value={codexModel}
+                      onChange={(e) => {
+                        const newModel = e.target.value;
+                        setCodexModel(newModel);
+                        localStorage.setItem('codex-model', newModel);
+                      }}
+                      className="pl-4 pr-10 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 min-w-[140px]"
+                    >
+                      {CODEX_MODELS.OPTIONS.map(({ value, label }) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <select
+                      value={cursorModel}
+                      onChange={(e) => {
+                        const newModel = e.target.value;
+                        setCursorModel(newModel);
+                        localStorage.setItem('cursor-model', newModel);
+                      }}
+                      className="pl-4 pr-10 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 min-w-[140px]"
+                      disabled={provider !== 'cursor'}
+                    >
+                      {CURSOR_MODELS.OPTIONS.map(({ value, label }) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
                 
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {provider === 'claude' 
-                    ? 'Ready to use Claude AI. Start typing your message below.'
+                  {provider === 'claude'
+                    ? `Ready to use Claude with ${claudeModel}. Start typing your message below.`
                     : provider === 'cursor'
                     ? `Ready to use Cursor with ${cursorModel}. Start typing your message below.`
+                    : provider === 'codex'
+                    ? `Ready to use Codex with ${codexModel}. Start typing your message below.`
                     : 'Select a provider above to begin'
                   }
                 </p>
                 
-                {/* Show NextTaskBanner when provider is selected and ready */}
-                {provider && tasksEnabled && (
+                {/* Show NextTaskBanner when provider is selected and ready, only if TaskMaster is installed */}
+                {provider && tasksEnabled && isTaskMasterInstalled && (
                   <div className="mt-4 px-4 sm:px-0">
-                    <NextTaskBanner 
+                    <NextTaskBanner
                       onStartTask={() => setInput('Start the next task')}
                       onShowAllTasks={onShowAllTasks}
                     />
@@ -4350,10 +4637,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   Ask questions about your code, request changes, or get help with development tasks
                 </p>
                 
-                {/* Show NextTaskBanner for existing sessions too */}
-                {tasksEnabled && (
+                {/* Show NextTaskBanner for existing sessions too, only if TaskMaster is installed */}
+                {tasksEnabled && isTaskMasterInstalled && (
                   <div className="mt-4 px-4 sm:px-0">
-                    <NextTaskBanner 
+                    <NextTaskBanner
                       onStartTask={() => setInput('Start the next task')}
                       onShowAllTasks={onShowAllTasks}
                     />
@@ -4428,11 +4715,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0 p-1 bg-transparent">
                   {(localStorage.getItem('selected-provider') || 'claude') === 'cursor' ? (
                     <CursorLogo className="w-full h-full" />
+                  ) : (localStorage.getItem('selected-provider') || 'claude') === 'codex' ? (
+                    <CodexLogo className="w-full h-full" />
                   ) : (
                     <ClaudeLogo className="w-full h-full" />
                   )}
                 </div>
-                <div className="text-sm font-medium text-gray-900 dark:text-white">{(localStorage.getItem('selected-provider') || 'claude') === 'cursor' ? 'Cursor' : 'Claude'}</div>
+                <div className="text-sm font-medium text-gray-900 dark:text-white">{(localStorage.getItem('selected-provider') || 'claude') === 'cursor' ? 'Cursor' : (localStorage.getItem('selected-provider') || 'claude') === 'codex' ? 'Codex' : 'Claude'}</div>
                 {/* Abort button removed - functionality not yet implemented at backend */}
               </div>
               <div className="w-full text-sm text-gray-500 dark:text-gray-400 pl-3 sm:pl-0">

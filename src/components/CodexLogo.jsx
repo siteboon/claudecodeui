@@ -1,16 +1,16 @@
 import React from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 
-const CursorLogo = ({ className = 'w-5 h-5' }) => {
+const CodexLogo = ({ className = 'w-5 h-5' }) => {
   const { isDarkMode } = useTheme();
 
   return (
     <img
-      src={isDarkMode ? "/icons/cursor-white.svg" : "/icons/cursor.svg"}
-      alt="Cursor"
+      src={isDarkMode ? "/icons/codex-white.svg" : "/icons/codex.svg"}
+      alt="Codex"
       className={className}
     />
   );
 };
 
-export default CursorLogo;
+export default CodexLogo;
