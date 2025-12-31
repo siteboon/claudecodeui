@@ -1,6 +1,6 @@
 {
   "name": "@siteboon/claude-code-ui",
-  "version": "1.12.0",
+  "version": "1.13.5",
   "description": "A web-based UI for Claude Code CLI",
   "type": "module",
   "main": "server/index.js",
@@ -10,6 +10,7 @@
   },
   "files": [
     "server/",
+    "shared/",
     "dist/",
     "README.md"
   ],
@@ -49,7 +50,9 @@
     "@codemirror/lang-python": "^6.2.1",
     "@codemirror/merge": "^6.11.1",
     "@codemirror/theme-one-dark": "^6.1.2",
+    "@iarna/toml": "^2.2.5",
     "@octokit/rest": "^22.0.0",
+    "@openai/codex-sdk": "^0.75.0",
     "@replit/codemirror-minimap": "^0.5.2",
     "@tailwindcss/typography": "^0.5.16",
     "@uiw/react-codemirror": "^4.23.13",

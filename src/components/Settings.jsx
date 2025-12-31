@@ -6,13 +6,20 @@ import { X, Plus, Settings as SettingsIcon, Shield, AlertTriangle, Moon, Sun, Se
 import { useTheme } from '../contexts/ThemeContext';
 import ClaudeLogo from './ClaudeLogo';
 import CursorLogo from './CursorLogo';
+import CodexLogo from './CodexLogo';
 import CredentialsSettings from './CredentialsSettings';
 import GitSettings from './GitSettings';
 import TasksSettings from './TasksSettings';
 import LoginModal from './LoginModal';
 import { authenticatedFetch } from '../utils/api';
 
-function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
+// New settings components
+import AgentListItem from './settings/AgentListItem';
+import AccountContent from './settings/AccountContent';
+import PermissionsContent from './settings/PermissionsContent';
+import McpServersContent from './settings/McpServersContent';
+
+function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
   const { isDarkMode, toggleDarkMode } = useTheme();
   const [allowedTools, setAllowedTools] = useState([]);
   const [disallowedTools, setDisallowedTools] = useState([]);
@@ -48,7 +55,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
   const [mcpToolsLoading, setMcpToolsLoading] = useState({});
   const [activeTab, setActiveTab] = useState(initialTab);
   const [jsonValidationError, setJsonValidationError] = useState('');
-  const [toolsProvider, setToolsProvider] = useState('claude'); // 'claude' or 'cursor'
+  const [selectedAgent, setSelectedAgent] = useState('claude'); // 'claude', 'cursor', or 'codex'
+  const [selectedCategory, setSelectedCategory] = useState('account'); // 'account', 'permissions', or 'mcp'
 
   // Code Editor settings
   const [codeEditorTheme, setCodeEditorTheme] = useState(() =>
@@ -75,6 +83,22 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
   const [newCursorDisallowedCommand, setNewCursorDisallowedCommand] = useState('');
   const [cursorMcpServers, setCursorMcpServers] = useState([]);
 
+  // Codex-specific states
+  const [codexMcpServers, setCodexMcpServers] = useState([]);
+  const [codexPermissionMode, setCodexPermissionMode] = useState('default');
+  const [showCodexMcpForm, setShowCodexMcpForm] = useState(false);
+  const [codexMcpFormData, setCodexMcpFormData] = useState({
+    name: '',
+    type: 'stdio',
+    config: {
+      command: '',
+      args: [],
+      env: {}
+    }
+  });
+  const [editingCodexMcpServer, setEditingCodexMcpServer] = useState(null);
+  const [codexMcpLoading, setCodexMcpLoading] = useState(false);
+
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginProvider, setLoginProvider] = useState('');
   const [selectedProject, setSelectedProject] = useState(null);
@@ -86,6 +110,12 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
     error: null
   });
   const [cursorAuthStatus, setCursorAuthStatus] = useState({
+    authenticated: false,
+    email: null,
+    loading: true,
+    error: null
+  });
+  const [codexAuthStatus, setCodexAuthStatus] = useState({
     authenticated: false,
     email: null,
     loading: true,
@@ -141,7 +171,43 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
       console.error('Error fetching Cursor MCP servers:', error);
     }
   };
-  
+
+  const fetchCodexMcpServers = async () => {
+    try {
+      const configResponse = await authenticatedFetch('/api/codex/mcp/config/read');
+
+      if (configResponse.ok) {
+        const configData = await configResponse.json();
+        if (configData.success && configData.servers) {
+          setCodexMcpServers(configData.servers);
+          return;
+        }
+      }
+
+      const cliResponse = await authenticatedFetch('/api/codex/mcp/cli/list');
+
+      if (cliResponse.ok) {
+        const cliData = await cliResponse.json();
+        if (cliData.success && cliData.servers) {
+          const servers = cliData.servers.map(server => ({
+            id: server.name,
+            name: server.name,
+            type: server.type || 'stdio',
+            scope: 'user',
+            config: {
+              command: server.command || '',
+              args: server.args || [],
+              env: server.env || {}
+            }
+          }));
+          setCodexMcpServers(servers);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching Codex MCP servers:', error);
+    }
+  };
+
   // MCP API functions
   const fetchMcpServers = async () => {
     try {
@@ -303,11 +369,134 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
     }
   };
 
+  const saveCodexMcpServer = async (serverData) => {
+    try {
+      if (editingCodexMcpServer) {
+        await deleteCodexMcpServer(editingCodexMcpServer.id);
+      }
+
+      const response = await authenticatedFetch('/api/codex/mcp/cli/add', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: serverData.name,
+          command: serverData.config?.command,
+          args: serverData.config?.args || [],
+          env: serverData.config?.env || {}
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          await fetchCodexMcpServers();
+          return true;
+        } else {
+          throw new Error(result.error || 'Failed to save Codex MCP server');
+        }
+      } else {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to save server');
+      }
+    } catch (error) {
+      console.error('Error saving Codex MCP server:', error);
+      throw error;
+    }
+  };
+
+  const deleteCodexMcpServer = async (serverId) => {
+    try {
+      const response = await authenticatedFetch(`/api/codex/mcp/cli/remove/${serverId}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          await fetchCodexMcpServers();
+          return true;
+        } else {
+          throw new Error(result.error || 'Failed to delete Codex MCP server');
+        }
+      } else {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to delete server');
+      }
+    } catch (error) {
+      console.error('Error deleting Codex MCP server:', error);
+      throw error;
+    }
+  };
+
+  const resetCodexMcpForm = () => {
+    setCodexMcpFormData({
+      name: '',
+      type: 'stdio',
+      config: {
+        command: '',
+        args: [],
+        env: {}
+      }
+    });
+    setEditingCodexMcpServer(null);
+    setShowCodexMcpForm(false);
+  };
+
+  const openCodexMcpForm = (server = null) => {
+    if (server) {
+      setEditingCodexMcpServer(server);
+      setCodexMcpFormData({
+        name: server.name,
+        type: server.type || 'stdio',
+        config: {
+          command: server.config?.command || '',
+          args: server.config?.args || [],
+          env: server.config?.env || {}
+        }
+      });
+    } else {
+      resetCodexMcpForm();
+    }
+    setShowCodexMcpForm(true);
+  };
+
+  const handleCodexMcpSubmit = async (e) => {
+    e.preventDefault();
+    setCodexMcpLoading(true);
+
+    try {
+      if (editingCodexMcpServer) {
+        // Delete old server first, then add new one
+        await deleteCodexMcpServer(editingCodexMcpServer.name);
+      }
+      await saveCodexMcpServer(codexMcpFormData);
+      resetCodexMcpForm();
+      setSaveStatus('success');
+    } catch (error) {
+      alert(`Error: ${error.message}`);
+      setSaveStatus('error');
+    } finally {
+      setCodexMcpLoading(false);
+    }
+  };
+
+  const handleCodexMcpDelete = async (serverName) => {
+    if (confirm('Are you sure you want to delete this MCP server?')) {
+      try {
+        await deleteCodexMcpServer(serverName);
+        setSaveStatus('success');
+      } catch (error) {
+        alert(`Error: ${error.message}`);
+        setSaveStatus('error');
+      }
+    }
+  };
+
   useEffect(() => {
     if (isOpen) {
       loadSettings();
       checkClaudeAuthStatus();
       checkCursorAuthStatus();
+      checkCodexAuthStatus();
       setActiveTab(initialTab);
     }
   }, [isOpen, initialTab]);
@@ -360,7 +549,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
       
       // Load Cursor settings from localStorage
       const savedCursorSettings = localStorage.getItem('cursor-tools-settings');
-      
+
       if (savedCursorSettings) {
         const cursorSettings = JSON.parse(savedCursorSettings);
         setCursorAllowedCommands(cursorSettings.allowedCommands || []);
@@ -373,11 +562,24 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
         setCursorSkipPermissions(false);
       }
 
+      // Load Codex settings from localStorage
+      const savedCodexSettings = localStorage.getItem('codex-settings');
+
+      if (savedCodexSettings) {
+        const codexSettings = JSON.parse(savedCodexSettings);
+        setCodexPermissionMode(codexSettings.permissionMode || 'default');
+      } else {
+        setCodexPermissionMode('default');
+      }
+
       // Load MCP servers from API
       await fetchMcpServers();
-      
+
       // Load Cursor MCP servers
       await fetchCursorMcpServers();
+
+      // Load Codex MCP servers
+      await fetchCodexMcpServers();
     } catch (error) {
       console.error('Error loading tool settings:', error);
       setAllowedTools([]);
@@ -448,6 +650,38 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
       });
     }
   };
+
+  const checkCodexAuthStatus = async () => {
+    try {
+      const response = await authenticatedFetch('/api/cli/codex/status');
+
+      if (response.ok) {
+        const data = await response.json();
+        setCodexAuthStatus({
+          authenticated: data.authenticated,
+          email: data.email,
+          loading: false,
+          error: data.error || null
+        });
+      } else {
+        setCodexAuthStatus({
+          authenticated: false,
+          email: null,
+          loading: false,
+          error: 'Failed to check authentication status'
+        });
+      }
+    } catch (error) {
+      console.error('Error checking Codex auth status:', error);
+      setCodexAuthStatus({
+        authenticated: false,
+        email: null,
+        loading: false,
+        error: error.message
+      });
+    }
+  };
+
   const handleClaudeLogin = () => {
     setLoginProvider('claude');
     setSelectedProject(projects?.[0] || { name: 'default', fullPath: process.cwd() });
@@ -460,6 +694,12 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
     setShowLoginModal(true);
   };
 
+  const handleCodexLogin = () => {
+    setLoginProvider('codex');
+    setSelectedProject(projects?.[0] || { name: 'default', fullPath: process.cwd() });
+    setShowLoginModal(true);
+  };
+
   const handleLoginComplete = (exitCode) => {
     if (exitCode === 0) {
       setSaveStatus('success');
@@ -468,6 +708,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
         checkClaudeAuthStatus();
       } else if (loginProvider === 'cursor') {
         checkCursorAuthStatus();
+      } else if (loginProvider === 'codex') {
+        checkCodexAuthStatus();
       }
     }
   };
@@ -493,11 +735,18 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
         skipPermissions: cursorSkipPermissions,
         lastUpdated: new Date().toISOString()
       };
-      
+
+      // Save Codex settings
+      const codexSettings = {
+        permissionMode: codexPermissionMode,
+        lastUpdated: new Date().toISOString()
+      };
+
       // Save to localStorage
       localStorage.setItem('claude-settings', JSON.stringify(claudeSettings));
       localStorage.setItem('cursor-tools-settings', JSON.stringify(cursorSettings));
-      
+      localStorage.setItem('codex-settings', JSON.stringify(codexSettings));
+
       setSaveStatus('success');
       
       setTimeout(() => {
@@ -716,14 +965,14 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
           <div className="border-b border-border">
             <div className="flex px-4 md:px-6">
               <button
-                onClick={() => setActiveTab('tools')}
+                onClick={() => setActiveTab('agents')}
                 className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === 'tools'
+                  activeTab === 'agents'
                     ? 'border-blue-600 text-blue-600 dark:text-blue-400'
                     : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
               >
-                Tools
+                Agents
               </button>
               <button
                 onClick={() => setActiveTab('appearance')}
@@ -997,474 +1246,197 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
             {/* Git Tab */}
             {activeTab === 'git' && <GitSettings />}
 
-            {/* Tools Tab */}
-            {activeTab === 'tools' && (
-              <div className="space-y-6 md:space-y-8">
-            
-            {/* Provider Tabs */}
-            <div className="border-b border-gray-300 dark:border-gray-600">
-              <div className="flex gap-4">
-                <button
-                  onClick={() => setToolsProvider('claude')}
-                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                    toolsProvider === 'claude'
-                      ? 'border-blue-600 text-blue-600 dark:text-blue-400'
-                      : 'border-transparent text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <ClaudeLogo className="w-4 h-4" />
-                    <span>Claude</span>
+            {/* Agents Tab */}
+            {activeTab === 'agents' && (
+              <div className="flex flex-col md:flex-row h-full min-h-[400px] md:min-h-[500px]">
+                {/* Mobile: Horizontal Agent Tabs */}
+                <div className="md:hidden border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+                  <div className="flex">
+                    <AgentListItem
+                      agentId="claude"
+                      authStatus={claudeAuthStatus}
+                      isSelected={selectedAgent === 'claude'}
+                      onClick={() => setSelectedAgent('claude')}
+                      isMobile={true}
+                    />
+                    <AgentListItem
+                      agentId="cursor"
+                      authStatus={cursorAuthStatus}
+                      isSelected={selectedAgent === 'cursor'}
+                      onClick={() => setSelectedAgent('cursor')}
+                      isMobile={true}
+                    />
+                    <AgentListItem
+                      agentId="codex"
+                      authStatus={codexAuthStatus}
+                      isSelected={selectedAgent === 'codex'}
+                      onClick={() => setSelectedAgent('codex')}
+                      isMobile={true}
+                    />
                   </div>
-                </button>
-                <button
-                  onClick={() => setToolsProvider('cursor')}
-                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                    toolsProvider === 'cursor'
-                      ? 'border-purple-600 text-purple-600 dark:text-purple-400'
-                      : 'border-transparent text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <CursorLogo className="w-4 h-4" />
-                    <span>Cursor</span>
-                  </div>
-                </button>
-              </div>
-            </div>
-            
-            {/* Claude Content */}
-            {toolsProvider === 'claude' && (
-              <div className="space-y-6 md:space-y-8">
-            
-            {/* Skip Permissions */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <AlertTriangle className="w-5 h-5 text-orange-500" />
-                <h3 className="text-lg font-medium text-foreground">
-                  Permission Settings
-                </h3>
-              </div>
-              <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
-                <label className="flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    checked={skipPermissions}
-                    onChange={(e) => setSkipPermissions(e.target.checked)}
-                    className="w-4 h-4 text-blue-600 bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500 focus:ring-2 checked:bg-blue-600 dark:checked:bg-blue-600"
-                  />
-                  <div>
-                    <div className="font-medium text-orange-900 dark:text-orange-100">
-                      Skip permission prompts (use with caution)
-                    </div>
-                    <div className="text-sm text-orange-700 dark:text-orange-300">
-                      Equivalent to --dangerously-skip-permissions flag
-                    </div>
-                  </div>
-                </label>
-              </div>
-            </div>
+                </div>
 
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <LogIn className="w-5 h-5 text-blue-500" />
-                <h3 className="text-lg font-medium text-foreground">
-                  Authentication
-                </h3>
-              </div>
-              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    {claudeAuthStatus.loading ? (
-                      <span className="text-sm text-blue-700 dark:text-blue-300">
-                        Checking authentication...
-                      </span>
-                    ) : claudeAuthStatus.authenticated ? (
-                      <div className="flex items-center gap-2">
-                        <Badge variant="success" className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
-                          ✓ Logged in
-                        </Badge>
-                        {claudeAuthStatus.email && (
-                          <span className="text-sm text-blue-700 dark:text-blue-300">
-                            as {claudeAuthStatus.email}
-                          </span>
-                        )}
-                      </div>
-                    ) : (
-                      <Badge variant="secondary" className="bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300">
-                        Not authenticated
-                      </Badge>
+                {/* Desktop: Sidebar - Agent List */}
+                <div className="hidden md:block w-48 border-r border-gray-200 dark:border-gray-700 flex-shrink-0">
+                  <div className="p-2">
+                    <AgentListItem
+                      agentId="claude"
+                      authStatus={claudeAuthStatus}
+                      isSelected={selectedAgent === 'claude'}
+                      onClick={() => setSelectedAgent('claude')}
+                    />
+                    <AgentListItem
+                      agentId="cursor"
+                      authStatus={cursorAuthStatus}
+                      isSelected={selectedAgent === 'cursor'}
+                      onClick={() => setSelectedAgent('cursor')}
+                    />
+                    <AgentListItem
+                      agentId="codex"
+                      authStatus={codexAuthStatus}
+                      isSelected={selectedAgent === 'codex'}
+                      onClick={() => setSelectedAgent('codex')}
+                    />
+                  </div>
+                </div>
+
+                {/* Main Panel */}
+                <div className="flex-1 flex flex-col overflow-hidden">
+                  {/* Category Tabs */}
+                  <div className="border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+                    <div className="flex px-2 md:px-4 overflow-x-auto">
+                      <button
+                        onClick={() => setSelectedCategory('account')}
+                        className={`px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                          selectedCategory === 'account'
+                            ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                            : 'border-transparent text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        Account
+                      </button>
+                      <button
+                        onClick={() => setSelectedCategory('permissions')}
+                        className={`px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                          selectedCategory === 'permissions'
+                            ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                            : 'border-transparent text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        Permissions
+                      </button>
+                      <button
+                        onClick={() => setSelectedCategory('mcp')}
+                        className={`px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                          selectedCategory === 'mcp'
+                            ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                            : 'border-transparent text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        MCP Servers
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Category Content */}
+                  <div className="flex-1 overflow-y-auto p-3 md:p-4">
+                    {/* Account Category */}
+                    {selectedCategory === 'account' && (
+                      <AccountContent
+                        agent={selectedAgent}
+                        authStatus={
+                          selectedAgent === 'claude' ? claudeAuthStatus :
+                          selectedAgent === 'cursor' ? cursorAuthStatus :
+                          codexAuthStatus
+                        }
+                        onLogin={
+                          selectedAgent === 'claude' ? handleClaudeLogin :
+                          selectedAgent === 'cursor' ? handleCursorLogin :
+                          handleCodexLogin
+                        }
+                      />
+                    )}
+
+                    {/* Permissions Category */}
+                    {selectedCategory === 'permissions' && selectedAgent === 'claude' && (
+                      <PermissionsContent
+                        agent="claude"
+                        skipPermissions={skipPermissions}
+                        setSkipPermissions={setSkipPermissions}
+                        allowedTools={allowedTools}
+                        setAllowedTools={setAllowedTools}
+                        disallowedTools={disallowedTools}
+                        setDisallowedTools={setDisallowedTools}
+                        newAllowedTool={newAllowedTool}
+                        setNewAllowedTool={setNewAllowedTool}
+                        newDisallowedTool={newDisallowedTool}
+                        setNewDisallowedTool={setNewDisallowedTool}
+                      />
+                    )}
+
+                    {selectedCategory === 'permissions' && selectedAgent === 'cursor' && (
+                      <PermissionsContent
+                        agent="cursor"
+                        skipPermissions={cursorSkipPermissions}
+                        setSkipPermissions={setCursorSkipPermissions}
+                        allowedCommands={cursorAllowedCommands}
+                        setAllowedCommands={setCursorAllowedCommands}
+                        disallowedCommands={cursorDisallowedCommands}
+                        setDisallowedCommands={setCursorDisallowedCommands}
+                        newAllowedCommand={newCursorCommand}
+                        setNewAllowedCommand={setNewCursorCommand}
+                        newDisallowedCommand={newCursorDisallowedCommand}
+                        setNewDisallowedCommand={setNewCursorDisallowedCommand}
+                      />
+                    )}
+
+                    {selectedCategory === 'permissions' && selectedAgent === 'codex' && (
+                      <PermissionsContent
+                        agent="codex"
+                        permissionMode={codexPermissionMode}
+                        setPermissionMode={setCodexPermissionMode}
+                      />
+                    )}
+
+                    {/* MCP Servers Category */}
+                    {selectedCategory === 'mcp' && selectedAgent === 'claude' && (
+                      <McpServersContent
+                        agent="claude"
+                        servers={mcpServers}
+                        onAdd={() => openMcpForm()}
+                        onEdit={(server) => openMcpForm(server)}
+                        onDelete={(serverId, scope) => handleMcpDelete(serverId, scope)}
+                        onTest={(serverId, scope) => handleMcpTest(serverId, scope)}
+                        onDiscoverTools={(serverId, scope) => handleMcpToolsDiscovery(serverId, scope)}
+                        testResults={mcpTestResults}
+                        serverTools={mcpServerTools}
+                        toolsLoading={mcpToolsLoading}
+                      />
+                    )}
+
+                    {selectedCategory === 'mcp' && selectedAgent === 'cursor' && (
+                      <McpServersContent
+                        agent="cursor"
+                        servers={cursorMcpServers}
+                        onAdd={() => {/* TODO: Add cursor MCP form */}}
+                        onEdit={(server) => {/* TODO: Edit cursor MCP form */}}
+                        onDelete={(serverId) => {/* TODO: Delete cursor MCP */}}
+                      />
+                    )}
+
+                    {selectedCategory === 'mcp' && selectedAgent === 'codex' && (
+                      <McpServersContent
+                        agent="codex"
+                        servers={codexMcpServers}
+                        onAdd={() => openCodexMcpForm()}
+                        onEdit={(server) => openCodexMcpForm(server)}
+                        onDelete={(serverId) => handleCodexMcpDelete(serverId)}
+                      />
                     )}
                   </div>
-
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="font-medium text-blue-900 dark:text-blue-100">
-                        Claude CLI Login
-                      </div>
-                      <div className="text-sm text-blue-700 dark:text-blue-300">
-                        {claudeAuthStatus.authenticated
-                          ? 'Re-authenticate or switch accounts'
-                          : 'Sign in to your Claude account to enable AI features'}
-                      </div>
-                    </div>
-                    <Button
-                      onClick={handleClaudeLogin}
-                      className="bg-blue-600 hover:bg-blue-700 text-white"
-                      size="sm"
-                    >
-                      <LogIn className="w-4 h-4 mr-2" />
-                      Login
-                    </Button>
-                  </div>
                 </div>
               </div>
-            </div>
-
-            {/* Allowed Tools */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <Shield className="w-5 h-5 text-green-500" />
-                <h3 className="text-lg font-medium text-foreground">
-                  Allowed Tools
-                </h3>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Tools that are automatically allowed without prompting for permission
-              </p>
-              
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Input
-                  value={newAllowedTool}
-                  onChange={(e) => setNewAllowedTool(e.target.value)}
-                  placeholder='e.g., "Bash(git log:*)" or "Write"'
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter') {
-                      addAllowedTool(newAllowedTool);
-                    }
-                  }}
-                  className="flex-1 h-10 touch-manipulation"
-                  style={{ fontSize: '16px' }}
-                />
-                <Button
-                  onClick={() => addAllowedTool(newAllowedTool)}
-                  disabled={!newAllowedTool}
-                  size="sm"
-                  className="h-10 px-4 touch-manipulation"
-                >
-                  <Plus className="w-4 h-4 mr-2 sm:mr-0" />
-                  <span className="sm:hidden">Add Tool</span>
-                </Button>
-              </div>
-
-              {/* Common tools quick add */}
-              <div className="space-y-2">
-                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Quick add common tools:
-                </p>
-                <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
-                  {commonTools.map(tool => (
-                    <Button
-                      key={tool}
-                      variant="outline"
-                      size="sm"
-                      onClick={() => addAllowedTool(tool)}
-                      disabled={allowedTools.includes(tool)}
-                      className="text-xs h-8 touch-manipulation truncate"
-                    >
-                      {tool}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                {allowedTools.map(tool => (
-                  <div key={tool} className="flex items-center justify-between bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
-                    <span className="font-mono text-sm text-green-800 dark:text-green-200">
-                      {tool}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeAllowedTool(tool)}
-                      className="text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300"
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ))}
-                {allowedTools.length === 0 && (
-                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                    No allowed tools configured
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Disallowed Tools */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <AlertTriangle className="w-5 h-5 text-red-500" />
-                <h3 className="text-lg font-medium text-foreground">
-                  Disallowed Tools
-                </h3>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Tools that are automatically blocked without prompting for permission
-              </p>
-              
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Input
-                  value={newDisallowedTool}
-                  onChange={(e) => setNewDisallowedTool(e.target.value)}
-                  placeholder='e.g., "Bash(rm:*)" or "Write"'
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter') {
-                      addDisallowedTool(newDisallowedTool);
-                    }
-                  }}
-                  className="flex-1 h-10 touch-manipulation"
-                  style={{ fontSize: '16px' }}
-                />
-                <Button
-                  onClick={() => addDisallowedTool(newDisallowedTool)}
-                  disabled={!newDisallowedTool}
-                  size="sm"
-                  className="h-10 px-4 touch-manipulation"
-                >
-                  <Plus className="w-4 h-4 mr-2 sm:mr-0" />
-                  <span className="sm:hidden">Add Tool</span>
-                </Button>
-              </div>
-
-              <div className="space-y-2">
-                {disallowedTools.map(tool => (
-                  <div key={tool} className="flex items-center justify-between bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
-                    <span className="font-mono text-sm text-red-800 dark:text-red-200">
-                      {tool}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeDisallowedTool(tool)}
-                      className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ))}
-                {disallowedTools.length === 0 && (
-                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                    No disallowed tools configured
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Help Section */}
-            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-              <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">
-                Tool Pattern Examples:
-              </h4>
-              <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
-                <li><code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">"Bash(git log:*)"</code> - Allow all git log commands</li>
-                <li><code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">"Bash(git diff:*)"</code> - Allow all git diff commands</li>
-                <li><code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">"Write"</code> - Allow all Write tool usage</li>
-                <li><code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">"Read"</code> - Allow all Read tool usage</li>
-                <li><code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">"Bash(rm:*)"</code> - Block all rm commands (dangerous)</li>
-              </ul>
-            </div>
-
-            {/* MCP Server Management */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <Server className="w-5 h-5 text-purple-500" />
-                <h3 className="text-lg font-medium text-foreground">
-                  MCP Servers
-                </h3>
-              </div>
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">
-                  Model Context Protocol servers provide additional tools and data sources to Claude
-                </p>
-              </div>
-              
-              <div className="flex justify-between items-center">
-                <Button
-                  onClick={() => openMcpForm()}
-                  className="bg-purple-600 hover:bg-purple-700 text-white"
-                  size="sm"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add MCP Server
-                </Button>
-              </div>
-
-              {/* MCP Servers List */}
-              <div className="space-y-2">
-                {mcpServers.map(server => (
-                  <div key={server.id} className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          {getTransportIcon(server.type)}
-                          <span className="font-medium text-foreground">{server.name}</span>
-                          <Badge variant="outline" className="text-xs">
-                            {server.type}
-                          </Badge>
-                          <Badge variant="outline" className="text-xs">
-                            {server.scope === 'local' ? '📁 local' : server.scope === 'user' ? '👤 user' : server.scope}
-                          </Badge>
-                          {server.projectPath && (
-                            <Badge variant="outline" className="text-xs bg-purple-50 dark:bg-purple-900/20" title={server.projectPath}>
-                              {server.projectPath.split('/').pop()}
-                            </Badge>
-                          )}
-                        </div>
-                        
-                        <div className="text-sm text-muted-foreground space-y-1">
-                          {server.type === 'stdio' && server.config.command && (
-                            <div>Command: <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded text-xs">{server.config.command}</code></div>
-                          )}
-                          {(server.type === 'sse' || server.type === 'http') && server.config.url && (
-                            <div>URL: <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded text-xs">{server.config.url}</code></div>
-                          )}
-                          {server.config.args && server.config.args.length > 0 && (
-                            <div>Args: <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded text-xs">{server.config.args.join(' ')}</code></div>
-                          )}
-                          {server.config.env && Object.keys(server.config.env).length > 0 && (
-                            <div>Environment: <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded text-xs">{Object.entries(server.config.env).map(([k, v]) => `${k}=${v}`).join(', ')}</code></div>
-                          )}
-                          {server.raw && (
-                            <details className="mt-2">
-                              <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">View full config</summary>
-                              <pre className="mt-1 text-xs bg-gray-100 dark:bg-gray-800 p-2 rounded overflow-x-auto">
-                                {JSON.stringify(server.raw, null, 2)}
-                              </pre>
-                            </details>
-                          )}
-                        </div>
-
-                        {/* Test Results */}
-                        {mcpTestResults[server.id] && (
-                          <div className={`mt-2 p-2 rounded text-xs ${
-                            mcpTestResults[server.id].success 
-                              ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200' 
-                              : 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200'
-                          }`}>
-                            <div className="font-medium">{mcpTestResults[server.id].message}</div>
-                            {mcpTestResults[server.id].details && mcpTestResults[server.id].details.length > 0 && (
-                              <ul className="mt-1 space-y-0.5">
-                                {mcpTestResults[server.id].details.map((detail, i) => (
-                                  <li key={i}>• {detail}</li>
-                                ))}
-                              </ul>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Tools Discovery Results */}
-                        {mcpServerTools[server.id] && (
-                          <div className="mt-2 p-2 rounded text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200 border border-blue-200 dark:border-blue-800">
-                            <div className="font-medium mb-2">Available Tools & Resources</div>
-                            
-                            {mcpServerTools[server.id].tools && mcpServerTools[server.id].tools.length > 0 && (
-                              <div className="mb-2">
-                                <div className="font-medium text-xs mb-1">Tools ({mcpServerTools[server.id].tools.length}):</div>
-                                <ul className="space-y-0.5">
-                                  {mcpServerTools[server.id].tools.map((tool, i) => (
-                                    <li key={i} className="flex items-start gap-1">
-                                      <span className="text-blue-400 mt-0.5">•</span>
-                                      <div>
-                                        <code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">{tool.name}</code>
-                                        {tool.description && tool.description !== 'No description provided' && (
-                                          <span className="ml-1 text-xs opacity-75">- {tool.description}</span>
-                                        )}
-                                      </div>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-
-                            {mcpServerTools[server.id].resources && mcpServerTools[server.id].resources.length > 0 && (
-                              <div className="mb-2">
-                                <div className="font-medium text-xs mb-1">Resources ({mcpServerTools[server.id].resources.length}):</div>
-                                <ul className="space-y-0.5">
-                                  {mcpServerTools[server.id].resources.map((resource, i) => (
-                                    <li key={i} className="flex items-start gap-1">
-                                      <span className="text-blue-400 mt-0.5">•</span>
-                                      <div>
-                                        <code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">{resource.name}</code>
-                                        {resource.description && resource.description !== 'No description provided' && (
-                                          <span className="ml-1 text-xs opacity-75">- {resource.description}</span>
-                                        )}
-                                      </div>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-
-                            {mcpServerTools[server.id].prompts && mcpServerTools[server.id].prompts.length > 0 && (
-                              <div>
-                                <div className="font-medium text-xs mb-1">Prompts ({mcpServerTools[server.id].prompts.length}):</div>
-                                <ul className="space-y-0.5">
-                                  {mcpServerTools[server.id].prompts.map((prompt, i) => (
-                                    <li key={i} className="flex items-start gap-1">
-                                      <span className="text-blue-400 mt-0.5">•</span>
-                                      <div>
-                                        <code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">{prompt.name}</code>
-                                        {prompt.description && prompt.description !== 'No description provided' && (
-                                          <span className="ml-1 text-xs opacity-75">- {prompt.description}</span>
-                                        )}
-                                      </div>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-
-                            {(!mcpServerTools[server.id].tools || mcpServerTools[server.id].tools.length === 0) &&
-                             (!mcpServerTools[server.id].resources || mcpServerTools[server.id].resources.length === 0) &&
-                             (!mcpServerTools[server.id].prompts || mcpServerTools[server.id].prompts.length === 0) && (
-                              <div className="text-xs opacity-75">No tools, resources, or prompts discovered</div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                      
-                      <div className="flex items-center gap-2 ml-4">
-                        <Button
-                          onClick={() => openMcpForm(server)}
-                          variant="ghost"
-                          size="sm"
-                          className="text-gray-600 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
-                          title="Edit server"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          onClick={() => handleMcpDelete(server.id, server.scope)}
-                          variant="ghost"
-                          size="sm"
-                          className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-                          title="Delete server"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                {mcpServers.length === 0 && (
-                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                    No MCP servers configured
-                  </div>
-                )}
-              </div>
-            </div>
+            )}
 
             {/* MCP Server Form Modal */}
             {showMcpForm && (
@@ -1816,272 +1788,103 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                 </div>
               </div>
             )}
-              </div>
-            )}
-            
-            {/* Cursor Content */}
-            {toolsProvider === 'cursor' && (
-              <div className="space-y-6 md:space-y-8">
-                
-                {/* Skip Permissions for Cursor */}
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <AlertTriangle className="w-5 h-5 text-orange-500" />
+
+            {/* Codex MCP Server Form Modal */}
+            {showCodexMcpForm && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[110] p-4">
+                <div className="bg-background border border-border rounded-lg w-full max-w-lg max-h-[90vh] overflow-y-auto">
+                  <div className="flex items-center justify-between p-4 border-b border-border">
                     <h3 className="text-lg font-medium text-foreground">
-                      Cursor Permission Settings
+                      {editingCodexMcpServer ? 'Edit MCP Server' : 'Add MCP Server'}
                     </h3>
+                    <Button variant="ghost" size="sm" onClick={resetCodexMcpForm}>
+                      <X className="w-4 h-4" />
+                    </Button>
                   </div>
-                  <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
-                    <label className="flex items-center gap-3">
-                      <input
-                        type="checkbox"
-                        checked={cursorSkipPermissions}
-                        onChange={(e) => setCursorSkipPermissions(e.target.checked)}
-                        className="w-4 h-4 text-blue-600 bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500 focus:ring-2 checked:bg-blue-600 dark:checked:bg-blue-600"
+
+                  <form onSubmit={handleCodexMcpSubmit} className="p-4 space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2">
+                        Server Name *
+                      </label>
+                      <Input
+                        value={codexMcpFormData.name}
+                        onChange={(e) => setCodexMcpFormData(prev => ({...prev, name: e.target.value}))}
+                        placeholder="my-mcp-server"
+                        required
                       />
-                      <div>
-                        <div className="font-medium text-orange-900 dark:text-orange-100">
-                          Skip permission prompts (use with caution)
-                        </div>
-                        <div className="text-sm text-orange-700 dark:text-orange-300">
-                          Equivalent to -f flag in Cursor CLI
-                        </div>
-                      </div>
-                    </label>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <LogIn className="w-5 h-5 text-purple-500" />
-                    <h3 className="text-lg font-medium text-foreground">
-                      Authentication
-                    </h3>
-                  </div>
-                  <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2">
-                        {cursorAuthStatus.loading ? (
-                          <span className="text-sm text-purple-700 dark:text-purple-300">
-                            Checking authentication...
-                          </span>
-                        ) : cursorAuthStatus.authenticated ? (
-                          <div className="flex items-center gap-2">
-                            <Badge variant="success" className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
-                              ✓ Logged in
-                            </Badge>
-                            {cursorAuthStatus.email && (
-                              <span className="text-sm text-purple-700 dark:text-purple-300">
-                                as {cursorAuthStatus.email}
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <Badge variant="secondary" className="bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300">
-                            Not authenticated
-                          </Badge>
-                        )}
-                      </div>
-
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="font-medium text-purple-900 dark:text-purple-100">
-                            Cursor CLI Login
-                          </div>
-                          <div className="text-sm text-purple-700 dark:text-purple-300">
-                            {cursorAuthStatus.authenticated
-                              ? 'Re-authenticate or switch accounts'
-                              : 'Sign in to your Cursor account to enable AI features'}
-                          </div>
-                        </div>
-                        <Button
-                          onClick={handleCursorLogin}
-                          className="bg-purple-600 hover:bg-purple-700 text-white"
-                          size="sm"
-                        >
-                          <LogIn className="w-4 h-4 mr-2" />
-                          Login
-                        </Button>
-                      </div>
                     </div>
-                  </div>
-                </div>
 
-                {/* Allowed Shell Commands */}
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <Shield className="w-5 h-5 text-green-500" />
-                    <h3 className="text-lg font-medium text-foreground">
-                      Allowed Shell Commands
-                    </h3>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Shell commands that are automatically allowed without prompting for permission
-                  </p>
-                  
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <Input
-                      value={newCursorCommand}
-                      onChange={(e) => setNewCursorCommand(e.target.value)}
-                      placeholder='e.g., "Shell(ls)" or "Shell(git status)"'
-                      onKeyPress={(e) => {
-                        if (e.key === 'Enter') {
-                          if (newCursorCommand && !cursorAllowedCommands.includes(newCursorCommand)) {
-                            setCursorAllowedCommands([...cursorAllowedCommands, newCursorCommand]);
-                            setNewCursorCommand('');
-                          }
-                        }
-                      }}
-                      className="flex-1 h-10 touch-manipulation"
-                      style={{ fontSize: '16px' }}
-                    />
-                    <Button
-                      onClick={() => {
-                        if (newCursorCommand && !cursorAllowedCommands.includes(newCursorCommand)) {
-                          setCursorAllowedCommands([...cursorAllowedCommands, newCursorCommand]);
-                          setNewCursorCommand('');
-                        }
-                      }}
-                      disabled={!newCursorCommand}
-                      size="sm"
-                      className="h-10 px-4 touch-manipulation"
-                    >
-                      <Plus className="w-4 h-4 mr-2 sm:mr-0" />
-                      <span className="sm:hidden">Add Command</span>
-                    </Button>
-                  </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2">
+                        Command *
+                      </label>
+                      <Input
+                        value={codexMcpFormData.config?.command || ''}
+                        onChange={(e) => setCodexMcpFormData(prev => ({
+                          ...prev,
+                          config: { ...prev.config, command: e.target.value }
+                        }))}
+                        placeholder="npx @my-org/mcp-server"
+                        required
+                      />
+                    </div>
 
-                  {/* Common commands quick add */}
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                      Quick add common commands:
-                    </p>
-                    <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
-                      {commonCursorCommands.map(cmd => (
-                        <Button
-                          key={cmd}
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            if (!cursorAllowedCommands.includes(cmd)) {
-                              setCursorAllowedCommands([...cursorAllowedCommands, cmd]);
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2">
+                        Arguments (one per line)
+                      </label>
+                      <textarea
+                        value={(codexMcpFormData.config?.args || []).join('\n')}
+                        onChange={(e) => setCodexMcpFormData(prev => ({
+                          ...prev,
+                          config: { ...prev.config, args: e.target.value.split('\n').filter(a => a.trim()) }
+                        }))}
+                        placeholder="--port&#10;3000"
+                        rows={3}
+                        className="w-full px-3 py-2 text-sm bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2">
+                        Environment Variables (KEY=VALUE, one per line)
+                      </label>
+                      <textarea
+                        value={Object.entries(codexMcpFormData.config?.env || {}).map(([k, v]) => `${k}=${v}`).join('\n')}
+                        onChange={(e) => {
+                          const env = {};
+                          e.target.value.split('\n').forEach(line => {
+                            const [key, ...valueParts] = line.split('=');
+                            if (key && valueParts.length > 0) {
+                              env[key.trim()] = valueParts.join('=').trim();
                             }
-                          }}
-                          disabled={cursorAllowedCommands.includes(cmd)}
-                          className="text-xs h-8 touch-manipulation truncate"
-                        >
-                          {cmd}
-                        </Button>
-                      ))}
+                          });
+                          setCodexMcpFormData(prev => ({
+                            ...prev,
+                            config: { ...prev.config, env }
+                          }));
+                        }}
+                        placeholder="API_KEY=xxx&#10;DEBUG=true"
+                        rows={3}
+                        className="w-full px-3 py-2 text-sm bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+                      />
                     </div>
-                  </div>
 
-                  <div className="space-y-2">
-                    {cursorAllowedCommands.map(cmd => (
-                      <div key={cmd} className="flex items-center justify-between bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
-                        <span className="font-mono text-sm text-green-800 dark:text-green-200">
-                          {cmd}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setCursorAllowedCommands(cursorAllowedCommands.filter(c => c !== cmd))}
-                          className="text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300"
-                        >
-                          <X className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    ))}
-                    {cursorAllowedCommands.length === 0 && (
-                      <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                        No allowed shell commands configured
-                      </div>
-                    )}
-                  </div>
+                    <div className="flex justify-end gap-2 pt-4 border-t border-border">
+                      <Button type="button" variant="outline" onClick={resetCodexMcpForm}>
+                        Cancel
+                      </Button>
+                      <Button
+                        type="submit"
+                        disabled={codexMcpLoading || !codexMcpFormData.name || !codexMcpFormData.config?.command}
+                        className="bg-green-600 hover:bg-green-700 text-white"
+                      >
+                        {codexMcpLoading ? 'Saving...' : (editingCodexMcpServer ? 'Update Server' : 'Add Server')}
+                      </Button>
+                    </div>
+                  </form>
                 </div>
-                
-                {/* Disallowed Shell Commands */}
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <Shield className="w-5 h-5 text-red-500" />
-                    <h3 className="text-lg font-medium text-foreground">
-                      Disallowed Shell Commands
-                    </h3>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Shell commands that should always be denied
-                  </p>
-                  
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <Input
-                      value={newCursorDisallowedCommand}
-                      onChange={(e) => setNewCursorDisallowedCommand(e.target.value)}
-                      placeholder='e.g., "Shell(rm -rf)" or "Shell(sudo)"'
-                      onKeyPress={(e) => {
-                        if (e.key === 'Enter') {
-                          if (newCursorDisallowedCommand && !cursorDisallowedCommands.includes(newCursorDisallowedCommand)) {
-                            setCursorDisallowedCommands([...cursorDisallowedCommands, newCursorDisallowedCommand]);
-                            setNewCursorDisallowedCommand('');
-                          }
-                        }
-                      }}
-                      className="flex-1 h-10 touch-manipulation"
-                      style={{ fontSize: '16px' }}
-                    />
-                    <Button
-                      onClick={() => {
-                        if (newCursorDisallowedCommand && !cursorDisallowedCommands.includes(newCursorDisallowedCommand)) {
-                          setCursorDisallowedCommands([...cursorDisallowedCommands, newCursorDisallowedCommand]);
-                          setNewCursorDisallowedCommand('');
-                        }
-                      }}
-                      disabled={!newCursorDisallowedCommand}
-                      size="sm"
-                      className="h-10 px-4 touch-manipulation"
-                    >
-                      <Plus className="w-4 h-4 mr-2 sm:mr-0" />
-                      <span className="sm:hidden">Add Command</span>
-                    </Button>
-                  </div>
-
-                  <div className="space-y-2">
-                    {cursorDisallowedCommands.map(cmd => (
-                      <div key={cmd} className="flex items-center justify-between bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
-                        <span className="font-mono text-sm text-red-800 dark:text-red-200">
-                          {cmd}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setCursorDisallowedCommands(cursorDisallowedCommands.filter(c => c !== cmd))}
-                          className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-                        >
-                          <X className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    ))}
-                    {cursorDisallowedCommands.length === 0 && (
-                      <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                        No disallowed shell commands configured
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Help Section */}
-                <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
-                  <h4 className="font-medium text-purple-900 dark:text-purple-100 mb-2">
-                    Cursor Shell Command Examples:
-                  </h4>
-                  <ul className="text-sm text-purple-800 dark:text-purple-200 space-y-1">
-                    <li><code className="bg-purple-100 dark:bg-purple-800 px-1 rounded">"Shell(ls)"</code> - Allow ls command</li>
-                    <li><code className="bg-purple-100 dark:bg-purple-800 px-1 rounded">"Shell(git status)"</code> - Allow git status command</li>
-                    <li><code className="bg-purple-100 dark:bg-purple-800 px-1 rounded">"Shell(mkdir)"</code> - Allow mkdir command</li>
-                    <li><code className="bg-purple-100 dark:bg-purple-800 px-1 rounded">"-f"</code> flag - Skip all permission prompts (dangerous)</li>
-                  </ul>
-                </div>
-              </div>
-            )}
               </div>
             )}
 
@@ -2149,6 +1952,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
 
       {/* Login Modal */}
       <LoginModal
+        key={loginProvider}
         isOpen={showLoginModal}
         onClose={() => setShowLoginModal(false)}
         provider={loginProvider}

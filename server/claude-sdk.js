@@ -16,6 +16,7 @@ import { query } from '@anthropic-ai/claude-agent-sdk';
 import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
+import { CLAUDE_MODELS } from '../shared/modelConstants.js';
 
 // Session tracking: Map of session IDs to active query instances
 const activeSessions = new Map();
@@ -57,7 +58,7 @@ function mapCliOptionsToSDK(options = {}) {
 
     // Add plan mode default tools
     if (permissionMode === 'plan') {
-      const planModeTools = ['Read', 'Task', 'exit_plan_mode', 'TodoRead', 'TodoWrite'];
+      const planModeTools = ['Read', 'Task', 'exit_plan_mode', 'TodoRead', 'TodoWrite', 'WebFetch', 'WebSearch'];
       for (const tool of planModeTools) {
         if (!allowedTools.includes(tool)) {
           allowedTools.push(tool);
@@ -76,8 +77,9 @@ function mapCliOptionsToSDK(options = {}) {
   }
 
   // Map model (default to sonnet)
-  // Map model (default to sonnet)
-  sdkOptions.model = options.model || 'sonnet';
+  // Valid models: sonnet, opus, haiku, opusplan, sonnet[1m]
+  sdkOptions.model = options.model || CLAUDE_MODELS.DEFAULT;
+  console.log(`Using model: ${sdkOptions.model}`);
 
   // Map system prompt configuration
   sdkOptions.systemPrompt = {
@@ -183,7 +185,7 @@ function extractTokenBudget(resultMessage) {
   // This is the user's budget limit, not the model's context window
   const contextWindow = parseInt(process.env.CONTEXT_WINDOW) || 160000;
 
-  console.log(`📊 Token calculation: input=${inputTokens}, output=${outputTokens}, cache=${cacheReadTokens + cacheCreationTokens}, total=${totalUsed}/${contextWindow}`);
+  console.log(`Token calculation: input=${inputTokens}, output=${outputTokens}, cache=${cacheReadTokens + cacheCreationTokens}, total=${totalUsed}/${contextWindow}`);
 
   return {
     used: totalUsed,
@@ -239,7 +241,7 @@ async function handleImages(command, images, cwd) {
       modifiedCommand = command + imageNote;
     }
 
-    console.log(`📸 Processed ${tempImagePaths.length} images to temp directory: ${tempDir}`);
+    console.log(`Processed ${tempImagePaths.length} images to temp directory: ${tempDir}`);
     return { modifiedCommand, tempImagePaths, tempDir };
   } catch (error) {
     console.error('Error processing images for SDK:', error);
@@ -272,7 +274,7 @@ async function cleanupTempFiles(tempImagePaths, tempDir) {
       );
     }
 
-    console.log(`🧹 Cleaned up ${tempImagePaths.length} temp image files`);
+    console.log(`Cleaned up ${tempImagePaths.length} temp image files`);
   } catch (error) {
     console.error('Error during temp file cleanup:', error);
   }
@@ -292,7 +294,7 @@ async function loadMcpConfig(cwd) {
       await fs.access(claudeConfigPath);
     } catch (error) {
       // File doesn't exist, return null
-      console.log('📡 No ~/.claude.json found, proceeding without MCP servers');
+      console.log('No ~/.claude.json found, proceeding without MCP servers');
       return null;
     }
 
@@ -302,7 +304,7 @@ async function loadMcpConfig(cwd) {
       const configContent = await fs.readFile(claudeConfigPath, 'utf8');
       claudeConfig = JSON.parse(configContent);
     } catch (error) {
-      console.error('❌ Failed to parse ~/.claude.json:', error.message);
+      console.error('Failed to parse ~/.claude.json:', error.message);
       return null;
     }
 
@@ -312,7 +314,7 @@ async function loadMcpConfig(cwd) {
     // Add global MCP servers
     if (claudeConfig.mcpServers && typeof claudeConfig.mcpServers === 'object') {
       mcpServers = { ...claudeConfig.mcpServers };
-      console.log(`📡 Loaded ${Object.keys(mcpServers).length} global MCP servers`);
+      console.log(`Loaded ${Object.keys(mcpServers).length} global MCP servers`);
     }
 
     // Add/override with project-specific MCP servers
@@ -320,20 +322,20 @@ async function loadMcpConfig(cwd) {
       const projectConfig = claudeConfig.claudeProjects[cwd];
       if (projectConfig && projectConfig.mcpServers && typeof projectConfig.mcpServers === 'object') {
         mcpServers = { ...mcpServers, ...projectConfig.mcpServers };
-        console.log(`📡 Loaded ${Object.keys(projectConfig.mcpServers).length} project-specific MCP servers`);
+        console.log(`Loaded ${Object.keys(projectConfig.mcpServers).length} project-specific MCP servers`);
       }
     }
 
     // Return null if no servers found
     if (Object.keys(mcpServers).length === 0) {
-      console.log('📡 No MCP servers configured');
+      console.log('No MCP servers configured');
       return null;
     }
 
-    console.log(`✅ Total MCP servers loaded: ${Object.keys(mcpServers).length}`);
+    console.log(`Total MCP servers loaded: ${Object.keys(mcpServers).length}`);
     return mcpServers;
   } catch (error) {
-    console.error('❌ Error loading MCP config:', error.message);
+    console.error('Error loading MCP config:', error.message);
     return null;
   }
 }
@@ -380,7 +382,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
     }
 
     // Process streaming messages
-    console.log('🔄 Starting async generator loop for session:', capturedSessionId || 'NEW');
+    console.log('Starting async generator loop for session:', capturedSessionId || 'NEW');
     for await (const message of queryInstance) {
       // Capture session ID from first message
       if (message.session_id && !capturedSessionId) {
@@ -396,33 +398,33 @@ async function queryClaudeSDK(command, options = {}, ws) {
         // Send session-created event only once for new sessions
         if (!sessionId && !sessionCreatedSent) {
           sessionCreatedSent = true;
-          ws.send(JSON.stringify({
+          ws.send({
             type: 'session-created',
             sessionId: capturedSessionId
-          }));
+          });
         } else {
-          console.log('⚠️ Not sending session-created. sessionId:', sessionId, 'sessionCreatedSent:', sessionCreatedSent);
+          console.log('Not sending session-created. sessionId:', sessionId, 'sessionCreatedSent:', sessionCreatedSent);
         }
       } else {
-        console.log('⚠️ No session_id in message or already captured. message.session_id:', message.session_id, 'capturedSessionId:', capturedSessionId);
+        console.log('No session_id in message or already captured. message.session_id:', message.session_id, 'capturedSessionId:', capturedSessionId);
       }
 
       // Transform and send message to WebSocket
       const transformedMessage = transformMessage(message);
-      ws.send(JSON.stringify({
+      ws.send({
         type: 'claude-response',
         data: transformedMessage
-      }));
+      });
 
       // Extract and send token budget updates from result messages
       if (message.type === 'result') {
         const tokenBudget = extractTokenBudget(message);
         if (tokenBudget) {
-          console.log('📊 Token budget from modelUsage:', tokenBudget);
-          ws.send(JSON.stringify({
+          console.log('Token budget from modelUsage:', tokenBudget);
+          ws.send({
             type: 'token-budget',
             data: tokenBudget
-          }));
+          });
         }
       }
     }
@@ -436,14 +438,14 @@ async function queryClaudeSDK(command, options = {}, ws) {
     await cleanupTempFiles(tempImagePaths, tempDir);
 
     // Send completion event
-    console.log('✅ Streaming complete, sending claude-complete event');
-    ws.send(JSON.stringify({
+    console.log('Streaming complete, sending claude-complete event');
+    ws.send({
       type: 'claude-complete',
       sessionId: capturedSessionId,
       exitCode: 0,
       isNewSession: !sessionId && !!command
-    }));
-    console.log('📤 claude-complete event sent');
+    });
+    console.log('claude-complete event sent');
 
   } catch (error) {
     console.error('SDK query error:', error);
@@ -457,10 +459,10 @@ async function queryClaudeSDK(command, options = {}, ws) {
     await cleanupTempFiles(tempImagePaths, tempDir);
 
     // Send error to WebSocket
-    ws.send(JSON.stringify({
+    ws.send({
       type: 'claude-error',
       error: error.message
-    }));
+    });
 
     throw error;
   }
@@ -480,7 +482,7 @@ async function abortClaudeSDKSession(sessionId) {
   }
 
   try {
-    console.log(`🛑 Aborting SDK session: ${sessionId}`);
+    console.log(`Aborting SDK session: ${sessionId}`);
 
     // Call interrupt() on the query instance
     await session.instance.interrupt();
