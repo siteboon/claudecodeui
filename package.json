@@ -10,6 +10,7 @@
   },
   "files": [
     "server/",
+    "shared/",
     "dist/",
     "README.md"
   ],
