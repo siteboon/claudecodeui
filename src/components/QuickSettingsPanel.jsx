@@ -43,8 +43,14 @@ const QuickSettingsPanel = ({
   const [handlePosition, setHandlePosition] = useState(() => {
     const saved = localStorage.getItem('quickSettingsHandlePosition');
     if (saved) {
-      const parsed = JSON.parse(saved);
-      return parsed.y;
+      try {
+        const parsed = JSON.parse(saved);
+        return parsed.y ?? 50;
+      } catch {
+        // Remove corrupted data
+        localStorage.removeItem('quickSettingsHandlePosition');
+        return 50;
+      }
     }
     return 50; // Default to 50% (middle of screen)
   });
@@ -151,6 +157,17 @@ const QuickSettingsPanel = ({
     document.body.style.overflow = '';
     document.body.style.position = '';
     document.body.style.width = '';
+  }, []);
+
+  // Cleanup body styles on unmount in case component unmounts while dragging
+  useEffect(() => {
+    return () => {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+    };
   }, []);
 
   // Set up global event listeners for drag
