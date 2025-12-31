@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  ChevronLeft, 
-  ChevronRight, 
-  Maximize2, 
-  Eye, 
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Maximize2,
+  Eye,
   Settings2,
   Moon,
   Sun,
@@ -12,7 +12,8 @@ import {
   Brain,
   Sparkles,
   FileText,
-  Languages
+  Languages,
+  GripVertical
 } from 'lucide-react';
 import DarkModeToggle from './DarkModeToggle';
 import { useTheme } from '../contexts/ThemeContext';
@@ -38,11 +39,170 @@ const QuickSettingsPanel = ({
   });
   const { isDarkMode } = useTheme();
 
+  // Draggable handle state
+  const [handlePosition, setHandlePosition] = useState(() => {
+    const saved = localStorage.getItem('quickSettingsHandlePosition');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return parsed.y ?? 50;
+      } catch {
+        // Remove corrupted data
+        localStorage.removeItem('quickSettingsHandlePosition');
+        return 50;
+      }
+    }
+    return 50; // Default to 50% (middle of screen)
+  });
+
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStartY, setDragStartY] = useState(0);
+  const [dragStartPosition, setDragStartPosition] = useState(0);
+  const [hasMoved, setHasMoved] = useState(false); // Track if user has moved during drag
+  const handleRef = useRef(null);
+  const constraintsRef = useRef({ min: 10, max: 90 }); // Percentage constraints
+  const dragThreshold = 5; // Pixels to move before it's considered a drag
+
   useEffect(() => {
     setLocalIsOpen(isOpen);
   }, [isOpen]);
 
-  const handleToggle = () => {
+  // Save handle position to localStorage when it changes
+  useEffect(() => {
+    localStorage.setItem('quickSettingsHandlePosition', JSON.stringify({ y: handlePosition }));
+  }, [handlePosition]);
+
+  // Calculate position from percentage
+  const getPositionStyle = useCallback(() => {
+    if (isMobile) {
+      // On mobile, convert percentage to pixels from bottom
+      const bottomPixels = (window.innerHeight * handlePosition) / 100;
+      return { bottom: `${bottomPixels}px` };
+    } else {
+      // On desktop, use top with percentage
+      return { top: `${handlePosition}%`, transform: 'translateY(-50%)' };
+    }
+  }, [handlePosition, isMobile]);
+
+  // Handle mouse/touch start
+  const handleDragStart = useCallback((e) => {
+    // Don't prevent default yet - we want to allow click if no drag happens
+    e.stopPropagation();
+
+    const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+    setDragStartY(clientY);
+    setDragStartPosition(handlePosition);
+    setHasMoved(false);
+    setIsDragging(false); // Don't set dragging until threshold is passed
+  }, [handlePosition]);
+
+  // Handle mouse/touch move
+  const handleDragMove = useCallback((e) => {
+    if (dragStartY === 0) return; // Not in a potential drag
+
+    const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+    const deltaY = Math.abs(clientY - dragStartY);
+
+    // Check if we've moved past threshold
+    if (!isDragging && deltaY > dragThreshold) {
+      setIsDragging(true);
+      setHasMoved(true);
+      document.body.style.cursor = 'grabbing';
+      document.body.style.userSelect = 'none';
+
+      // Prevent body scroll on mobile during drag
+      if (e.type.includes('touch')) {
+        document.body.style.overflow = 'hidden';
+        document.body.style.position = 'fixed';
+        document.body.style.width = '100%';
+      }
+    }
+
+    if (!isDragging) return;
+
+    // Prevent scrolling on touch move
+    if (e.type.includes('touch')) {
+      e.preventDefault();
+    }
+
+    const actualDeltaY = clientY - dragStartY;
+
+    // For top-based positioning (desktop), moving down increases top percentage
+    // For bottom-based positioning (mobile), we need to invert
+    let percentageDelta;
+    if (isMobile) {
+      // On mobile, moving down should decrease bottom position (increase percentage from top)
+      percentageDelta = -(actualDeltaY / window.innerHeight) * 100;
+    } else {
+      // On desktop, moving down should increase top position
+      percentageDelta = (actualDeltaY / window.innerHeight) * 100;
+    }
+
+    let newPosition = dragStartPosition + percentageDelta;
+
+    // Apply constraints
+    newPosition = Math.max(constraintsRef.current.min, Math.min(constraintsRef.current.max, newPosition));
+
+    setHandlePosition(newPosition);
+  }, [isDragging, dragStartY, dragStartPosition, isMobile, dragThreshold]);
+
+  // Handle mouse/touch end
+  const handleDragEnd = useCallback(() => {
+    setIsDragging(false);
+    setDragStartY(0);
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+
+    // Restore body scroll on mobile
+    document.body.style.overflow = '';
+    document.body.style.position = '';
+    document.body.style.width = '';
+  }, []);
+
+  // Cleanup body styles on unmount in case component unmounts while dragging
+  useEffect(() => {
+    return () => {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+    };
+  }, []);
+
+  // Set up global event listeners for drag
+  useEffect(() => {
+    if (dragStartY !== 0) {
+      // Mouse events
+      const handleMouseMove = (e) => handleDragMove(e);
+      const handleMouseUp = () => handleDragEnd();
+
+      // Touch events
+      const handleTouchMove = (e) => handleDragMove(e);
+      const handleTouchEnd = () => handleDragEnd();
+
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.addEventListener('touchmove', handleTouchMove, { passive: false });
+      document.addEventListener('touchend', handleTouchEnd);
+
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        document.removeEventListener('touchmove', handleTouchMove);
+        document.removeEventListener('touchend', handleTouchEnd);
+      };
+    }
+  }, [dragStartY, handleDragMove, handleDragEnd]);
+
+  const handleToggle = (e) => {
+    // Don't toggle if user was dragging
+    if (hasMoved) {
+      e.preventDefault();
+      setHasMoved(false);
+      return;
+    }
+
     const newState = !localIsOpen;
     setLocalIsOpen(newState);
     onToggle(newState);
@@ -50,24 +210,37 @@ const QuickSettingsPanel = ({
 
   return (
     <>
-      {/* Pull Tab */}
-      <div
-        className={`fixed ${isMobile ? 'bottom-44' : 'top-1/2 -translate-y-1/2'} ${
+      {/* Pull Tab - Combined drag handle and toggle button */}
+      <button
+        ref={handleRef}
+        onClick={handleToggle}
+        onMouseDown={(e) => {
+          // Start drag on mousedown
+          handleDragStart(e);
+        }}
+        onTouchStart={(e) => {
+          // Start drag on touchstart
+          handleDragStart(e);
+        }}
+        className={`fixed ${
           localIsOpen ? 'right-64' : 'right-0'
-        } z-50 transition-all duration-150 ease-out`}
+        } z-50 ${isDragging ? '' : 'transition-all duration-150 ease-out'} bg-white dark:bg-gray-800 border ${
+          isDragging ? 'border-blue-500 dark:border-blue-400' : 'border-gray-200 dark:border-gray-700'
+        } rounded-l-md p-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors shadow-lg ${
+          isDragging ? 'cursor-grabbing' : 'cursor-pointer'
+        } touch-none`}
+        style={{ ...getPositionStyle(), touchAction: 'none', WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
+        aria-label={isDragging ? 'Dragging handle' : localIsOpen ? 'Close settings panel' : 'Open settings panel'}
+        title={isDragging ? 'Dragging...' : 'Click to toggle, drag to move'}
       >
-        <button
-          onClick={handleToggle}
-          className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-l-md p-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors shadow-lg"
-          aria-label={localIsOpen ? 'Close settings panel' : 'Open settings panel'}
-        >
-          {localIsOpen ? (
-            <ChevronRight className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-          ) : (
-            <ChevronLeft className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-          )}
-        </button>
-      </div>
+        {isDragging ? (
+          <GripVertical className="h-5 w-5 text-blue-500 dark:text-blue-400" />
+        ) : localIsOpen ? (
+          <ChevronRight className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+        ) : (
+          <ChevronLeft className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+        )}
+      </button>
 
       {/* Panel */}
       <div
