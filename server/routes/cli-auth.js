@@ -76,6 +76,24 @@ router.get('/codex/status', async (req, res) => {
 
 async function checkClaudeCredentials() {
   try {
+    // First try Claude Code 2.x auth location (.claude.json with oauthAccount)
+    const claudeJsonPath = path.join(os.homedir(), '.claude', '.claude.json');
+    try {
+      const claudeJsonContent = await fs.readFile(claudeJsonPath, 'utf8');
+      const claudeJson = JSON.parse(claudeJsonContent);
+
+      if (claudeJson.oauthAccount && claudeJson.oauthAccount.emailAddress) {
+        return {
+          authenticated: true,
+          email: claudeJson.oauthAccount.emailAddress,
+          method: 'claude_code_2x'
+        };
+      }
+    } catch (e) {
+      // .claude.json not found or invalid, try legacy location
+    }
+
+    // Fallback to legacy credentials location (.credentials.json)
     const credPath = path.join(os.homedir(), '.claude', '.credentials.json');
     const content = await fs.readFile(credPath, 'utf8');
     const creds = JSON.parse(content);
@@ -87,7 +105,8 @@ async function checkClaudeCredentials() {
       if (!isExpired) {
         return {
           authenticated: true,
-          email: creds.email || creds.user || null
+          email: creds.email || creds.user || null,
+          method: 'legacy_oauth'
         };
       }
     }
