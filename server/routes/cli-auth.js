@@ -14,7 +14,7 @@ router.get('/claude/status', async (req, res) => {
       return res.json({
         authenticated: true,
         email: credentialsResult.email || 'Authenticated',
-        method: 'credentials_file'
+        method: credentialsResult.method || 'credentials_file'
       });
     }
 
