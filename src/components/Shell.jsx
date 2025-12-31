@@ -220,7 +220,6 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
       return;
     }
 
-    console.log('[Shell] Terminal initializing, mounting component');
 
     terminal.current = new Terminal({
       cursorBlink: true,
@@ -346,7 +345,6 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     }
 
     return () => {
-      console.log('[Shell] Terminal cleanup, unmounting component');
       resizeObserver.disconnect();
 
       if (ws.current && (ws.current.readyState === WebSocket.OPEN || ws.current.readyState === WebSocket.CONNECTING)) {

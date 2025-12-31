@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import os from 'os';
 import matter from 'gray-matter';
+import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '../../shared/modelConstants.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -182,23 +183,15 @@ Custom commands can be created in:
   },
 
   '/model': async (args, context) => {
-    // Read available models from config or defaults
+    // Read available models from centralized constants
     const availableModels = {
-      claude: [
-        'claude-sonnet-4.5',
-        'claude-sonnet-4',
-        'claude-opus-4',
-        'claude-sonnet-3.5'
-      ],
-      cursor: [
-        'gpt-5',
-        'sonnet-4',
-        'opus-4.1'
-      ]
+      claude: CLAUDE_MODELS.OPTIONS.map(o => o.value),
+      cursor: CURSOR_MODELS.OPTIONS.map(o => o.value),
+      codex: CODEX_MODELS.OPTIONS.map(o => o.value)
     };
 
     const currentProvider = context?.provider || 'claude';
-    const currentModel = context?.model || 'claude-sonnet-4.5';
+    const currentModel = context?.model || CLAUDE_MODELS.DEFAULT;
 
     return {
       type: 'builtin',
@@ -212,50 +205,6 @@ Custom commands can be created in:
         message: args.length > 0
           ? `Switching to model: ${args[0]}`
           : `Current model: ${currentModel}`
-      }
-    };
-  },
-
-  '/cost': async (args, context) => {
-    // Calculate token usage and cost
-    const sessionId = context?.sessionId;
-    const tokenUsage = context?.tokenUsage || { used: 0, total: 200000 };
-
-    const costPerMillion = {
-      'claude-sonnet-4.5': { input: 3, output: 15 },
-      'claude-sonnet-4': { input: 3, output: 15 },
-      'claude-opus-4': { input: 15, output: 75 },
-      'gpt-5': { input: 5, output: 15 }
-    };
-
-    const model = context?.model || 'claude-sonnet-4.5';
-    const rates = costPerMillion[model] || costPerMillion['claude-sonnet-4.5'];
-
-    // Estimate 70% input, 30% output
-    const estimatedInputTokens = Math.floor(tokenUsage.used * 0.7);
-    const estimatedOutputTokens = Math.floor(tokenUsage.used * 0.3);
-
-    const inputCost = (estimatedInputTokens / 1000000) * rates.input;
-    const outputCost = (estimatedOutputTokens / 1000000) * rates.output;
-    const totalCost = inputCost + outputCost;
-
-    return {
-      type: 'builtin',
-      action: 'cost',
-      data: {
-        tokenUsage: {
-          used: tokenUsage.used,
-          total: tokenUsage.total,
-          percentage: ((tokenUsage.used / tokenUsage.total) * 100).toFixed(1)
-        },
-        cost: {
-          input: inputCost.toFixed(4),
-          output: outputCost.toFixed(4),
-          total: totalCost.toFixed(4),
-          currency: 'USD'
-        },
-        model,
-        rates
       }
     };
   },

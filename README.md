@@ -1,10 +1,10 @@
 <div align="center">
   <img src="public/logo.svg" alt="Claude Code UI" width="64" height="64">
-  <h1>Claude Code UI</h1>
+  <h1>Cloud CLI (aka Claude Code UI)</h1>
 </div>
 
 
-A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), and [Cursor CLI](https://docs.cursor.com/en/cli/overview). You can use it locally or remotely to view your active projects and sessions in Claude Code or Cursor and make changes to them from everywhere (mobile or desktop). This gives you a proper interface that works everywhere. Supports models including **Claude Sonnet 4**, **Opus 4.1**, and **GPT-5**
+A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor CLI](https://docs.cursor.com/en/cli/overview) and [Codex](https://developers.openai.com/codex). You can use it locally or remotely to view your active projects and sessions in Claude Code, Cursor, or Codex and make changes to them from everywhere (mobile or desktop). This gives you a proper interface that works everywhere. 
 
 ## Screenshots
 
@@ -30,7 +30,7 @@ A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/cla
 <h3>CLI Selection</h3>
 <img src="public/screenshots/cli-selection.png" alt="CLI Selection" width="400">
 <br>
-<em>Select between Claude Code and Cursor CLI</em>
+<em>Select between Claude Code, Cursor CLI and Codex</em>
 </td>
 </tr>
 </table>
@@ -41,14 +41,14 @@ A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/cla
 
 ## Features
 
-- **Responsive Design** - Works seamlessly across desktop, tablet, and mobile so you can also use Claude Code from mobile 
-- **Interactive Chat Interface** - Built-in chat interface for seamless communication with Claude Code or Cursor
-- **Integrated Shell Terminal** - Direct access to Claude Code or Cursor CLI through built-in shell functionality
+- **Responsive Design** - Works seamlessly across desktop, tablet, and mobile so you can also use Claude Code, Cursor, or Codex from mobile 
+- **Interactive Chat Interface** - Built-in chat interface for seamless communication with Claude Code, Cursor, or Codex
+- **Integrated Shell Terminal** - Direct access to Claude Code, Cursor CLI, or Codex through built-in shell functionality
 - **File Explorer** - Interactive file tree with syntax highlighting and live editing
 - **Git Explorer** - View, stage and commit your changes. You can also switch branches 
 - **Session Management** - Resume conversations, manage multiple sessions, and track history
 - **TaskMaster AI Integration** *(Optional)* - Advanced project management with AI-powered task planning, PRD parsing, and workflow automation
-- **Model Compatibility** - Works with Claude Sonnet 4, Opus 4.1, and GPT-5
+- **Model Compatibility** - Works with Claude Sonnet 4.5, Opus 4.5, and GPT-5.2 
 
 
 ## Quick Start
@@ -57,7 +57,8 @@ A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/cla
 
 - [Node.js](https://nodejs.org/) v20 or higher
 - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and configured, and/or
-- [Cursor CLI](https://docs.cursor.com/en/cli/overview) installed and configured
+- [Cursor CLI](https://docs.cursor.com/en/cli/overview) installed and configured, and/or
+- [Codex](https://developers.openai.com/codex) installed and configured
 
 ### One-click Operation (Recommended)
 
@@ -87,32 +88,25 @@ claude-code-ui
 
 **To restart**: Stop with Ctrl+C and run `claude-code-ui` again.
 
-### CLI Commands
+### CLI Usage
 
 After global installation, you have access to both `claude-code-ui` and `cloudcli` commands:
 
+| Command / Option | Short | Description |
+|------------------|-------|-------------|
+| `cloudcli` or `claude-code-ui` | | Start the server (default) |
+| `cloudcli start` | | Start the server explicitly |
+| `cloudcli status` | | Show configuration and data locations |
+| `cloudcli help` | | Show help information |
+| `cloudcli version` | | Show version information |
+| `--port <port>` | `-p` | Set server port (default: 3001) |
+| `--database-path <path>` | | Set custom database location |
+
+**Examples:**
 ```bash
-# Start the server (default command)
-claude-code-ui
-cloudcli start
-
-# Show configuration and data locations
-cloudcli status
-
-# Show help information
-cloudcli help
-
-# Show version
-cloudcli version
-```
-
-**The `cloudcli status` command shows you:**
-- Installation directory location
-- Database location (where credentials are stored)
-- Current configuration (PORT, DATABASE_PATH, etc.)
-- Claude projects folder location
-- Configuration file location
-
+cloudcli                          # Start with defaults
+cloudcli -p 8080              # Start on custom port
+cloudcli status                   # Show current configuration
 ```
 
 ### Run as Background Service (Recommended for Production)
@@ -133,6 +127,9 @@ pm2 start claude-code-ui --name "claude-code-ui"
 
 # Or using the shorter alias
 pm2 start cloudcli --name "claude-code-ui"
+
+# Start on a custom port
+pm2 start cloudcli --name "claude-code-ui" -- --port 8080
 ```
 
 
@@ -218,15 +215,15 @@ After installing it you should be able to enable it from the Settings
 ### Core Features
 
 #### Project Management
-The UI automatically discovers Claude Code projects from `~/.claude/projects/` and provides:
-- **Visual Project Browser** - All available projects with metadata and session counts
+It automatically discovers Claude Code, Cursor or Codex sessions when available and groups them together into projects
+session counts
 - **Project Actions** - Rename, delete, and organize projects
 - **Smart Navigation** - Quick access to recent projects and sessions
 - **MCP support** - Add your own MCP servers through the UI 
 
 #### Chat Interface
-- **Use responsive chat or Claude Code/Cursor CLI** - You can either use the adapted chat interface or use the shell button to connect to your selected CLI. 
-- **Real-time Communication** - Stream responses from Claude with WebSocket connection
+- **Use responsive chat or Claude Code/Cursor CLI/Codex CLI** - You can either use the adapted chat interface or use the shell button to connect to your selected CLI. 
+- **Real-time Communication** - Stream responses from your selected CLI (Claude Code/Cursor/Codex) with WebSocket connection
 - **Session Management** - Resume previous conversations or start fresh sessions
 - **Message History** - Complete conversation history with timestamps and metadata
 - **Multi-format Support** - Text, code blocks, and file references
@@ -264,16 +261,16 @@ The UI automatically discovers Claude Code projects from `~/.claude/projects/` a
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Frontend      │    │   Backend       │    │  Claude CLI     │
+│   Frontend      │    │   Backend       │    │  Agent     │
 │   (React/Vite)  │◄──►│ (Express/WS)    │◄──►│  Integration    │
+│                 │    │                 │    │                │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 
 ### Backend (Node.js + Express)
 - **Express Server** - RESTful API with static file serving
 - **WebSocket Server** - Communication for chats and project refresh
-- **CLI Integration (Claude Code / Cursor)** - Process spawning and management
-- **Session Management** - JSONL parsing and conversation persistence
+- **Agent Integration (Claude Code / Cursor CLI / Codex)** - Process spawning and management
 - **File System API** - Exposing file browser for projects
 
 ### Frontend (React + Vite)
@@ -320,7 +317,7 @@ We welcome contributions! Please follow these guidelines:
 #### "No Claude projects found"
 **Problem**: The UI shows no projects or empty project list
 **Solutions**:
-- Ensure [Claude CLI](https://docs.anthropic.com/en/docs/claude-code) is properly installed
+- Ensure [Claude Code](https://docs.anthropic.com/en/docs/claude-code) is properly installed
 - Run `claude` command in at least one project directory to initialize
 - Verify `~/.claude/projects/` directory exists and has proper permissions
 
@@ -343,6 +340,8 @@ This project is open source and free to use, modify, and distribute under the GP
 
 ### Built With
 - **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** - Anthropic's official CLI
+- **[Cursor CLI](https://docs.cursor.com/en/cli/overview)** - Cursor's official CLI
+- **[Codex](https://developers.openai.com/codex)** - OpenAI Codex
 - **[React](https://react.dev/)** - User interface library
 - **[Vite](https://vitejs.dev/)** - Fast build tool and dev server
 - **[Tailwind CSS](https://tailwindcss.com/)** - Utility-first CSS framework
@@ -361,5 +360,5 @@ This project is open source and free to use, modify, and distribute under the GP
 ---
 
 <div align="center">
-  <strong>Made with care for the Claude Code community.</strong>
+  <strong>Made with care for the Claude Code, Cursor and Codex community.</strong>
 </div>

@@ -55,7 +55,7 @@ function AppContent() {
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [settingsInitialTab, setSettingsInitialTab] = useState('tools');
+  const [settingsInitialTab, setSettingsInitialTab] = useState('agents');
   const [showQuickSettings, setShowQuickSettings] = useState(false);
   const [autoExpandTools, setAutoExpandTools] = useLocalStorage('autoExpandTools', false);
   const [showRawParameters, setShowRawParameters] = useLocalStorage('showRawParameters', false);
@@ -230,14 +230,16 @@ function AppContent() {
               setSelectedProject(updatedSelectedProject);
             }
 
-            // Update selected session only if it was deleted - avoid unnecessary reloads
             if (selectedSession) {
-              const updatedSelectedSession = updatedSelectedProject.sessions?.find(s => s.id === selectedSession.id);
+              const allSessions = [
+                ...(updatedSelectedProject.sessions || []),
+                ...(updatedSelectedProject.codexSessions || []),
+                ...(updatedSelectedProject.cursorSessions || [])
+              ];
+              const updatedSelectedSession = allSessions.find(s => s.id === selectedSession.id);
               if (!updatedSelectedSession) {
-                // Session was deleted
                 setSelectedSession(null);
               }
-              // Don't update if session still exists with same ID - prevents reload
             }
           }
         }

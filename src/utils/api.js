@@ -5,7 +5,7 @@ export const authenticatedFetch = (url, options = {}) => {
 
   const defaultHeaders = {};
 
-  // Only set Content-Type if body is not FormData (browser will set it automatically for FormData)
+  // Only set Content-Type for non-FormData requests
   if (!(options.body instanceof FormData)) {
     defaultHeaders['Content-Type'] = 'application/json';
   }
@@ -47,14 +47,23 @@ export const api = {
   projects: () => authenticatedFetch('/api/projects'),
   sessions: (projectName, limit = 5, offset = 0) => 
     authenticatedFetch(`/api/projects/${projectName}/sessions?limit=${limit}&offset=${offset}`),
-  sessionMessages: (projectName, sessionId, limit = null, offset = 0) => {
+  sessionMessages: (projectName, sessionId, limit = null, offset = 0, provider = 'claude') => {
     const params = new URLSearchParams();
     if (limit !== null) {
       params.append('limit', limit);
       params.append('offset', offset);
     }
     const queryString = params.toString();
-    const url = `/api/projects/${projectName}/sessions/${sessionId}/messages${queryString ? `?${queryString}` : ''}`;
+
+    // Route to the correct endpoint based on provider
+    let url;
+    if (provider === 'codex') {
+      url = `/api/codex/sessions/${sessionId}/messages${queryString ? `?${queryString}` : ''}`;
+    } else if (provider === 'cursor') {
+      url = `/api/cursor/sessions/${sessionId}/messages${queryString ? `?${queryString}` : ''}`;
+    } else {
+      url = `/api/projects/${projectName}/sessions/${sessionId}/messages${queryString ? `?${queryString}` : ''}`;
+    }
     return authenticatedFetch(url);
   },
   renameProject: (projectName, displayName) =>
@@ -64,6 +73,10 @@ export const api = {
     }),
   deleteSession: (projectName, sessionId) =>
     authenticatedFetch(`/api/projects/${projectName}/sessions/${sessionId}`, {
+      method: 'DELETE',
+    }),
+  deleteCodexSession: (sessionId) =>
+    authenticatedFetch(`/api/codex/sessions/${sessionId}`, {
       method: 'DELETE',
     }),
   deleteProject: (projectName) =>

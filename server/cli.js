@@ -14,6 +14,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
@@ -115,7 +116,7 @@ function showStatus() {
     console.log(`       CONTEXT_WINDOW: ${c.dim(process.env.CONTEXT_WINDOW || '160000 (default)')}`);
 
     // Claude projects folder
-    const claudeProjectsPath = path.join(process.env.HOME, '.claude', 'projects');
+    const claudeProjectsPath = path.join(os.homedir(), '.claude', 'projects');
     const projectsExists = fs.existsSync(claudeProjectsPath);
     console.log(`\n${c.info('[INFO]')} Claude Projects Folder:`);
     console.log(`       ${c.dim(claudeProjectsPath)}`);
@@ -130,10 +131,10 @@ function showStatus() {
 
     console.log('\n' + c.dim('═'.repeat(60)));
     console.log(`\n${c.tip('[TIP]')} Hints:`);
-    console.log(`      ${c.dim('>')} Set DATABASE_PATH env variable to use a custom database location`);
-    console.log(`      ${c.dim('>')} Create .env file in installation directory for persistent config`);
-    console.log(`      ${c.dim('>')} Run "claude-code-ui" or "cloudcli start" to start the server`);
-    console.log(`      ${c.dim('>')} Access the UI at http://localhost:3001 (or custom PORT)\n`);
+    console.log(`      ${c.dim('>')} Use ${c.bright('cloudcli --port 8080')} to run on a custom port`);
+    console.log(`      ${c.dim('>')} Use ${c.bright('cloudcli --database-path /path/to/db')} for custom database`);
+    console.log(`      ${c.dim('>')} Run ${c.bright('cloudcli help')} for all options`);
+    console.log(`      ${c.dim('>')} Access the UI at http://localhost:${process.env.PORT || '3001'}\n`);
 }
 
 // Show help
@@ -144,8 +145,8 @@ function showHelp() {
 ╚═══════════════════════════════════════════════════════════════╝
 
 Usage:
-  claude-code-ui [command]
-  cloudcli [command]
+  claude-code-ui [command] [options]
+  cloudcli [command] [options]
 
 Commands:
   start          Start the Claude Code UI server (default)
@@ -153,21 +154,24 @@ Commands:
   help           Show this help information
   version        Show version information
 
+Options:
+  -p, --port <port>           Set server port (default: 3001)
+  --database-path <path>      Set custom database location
+  -h, --help                  Show this help information
+  -v, --version               Show version information
+
 Examples:
-  $ claude-code-ui              # Start the server
-  $ cloudcli status             # Show configuration
-  $ cloudcli help               # Show help
+  $ cloudcli                        # Start with defaults
+  $ cloudcli --port 8080            # Start on port 8080
+  $ cloudcli -p 3000                # Short form for port
+  $ cloudcli start --port 4000      # Explicit start command
+  $ cloudcli status                 # Show configuration
 
 Environment Variables:
   PORT                Set server port (default: 3001)
   DATABASE_PATH       Set custom database location
   CLAUDE_CLI_PATH     Set custom Claude CLI path
   CONTEXT_WINDOW      Set context window size (default: 160000)
-
-Configuration:
-  Create a .env file in the installation directory to set
-  persistent environment variables. Use 'cloudcli status' to
-  see the installation directory path.
 
 Documentation:
   ${packageJson.homepage || 'https://github.com/siteboon/claudecodeui'}
@@ -188,10 +192,45 @@ async function startServer() {
     await import('./index.js');
 }
 
+// Parse CLI arguments
+function parseArgs(args) {
+    const parsed = { command: 'start', options: {} };
+
+    for (let i = 0; i < args.length; i++) {
+        const arg = args[i];
+
+        if (arg === '--port' || arg === '-p') {
+            parsed.options.port = args[++i];
+        } else if (arg.startsWith('--port=')) {
+            parsed.options.port = arg.split('=')[1];
+        } else if (arg === '--database-path') {
+            parsed.options.databasePath = args[++i];
+        } else if (arg.startsWith('--database-path=')) {
+            parsed.options.databasePath = arg.split('=')[1];
+        } else if (arg === '--help' || arg === '-h') {
+            parsed.command = 'help';
+        } else if (arg === '--version' || arg === '-v') {
+            parsed.command = 'version';
+        } else if (!arg.startsWith('-')) {
+            parsed.command = arg;
+        }
+    }
+
+    return parsed;
+}
+
 // Main CLI handler
 async function main() {
     const args = process.argv.slice(2);
-    const command = args[0] || 'start';
+    const { command, options } = parseArgs(args);
+
+    // Apply CLI options to environment variables
+    if (options.port) {
+        process.env.PORT = options.port;
+    }
+    if (options.databasePath) {
+        process.env.DATABASE_PATH = options.databasePath;
+    }
 
     switch (command) {
         case 'start':

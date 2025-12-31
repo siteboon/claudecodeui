@@ -60,6 +60,7 @@ import mime from 'mime-types';
 import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
 import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions } from './claude-sdk.js';
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
+import { queryCodex, abortCodexSession, isCodexSessionActive, getActiveCodexSessions } from './openai-codex.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
 import mcpRoutes from './routes/mcp.js';
@@ -72,6 +73,7 @@ import agentRoutes from './routes/agent.js';
 import projectsRoutes from './routes/projects.js';
 import cliAuthRoutes from './routes/cli-auth.js';
 import userRoutes from './routes/user.js';
+import codexRoutes from './routes/codex.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 
@@ -82,7 +84,7 @@ const connectedClients = new Set();
 // Setup file system watcher for Claude projects folder using chokidar
 async function setupProjectsWatcher() {
     const chokidar = (await import('chokidar')).default;
-    const claudeProjectsPath = path.join(process.env.HOME, '.claude', 'projects');
+    const claudeProjectsPath = path.join(os.homedir(), '.claude', 'projects');
 
     if (projectsWatcher) {
         projectsWatcher.close();
@@ -211,7 +213,17 @@ const wss = new WebSocketServer({
 app.locals.wss = wss;
 
 app.use(cors());
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({
+  limit: '50mb',
+  type: (req) => {
+    // Skip multipart/form-data requests (for file uploads like images)
+    const contentType = req.headers['content-type'] || '';
+    if (contentType.includes('multipart/form-data')) {
+      return false;
+    }
+    return contentType.includes('json');
+  }
+}));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Public health check endpoint (no authentication required)
@@ -257,6 +269,9 @@ app.use('/api/cli', authenticateToken, cliAuthRoutes);
 
 // User API Routes (protected)
 app.use('/api/user', authenticateToken, userRoutes);
+
+// Codex API Routes (protected)
+app.use('/api/codex', authenticateToken, codexRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
@@ -702,12 +717,41 @@ wss.on('connection', (ws, request) => {
     }
 });
 
+/**
+ * WebSocket Writer - Wrapper for WebSocket to match SSEStreamWriter interface
+ */
+class WebSocketWriter {
+  constructor(ws) {
+    this.ws = ws;
+    this.sessionId = null;
+    this.isWebSocketWriter = true;  // Marker for transport detection
+  }
+
+  send(data) {
+    if (this.ws.readyState === 1) { // WebSocket.OPEN
+      // Providers send raw objects, we stringify for WebSocket
+      this.ws.send(JSON.stringify(data));
+    }
+  }
+
+  setSessionId(sessionId) {
+    this.sessionId = sessionId;
+  }
+
+  getSessionId() {
+    return this.sessionId;
+  }
+}
+
 // Handle chat WebSocket connections
 function handleChatConnection(ws) {
     console.log('[INFO] Chat WebSocket connected');
 
     // Add to connected clients for project updates
     connectedClients.add(ws);
+
+    // Wrap WebSocket with writer for consistent interface with SSEStreamWriter
+    const writer = new WebSocketWriter(ws);
 
     ws.on('message', async (message) => {
         try {
@@ -719,13 +763,19 @@ function handleChatConnection(ws) {
                 console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
 
                 // Use Claude Agents SDK
-                await queryClaudeSDK(data.command, data.options, ws);
+                await queryClaudeSDK(data.command, data.options, writer);
             } else if (data.type === 'cursor-command') {
                 console.log('[DEBUG] Cursor message:', data.command || '[Continue/Resume]');
                 console.log('📁 Project:', data.options?.cwd || 'Unknown');
                 console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
                 console.log('🤖 Model:', data.options?.model || 'default');
-                await spawnCursor(data.command, data.options, ws);
+                await spawnCursor(data.command, data.options, writer);
+            } else if (data.type === 'codex-command') {
+                console.log('[DEBUG] Codex message:', data.command || '[Continue/Resume]');
+                console.log('📁 Project:', data.options?.projectPath || data.options?.cwd || 'Unknown');
+                console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
+                console.log('🤖 Model:', data.options?.model || 'default');
+                await queryCodex(data.command, data.options, writer);
             } else if (data.type === 'cursor-resume') {
                 // Backward compatibility: treat as cursor-command with resume and no prompt
                 console.log('[DEBUG] Cursor resume session (compat):', data.sessionId);
@@ -733,7 +783,7 @@ function handleChatConnection(ws) {
                     sessionId: data.sessionId,
                     resume: true,
                     cwd: data.options?.cwd
-                }, ws);
+                }, writer);
             } else if (data.type === 'abort-session') {
                 console.log('[DEBUG] Abort session request:', data.sessionId);
                 const provider = data.provider || 'claude';
@@ -741,26 +791,28 @@ function handleChatConnection(ws) {
 
                 if (provider === 'cursor') {
                     success = abortCursorSession(data.sessionId);
+                } else if (provider === 'codex') {
+                    success = abortCodexSession(data.sessionId);
                 } else {
                     // Use Claude Agents SDK
                     success = await abortClaudeSDKSession(data.sessionId);
                 }
 
-                ws.send(JSON.stringify({
+                writer.send({
                     type: 'session-aborted',
                     sessionId: data.sessionId,
                     provider,
                     success
-                }));
+                });
             } else if (data.type === 'cursor-abort') {
                 console.log('[DEBUG] Abort Cursor session:', data.sessionId);
                 const success = abortCursorSession(data.sessionId);
-                ws.send(JSON.stringify({
+                writer.send({
                     type: 'session-aborted',
                     sessionId: data.sessionId,
                     provider: 'cursor',
                     success
-                }));
+                });
             } else if (data.type === 'check-session-status') {
                 // Check if a specific session is currently processing
                 const provider = data.provider || 'claude';
@@ -769,34 +821,37 @@ function handleChatConnection(ws) {
 
                 if (provider === 'cursor') {
                     isActive = isCursorSessionActive(sessionId);
+                } else if (provider === 'codex') {
+                    isActive = isCodexSessionActive(sessionId);
                 } else {
                     // Use Claude Agents SDK
                     isActive = isClaudeSDKSessionActive(sessionId);
                 }
 
-                ws.send(JSON.stringify({
+                writer.send({
                     type: 'session-status',
                     sessionId,
                     provider,
                     isProcessing: isActive
-                }));
+                });
             } else if (data.type === 'get-active-sessions') {
                 // Get all currently active sessions
                 const activeSessions = {
                     claude: getActiveClaudeSDKSessions(),
-                    cursor: getActiveCursorSessions()
+                    cursor: getActiveCursorSessions(),
+                    codex: getActiveCodexSessions()
                 };
-                ws.send(JSON.stringify({
+                writer.send({
                     type: 'active-sessions',
                     sessions: activeSessions
-                }));
+                });
             }
         } catch (error) {
             console.error('[ERROR] Chat WebSocket error:', error.message);
-            ws.send(JSON.stringify({
+            writer.send({
                 type: 'error',
                 error: error.message
-            }));
+            });
         }
     });
 
@@ -827,9 +882,31 @@ function handleShellConnection(ws) {
                 const initialCommand = data.initialCommand;
                 const isPlainShell = data.isPlainShell || (!!initialCommand && !hasSession) || provider === 'plain-shell';
 
-                ptySessionKey = `${projectPath}_${sessionId || 'default'}`;
+                // Login commands (Claude/Cursor auth) should never reuse cached sessions
+                const isLoginCommand = initialCommand && (
+                    initialCommand.includes('setup-token') ||
+                    initialCommand.includes('cursor-agent login') ||
+                    initialCommand.includes('auth login')
+                );
 
-                const existingSession = ptySessionsMap.get(ptySessionKey);
+                // Include command hash in session key so different commands get separate sessions
+                const commandSuffix = isPlainShell && initialCommand
+                    ? `_cmd_${Buffer.from(initialCommand).toString('base64').slice(0, 16)}`
+                    : '';
+                ptySessionKey = `${projectPath}_${sessionId || 'default'}${commandSuffix}`;
+
+                // Kill any existing login session before starting fresh
+                if (isLoginCommand) {
+                    const oldSession = ptySessionsMap.get(ptySessionKey);
+                    if (oldSession) {
+                        console.log('🧹 Cleaning up existing login session:', ptySessionKey);
+                        if (oldSession.timeoutId) clearTimeout(oldSession.timeoutId);
+                        if (oldSession.pty && oldSession.pty.kill) oldSession.pty.kill();
+                        ptySessionsMap.delete(ptySessionKey);
+                    }
+                }
+
+                const existingSession = isLoginCommand ? null : ptySessionsMap.get(ptySessionKey);
                 if (existingSession) {
                     console.log('♻️  Reconnecting to existing PTY session:', ptySessionKey);
                     shellProcess = existingSession.pty;
@@ -938,7 +1015,7 @@ function handleShellConnection(ws) {
                         name: 'xterm-256color',
                         cols: termCols,
                         rows: termRows,
-                        cwd: process.env.HOME || (os.platform() === 'win32' ? process.env.USERPROFILE : '/'),
+                        cwd: os.homedir(),
                         env: {
                             ...process.env,
                             TERM: 'xterm-256color',
@@ -1332,8 +1409,98 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
 app.get('/api/projects/:projectName/sessions/:sessionId/token-usage', authenticateToken, async (req, res) => {
   try {
     const { projectName, sessionId } = req.params;
+    const { provider = 'claude' } = req.query;
     const homeDir = os.homedir();
 
+    // Allow only safe characters in sessionId
+    const safeSessionId = String(sessionId).replace(/[^a-zA-Z0-9._-]/g, '');
+    if (!safeSessionId) {
+      return res.status(400).json({ error: 'Invalid sessionId' });
+    }
+
+    // Handle Cursor sessions - they use SQLite and don't have token usage info
+    if (provider === 'cursor') {
+      return res.json({
+        used: 0,
+        total: 0,
+        breakdown: { input: 0, cacheCreation: 0, cacheRead: 0 },
+        unsupported: true,
+        message: 'Token usage tracking not available for Cursor sessions'
+      });
+    }
+
+    // Handle Codex sessions
+    if (provider === 'codex') {
+      const codexSessionsDir = path.join(homeDir, '.codex', 'sessions');
+
+      // Find the session file by searching for the session ID
+      const findSessionFile = async (dir) => {
+        try {
+          const entries = await fsPromises.readdir(dir, { withFileTypes: true });
+          for (const entry of entries) {
+            const fullPath = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+              const found = await findSessionFile(fullPath);
+              if (found) return found;
+            } else if (entry.name.includes(safeSessionId) && entry.name.endsWith('.jsonl')) {
+              return fullPath;
+            }
+          }
+        } catch (error) {
+          // Skip directories we can't read
+        }
+        return null;
+      };
+
+      const sessionFilePath = await findSessionFile(codexSessionsDir);
+
+      if (!sessionFilePath) {
+        return res.status(404).json({ error: 'Codex session file not found', sessionId: safeSessionId });
+      }
+
+      // Read and parse the Codex JSONL file
+      let fileContent;
+      try {
+        fileContent = await fsPromises.readFile(sessionFilePath, 'utf8');
+      } catch (error) {
+        if (error.code === 'ENOENT') {
+          return res.status(404).json({ error: 'Session file not found', path: sessionFilePath });
+        }
+        throw error;
+      }
+      const lines = fileContent.trim().split('\n');
+      let totalTokens = 0;
+      let contextWindow = 200000; // Default for Codex/OpenAI
+
+      // Find the latest token_count event with info (scan from end)
+      for (let i = lines.length - 1; i >= 0; i--) {
+        try {
+          const entry = JSON.parse(lines[i]);
+
+          // Codex stores token info in event_msg with type: "token_count"
+          if (entry.type === 'event_msg' && entry.payload?.type === 'token_count' && entry.payload?.info) {
+            const tokenInfo = entry.payload.info;
+            if (tokenInfo.total_token_usage) {
+              totalTokens = tokenInfo.total_token_usage.total_tokens || 0;
+            }
+            if (tokenInfo.model_context_window) {
+              contextWindow = tokenInfo.model_context_window;
+            }
+            break; // Stop after finding the latest token count
+          }
+        } catch (parseError) {
+          // Skip lines that can't be parsed
+          continue;
+        }
+      }
+
+      return res.json({
+        used: totalTokens,
+        total: contextWindow
+      });
+    }
+
+    // Handle Claude sessions (default)
     // Extract actual project path
     let projectPath;
     try {
@@ -1349,11 +1516,6 @@ app.get('/api/projects/:projectName/sessions/:sessionId/token-usage', authentica
     const encodedPath = projectPath.replace(/[\\/:\s~_]/g, '-');
     const projectDir = path.join(homeDir, '.claude', 'projects', encodedPath);
 
-    // Allow only safe characters in sessionId
-    const safeSessionId = String(sessionId).replace(/[^a-zA-Z0-9._-]/g, '');
-    if (!safeSessionId) {
-      return res.status(400).json({ error: 'Invalid sessionId' });
-    }
     const jsonlPath = path.join(projectDir, `${safeSessionId}.jsonl`);
 
     // Constrain to projectDir
