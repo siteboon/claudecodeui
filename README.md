@@ -1,6 +1,6 @@
 <div align="center">
   <img src="public/logo.svg" alt="Claude Code UI" width="64" height="64">
-  <h1>Claude Code UI</h1>
+  <h1>Cloud CLI (aka Claude Code UI)</h1>
 </div>
 
 
@@ -88,32 +88,25 @@ claude-code-ui
 
 **To restart**: Stop with Ctrl+C and run `claude-code-ui` again.
 
-### CLI Commands
+### CLI Usage
 
 After global installation, you have access to both `claude-code-ui` and `cloudcli` commands:
 
+| Command / Option | Short | Description |
+|------------------|-------|-------------|
+| `cloudcli` or `claude-code-ui` | | Start the server (default) |
+| `cloudcli start` | | Start the server explicitly |
+| `cloudcli status` | | Show configuration and data locations |
+| `cloudcli help` | | Show help information |
+| `cloudcli version` | | Show version information |
+| `--port <port>` | `-p` | Set server port (default: 3001) |
+| `--database-path <path>` | | Set custom database location |
+
+**Examples:**
 ```bash
-# Start the server (default command)
-claude-code-ui
-cloudcli start
-
-# Show configuration and data locations
-cloudcli status
-
-# Show help information
-cloudcli help
-
-# Show version
-cloudcli version
-```
-
-**The `cloudcli status` command shows you:**
-- Installation directory location
-- Database location (where credentials are stored)
-- Current configuration (PORT, DATABASE_PATH, etc.)
-- Claude projects folder location
-- Configuration file location
-
+cloudcli                          # Start with defaults
+cloudcli -p 8080              # Start on custom port
+cloudcli status                   # Show current configuration
 ```
 
 ### Run as Background Service (Recommended for Production)
@@ -134,6 +127,9 @@ pm2 start claude-code-ui --name "claude-code-ui"
 
 # Or using the shorter alias
 pm2 start cloudcli --name "claude-code-ui"
+
+# Start on a custom port
+pm2 start cloudcli --name "claude-code-ui" -- --port 8080
 ```
 
 
