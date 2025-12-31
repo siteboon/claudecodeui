@@ -462,7 +462,7 @@ app.post('/api/projects/create', authenticateToken, async (req, res) => {
 });
 
 // Browse filesystem endpoint for project suggestions - uses existing getFileTree
-app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {    
+app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
     try {
         const { path: dirPath } = req.query;
         
@@ -510,9 +510,9 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
             suggestions.push(...directories);
         }
         
-        res.json({ 
+        res.json({
             path: targetPath,
-            suggestions: suggestions 
+            suggestions: suggestions
         });
         
     } catch (error) {
