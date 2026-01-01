@@ -604,7 +604,7 @@ function Sidebar({
               size="sm"
               className="flex-1 h-8 text-xs bg-primary hover:bg-primary/90 transition-all duration-200"
               onClick={() => setShowNewProject(true)}
-              title="Create new project (Ctrl+N)"
+              title="Create new project"
             >
               <FolderPlus className="w-3.5 h-3.5 mr-1.5" />
               New Project
