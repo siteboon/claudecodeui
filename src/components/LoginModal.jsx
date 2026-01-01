@@ -25,13 +25,15 @@ function LoginModal({
   const getCommand = () => {
     if (customCommand) return customCommand;
 
+    const isPlatform = import.meta.env.VITE_IS_PLATFORM === 'true';
+
     switch (provider) {
       case 'claude':
         return 'claude setup-token --dangerously-skip-permissions';
       case 'cursor':
         return 'cursor-agent login';
       case 'codex':
-        return 'codex login';
+        return isPlatform ? 'codex login --device-auth' : 'codex login';
       default:
         return 'claude setup-token --dangerously-skip-permissions';
     }
