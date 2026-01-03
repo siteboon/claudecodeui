@@ -3956,7 +3956,15 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         });
         
         if (!response.ok) {
-          throw new Error('Failed to upload images');
+          let errorDetails = `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}`;
+          try {
+            const errorBody = await response.json();
+            if (errorBody?.error) errorDetails = errorBody.error;
+            else if (errorBody?.message) errorDetails = errorBody.message;
+          } catch (_) {
+            // Ignore JSON parse errors and keep the HTTP fallback
+          }
+          throw new Error(errorDetails);
         }
         
         const result = await response.json();
