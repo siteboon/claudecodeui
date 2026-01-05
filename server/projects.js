@@ -1206,7 +1206,12 @@ async function getCodexSessions(projectPath) {
         const sessionData = await parseCodexSessionFile(filePath);
 
         // Check if this session matches the project path
-        if (sessionData && sessionData.cwd === projectPath) {
+        // Handle Windows long paths with \\?\ prefix
+        const sessionCwd = sessionData?.cwd || '';
+        const cleanSessionCwd = sessionCwd.startsWith('\\\\?\\') ? sessionCwd.slice(4) : sessionCwd;
+        const cleanProjectPath = projectPath.startsWith('\\\\?\\') ? projectPath.slice(4) : projectPath;
+
+        if (sessionData && (sessionData.cwd === projectPath || cleanSessionCwd === cleanProjectPath || path.relative(cleanSessionCwd, cleanProjectPath) === '')) {
           sessions.push({
             id: sessionData.id,
             summary: sessionData.summary || 'Codex Session',
@@ -1273,12 +1278,12 @@ async function parseCodexSessionFile(filePath) {
           // Count messages and extract user messages for summary
           if (entry.type === 'event_msg' && entry.payload?.type === 'user_message') {
             messageCount++;
-            if (entry.payload.text) {
-              lastUserMessage = entry.payload.text;
+            if (entry.payload.message) {
+              lastUserMessage = entry.payload.message;
             }
           }
 
-          if (entry.type === 'response_item' && entry.payload?.type === 'message') {
+          if (entry.type === 'response_item' && entry.payload?.type === 'message' && entry.payload.role === 'assistant') {
             messageCount++;
           }
 
