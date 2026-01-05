@@ -595,9 +595,44 @@ function Sidebar({
         </div>
       </div>
 
-      {/* Search Filter and Actions */}
+      {/* Action Buttons - Desktop only - Always show when not loading */}
+      {!isLoading && !isMobile && (
+        <div className="px-3 md:px-4 py-2 border-b border-border">
+          <div className="flex gap-2">
+            <Button
+              variant="default"
+              size="sm"
+              className="flex-1 h-8 text-xs bg-primary hover:bg-primary/90 transition-all duration-200"
+              onClick={() => setShowNewProject(true)}
+              title="Create new project"
+            >
+              <FolderPlus className="w-3.5 h-3.5 mr-1.5" />
+              New Project
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 w-8 px-0 hover:bg-accent transition-colors duration-200 group"
+              onClick={async () => {
+                setIsRefreshing(true);
+                try {
+                  await onRefresh();
+                } finally {
+                  setIsRefreshing(false);
+                }
+              }}
+              disabled={isRefreshing}
+              title="Refresh projects and sessions (Ctrl+R)"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''} group-hover:rotate-180 transition-transform duration-300`} />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Search Filter - Only show when there are projects */}
       {projects.length > 0 && !isLoading && (
-        <div className="px-3 md:px-4 py-2 border-b border-border space-y-2">
+        <div className="px-3 md:px-4 py-2 border-b border-border">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
@@ -616,39 +651,6 @@ function Sidebar({
               </button>
             )}
           </div>
-
-          {/* Action Buttons - Desktop only */}
-          {!isMobile && (
-            <div className="flex gap-2">
-              <Button
-                variant="default"
-                size="sm"
-                className="flex-1 h-8 text-xs bg-primary hover:bg-primary/90 transition-all duration-200"
-                onClick={() => setShowNewProject(true)}
-                title="Create new project (Ctrl+N)"
-              >
-                <FolderPlus className="w-3.5 h-3.5 mr-1.5" />
-                New Project
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 w-8 px-0 hover:bg-accent transition-colors duration-200 group"
-                onClick={async () => {
-                  setIsRefreshing(true);
-                  try {
-                    await onRefresh();
-                  } finally {
-                    setIsRefreshing(false);
-                  }
-                }}
-                disabled={isRefreshing}
-                title="Refresh projects and sessions (Ctrl+R)"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''} group-hover:rotate-180 transition-transform duration-300`} />
-              </Button>
-            </div>
-          )}
         </div>
       )}
       
