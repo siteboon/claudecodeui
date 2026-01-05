@@ -2980,11 +2980,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             if (onReplaceTemporarySession) {
               onReplaceTemporarySession(latestMessage.sessionId);
             }
-
-            // Navigate to the new session to ensure URL and selectedSession are updated
-            if (onNavigateToSession) {
-              onNavigateToSession(latestMessage.sessionId);
-            }
           }
           break;
 
@@ -3538,8 +3533,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           }
 
           const codexPendingSessionId = sessionStorage.getItem('pendingSessionId');
+          const codexActualSessionId = latestMessage.actualSessionId || codexPendingSessionId;
           if (codexPendingSessionId && !currentSessionId) {
-            setCurrentSessionId(codexPendingSessionId);
+            setCurrentSessionId(codexActualSessionId);
+            setIsSystemSessionChange(true);
+            if (onNavigateToSession) {
+              onNavigateToSession(codexActualSessionId);
+            }
             sessionStorage.removeItem('pendingSessionId');
             console.log('Codex session complete, ID set to:', codexPendingSessionId);
           }
