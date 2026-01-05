@@ -8,6 +8,17 @@ import { getCodexSessions, getCodexSessionMessages, deleteCodexSession } from '.
 
 const router = express.Router();
 
+function createCliResponder(res) {
+  let responded = false;
+  return (status, payload) => {
+    if (responded || res.headersSent) {
+      return;
+    }
+    responded = true;
+    res.status(status).json(payload);
+  };
+}
+
 router.get('/config', async (req, res) => {
   try {
     const configPath = path.join(os.homedir(), '.codex', 'config.toml');
@@ -88,24 +99,30 @@ router.delete('/sessions/:sessionId', async (req, res) => {
 
 router.get('/mcp/cli/list', async (req, res) => {
   try {
+    const respond = createCliResponder(res);
     const proc = spawn('codex', ['mcp', 'list'], { stdio: ['pipe', 'pipe', 'pipe'] });
 
     let stdout = '';
     let stderr = '';
 
-    proc.stdout.on('data', (data) => { stdout += data.toString(); });
-    proc.stderr.on('data', (data) => { stderr += data.toString(); });
+    proc.stdout?.on('data', (data) => { stdout += data.toString(); });
+    proc.stderr?.on('data', (data) => { stderr += data.toString(); });
 
     proc.on('close', (code) => {
       if (code === 0) {
-        res.json({ success: true, output: stdout, servers: parseCodexListOutput(stdout) });
+        respond(200, { success: true, output: stdout, servers: parseCodexListOutput(stdout) });
       } else {
-        res.status(500).json({ error: 'Codex CLI command failed', details: stderr });
+        respond(500, { error: 'Codex CLI command failed', details: stderr || `Exited with code ${code}` });
       }
     });
 
     proc.on('error', (error) => {
-      res.status(500).json({ error: 'Failed to run Codex CLI', details: error.message });
+      const isMissing = error?.code === 'ENOENT';
+      respond(isMissing ? 503 : 500, {
+        error: isMissing ? 'Codex CLI not installed' : 'Failed to run Codex CLI',
+        details: error.message,
+        code: error.code
+      });
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to list MCP servers', details: error.message });
@@ -133,24 +150,30 @@ router.post('/mcp/cli/add', async (req, res) => {
       cliArgs.push(...args);
     }
 
+    const respond = createCliResponder(res);
     const proc = spawn('codex', cliArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
 
     let stdout = '';
     let stderr = '';
 
-    proc.stdout.on('data', (data) => { stdout += data.toString(); });
-    proc.stderr.on('data', (data) => { stderr += data.toString(); });
+    proc.stdout?.on('data', (data) => { stdout += data.toString(); });
+    proc.stderr?.on('data', (data) => { stderr += data.toString(); });
 
     proc.on('close', (code) => {
       if (code === 0) {
-        res.json({ success: true, output: stdout, message: `MCP server "${name}" added successfully` });
+        respond(200, { success: true, output: stdout, message: `MCP server "${name}" added successfully` });
       } else {
-        res.status(400).json({ error: 'Codex CLI command failed', details: stderr });
+        respond(400, { error: 'Codex CLI command failed', details: stderr || `Exited with code ${code}` });
       }
     });
 
     proc.on('error', (error) => {
-      res.status(500).json({ error: 'Failed to run Codex CLI', details: error.message });
+      const isMissing = error?.code === 'ENOENT';
+      respond(isMissing ? 503 : 500, {
+        error: isMissing ? 'Codex CLI not installed' : 'Failed to run Codex CLI',
+        details: error.message,
+        code: error.code
+      });
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to add MCP server', details: error.message });
@@ -161,24 +184,30 @@ router.delete('/mcp/cli/remove/:name', async (req, res) => {
   try {
     const { name } = req.params;
 
+    const respond = createCliResponder(res);
     const proc = spawn('codex', ['mcp', 'remove', name], { stdio: ['pipe', 'pipe', 'pipe'] });
 
     let stdout = '';
     let stderr = '';
 
-    proc.stdout.on('data', (data) => { stdout += data.toString(); });
-    proc.stderr.on('data', (data) => { stderr += data.toString(); });
+    proc.stdout?.on('data', (data) => { stdout += data.toString(); });
+    proc.stderr?.on('data', (data) => { stderr += data.toString(); });
 
     proc.on('close', (code) => {
       if (code === 0) {
-        res.json({ success: true, output: stdout, message: `MCP server "${name}" removed successfully` });
+        respond(200, { success: true, output: stdout, message: `MCP server "${name}" removed successfully` });
       } else {
-        res.status(400).json({ error: 'Codex CLI command failed', details: stderr });
+        respond(400, { error: 'Codex CLI command failed', details: stderr || `Exited with code ${code}` });
       }
     });
 
     proc.on('error', (error) => {
-      res.status(500).json({ error: 'Failed to run Codex CLI', details: error.message });
+      const isMissing = error?.code === 'ENOENT';
+      respond(isMissing ? 503 : 500, {
+        error: isMissing ? 'Codex CLI not installed' : 'Failed to run Codex CLI',
+        details: error.message,
+        code: error.code
+      });
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to remove MCP server', details: error.message });
@@ -189,24 +218,30 @@ router.get('/mcp/cli/get/:name', async (req, res) => {
   try {
     const { name } = req.params;
 
+    const respond = createCliResponder(res);
     const proc = spawn('codex', ['mcp', 'get', name], { stdio: ['pipe', 'pipe', 'pipe'] });
 
     let stdout = '';
     let stderr = '';
 
-    proc.stdout.on('data', (data) => { stdout += data.toString(); });
-    proc.stderr.on('data', (data) => { stderr += data.toString(); });
+    proc.stdout?.on('data', (data) => { stdout += data.toString(); });
+    proc.stderr?.on('data', (data) => { stderr += data.toString(); });
 
     proc.on('close', (code) => {
       if (code === 0) {
-        res.json({ success: true, output: stdout, server: parseCodexGetOutput(stdout) });
+        respond(200, { success: true, output: stdout, server: parseCodexGetOutput(stdout) });
       } else {
-        res.status(404).json({ error: 'Codex CLI command failed', details: stderr });
+        respond(404, { error: 'Codex CLI command failed', details: stderr || `Exited with code ${code}` });
       }
     });
 
     proc.on('error', (error) => {
-      res.status(500).json({ error: 'Failed to run Codex CLI', details: error.message });
+      const isMissing = error?.code === 'ENOENT';
+      respond(isMissing ? 503 : 500, {
+        error: isMissing ? 'Codex CLI not installed' : 'Failed to run Codex CLI',
+        details: error.message,
+        code: error.code
+      });
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to get MCP server details', details: error.message });
