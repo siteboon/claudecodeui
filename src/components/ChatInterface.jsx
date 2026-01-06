@@ -3002,6 +3002,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           if (latestMessage.sessionId && !currentSessionId) {
             sessionStorage.setItem('pendingSessionId', latestMessage.sessionId);
             
+            // Mark as system change to prevent clearing messages when session ID updates
+            setIsSystemSessionChange(true);
+            
             // Session Protection: Replace temporary "new-session-*" identifier with real session ID
             // This maintains protection continuity - no gap between temp ID and real ID
             // The temporary session is removed and real session is marked as active
@@ -3561,8 +3564,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           }
 
           const codexPendingSessionId = sessionStorage.getItem('pendingSessionId');
+          const codexActualSessionId = latestMessage.actualSessionId || codexPendingSessionId;
           if (codexPendingSessionId && !currentSessionId) {
-            setCurrentSessionId(codexPendingSessionId);
+            setCurrentSessionId(codexActualSessionId);
+            setIsSystemSessionChange(true);
+            if (onNavigateToSession) {
+              onNavigateToSession(codexActualSessionId);
+            }
             sessionStorage.removeItem('pendingSessionId');
             console.log('Codex session complete, ID set to:', codexPendingSessionId);
           }

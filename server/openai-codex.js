@@ -280,7 +280,8 @@ export async function queryCodex(command, options = {}, ws) {
     // Send completion event
     sendMessage(ws, {
       type: 'codex-complete',
-      sessionId: currentSessionId
+      sessionId: currentSessionId,
+      actualSessionId: thread.id
     });
 
   } catch (error) {
