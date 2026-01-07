@@ -236,6 +236,102 @@ const safeLocalStorage = {
   }
 };
 
+const CLAUDE_SETTINGS_KEY = 'claude-settings';
+const TOOL_PERMISSION_ERROR_REGEX = /requested permissions? to use\s+([^.,\n]+)/i;
+
+function safeJsonParse(value) {
+  if (!value || typeof value !== 'string') return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function getClaudeSettings() {
+  const raw = safeLocalStorage.getItem(CLAUDE_SETTINGS_KEY);
+  if (!raw) {
+    return {
+      allowedTools: [],
+      disallowedTools: [],
+      skipPermissions: false,
+      projectSortOrder: 'name'
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    return {
+      ...parsed,
+      allowedTools: Array.isArray(parsed.allowedTools) ? parsed.allowedTools : [],
+      disallowedTools: Array.isArray(parsed.disallowedTools) ? parsed.disallowedTools : [],
+      skipPermissions: Boolean(parsed.skipPermissions),
+      projectSortOrder: parsed.projectSortOrder || 'name'
+    };
+  } catch {
+    return {
+      allowedTools: [],
+      disallowedTools: [],
+      skipPermissions: false,
+      projectSortOrder: 'name'
+    };
+  }
+}
+
+function buildClaudeToolPermissionEntry(toolName, toolInput) {
+  if (!toolName) return null;
+  if (toolName !== 'Bash') return toolName;
+
+  const parsed = safeJsonParse(toolInput);
+  const command = typeof parsed?.command === 'string' ? parsed.command.trim() : '';
+  if (!command) return toolName;
+
+  const tokens = command.split(/\s+/);
+  if (tokens.length === 0) return toolName;
+
+  // For Bash, allow the command family instead of every Bash invocation.
+  if (tokens[0] === 'git' && tokens[1]) {
+    return `Bash(${tokens[0]} ${tokens[1]}:*)`;
+  }
+  return `Bash(${tokens[0]}:*)`;
+}
+
+function getClaudePermissionSuggestion(message, provider) {
+  if (provider !== 'claude') return null;
+  if (!message?.toolResult?.isError) return null;
+
+  const content = String(message.toolResult.content || '');
+  if (!TOOL_PERMISSION_ERROR_REGEX.test(content)) return null;
+
+  const match = content.match(TOOL_PERMISSION_ERROR_REGEX);
+  const requestedTool = match?.[1]?.trim();
+  const toolName = requestedTool || message.toolName;
+  const entry = buildClaudeToolPermissionEntry(toolName, message.toolInput);
+  if (!entry) return null;
+
+  const settings = getClaudeSettings();
+  const isAllowed = settings.allowedTools.includes(entry);
+  return { toolName: toolName || entry, entry, isAllowed };
+}
+
+function grantClaudeToolPermission(entry) {
+  if (!entry) return { success: false };
+
+  const settings = getClaudeSettings();
+  const alreadyAllowed = settings.allowedTools.includes(entry);
+  const nextAllowed = alreadyAllowed ? settings.allowedTools : [...settings.allowedTools, entry];
+  const nextDisallowed = settings.disallowedTools.filter(tool => tool !== entry);
+  const updatedSettings = {
+    ...settings,
+    allowedTools: nextAllowed,
+    disallowedTools: nextDisallowed,
+    lastUpdated: new Date().toISOString()
+  };
+
+  safeLocalStorage.setItem(CLAUDE_SETTINGS_KEY, JSON.stringify(updatedSettings));
+  return { success: true, alreadyAllowed, updatedSettings };
+}
+
 // Common markdown components to ensure consistent rendering (tables, inline code, links, etc.)
 const markdownComponents = {
   code: ({ node, inline, className, children, ...props }) => {
@@ -356,7 +452,7 @@ const markdownComponents = {
 };
 
 // Memoized message component to prevent unnecessary re-renders
-const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFileOpen, onShowSettings, autoExpandTools, showRawParameters, showThinking, selectedProject }) => {
+const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFileOpen, onShowSettings, onGrantToolPermission, autoExpandTools, showRawParameters, showThinking, selectedProject, provider }) => {
   const isGrouped = prevMessage && prevMessage.type === message.type &&
                    ((prevMessage.type === 'assistant') ||
                     (prevMessage.type === 'user') ||
@@ -364,6 +460,13 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     (prevMessage.type === 'error'));
   const messageRef = React.useRef(null);
   const [isExpanded, setIsExpanded] = React.useState(false);
+  const permissionSuggestion = getClaudePermissionSuggestion(message, provider);
+  const [permissionGrantState, setPermissionGrantState] = React.useState('idle');
+
+  React.useEffect(() => {
+    setPermissionGrantState('idle');
+  }, [permissionSuggestion?.entry, message.toolId]);
+
   React.useEffect(() => {
     if (!autoExpandTools || !messageRef.current || !message.isToolUse) return;
     
@@ -1358,6 +1461,59 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                           </Markdown>
                         );
                       })()}
+                      {permissionSuggestion && (
+                        <div className="mt-4 border-t border-red-200/60 dark:border-red-800/60 pt-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!onGrantToolPermission) return;
+                                const result = onGrantToolPermission(permissionSuggestion);
+                                if (result?.success) {
+                                  setPermissionGrantState('granted');
+                                } else {
+                                  setPermissionGrantState('error');
+                                }
+                              }}
+                              disabled={permissionSuggestion.isAllowed || permissionGrantState === 'granted'}
+                              className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${
+                                permissionSuggestion.isAllowed || permissionGrantState === 'granted'
+                                  ? 'bg-green-100 dark:bg-green-900/30 border-green-300/70 dark:border-green-800/60 text-green-800 dark:text-green-200 cursor-default'
+                                  : 'bg-white/80 dark:bg-gray-900/40 border-red-300/70 dark:border-red-800/60 text-red-700 dark:text-red-200 hover:bg-white dark:hover:bg-gray-900/70'
+                              }`}
+                            >
+                              {permissionSuggestion.isAllowed || permissionGrantState === 'granted'
+                                ? 'Permission added'
+                                : `Grant permission for ${permissionSuggestion.toolName}`}
+                            </button>
+                            {onShowSettings && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onShowSettings();
+                                }}
+                                className="text-xs text-red-700 dark:text-red-200 underline hover:text-red-800 dark:hover:text-red-100"
+                              >
+                                Open settings
+                              </button>
+                            )}
+                          </div>
+                          <div className="mt-2 text-xs text-red-700/90 dark:text-red-200/80">
+                            Adds <span className="font-mono">{permissionSuggestion.entry}</span> to Allowed Tools.
+                          </div>
+                          {permissionGrantState === 'error' && (
+                            <div className="mt-2 text-xs text-red-700 dark:text-red-200">
+                              Unable to update permissions. Please try again.
+                            </div>
+                          )}
+                          {(permissionSuggestion.isAllowed || permissionGrantState === 'granted') && (
+                            <div className="mt-2 text-xs text-green-700 dark:text-green-200">
+                              Permission saved. Retry the request to use the tool.
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                   );
@@ -4099,6 +4255,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, [input, isLoading, selectedProject, attachedImages, currentSessionId, selectedSession, provider, permissionMode, onSessionActive, cursorModel, claudeModel, codexModel, sendMessage, setInput, setAttachedImages, setUploadingImages, setImageErrors, setIsTextareaExpanded, textareaRef, setChatMessages, setIsLoading, setCanAbortSession, setClaudeStatus, setIsUserScrolledUp, scrollToBottom]);
 
+  const handleGrantToolPermission = useCallback((suggestion) => {
+    if (!suggestion || provider !== 'claude') {
+      return { success: false };
+    }
+    return grantClaudeToolPermission(suggestion.entry);
+  }, [provider]);
+
   // Store handleSubmit in ref so handleCustomCommand can access it
   useEffect(() => {
     handleSubmitRef.current = handleSubmit;
@@ -4675,10 +4838,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   createDiff={createDiff}
                   onFileOpen={onFileOpen}
                   onShowSettings={onShowSettings}
+                  onGrantToolPermission={handleGrantToolPermission}
                   autoExpandTools={autoExpandTools}
                   showRawParameters={showRawParameters}
                   showThinking={showThinking}
                   selectedProject={selectedProject}
+                  provider={provider}
                 />
               );
             })}
