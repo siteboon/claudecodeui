@@ -16,7 +16,7 @@
  * This ensures uninterrupted chat experience by coordinating with App.jsx to pause sidebar updates.
  */
 
-import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect, memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -1874,6 +1874,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const inputContainerRef = useRef(null);
   const scrollContainerRef = useRef(null);
   const isLoadingSessionRef = useRef(false); // Track session loading to prevent multiple scrolls
+  const isLoadingMoreRef = useRef(false);
+  const topLoadLockRef = useRef(false);
+  const pendingScrollRestoreRef = useRef(null);
   // Streaming throttle buffers
   const streamBufferRef = useRef('');
   const streamTimerRef = useRef(null);
@@ -2888,6 +2891,39 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     return scrollHeight - scrollTop - clientHeight < 50;
   }, []);
 
+  const loadOlderMessages = useCallback(async (container) => {
+    if (!container || isLoadingMoreRef.current || isLoadingMoreMessages) return false;
+    if (!hasMoreMessages || !selectedSession || !selectedProject) return false;
+
+    const sessionProvider = selectedSession.__provider || 'claude';
+    if (sessionProvider === 'cursor') return false;
+
+    isLoadingMoreRef.current = true;
+    const previousScrollHeight = container.scrollHeight;
+    const previousScrollTop = container.scrollTop;
+
+    try {
+      const moreMessages = await loadSessionMessages(
+        selectedProject.name,
+        selectedSession.id,
+        true,
+        sessionProvider
+      );
+
+      if (moreMessages.length > 0) {
+        pendingScrollRestoreRef.current = {
+          height: previousScrollHeight,
+          top: previousScrollTop
+        };
+        // Prepend new messages to the existing ones
+        setSessionMessages(prev => [...moreMessages, ...prev]);
+      }
+      return true;
+    } finally {
+      isLoadingMoreRef.current = false;
+    }
+  }, [hasMoreMessages, isLoadingMoreMessages, selectedSession, selectedProject, loadSessionMessages]);
+
   // Handle scroll events to detect when user manually scrolls up and load more messages
   const handleScroll = useCallback(async () => {
     if (scrollContainerRef.current) {
@@ -2897,32 +2933,29 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       
       // Check if we should load more messages (scrolled near top)
       const scrolledNearTop = container.scrollTop < 100;
-      const provider = localStorage.getItem('selected-provider') || 'claude';
-      
-      if (scrolledNearTop && hasMoreMessages && !isLoadingMoreMessages && selectedSession && selectedProject && provider !== 'cursor') {
-        // Save current scroll position
-        const previousScrollHeight = container.scrollHeight;
-        const previousScrollTop = container.scrollTop;
-        
-        // Load more messages
-        const moreMessages = await loadSessionMessages(selectedProject.name, selectedSession.id, true, selectedSession.__provider || 'claude');
-        
-        if (moreMessages.length > 0) {
-          // Prepend new messages to the existing ones
-          setSessionMessages(prev => [...moreMessages, ...prev]);
-          
-          // Restore scroll position after DOM update
-          setTimeout(() => {
-            if (scrollContainerRef.current) {
-              const newScrollHeight = scrollContainerRef.current.scrollHeight;
-              const scrollDiff = newScrollHeight - previousScrollHeight;
-              scrollContainerRef.current.scrollTop = previousScrollTop + scrollDiff;
-            }
-          }, 0);
+      if (!scrolledNearTop) {
+        topLoadLockRef.current = false;
+      } else if (!topLoadLockRef.current) {
+        const didLoad = await loadOlderMessages(container);
+        if (didLoad) {
+          topLoadLockRef.current = true;
         }
       }
     }
-  }, [isNearBottom, hasMoreMessages, isLoadingMoreMessages, selectedSession, selectedProject, loadSessionMessages]);
+  }, [isNearBottom, loadOlderMessages]);
+
+  // Restore scroll position after paginated messages render
+  useLayoutEffect(() => {
+    if (!pendingScrollRestoreRef.current || !scrollContainerRef.current) return;
+
+    const { height, top } = pendingScrollRestoreRef.current;
+    const container = scrollContainerRef.current;
+    const newScrollHeight = container.scrollHeight;
+    const scrollDiff = newScrollHeight - height;
+
+    container.scrollTop = top + Math.max(scrollDiff, 0);
+    pendingScrollRestoreRef.current = null;
+  }, [chatMessages.length]);
 
   useEffect(() => {
     // Load session messages when session changes
@@ -3051,7 +3084,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             // convertedMessages will be automatically updated via useMemo
 
             // Smart scroll behavior: only auto-scroll if user is near bottom
-            if (isNearBottom && autoScrollToBottom) {
+            const shouldAutoScroll = autoScrollToBottom && isNearBottom();
+            if (shouldAutoScroll) {
               setTimeout(() => scrollToBottom(), 200);
             }
             // If user scrolled up, preserve their position (they're reading history)
@@ -4603,6 +4637,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         {/* Messages Area - Scrollable Middle Section */}
       <div 
         ref={scrollContainerRef}
+        onWheel={handleScroll}
+        onTouchMove={handleScroll}
         className="flex-1 overflow-y-auto overflow-x-hidden px-0 py-3 sm:p-4 space-y-3 sm:space-y-4 relative"
       >
         {isLoadingSessionMessages && chatMessages.length === 0 ? (
