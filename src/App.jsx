@@ -177,7 +177,9 @@ function AppContent() {
         // If so, and the session is not active, trigger a message reload in ChatInterface
         if (latestMessage.changedFile && selectedSession && selectedProject) {
           // Extract session ID from changedFile (format: "project-name/session-id.jsonl")
-          const changedFileParts = latestMessage.changedFile.split('/');
+          const normalized = latestMessage.changedFile.replace(/\\/g, '/');
+          const changedFileParts = normalized.split('/');
+
           if (changedFileParts.length >= 2) {
             const filename = changedFileParts[changedFileParts.length - 1];
             const changedSessionId = filename.replace('.jsonl', '');
