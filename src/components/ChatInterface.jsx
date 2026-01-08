@@ -237,8 +237,6 @@ const safeLocalStorage = {
 };
 
 const CLAUDE_SETTINGS_KEY = 'claude-settings';
-const TOOL_PERMISSION_ERROR_REGEX = /requested permissions? to use\s+([^.,\n]+)/i;
-const BASH_APPROVAL_REGEX = /requires approval:\s*([^\n]+)/i;
 
 function safeJsonParse(value) {
   if (!value || typeof value !== 'string') return null;
@@ -297,43 +295,18 @@ function buildClaudeToolPermissionEntry(toolName, toolInput) {
   return `Bash(${tokens[0]}:*)`;
 }
 
-function getBashCommandLabel(command) {
-  if (!command || typeof command !== 'string') return 'Bash';
-  const tokens = command.trim().split(/\s+/);
-  if (tokens.length === 0) return 'Bash';
-  if (tokens[0] === 'git' && tokens[1]) {
-    return `git ${tokens[1]}`;
-  }
-  return tokens[0];
-}
-
 function getClaudePermissionSuggestion(message, provider) {
   if (provider !== 'claude') return null;
   if (!message?.toolResult?.isError) return null;
 
-  const content = String(message.toolResult.content || '');
-  let toolName = null;
-  let entry = null;
-
-  const match = content.match(TOOL_PERMISSION_ERROR_REGEX);
-  if (match) {
-    const requestedTool = match?.[1]?.trim();
-    toolName = requestedTool || message.toolName;
-    entry = buildClaudeToolPermissionEntry(toolName, message.toolInput);
-  } else if (message.toolName === 'Bash') {
-    const approvalMatch = content.match(BASH_APPROVAL_REGEX);
-    const command = approvalMatch?.[1]?.trim();
-    if (command) {
-      entry = buildClaudeToolPermissionEntry('Bash', JSON.stringify({ command }));
-      toolName = getBashCommandLabel(command);
-    }
-  }
+  const toolName = message?.toolName;
+  const entry = buildClaudeToolPermissionEntry(toolName, message.toolInput);
 
   if (!entry) return null;
 
   const settings = getClaudeSettings();
   const isAllowed = settings.allowedTools.includes(entry);
-  return { toolName: toolName || entry, entry, isAllowed };
+  return { toolName, entry, isAllowed };
 }
 
 function grantClaudeToolPermission(entry) {
