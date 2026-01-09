@@ -295,6 +295,19 @@ function buildClaudeToolPermissionEntry(toolName, toolInput) {
   return `Bash(${tokens[0]}:*)`;
 }
 
+// Normalize tool inputs for display in the permission banner.
+// This does not sanitize/redact secrets; it is strictly formatting so users
+// can see the raw input that triggered the permission prompt.
+function formatToolInputForDisplay(input) {
+  if (input === undefined || input === null) return '';
+  if (typeof input === 'string') return input;
+  try {
+    return JSON.stringify(input, null, 2);
+  } catch {
+    return String(input);
+  }
+}
+
 function getClaudePermissionSuggestion(message, provider) {
   if (provider !== 'claude') return null;
   if (!message?.toolResult?.isError) return null;
@@ -1839,6 +1852,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const MESSAGES_PER_PAGE = 20;
   const [isSystemSessionChange, setIsSystemSessionChange] = useState(false);
   const [permissionMode, setPermissionMode] = useState('default');
+  // In-memory queue of tool permission prompts for the current UI view.
+  // These are not persisted and do not survive a page refresh; introduced so
+  // the UI can present pending approvals while the SDK waits.
+  const [pendingPermissionRequests, setPendingPermissionRequests] = useState([]);
   const [attachedImages, setAttachedImages] = useState([]);
   const [uploadingImages, setUploadingImages] = useState(new Map());
   const [imageErrors, setImageErrors] = useState(new Map());
@@ -1886,6 +1903,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [codexModel, setCodexModel] = useState(() => {
     return localStorage.getItem('codex-model') || CODEX_MODELS.DEFAULT;
   });
+  // Track provider transitions so we only clear approvals when provider truly changes.
+  // This does not sync with the backend; it just prevents UI prompts from disappearing.
+  const lastProviderRef = useRef(provider);
   // Load permission mode for the current session
   useEffect(() => {
     if (selectedSession?.id) {
@@ -1905,6 +1925,23 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       localStorage.setItem('selected-provider', selectedSession.__provider);
     }
   }, [selectedSession]);
+
+  // Clear pending permission prompts when switching providers; filter when switching sessions.
+  // This does not preserve prompts across provider changes; it exists to keep the
+  // Claude approval flow intact while preventing prompts from a different provider.
+  useEffect(() => {
+    if (lastProviderRef.current !== provider) {
+      setPendingPermissionRequests([]);
+      lastProviderRef.current = provider;
+    }
+  }, [provider]);
+
+  // When the selected session changes, drop prompts that belong to other sessions.
+  // This does not attempt to migrate prompts across sessions; it only filters,
+  // introduced so the UI does not show approvals for a session the user is no longer viewing.
+  useEffect(() => {
+    setPendingPermissionRequests(prev => prev.filter(req => !req.sessionId || req.sessionId === selectedSession?.id));
+  }, [selectedSession?.id]);
   
   // Load Cursor default model from config
   useEffect(() => {
@@ -3165,6 +3202,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             if (onReplaceTemporarySession) {
               onReplaceTemporarySession(latestMessage.sessionId);
             }
+
+            // Attach the real session ID to any pending permission requests so they
+            // do not disappear during the "new-session -> real-session" transition.
+            // This does not create or auto-approve requests; it only keeps UI state aligned.
+            setPendingPermissionRequests(prev => prev.map(req => (
+              req.sessionId ? req : { ...req, sessionId: latestMessage.sessionId }
+            )));
           }
           break;
 
@@ -3395,6 +3439,55 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           }]);
           break;
 
+        case 'claude-permission-request': {
+          // Receive a tool approval request from the backend and surface it in the UI.
+          // This does not approve anything automatically; it only queues a prompt,
+          // introduced so the user can decide before the SDK continues.
+          if (provider !== 'claude' || !latestMessage.requestId) {
+            break;
+          }
+
+          setPendingPermissionRequests(prev => {
+            if (prev.some(req => req.requestId === latestMessage.requestId)) {
+              return prev;
+            }
+            return [
+              ...prev,
+              {
+                requestId: latestMessage.requestId,
+                toolName: latestMessage.toolName || 'UnknownTool',
+                input: latestMessage.input,
+                context: latestMessage.context,
+                sessionId: latestMessage.sessionId || null,
+                receivedAt: new Date()
+              }
+            ];
+          });
+
+          // Keep the session in a "waiting" state while approval is pending.
+          // This does not resume the run; it only updates the UI status so the
+          // user knows Claude is blocked on a decision.
+          setIsLoading(true);
+          setCanAbortSession(true);
+          setClaudeStatus({
+            text: 'Waiting for permission',
+            tokens: 0,
+            can_interrupt: true
+          });
+          break;
+        }
+
+        case 'claude-permission-cancelled': {
+          // Backend cancelled the approval (timeout or SDK cancel); remove the banner.
+          // We currently do not show a user-facing warning here; this is intentional
+          // to avoid noisy alerts when the SDK cancels in the background.
+          if (!latestMessage.requestId) {
+            break;
+          }
+          setPendingPermissionRequests(prev => prev.filter(req => req.requestId !== latestMessage.requestId));
+          break;
+        }
+
         case 'claude-error':
           setChatMessages(prev => [...prev, {
             type: 'error',
@@ -3591,6 +3684,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           if (selectedProject && latestMessage.exitCode === 0) {
             safeLocalStorage.removeItem(`chat_messages_${selectedProject.name}`);
           }
+          // Conversation finished; clear any stale permission prompts.
+          // This does not remove saved permissions; it only resets transient UI state.
+          setPendingPermissionRequests([]);
           break;
 
         case 'codex-response':
@@ -3765,6 +3861,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               onSessionNotProcessing(abortedSessionId);
             }
           }
+
+          // Abort ends the run; clear permission prompts to avoid dangling UI state.
+          // This does not change allowlists; it only clears the current banner.
+          setPendingPermissionRequests([]);
 
           setChatMessages(prev => [...prev, {
             type: 'assistant',
@@ -4290,6 +4390,36 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
     return grantClaudeToolPermission(suggestion.entry);
   }, [provider]);
+
+  // Send a UI decision back to the server (single or batched request IDs).
+  // This does not validate tool inputs or permissions; the backend enforces rules.
+  // It exists so "Allow & remember" can resolve multiple queued prompts at once.
+  const handlePermissionDecision = useCallback((requestIds, decision) => {
+    const ids = Array.isArray(requestIds) ? requestIds : [requestIds];
+    const validIds = ids.filter(Boolean);
+    if (validIds.length === 0) {
+      return;
+    }
+
+    validIds.forEach((requestId) => {
+      sendMessage({
+        type: 'claude-permission-response',
+        requestId,
+        allow: Boolean(decision?.allow),
+        updatedInput: decision?.updatedInput,
+        message: decision?.message,
+        rememberEntry: decision?.rememberEntry
+      });
+    });
+
+    setPendingPermissionRequests(prev => {
+      const next = prev.filter(req => !validIds.includes(req.requestId));
+      if (next.length === 0) {
+        setClaudeStatus(null);
+      }
+      return next;
+    });
+  }, [sendMessage]);
 
   // Store handleSubmit in ref so handleCustomCommand can access it
   useEffect(() => {
@@ -4929,6 +5059,101 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               </div>
         {/* Permission Mode Selector with scroll to bottom button - Above input, clickable for mobile */}
         <div ref={inputContainerRef} className="max-w-4xl mx-auto mb-3">
+          {pendingPermissionRequests.length > 0 && (
+            // Permission banner for tool approvals. This renders the input, allows
+            // "allow once" or "allow & remember", and supports batching similar requests.
+            // It does not persist permissions by itself; persistence is handled by
+            // the existing localStorage-based settings helpers, introduced to surface
+            // approvals before tool execution resumes.
+            <div className="mb-3 space-y-2">
+              {pendingPermissionRequests.map((request) => {
+                const rawInput = formatToolInputForDisplay(request.input);
+                const permissionEntry = buildClaudeToolPermissionEntry(request.toolName, rawInput);
+                const settings = getClaudeSettings();
+                const alreadyAllowed = permissionEntry
+                  ? settings.allowedTools.includes(permissionEntry)
+                  : false;
+                const rememberLabel = alreadyAllowed ? 'Allow (saved)' : 'Allow & remember';
+                // Group pending prompts that resolve to the same allow rule so
+                // a single "Allow & remember" can clear them in one click.
+                // This does not attempt fuzzy matching; it only batches identical rules.
+                const matchingRequestIds = permissionEntry
+                  ? pendingPermissionRequests
+                    .filter(item => buildClaudeToolPermissionEntry(item.toolName, formatToolInputForDisplay(item.input)) === permissionEntry)
+                    .map(item => item.requestId)
+                  : [request.requestId];
+
+                return (
+                  <div
+                    key={request.requestId}
+                    className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-3 shadow-sm"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                          Permission required
+                        </div>
+                        <div className="text-xs text-amber-800 dark:text-amber-200">
+                          Tool: <span className="font-mono">{request.toolName}</span>
+                        </div>
+                      </div>
+                      {permissionEntry && (
+                        <div className="text-xs text-amber-700 dark:text-amber-300">
+                          Allow rule: <span className="font-mono">{permissionEntry}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {rawInput && (
+                      <details className="mt-2">
+                        <summary className="cursor-pointer text-xs text-amber-800 dark:text-amber-200 hover:text-amber-900 dark:hover:text-amber-100">
+                          View tool input
+                        </summary>
+                        <pre className="mt-2 max-h-40 overflow-auto rounded-md bg-white/80 dark:bg-gray-900/60 border border-amber-200/60 dark:border-amber-800/60 p-2 text-xs text-amber-900 dark:text-amber-100 whitespace-pre-wrap">
+                          {rawInput}
+                        </pre>
+                      </details>
+                    )}
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handlePermissionDecision(request.requestId, { allow: true })}
+                        className="inline-flex items-center gap-2 rounded-md bg-amber-600 text-white text-xs font-medium px-3 py-1.5 hover:bg-amber-700 transition-colors"
+                      >
+                        Allow once
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (permissionEntry && !alreadyAllowed) {
+                            handleGrantToolPermission({ entry: permissionEntry, toolName: request.toolName });
+                          }
+                          handlePermissionDecision(matchingRequestIds, { allow: true, rememberEntry: permissionEntry });
+                        }}
+                        className={`inline-flex items-center gap-2 rounded-md text-xs font-medium px-3 py-1.5 border transition-colors ${
+                          permissionEntry
+                            ? 'border-amber-300 text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-100 dark:hover:bg-amber-900/30'
+                            : 'border-gray-300 text-gray-400 cursor-not-allowed'
+                        }`}
+                        disabled={!permissionEntry}
+                      >
+                        {rememberLabel}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handlePermissionDecision(request.requestId, { allow: false, message: 'User denied tool use' })}
+                        className="inline-flex items-center gap-2 rounded-md text-xs font-medium px-3 py-1.5 border border-red-300 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-200 dark:hover:bg-red-900/30 transition-colors"
+                      >
+                        Deny
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           <div className="flex items-center justify-center gap-3">
             <button
               type="button"
