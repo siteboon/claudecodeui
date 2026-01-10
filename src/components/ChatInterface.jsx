@@ -37,6 +37,7 @@ import Fuse from 'fuse.js';
 import CommandMenu from './CommandMenu';
 import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '../../shared/modelConstants';
 
+import { safeJsonParse } from '../lib/utils.js';
 
 // Helper function to decode HTML entities in text
 function decodeHtmlEntities(text) {
@@ -238,14 +239,6 @@ const safeLocalStorage = {
 
 const CLAUDE_SETTINGS_KEY = 'claude-settings';
 
-function safeJsonParse(value) {
-  if (!value || typeof value !== 'string') return null;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return null;
-  }
-}
 
 function getClaudeSettings() {
   const raw = safeLocalStorage.getItem(CLAUDE_SETTINGS_KEY);

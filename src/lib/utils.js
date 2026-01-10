@@ -5,5 +5,11 @@ export function cn(...inputs) {
   return twMerge(clsx(inputs))
 }
 
-// TODO: Add safeJsonParse here
-// 
+export function safeJsonParse(value) {
+  if (!value || typeof value !== 'string') return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
