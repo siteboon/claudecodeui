@@ -58,7 +58,7 @@ import fetch from 'node-fetch';
 import mime from 'mime-types';
 
 import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
-import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions } from './claude-sdk.js';
+import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions, resolveToolApproval } from './claude-sdk.js';
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
 import { queryCodex, abortCodexSession, isCodexSessionActive, getActiveCodexSessions } from './openai-codex.js';
 import gitRoutes from './routes/git.js';
@@ -804,6 +804,18 @@ function handleChatConnection(ws) {
                     provider,
                     success
                 });
+            } else if (data.type === 'claude-permission-response') {
+                // Relay UI approval decisions back into the SDK control flow.
+                // This does not persist permissions; it only resolves the in-flight request,
+                // introduced so the SDK can resume once the user clicks Allow/Deny.
+                if (data.requestId) {
+                    resolveToolApproval(data.requestId, {
+                        allow: Boolean(data.allow),
+                        updatedInput: data.updatedInput,
+                        message: data.message,
+                        rememberEntry: data.rememberEntry
+                    });
+                }
             } else if (data.type === 'cursor-abort') {
                 console.log('[DEBUG] Abort Cursor session:', data.sessionId);
                 const success = abortCursorSession(data.sessionId);
