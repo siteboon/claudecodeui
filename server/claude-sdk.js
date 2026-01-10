@@ -37,6 +37,7 @@ const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEO
 // This does not encode tool details or get shown to users; it exists so the UI
 // can respond to the correct pending request without collisions.
 function createRequestId() {
+  // if clause is used because randomUUID is not available in older Node.js versions
   if (typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }
