@@ -49,9 +49,13 @@ COPY --from=builder /app/server ./server
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/index.html ./index.html
 
+# Install Claude CLI globally
+RUN npm install -g @anthropic-ai/claude-code && \
+    npm cache clean --force
+
 # Create necessary directories with proper permissions
-RUN mkdir -p /data /config && \
-    chown -R node:node /app /data /config
+RUN mkdir -p /data /config /home/node/.claude && \
+    chown -R node:node /app /data /config /home/node/.claude
 
 # Switch to node user (uid/gid 1000)
 USER node
@@ -59,7 +63,8 @@ USER node
 # Environment variables
 ENV NODE_ENV=production \
     PORT=3001 \
-    DATABASE_PATH=/data/auth.db
+    DATABASE_PATH=/data/auth.db \
+    CLAUDE_CLI_PATH=claude
 
 # Expose port
 EXPOSE 3001

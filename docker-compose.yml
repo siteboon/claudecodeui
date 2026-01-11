@@ -23,12 +23,12 @@ services:
       - CLAUDE_CLI_PATH=${CLAUDE_CLI_PATH:-claude}
       - NODE_ENV=production
     volumes:
-      # sadly these paths must be hardcoded (no we cannot use $HOME) because claude code uses
-      # hardcoded absolute paths in the ../node/.claude file and Docker must have identical full ones
-      #- /home/faris/Projects/:/home/faris/Projects/
+      # Mount project directories for code access
+      # Adjust these paths to match your local project locations
       - ${HOME}/Projects/:${HOME}/Projects/
-#      - /mnt/d2/Projects/:/mnt/d2/Projects/
-      - ${HOME}/.claude:/home/node/.claude:rw
+      # Claude CLI config and authentication (persisted in named volume)
+      - claudecodeui-claude:/home/node/.claude
+      # Application data persistence
       - claudecodeui-data:/data
       - claudecodeui-config:/config
     networks:
@@ -46,3 +46,5 @@ volumes:
     name: claudecodeui_data
   claudecodeui-config:
     name: claudecodeui_config
+  claudecodeui-claude:
+    name: claudecodeui_claude
