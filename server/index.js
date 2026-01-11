@@ -366,7 +366,35 @@ app.post('/api/system/update', authenticateToken, async (req, res) => {
 
 app.get('/api/projects', authenticateToken, async (req, res) => {
     try {
-        const projects = await getProjects();
+        const { running } = req.query;
+        let projects = await getProjects();
+
+        // Filter to only show projects with running sessions
+        if (running === 'true') {
+            const activeSessions = {
+                claude: getActiveClaudeSDKSessions(),
+                cursor: getActiveCursorSessions(),
+                codex: getActiveCodexSessions()
+            };
+
+            projects = projects.map(project => ({
+                ...project,
+                sessions: project.sessions.filter(s =>
+                    activeSessions.claude.includes(s.id)
+                ),
+                cursorSessions: (project.cursorSessions || []).filter(s =>
+                    activeSessions.cursor.includes(s.id)
+                ),
+                codexSessions: (project.codexSessions || []).filter(s =>
+                    activeSessions.codex.some(c => c.id === s.id)
+                )
+            })).filter(project =>
+                project.sessions.length > 0 ||
+                (project.cursorSessions?.length || 0) > 0 ||
+                (project.codexSessions?.length || 0) > 0
+            );
+        }
+
         res.json(projects);
     } catch (error) {
         res.status(500).json({ error: error.message });
