@@ -27,14 +27,16 @@ RUN npm run build
 # =============================================================================
 FROM node:20-alpine
 
-# Install runtime dependencies
+# Install runtime dependencies including bash and curl for CLI installations
 RUN apk add --no-cache \
     python3 \
     make \
     g++ \
     git \
     ca-certificates \
-    tzdata
+    tzdata \
+    bash \
+    curl
 
 WORKDIR /app
 
@@ -49,13 +51,29 @@ COPY --from=builder /app/server ./server
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/index.html ./index.html
 
-# Install Claude CLI globally
+# Install all supported CLIs globally
+# 1. Claude Code CLI - Anthropic's official CLI
 RUN npm install -g @anthropic-ai/claude-code && \
     npm cache clean --force
 
-# Create necessary directories with proper permissions
-RUN mkdir -p /data /config /home/node/.claude && \
-    chown -R node:node /app /data /config /home/node/.claude
+# 2. Cursor CLI - Install via official method
+RUN curl -fsSL https://cursor.com/install | bash
+
+# 3. Codex CLI - OpenAI's Codex CLI
+RUN npm install -g @openai/codex && \
+    npm cache clean --force
+
+# 4. Taskmaster CLI - AI task orchestration
+RUN npm install -g taskmaster-cli && \
+    npm cache clean --force
+
+# Create necessary directories with proper permissions for all CLIs
+RUN mkdir -p /data /config /init-scripts /home/node/.claude /home/node/.cursor /home/node/.openai /home/node/.taskmaster && \
+    chown -R node:node /app /data /config /init-scripts /home/node/.claude /home/node/.cursor /home/node/.openai /home/node/.taskmaster
+
+# Copy entrypoint script
+COPY --chown=node:node docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
 
 # Switch to node user (uid/gid 1000)
 USER node
@@ -69,5 +87,5 @@ ENV NODE_ENV=production \
 # Expose port
 EXPOSE 3001
 
-# Start server
-CMD ["node", "server/index.js"]
+# Start server using entrypoint script
+CMD ["/app/docker-entrypoint.sh"]

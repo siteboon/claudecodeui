@@ -139,6 +139,9 @@ docker run -d \
   -v claudecodeui-data:/data \
   -v claudecodeui-config:/config \
   -v claudecodeui-claude:/home/node/.claude \
+  -v claudecodeui-cursor:/home/node/.cursor \
+  -v claudecodeui-taskmaster:/home/node/.taskmaster \
+  -v ./init-scripts:/init-scripts \
   -v ~/Projects:~/Projects \
   -e PORT=3001 \
   -e DATABASE_PATH=/data/auth.db \
@@ -168,6 +171,9 @@ docker run -d \
   -v claudecodeui-data:/data \
   -v claudecodeui-config:/config \
   -v claudecodeui-claude:/home/node/.claude \
+  -v claudecodeui-cursor:/home/node/.cursor \
+  -v claudecodeui-taskmaster:/home/node/.taskmaster \
+  -v ./init-scripts:/init-scripts \
   -v ~/Projects:~/Projects \
   --restart unless-stopped \
   claudecodeui:local
@@ -229,6 +235,9 @@ The Docker setup uses several volumes for data persistence:
 | `claudecodeui-data` | Application data | SQLite database and user data |
 | `claudecodeui-config` | Configuration | Application settings and config files |
 | `claudecodeui-claude` | Claude CLI data | Claude authentication and session data |
+| `claudecodeui-cursor` | Cursor CLI data | Cursor configuration and settings |
+| `claudecodeui-taskmaster` | Taskmaster data | Taskmaster CLI configuration |
+| `./init-scripts` | Init scripts | Custom startup scripts (bind mount for easy editing) |
 | `~/Projects` | Project files | Mount your local projects (adjust path as needed) |
 
 **Important**: Adjust the `~/Projects` mount path to match your local project locations. You can add multiple volume mounts for different project directories:
@@ -272,6 +281,60 @@ docker rm claudecodeui
 docker stats claudecodeui
 ```
 
+#### Initialization Scripts
+
+The Docker container supports custom initialization scripts that run on startup. This allows you to customize your environment, configure CLIs, and set up tools automatically.
+
+**Quick Start:**
+
+1. **Create a custom script** in the `init-scripts/` directory:
+   ```bash
+   cat > init-scripts/my-setup.sh <<'EOF'
+   #!/bin/bash
+   echo "Setting up my environment..."
+   git config --global user.name "My Name"
+   git config --global user.email "me@example.com"
+   EOF
+   ```
+
+2. **Make it executable:**
+   ```bash
+   chmod +x init-scripts/my-setup.sh
+   ```
+
+3. **Restart the container:**
+   ```bash
+   docker-compose restart
+   ```
+
+**What's Included:**
+
+The `init-scripts/` directory contains example scripts for:
+- **Claude Code Configuration** - Custom CLI settings
+- **Cursor IDE Setup** - Editor preferences
+- **Taskmaster Configuration** - AI task orchestration settings
+- **Git Configuration** - User settings and aliases
+- **Tool Installation** - Additional npm packages and utilities
+
+All example scripts are disabled by default (you need to uncomment the code to activate them).
+
+**Supported CLIs:**
+
+The Docker container includes the following AI CLIs pre-installed:
+- **Claude Code CLI** - Anthropic's official Claude CLI (`@anthropic-ai/claude-code`)
+- **Cursor CLI** - Cursor's official CLI
+- **Codex CLI** - OpenAI's Codex CLI (`@openai/codex`)
+- **Taskmaster CLI** - AI task orchestration (`taskmaster-cli`)
+
+**Usage Tips:**
+
+- Scripts run in alphabetical order (use number prefixes: `00-`, `01-`, etc.)
+- Scripts must be executable (`chmod +x`)
+- Scripts run as the `node` user (not root)
+- Check container logs for script output: `docker logs claudecodeui`
+
+For detailed documentation on initialization scripts, see [init-scripts/README.md](init-scripts/README.md).
+
 #### Troubleshooting Docker Deployment
 
 **Container won't start:**
@@ -283,6 +346,12 @@ docker stats claudecodeui
 - The Claude CLI is pre-installed in the container
 - Authentication data is stored in the `claudecodeui-claude` volume
 - First-time setup may require authenticating through the UI
+
+**Init scripts not running:**
+- Verify scripts are executable: `ls -la init-scripts/`
+- Check script paths are correct (must be in `init-scripts/` directory)
+- View container logs for script output: `docker logs claudecodeui`
+- Ensure scripts have proper shebang: `#!/bin/bash`
 
 **Project files not visible:**
 - Verify volume mount paths match your local directories

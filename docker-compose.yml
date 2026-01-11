@@ -26,11 +26,15 @@ services:
       # Mount project directories for code access
       # Adjust these paths to match your local project locations
       - ${HOME}/Projects/:${HOME}/Projects/
-      # Claude CLI config and authentication (persisted in named volume)
+      # CLI configs and authentication (persisted in named volumes)
       - claudecodeui-claude:/home/node/.claude
+      - claudecodeui-cursor:/home/node/.cursor
+      - claudecodeui-taskmaster:/home/node/.taskmaster
       # Application data persistence
       - claudecodeui-data:/data
       - claudecodeui-config:/config
+      # Initialization scripts (bind mount to local directory for easy editing)
+      - ./init-scripts:/init-scripts
     networks:
       - claudecodeui
       - public
@@ -48,3 +52,7 @@ volumes:
     name: claudecodeui_config
   claudecodeui-claude:
     name: claudecodeui_claude
+  claudecodeui-cursor:
+    name: claudecodeui_cursor
+  claudecodeui-taskmaster:
+    name: claudecodeui_taskmaster

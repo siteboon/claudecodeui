@@ -1,0 +1,8 @@
+# Ignore all shell scripts except examples
+*.sh
+
+# Keep example scripts
+!*-example-*.sh
+
+# Keep the README
+!README.md
