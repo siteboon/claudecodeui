@@ -289,6 +289,55 @@ docker stats claudecodeui
 - Ensure mounted directories have read permissions
 - Check docker-compose.yml volume configuration
 
+### Unraid Deployment
+
+Deploy Claude Code UI on Unraid servers with the official Community Applications template.
+
+#### Installation via Community Applications (Recommended - Coming Soon)
+
+Once approved for Community Applications:
+
+1. Open Unraid WebUI
+2. Navigate to **Apps** tab
+3. Search for **"claudecodeui"** or **"Claude Code UI"**
+4. Click **Install**
+5. Configure settings:
+   - Set **WebUI Port** (default: 3002)
+   - Map **project directories** to your Unraid shares
+   - Adjust **appdata paths** if needed (defaults are fine for most users)
+6. Click **Apply**
+
+Access the WebUI at `http://[UNRAID-IP]:3002`
+
+#### Manual Template Installation
+
+Until available in Community Applications, install manually:
+
+1. Go to **Docker** > **Add Container**
+2. Set **Template URL** to:
+   ```
+   https://raw.githubusercontent.com/siteboon/claudecodeui/main/unraid/claudecodeui.xml
+   ```
+3. Click **Apply**
+
+#### Configuration Tips
+
+**Project Directory Mapping:**
+- Map your actual project locations (e.g., `/mnt/user/projects`)
+- Container paths must match host paths for Claude Code to work
+- You can configure up to 3 project directories
+
+**Default Paths:**
+- Application Data: `/mnt/user/appdata/claudecodeui/data`
+- Configuration: `/mnt/user/appdata/claudecodeui/config`
+- Claude CLI Data: `/mnt/user/appdata/claudecodeui/claude`
+
+**Port Configuration:**
+- Default WebUI Port: `3002`
+- Ensure port doesn't conflict with other containers
+
+For detailed Unraid setup instructions, troubleshooting, and configuration options, see [unraid/README.md](unraid/README.md).
+
 ### Run as Background Service (Recommended for Production)
 
 For production use, run Claude Code UI as a background service using PM2 (Process Manager 2):

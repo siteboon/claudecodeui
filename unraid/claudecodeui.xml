@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>claudecodeui</Name>
+  <Repository>ghcr.io/nickbolles/claudecodeui:latest</Repository>
+  <Registry>https://ghcr.io/nickbolles/claudecodeui</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/siteboon/claudecodeui/issues</Support>
+  <Project>https://github.com/siteboon/claudecodeui</Project>
+  <Overview>Use Claude Code, Cursor CLI, or Codex on mobile and web with CloudCLI (aka Claude Code UI). A free open-source web UI that helps you manage your Claude Code, Cursor, or Codex sessions and projects remotely from any device.&#xD;
+&#xD;
+Features:&#xD;
+- Responsive design for desktop, tablet, and mobile&#xD;
+- Interactive chat interface with Claude Code/Cursor/Codex&#xD;
+- Built-in shell terminal access&#xD;
+- File explorer with syntax highlighting&#xD;
+- Git integration for version control&#xD;
+- Session management and history&#xD;
+- Claude CLI pre-installed and bundled&#xD;
+&#xD;
+Access the WebUI at: http://[IP]:[PORT:3002]</Overview>
+  <Category>Productivity: Tools:</Category>
+  <WebUI>http://[IP]:[PORT:3002]</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/siteboon/claudecodeui/main/unraid/claudecodeui.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/siteboon/claudecodeui/main/public/logo-256.png</Icon>
+  <ExtraParams>--restart=unless-stopped</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled></DateInstalled>
+  <DonateText/>
+  <DonateLink/>
+  <Requires/>
+  <Config Name="WebUI Port" Target="3001" Default="3002" Mode="tcp" Description="Port for accessing the web interface" Type="Port" Display="always" Required="true" Mask="false">3002</Config>
+  <Config Name="Application Data" Target="/data" Default="/mnt/user/appdata/claudecodeui/data" Mode="rw" Description="Application database and user data" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/claudecodeui/data</Config>
+  <Config Name="Configuration" Target="/config" Default="/mnt/user/appdata/claudecodeui/config" Mode="rw" Description="Application configuration files" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/claudecodeui/config</Config>
+  <Config Name="Claude CLI Data" Target="/home/node/.claude" Default="/mnt/user/appdata/claudecodeui/claude" Mode="rw" Description="Claude CLI authentication and session data (persisted)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/claudecodeui/claude</Config>
+  <Config Name="Projects Directory 1" Target="/mnt/user/projects" Default="/mnt/user/projects" Mode="rw" Description="Mount your project directories for code access. Adjust path as needed." Type="Path" Display="always" Required="false" Mask="false">/mnt/user/projects</Config>
+  <Config Name="Projects Directory 2" Target="/mnt/user/docker-projects" Default="" Mode="rw" Description="Optional: Additional project directory. Leave empty if not needed." Type="Path" Display="advanced" Required="false" Mask="false"></Config>
+  <Config Name="Projects Directory 3" Target="/mnt/user/development" Default="" Mode="rw" Description="Optional: Additional project directory. Leave empty if not needed." Type="Path" Display="advanced" Required="false" Mask="false"></Config>
+  <Config Name="Internal Port" Target="PORT" Default="3001" Mode="" Description="Internal application port (usually no need to change)" Type="Variable" Display="advanced" Required="false" Mask="false">3001</Config>
+  <Config Name="Database Path" Target="DATABASE_PATH" Default="/data/auth.db" Mode="" Description="SQLite database file location" Type="Variable" Display="advanced" Required="false" Mask="false">/data/auth.db</Config>
+  <Config Name="Context Window" Target="CONTEXT_WINDOW" Default="160000" Mode="" Description="Claude context window size" Type="Variable" Display="advanced" Required="false" Mask="false">160000</Config>
+  <Config Name="Claude CLI Path" Target="CLAUDE_CLI_PATH" Default="claude" Mode="" Description="Path to Claude CLI executable (pre-installed in container)" Type="Variable" Display="advanced" Required="false" Mask="false">claude</Config>
+  <Config Name="Node Environment" Target="NODE_ENV" Default="production" Mode="" Description="Node.js environment mode" Type="Variable" Display="advanced" Required="false" Mask="false">production</Config>
+  <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="User ID (default: 99 for 'nobody' user on Unraid)" Type="Variable" Display="advanced" Required="false" Mask="false">99</Config>
+  <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Group ID (default: 100 for 'users' group on Unraid)" Type="Variable" Display="advanced" Required="false" Mask="false">100</Config>
+</Container>
