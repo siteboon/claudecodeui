@@ -319,6 +319,29 @@ We welcome contributions! Please follow these guidelines:
 
 ### Common Issues & Solutions
 
+#### Shell/Terminal Fails with "posix_spawnp failed" (macOS)
+**Problem**: When clicking "Continue in Shell" or starting a terminal session, you see:
+```
+Error: posix_spawnp failed.
+```
+With a stack trace referencing `node-pty/lib/unixTerminal.js`.
+
+**Cause**: The `node-pty` package's `spawn-helper` binary may be missing execute permissions after installation. This commonly happens on macOS when:
+- Installing via `npx` or `pnpm`
+- The npm tarball doesn't preserve the execute bit
+
+**Solution**: Run this command from the project root (or global install location):
+```bash
+chmod +x node_modules/node-pty/prebuilds/darwin-*/spawn-helper
+```
+
+For Intel Macs, the path is `darwin-x64`. For Apple Silicon (M1/M2/M3), it's `darwin-arm64`.
+
+**Permanent Fix**: This project includes a `postinstall` script that automatically fixes permissions. If you still encounter the issue:
+1. Delete `node_modules` and reinstall: `rm -r node_modules && npm install`
+2. Verify the fix: `ls -la node_modules/node-pty/prebuilds/darwin-*/spawn-helper` (should show `-rwxr-xr-x`)
+
+**Related Issues**: [#284](https://github.com/siteboon/claudecodeui/issues/284)
 
 #### "No Claude projects found"
 **Problem**: The UI shows no projects or empty project list

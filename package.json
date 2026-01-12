@@ -29,7 +29,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "npm run build && npm run server",
-    "release": "./release.sh"
+    "release": "./release.sh",
+    "postinstall": "node -e \"const fs = require('fs'), path = require('path'); const helper = path.join(__dirname, 'node_modules/node-pty/prebuilds', process.platform + '-' + process.arch, 'spawn-helper'); try { fs.chmodSync(helper, 0o755); console.log('Fixed spawn-helper permissions'); } catch(e) { /* ignore if not found */ }\""
   },
   "keywords": [
     "claude coode",
@@ -77,7 +78,7 @@
     "mime-types": "^3.0.1",
     "multer": "^2.0.1",
     "node-fetch": "^2.7.0",
-    "node-pty": "^1.1.0-beta34",
+    "node-pty": "^1.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-dropzone": "^14.2.3",
@@ -89,6 +90,7 @@
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",
     "tailwind-merge": "^3.3.1",
+    "task-master-ai": "^0.41.0",
     "ws": "^8.14.2"
   },
   "devDependencies": {
