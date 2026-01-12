@@ -184,6 +184,24 @@ The application will start at the port you specified in your .env
 
 ## Security & Tools Configuration
 
+### Authentication
+
+Claude Code UI includes **built-in authentication** to protect your data when running on a server or VPS:
+
+- **First-time setup**: When you first access the UI, you'll be prompted to create an admin account
+- **Single-user system**: Only one user account is supported (designed for personal use)
+- **JWT-based auth**: Secure token-based authentication with bcrypt password hashing
+- **Session persistence**: Stay logged in across browser sessions
+
+> ⚠️ **Important for Remote/VPS Deployment**: If you're running Claude Code UI on a remote server or VPS, authentication is **essential** to prevent unauthorized access to your projects and Claude sessions. Make sure to:
+> 1. Set a strong password during initial setup
+> 2. Use HTTPS (via reverse proxy like nginx/caddy) for production deployments
+> 3. Consider firewall rules to restrict access to trusted IPs
+
+For local-only use (localhost), the authentication still applies but the security risk is lower since access is limited to your machine.
+
+### Tool Permissions
+
 **🔒 Important Notice**: All Claude Code tools are **disabled by default**. This prevents potentially harmful operations from running automatically.
 
 ### Enabling Tools
