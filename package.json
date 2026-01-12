@@ -30,7 +30,7 @@
     "preview": "vite preview",
     "start": "npm run build && npm run server",
     "release": "./release.sh",
-    "postinstall": "node -e \"const fs = require('fs'), path = require('path'); const helper = path.join(__dirname, 'node_modules/node-pty/prebuilds', process.platform + '-' + process.arch, 'spawn-helper'); try { fs.chmodSync(helper, 0o755); console.log('Fixed spawn-helper permissions'); } catch(e) { /* ignore if not found */ }\""
+    "postinstall": "node -e \"const fs = require('fs'), path = require('path'); const helper = path.join(__dirname, 'node_modules/node-pty/prebuilds', process.platform + '-' + process.arch, 'spawn-helper'); try { fs.chmodSync(helper, 0o755); console.log('Fixed spawn-helper permissions'); } catch(e) { if (e.code !== 'ENOENT') console.error('Failed to fix spawn-helper permissions:', e.message); }\""
   },
   "keywords": [
     "claude coode",
@@ -90,7 +90,6 @@
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",
     "tailwind-merge": "^3.3.1",
-    "task-master-ai": "^0.41.0",
     "ws": "^8.14.2"
   },
   "devDependencies": {

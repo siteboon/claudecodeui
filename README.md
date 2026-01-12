@@ -321,7 +321,7 @@ We welcome contributions! Please follow these guidelines:
 
 #### Shell/Terminal Fails with "posix_spawnp failed" (macOS)
 **Problem**: When clicking "Continue in Shell" or starting a terminal session, you see:
-```
+```text
 Error: posix_spawnp failed.
 ```
 With a stack trace referencing `node-pty/lib/unixTerminal.js`.
