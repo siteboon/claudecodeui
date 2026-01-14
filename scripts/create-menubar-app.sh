@@ -66,6 +66,15 @@ if [ -z "$PROJECT_DIR" ] || [ ! -d "$PROJECT_DIR" ]; then
     exit 1
 fi
 
+# .envファイルからポート番号を読み取る（デフォルト: 3001）
+SERVER_PORT=3001
+if [ -f "$PROJECT_DIR/.env" ]; then
+    ENV_PORT=$(grep -E "^PORT=" "$PROJECT_DIR/.env" | cut -d'=' -f2 | tr -d ' ')
+    if [ -n "$ENV_PORT" ]; then
+        SERVER_PORT="$ENV_PORT"
+    fi
+fi
+
 # サーバーが実行中かチェック
 is_running() {
     if [ -f "$PID_FILE" ]; then
@@ -75,7 +84,7 @@ is_running() {
         fi
     fi
     # PIDファイルがなくてもポートで確認
-    if lsof -i :3001 > /dev/null 2>&1; then
+    if lsof -i :$SERVER_PORT > /dev/null 2>&1; then
         return 0
     fi
     return 1
@@ -99,7 +108,7 @@ start_server() {
     sleep 2
 
     if is_running; then
-        osascript -e 'display notification "サーバーを起動しました (Port 3001)" with title "Claude Code UI"'
+        osascript -e "display notification \"サーバーを起動しました (Port $SERVER_PORT)\" with title \"Claude Code UI\""
     else
         osascript -e 'display notification "サーバーの起動に失敗しました" with title "Claude Code UI"'
     fi
@@ -124,8 +133,8 @@ stop_server() {
         rm -f "$PID_FILE"
     fi
 
-    # ポート3001を使用しているプロセスも停止
-    local port_pid=$(lsof -ti :3001 2>/dev/null)
+    # 設定されたポートを使用しているプロセスも停止
+    local port_pid=$(lsof -ti :$SERVER_PORT 2>/dev/null)
     if [ -n "$port_pid" ]; then
         kill -TERM $port_pid 2>/dev/null
     fi
@@ -146,7 +155,7 @@ stop_server() {
 # ブラウザで開く
 open_browser() {
     if is_running; then
-        open "http://localhost:3001"
+        open "http://localhost:$SERVER_PORT"
     else
         osascript -e 'display notification "サーバーが起動していません" with title "Claude Code UI"'
     fi
@@ -167,7 +176,7 @@ show_menu() {
     local status_icon
 
     if is_running; then
-        status_text="● 実行中 (Port 3001)"
+        status_text="● 実行中 (Port $SERVER_PORT)"
         status_icon="🟢"
     else
         status_text="○ 停止中"
