@@ -90,10 +90,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // メニューバーアイテムを作成
         log("Creating status bar item...")
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
         if let button = statusItem.button {
-            button.title = "☁️"
+            // 初期アイコン（停止中 = グレー）
+            if let grayIcon = loadMenuBarIcon(named: "menubar-icon-gray") {
+                button.image = grayIcon
+            } else {
+                button.title = "💤"
+            }
         }
         log("Status bar item created")
 
@@ -169,8 +174,41 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // アイコンを更新
         if let button = self.statusItem.button {
-            button.title = isRunning ? "☁️" : "💤"
+            if isRunning {
+                if let colorIcon = loadMenuBarIcon(named: "menubar-icon-color") {
+                    button.image = colorIcon
+                    button.title = ""
+                } else {
+                    button.image = nil
+                    button.title = "☁️"
+                }
+            } else {
+                if let grayIcon = loadMenuBarIcon(named: "menubar-icon-gray") {
+                    button.image = grayIcon
+                    button.title = ""
+                } else {
+                    button.image = nil
+                    button.title = "💤"
+                }
+            }
         }
+    }
+
+    func loadMenuBarIcon(named name: String) -> NSImage? {
+        let bundle = Bundle.main
+        // @2x版を優先的に探す
+        if let path = bundle.path(forResource: "\(name)@2x", ofType: "png"),
+           let image = NSImage(contentsOfFile: path) {
+            image.size = NSSize(width: 18, height: 18)
+            return image
+        }
+        // 通常版
+        if let path = bundle.path(forResource: name, ofType: "png"),
+           let image = NSImage(contentsOfFile: path) {
+            image.size = NSSize(width: 18, height: 18)
+            return image
+        }
+        return nil
     }
 
     func isServerRunning() -> Bool {
@@ -509,6 +547,13 @@ echo "$PROJECT_DIR" > "$APP_DIR/Contents/Resources/project_dir.txt"
 if [ -f "$PROJECT_DIR/public/icons/icon-512x512.png" ]; then
     cp "$PROJECT_DIR/public/icons/icon-512x512.png" "$APP_DIR/Contents/Resources/AppIcon.png" 2>/dev/null || true
 fi
+
+# メニューバーアイコンをコピー
+for icon in menubar-icon-color.png menubar-icon-color@2x.png menubar-icon-gray.png menubar-icon-gray@2x.png; do
+    if [ -f "$PROJECT_DIR/public/icons/$icon" ]; then
+        cp "$PROJECT_DIR/public/icons/$icon" "$APP_DIR/Contents/Resources/$icon" 2>/dev/null || true
+    fi
+done
 
 # ビルドディレクトリをクリーンアップ
 rm -rf "$BUILD_DIR"

@@ -290,25 +290,18 @@ npm run dev:tunnel
 
 **停止:** `Ctrl+C` ですべて終了
 
-### 方法2: macOSアプリ（デスクトップアイコン）
+### 方法2: macOSメニューバーアプリ
 
-デスクトップにアプリアイコンを作成:
+メニューバーから制御できるネイティブアプリを作成:
 
 ```bash
-./scripts/create-macos-app.sh
+./scripts/create-native-menubar-app.sh
 ```
 
 作成後:
-1. デスクトップに「Claude Code UI」アイコンが表示される
-2. ダブルクリックでTerminalが開き、自動起動
-3. **Dockに追加**: アイコンをDockにドラッグ
-4. **ログイン時自動起動**: システム設定 → ログイン項目 に追加
-
-### 方法3: シェルスクリプト
-
-```bash
-./scripts/start-with-tunnel.sh
-```
+1. `~/Applications/ClaudeCodeUI.app` が作成される
+2. メニューバーのアイコンからサーバーを起動/停止
+3. **ログイン時自動起動**: システム設定 → 一般 → ログイン項目 に追加
 
 ---
 
