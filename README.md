@@ -1,370 +1,507 @@
 <div align="center">
   <img src="public/logo.svg" alt="Claude Code UI" width="64" height="64">
-  <h1>Cloud CLI (aka Claude Code UI)</h1>
+  <h1>Claude Code UI</h1>
+  <p><strong>🏃 PCを立ち上げっぱなしにして、ジムやウォーキングに出かけよう</strong></p>
+  <p>スマートフォンからセキュアにClaude Codeを操作できるリモートUI</p>
+  <br>
+  <p>
+    <a href="https://github.com/RVCA212/claude-code-ui">📦 Original Repository (RVCA212)</a> からフォーク
+  </p>
 </div>
 
+---
 
-A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor CLI](https://docs.cursor.com/en/cli/overview) and [Codex](https://developers.openai.com/codex). You can use it locally or remotely to view your active projects and sessions in Claude Code, Cursor, or Codex and make changes to them from everywhere (mobile or desktop). This gives you a proper interface that works everywhere. 
+## コンセプト
 
-## Screenshots
+**Claude Code UI** は、自宅のPCで動作する Claude Code / Cursor CLI / Codex を、外出先からスマートフォンでセキュアに操作するためのWebベースUIです。
+
+```
+🏠 自宅PC                          📱 外出先
+┌─────────────────┐               ┌─────────────────┐
+│ Claude Code UI  │◄──セキュア────►│   スマホブラウザ  │
+│ (常時起動)      │   トンネル      │   ジム/散歩中    │
+│                 │               │                 │
+│ ☁️ メニューバー   │               │  タスクを確認    │
+│    から制御     │               │  指示を送信      │
+└─────────────────┘               └─────────────────┘
+```
+
+**こんな使い方ができます：**
+- 🏋️ ジムで運動しながら、コード生成の進捗を確認
+- 🚶 散歩中に、AIへ追加の指示を送信
+- ☕ カフェで、長時間タスクの結果をチェック
+- 🛋️ リビングから、デスクのPCを操作
+
+## スクリーンショット
 
 <div align="center">
-  
+
 <table>
 <tr>
 <td align="center">
-<h3>Desktop View</h3>
+<h3>デスクトップ</h3>
 <img src="public/screenshots/desktop-main.png" alt="Desktop Interface" width="400">
 <br>
-<em>Main interface showing project overview and chat</em>
+<em>プロジェクト一覧とチャットUI</em>
 </td>
 <td align="center">
-<h3>Mobile Experience</h3>
+<h3>スマートフォン</h3>
 <img src="public/screenshots/mobile-chat.png" alt="Mobile Interface" width="250">
 <br>
-<em>Responsive mobile design with touch navigation</em>
-</td>
-</tr>
-<tr>
-<td align="center" colspan="2">
-<h3>CLI Selection</h3>
-<img src="public/screenshots/cli-selection.png" alt="CLI Selection" width="400">
-<br>
-<em>Select between Claude Code, Cursor CLI and Codex</em>
+<em>外出先からタッチ操作で制御</em>
 </td>
 </tr>
 </table>
 
-
-
 </div>
 
-## Features
+## 主な機能
 
-- **Responsive Design** - Works seamlessly across desktop, tablet, and mobile so you can also use Claude Code, Cursor, or Codex from mobile 
-- **Interactive Chat Interface** - Built-in chat interface for seamless communication with Claude Code, Cursor, or Codex
-- **Integrated Shell Terminal** - Direct access to Claude Code, Cursor CLI, or Codex through built-in shell functionality
-- **File Explorer** - Interactive file tree with syntax highlighting and live editing
-- **Git Explorer** - View, stage and commit your changes. You can also switch branches 
-- **Session Management** - Resume conversations, manage multiple sessions, and track history
-- **TaskMaster AI Integration** *(Optional)* - Advanced project management with AI-powered task planning, PRD parsing, and workflow automation
-- **Model Compatibility** - Works with Claude Sonnet 4.5, Opus 4.5, and GPT-5.2 
+- **📱 レスポンシブUI** - スマートフォン・タブレット・デスクトップで最適化
+- **💬 チャットインターフェース** - Claude Code / Cursor / Codex との対話
+- **🖥️ 統合ターミナル** - 直接CLIを操作
+- **📁 ファイルエクスプローラー** - プロジェクトのファイルを閲覧・編集
+- **🔀 Git操作** - ステージング、コミット、ブランチ切り替え
+- **🔐 セキュアアクセス** - Cloudflare Tunnel + Access で安全に外部公開
 
+---
 
-## Quick Start
+## クイックスタート
 
-### Prerequisites
+### 必要なもの
 
-- [Node.js](https://nodejs.org/) v20 or higher
-- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and configured, and/or
-- [Cursor CLI](https://docs.cursor.com/en/cli/overview) installed and configured, and/or
-- [Codex](https://developers.openai.com/codex) installed and configured
+- macOS / Linux / Windows
+- [Node.js](https://nodejs.org/) v20以上
+- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code)（または [Cursor CLI](https://docs.cursor.com/en/cli/overview) / [Codex](https://developers.openai.com/codex)）
 
-### One-click Operation (Recommended)
-
-No installation required, direct operation:
+### 方法1: npxで即座に起動（お試し）
 
 ```bash
 npx @siteboon/claude-code-ui
 ```
 
-The server will start and be accessible at `http://localhost:3001` (or your configured PORT).
+ブラウザで `http://localhost:3001` にアクセス。
 
-**To restart**: Simply run the same `npx` command again after stopping the server
-### Global Installation (For Regular Use)
-
-For frequent use, install globally once:
+### 方法2: グローバルインストール（推奨）
 
 ```bash
+# インストール
 npm install -g @siteboon/claude-code-ui
-```
 
-Then start with a simple command:
-
-```bash
+# 起動
 claude-code-ui
+
+# または
+cloudcli
 ```
 
+### 方法3: ソースからインストール（開発者向け）
 
-**To restart**: Stop with Ctrl+C and run `claude-code-ui` again.
-
-**To update**:
 ```bash
-cloudcli update
+# リポジトリをクローン
+git clone https://github.com/siteboon/claudecodeui.git
+cd claudecodeui
+
+# 依存関係をインストール
+npm install
+
+# 開発モードで起動
+npm run dev
 ```
 
-### CLI Usage
+---
 
-After global installation, you have access to both `claude-code-ui` and `cloudcli` commands:
+## 開発者向けコマンド一覧
 
-| Command / Option | Short | Description |
-|------------------|-------|-------------|
-| `cloudcli` or `claude-code-ui` | | Start the server (default) |
-| `cloudcli start` | | Start the server explicitly |
-| `cloudcli status` | | Show configuration and data locations |
-| `cloudcli update` | | Update to the latest version |
-| `cloudcli help` | | Show help information |
-| `cloudcli version` | | Show version information |
-| `--port <port>` | `-p` | Set server port (default: 3001) |
-| `--database-path <path>` | | Set custom database location |
+ソースからインストールした場合の各コマンドです。
 
-**Examples:**
+### ポート設定
+
+| ポート | 用途 |
+|--------|------|
+| `3001` | バックエンドサーバー（API/WebSocket） |
+| `5173` | フロントエンド開発サーバー（Vite） |
+
+> **Note**: 開発時は `http://localhost:5173` にアクセスします。本番ビルド時は `http://localhost:3001` のみで動作します。
+
+### 起動コマンド
+
+| コマンド | 用途 | 説明 |
+|----------|------|------|
+| `npm run dev` | ローカル開発 | フロントエンド + バックエンドを同時起動（開発モード） |
+| `npm run dev:tunnel` | リモート開発 | 上記 + Cloudflare Tunnelを同時起動 |
+| `npm run server` | バックエンドのみ | APIサーバーのみ起動（ポート3001） |
+| `npm run client` | フロントエンドのみ | Vite開発サーバーのみ起動（ポート5173） |
+| `npm run tunnel` | Tunnelのみ | Cloudflare Tunnelのみ起動（要事前設定） |
+| `npm run start` | 本番起動 | ビルド後にサーバーを起動 |
+
+### 使い分けガイド
+
 ```bash
-cloudcli                          # Start with defaults
-cloudcli -p 8080              # Start on custom port
-cloudcli status                   # Show current configuration
+# 🏠 ローカルで開発・テストする場合
+npm run dev
+# → http://localhost:5173 でアクセス
+
+# 📱 スマホからリモートアクセスしたい場合
+npm run dev:tunnel
+# → https://claude.your-domain.com でアクセス
+
+# ☁️ Tunnelだけ別ターミナルで起動したい場合
+npm run dev      # ターミナル1
+npm run tunnel   # ターミナル2（別窓）
+
+# 🖥️ メニューバーアプリから起動する場合
+# → アプリが npm run dev を自動実行します
 ```
 
-### Run as Background Service (Recommended for Production)
+### Cloudflare Tunnel 単独起動
 
-For production use, run Claude Code UI as a background service using PM2 (Process Manager 2):
+Tunnelのみを起動する場合は、事前に以下が必要です：
 
-#### Install PM2
+1. `cloudflared tunnel login` で認証済み
+2. `cloudflared tunnel create claudeui` でトンネル作成済み
+3. `~/.cloudflared/config.yml` に設定ファイル作成済み
 
 ```bash
+# Tunnelのみ起動（バックエンドは別途起動が必要）
+npm run tunnel
+
+# または直接コマンド
+cloudflared tunnel run claudeui
+```
+
+> **Tip**: `npm run tunnel` は `caffeinate` コマンドを使用してMacのスリープを防止します。
+
+---
+
+## macOS メニューバーアプリ
+
+macOSでは、メニューバーから簡単にサーバーを起動・停止できるネイティブアプリを作成できます。
+
+<div align="center">
+  <img src="public/screenshots/menubar-app.png" alt="Menubar App" width="300">
+  <br>
+  <em>メニューバーからワンクリックで制御</em>
+</div>
+
+### インストール
+
+```bash
+# リポジトリをクローン（まだの場合）
+git clone https://github.com/siteboon/claudecodeui.git
+cd claudecodeui
+
+# メニューバーアプリを作成
+./scripts/create-native-menubar-app.sh
+```
+
+アプリは `~/Applications/ClaudeCodeUI.app` に作成されます。
+
+### 機能
+
+| アイコン | 状態 |
+|---------|------|
+| ☁️ | サーバー実行中 |
+| 💤 | サーバー停止中 |
+
+**メニュー項目：**
+- ▶ サーバーを起動
+- ⏹ サーバーを停止
+- 🔄 再起動
+- 🌐 ブラウザで開く
+- 📋 ログを表示
+- ❌ 終了
+
+### ログイン時に自動起動
+
+1. **システム設定** を開く
+2. **一般** → **ログイン項目**
+3. **+** をクリックして `~/Applications/ClaudeCodeUI.app` を追加
+
+これで、Macを起動するだけでサーバーが自動的に立ち上がります。
+
+---
+
+## 外部からセキュアにアクセス（Cloudflare Tunnel）
+
+外出先からスマートフォンでアクセスするには、Cloudflare Tunnelを使用します。
+
+### アーキテクチャ
+
+```
+📱 スマートフォン（外出先）
+        ↓ HTTPS
+   インターネット
+        ↓
+  Cloudflare CDN
+        ↓
+  Cloudflare Access (認証レイヤー) ← メール/Google/GitHub認証
+        ↓
+  Cloudflare Tunnel (暗号化トンネル)
+        ↓
+🏠 自宅PC: localhost:3001 ← Claude Code UI
+```
+
+**メリット：**
+- ✅ **ポート開放不要** - ルーター設定不要、ファイアウォールそのまま
+- ✅ **全通信が暗号化** - HTTPS強制、中間者攻撃を防止
+- ✅ **ゼロトラスト認証** - 許可したユーザーのみアクセス可能
+- ✅ **無料で利用可能** - Cloudflare Free Planで十分
+
+### 前提条件
+
+- Cloudflareアカウント（無料）
+- 独自ドメイン（Cloudflareで管理）または `*.trycloudflare.com`
+
+### Step 1: cloudflaredをインストール
+
+**macOS:**
+```bash
+brew install cloudflare/cloudflare/cloudflared
+```
+
+**Linux:**
+```bash
+wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+sudo mv cloudflared-linux-amd64 /usr/local/bin/cloudflared
+sudo chmod +x /usr/local/bin/cloudflared
+```
+
+**Windows:**
+```powershell
+choco install cloudflared
+```
+
+### Step 2: Tunnelを作成
+
+```bash
+# Cloudflareにログイン（ブラウザが開く）
+cloudflared tunnel login
+
+# トンネルを作成
+cloudflared tunnel create claudeui
+# → トンネルIDが発行される（例: a1b2c3d4-...）
+
+# DNSを設定（your-domain.comは自分のドメインに変更）
+cloudflared tunnel route dns claudeui claude.your-domain.com
+```
+
+### Step 3: 設定ファイルを作成
+
+`~/.cloudflared/config.yml`:
+```yaml
+tunnel: <your-tunnel-id>
+credentials-file: ~/.cloudflared/<tunnel-id>.json
+
+ingress:
+  - hostname: claude.your-domain.com
+    service: http://localhost:3001
+  - service: http_status:404
+```
+
+### Step 4: Cloudflare Accessで認証を設定
+
+Tunnelだけでは**URLを知っている人は誰でもアクセス可能**です。
+Cloudflare Accessで認証を追加しましょう。
+
+1. [Zero Trust Dashboard](https://one.dash.cloudflare.com/) にアクセス
+2. **Access** → **Applications** → **Add an application**
+3. **Self-hosted** を選択
+4. 設定:
+   - **Application name**: `Claude Code UI`
+   - **Application domain**: `claude.your-domain.com`
+   - **Session Duration**: `24 hours`
+
+5. **Add a Policy** で認証ルールを作成:
+   - **Policy name**: `Allow Me`
+   - **Action**: `Allow`
+   - **Include**: `Emails` → `your-email@example.com`
+
+6. **Save application**
+
+これで、指定したメールアドレスでログインした人のみアクセス可能になります。
+
+### Step 5: 起動
+
+```bash
+# Claude Code UIを起動
+npm run server
+
+# 別ターミナルでTunnelを起動
+cloudflared tunnel run claudeui
+```
+
+または一括起動:
+```bash
+npm run dev:tunnel
+```
+
+### Step 6: アクセス
+
+1. スマートフォンで `https://claude.your-domain.com` にアクセス
+2. Cloudflare Accessのログイン画面が表示
+3. メールアドレスを入力 → OTPコードを受信 → ログイン
+4. Claude Code UIにアクセス完了！
+
+**詳細な設定手順：** [CLOUDFLARE_SETUP.md](CLOUDFLARE_SETUP.md) を参照
+
+---
+
+## CLI リファレンス
+
+グローバルインストール後、以下のコマンドが使えます：
+
+| コマンド | 説明 |
+|---------|------|
+| `cloudcli` | サーバーを起動（デフォルト） |
+| `cloudcli start` | サーバーを明示的に起動 |
+| `cloudcli status` | 設定と状態を表示 |
+| `cloudcli update` | 最新版に更新 |
+| `cloudcli help` | ヘルプを表示 |
+| `cloudcli version` | バージョンを表示 |
+
+**オプション：**
+```bash
+cloudcli -p 8080              # ポートを指定
+cloudcli --database-path ./db  # DBパスを指定
+```
+
+---
+
+## PM2でバックグラウンド実行（サーバー向け）
+
+Linux/Windowsサーバーで常時起動する場合：
+
+```bash
+# PM2をインストール
 npm install -g pm2
-```
 
-#### Start as Background Service
-
-```bash
-# Start the server in background
-pm2 start claude-code-ui --name "claude-code-ui"
-
-# Or using the shorter alias
+# バックグラウンドで起動
 pm2 start cloudcli --name "claude-code-ui"
 
-# Start on a custom port
-pm2 start cloudcli --name "claude-code-ui" -- --port 8080
-```
-
-
-#### Auto-Start on System Boot
-
-To make Claude Code UI start automatically when your system boots:
-
-```bash
-# Generate startup script for your platform
+# システム起動時に自動起動
 pm2 startup
-
-# Save current process list
 pm2 save
 ```
 
+---
 
-### Local Development Installation
-
-1. **Clone the repository:**
-```bash
-git clone https://github.com/siteboon/claudecodeui.git
-cd claudecodeui
-```
-
-2. **Install dependencies:**
-```bash
-npm install
-```
-
-3. **Configure environment:**
-```bash
-cp .env.example .env
-# Edit .env with your preferred settings
-```
-
-4. **Start the application:**
-```bash
-# Development mode (with hot reload)
-npm run dev
-
-```
-The application will start at the port you specified in your .env
-
-5. **Open your browser:**
-   - Development: `http://localhost:3001`
-
-## Security & Tools Configuration
-
-**🔒 Important Notice**: All Claude Code tools are **disabled by default**. This prevents potentially harmful operations from running automatically.
-
-### Enabling Tools
-
-To use Claude Code's full functionality, you'll need to manually enable tools:
-
-1. **Open Tools Settings** - Click the gear icon in the sidebar
-3. **Enable Selectively** - Turn on only the tools you need
-4. **Apply Settings** - Your preferences are saved locally
-
-<div align="center">
-
-![Tools Settings Modal](public/screenshots/tools-modal.png)
-*Tools Settings interface - enable only what you need*
-
-</div>
-
-**Recommended approach**: Start with basic tools enabled and add more as needed. You can always adjust these settings later.
-
-## TaskMaster AI Integration *(Optional)*
-
-Claude Code UI supports **[TaskMaster AI](https://github.com/eyaltoledano/claude-task-master)** (aka claude-task-master) integration for advanced project management and AI-powered task planning.
-
-It provides
-- AI-powered task generation from PRDs (Product Requirements Documents)
-- Smart task breakdown and dependency management  
-- Visual task boards and progress tracking
-
-**Setup & Documentation**: Visit the [TaskMaster AI GitHub repository](https://github.com/eyaltoledano/claude-task-master) for installation instructions, configuration guides, and usage examples.
-After installing it you should be able to enable it from the Settings
-
-
-## Usage Guide
-
-### Core Features
-
-#### Project Management
-It automatically discovers Claude Code, Cursor or Codex sessions when available and groups them together into projects
-session counts
-- **Project Actions** - Rename, delete, and organize projects
-- **Smart Navigation** - Quick access to recent projects and sessions
-- **MCP support** - Add your own MCP servers through the UI 
-
-#### Chat Interface
-- **Use responsive chat or Claude Code/Cursor CLI/Codex CLI** - You can either use the adapted chat interface or use the shell button to connect to your selected CLI. 
-- **Real-time Communication** - Stream responses from your selected CLI (Claude Code/Cursor/Codex) with WebSocket connection
-- **Session Management** - Resume previous conversations or start fresh sessions
-- **Message History** - Complete conversation history with timestamps and metadata
-- **Multi-format Support** - Text, code blocks, and file references
-
-#### File Explorer & Editor
-- **Interactive File Tree** - Browse project structure with expand/collapse navigation
-- **Live File Editing** - Read, modify, and save files directly in the interface
-- **Syntax Highlighting** - Support for multiple programming languages
-- **File Operations** - Create, rename, delete files and directories
-
-#### Git Explorer
-
-
-#### TaskMaster AI Integration *(Optional)*
-- **Visual Task Board** - Kanban-style interface for managing development tasks
-- **PRD Parser** - Create Product Requirements Documents and parse them into structured tasks
-- **Progress Tracking** - Real-time status updates and completion tracking
-
-#### Session Management
-- **Session Persistence** - All conversations automatically saved
-- **Session Organization** - Group sessions by project and timestamp
-- **Session Actions** - Rename, delete, and export conversation history
-- **Cross-device Sync** - Access sessions from any device
-
-### Mobile App
-- **Responsive Design** - Optimized for all screen sizes
-- **Touch-friendly Interface** - Swipe gestures and touch navigation
-- **Mobile Navigation** - Bottom tab bar for easy thumb navigation
-- **Adaptive Layout** - Collapsible sidebar and smart content prioritization
-- **Add shortcut to Home Screen** - Add a shortcut to your home screen and the app will behave like a PWA
-
-## Architecture
-
-### System Overview
+## アーキテクチャ
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Frontend      │    │   Backend       │    │  Agent     │
-│   (React/Vite)  │◄──►│ (Express/WS)    │◄──►│  Integration    │
-│                 │    │                 │    │                │
+│   フロントエンド   │    │   バックエンド    │    │    CLI連携      │
+│  (React/Vite)   │◄──►│ (Express/WS)    │◄──►│ Claude/Cursor   │
+│                 │    │                 │    │    /Codex       │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
+         ↑
+         │
+    ┌────┴────┐
+    │ スマホ   │  ← Cloudflare Tunnel経由でアクセス
+    └─────────┘
 ```
 
-### Backend (Node.js + Express)
-- **Express Server** - RESTful API with static file serving
-- **WebSocket Server** - Communication for chats and project refresh
-- **Agent Integration (Claude Code / Cursor CLI / Codex)** - Process spawning and management
-- **File System API** - Exposing file browser for projects
+### バックエンド（Node.js + Express）
+- RESTful API + WebSocket
+- pty（擬似端末）でCLIプロセス管理
+- グレースフルシャットダウン対応
 
-### Frontend (React + Vite)
-- **React 18** - Modern component architecture with hooks
-- **CodeMirror** - Advanced code editor with syntax highlighting
+### フロントエンド（React + Vite）
+- レスポンシブデザイン
+- CodeMirrorエディタ
+- PWA対応（ホーム画面に追加可能）
 
+---
 
+## セキュリティ設定
 
+### ツールの有効化
 
+セキュリティのため、Claude Codeのツールは**デフォルトで無効**です。
 
-### Contributing
+1. サイドバーの⚙️（設定）をクリック
+2. 必要なツールのみを有効化
+3. 設定を保存
 
-We welcome contributions! Please follow these guidelines:
+### 推奨設定
 
-#### Getting Started
-1. **Fork** the repository
-2. **Clone** your fork: `git clone <your-fork-url>`
-3. **Install** dependencies: `npm install`
-4. **Create** a feature branch: `git checkout -b feature/amazing-feature`
+| 環境 | 推奨 |
+|-----|------|
+| ローカルのみ | 必要なツールを有効化 |
+| リモートアクセス | 最小限のツール + Cloudflare Access認証 |
 
-#### Development Process
-1. **Make your changes** following the existing code style
-2. **Test thoroughly** - ensure all features work correctly
-3. **Run quality checks**: `npm run lint && npm run format`
-4. **Commit** with descriptive messages following [Conventional Commits](https://conventionalcommits.org/)
-5. **Push** to your branch: `git push origin feature/amazing-feature`
-6. **Submit** a Pull Request with:
-   - Clear description of changes
-   - Screenshots for UI changes
-   - Test results if applicable
+---
 
-#### What to Contribute
-- **Bug fixes** - Help us improve stability
-- **New features** - Enhance functionality (discuss in issues first)
-- **Documentation** - Improve guides and API docs
-- **UI/UX improvements** - Better user experience
-- **Performance optimizations** - Make it faster
+## トラブルシューティング
 
-## Troubleshooting
+### 「No Claude projects found」
 
-### Common Issues & Solutions
+```bash
+# Claude CLIを一度実行してプロジェクトを初期化
+cd /path/to/your/project
+claude
 
+# プロジェクトディレクトリの確認
+ls -la ~/.claude/projects/
+```
 
-#### "No Claude projects found"
-**Problem**: The UI shows no projects or empty project list
-**Solutions**:
-- Ensure [Claude Code](https://docs.anthropic.com/en/docs/claude-code) is properly installed
-- Run `claude` command in at least one project directory to initialize
-- Verify `~/.claude/projects/` directory exists and has proper permissions
+### サーバーが停止しない
 
-#### File Explorer Issues
-**Problem**: Files not loading, permission errors, empty directories
-**Solutions**:
-- Check project directory permissions (`ls -la` in terminal)
-- Verify the project path exists and is accessible
-- Review server console logs for detailed error messages
-- Ensure you're not trying to access system directories outside project scope
+```bash
+# ポート3001を使用しているプロセスを確認
+lsof -i :3001
 
+# 強制終了
+kill -9 <PID>
+```
 
-## License
+### メニューバーアプリが起動しない
 
-GNU General Public License v3.0 - see [LICENSE](LICENSE) file for details.
+```bash
+# アプリを再作成
+./scripts/create-native-menubar-app.sh
 
-This project is open source and free to use, modify, and distribute under the GPL v3 license.
+# Gatekeeperの許可（初回のみ）
+xattr -d com.apple.quarantine ~/Applications/ClaudeCodeUI.app
+```
 
-## Acknowledgments
+---
 
-### Built With
-- **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** - Anthropic's official CLI
-- **[Cursor CLI](https://docs.cursor.com/en/cli/overview)** - Cursor's official CLI
-- **[Codex](https://developers.openai.com/codex)** - OpenAI Codex
-- **[React](https://react.dev/)** - User interface library
-- **[Vite](https://vitejs.dev/)** - Fast build tool and dev server
-- **[Tailwind CSS](https://tailwindcss.com/)** - Utility-first CSS framework
-- **[CodeMirror](https://codemirror.net/)** - Advanced code editor
-- **[TaskMaster AI](https://github.com/eyaltoledano/claude-task-master)** *(Optional)* - AI-powered project management and task planning
+## コントリビューション
 
-## Support & Community
+プルリクエスト歓迎です！
 
-### Stay Updated
-- **Star** this repository to show support
-- **Watch** for updates and new releases
-- **Follow** the project for announcements
+1. リポジトリをフォーク
+2. 機能ブランチを作成: `git checkout -b feature/amazing-feature`
+3. 変更をコミット: `git commit -m 'Add amazing feature'`
+4. プッシュ: `git push origin feature/amazing-feature`
+5. プルリクエストを作成
 
-### Sponsors
-- [Siteboon - AI powered website builder](https://siteboon.ai)
+---
+
+## ライセンス
+
+GNU General Public License v3.0 - [LICENSE](LICENSE) を参照
+
+---
+
+## 謝辞
+
+**本プロジェクトは [RVCA212/claude-code-ui](https://github.com/RVCA212/claude-code-ui) からフォークしました。**
+オリジナルの素晴らしいプロジェクトに感謝します。
+
+- [Original Claude Code UI](https://github.com/RVCA212/claude-code-ui) - RVCA212（本家）
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) - Anthropic
+- [Cursor CLI](https://docs.cursor.com/en/cli/overview) - Cursor
+- [Codex](https://developers.openai.com/codex) - OpenAI
+- [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/) - Cloudflare
+
 ---
 
 <div align="center">
-  <strong>Made with care for the Claude Code, Cursor and Codex community.</strong>
+  <strong>🏃 PCに仕事を任せて、外に出かけよう</strong>
+  <br><br>
+  <a href="https://github.com/siteboon/claudecodeui">⭐ Star this repo</a> ・
+  <a href="https://github.com/siteboon/claudecodeui/issues">🐛 Report Bug</a> ・
+  <a href="https://github.com/siteboon/claudecodeui/issues">💡 Request Feature</a>
 </div>
