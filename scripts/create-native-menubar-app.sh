@@ -1,0 +1,415 @@
+#!/bin/bash
+# macOS ネイティブメニューバーアプリを作成するスクリプト
+# SwiftUIでメニューバーに常駐し、サーバーの起動/停止を制御
+# 使用方法: ./scripts/create-native-menubar-app.sh
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+APP_NAME="ClaudeCodeUI"
+BUILD_DIR="/tmp/ClaudeCodeUIMenuBar"
+APP_DIR="$HOME/Applications/${APP_NAME}.app"
+
+echo "🔨 Building native macOS menubar app..."
+
+# ビルドディレクトリを作成
+rm -rf "$BUILD_DIR"
+mkdir -p "$BUILD_DIR"
+
+# Swift ソースコードを作成
+cat > "$BUILD_DIR/main.swift" << 'SWIFTCODE'
+import Cocoa
+import Foundation
+
+class AppDelegate: NSObject, NSApplicationDelegate {
+    var statusItem: NSStatusItem!
+    var serverProcess: Process?
+    let pidFile = "/tmp/claude-code-ui.pid"
+    let logFile = "/tmp/claude-code-ui.log"
+    var projectDir: String = ""
+    var statusCheckTimer: Timer?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // プロジェクトディレクトリを取得
+        let bundle = Bundle.main
+        if let configPath = bundle.path(forResource: "project_dir", ofType: "txt"),
+           let dir = try? String(contentsOfFile: configPath, encoding: .utf8) {
+            projectDir = dir.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        if projectDir.isEmpty || !FileManager.default.fileExists(atPath: projectDir) {
+            let alert = NSAlert()
+            alert.messageText = "エラー"
+            alert.informativeText = "Claude Code UIのプロジェクトディレクトリが見つかりません。"
+            alert.alertStyle = .critical
+            alert.runModal()
+            NSApp.terminate(nil)
+            return
+        }
+
+        // メニューバーアイテムを作成
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+
+        if let button = statusItem.button {
+            button.title = "☁️"
+        }
+
+        updateMenu()
+
+        // 定期的にステータスをチェック
+        statusCheckTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+            self?.updateMenu()
+        }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        // アプリ終了時にサーバーも停止
+        stopServer(showNotification: false)
+        statusCheckTimer?.invalidate()
+    }
+
+    func updateMenu() {
+        let menu = NSMenu()
+
+        let isRunning = isServerRunning()
+        let statusText = isRunning ? "● 実行中 (Port 3001)" : "○ 停止中"
+
+        // ステータス表示
+        let statusItem = NSMenuItem(title: statusText, action: nil, keyEquivalent: "")
+        statusItem.isEnabled = false
+        menu.addItem(statusItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        // 起動/停止ボタン
+        if isRunning {
+            let stopItem = NSMenuItem(title: "⏹ サーバーを停止", action: #selector(stopServerAction), keyEquivalent: "s")
+            stopItem.target = self
+            menu.addItem(stopItem)
+        } else {
+            let startItem = NSMenuItem(title: "▶ サーバーを起動", action: #selector(startServerAction), keyEquivalent: "r")
+            startItem.target = self
+            menu.addItem(startItem)
+        }
+
+        let restartItem = NSMenuItem(title: "🔄 再起動", action: #selector(restartServerAction), keyEquivalent: "")
+        restartItem.target = self
+        restartItem.isEnabled = isRunning
+        menu.addItem(restartItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        // ブラウザで開く
+        let openItem = NSMenuItem(title: "🌐 ブラウザで開く", action: #selector(openBrowser), keyEquivalent: "o")
+        openItem.target = self
+        openItem.isEnabled = isRunning
+        menu.addItem(openItem)
+
+        // ログを表示
+        let logItem = NSMenuItem(title: "📋 ログを表示", action: #selector(showLogs), keyEquivalent: "l")
+        logItem.target = self
+        menu.addItem(logItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        // 終了
+        let quitItem = NSMenuItem(title: "❌ 終了", action: #selector(quitApp), keyEquivalent: "q")
+        quitItem.target = self
+        menu.addItem(quitItem)
+
+        self.statusItem.menu = menu
+
+        // アイコンを更新
+        if let button = self.statusItem.button {
+            button.title = isRunning ? "☁️" : "💤"
+        }
+    }
+
+    func isServerRunning() -> Bool {
+        // PIDファイルをチェック
+        if FileManager.default.fileExists(atPath: pidFile),
+           let pidString = try? String(contentsOfFile: pidFile, encoding: .utf8),
+           let pid = Int32(pidString.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            // プロセスが存在するか確認
+            if kill(pid, 0) == 0 {
+                return true
+            }
+        }
+
+        // ポート3001をチェック
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
+        task.arguments = ["-i", ":3001", "-t"]
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = FileHandle.nullDevice
+
+        do {
+            try task.run()
+            task.waitUntilExit()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            if let output = String(data: data, encoding: .utf8), !output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return true
+            }
+        } catch {
+            // エラーは無視
+        }
+
+        return false
+    }
+
+    @objc func startServerAction() {
+        startServer()
+    }
+
+    func startServer() {
+        if isServerRunning() {
+            showNotification(title: "Claude Code UI", message: "サーバーは既に実行中です")
+            return
+        }
+
+        // npm run server を実行
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/bin/bash")
+        task.arguments = ["-c", "cd '\(projectDir)' && npm run server >> '\(logFile)' 2>&1 & echo $!"]
+        task.currentDirectoryURL = URL(fileURLWithPath: projectDir)
+
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = FileHandle.nullDevice
+
+        do {
+            try task.run()
+            task.waitUntilExit()
+
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            if let pidString = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !pidString.isEmpty {
+                try? pidString.write(toFile: pidFile, atomically: true, encoding: .utf8)
+            }
+
+            // 少し待ってからステータス更新
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+                self?.updateMenu()
+                if self?.isServerRunning() == true {
+                    self?.showNotification(title: "Claude Code UI", message: "サーバーを起動しました (Port 3001)")
+                } else {
+                    self?.showNotification(title: "Claude Code UI", message: "サーバーの起動に失敗しました")
+                }
+            }
+        } catch {
+            showNotification(title: "Claude Code UI", message: "サーバーの起動に失敗しました: \(error.localizedDescription)")
+        }
+    }
+
+    @objc func stopServerAction() {
+        stopServer(showNotification: true)
+    }
+
+    func stopServer(showNotification notify: Bool) {
+        if !isServerRunning() {
+            if notify {
+                showNotification(title: "Claude Code UI", message: "サーバーは実行されていません")
+            }
+            try? FileManager.default.removeItem(atPath: pidFile)
+            return
+        }
+
+        // PIDファイルからプロセスを停止
+        if FileManager.default.fileExists(atPath: pidFile),
+           let pidString = try? String(contentsOfFile: pidFile, encoding: .utf8),
+           let pid = Int32(pidString.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            kill(pid, SIGTERM)
+
+            // 子プロセスも停止
+            let task = Process()
+            task.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
+            task.arguments = ["-TERM", "-P", String(pid)]
+            try? task.run()
+            task.waitUntilExit()
+        }
+
+        // ポート3001のプロセスも停止
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
+        task.arguments = ["-ti", ":3001"]
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = FileHandle.nullDevice
+
+        do {
+            try task.run()
+            task.waitUntilExit()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            if let pids = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines), !pids.isEmpty {
+                for pidStr in pids.components(separatedBy: .newlines) {
+                    if let pid = Int32(pidStr) {
+                        kill(pid, SIGTERM)
+                    }
+                }
+            }
+        } catch {
+            // エラーは無視
+        }
+
+        try? FileManager.default.removeItem(atPath: pidFile)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            self?.updateMenu()
+            if notify {
+                self?.showNotification(title: "Claude Code UI", message: "サーバーを停止しました")
+            }
+        }
+    }
+
+    @objc func restartServerAction() {
+        stopServer(showNotification: false)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            self?.startServer()
+        }
+    }
+
+    @objc func openBrowser() {
+        if isServerRunning() {
+            if let url = URL(string: "http://localhost:3001") {
+                NSWorkspace.shared.open(url)
+            }
+        } else {
+            showNotification(title: "Claude Code UI", message: "サーバーが起動していません")
+        }
+    }
+
+    @objc func showLogs() {
+        if FileManager.default.fileExists(atPath: logFile) {
+            NSWorkspace.shared.open(URL(fileURLWithPath: logFile))
+        } else {
+            showNotification(title: "Claude Code UI", message: "ログファイルがありません")
+        }
+    }
+
+    @objc func quitApp() {
+        // アプリ終了時にサーバーも停止するか確認
+        if isServerRunning() {
+            let alert = NSAlert()
+            alert.messageText = "Claude Code UI"
+            alert.informativeText = "サーバーを停止してから終了しますか？"
+            alert.addButton(withTitle: "停止して終了")
+            alert.addButton(withTitle: "そのまま終了")
+            alert.addButton(withTitle: "キャンセル")
+
+            let response = alert.runModal()
+            switch response {
+            case .alertFirstButtonReturn:
+                stopServer(showNotification: false)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    NSApp.terminate(nil)
+                }
+            case .alertSecondButtonReturn:
+                NSApp.terminate(nil)
+            default:
+                return
+            }
+        } else {
+            NSApp.terminate(nil)
+        }
+    }
+
+    func showNotification(title: String, message: String) {
+        // 通知を表示（osascript経由でモダンな通知を使用）
+        let script = "display notification \"\(message)\" with title \"\(title)\""
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        task.arguments = ["-e", script]
+        try? task.run()
+    }
+}
+
+// メインエントリポイント
+let app = NSApplication.shared
+let delegate = AppDelegate()
+app.delegate = delegate
+app.run()
+SWIFTCODE
+
+# コンパイル
+echo "📦 Compiling Swift code..."
+swiftc -o "$BUILD_DIR/$APP_NAME" \
+    -framework Cocoa \
+    -framework Foundation \
+    "$BUILD_DIR/main.swift"
+
+# .app構造を作成
+echo "📁 Creating app bundle..."
+rm -rf "$APP_DIR"
+mkdir -p "$APP_DIR/Contents/MacOS"
+mkdir -p "$APP_DIR/Contents/Resources"
+
+# バイナリをコピー
+cp "$BUILD_DIR/$APP_NAME" "$APP_DIR/Contents/MacOS/"
+
+# Info.plist を作成
+cat > "$APP_DIR/Contents/Info.plist" << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>ClaudeCodeUI</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.siteboon.claude-code-ui-menubar</string>
+    <key>CFBundleName</key>
+    <string>Claude Code UI</string>
+    <key>CFBundleDisplayName</key>
+    <string>Claude Code UI</string>
+    <key>CFBundleVersion</key>
+    <string>1.0</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>10.15</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>LSUIElement</key>
+    <true/>
+</dict>
+</plist>
+EOF
+
+# プロジェクトディレクトリを保存
+echo "$PROJECT_DIR" > "$APP_DIR/Contents/Resources/project_dir.txt"
+
+# アイコンをコピー（存在する場合）
+if [ -f "$PROJECT_DIR/public/icons/icon-512x512.png" ]; then
+    cp "$PROJECT_DIR/public/icons/icon-512x512.png" "$APP_DIR/Contents/Resources/AppIcon.png" 2>/dev/null || true
+fi
+
+# ビルドディレクトリをクリーンアップ
+rm -rf "$BUILD_DIR"
+
+echo ""
+echo "✅ メニューバーアプリを作成しました: $APP_DIR"
+echo ""
+echo "機能:"
+echo "  ☁️ - メニューバーにアイコンが表示されます"
+echo "  💤 - サーバー停止中はこのアイコンになります"
+echo ""
+echo "使い方:"
+echo "  1. '$APP_DIR' を開くか、以下を実行:"
+echo "     open '$APP_DIR'"
+echo ""
+echo "  2. メニューバーのアイコンをクリックしてサーバーを制御"
+echo ""
+echo "オプション:"
+echo "  - ログイン時に自動起動: システム設定 > 一般 > ログイン項目 に追加"
+echo ""
+
+# アプリを起動するか確認
+read -p "アプリを今すぐ起動しますか？ (y/N): " answer
+if [[ "$answer" =~ ^[Yy]$ ]]; then
+    open "$APP_DIR"
+fi

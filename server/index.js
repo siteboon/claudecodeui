@@ -1741,4 +1741,105 @@ async function startServer() {
     }
 }
 
+// Graceful shutdown handler
+async function gracefulShutdown(signal) {
+    console.log(`\n🛑 ${signal} received - shutting down gracefully...`);
+
+    // 1. Stop accepting new connections
+    console.log('📡 Closing WebSocket server...');
+    wss.close();
+
+    // 2. Kill all active PTY sessions
+    console.log(`🐚 Terminating ${ptySessionsMap.size} PTY session(s)...`);
+    for (const [key, session] of ptySessionsMap.entries()) {
+        if (session.timeoutId) {
+            clearTimeout(session.timeoutId);
+        }
+        if (session.pty && session.pty.kill) {
+            try {
+                session.pty.kill('SIGTERM');
+            } catch (e) {
+                console.error(`  Error killing PTY ${key}:`, e.message);
+            }
+        }
+    }
+    ptySessionsMap.clear();
+
+    // 3. Kill all Cursor processes (imported from cursor-cli.js)
+    const cursorSessions = getActiveCursorSessions();
+    console.log(`🤖 Terminating ${cursorSessions.length} Cursor session(s)...`);
+    for (const sessionId of cursorSessions) {
+        abortCursorSession(sessionId);
+    }
+
+    // 4. Kill all Codex processes (imported from openai-codex.js)
+    const codexSessions = getActiveCodexSessions();
+    console.log(`📦 Terminating ${codexSessions.length} Codex session(s)...`);
+    for (const sessionId of codexSessions) {
+        abortCodexSession(sessionId);
+    }
+
+    // 5. Kill all Claude SDK sessions (imported from claude-sdk.js)
+    const claudeSessions = getActiveClaudeSDKSessions();
+    console.log(`🧠 Terminating ${claudeSessions.length} Claude SDK session(s)...`);
+    for (const sessionId of claudeSessions) {
+        await abortClaudeSDKSession(sessionId);
+    }
+
+    // 6. Close chokidar watcher
+    if (projectsWatcher) {
+        console.log('👁️ Closing file watcher...');
+        await projectsWatcher.close();
+    }
+
+    // 7. Close all WebSocket connections
+    console.log(`🔌 Closing ${connectedClients.size} client connection(s)...`);
+    for (const client of connectedClients) {
+        try {
+            client.close();
+        } catch (e) {
+            // Ignore errors on close
+        }
+    }
+    connectedClients.clear();
+
+    // 8. Close database
+    console.log('💾 Closing database...');
+    try {
+        const { db } = await import('./database/db.js');
+        db.close();
+    } catch (e) {
+        console.error('  Error closing database:', e.message);
+    }
+
+    // 9. Shutdown HTTP server
+    console.log('🌐 Shutting down HTTP server...');
+    server.close(() => {
+        console.log('✅ Server shut down cleanly');
+        process.exit(0);
+    });
+
+    // Force exit after 10 seconds if graceful shutdown fails
+    setTimeout(() => {
+        console.error('⚠️ Force exit after timeout');
+        process.exit(1);
+    }, 10000);
+}
+
+// Register signal handlers
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGHUP', () => gracefulShutdown('SIGHUP'));
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught Exception:', err);
+    gracefulShutdown('uncaughtException');
+});
+
+// Handle unhandled rejections
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
 startServer();
