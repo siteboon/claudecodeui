@@ -194,11 +194,29 @@ Claude Code UI includes **built-in authentication** to protect your data when ru
 - **Session persistence**: Stay logged in across browser sessions
 
 > ⚠️ **Important for Remote/VPS Deployment**: If you're running Claude Code UI on a remote server or VPS, authentication is **essential** to prevent unauthorized access to your projects and Claude sessions. Make sure to:
-> 1. Set a strong password during initial setup
+> 1. Set a strong password during initial setup (minimum 12 characters recommended, with a mix of uppercase, lowercase, numbers, and symbols)
 > 2. Use HTTPS (via reverse proxy like nginx/caddy) for production deployments
 > 3. Consider firewall rules to restrict access to trusted IPs
+> 4. Use a reverse proxy with rate limiting to protect against brute-force attacks
 
 For local-only use (localhost), the authentication still applies but the security risk is lower since access is limited to your machine.
+
+#### Session Management
+
+- **Token storage**: JWT tokens are stored in your browser's localStorage
+- **Token expiry**: Tokens do not expire by default - you stay logged in until you manually log out
+- **Logging out**: Click the logout button to clear your session token
+
+#### Password Recovery
+
+If you forget your password, you'll need to reset the database:
+
+1. Stop the server
+2. Delete the database file (default: `~/.claude-code-ui/database.sqlite` or the path in `DATABASE_PATH` env var)
+3. Restart the server
+4. Create a new admin account on first access
+
+> **Note**: This will also clear any saved settings and GitHub tokens.
 
 ### Tool Permissions
 
