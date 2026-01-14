@@ -24,8 +24,10 @@
   },
   "scripts": {
     "dev": "concurrently --kill-others \"npm run server\" \"npm run client\"",
+    "dev:tunnel": "concurrently --kill-others \"npm run server\" \"npm run client\" \"npm run tunnel\"",
     "server": "node server/index.js",
     "client": "vite --host",
+    "tunnel": "caffeinate -s -i cloudflared tunnel run claudeui",
     "build": "vite build",
     "preview": "vite preview",
     "start": "npm run build && npm run server",
