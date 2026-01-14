@@ -93,6 +93,10 @@ function unescapeWithMathProtection(text) {
   return processedText;
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // Small wrapper to keep markdown behavior consistent in one place
 const Markdown = ({ children, className }) => {
   const content = normalizeInlineCodeFences(String(children ?? ''));
@@ -1855,6 +1859,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const inputContainerRef = useRef(null);
+  const inputHighlightRef = useRef(null);
   const scrollContainerRef = useRef(null);
   const isLoadingSessionRef = useRef(false); // Track session loading to prevent multiple scrolls
   const isLoadingMoreRef = useRef(false);
@@ -1867,6 +1872,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [debouncedInput, setDebouncedInput] = useState('');
   const [showFileDropdown, setShowFileDropdown] = useState(false);
   const [fileList, setFileList] = useState([]);
+  const [fileMentions, setFileMentions] = useState([]);
   const [filteredFiles, setFilteredFiles] = useState([]);
   const [selectedFileIndex, setSelectedFileIndex] = useState(-1);
   const [cursorPosition, setCursorPosition] = useState(0);
@@ -3962,6 +3968,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     return result;
   };
 
+
   // Handle @ symbol detection and file filtering
   useEffect(() => {
     const textBeforeCursor = input.slice(0, cursorPosition);
@@ -3991,6 +3998,43 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       setAtSymbolPosition(-1);
     }
   }, [input, cursorPosition, fileList]);
+
+  const activeFileMentions = useMemo(() => {
+    if (!input || fileMentions.length === 0) return [];
+    return fileMentions.filter(path => input.includes(path));
+  }, [fileMentions, input]);
+
+  const sortedFileMentions = useMemo(() => {
+    if (activeFileMentions.length === 0) return [];
+    const unique = Array.from(new Set(activeFileMentions));
+    return unique.sort((a, b) => b.length - a.length);
+  }, [activeFileMentions]);
+
+  const fileMentionRegex = useMemo(() => {
+    if (sortedFileMentions.length === 0) return null;
+    const pattern = sortedFileMentions.map(escapeRegExp).join('|');
+    return new RegExp(`(${pattern})`, 'g');
+  }, [sortedFileMentions]);
+
+  const fileMentionSet = useMemo(() => new Set(sortedFileMentions), [sortedFileMentions]);
+
+  const renderInputWithMentions = useCallback((text) => {
+    if (!text) return '';
+    if (!fileMentionRegex) return text;
+    const parts = text.split(fileMentionRegex);
+    return parts.map((part, index) => (
+      fileMentionSet.has(part) ? (
+        <span
+          key={`mention-${index}`}
+          className="bg-blue-200/70 -ml-0.5 dark:bg-blue-300/40 px-0.5 rounded-md box-decoration-clone text-transparent"
+        >
+          {part}
+        </span>
+      ) : (
+        <span key={`text-${index}`}>{part}</span>
+      )
+    ));
+  }, [fileMentionRegex, fileMentionSet]);
 
   // Debounced input handling
   useEffect(() => {
@@ -4566,8 +4610,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     const spaceIndex = textAfterAtQuery.indexOf(' ');
     const textAfterQuery = spaceIndex !== -1 ? textAfterAtQuery.slice(spaceIndex) : '';
     
-    const newInput = textBeforeAt + '@' + file.path + ' ' + textAfterQuery;
-    const newCursorPos = textBeforeAt.length + 1 + file.path.length + 1;
+    const newInput = textBeforeAt + file.path + ' ' + textAfterQuery;
+    const newCursorPos = textBeforeAt.length + file.path.length + 1;
     
     // Immediately ensure focus is maintained
     if (textareaRef.current && !textareaRef.current.matches(':focus')) {
@@ -4577,6 +4621,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     // Update input and cursor position
     setInput(newInput);
     setCursorPosition(newCursorPos);
+    setFileMentions(prev => (prev.includes(file.path) ? prev : [...prev, file.path]));
     
     // Hide dropdown
     setShowFileDropdown(false);
@@ -4669,6 +4714,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       }
     }
   };
+
+  const syncInputOverlayScroll = useCallback((target) => {
+    if (!inputHighlightRef.current || !target) return;
+    inputHighlightRef.current.scrollTop = target.scrollTop;
+    inputHighlightRef.current.scrollLeft = target.scrollLeft;
+  }, []);
 
   const handleTextareaClick = (e) => {
     setCursorPosition(e.target.selectionStart);
@@ -5370,6 +5421,16 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
           <div {...getRootProps()} className={`relative bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-600 focus-within:ring-2 focus-within:ring-blue-500 dark:focus-within:ring-blue-500 focus-within:border-blue-500 transition-all duration-200 overflow-hidden ${isTextareaExpanded ? 'chat-input-expanded' : ''}`}>
             <input {...getInputProps()} />
+            <div
+              ref={inputHighlightRef}
+              aria-hidden="true"
+              className="absolute inset-0 pointer-events-none overflow-hidden rounded-2xl"
+            >
+              <div className="chat-input-placeholder block w-full pl-12 pr-20 sm:pr-40 py-1.5 sm:py-4 text-transparent text-sm sm:text-base leading-[21px] sm:leading-6 whitespace-pre-wrap break-words">
+                {renderInputWithMentions(input)}
+              </div>
+            </div>
+            <div className="relative z-10">
             <textarea
               ref={textareaRef}
               value={input}
@@ -5377,6 +5438,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               onClick={handleTextareaClick}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
+              onScroll={(e) => syncInputOverlayScroll(e.target)}
               onFocus={() => setIsInputFocused(true)}
               onBlur={() => setIsInputFocused(false)}
               onInput={(e) => {
@@ -5384,6 +5446,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 e.target.style.height = 'auto';
                 e.target.style.height = e.target.scrollHeight + 'px';
                 setCursorPosition(e.target.selectionStart);
+                syncInputOverlayScroll(e.target);
 
                 // Check if textarea is expanded (more than 2 lines worth of height)
                 const lineHeight = parseInt(window.getComputedStyle(e.target).lineHeight);
@@ -5451,6 +5514,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               {sendByCtrlEnter
                 ? "Ctrl+Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands"
                 : "Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands"}
+            </div>
             </div>
           </div>
         </form>
