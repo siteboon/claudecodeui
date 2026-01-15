@@ -5191,12 +5191,16 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               </div>
             </button>
             
-            {/* Thinking Mode Selector */}
-            <ThinkingModeSelector
-              selectedMode={thinkingMode}
-              onModeChange={setThinkingMode}
-              className=""
-            />
+              {/* Thinking Mode Selector */}
+              {
+                provider === 'claude' && (
+
+                  <ThinkingModeSelector
+                    selectedMode={thinkingMode}
+                    onModeChange={setThinkingMode}
+                    className=""
+                  />
+                )}
             {/* Token usage pie chart - positioned next to mode indicator */}
             <TokenUsagePie
               used={tokenBudget?.used || 0}
