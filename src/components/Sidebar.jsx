@@ -5,7 +5,7 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 
-import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2, Star, Search } from 'lucide-react';
+import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2, Star, Search, Zap } from 'lucide-react';
 import { cn } from '../lib/utils';
 import ClaudeLogo from './ClaudeLogo';
 import CursorLogo from './CursorLogo.jsx';
@@ -77,6 +77,9 @@ function Sidebar({
   const [editingSessionName, setEditingSessionName] = useState('');
   const [generatingSummary, setGeneratingSummary] = useState({});
   const [searchFilter, setSearchFilter] = useState('');
+  const [showRunningOnly, setShowRunningOnly] = useState(false);
+  const [runningProjects, setRunningProjects] = useState(null);
+  const [isLoadingRunning, setIsLoadingRunning] = useState(false);
 
   // TaskMaster context
   const { setCurrentProject, mcpServerStatus } = useTaskMaster();
@@ -181,6 +184,32 @@ function Sidebar({
     };
   }, []);
 
+  // Fetch running-only projects when filter is enabled
+  useEffect(() => {
+    if (showRunningOnly) {
+      const fetchRunning = async () => {
+        setIsLoadingRunning(true);
+        try {
+          const response = await api.projects({ running: true });
+          const data = await response.json();
+          setRunningProjects(data);
+        } catch (error) {
+          console.error('Error fetching running projects:', error);
+          setRunningProjects([]);
+        } finally {
+          setIsLoadingRunning(false);
+        }
+      };
+      fetchRunning();
+    } else {
+      setRunningProjects(null);
+    }
+  }, [showRunningOnly]);
+
+  const toggleRunningFilter = () => {
+    setShowRunningOnly(prev => !prev);
+  };
+
 
   const toggleProject = (projectName) => {
     const newExpanded = new Set();
@@ -250,8 +279,11 @@ function Sidebar({
     return mostRecentDate;
   };
 
+  // Use running projects when filter is active, otherwise all projects
+  const baseProjects = showRunningOnly && runningProjects !== null ? runningProjects : projects;
+
   // Combined sorting: starred projects first, then by selected order
-  const sortedProjects = [...projects].sort((a, b) => {
+  const sortedProjects = [...baseProjects].sort((a, b) => {
     const aStarred = isProjectStarred(a.name);
     const bStarred = isProjectStarred(b.name);
     
@@ -633,23 +665,41 @@ function Sidebar({
       {/* Search Filter - Only show when there are projects */}
       {projects.length > 0 && !isLoading && (
         <div className="px-3 md:px-4 py-2 border-b border-border">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="Search projects..."
-              value={searchFilter}
-              onChange={(e) => setSearchFilter(e.target.value)}
-              className="pl-9 h-9 text-sm bg-muted/50 border-0 focus:bg-background focus:ring-1 focus:ring-primary/20"
-            />
-            {searchFilter && (
-              <button
-                onClick={() => setSearchFilter('')}
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 hover:bg-accent rounded"
-              >
-                <X className="w-3 h-3 text-muted-foreground" />
-              </button>
-            )}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search projects..."
+                value={searchFilter}
+                onChange={(e) => setSearchFilter(e.target.value)}
+                className="pl-9 h-9 text-sm bg-muted/50 border-0 focus:bg-background focus:ring-1 focus:ring-primary/20"
+              />
+              {searchFilter && (
+                <button
+                  onClick={() => setSearchFilter('')}
+                  className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 hover:bg-accent rounded"
+                >
+                  <X className="w-3 h-3 text-muted-foreground" />
+                </button>
+              )}
+            </div>
+            <button
+              onClick={toggleRunningFilter}
+              className={cn(
+                "p-2 rounded-md transition-colors duration-200 shrink-0",
+                showRunningOnly
+                  ? "bg-green-500/20 text-green-500 hover:bg-green-500/30"
+                  : "hover:bg-accent text-muted-foreground"
+              )}
+              title={showRunningOnly ? "Show all sessions" : "Show running only"}
+            >
+              {isLoadingRunning ? (
+                <div className="w-4 h-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              ) : (
+                <Zap className={cn("w-4 h-4", showRunningOnly && "fill-current")} />
+              )}
+            </button>
           </div>
         </div>
       )}
@@ -675,6 +725,26 @@ function Sidebar({
               <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">No projects found</h3>
               <p className="text-sm text-muted-foreground">
                 Run Claude CLI in a project directory to get started
+              </p>
+            </div>
+          ) : isLoadingRunning ? (
+            <div className="text-center py-12 md:py-8 px-4">
+              <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-4 md:mb-3">
+                <div className="w-6 h-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+              </div>
+              <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">Finding running sessions...</h3>
+              <p className="text-sm text-muted-foreground">
+                Checking for active Claude sessions
+              </p>
+            </div>
+          ) : showRunningOnly && filteredProjects.length === 0 ? (
+            <div className="text-center py-12 md:py-8 px-4">
+              <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-4 md:mb-3">
+                <Zap className="w-6 h-6 text-muted-foreground" />
+              </div>
+              <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">No running sessions</h3>
+              <p className="text-sm text-muted-foreground">
+                Start a Claude session to see it here
               </p>
             </div>
           ) : filteredProjects.length === 0 ? (
