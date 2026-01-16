@@ -1,0 +1,75 @@
+{
+  "title": "Settings",
+  "tabs": {
+    "account": "Account",
+    "permissions": "Permissions",
+    "mcpServers": "MCP Servers",
+    "appearance": "Appearance"
+  },
+  "account": {
+    "language": "Language",
+    "languageLabel": "Display Language",
+    "languageDescription": "Choose your preferred language for the interface",
+    "username": "Username",
+    "email": "Email",
+    "profile": "Profile",
+    "changePassword": "Change Password"
+  },
+  "permissions": {
+    "allowedTools": "Allowed Tools",
+    "disallowedTools": "Disallowed Tools",
+    "addTool": "Add Tool",
+    "removeTool": "Remove Tool",
+    "description": "Configure which tools Claude can use. Tools must be enabled here before Claude can access them."
+  },
+  "mcp": {
+    "title": "MCP Servers",
+    "addServer": "Add Server",
+    "editServer": "Edit Server",
+    "deleteServer": "Delete Server",
+    "serverName": "Server Name",
+    "serverType": "Server Type",
+    "config": "Configuration",
+    "testConnection": "Test Connection",
+    "status": "Status",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "scope": {
+      "label": "Scope",
+      "user": "User",
+      "project": "Project"
+    }
+  },
+  "appearance": {
+    "title": "Appearance",
+    "theme": "Theme",
+    "codeEditor": "Code Editor",
+    "editorTheme": "Editor Theme",
+    "wordWrap": "Word Wrap",
+    "showMinimap": "Show Minimap",
+    "lineNumbers": "Line Numbers",
+    "fontSize": "Font Size"
+  },
+  "actions": {
+    "saveChanges": "Save Changes",
+    "resetToDefaults": "Reset to Defaults",
+    "cancelChanges": "Cancel Changes"
+  },
+  "quickSettings": {
+    "title": "Quick Settings",
+    "sections": {
+      "appearance": "Appearance",
+      "toolDisplay": "Tool Display",
+      "viewOptions": "View Options",
+      "inputSettings": "Input Settings",
+      "whisperDictation": "Whisper Dictation"
+    },
+    "darkMode": "Dark Mode",
+    "autoExpandTools": "Auto-expand tools",
+    "showRawParameters": "Show raw parameters",
+    "showThinking": "Show thinking",
+    "autoScrollToBottom": "Auto-scroll to bottom",
+    "sendByCtrlEnter": "Send by Ctrl+Enter",
+    "sendByCtrlEnterDescription": "When enabled, pressing Ctrl+Enter will send the message instead of just Enter. This is useful for IME users to avoid accidental sends."
+  }
+}

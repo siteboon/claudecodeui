@@ -4,6 +4,7 @@ import { Input } from './ui/input';
 import { Badge } from './ui/badge';
 import { X, Plus, Settings as SettingsIcon, Shield, AlertTriangle, Moon, Sun, Server, Edit3, Trash2, Globe, Terminal, Zap, FolderOpen, LogIn, Key, GitBranch, Check } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+import { useTranslation } from 'react-i18next';
 import ClaudeLogo from './ClaudeLogo';
 import CursorLogo from './CursorLogo';
 import CodexLogo from './CodexLogo';
@@ -18,9 +19,11 @@ import AgentListItem from './settings/AgentListItem';
 import AccountContent from './settings/AccountContent';
 import PermissionsContent from './settings/PermissionsContent';
 import McpServersContent from './settings/McpServersContent';
+import LanguageSelector from './LanguageSelector';
 
 function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
   const { isDarkMode, toggleDarkMode } = useTheme();
+  const { t } = useTranslation('settings');
   const [allowedTools, setAllowedTools] = useState([]);
   const [disallowedTools, setDisallowedTools] = useState([]);
   const [newAllowedTool, setNewAllowedTool] = useState('');
@@ -1062,6 +1065,11 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
       </div>
     </div>
 
+    {/* Language Selector */}
+    <div className="space-y-4">
+      <LanguageSelector />
+    </div>
+
     {/* Project Sorting */}
     <div className="space-y-4">
       <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
@@ -1313,7 +1321,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                             : 'border-transparent text-muted-foreground hover:text-foreground'
                         }`}
                       >
-                        Account
+                        {t('tabs.account')}
                       </button>
                       <button
                         onClick={() => setSelectedCategory('permissions')}
@@ -1323,7 +1331,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                             : 'border-transparent text-muted-foreground hover:text-foreground'
                         }`}
                       >
-                        Permissions
+                        {t('tabs.permissions')}
                       </button>
                       <button
                         onClick={() => setSelectedCategory('mcp')}
@@ -1333,7 +1341,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                             : 'border-transparent text-muted-foreground hover:text-foreground'
                         }`}
                       >
-                        MCP Servers
+                        {t('tabs.mcpServers')}
                       </button>
                     </div>
                   </div>

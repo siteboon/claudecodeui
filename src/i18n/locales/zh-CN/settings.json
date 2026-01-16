@@ -1,0 +1,75 @@
+{
+  "title": "设置",
+  "tabs": {
+    "account": "账户",
+    "permissions": "权限",
+    "mcpServers": "MCP 服务器",
+    "appearance": "外观"
+  },
+  "account": {
+    "language": "语言",
+    "languageLabel": "显示语言",
+    "languageDescription": "选择您偏好的界面语言",
+    "username": "用户名",
+    "email": "邮箱",
+    "profile": "个人资料",
+    "changePassword": "修改密码"
+  },
+  "permissions": {
+    "allowedTools": "允许的工具",
+    "disallowedTools": "禁止的工具",
+    "addTool": "添加工具",
+    "removeTool": "移除工具",
+    "description": "配置 Claude 可以使用的工具。工具必须在此处启用后，Claude 才能访问它们。"
+  },
+  "mcp": {
+    "title": "MCP 服务器",
+    "addServer": "添加服务器",
+    "editServer": "编辑服务器",
+    "deleteServer": "删除服务器",
+    "serverName": "服务器名称",
+    "serverType": "服务器类型",
+    "config": "配置",
+    "testConnection": "测试连接",
+    "status": "状态",
+    "connected": "已连接",
+    "disconnected": "未连接",
+    "scope": {
+      "label": "范围",
+      "user": "用户",
+      "project": "项目"
+    }
+  },
+  "appearance": {
+    "title": "外观",
+    "theme": "主题",
+    "codeEditor": "代码编辑器",
+    "editorTheme": "编辑器主题",
+    "wordWrap": "自动换行",
+    "showMinimap": "显示缩略图",
+    "lineNumbers": "行号",
+    "fontSize": "字体大小"
+  },
+  "actions": {
+    "saveChanges": "保存更改",
+    "resetToDefaults": "重置为默认值",
+    "cancelChanges": "取消更改"
+  },
+  "quickSettings": {
+    "title": "快速设置",
+    "sections": {
+      "appearance": "外观",
+      "toolDisplay": "工具显示",
+      "viewOptions": "视图选项",
+      "inputSettings": "输入设置",
+      "whisperDictation": "Whisper 听写"
+    },
+    "darkMode": "深色模式",
+    "autoExpandTools": "自动展开工具",
+    "showRawParameters": "显示原始参数",
+    "showThinking": "显示思考过程",
+    "autoScrollToBottom": "自动滚动到底部",
+    "sendByCtrlEnter": "使用 Ctrl+Enter 发送",
+    "sendByCtrlEnterDescription": "启用后，按 Ctrl+Enter 发送消息，而不是仅按 Enter。这对于使用输入法的用户可以避免意外发送。"
+  }
+}
