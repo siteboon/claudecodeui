@@ -3233,8 +3233,17 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
       // Filter messages by session ID to prevent cross-session interference
       // Skip filtering for global messages that apply to all sessions
-      const globalMessageTypes = ['projects_updated', 'taskmaster-project-updated', 'session-created', 'claude-complete', 'codex-complete'];
+      const globalMessageTypes = ['projects_updated', 'taskmaster-project-updated', 'session-created'];
       const isGlobalMessage = globalMessageTypes.includes(latestMessage.type);
+      const lifecycleMessageTypes = new Set([
+        'claude-complete',
+        'codex-complete',
+        'cursor-result',
+        'session-aborted',
+        'claude-error',
+        'cursor-error',
+        'codex-error'
+      ]);
 
       const isClaudeSystemInit = latestMessage.type === 'claude-response' &&
         messageData &&
@@ -3245,16 +3254,36 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         latestMessage.data.type === 'system' &&
         latestMessage.data.subtype === 'init';
 
+      const systemInitSessionId = isClaudeSystemInit
+        ? messageData?.session_id
+        : isCursorSystemInit
+          ? latestMessage.data?.session_id
+          : null;
+
       const activeViewSessionId = selectedSession?.id || currentSessionId || pendingViewSessionRef.current?.sessionId || null;
-      const shouldBypassSessionFilter = isGlobalMessage || isClaudeSystemInit || isCursorSystemInit;
+      const isSystemInitForView = systemInitSessionId && (!activeViewSessionId || systemInitSessionId === activeViewSessionId);
+      const shouldBypassSessionFilter = isGlobalMessage || isSystemInitForView;
       const isUnscopedError = !latestMessage.sessionId &&
         pendingViewSessionRef.current &&
         !pendingViewSessionRef.current.sessionId &&
         (latestMessage.type === 'claude-error' || latestMessage.type === 'cursor-error' || latestMessage.type === 'codex-error');
 
+      const handleBackgroundLifecycle = (sessionId) => {
+        if (!sessionId) return;
+        if (onSessionInactive) {
+          onSessionInactive(sessionId);
+        }
+        if (onSessionNotProcessing) {
+          onSessionNotProcessing(sessionId);
+        }
+      };
+
       if (!shouldBypassSessionFilter) {
         if (!activeViewSessionId) {
           // No session in view; ignore session-scoped traffic.
+          if (latestMessage.sessionId && lifecycleMessageTypes.has(latestMessage.type)) {
+            handleBackgroundLifecycle(latestMessage.sessionId);
+          }
           if (!isUnscopedError) {
             return;
           }
@@ -3264,6 +3293,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           return;
         }
         if (latestMessage.sessionId !== activeViewSessionId) {
+          if (latestMessage.sessionId && lifecycleMessageTypes.has(latestMessage.type)) {
+            handleBackgroundLifecycle(latestMessage.sessionId);
+          }
           // Message is for a different session, ignore it
           console.log('??-?,? Skipping message for different session:', latestMessage.sessionId, 'current:', activeViewSessionId);
           return;
@@ -3375,7 +3407,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               latestMessage.data.subtype === 'init' && 
               latestMessage.data.session_id && 
               currentSessionId && 
-              latestMessage.data.session_id !== currentSessionId) {
+              latestMessage.data.session_id !== currentSessionId &&
+              isSystemInitForView) {
             
             console.log('🔄 Claude CLI session duplication detected:', {
               originalSession: currentSessionId,
@@ -3398,7 +3431,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           if (latestMessage.data.type === 'system' && 
               latestMessage.data.subtype === 'init' && 
               latestMessage.data.session_id && 
-              !currentSessionId) {
+              !currentSessionId &&
+              isSystemInitForView) {
             
             console.log('🔄 New session init detected:', {
               newSession: latestMessage.data.session_id
@@ -3419,7 +3453,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               latestMessage.data.subtype === 'init' && 
               latestMessage.data.session_id && 
               currentSessionId && 
-              latestMessage.data.session_id === currentSessionId) {
+              latestMessage.data.session_id === currentSessionId &&
+              isSystemInitForView) {
             console.log('🔄 System init message for current session, ignoring');
             return; // Don't process the message further
           }
@@ -3587,6 +3622,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           try {
             const cdata = latestMessage.data;
             if (cdata && cdata.type === 'system' && cdata.subtype === 'init' && cdata.session_id) {
+              if (!isSystemInitForView) {
+                return;
+              }
               // If we already have a session and this differs, switch (duplication/redirect)
               if (currentSessionId && cdata.session_id !== currentSessionId) {
                 console.log('🔄 Cursor session switch detected:', { originalSession: currentSessionId, newSession: cdata.session_id });
