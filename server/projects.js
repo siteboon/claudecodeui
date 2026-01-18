@@ -514,7 +514,6 @@ async function getProjects(progressCallback = null) {
 
         projects.push(project);
         processedProjects++;
-      }
     }
 
     // Emit completion
