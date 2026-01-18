@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, FolderPlus, GitBranch, Key, ChevronRight, ChevronLeft, Check, Loader2, AlertCircle } from 'lucide-react';
+import { X, FolderPlus, GitBranch, Key, ChevronRight, ChevronLeft, Check, Loader2, AlertCircle, FolderOpen, Eye, EyeOff } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { api } from '../utils/api';
@@ -7,7 +7,7 @@ import { api } from '../utils/api';
 const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
   // Wizard state
   const [step, setStep] = useState(1); // 1: Choose type, 2: Configure, 3: Confirm
-  const [workspaceType, setWorkspaceType] = useState(null); // 'existing' or 'new'
+  const [workspaceType, setWorkspaceType] = useState('existing'); // 'existing' or 'new' - default to 'existing'
 
   // Form state
   const [workspacePath, setWorkspacePath] = useState('');
@@ -23,6 +23,11 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
   const [loadingTokens, setLoadingTokens] = useState(false);
   const [pathSuggestions, setPathSuggestions] = useState([]);
   const [showPathDropdown, setShowPathDropdown] = useState(false);
+  const [showFolderBrowser, setShowFolderBrowser] = useState(false);
+  const [browserCurrentPath, setBrowserCurrentPath] = useState('~');
+  const [browserFolders, setBrowserFolders] = useState([]);
+  const [loadingFolders, setLoadingFolders] = useState(false);
+  const [showHiddenFolders, setShowHiddenFolders] = useState(false);
 
   // Load available GitHub tokens when needed
   useEffect(() => {
@@ -153,6 +158,37 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
   const selectPathSuggestion = (suggestion) => {
     setWorkspacePath(suggestion.path);
     setShowPathDropdown(false);
+  };
+
+  const openFolderBrowser = async () => {
+    setShowFolderBrowser(true);
+    await loadBrowserFolders('~');
+  };
+
+  const loadBrowserFolders = async (path) => {
+    try {
+      setLoadingFolders(true);
+      setBrowserCurrentPath(path);
+      const response = await api.browseFilesystem(path);
+      const data = await response.json();
+      setBrowserFolders(data.suggestions || []);
+    } catch (error) {
+      console.error('Error loading folders:', error);
+    } finally {
+      setLoadingFolders(false);
+    }
+  };
+
+  const selectFolder = (folderPath, advanceToConfirm = false) => {
+    setWorkspacePath(folderPath);
+    setShowFolderBrowser(false);
+    if (advanceToConfirm) {
+      setStep(3);
+    }
+  };
+
+  const navigateToFolder = async (folderPath) => {
+    await loadBrowserFolders(folderPath);
   };
 
   return (
@@ -290,28 +326,39 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   {workspaceType === 'existing' ? 'Workspace Path' : 'Where should the workspace be created?'}
                 </label>
-                <div className="relative">
-                  <Input
-                    type="text"
-                    value={workspacePath}
-                    onChange={(e) => setWorkspacePath(e.target.value)}
-                    placeholder={workspaceType === 'existing' ? '/path/to/existing/workspace' : '/path/to/new/workspace'}
-                    className="w-full"
-                  />
-                  {showPathDropdown && pathSuggestions.length > 0 && (
-                    <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                      {pathSuggestions.map((suggestion, index) => (
-                        <button
-                          key={index}
-                          onClick={() => selectPathSuggestion(suggestion)}
-                          className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 text-sm"
-                        >
-                          <div className="font-medium text-gray-900 dark:text-white">{suggestion.name}</div>
-                          <div className="text-xs text-gray-500 dark:text-gray-400">{suggestion.path}</div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                <div className="relative flex gap-2">
+                  <div className="flex-1 relative">
+                    <Input
+                      type="text"
+                      value={workspacePath}
+                      onChange={(e) => setWorkspacePath(e.target.value)}
+                      placeholder={workspaceType === 'existing' ? '/path/to/existing/workspace' : '/path/to/new/workspace'}
+                      className="w-full"
+                    />
+                    {showPathDropdown && pathSuggestions.length > 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        {pathSuggestions.map((suggestion, index) => (
+                          <button
+                            key={index}
+                            onClick={() => selectPathSuggestion(suggestion)}
+                            className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 text-sm"
+                          >
+                            <div className="font-medium text-gray-900 dark:text-white">{suggestion.name}</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">{suggestion.path}</div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={openFolderBrowser}
+                    className="px-3"
+                    title="Browse folders"
+                  >
+                    <FolderOpen className="w-4 h-4" />
+                  </Button>
                 </div>
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   {workspaceType === 'existing'
@@ -563,6 +610,121 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
           </Button>
         </div>
       </div>
+
+      {/* Folder Browser Modal */}
+      {showFolderBrowser && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[70] p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] border border-gray-200 dark:border-gray-700 flex flex-col">
+            {/* Browser Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/50 rounded-lg flex items-center justify-center">
+                  <FolderOpen className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  Select Folder
+                </h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowHiddenFolders(!showHiddenFolders)}
+                  className={`p-2 rounded-md transition-colors ${
+                    showHiddenFolders
+                      ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30'
+                      : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  }`}
+                  title={showHiddenFolders ? 'Hide hidden folders' : 'Show hidden folders'}
+                >
+                  {showHiddenFolders ? <Eye className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
+                </button>
+                <button
+                  onClick={() => setShowFolderBrowser(false)}
+                  className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Folder List */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {loadingFolders ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                </div>
+              ) : browserFolders.length === 0 ? (
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                  No folders found
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {/* Parent Directory */}
+                  {browserCurrentPath !== '~' && browserCurrentPath !== '/' && (
+                    <button
+                      onClick={() => {
+                        const parentPath = browserCurrentPath.substring(0, browserCurrentPath.lastIndexOf('/')) || '/';
+                        navigateToFolder(parentPath);
+                      }}
+                      className="w-full px-4 py-3 text-left hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg flex items-center gap-3"
+                    >
+                      <FolderOpen className="w-5 h-5 text-gray-400" />
+                      <span className="font-medium text-gray-700 dark:text-gray-300">..</span>
+                    </button>
+                  )}
+
+                  {/* Folders */}
+                  {browserFolders
+                    .filter(folder => showHiddenFolders || !folder.name.startsWith('.'))
+                    .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
+                    .map((folder, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <button
+                        onClick={() => navigateToFolder(folder.path)}
+                        className="flex-1 px-4 py-3 text-left hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg flex items-center gap-3"
+                      >
+                        <FolderPlus className="w-5 h-5 text-blue-500" />
+                        <span className="font-medium text-gray-900 dark:text-white">{folder.name}</span>
+                      </button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => selectFolder(folder.path, true)}
+                        className="text-xs px-3"
+                      >
+                        Select
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Browser Footer with Current Path */}
+            <div className="border-t border-gray-200 dark:border-gray-700">
+              <div className="px-4 py-3 bg-gray-50 dark:bg-gray-900/50 flex items-center gap-2">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Path:</span>
+                <code className="text-sm font-mono text-gray-900 dark:text-white flex-1 truncate">
+                  {browserCurrentPath}
+                </code>
+              </div>
+              <div className="flex items-center justify-end gap-2 p-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowFolderBrowser(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => selectFolder(browserCurrentPath, true)}
+                >
+                  Use this folder
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
