@@ -379,22 +379,46 @@ async function extractProjectDirectory(projectName) {
   }
 }
 
-async function getProjects() {
+async function getProjects(progressCallback = null) {
   const claudeDir = path.join(os.homedir(), '.claude', 'projects');
   const config = await loadProjectConfig();
   const projects = [];
   const existingProjects = new Set();
-  
+  let totalProjects = 0;
+  let processedProjects = 0;
+  let directories = [];
+
   try {
     // Check if the .claude/projects directory exists
     await fs.access(claudeDir);
-    
+
     // First, get existing Claude projects from the file system
     const entries = await fs.readdir(claudeDir, { withFileTypes: true });
-    
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        existingProjects.add(entry.name);
+    directories = entries.filter(e => e.isDirectory());
+
+    // Build set of existing project names for later
+    directories.forEach(e => existingProjects.add(e.name));
+
+    // Count manual projects not already in directories
+    const manualProjectsCount = Object.entries(config)
+      .filter(([name, cfg]) => cfg.manuallyAdded && !existingProjects.has(name))
+      .length;
+
+    totalProjects = directories.length + manualProjectsCount;
+
+    for (const entry of directories) {
+        processedProjects++;
+
+        // Emit progress
+        if (progressCallback) {
+          progressCallback({
+            phase: 'loading',
+            current: processedProjects,
+            total: totalProjects,
+            currentProject: entry.name
+          });
+        }
+
         const projectPath = path.join(claudeDir, entry.name);
         
         // Extract actual project directory from JSONL sessions
@@ -460,20 +484,35 @@ async function getProjects() {
             status: 'error'
           };
         }
-        
-        projects.push(project);
-      }
+
+      projects.push(project);
     }
   } catch (error) {
     // If the directory doesn't exist (ENOENT), that's okay - just continue with empty projects
     if (error.code !== 'ENOENT') {
       console.error('Error reading projects directory:', error);
     }
+    // Calculate total for manual projects only (no directories exist)
+    totalProjects = Object.entries(config)
+      .filter(([name, cfg]) => cfg.manuallyAdded)
+      .length;
   }
   
   // Add manually configured projects that don't exist as folders yet
   for (const [projectName, projectConfig] of Object.entries(config)) {
     if (!existingProjects.has(projectName) && projectConfig.manuallyAdded) {
+      processedProjects++;
+
+      // Emit progress for manual projects
+      if (progressCallback) {
+        progressCallback({
+          phase: 'loading',
+          current: processedProjects,
+          total: totalProjects,
+          currentProject: projectName
+        });
+      }
+
       // Use the original path if available, otherwise extract from potential sessions
       let actualProjectDir = projectConfig.originalPath;
       
@@ -541,7 +580,16 @@ async function getProjects() {
       projects.push(project);
     }
   }
-  
+
+  // Emit completion after all projects (including manual) are processed
+  if (progressCallback) {
+    progressCallback({
+      phase: 'complete',
+      current: totalProjects,
+      total: totalProjects
+    });
+  }
+
   return projects;
 }
 
