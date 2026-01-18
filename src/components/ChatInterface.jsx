@@ -3181,11 +3181,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   }, [selectedSession?.id]);
 
   // Update chatMessages when convertedMessages changes
+  // Skip during active sessions to preserve optimistic UI updates
   useEffect(() => {
-    if (sessionMessages.length > 0) {
+    if (sessionMessages.length > 0 && !isLoading) {
       setChatMessages(convertedMessages);
     }
-  }, [convertedMessages, sessionMessages]);
+  }, [convertedMessages, sessionMessages, isLoading]);
 
   // Notify parent when input focus changes
   useEffect(() => {

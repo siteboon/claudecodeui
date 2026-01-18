@@ -209,7 +209,10 @@ function AppContent() {
 
             // Check if this is the currently-selected session
             if (changedSessionId === selectedSession.id) {
-              const isSessionActive = activeSessions.has(selectedSession.id);
+              // Check for active session: either the exact session ID or any temporary new-session-* ID
+              // This prevents race conditions where activeSessions hasn't been updated yet
+              const isSessionActive = activeSessions.has(selectedSession.id) ||
+                Array.from(activeSessions).some(id => id.startsWith('new-session-'));
 
               if (!isSessionActive) {
                 // Session is not active - safe to reload messages
