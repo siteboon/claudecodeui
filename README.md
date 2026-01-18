@@ -338,7 +338,7 @@ chmod +x node_modules/node-pty/prebuilds/darwin-*/spawn-helper
 For Intel Macs, the path is `darwin-x64`. For Apple Silicon (M1/M2/M3), it's `darwin-arm64`.
 
 **Permanent Fix**: This project includes a `postinstall` script that automatically fixes permissions. If you still encounter the issue:
-1. Delete `node_modules` and reinstall: `rm -r node_modules && npm install`
+1. Delete `node_modules` and reinstall: `rm -rf node_modules && npm install`
 2. Verify the fix: `ls -la node_modules/node-pty/prebuilds/darwin-*/spawn-helper` (should show `-rwxr-xr-x`)
 
 **Related Issues**: [#284](https://github.com/siteboon/claudecodeui/issues/284)
