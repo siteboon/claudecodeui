@@ -53,6 +53,7 @@ function AppContent() {
   const [isMobile, setIsMobile] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
+  const [loadingProgress, setLoadingProgress] = useState(null); // { phase, current, total, currentProject }
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState('agents');
@@ -170,7 +171,16 @@ function AppContent() {
   useEffect(() => {
     if (messages.length > 0) {
       const latestMessage = messages[messages.length - 1];
-      
+
+      // Handle loading progress updates
+      if (latestMessage.type === 'loading_progress') {
+        setLoadingProgress(latestMessage);
+        if (latestMessage.phase === 'complete') {
+          setTimeout(() => setLoadingProgress(null), 500);
+        }
+        return;
+      }
+
       if (latestMessage.type === 'projects_updated') {
 
         // External Session Update Detection: Check if the changed file is the current session's JSONL
@@ -765,6 +775,7 @@ function AppContent() {
                 onSessionDelete={handleSessionDelete}
                 onProjectDelete={handleProjectDelete}
                 isLoading={isLoadingProjects}
+                loadingProgress={loadingProgress}
                 onRefresh={handleSidebarRefresh}
                 onShowSettings={() => setShowSettings(true)}
                 updateAvailable={updateAvailable}
@@ -859,6 +870,7 @@ function AppContent() {
               onSessionDelete={handleSessionDelete}
               onProjectDelete={handleProjectDelete}
               isLoading={isLoadingProjects}
+              loadingProgress={loadingProgress}
               onRefresh={handleSidebarRefresh}
               onShowSettings={() => setShowSettings(true)}
               updateAvailable={updateAvailable}

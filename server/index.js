@@ -80,6 +80,20 @@ import { validateApiKey, authenticateToken, authenticateWebSocket } from './midd
 // File system watcher for projects folder
 let projectsWatcher = null;
 const connectedClients = new Set();
+let isGetProjectsRunning = false; // Flag to prevent reentrant calls
+
+// Broadcast progress to all connected WebSocket clients
+function broadcastProgress(progress) {
+    const message = JSON.stringify({
+        type: 'loading_progress',
+        ...progress
+    });
+    connectedClients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(message);
+        }
+    });
+}
 
 // Setup file system watcher for Claude projects folder using chokidar
 async function setupProjectsWatcher() {
@@ -115,9 +129,20 @@ async function setupProjectsWatcher() {
         // Debounce function to prevent excessive notifications
         let debounceTimer;
         const debouncedUpdate = async (eventType, filePath) => {
+            // Ignore cache files to prevent infinite loops
+            if (filePath.endsWith('.metadata-cache.json')) {
+                return;
+            }
+
             clearTimeout(debounceTimer);
             debounceTimer = setTimeout(async () => {
+                // Prevent reentrant calls
+                if (isGetProjectsRunning) {
+                    return;
+                }
+
                 try {
+                    isGetProjectsRunning = true;
 
                     // Clear project directory cache when files change
                     clearProjectDirectoryCache();
@@ -142,6 +167,8 @@ async function setupProjectsWatcher() {
 
                 } catch (error) {
                     console.error('[ERROR] Error handling project changes:', error);
+                } finally {
+                    isGetProjectsRunning = false;
                 }
             }, 300); // 300ms debounce (slightly faster than before)
         };
@@ -366,7 +393,7 @@ app.post('/api/system/update', authenticateToken, async (req, res) => {
 
 app.get('/api/projects', authenticateToken, async (req, res) => {
     try {
-        const projects = await getProjects();
+        const projects = await getProjects(broadcastProgress);
         res.json(projects);
     } catch (error) {
         res.status(500).json({ error: error.message });

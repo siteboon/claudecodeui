@@ -197,9 +197,47 @@ async function detectTaskMasterFolder(projectPath) {
 // Cache for extracted project directories
 const projectDirectoryCache = new Map();
 
+// Cache for session metadata (avoids re-parsing JSONL files)
+const sessionMetadataCache = new Map();
+const CACHE_VERSION = 1;
+
+// Load session metadata cache from file
+async function loadSessionMetadataCache(projectDir) {
+  const cacheFile = path.join(projectDir, '.metadata-cache.json');
+  try {
+    const data = await fs.readFile(cacheFile, 'utf8');
+    const cache = JSON.parse(data);
+    if (cache.version === CACHE_VERSION) {
+      return cache.files || {};
+    }
+  } catch (error) {
+    // Cache doesn't exist or is invalid
+  }
+  return {};
+}
+
+// Save session metadata cache to file
+async function saveSessionMetadataCache(projectDir, filesCache) {
+  const cacheFile = path.join(projectDir, '.metadata-cache.json');
+  try {
+    await fs.writeFile(cacheFile, JSON.stringify({
+      version: CACHE_VERSION,
+      cacheTime: new Date().toISOString(),
+      files: filesCache
+    }, null, 2));
+  } catch (error) {
+    console.warn('Could not save metadata cache:', error.message);
+  }
+}
+
 // Clear cache when needed (called when project files change)
 function clearProjectDirectoryCache() {
   projectDirectoryCache.clear();
+}
+
+// Clear session metadata cache for a specific project
+function clearSessionMetadataCache(projectName) {
+  sessionMetadataCache.delete(projectName);
 }
 
 // Load project configuration file
@@ -379,22 +417,35 @@ async function extractProjectDirectory(projectName) {
   }
 }
 
-async function getProjects() {
+async function getProjects(progressCallback = null) {
   const claudeDir = path.join(os.homedir(), '.claude', 'projects');
   const config = await loadProjectConfig();
   const projects = [];
   const existingProjects = new Set();
-  
+
   try {
     // Check if the .claude/projects directory exists
     await fs.access(claudeDir);
-    
+
     // First, get existing Claude projects from the file system
     const entries = await fs.readdir(claudeDir, { withFileTypes: true });
-    
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
+    const directories = entries.filter(e => e.isDirectory());
+    const totalProjects = directories.length;
+    let processedProjects = 0;
+
+    for (const entry of directories) {
         existingProjects.add(entry.name);
+
+        // Emit progress
+        if (progressCallback) {
+          progressCallback({
+            phase: 'loading',
+            current: processedProjects,
+            total: totalProjects,
+            currentProject: entry.name
+          });
+        }
+
         const projectPath = path.join(claudeDir, entry.name);
         
         // Extract actual project directory from JSONL sessions
@@ -460,9 +511,19 @@ async function getProjects() {
             status: 'error'
           };
         }
-        
+
         projects.push(project);
+        processedProjects++;
       }
+    }
+
+    // Emit completion
+    if (progressCallback) {
+      progressCallback({
+        phase: 'complete',
+        current: totalProjects,
+        total: totalProjects
+      });
     }
   } catch (error) {
     // If the directory doesn't exist (ENOENT), that's okay - just continue with empty projects
