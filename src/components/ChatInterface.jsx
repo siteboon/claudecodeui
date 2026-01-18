@@ -2977,10 +2977,14 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         };
         // Prepend new messages to the existing ones
         setSessionMessages(prev => [...moreMessages, ...prev]);
+        // Increase visible message count to show the newly loaded messages
+        setVisibleMessageCount(prevCount => prevCount + moreMessages.length);
       }
       return true;
     } finally {
-      isLoadingMoreRef.current = false;
+      setTimeout(() => {
+        isLoadingMoreRef.current = false;
+      }, 0);
     }
   }, [hasMoreMessages, isLoadingMoreMessages, selectedSession, selectedProject, loadSessionMessages]);
 
@@ -3087,6 +3091,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             const converted = await loadCursorSessionMessages(projectPath, selectedSession.id);
             setSessionMessages([]);
             setChatMessages(converted);
+            // Set visible count to at least the number of initially loaded messages
+            setVisibleMessageCount(Math.max(100, converted.length));
           } else {
             // Reset the flag after handling system session change
             setIsSystemSessionChange(false);
@@ -3100,6 +3106,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           if (!isSystemSessionChange) {
             const messages = await loadSessionMessages(selectedProject.name, selectedSession.id, false, selectedSession.__provider || 'claude');
             setSessionMessages(messages);
+            // Set visible count to at least the number of initially loaded messages
+            setVisibleMessageCount(Math.max(100, messages.length));
             // convertedMessages will be automatically updated via useMemo
             // Scroll will be handled by the main scroll useEffect after messages are rendered
           } else {
@@ -3124,6 +3132,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         setHasMoreMessages(false);
         setTotalMessages(0);
         setTokenBudget(null);
+        setVisibleMessageCount(100);
       }
 
       // Mark loading as complete after messages are set
@@ -4207,6 +4216,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   useEffect(() => {
     // Auto-scroll to bottom when new messages arrive
     if (scrollContainerRef.current && chatMessages.length > 0) {
+      // Skip auto-scroll if we're loading older messages (pagination)
+      if (isLoadingMoreRef.current) {
+        return;
+      }
+
       if (autoScrollToBottom) {
         // If auto-scroll is enabled, always scroll to bottom unless user has manually scrolled up
         if (!isUserScrolledUp) {
