@@ -864,6 +864,14 @@ function handleChatConnection(ws) {
   // Add to connected clients for project updates
   connectedClients.add(ws);
 
+  // Generate unique connection ID for orchestrator status tracking
+  const connectionId = `ws-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+  // Track connection for orchestrator status (if enabled)
+  if (orchestratorStatusHooks) {
+    orchestratorStatusHooks.onConnectionOpen(connectionId);
+  }
+
   // Wrap WebSocket with writer for consistent interface with SSEStreamWriter
   const writer = new WebSocketWriter(ws);
 
