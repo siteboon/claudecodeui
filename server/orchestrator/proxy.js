@@ -201,7 +201,11 @@ export class OrchestratorProxyWriter {
  * @param {Object} [authConfig] - Authentication configuration override
  * @returns {Function} Handler function for user_request events
  */
-export function createUserRequestHandler(handlers, statusHooks, authConfig = null) {
+export function createUserRequestHandler(
+  handlers,
+  statusHooks,
+  authConfig = null,
+) {
   // Track active proxy sockets by request ID
   const activeProxySockets = new Map();
 
@@ -221,7 +225,7 @@ export function createUserRequestHandler(handlers, statusHooks, authConfig = nul
 
       if (!authResult.authenticated) {
         console.warn(
-          `[ORCHESTRATOR-PROXY] Authentication failed for request ${requestId}: ${authResult.error}`
+          `[ORCHESTRATOR-PROXY] Authentication failed for request ${requestId}: ${authResult.error}`,
         );
         // Send auth error back through orchestrator
         const errorMsg = createAuthErrorMessage(requestId, authResult.error);
@@ -231,7 +235,7 @@ export function createUserRequestHandler(handlers, statusHooks, authConfig = nul
 
       // Authentication succeeded - attach user info to payload
       console.log(
-        `[ORCHESTRATOR-PROXY] Authenticated user: ${authResult.user.username} (${authResult.user.authMethod})`
+        `[ORCHESTRATOR-PROXY] Authenticated user: ${authResult.user.username} (${authResult.user.authMethod})`,
       );
       // Use the validated user info
       payload.user = authResult.user;

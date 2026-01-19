@@ -66,7 +66,10 @@ export async function checkOrgMembership(token, org) {
   try {
     // GET /user/memberships/orgs/{org} returns membership info if user is a member
     // Returns 404 if not a member, 403 if org requires 2FA and user doesn't have it
-    const membership = await githubFetch(`/user/memberships/orgs/${org}`, token);
+    const membership = await githubFetch(
+      `/user/memberships/orgs/${org}`,
+      token,
+    );
     return membership.state === "active";
   } catch (error) {
     // 404 means not a member, other errors are actual failures
@@ -100,7 +103,7 @@ export async function checkTeamMembership(token, org, teamSlug) {
     // GET /orgs/{org}/teams/{team_slug}/memberships/{username}
     const membership = await githubFetch(
       `/orgs/${org}/teams/${teamSlug}/memberships/${username}`,
-      token
+      token,
     );
     return membership.state === "active";
   } catch (error) {
@@ -121,9 +124,7 @@ export async function checkTeamMembership(token, org, teamSlug) {
  */
 export function checkUserAllowed(username, allowedUsers) {
   const allowed = Array.isArray(allowedUsers) ? allowedUsers : [allowedUsers];
-  return allowed.some(
-    (u) => u.toLowerCase() === username.toLowerCase()
-  );
+  return allowed.some((u) => u.toLowerCase() === username.toLowerCase());
 }
 
 /**
@@ -148,7 +149,8 @@ export async function validateGitHubToken(token, config = {}) {
     return {
       authenticated: false,
       user: null,
-      error: "No authorization rules configured (set ORCHESTRATOR_GITHUB_ORG, ORCHESTRATOR_GITHUB_TEAM, or ORCHESTRATOR_GITHUB_USERS)",
+      error:
+        "No authorization rules configured (set ORCHESTRATOR_GITHUB_ORG, ORCHESTRATOR_GITHUB_TEAM, or ORCHESTRATOR_GITHUB_USERS)",
     };
   }
 
@@ -261,7 +263,8 @@ export function createGitHubAuthFromEnv() {
       : null,
   };
 
-  const isConfigured = config.allowedOrg || config.allowedTeam || config.allowedUsers;
+  const isConfigured =
+    config.allowedOrg || config.allowedTeam || config.allowedUsers;
 
   return {
     config,
