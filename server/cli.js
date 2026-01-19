@@ -144,6 +144,29 @@ function showStatus() {
     console.log(
       `       ORCHESTRATOR_TOKEN: ${process.env.ORCHESTRATOR_TOKEN ? c.ok("[configured]") : c.warn("(not set)")}`,
     );
+
+    // GitHub pass-through auth configuration
+    const githubOrg = process.env.ORCHESTRATOR_GITHUB_ORG;
+    const githubTeam = process.env.ORCHESTRATOR_GITHUB_TEAM;
+    const githubUsers = process.env.ORCHESTRATOR_GITHUB_USERS;
+    const hasGitHubAuth = githubOrg || githubTeam || githubUsers;
+
+    console.log(`\n${c.info("[INFO]")} Pass-through Authentication:`);
+    if (hasGitHubAuth) {
+      if (githubOrg) {
+        console.log(`       GITHUB_ORG: ${c.bright(githubOrg)}`);
+      }
+      if (githubTeam) {
+        console.log(`       GITHUB_TEAM: ${c.bright(githubTeam)}`);
+      }
+      if (githubUsers) {
+        console.log(`       GITHUB_USERS: ${c.bright(githubUsers)}`);
+      }
+    } else {
+      console.log(
+        `       ${c.warn("(not configured - requests will not require user validation)")}`,
+      );
+    }
   }
 
   // Claude projects folder
