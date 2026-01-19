@@ -389,6 +389,15 @@ async function main() {
   if (options.orchestratorToken) {
     process.env.ORCHESTRATOR_TOKEN = options.orchestratorToken;
   }
+  if (options.githubOrg) {
+    process.env.ORCHESTRATOR_GITHUB_ORG = options.githubOrg;
+  }
+  if (options.githubTeam) {
+    process.env.ORCHESTRATOR_GITHUB_TEAM = options.githubTeam;
+  }
+  if (options.githubUsers) {
+    process.env.ORCHESTRATOR_GITHUB_USERS = options.githubUsers;
+  }
 
   switch (command) {
     case "start":
