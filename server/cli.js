@@ -215,10 +215,13 @@ Examples:
   $ cloudcli status                 # Show configuration
 
 Environment Variables:
-  PORT                Set server port (default: 3001)
-  DATABASE_PATH       Set custom database location
-  CLAUDE_CLI_PATH     Set custom Claude CLI path
-  CONTEXT_WINDOW      Set context window size (default: 160000)
+  PORT                      Set server port (default: 3001)
+  DATABASE_PATH             Set custom database location
+  CLAUDE_CLI_PATH           Set custom Claude CLI path
+  CONTEXT_WINDOW            Set context window size (default: 160000)
+  ORCHESTRATOR_MODE         Orchestrator mode: standalone | client
+  ORCHESTRATOR_URL          Orchestrator WebSocket URL (for client mode)
+  ORCHESTRATOR_TOKEN        Orchestrator authentication token
 
 Documentation:
   ${packageJson.homepage || "https://github.com/siteboon/claudecodeui"}
