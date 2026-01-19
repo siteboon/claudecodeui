@@ -7,6 +7,8 @@
  */
 
 import { EventEmitter } from "events";
+import { createAuthErrorMessage } from "./protocol.js";
+import { createGitHubAuthFromEnv } from "./github-auth.js";
 
 /**
  * OrchestratorProxySocket
