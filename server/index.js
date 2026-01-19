@@ -876,133 +876,8 @@ function handleChatConnection(ws) {
   const writer = new WebSocketWriter(ws);
 
   ws.on("message", async (message) => {
-    try {
-      const data = JSON.parse(message);
-
-      if (data.type === "claude-command") {
-        console.log(
-          "[DEBUG] User message:",
-          data.command || "[Continue/Resume]",
-        );
-        console.log("📁 Project:", data.options?.projectPath || "Unknown");
-        console.log("🔄 Session:", data.options?.sessionId ? "Resume" : "New");
-
-        // Use Claude Agents SDK
-        await queryClaudeSDK(data.command, data.options, writer);
-      } else if (data.type === "cursor-command") {
-        console.log(
-          "[DEBUG] Cursor message:",
-          data.command || "[Continue/Resume]",
-        );
-        console.log("📁 Project:", data.options?.cwd || "Unknown");
-        console.log("🔄 Session:", data.options?.sessionId ? "Resume" : "New");
-        console.log("🤖 Model:", data.options?.model || "default");
-        await spawnCursor(data.command, data.options, writer);
-      } else if (data.type === "codex-command") {
-        console.log(
-          "[DEBUG] Codex message:",
-          data.command || "[Continue/Resume]",
-        );
-        console.log(
-          "📁 Project:",
-          data.options?.projectPath || data.options?.cwd || "Unknown",
-        );
-        console.log("🔄 Session:", data.options?.sessionId ? "Resume" : "New");
-        console.log("🤖 Model:", data.options?.model || "default");
-        await queryCodex(data.command, data.options, writer);
-      } else if (data.type === "cursor-resume") {
-        // Backward compatibility: treat as cursor-command with resume and no prompt
-        console.log("[DEBUG] Cursor resume session (compat):", data.sessionId);
-        await spawnCursor(
-          "",
-          {
-            sessionId: data.sessionId,
-            resume: true,
-            cwd: data.options?.cwd,
-          },
-          writer,
-        );
-      } else if (data.type === "abort-session") {
-        console.log("[DEBUG] Abort session request:", data.sessionId);
-        const provider = data.provider || "claude";
-        let success;
-
-        if (provider === "cursor") {
-          success = abortCursorSession(data.sessionId);
-        } else if (provider === "codex") {
-          success = abortCodexSession(data.sessionId);
-        } else {
-          // Use Claude Agents SDK
-          success = await abortClaudeSDKSession(data.sessionId);
-        }
-
-        writer.send({
-          type: "session-aborted",
-          sessionId: data.sessionId,
-          provider,
-          success,
-        });
-      } else if (data.type === "claude-permission-response") {
-        // Relay UI approval decisions back into the SDK control flow.
-        // This does not persist permissions; it only resolves the in-flight request,
-        // introduced so the SDK can resume once the user clicks Allow/Deny.
-        if (data.requestId) {
-          resolveToolApproval(data.requestId, {
-            allow: Boolean(data.allow),
-            updatedInput: data.updatedInput,
-            message: data.message,
-            rememberEntry: data.rememberEntry,
-          });
-        }
-      } else if (data.type === "cursor-abort") {
-        console.log("[DEBUG] Abort Cursor session:", data.sessionId);
-        const success = abortCursorSession(data.sessionId);
-        writer.send({
-          type: "session-aborted",
-          sessionId: data.sessionId,
-          provider: "cursor",
-          success,
-        });
-      } else if (data.type === "check-session-status") {
-        // Check if a specific session is currently processing
-        const provider = data.provider || "claude";
-        const sessionId = data.sessionId;
-        let isActive;
-
-        if (provider === "cursor") {
-          isActive = isCursorSessionActive(sessionId);
-        } else if (provider === "codex") {
-          isActive = isCodexSessionActive(sessionId);
-        } else {
-          // Use Claude Agents SDK
-          isActive = isClaudeSDKSessionActive(sessionId);
-        }
-
-        writer.send({
-          type: "session-status",
-          sessionId,
-          provider,
-          isProcessing: isActive,
-        });
-      } else if (data.type === "get-active-sessions") {
-        // Get all currently active sessions
-        const activeSessions = {
-          claude: getActiveClaudeSDKSessions(),
-          cursor: getActiveCursorSessions(),
-          codex: getActiveCodexSessions(),
-        };
-        writer.send({
-          type: "active-sessions",
-          sessions: activeSessions,
-        });
-      }
-    } catch (error) {
-      console.error("[ERROR] Chat WebSocket error:", error.message);
-      writer.send({
-        type: "error",
-        error: error.message,
-      });
-    }
+    // Delegate to shared message handler
+    await handleChatMessage(ws, writer, message.toString());
   });
 
   ws.on("close", () => {
@@ -1019,14 +894,13 @@ function handleChatConnection(ws) {
 // Handle chat message processing (shared between WebSocket and orchestrator proxy)
 async function handleChatMessage(ws, writer, messageData) {
   try {
-    const data = typeof messageData === "string" ? JSON.parse(messageData) : messageData;
-    const sessionIdForTracking = data.options?.sessionId || data.sessionId || `session-${Date.now()}`;
+    const data =
+      typeof messageData === "string" ? JSON.parse(messageData) : messageData;
+    const sessionIdForTracking =
+      data.options?.sessionId || data.sessionId || `session-${Date.now()}`;
 
     if (data.type === "claude-command") {
-      console.log(
-        "[DEBUG] User message:",
-        data.command || "[Continue/Resume]",
-      );
+      console.log("[DEBUG] User message:", data.command || "[Continue/Resume]");
       console.log("📁 Project:", data.options?.projectPath || "Unknown");
       console.log("🔄 Session:", data.options?.sessionId ? "Resume" : "New");
 
