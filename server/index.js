@@ -2074,9 +2074,7 @@ async function startServer() {
         console.warn(
           `${c.warn("[WARN]")} Orchestrator connection failed: ${orchError.message}`,
         );
-        console.log(
-          `${c.info("[INFO]")} Continuing in standalone mode`,
-        );
+        console.log(`${c.info("[INFO]")} Continuing in standalone mode`);
       }
     } else {
       console.log(

@@ -28,7 +28,10 @@ export class OrchestratorProxySocket extends EventEmitter {
 
     this.orchestratorClient = orchestratorClient;
     this.requestId = requestId;
-    this.user = options.user || { id: "orchestrator", username: "orchestrator" };
+    this.user = options.user || {
+      id: "orchestrator",
+      username: "orchestrator",
+    };
 
     // Mimic WebSocket readyState constants
     this.CONNECTING = 0;
@@ -64,9 +67,7 @@ export class OrchestratorProxySocket extends EventEmitter {
    */
   send(data) {
     if (this._closed || !this.orchestratorClient) {
-      console.warn(
-        "[ORCHESTRATOR-PROXY] Cannot send, socket closed"
-      );
+      console.warn("[ORCHESTRATOR-PROXY] Cannot send, socket closed");
       return;
     }
 
@@ -207,7 +208,7 @@ export function createUserRequestHandler(handlers, statusHooks) {
     const proxySocket = new OrchestratorProxySocket(
       orchestratorClient,
       requestId,
-      { user: payload?.user }
+      { user: payload?.user },
     );
 
     // Track connection for status
@@ -242,7 +243,7 @@ export function createUserRequestHandler(handlers, statusHooks) {
           handlers.handleChatMessage(
             proxySocket,
             writer,
-            JSON.stringify({ type: action, ...payload })
+            JSON.stringify({ type: action, ...payload }),
           );
         }
         break;
@@ -253,13 +254,8 @@ export function createUserRequestHandler(handlers, statusHooks) {
         break;
 
       default:
-        console.warn(
-          `[ORCHESTRATOR-PROXY] Unknown action: ${action}`
-        );
-        orchestratorClient.sendError(
-          requestId,
-          `Unknown action: ${action}`
-        );
+        console.warn(`[ORCHESTRATOR-PROXY] Unknown action: ${action}`);
+        orchestratorClient.sendError(requestId, `Unknown action: ${action}`);
         proxySocket.close(4000, "Unknown action");
     }
 

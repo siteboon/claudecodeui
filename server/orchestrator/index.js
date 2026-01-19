@@ -65,14 +65,14 @@ export function createOrchestratorClientFromEnv(overrides = {}) {
 
   if (!url) {
     console.warn(
-      "[ORCHESTRATOR] ORCHESTRATOR_URL not set, running in standalone mode"
+      "[ORCHESTRATOR] ORCHESTRATOR_URL not set, running in standalone mode",
     );
     return null;
   }
 
   if (!token) {
     console.warn(
-      "[ORCHESTRATOR] ORCHESTRATOR_TOKEN not set, running in standalone mode"
+      "[ORCHESTRATOR] ORCHESTRATOR_TOKEN not set, running in standalone mode",
     );
     return null;
   }
@@ -129,7 +129,7 @@ export async function initializeOrchestrator(options = {}) {
 
   if (!url || !token) {
     console.warn(
-      "[ORCHESTRATOR] URL or token not configured, running in standalone mode"
+      "[ORCHESTRATOR] URL or token not configured, running in standalone mode",
     );
     return null;
   }
@@ -168,7 +168,7 @@ export async function initializeOrchestrator(options = {}) {
 
   client.on("disconnected", ({ code, reason }) => {
     console.log(
-      `[ORCHESTRATOR] Disconnected from orchestrator: ${code} ${reason || ""}`
+      `[ORCHESTRATOR] Disconnected from orchestrator: ${code} ${reason || ""}`,
     );
   });
 
@@ -183,7 +183,7 @@ export async function initializeOrchestrator(options = {}) {
   } catch (error) {
     console.warn(
       "[ORCHESTRATOR] Failed to connect, running in standalone mode:",
-      error.message
+      error.message,
     );
     // Don't throw - allow the server to continue in standalone mode
   }
