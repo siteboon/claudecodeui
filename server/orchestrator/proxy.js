@@ -190,21 +190,52 @@ export class OrchestratorProxyWriter {
  * Creates a request handler for orchestrator user requests
  *
  * This factory creates a handler that:
- * 1. Creates a proxy socket for each request
- * 2. Routes the request to the appropriate existing handler
- * 3. Manages the proxy socket lifecycle
+ * 1. Authenticates the request using pass-through GitHub OAuth
+ * 2. Creates a proxy socket for each request
+ * 3. Routes the request to the appropriate existing handler
+ * 4. Manages the proxy socket lifecycle
  *
  * @param {Object} handlers - Object containing handler functions
  * @param {Function} handlers.handleChatMessage - Function to handle chat messages
  * @param {Object} statusHooks - Status tracking hooks
+ * @param {Object} [authConfig] - Authentication configuration override
  * @returns {Function} Handler function for user_request events
  */
-export function createUserRequestHandler(handlers, statusHooks) {
+export function createUserRequestHandler(handlers, statusHooks, authConfig = null) {
   // Track active proxy sockets by request ID
   const activeProxySockets = new Map();
 
-  return function handleUserRequest(orchestratorClient, message) {
+  // Initialize GitHub auth validator from env or config
+  const githubAuth = authConfig || createGitHubAuthFromEnv();
+
+  return async function handleUserRequest(orchestratorClient, message) {
     const { request_id: requestId, action, payload } = message;
+
+    // Check if authentication is required (GitHub auth configured)
+    if (githubAuth.isConfigured) {
+      // Extract auth token from payload
+      const authToken = payload?.auth_token;
+
+      // Validate the token
+      const authResult = await githubAuth.validate(authToken);
+
+      if (!authResult.authenticated) {
+        console.warn(
+          `[ORCHESTRATOR-PROXY] Authentication failed for request ${requestId}: ${authResult.error}`
+        );
+        // Send auth error back through orchestrator
+        const errorMsg = createAuthErrorMessage(requestId, authResult.error);
+        orchestratorClient.ws?.send(JSON.stringify(errorMsg));
+        return null;
+      }
+
+      // Authentication succeeded - attach user info to payload
+      console.log(
+        `[ORCHESTRATOR-PROXY] Authenticated user: ${authResult.user.username} (${authResult.user.authMethod})`
+      );
+      // Use the validated user info
+      payload.user = authResult.user;
+    }
 
     // Create proxy socket for this request
     const proxySocket = new OrchestratorProxySocket(
