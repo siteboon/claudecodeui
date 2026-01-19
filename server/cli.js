@@ -344,6 +344,18 @@ function parseArgs(args) {
       parsed.options.orchestratorToken = args[++i];
     } else if (arg.startsWith("--orchestrator-token=")) {
       parsed.options.orchestratorToken = arg.split("=")[1];
+    } else if (arg === "--github-org") {
+      parsed.options.githubOrg = args[++i];
+    } else if (arg.startsWith("--github-org=")) {
+      parsed.options.githubOrg = arg.split("=")[1];
+    } else if (arg === "--github-team") {
+      parsed.options.githubTeam = args[++i];
+    } else if (arg.startsWith("--github-team=")) {
+      parsed.options.githubTeam = arg.split("=")[1];
+    } else if (arg === "--github-users") {
+      parsed.options.githubUsers = args[++i];
+    } else if (arg.startsWith("--github-users=")) {
+      parsed.options.githubUsers = arg.split("=")[1];
     } else if (arg === "--help" || arg === "-h") {
       parsed.command = "help";
     } else if (arg === "--version" || arg === "-v") {
