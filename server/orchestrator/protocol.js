@@ -202,6 +202,21 @@ export function validateInboundMessage(message) {
       return typeof message.message === "string";
 
     case InboundMessageTypes.USER_REQUEST:
+      // user_request message structure:
+      // {
+      //   type: "user_request",
+      //   request_id: string,          // Unique request identifier
+      //   action: string,              // Action to perform (e.g., "claude-command")
+      //   payload: {
+      //     auth_token?: string,       // GitHub OAuth token for pass-through auth
+      //     user?: {                   // Optional pre-validated user info
+      //       id: string,
+      //       username: string,
+      //       email?: string
+      //     },
+      //     ...                        // Action-specific payload data
+      //   }
+      // }
       return (
         typeof message.request_id === "string" &&
         typeof message.action === "string"
@@ -211,4 +226,19 @@ export function validateInboundMessage(message) {
       // Unknown message types are considered valid (forward compatibility)
       return true;
   }
+}
+
+/**
+ * Creates an auth error response message
+ * @param {string} requestId - Request ID
+ * @param {string} error - Error message
+ * @returns {Object} Auth error message
+ */
+export function createAuthErrorMessage(requestId, error) {
+  return {
+    type: OutboundMessageTypes.ERROR,
+    request_id: requestId,
+    auth_error: true,
+    message: error,
+  };
 }
