@@ -1009,7 +1009,175 @@ function handleChatConnection(ws) {
     console.log("🔌 Chat client disconnected");
     // Remove from connected clients
     connectedClients.delete(ws);
+    // Track disconnection for orchestrator status (if enabled)
+    if (orchestratorStatusHooks) {
+      orchestratorStatusHooks.onConnectionClose(connectionId);
+    }
   });
+}
+
+// Handle chat message processing (shared between WebSocket and orchestrator proxy)
+async function handleChatMessage(ws, writer, messageData) {
+  try {
+    const data = typeof messageData === "string" ? JSON.parse(messageData) : messageData;
+    const sessionIdForTracking = data.options?.sessionId || data.sessionId || `session-${Date.now()}`;
+
+    if (data.type === "claude-command") {
+      console.log(
+        "[DEBUG] User message:",
+        data.command || "[Continue/Resume]",
+      );
+      console.log("📁 Project:", data.options?.projectPath || "Unknown");
+      console.log("🔄 Session:", data.options?.sessionId ? "Resume" : "New");
+
+      // Track busy status for orchestrator
+      if (orchestratorStatusHooks) {
+        orchestratorStatusHooks.onQueryStart(sessionIdForTracking);
+      }
+
+      try {
+        // Use Claude Agents SDK
+        await queryClaudeSDK(data.command, data.options, writer);
+      } finally {
+        // Mark as no longer busy
+        if (orchestratorStatusHooks) {
+          orchestratorStatusHooks.onQueryEnd(sessionIdForTracking);
+        }
+      }
+    } else if (data.type === "cursor-command") {
+      console.log(
+        "[DEBUG] Cursor message:",
+        data.command || "[Continue/Resume]",
+      );
+      console.log("📁 Project:", data.options?.cwd || "Unknown");
+      console.log("🔄 Session:", data.options?.sessionId ? "Resume" : "New");
+      console.log("🤖 Model:", data.options?.model || "default");
+
+      if (orchestratorStatusHooks) {
+        orchestratorStatusHooks.onQueryStart(sessionIdForTracking);
+      }
+
+      try {
+        await spawnCursor(data.command, data.options, writer);
+      } finally {
+        if (orchestratorStatusHooks) {
+          orchestratorStatusHooks.onQueryEnd(sessionIdForTracking);
+        }
+      }
+    } else if (data.type === "codex-command") {
+      console.log(
+        "[DEBUG] Codex message:",
+        data.command || "[Continue/Resume]",
+      );
+      console.log(
+        "📁 Project:",
+        data.options?.projectPath || data.options?.cwd || "Unknown",
+      );
+      console.log("🔄 Session:", data.options?.sessionId ? "Resume" : "New");
+      console.log("🤖 Model:", data.options?.model || "default");
+
+      if (orchestratorStatusHooks) {
+        orchestratorStatusHooks.onQueryStart(sessionIdForTracking);
+      }
+
+      try {
+        await queryCodex(data.command, data.options, writer);
+      } finally {
+        if (orchestratorStatusHooks) {
+          orchestratorStatusHooks.onQueryEnd(sessionIdForTracking);
+        }
+      }
+    } else if (data.type === "cursor-resume") {
+      // Backward compatibility: treat as cursor-command with resume and no prompt
+      console.log("[DEBUG] Cursor resume session (compat):", data.sessionId);
+      await spawnCursor(
+        "",
+        {
+          sessionId: data.sessionId,
+          resume: true,
+          cwd: data.options?.cwd,
+        },
+        writer,
+      );
+    } else if (data.type === "abort-session") {
+      console.log("[DEBUG] Abort session request:", data.sessionId);
+      const provider = data.provider || "claude";
+      let success;
+
+      if (provider === "cursor") {
+        success = abortCursorSession(data.sessionId);
+      } else if (provider === "codex") {
+        success = abortCodexSession(data.sessionId);
+      } else {
+        // Use Claude Agents SDK
+        success = await abortClaudeSDKSession(data.sessionId);
+      }
+
+      writer.send({
+        type: "session-aborted",
+        sessionId: data.sessionId,
+        provider,
+        success,
+      });
+    } else if (data.type === "claude-permission-response") {
+      // Relay UI approval decisions back into the SDK control flow.
+      if (data.requestId) {
+        resolveToolApproval(data.requestId, {
+          allow: Boolean(data.allow),
+          updatedInput: data.updatedInput,
+          message: data.message,
+          rememberEntry: data.rememberEntry,
+        });
+      }
+    } else if (data.type === "cursor-abort") {
+      console.log("[DEBUG] Abort Cursor session:", data.sessionId);
+      const success = abortCursorSession(data.sessionId);
+      writer.send({
+        type: "session-aborted",
+        sessionId: data.sessionId,
+        provider: "cursor",
+        success,
+      });
+    } else if (data.type === "check-session-status") {
+      // Check if a specific session is currently processing
+      const provider = data.provider || "claude";
+      const sessionId = data.sessionId;
+      let isActive;
+
+      if (provider === "cursor") {
+        isActive = isCursorSessionActive(sessionId);
+      } else if (provider === "codex") {
+        isActive = isCodexSessionActive(sessionId);
+      } else {
+        // Use Claude Agents SDK
+        isActive = isClaudeSDKSessionActive(sessionId);
+      }
+
+      writer.send({
+        type: "session-status",
+        sessionId,
+        provider,
+        isProcessing: isActive,
+      });
+    } else if (data.type === "get-active-sessions") {
+      // Get all currently active sessions
+      const activeSessions = {
+        claude: getActiveClaudeSDKSessions(),
+        cursor: getActiveCursorSessions(),
+        codex: getActiveCodexSessions(),
+      };
+      writer.send({
+        type: "active-sessions",
+        sessions: activeSessions,
+      });
+    }
+  } catch (error) {
+    console.error("[ERROR] Chat message handling error:", error.message);
+    writer.send({
+      type: "error",
+      error: error.message,
+    });
+  }
 }
 
 // Handle shell WebSocket connections
