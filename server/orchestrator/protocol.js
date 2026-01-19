@@ -16,6 +16,7 @@ export const OutboundMessageTypes = {
   RESPONSE_CHUNK: "response_chunk",
   RESPONSE_COMPLETE: "response_complete",
   ERROR: "error",
+  HTTP_PROXY_RESPONSE: "http_proxy_response",
 };
 
 /**
@@ -27,6 +28,7 @@ export const InboundMessageTypes = {
   COMMAND: "command",
   ERROR: "error",
   USER_REQUEST: "user_request",
+  HTTP_PROXY_REQUEST: "http_proxy_request",
 };
 
 /**
@@ -222,6 +224,24 @@ export function validateInboundMessage(message) {
         typeof message.action === "string"
       );
 
+    case InboundMessageTypes.HTTP_PROXY_REQUEST:
+      // http_proxy_request message structure:
+      // {
+      //   type: "http_proxy_request",
+      //   request_id: string,          // Unique request identifier
+      //   method: string,              // HTTP method (GET, POST, etc.)
+      //   path: string,                // Request path
+      //   headers: [[string, string]], // Headers as key-value pairs
+      //   body?: string,               // Optional request body
+      //   query?: string,              // Optional query string
+      //   proxy_base?: string,         // Base path for URL rewriting (e.g., "/clients/{id}/proxy")
+      // }
+      return (
+        typeof message.request_id === "string" &&
+        typeof message.method === "string" &&
+        typeof message.path === "string"
+      );
+
     default:
       // Unknown message types are considered valid (forward compatibility)
       return true;
@@ -240,5 +260,28 @@ export function createAuthErrorMessage(requestId, error) {
     request_id: requestId,
     auth_error: true,
     message: error,
+  };
+}
+
+/**
+ * Creates an HTTP proxy response message
+ * @param {string} requestId - Original request ID
+ * @param {number} status - HTTP status code
+ * @param {Array<[string, string]>} headers - Response headers as [key, value] pairs
+ * @param {string} body - Response body
+ * @returns {Object} HTTP proxy response message
+ */
+export function createHttpProxyResponseMessage(
+  requestId,
+  status,
+  headers,
+  body,
+) {
+  return {
+    type: OutboundMessageTypes.HTTP_PROXY_RESPONSE,
+    request_id: requestId,
+    status,
+    headers,
+    body,
   };
 }

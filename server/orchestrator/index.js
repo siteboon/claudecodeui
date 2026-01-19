@@ -23,6 +23,7 @@ export {
   createResponseCompleteMessage,
   createErrorMessage,
   createAuthErrorMessage,
+  createHttpProxyResponseMessage,
   serialize,
   parse,
   validateInboundMessage,
@@ -146,6 +147,11 @@ export async function initializeOrchestrator(options = {}) {
     return null;
   }
 
+  // Determine callback URL for HTTP proxying
+  // If not explicitly set, construct from PORT and public hostname
+  const callbackUrl =
+    config.callbackUrl || process.env.ORCHESTRATOR_CALLBACK_URL || null;
+
   // Create client
   const client = new OrchestratorClient({
     url,
@@ -160,6 +166,7 @@ export async function initializeOrchestrator(options = {}) {
       parseInt(process.env.ORCHESTRATOR_HEARTBEAT_INTERVAL) ||
       30000,
     metadata: config.metadata || {},
+    callbackUrl,
   });
 
   // Create status hooks
