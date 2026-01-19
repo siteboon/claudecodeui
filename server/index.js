@@ -864,6 +864,14 @@ function handleChatConnection(ws) {
   // Add to connected clients for project updates
   connectedClients.add(ws);
 
+  // Generate unique connection ID for orchestrator status tracking
+  const connectionId = `ws-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+  // Track connection for orchestrator status (if enabled)
+  if (orchestratorStatusHooks) {
+    orchestratorStatusHooks.onConnectionOpen(connectionId);
+  }
+
   // Wrap WebSocket with writer for consistent interface with SSEStreamWriter
   const writer = new WebSocketWriter(ws);
 
@@ -1393,12 +1401,10 @@ app.post("/api/transcribe", authenticateToken, async (req, res) => {
 
       const apiKey = process.env.OPENAI_API_KEY;
       if (!apiKey) {
-        return res
-          .status(500)
-          .json({
-            error:
-              "OpenAI API key not configured. Please set OPENAI_API_KEY in server environment.",
-          });
+        return res.status(500).json({
+          error:
+            "OpenAI API key not configured. Please set OPENAI_API_KEY in server environment.",
+        });
       }
 
       try {
@@ -1705,12 +1711,10 @@ app.get(
         const sessionFilePath = await findSessionFile(codexSessionsDir);
 
         if (!sessionFilePath) {
-          return res
-            .status(404)
-            .json({
-              error: "Codex session file not found",
-              sessionId: safeSessionId,
-            });
+          return res.status(404).json({
+            error: "Codex session file not found",
+            sessionId: safeSessionId,
+          });
         }
 
         // Read and parse the Codex JSONL file
