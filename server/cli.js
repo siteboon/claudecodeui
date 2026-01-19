@@ -227,6 +227,9 @@ Options:
   --orchestrator-mode <mode>  Set orchestrator mode (standalone|client)
   --orchestrator-url <url>    Orchestrator WebSocket URL
   --orchestrator-token <tok>  Orchestrator authentication token
+  --github-org <org>          Allow GitHub org members (pass-through auth)
+  --github-team <org/team>    Allow GitHub team members (pass-through auth)
+  --github-users <users>      Allow specific GitHub users (comma-separated)
   -h, --help                  Show this help information
   -v, --version               Show version information
 
@@ -237,14 +240,23 @@ Examples:
   $ cloudcli start --port 4000      # Explicit start command
   $ cloudcli status                 # Show configuration
 
+  # Orchestrator client mode with GitHub org auth:
+  $ cloudcli --orchestrator-mode client \\
+             --orchestrator-url wss://orchestrator.example.com/ws/connect \\
+             --orchestrator-token YOUR_TOKEN \\
+             --github-org your-org-name
+
 Environment Variables:
-  PORT                      Set server port (default: 3001)
-  DATABASE_PATH             Set custom database location
-  CLAUDE_CLI_PATH           Set custom Claude CLI path
-  CONTEXT_WINDOW            Set context window size (default: 160000)
-  ORCHESTRATOR_MODE         Orchestrator mode: standalone | client
-  ORCHESTRATOR_URL          Orchestrator WebSocket URL (for client mode)
-  ORCHESTRATOR_TOKEN        Orchestrator authentication token
+  PORT                        Set server port (default: 3001)
+  DATABASE_PATH               Set custom database location
+  CLAUDE_CLI_PATH             Set custom Claude CLI path
+  CONTEXT_WINDOW              Set context window size (default: 160000)
+  ORCHESTRATOR_MODE           Orchestrator mode: standalone | client
+  ORCHESTRATOR_URL            Orchestrator WebSocket URL (for client mode)
+  ORCHESTRATOR_TOKEN          Orchestrator authentication token
+  ORCHESTRATOR_GITHUB_ORG     Allow users from this GitHub organization
+  ORCHESTRATOR_GITHUB_TEAM    Allow users from this GitHub team (org/team)
+  ORCHESTRATOR_GITHUB_USERS   Allow specific GitHub usernames (comma-separated)
 
 Documentation:
   ${packageJson.homepage || "https://github.com/siteboon/claudecodeui"}
