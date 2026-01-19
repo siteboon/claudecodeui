@@ -76,6 +76,7 @@ import userRoutes from './routes/user.js';
 import codexRoutes from './routes/codex.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
+import { initializeOrchestrator, StatusValues } from './orchestrator/index.js';
 
 // File system watcher for projects folder
 let projectsWatcher = null;
