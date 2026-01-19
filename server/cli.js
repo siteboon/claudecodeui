@@ -158,6 +158,9 @@ Commands:
 Options:
   -p, --port <port>           Set server port (default: 3001)
   --database-path <path>      Set custom database location
+  --orchestrator-mode <mode>  Set orchestrator mode (standalone|client)
+  --orchestrator-url <url>    Orchestrator WebSocket URL
+  --orchestrator-token <tok>  Orchestrator authentication token
   -h, --help                  Show this help information
   -v, --version               Show version information
 
