@@ -22,10 +22,22 @@ export {
   createResponseChunkMessage,
   createResponseCompleteMessage,
   createErrorMessage,
+  createAuthErrorMessage,
   serialize,
   parse,
   validateInboundMessage,
 } from "./protocol.js";
+
+// Re-export GitHub authentication
+export {
+  validateGitHubToken,
+  createGitHubAuthFromEnv,
+  authenticateOrchestratorRequest,
+  getGitHubUser,
+  checkOrgMembership,
+  checkTeamMembership,
+  checkUserAllowed,
+} from "./github-auth.js";
 
 // Re-export client
 export { OrchestratorClient } from "./client.js";
