@@ -350,6 +350,15 @@ async function main() {
   if (options.databasePath) {
     process.env.DATABASE_PATH = options.databasePath;
   }
+  if (options.orchestratorMode) {
+    process.env.ORCHESTRATOR_MODE = options.orchestratorMode;
+  }
+  if (options.orchestratorUrl) {
+    process.env.ORCHESTRATOR_URL = options.orchestratorUrl;
+  }
+  if (options.orchestratorToken) {
+    process.env.ORCHESTRATOR_TOKEN = options.orchestratorToken;
+  }
 
   switch (command) {
     case "start":
