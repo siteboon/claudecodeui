@@ -1,0 +1,11 @@
+{
+    "session_id": "session-1768779775",
+    "feature_branch": "feat/orchestrator-client-mode",
+    "base_branch": "main",
+    "prompt": "Look in @~/repos/liamhelmer/ai-orchestrator/CLAUDE.md . I'm building an orchestrator that will act as a central server where instances of claudecodeui can connect to. We need to create a mode of claudecodeui that works with the orchestrator: it should create a websocket connection to the orchestrator at a URL defined in the config, and it should authenticate itself using github oauth authentication. Then it will accept user traffic over the websocket connection which will be authenticated with the github token, and it will send back app data that will be consumed by the orchestrator. Create a plan for building this functionality.\n",
+    "state": "STARTED",
+    "started_at": "2026-01-18T23:42:55Z",
+    "agents": [],
+    "merged_count": 0,
+    "conflict_count": 0
+}

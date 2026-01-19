@@ -66,10 +66,8 @@ export class OrchestratorClient extends EventEmitter {
       url: config.url,
       token: config.token,
       clientId: config.clientId || `${os.hostname()}-${process.pid}`,
-      reconnectInterval:
-        config.reconnectInterval || DEFAULTS.reconnectInterval,
-      heartbeatInterval:
-        config.heartbeatInterval || DEFAULTS.heartbeatInterval,
+      reconnectInterval: config.reconnectInterval || DEFAULTS.reconnectInterval,
+      heartbeatInterval: config.heartbeatInterval || DEFAULTS.heartbeatInterval,
       maxReconnectAttempts:
         config.maxReconnectAttempts || DEFAULTS.maxReconnectAttempts,
       metadata: config.metadata || {},
@@ -102,7 +100,7 @@ export class OrchestratorClient extends EventEmitter {
 
       try {
         console.log(
-          `[ORCHESTRATOR] Connecting to ${this.config.url} as ${this.config.clientId}`
+          `[ORCHESTRATOR] Connecting to ${this.config.url} as ${this.config.clientId}`,
         );
         this.ws = new WebSocket(this.config.url);
 
@@ -136,7 +134,7 @@ export class OrchestratorClient extends EventEmitter {
           this.stopHeartbeat();
 
           console.log(
-            `[ORCHESTRATOR] Connection closed: ${code} ${reason || ""}`
+            `[ORCHESTRATOR] Connection closed: ${code} ${reason || ""}`,
           );
           this.emit("disconnected", { code, reason: reason?.toString() });
 
@@ -209,7 +207,7 @@ export class OrchestratorClient extends EventEmitter {
     const message = createRegisterMessage(
       this.config.clientId,
       this.config.token,
-      metadata
+      metadata,
     );
     this.sendMessage(message);
   }
@@ -229,7 +227,7 @@ export class OrchestratorClient extends EventEmitter {
     if (!this.isRegistered) {
       console.log(
         "[ORCHESTRATOR] Not registered, queuing status update:",
-        status
+        status,
       );
       return;
     }
@@ -337,10 +335,7 @@ export class OrchestratorClient extends EventEmitter {
         break;
 
       default:
-        console.log(
-          "[ORCHESTRATOR] Unknown message type:",
-          message.type
-        );
+        console.log("[ORCHESTRATOR] Unknown message type:", message.type);
     }
   }
 
@@ -363,7 +358,7 @@ export class OrchestratorClient extends EventEmitter {
     } else {
       console.error(
         "[ORCHESTRATOR] Registration failed:",
-        message.message || "Unknown error"
+        message.message || "Unknown error",
       );
       this.emit("error", new Error(message.message || "Registration failed"));
       this.disconnect();
@@ -411,7 +406,7 @@ export class OrchestratorClient extends EventEmitter {
     console.log(
       "[ORCHESTRATOR] Received user request:",
       message.request_id,
-      message.action
+      message.action,
     );
     this.emit("user_request", message);
   }
@@ -449,36 +444,28 @@ export class OrchestratorClient extends EventEmitter {
     }
 
     if (this.reconnectAttempts >= this.config.maxReconnectAttempts) {
-      console.error(
-        "[ORCHESTRATOR] Max reconnect attempts reached, giving up"
-      );
-      this.emit(
-        "error",
-        new Error("Max reconnect attempts reached")
-      );
+      console.error("[ORCHESTRATOR] Max reconnect attempts reached, giving up");
+      this.emit("error", new Error("Max reconnect attempts reached"));
       return;
     }
 
     this.reconnectAttempts++;
     console.log(
-      `[ORCHESTRATOR] Scheduling reconnect attempt ${this.reconnectAttempts}/${this.config.maxReconnectAttempts} in ${this.currentReconnectInterval}ms`
+      `[ORCHESTRATOR] Scheduling reconnect attempt ${this.reconnectAttempts}/${this.config.maxReconnectAttempts} in ${this.currentReconnectInterval}ms`,
     );
 
     this.reconnectTimer = setTimeout(async () => {
       try {
         await this.connect();
       } catch (error) {
-        console.error(
-          "[ORCHESTRATOR] Reconnect failed:",
-          error.message
-        );
+        console.error("[ORCHESTRATOR] Reconnect failed:", error.message);
       }
     }, this.currentReconnectInterval);
 
     // Exponential backoff
     this.currentReconnectInterval = Math.min(
       this.currentReconnectInterval * DEFAULTS.reconnectBackoffMultiplier,
-      DEFAULTS.maxReconnectInterval
+      DEFAULTS.maxReconnectInterval,
     );
   }
 
