@@ -2049,6 +2049,41 @@ async function startServer() {
       );
     }
 
+    // Initialize orchestrator integration (if configured)
+    const orchestratorMode = process.env.ORCHESTRATOR_MODE || "standalone";
+    if (orchestratorMode === "client") {
+      console.log(
+        `${c.info("[INFO]")} Orchestrator mode: ${c.bright("client")}`,
+      );
+
+      try {
+        const result = await initializeOrchestrator({
+          handlers: {
+            handleChatMessage,
+          },
+        });
+
+        if (result) {
+          orchestrator = result;
+          orchestratorStatusHooks = result.statusHooks;
+          console.log(
+            `${c.ok("[OK]")} Connected to orchestrator at ${c.dim(process.env.ORCHESTRATOR_URL)}`,
+          );
+        }
+      } catch (orchError) {
+        console.warn(
+          `${c.warn("[WARN]")} Orchestrator connection failed: ${orchError.message}`,
+        );
+        console.log(
+          `${c.info("[INFO]")} Continuing in standalone mode`,
+        );
+      }
+    } else {
+      console.log(
+        `${c.info("[INFO]")} Orchestrator mode: ${c.dim("standalone")}`,
+      );
+    }
+
     server.listen(PORT, "0.0.0.0", async () => {
       const appInstallPath = path.join(__dirname, "..");
 
@@ -2061,6 +2096,15 @@ async function startServer() {
         `${c.info("[INFO]")} Server URL:  ${c.bright("http://0.0.0.0:" + PORT)}`,
       );
       console.log(`${c.info("[INFO]")} Installed at: ${c.dim(appInstallPath)}`);
+
+      // Show orchestrator status
+      if (orchestrator && orchestrator.client) {
+        const state = orchestrator.client.getState();
+        console.log(
+          `${c.info("[INFO]")} Orchestrator: ${state.isConnected ? c.ok("Connected") : c.warn("Disconnected")} (${c.dim(state.clientId)})`,
+        );
+      }
+
       console.log(
         `${c.tip("[TIP]")}  Run "cloudcli status" for full configuration details`,
       );
