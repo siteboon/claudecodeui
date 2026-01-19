@@ -131,6 +131,21 @@ function showStatus() {
     `       CONTEXT_WINDOW: ${c.dim(process.env.CONTEXT_WINDOW || "160000 (default)")}`,
   );
 
+  // Orchestrator configuration
+  console.log(`\n${c.info("[INFO]")} Orchestrator Configuration:`);
+  const orchestratorMode = process.env.ORCHESTRATOR_MODE || "standalone";
+  console.log(
+    `       ORCHESTRATOR_MODE: ${orchestratorMode === "client" ? c.bright(orchestratorMode) : c.dim(orchestratorMode)}`,
+  );
+  if (orchestratorMode === "client") {
+    console.log(
+      `       ORCHESTRATOR_URL: ${c.dim(process.env.ORCHESTRATOR_URL || "(not set)")}`,
+    );
+    console.log(
+      `       ORCHESTRATOR_TOKEN: ${process.env.ORCHESTRATOR_TOKEN ? c.ok("[configured]") : c.warn("(not set)")}`,
+    );
+  }
+
   // Claude projects folder
   const claudeProjectsPath = path.join(os.homedir(), ".claude", "projects");
   const projectsExists = fs.existsSync(claudeProjectsPath);
