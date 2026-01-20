@@ -170,9 +170,9 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
   const loadBrowserFolders = async (path) => {
     try {
       setLoadingFolders(true);
-      setBrowserCurrentPath(path);
       const response = await api.browseFilesystem(path);
       const data = await response.json();
+      setBrowserCurrentPath(data.path || path);
       setBrowserFolders(data.suggestions || []);
     } catch (error) {
       console.error('Error loading folders:', error);
