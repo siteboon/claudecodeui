@@ -319,7 +319,7 @@ export function createUserRequestHandler(
           handlers.handleChatMessage(
             proxySocket,
             writer,
-            JSON.stringify({ type: action, ...payload }),
+            JSON.stringify({ ...payload, type: action }),
           );
         }
         break;

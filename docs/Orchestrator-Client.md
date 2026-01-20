@@ -13,7 +13,7 @@ When running Claude Code UI on multiple machines (development servers, remote wo
 
 ## Architecture
 
-```
+```text
 ┌─────────────────┐     ┌──────────────────────────────────────────────┐
 │  claudecodeui   │────▶│         Orchestrator Server                  │
 │   instance 1    │     │  (Cloudflare Workers + Durable Objects)      │
@@ -185,7 +185,7 @@ The orchestrator module is located in `server/orchestrator/`:
 
    Check the server logs for:
 
-   ```
+   ```text
    [ORCHESTRATOR] Connected to orchestrator
    [ORCHESTRATOR] Successfully connected and registered
    ```

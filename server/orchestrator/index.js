@@ -201,10 +201,11 @@ export async function initializeOrchestrator(options = {}) {
     console.log("[ORCHESTRATOR] Successfully connected and registered");
   } catch (error) {
     console.warn(
-      "[ORCHESTRATOR] Failed to connect, running in standalone mode:",
+      "[ORCHESTRATOR] Orchestrator unavailable, running in standalone mode:",
       error.message,
     );
-    // Don't throw - allow the server to continue in standalone mode
+    // Return null so callers know orchestrator is not available
+    return null;
   }
 
   return {

@@ -165,6 +165,7 @@ export class OrchestratorClient extends EventEmitter {
         // Wait for registration before resolving
         const onRegistered = () => {
           clearTimeout(connectTimeout);
+          this.removeListener("error", onError);
           resolve();
         };
 
@@ -176,6 +177,12 @@ export class OrchestratorClient extends EventEmitter {
 
         this.once("registered", onRegistered);
         this.once("error", onError);
+
+        // Clean up listeners if socket closes before registration
+        this.ws.once("close", () => {
+          this.removeListener("registered", onRegistered);
+          this.removeListener("error", onError);
+        });
       } catch (error) {
         console.error("[ORCHESTRATOR] Connection error:", error.message);
         reject(error);
@@ -631,17 +638,40 @@ export class OrchestratorClient extends EventEmitter {
         `[ORCHESTRATOR] HTTP proxy response: ${response.status} (${responseBody.length} bytes)`,
       );
     } catch (error) {
-      console.error("[ORCHESTRATOR] HTTP proxy request failed:", error.message);
+      // Log full error details internally but don't expose to client
+      console.error(
+        "[ORCHESTRATOR] HTTP proxy request failed:",
+        error.message,
+        error.stack,
+      );
 
-      // Send error response
+      // Send generic error response without internal details
       const errorResponse = createHttpProxyResponseMessage(
         request_id,
         502,
         [["Content-Type", "application/json"]],
-        JSON.stringify({ error: `Proxy request failed: ${error.message}` }),
+        JSON.stringify({ error: "Proxy request failed" }),
       );
       this.sendMessage(errorResponse);
     }
+  }
+
+  /**
+   * Escapes a string for safe inclusion in inline JavaScript
+   * Prevents XSS by escaping quotes, backslashes, and script-breaking characters
+   * @param {string} str - String to escape
+   * @returns {string} Escaped string safe for JS interpolation
+   */
+  escapeForJs(str) {
+    if (!str) return "";
+    return str
+      .replace(/\\/g, "\\\\")
+      .replace(/"/g, '\\"')
+      .replace(/'/g, "\\'")
+      .replace(/</g, "\\x3c")
+      .replace(/>/g, "\\x3e")
+      .replace(/\n/g, "\\n")
+      .replace(/\r/g, "\\r");
   }
 
   /**
@@ -734,13 +764,17 @@ export class OrchestratorClient extends EventEmitter {
 })();
 </script>`;
 
+    // Escape user-controlled values to prevent XSS
+    const safeUsername = this.escapeForJs(orchestratorUsername || "");
+    const safeToken = this.escapeForJs(orchestratorToken || "");
+
     const authScript = orchestratorToken
       ? `<script>
 // Auto-authenticate via orchestrator token
 (function() {
   const existingToken = localStorage.getItem('auth-token');
   const storedOrchestratorUser = localStorage.getItem('orchestrator-user');
-  const orchestratorUsername = "${orchestratorUsername || ""}";
+  const orchestratorUsername = "${safeUsername}";
 
   // Check if we need to update the token:
   // 1. No existing token
@@ -751,7 +785,7 @@ export class OrchestratorClient extends EventEmitter {
     (existingToken && !storedOrchestratorUser && orchestratorUsername);
 
   if (needsUpdate) {
-    const token = "${orchestratorToken}";
+    const token = "${safeToken}";
     localStorage.setItem('auth-token', token);
     if (orchestratorUsername) {
       localStorage.setItem('orchestrator-user', orchestratorUsername);
