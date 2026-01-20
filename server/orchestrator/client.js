@@ -354,6 +354,11 @@ export class OrchestratorClient extends EventEmitter {
         this.handleUserRequest(message);
         break;
 
+      case InboundMessageTypes.USER_REQUEST_FOLLOW_UP:
+        // Emit follow-up messages for proxy handler to process
+        this.emit(InboundMessageTypes.USER_REQUEST_FOLLOW_UP, message);
+        break;
+
       case InboundMessageTypes.HTTP_PROXY_REQUEST:
         this.handleHttpProxyRequest(message);
         break;

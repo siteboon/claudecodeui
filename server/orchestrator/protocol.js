@@ -28,6 +28,7 @@ export const InboundMessageTypes = {
   COMMAND: "command",
   ERROR: "error",
   USER_REQUEST: "user_request",
+  USER_REQUEST_FOLLOW_UP: "user_request_follow_up",
   HTTP_PROXY_REQUEST: "http_proxy_request",
 };
 
@@ -223,6 +224,17 @@ export function validateInboundMessage(message) {
         typeof message.request_id === "string" &&
         typeof message.action === "string"
       );
+
+    case InboundMessageTypes.USER_REQUEST_FOLLOW_UP:
+      // user_request_follow_up message structure:
+      // {
+      //   type: "user_request_follow_up",
+      //   request_id: string,          // Request ID of existing session
+      //   payload: {
+      //     ...                        // Follow-up message data
+      //   }
+      // }
+      return typeof message.request_id === "string";
 
     case InboundMessageTypes.HTTP_PROXY_REQUEST:
       // http_proxy_request message structure:

@@ -7,7 +7,7 @@
  */
 
 import { EventEmitter } from "events";
-import { createAuthErrorMessage } from "./protocol.js";
+import { createAuthErrorMessage, InboundMessageTypes } from "./protocol.js";
 import { createGitHubAuthFromEnv } from "./github-auth.js";
 
 /**
@@ -199,7 +199,7 @@ export class OrchestratorProxyWriter {
  * @param {Function} handlers.handleChatMessage - Function to handle chat messages
  * @param {Object} statusHooks - Status tracking hooks
  * @param {Object} [authConfig] - Authentication configuration override
- * @returns {Function} Handler function for user_request events
+ * @returns {Object} Object with handleUserRequest and setupFollowUpListener functions
  */
 export function createUserRequestHandler(
   handlers,
@@ -212,10 +212,47 @@ export function createUserRequestHandler(
   // Initialize GitHub auth validator from env or config
   const githubAuth = authConfig || createGitHubAuthFromEnv();
 
-  return async function handleUserRequest(orchestratorClient, message) {
+  // Track if follow-up listener has been registered
+  let followUpListenerRegistered = false;
+
+  /**
+   * Sets up the follow-up message listener on the orchestrator client
+   * @param {OrchestratorClient} orchestratorClient - The orchestrator client
+   */
+  function setupFollowUpListener(orchestratorClient) {
+    if (followUpListenerRegistered) {
+      return;
+    }
+
+    // Listen for follow-up messages
+    orchestratorClient.on(
+      InboundMessageTypes.USER_REQUEST_FOLLOW_UP,
+      (message) => {
+        const { request_id: requestId, payload } = message;
+        const handled = handleFollowUpMessage(
+          activeProxySockets,
+          requestId,
+          payload || {},
+        );
+        if (!handled) {
+          console.warn(
+            `[ORCHESTRATOR-PROXY] No active session found for follow-up request ${requestId}`,
+          );
+        }
+      },
+    );
+
+    followUpListenerRegistered = true;
+    console.log("[ORCHESTRATOR-PROXY] Follow-up message listener registered");
+  }
+
+  async function handleUserRequest(orchestratorClient, message) {
     const { request_id: requestId, action } = message;
     // Initialize payload to prevent undefined mutation errors
     let payload = message.payload || {};
+
+    // Ensure follow-up listener is registered
+    setupFollowUpListener(orchestratorClient);
 
     // Check if authentication is required (GitHub auth configured)
     if (githubAuth.isConfigured) {
@@ -299,7 +336,11 @@ export function createUserRequestHandler(
     }
 
     return proxySocket;
-  };
+  }
+
+  // Return both the handler and setup function
+  // The handler also auto-registers the listener on first call for convenience
+  return handleUserRequest;
 }
 
 /**
