@@ -11,12 +11,14 @@ CREATE TABLE IF NOT EXISTS users (
     is_active BOOLEAN DEFAULT 1,
     git_name TEXT,
     git_email TEXT,
-    has_completed_onboarding BOOLEAN DEFAULT 0
+    has_completed_onboarding BOOLEAN DEFAULT 0,
+    github_id TEXT UNIQUE
 );
 
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 CREATE INDEX IF NOT EXISTS idx_users_active ON users(is_active);
+-- Note: idx_users_github_id is created by migration in db.js for existing databases
 
 -- API Keys table for external API access
 CREATE TABLE IF NOT EXISTS api_keys (

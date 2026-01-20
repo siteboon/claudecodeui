@@ -6,3 +6,4 @@
 /Users/liam.helmer/repos/epiphytic/claudecodeui/server/orchestrator/protocol.js
 /Users/liam.helmer/repos/epiphytic/claudecodeui/server/orchestrator/proxy.js
 /Users/liam.helmer/repos/epiphytic/claudecodeui/src/App.jsx
+/Users/liam.helmer/repos/epiphytic/claudecodeui/server/database/init.sql

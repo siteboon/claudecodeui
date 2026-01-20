@@ -89,7 +89,12 @@ const runMigrations = () => {
 
     if (!columnNames.includes("github_id")) {
       console.log("Running migration: Adding github_id column");
-      db.exec("ALTER TABLE users ADD COLUMN github_id TEXT UNIQUE");
+      // SQLite doesn't allow adding UNIQUE columns directly with ALTER TABLE
+      // Add column first, then create unique index
+      db.exec("ALTER TABLE users ADD COLUMN github_id TEXT");
+      db.exec(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_github_id ON users(github_id)",
+      );
     }
 
     console.log("Database migrations completed successfully");
