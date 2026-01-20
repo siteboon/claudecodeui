@@ -213,12 +213,14 @@ export function createUserRequestHandler(
   const githubAuth = authConfig || createGitHubAuthFromEnv();
 
   return async function handleUserRequest(orchestratorClient, message) {
-    const { request_id: requestId, action, payload } = message;
+    const { request_id: requestId, action } = message;
+    // Initialize payload to prevent undefined mutation errors
+    let payload = message.payload || {};
 
     // Check if authentication is required (GitHub auth configured)
     if (githubAuth.isConfigured) {
       // Extract auth token from payload
-      const authToken = payload?.auth_token;
+      const authToken = payload.auth_token;
 
       // Validate the token
       const authResult = await githubAuth.validate(authToken);

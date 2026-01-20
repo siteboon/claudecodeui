@@ -1,0 +1,8 @@
+/Users/liam.helmer/repos/epiphytic/claudecodeui/server/database/db.js
+/Users/liam.helmer/repos/epiphytic/claudecodeui/server/middleware/auth.js
+/Users/liam.helmer/repos/epiphytic/claudecodeui/server/orchestrator/client.js
+/Users/liam.helmer/repos/epiphytic/claudecodeui/server/orchestrator/github-auth.js
+/Users/liam.helmer/repos/epiphytic/claudecodeui/server/orchestrator/index.js
+/Users/liam.helmer/repos/epiphytic/claudecodeui/server/orchestrator/protocol.js
+/Users/liam.helmer/repos/epiphytic/claudecodeui/server/orchestrator/proxy.js
+/Users/liam.helmer/repos/epiphytic/claudecodeui/src/App.jsx

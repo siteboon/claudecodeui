@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from "react";
 
 export function useWebSocket() {
   const [ws, setWs] = useState(null);
@@ -8,7 +8,7 @@ export function useWebSocket() {
 
   useEffect(() => {
     connect();
-    
+
     return () => {
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
@@ -21,24 +21,42 @@ export function useWebSocket() {
 
   const connect = async () => {
     try {
-      const isPlatform = import.meta.env.VITE_IS_PLATFORM === 'true';
+      const isPlatform = import.meta.env.VITE_IS_PLATFORM === "true";
 
       // Construct WebSocket URL
       let wsUrl;
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+
+      // Check if we're running through orchestrator proxy
+      const proxyBase = window.__ORCHESTRATOR_PROXY_BASE__;
 
       if (isPlatform) {
         // Platform mode: Use same domain as the page (goes through proxy)
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         wsUrl = `${protocol}//${window.location.host}/ws`;
+      } else if (proxyBase) {
+        // Orchestrator proxy mode: WebSocket URL goes through the proxy path
+        const token = localStorage.getItem("auth-token");
+        if (!token) {
+          console.warn(
+            "No authentication token found for WebSocket connection",
+          );
+          return;
+        }
+        wsUrl = `${protocol}//${window.location.host}${proxyBase}/ws?token=${encodeURIComponent(token)}`;
+        console.log(
+          "[ORCHESTRATOR] WebSocket connecting through proxy:",
+          wsUrl,
+        );
       } else {
         // OSS mode: Connect to same host:port that served the page
-        const token = localStorage.getItem('auth-token');
+        const token = localStorage.getItem("auth-token");
         if (!token) {
-          console.warn('No authentication token found for WebSocket connection');
+          console.warn(
+            "No authentication token found for WebSocket connection",
+          );
           return;
         }
 
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         wsUrl = `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}`;
       }
 
@@ -52,16 +70,16 @@ export function useWebSocket() {
       websocket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          setMessages(prev => [...prev, data]);
+          setMessages((prev) => [...prev, data]);
         } catch (error) {
-          console.error('Error parsing WebSocket message:', error);
+          console.error("Error parsing WebSocket message:", error);
         }
       };
 
       websocket.onclose = () => {
         setIsConnected(false);
         setWs(null);
-        
+
         // Attempt to reconnect after 3 seconds
         reconnectTimeoutRef.current = setTimeout(() => {
           connect();
@@ -69,11 +87,10 @@ export function useWebSocket() {
       };
 
       websocket.onerror = (error) => {
-        console.error('WebSocket error:', error);
+        console.error("WebSocket error:", error);
       };
-
     } catch (error) {
-      console.error('Error creating WebSocket connection:', error);
+      console.error("Error creating WebSocket connection:", error);
     }
   };
 
@@ -81,7 +98,7 @@ export function useWebSocket() {
     if (ws && isConnected) {
       ws.send(JSON.stringify(message));
     } else {
-      console.warn('WebSocket not connected');
+      console.warn("WebSocket not connected");
     }
   };
 
@@ -89,6 +106,6 @@ export function useWebSocket() {
     ws,
     sendMessage,
     messages,
-    isConnected
+    isConnected,
   };
 }

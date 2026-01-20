@@ -62,10 +62,10 @@ export {
  * Creates and configures an orchestrator client from environment variables
  *
  * @param {Object} [overrides] - Configuration overrides
- * @returns {OrchestratorClient|null} Configured client or null if not in client mode
+ * @returns {Promise<OrchestratorClient|null>} Configured client or null if not in client mode
  */
-export function createOrchestratorClientFromEnv(overrides = {}) {
-  const { OrchestratorClient } = require("./client.js");
+export async function createOrchestratorClientFromEnv(overrides = {}) {
+  const { OrchestratorClient } = await import("./client.js");
 
   // Check if orchestrator mode is enabled
   const mode = overrides.mode || process.env.ORCHESTRATOR_MODE || "standalone";

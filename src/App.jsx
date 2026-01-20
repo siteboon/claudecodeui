@@ -107,14 +107,19 @@ function AppContent() {
   const [isPWA, setIsPWA] = useState(false);
 
   useEffect(() => {
+    // Capture the MediaQueryList once to ensure we add/remove from the same object
+    const mql = window.matchMedia("(display-mode: standalone)");
+
+    // Handle touchstart for PWA - use a real function so we can remove it
+    const handleTouchStart = () => {};
+
     // Check if running in standalone mode (PWA)
-    const checkPWA = () => {
+    const updatePWAState = () => {
       const isStandalone =
-        window.matchMedia("(display-mode: standalone)").matches ||
+        mql.matches ||
         window.navigator.standalone ||
         document.referrer.includes("android-app://");
       setIsPWA(isStandalone);
-      document.addEventListener("touchstart", {});
 
       // Add class to html and body for CSS targeting
       if (isStandalone) {
@@ -126,17 +131,18 @@ function AppContent() {
       }
     };
 
-    checkPWA();
+    // Initial check
+    updatePWAState();
 
-    // Listen for changes
-    window
-      .matchMedia("(display-mode: standalone)")
-      .addEventListener("change", checkPWA);
+    // Add touchstart listener once (for PWA touch handling)
+    document.addEventListener("touchstart", handleTouchStart);
+
+    // Listen for display mode changes
+    mql.addEventListener("change", updatePWAState);
 
     return () => {
-      window
-        .matchMedia("(display-mode: standalone)")
-        .removeEventListener("change", checkPWA);
+      mql.removeEventListener("change", updatePWAState);
+      document.removeEventListener("touchstart", handleTouchStart);
     };
   }, []);
 

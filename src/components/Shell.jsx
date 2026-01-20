@@ -1,9 +1,15 @@
-import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { Terminal } from '@xterm/xterm';
-import { FitAddon } from '@xterm/addon-fit';
-import { WebglAddon } from '@xterm/addon-webgl';
-import { WebLinksAddon } from '@xterm/addon-web-links';
-import '@xterm/xterm/css/xterm.css';
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  useMemo,
+} from "react";
+import { Terminal } from "@xterm/xterm";
+import { FitAddon } from "@xterm/addon-fit";
+import { WebglAddon } from "@xterm/addon-webgl";
+import { WebLinksAddon } from "@xterm/addon-web-links";
+import "@xterm/xterm/css/xterm.css";
 
 const xtermStyles = `
   .xterm .xterm-screen {
@@ -17,14 +23,22 @@ const xtermStyles = `
   }
 `;
 
-if (typeof document !== 'undefined') {
-  const styleSheet = document.createElement('style');
-  styleSheet.type = 'text/css';
+if (typeof document !== "undefined") {
+  const styleSheet = document.createElement("style");
+  styleSheet.type = "text/css";
   styleSheet.innerText = xtermStyles;
   document.head.appendChild(styleSheet);
 }
 
-function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell = false, onProcessComplete, minimal = false, autoConnect = false }) {
+function Shell({
+  selectedProject,
+  selectedSession,
+  initialCommand,
+  isPlainShell = false,
+  onProcessComplete,
+  minimal = false,
+  autoConnect = false,
+}) {
   const terminalRef = useRef(null);
   const terminal = useRef(null);
   const fitAddon = useRef(null);
@@ -53,20 +67,36 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     if (isConnecting || isConnected) return;
 
     try {
-      const isPlatform = import.meta.env.VITE_IS_PLATFORM === 'true';
+      const isPlatform = import.meta.env.VITE_IS_PLATFORM === "true";
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const proxyBase = window.__ORCHESTRATOR_PROXY_BASE__;
       let wsUrl;
 
       if (isPlatform) {
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         wsUrl = `${protocol}//${window.location.host}/shell`;
-      } else {
-        const token = localStorage.getItem('auth-token');
+      } else if (proxyBase) {
+        // Orchestrator proxy mode: WebSocket URL goes through the proxy path
+        const token = localStorage.getItem("auth-token");
         if (!token) {
-          console.error('No authentication token found for Shell WebSocket connection');
+          console.error(
+            "No authentication token found for Shell WebSocket connection",
+          );
+          return;
+        }
+        wsUrl = `${protocol}//${window.location.host}${proxyBase}/shell?token=${encodeURIComponent(token)}`;
+        console.log(
+          "[ORCHESTRATOR] Shell WebSocket connecting through proxy:",
+          wsUrl,
+        );
+      } else {
+        const token = localStorage.getItem("auth-token");
+        if (!token) {
+          console.error(
+            "No authentication token found for Shell WebSocket connection",
+          );
           return;
         }
 
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         wsUrl = `${protocol}//${window.location.host}/shell?token=${encodeURIComponent(token)}`;
       }
 
@@ -80,17 +110,27 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
           if (fitAddon.current && terminal.current) {
             fitAddon.current.fit();
 
-            ws.current.send(JSON.stringify({
-              type: 'init',
-              projectPath: selectedProjectRef.current.fullPath || selectedProjectRef.current.path,
-              sessionId: isPlainShellRef.current ? null : selectedSessionRef.current?.id,
-              hasSession: isPlainShellRef.current ? false : !!selectedSessionRef.current,
-              provider: isPlainShellRef.current ? 'plain-shell' : (selectedSessionRef.current?.__provider || 'claude'),
-              cols: terminal.current.cols,
-              rows: terminal.current.rows,
-              initialCommand: initialCommandRef.current,
-              isPlainShell: isPlainShellRef.current
-            }));
+            ws.current.send(
+              JSON.stringify({
+                type: "init",
+                projectPath:
+                  selectedProjectRef.current.fullPath ||
+                  selectedProjectRef.current.path,
+                sessionId: isPlainShellRef.current
+                  ? null
+                  : selectedSessionRef.current?.id,
+                hasSession: isPlainShellRef.current
+                  ? false
+                  : !!selectedSessionRef.current,
+                provider: isPlainShellRef.current
+                  ? "plain-shell"
+                  : selectedSessionRef.current?.__provider || "claude",
+                cols: terminal.current.cols,
+                rows: terminal.current.rows,
+                initialCommand: initialCommandRef.current,
+                isPlainShell: isPlainShellRef.current,
+              }),
+            );
           }
         }, 100);
       };
@@ -99,15 +139,17 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
         try {
           const data = JSON.parse(event.data);
 
-          if (data.type === 'output') {
+          if (data.type === "output") {
             let output = data.data;
 
             if (isPlainShellRef.current && onProcessCompleteRef.current) {
-              const cleanOutput = output.replace(/\x1b\[[0-9;]*m/g, '');
-              if (cleanOutput.includes('Process exited with code 0')) {
+              const cleanOutput = output.replace(/\x1b\[[0-9;]*m/g, "");
+              if (cleanOutput.includes("Process exited with code 0")) {
                 onProcessCompleteRef.current(0);
               } else if (cleanOutput.match(/Process exited with code (\d+)/)) {
-                const exitCode = parseInt(cleanOutput.match(/Process exited with code (\d+)/)[1]);
+                const exitCode = parseInt(
+                  cleanOutput.match(/Process exited with code (\d+)/)[1],
+                );
                 if (exitCode !== 0) {
                   onProcessCompleteRef.current(exitCode);
                 }
@@ -117,11 +159,15 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
             if (terminal.current) {
               terminal.current.write(output);
             }
-          } else if (data.type === 'url_open') {
-            window.open(data.url, '_blank');
+          } else if (data.type === "url_open") {
+            window.open(data.url, "_blank");
           }
         } catch (error) {
-          console.error('[Shell] Error handling WebSocket message:', error, event.data);
+          console.error(
+            "[Shell] Error handling WebSocket message:",
+            error,
+            event.data,
+          );
         }
       };
 
@@ -131,7 +177,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
 
         if (terminal.current) {
           terminal.current.clear();
-          terminal.current.write('\x1b[2J\x1b[H');
+          terminal.current.write("\x1b[2J\x1b[H");
         }
       };
 
@@ -159,7 +205,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
 
     if (terminal.current) {
       terminal.current.clear();
-      terminal.current.write('\x1b[2J\x1b[H');
+      terminal.current.write("\x1b[2J\x1b[H");
     }
 
     setIsConnected(false);
@@ -168,9 +214,9 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
 
   const sessionDisplayName = useMemo(() => {
     if (!selectedSession) return null;
-    return selectedSession.__provider === 'cursor'
-      ? (selectedSession.name || 'Untitled Session')
-      : (selectedSession.summary || 'New Session');
+    return selectedSession.__provider === "cursor"
+      ? selectedSession.name || "Untitled Session"
+      : selectedSession.summary || "New Session";
   }, [selectedSession]);
 
   const sessionDisplayNameShort = useMemo(() => {
@@ -208,7 +254,11 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
   useEffect(() => {
     const currentSessionId = selectedSession?.id || null;
 
-    if (lastSessionId !== null && lastSessionId !== currentSessionId && isInitialized) {
+    if (
+      lastSessionId !== null &&
+      lastSessionId !== currentSessionId &&
+      isInitialized
+    ) {
       disconnectFromShell();
     }
 
@@ -216,10 +266,14 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
   }, [selectedSession?.id, isInitialized, disconnectFromShell]);
 
   useEffect(() => {
-    if (!terminalRef.current || !selectedProject || isRestarting || terminal.current) {
+    if (
+      !terminalRef.current ||
+      !selectedProject ||
+      isRestarting ||
+      terminal.current
+    ) {
       return;
     }
-
 
     terminal.current = new Terminal({
       cursorBlink: true,
@@ -234,35 +288,47 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
       macOptionIsMeta: true,
       macOptionClickForcesSelection: false,
       theme: {
-        background: '#1e1e1e',
-        foreground: '#d4d4d4',
-        cursor: '#ffffff',
-        cursorAccent: '#1e1e1e',
-        selection: '#264f78',
-        selectionForeground: '#ffffff',
-        black: '#000000',
-        red: '#cd3131',
-        green: '#0dbc79',
-        yellow: '#e5e510',
-        blue: '#2472c8',
-        magenta: '#bc3fbc',
-        cyan: '#11a8cd',
-        white: '#e5e5e5',
-        brightBlack: '#666666',
-        brightRed: '#f14c4c',
-        brightGreen: '#23d18b',
-        brightYellow: '#f5f543',
-        brightBlue: '#3b8eea',
-        brightMagenta: '#d670d6',
-        brightCyan: '#29b8db',
-        brightWhite: '#ffffff',
+        background: "#1e1e1e",
+        foreground: "#d4d4d4",
+        cursor: "#ffffff",
+        cursorAccent: "#1e1e1e",
+        selection: "#264f78",
+        selectionForeground: "#ffffff",
+        black: "#000000",
+        red: "#cd3131",
+        green: "#0dbc79",
+        yellow: "#e5e510",
+        blue: "#2472c8",
+        magenta: "#bc3fbc",
+        cyan: "#11a8cd",
+        white: "#e5e5e5",
+        brightBlack: "#666666",
+        brightRed: "#f14c4c",
+        brightGreen: "#23d18b",
+        brightYellow: "#f5f543",
+        brightBlue: "#3b8eea",
+        brightMagenta: "#d670d6",
+        brightCyan: "#29b8db",
+        brightWhite: "#ffffff",
         extendedAnsi: [
-          '#000000', '#800000', '#008000', '#808000',
-          '#000080', '#800080', '#008080', '#c0c0c0',
-          '#808080', '#ff0000', '#00ff00', '#ffff00',
-          '#0000ff', '#ff00ff', '#00ffff', '#ffffff'
-        ]
-      }
+          "#000000",
+          "#800000",
+          "#008000",
+          "#808000",
+          "#000080",
+          "#800080",
+          "#008080",
+          "#c0c0c0",
+          "#808080",
+          "#ff0000",
+          "#00ff00",
+          "#ffff00",
+          "#0000ff",
+          "#ff00ff",
+          "#00ffff",
+          "#ffffff",
+        ],
+      },
     });
 
     fitAddon.current = new FitAddon();
@@ -276,26 +342,35 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     try {
       terminal.current.loadAddon(webglAddon);
     } catch (error) {
-      console.warn('[Shell] WebGL renderer unavailable, using Canvas fallback');
+      console.warn("[Shell] WebGL renderer unavailable, using Canvas fallback");
     }
 
     terminal.current.open(terminalRef.current);
 
     terminal.current.attachCustomKeyEventHandler((event) => {
-      if ((event.ctrlKey || event.metaKey) && event.key === 'c' && terminal.current.hasSelection()) {
-        document.execCommand('copy');
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        event.key === "c" &&
+        terminal.current.hasSelection()
+      ) {
+        document.execCommand("copy");
         return false;
       }
 
-      if ((event.ctrlKey || event.metaKey) && event.key === 'v') {
-        navigator.clipboard.readText().then(text => {
-          if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-            ws.current.send(JSON.stringify({
-              type: 'input',
-              data: text
-            }));
-          }
-        }).catch(() => {});
+      if ((event.ctrlKey || event.metaKey) && event.key === "v") {
+        navigator.clipboard
+          .readText()
+          .then((text) => {
+            if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+              ws.current.send(
+                JSON.stringify({
+                  type: "input",
+                  data: text,
+                }),
+              );
+            }
+          })
+          .catch(() => {});
         return false;
       }
 
@@ -305,12 +380,18 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     setTimeout(() => {
       if (fitAddon.current) {
         fitAddon.current.fit();
-        if (terminal.current && ws.current && ws.current.readyState === WebSocket.OPEN) {
-          ws.current.send(JSON.stringify({
-            type: 'resize',
-            cols: terminal.current.cols,
-            rows: terminal.current.rows
-          }));
+        if (
+          terminal.current &&
+          ws.current &&
+          ws.current.readyState === WebSocket.OPEN
+        ) {
+          ws.current.send(
+            JSON.stringify({
+              type: "resize",
+              cols: terminal.current.cols,
+              rows: terminal.current.rows,
+            }),
+          );
         }
       }
     }, 100);
@@ -318,10 +399,12 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     setIsInitialized(true);
     terminal.current.onData((data) => {
       if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-        ws.current.send(JSON.stringify({
-          type: 'input',
-          data: data
-        }));
+        ws.current.send(
+          JSON.stringify({
+            type: "input",
+            data: data,
+          }),
+        );
       }
     });
 
@@ -330,11 +413,13 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
         setTimeout(() => {
           fitAddon.current.fit();
           if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-            ws.current.send(JSON.stringify({
-              type: 'resize',
-              cols: terminal.current.cols,
-              rows: terminal.current.rows
-            }));
+            ws.current.send(
+              JSON.stringify({
+                type: "resize",
+                cols: terminal.current.cols,
+                rows: terminal.current.rows,
+              }),
+            );
           }
         }, 50);
       }
@@ -347,7 +432,11 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     return () => {
       resizeObserver.disconnect();
 
-      if (ws.current && (ws.current.readyState === WebSocket.OPEN || ws.current.readyState === WebSocket.CONNECTING)) {
+      if (
+        ws.current &&
+        (ws.current.readyState === WebSocket.OPEN ||
+          ws.current.readyState === WebSocket.CONNECTING)
+      ) {
         ws.current.close();
       }
       ws.current = null;
@@ -369,8 +458,18 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
       <div className="h-full flex items-center justify-center">
         <div className="text-center text-gray-500 dark:text-gray-400">
           <div className="w-16 h-16 mx-auto mb-4 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center">
-            <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z" />
+            <svg
+              className="w-8 h-8 text-gray-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z"
+              />
             </svg>
           </div>
           <h3 className="text-lg font-semibold mb-2">Select a Project</h3>
@@ -383,7 +482,11 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
   if (minimal) {
     return (
       <div className="h-full w-full bg-gray-900">
-        <div ref={terminalRef} className="h-full w-full focus:outline-none" style={{ outline: 'none' }} />
+        <div
+          ref={terminalRef}
+          className="h-full w-full focus:outline-none"
+          style={{ outline: "none" }}
+        />
       </div>
     );
   }
@@ -393,7 +496,9 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
       <div className="flex-shrink-0 bg-gray-800 border-b border-gray-700 px-4 py-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+            <div
+              className={`w-2 h-2 rounded-full ${isConnected ? "bg-green-500" : "bg-red-500"}`}
+            />
             {selectedSession && (
               <span className="text-xs text-blue-300">
                 ({sessionDisplayNameShort}...)
@@ -416,8 +521,18 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
                 className="px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 flex items-center space-x-1"
                 title="Disconnect from shell"
               >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                <svg
+                  className="w-3 h-3"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
                 </svg>
                 <span>Disconnect</span>
               </button>
@@ -429,8 +544,18 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
               className="text-xs text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
               title="Restart Shell (disconnect first)"
             >
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              <svg
+                className="w-3 h-3"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
               </svg>
               <span>Restart</span>
             </button>
@@ -439,7 +564,11 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
       </div>
 
       <div className="flex-1 p-2 overflow-hidden relative">
-        <div ref={terminalRef} className="h-full w-full focus:outline-none" style={{ outline: 'none' }} />
+        <div
+          ref={terminalRef}
+          className="h-full w-full focus:outline-none"
+          style={{ outline: "none" }}
+        />
 
         {!isInitialized && (
           <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90">
@@ -455,18 +584,27 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
                 className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center space-x-2 text-base font-medium w-full sm:w-auto"
                 title="Connect to shell"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M13 10V3L4 14h7v7l9-11h-7z"
+                  />
                 </svg>
                 <span>Continue in Shell</span>
               </button>
               <p className="text-gray-400 text-sm mt-3 px-2">
-                {isPlainShell ?
-                  `Run ${initialCommand || 'command'} in ${selectedProject.displayName}` :
-                  selectedSession ?
-                    `Resume session: ${sessionDisplayNameLong}...` :
-                    'Start a new Claude session'
-                }
+                {isPlainShell
+                  ? `Run ${initialCommand || "command"} in ${selectedProject.displayName}`
+                  : selectedSession
+                    ? `Resume session: ${sessionDisplayNameLong}...`
+                    : "Start a new Claude session"}
               </p>
             </div>
           </div>
@@ -477,13 +615,14 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
             <div className="text-center max-w-sm w-full">
               <div className="flex items-center justify-center space-x-3 text-yellow-400">
                 <div className="w-6 h-6 animate-spin rounded-full border-2 border-yellow-400 border-t-transparent"></div>
-                <span className="text-base font-medium">Connecting to shell...</span>
+                <span className="text-base font-medium">
+                  Connecting to shell...
+                </span>
               </div>
               <p className="text-gray-400 text-sm mt-3 px-2">
-                {isPlainShell ?
-                  `Running ${initialCommand || 'command'} in ${selectedProject.displayName}` :
-                  `Starting Claude CLI in ${selectedProject.displayName}`
-                }
+                {isPlainShell
+                  ? `Running ${initialCommand || "command"} in ${selectedProject.displayName}`
+                  : `Starting Claude CLI in ${selectedProject.displayName}`}
               </p>
             </div>
           </div>

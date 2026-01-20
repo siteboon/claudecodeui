@@ -12,7 +12,10 @@ const secretHash = crypto
   .update(JWT_SECRET)
   .digest("hex")
   .substring(0, 8);
-console.log(`[AUTH] Module loaded - JWT_SECRET hash: ${secretHash}`);
+const AUTH_DEBUG = process.env.AUTH_DEBUG === "true";
+if (AUTH_DEBUG) {
+  console.log(`[AUTH] Module loaded - JWT_SECRET hash: ${secretHash}`);
+}
 
 // Optional API key middleware
 const validateApiKey = (req, res, next) => {
@@ -58,23 +61,27 @@ const authenticateToken = async (req, res, next) => {
   }
 
   try {
-    // Debug: Log token details before verification
-    console.log(
-      `[AUTH] Verifying token (first 20 chars): ${token.substring(0, 20)}...`,
-    );
-    console.log(`[AUTH] Using JWT_SECRET hash: ${secretHash}`);
+    // Debug: Log token details before verification (only when AUTH_DEBUG is enabled)
+    if (AUTH_DEBUG) {
+      console.log(
+        `[AUTH] Verifying token (first 20 chars): ${token.substring(0, 20)}...`,
+      );
+      console.log(`[AUTH] Using JWT_SECRET hash: ${secretHash}`);
 
-    // Decode without verification to see the payload
-    const unverified = jwt.decode(token);
-    console.log(
-      `[AUTH] Token payload (unverified):`,
-      JSON.stringify(unverified),
-    );
+      // Decode without verification to see the payload
+      const unverified = jwt.decode(token);
+      console.log(
+        `[AUTH] Token payload (unverified):`,
+        JSON.stringify(unverified),
+      );
+    }
 
     const decoded = jwt.verify(token, JWT_SECRET);
-    console.log(
-      `[AUTH] Token verified successfully for user: ${decoded.username}`,
-    );
+    if (AUTH_DEBUG) {
+      console.log(
+        `[AUTH] Token verified successfully for user: ${decoded.username}`,
+      );
+    }
 
     // Verify user still exists and is active
     const user = userDb.getUserById(decoded.userId);
@@ -86,10 +93,12 @@ const authenticateToken = async (req, res, next) => {
     next();
   } catch (error) {
     console.error(`[AUTH] Token verification error: ${error.message}`);
-    console.error(
-      `[AUTH] Token (first 50 chars): ${token.substring(0, 50)}...`,
-    );
-    console.error(`[AUTH] JWT_SECRET hash: ${secretHash}`);
+    if (AUTH_DEBUG) {
+      console.error(
+        `[AUTH] Token (first 50 chars): ${token.substring(0, 50)}...`,
+      );
+      console.error(`[AUTH] JWT_SECRET hash: ${secretHash}`);
+    }
     return res.status(403).json({ error: "Invalid token" });
   }
 };
@@ -104,11 +113,13 @@ const generateToken = (user) => {
     JWT_SECRET,
     // No expiration - token lasts forever
   );
-  console.log(
-    `[AUTH] Generated token for user ${user.username} (id: ${user.id})`,
-  );
-  console.log(`[AUTH] Token (first 20 chars): ${token.substring(0, 20)}...`);
-  console.log(`[AUTH] Using JWT_SECRET hash: ${secretHash}`);
+  if (AUTH_DEBUG) {
+    console.log(
+      `[AUTH] Generated token for user ${user.username} (id: ${user.id})`,
+    );
+    console.log(`[AUTH] Token (first 20 chars): ${token.substring(0, 20)}...`);
+    console.log(`[AUTH] Using JWT_SECRET hash: ${secretHash}`);
+  }
   return token;
 };
 
