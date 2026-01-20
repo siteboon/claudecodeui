@@ -238,7 +238,7 @@ const userDb = {
 
   // Get or create user for orchestrator authentication
   // When connecting via orchestrator proxy, auto-create user if needed
-  getOrCreateOrchestratorUser: (githubId, githubUsername) => {
+  getOrCreateOrchestratorUser: async (githubId, githubUsername) => {
     try {
       // Validate required parameters
       if (
@@ -286,7 +286,7 @@ const userDb = {
           // Create namespaced orchestrator user instead of reusing
           const namespacedUsername = `orch_${githubId}_${githubUsername}`;
           const randomPassword = crypto.randomBytes(32).toString("hex");
-          const passwordHash = bcrypt.hashSync(randomPassword, 12);
+          const passwordHash = await bcrypt.hash(randomPassword, 12);
 
           const stmt = db.prepare(
             "INSERT INTO users (username, password_hash, github_id, has_completed_onboarding, last_login) VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)",
@@ -315,7 +315,7 @@ const userDb = {
 
       // No existing user found, create new one
       const randomPassword = crypto.randomBytes(32).toString("hex");
-      const passwordHash = bcrypt.hashSync(randomPassword, 12);
+      const passwordHash = await bcrypt.hash(randomPassword, 12);
 
       const stmt = db.prepare(
         "INSERT INTO users (username, password_hash, github_id, has_completed_onboarding, last_login) VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)",

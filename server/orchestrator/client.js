@@ -689,8 +689,8 @@ export class OrchestratorClient extends EventEmitter {
     orchestratorUsername = null,
   ) {
     // Add a cache-busting version to force fresh fetches from Cloudflare edge
-    // Using a static version that should be incremented when URL rewriting logic changes
-    const cacheVersion = "v3"; // Increment this when rewriting logic changes
+    // Derived from package version to auto-increment on releases
+    const cacheVersion = process.env.npm_package_version || "1.0.0";
 
     let result = html
       .replace(/src="\/(?!\/)/g, `src="${proxyBase}/`)
@@ -946,7 +946,10 @@ export class OrchestratorClient extends EventEmitter {
    */
   async getOrCreateOrchestratorToken(githubId, githubUsername) {
     // Get or create the user in the local database
-    const user = userDb.getOrCreateOrchestratorUser(githubId, githubUsername);
+    const user = await userDb.getOrCreateOrchestratorUser(
+      githubId,
+      githubUsername,
+    );
 
     // Generate a JWT token for this user
     const token = generateToken(user);

@@ -158,5 +158,4 @@ export {
   authenticateToken,
   generateToken,
   authenticateWebSocket,
-  JWT_SECRET,
 };
