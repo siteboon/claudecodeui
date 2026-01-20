@@ -1026,25 +1026,56 @@ async function isProjectEmpty(projectName) {
   }
 }
 
-// Delete an empty project
-async function deleteProject(projectName) {
+// Delete a project (force=true to delete even with sessions)
+async function deleteProject(projectName, force = false) {
   const projectDir = path.join(os.homedir(), '.claude', 'projects', projectName);
-  
+
   try {
-    // First check if the project is empty
     const isEmpty = await isProjectEmpty(projectName);
-    if (!isEmpty) {
+    if (!isEmpty && !force) {
       throw new Error('Cannot delete project with existing sessions');
     }
-    
-    // Remove the project directory
-    await fs.rm(projectDir, { recursive: true, force: true });
-    
-    // Remove from project config
+
     const config = await loadProjectConfig();
+    let projectPath = config[projectName]?.path || config[projectName]?.originalPath;
+
+    // Fallback to extractProjectDirectory if projectPath is not in config
+    if (!projectPath) {
+      projectPath = await extractProjectDirectory(projectName);
+    }
+
+    // Remove the project directory (includes all Claude sessions)
+    await fs.rm(projectDir, { recursive: true, force: true });
+
+    // Delete all Codex sessions associated with this project
+    if (projectPath) {
+      try {
+        const codexSessions = await getCodexSessions(projectPath, { limit: 0 });
+        for (const session of codexSessions) {
+          try {
+            await deleteCodexSession(session.id);
+          } catch (err) {
+            console.warn(`Failed to delete Codex session ${session.id}:`, err.message);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to delete Codex sessions:', err.message);
+      }
+
+      // Delete Cursor sessions directory if it exists
+      try {
+        const hash = crypto.createHash('md5').update(projectPath).digest('hex');
+        const cursorProjectDir = path.join(os.homedir(), '.cursor', 'chats', hash);
+        await fs.rm(cursorProjectDir, { recursive: true, force: true });
+      } catch (err) {
+        // Cursor dir may not exist, ignore
+      }
+    }
+
+    // Remove from project config
     delete config[projectName];
     await saveProjectConfig(config);
-    
+
     return true;
   } catch (error) {
     console.error(`Error deleting project ${projectName}:`, error);
@@ -1055,17 +1086,17 @@ async function deleteProject(projectName) {
 // Add a project manually to the config (without creating folders)
 async function addProjectManually(projectPath, displayName = null) {
   const absolutePath = path.resolve(projectPath);
-  
+
   try {
     // Check if the path exists
     await fs.access(absolutePath);
   } catch (error) {
     throw new Error(`Path does not exist: ${absolutePath}`);
   }
-  
+
   // Generate project name (encode path for use as directory name)
   const projectName = absolutePath.replace(/\//g, '-');
-  
+
   // Check if project already exists in config
   const config = await loadProjectConfig();
   const projectDir = path.join(os.homedir(), '.claude', 'projects', projectName);
@@ -1076,13 +1107,13 @@ async function addProjectManually(projectPath, displayName = null) {
 
   // Allow adding projects even if the directory exists - this enables tracking
   // existing Claude Code or Cursor projects in the UI
-  
+
   // Add to config as manually added project
   config[projectName] = {
     manuallyAdded: true,
     originalPath: absolutePath
   };
-  
+
   if (displayName) {
     config[projectName].displayName = displayName;
   }
@@ -1214,7 +1245,8 @@ async function getCursorSessions(projectPath) {
 
 
 // Fetch Codex sessions for a given project path
-async function getCodexSessions(projectPath) {
+async function getCodexSessions(projectPath, options = {}) {
+  const { limit = 5 } = options;
   try {
     const codexSessionsDir = path.join(os.homedir(), '.codex', 'sessions');
     const sessions = [];
@@ -1279,8 +1311,8 @@ async function getCodexSessions(projectPath) {
     // Sort sessions by last activity (newest first)
     sessions.sort((a, b) => new Date(b.lastActivity) - new Date(a.lastActivity));
 
-    // Return only the first 5 sessions for performance
-    return sessions.slice(0, 5);
+    // Return limited sessions for performance (0 = unlimited for deletion)
+    return limit > 0 ? sessions.slice(0, limit) : sessions;
 
   } catch (error) {
     console.error('Error fetching Codex sessions:', error);

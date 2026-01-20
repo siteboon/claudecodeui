@@ -455,11 +455,12 @@ app.delete('/api/projects/:projectName/sessions/:sessionId', authenticateToken, 
     }
 });
 
-// Delete project endpoint (only if empty)
+// Delete project endpoint (force=true to delete with sessions)
 app.delete('/api/projects/:projectName', authenticateToken, async (req, res) => {
     try {
         const { projectName } = req.params;
-        await deleteProject(projectName);
+        const force = req.query.force === 'true';
+        await deleteProject(projectName, force);
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: error.message });
