@@ -16,6 +16,10 @@
     {
       "prompt": "close both PRs from this branch without merging. Force push the branch. Then change the origin to https://github.com/Epiphytic/claudecodeui and push all changes there. Then make new PRs to https://github.com/Epiphytic/claudecodeui and https://github.com/siteboon/claudecodeui/",
       "timestamp": "2026-01-20 22:24:35 UTC"
+    },
+    {
+      "prompt": "add detail from this PR: https://github.com/siteboon/claudecodeui/pull/316 into documentation for the project in /docs/Orchestrator-Client.md, as well as in the PR description for https://github.com/siteboon/claudecodeui/pull/319. Make sure everything is up to date with the latest version of the PR. Put a link to the orchestrator client docs into the main README. Make sure the docs reference the new orchestrator project url: https://github.com/Epiphytic/duratii",
+      "timestamp": "2026-01-20 22:31:02 UTC"
     }
   ]
 }
