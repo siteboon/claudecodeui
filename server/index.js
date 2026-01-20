@@ -496,7 +496,13 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
                 name: item.name,
                 type: 'directory'
             }))
-            .slice(0, 20); // Limit results
+            .sort((a, b) => {
+                const aHidden = a.name.startsWith('.');
+                const bHidden = b.name.startsWith('.');
+                if (aHidden && !bHidden) return 1;
+                if (!aHidden && bHidden) return -1;
+                return a.name.localeCompare(b.name);
+            });
             
         // Add common directories if browsing home directory
         const suggestions = [];
