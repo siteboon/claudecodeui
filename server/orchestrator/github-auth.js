@@ -30,21 +30,34 @@ const GITHUB_API_BASE = "https://api.github.com";
  * @returns {Promise<Object>} API response
  */
 async function githubFetch(endpoint, token) {
-  const response = await fetch(`${GITHUB_API_BASE}${endpoint}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28",
-      "User-Agent": "claudecodeui-orchestrator",
-    },
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`GitHub API error (${response.status}): ${errorText}`);
+  try {
+    const response = await fetch(`${GITHUB_API_BASE}${endpoint}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "claudecodeui-orchestrator",
+      },
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`GitHub API error (${response.status}): ${errorText}`);
+    }
+
+    return response.json();
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw new Error("GitHub API request timed out after 8 seconds");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  return response.json();
 }
 
 /**

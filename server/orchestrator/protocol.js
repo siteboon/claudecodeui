@@ -134,7 +134,7 @@ export function createResponseCompleteMessage(requestId, data = null) {
   return {
     type: OutboundMessageTypes.RESPONSE_COMPLETE,
     request_id: requestId,
-    ...(data && { data }),
+    ...(data !== null && data !== undefined && { data }),
   };
 }
 

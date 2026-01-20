@@ -256,6 +256,13 @@ export class OrchestratorClient extends EventEmitter {
     const message = createPingMessage(this.config.clientId);
     this.sendMessage(message);
 
+    // Clear any existing heartbeat timeout before setting a new one
+    // This prevents stale timers from firing on healthy connections
+    if (this.heartbeatTimeoutTimer) {
+      clearTimeout(this.heartbeatTimeoutTimer);
+      this.heartbeatTimeoutTimer = null;
+    }
+
     // Set timeout for pong response
     this.heartbeatTimeoutTimer = setTimeout(() => {
       console.warn("[ORCHESTRATOR] Heartbeat timeout, reconnecting...");
@@ -511,7 +518,7 @@ export class OrchestratorClient extends EventEmitter {
         } else {
           fetchOptions.headers["authorization"] = `Bearer ${orchestratorToken}`;
           console.log(
-            `[ORCHESTRATOR] Setting auth header for user: ${orchestratorUsername} (token: ${orchestratorToken.substring(0, 20)}...)`,
+            `[ORCHESTRATOR] Setting auth header for user: ${orchestratorUsername || "[unknown]"} (token: [REDACTED])`,
           );
         }
       }
@@ -534,8 +541,25 @@ export class OrchestratorClient extends EventEmitter {
         }
       });
 
-      // Get response body as text
-      let responseBody = await response.text();
+      // Determine if content is binary based on content-type
+      // Text types: text/*, application/json, application/javascript, application/xml, etc. with utf-8
+      const isTextContent =
+        contentType.startsWith("text/") ||
+        contentType.includes("application/json") ||
+        contentType.includes("application/javascript") ||
+        contentType.includes("application/xml") ||
+        contentType.includes("utf-8");
+
+      // Get response body - use arrayBuffer for binary, text for text content
+      let responseBody;
+      if (isTextContent) {
+        responseBody = await response.text();
+      } else {
+        // Binary content - read as arrayBuffer and base64 encode
+        const arrayBuffer = await response.arrayBuffer();
+        responseBody = Buffer.from(arrayBuffer).toString("base64");
+        responseHeaders.push(["x-orch-encoding", "base64"]);
+      }
 
       // Rewrite URLs if proxy_base is provided and content type is HTML or JavaScript
       let didRewrite = false;
@@ -548,6 +572,7 @@ export class OrchestratorClient extends EventEmitter {
             responseBody,
             proxy_base,
             orchestratorToken,
+            orchestratorUsername,
           );
           didRewrite = true;
         } else if (contentType.includes("javascript")) {
@@ -619,9 +644,15 @@ export class OrchestratorClient extends EventEmitter {
    * @param {string} html - HTML content
    * @param {string} proxyBase - Base proxy path (e.g., "/clients/{id}/proxy")
    * @param {string|null} orchestratorToken - Optional JWT token for auto-authentication
+   * @param {string|null} orchestratorUsername - Optional username for token matching
    * @returns {string} HTML with rewritten URLs
    */
-  rewriteHtmlUrls(html, proxyBase, orchestratorToken = null) {
+  rewriteHtmlUrls(
+    html,
+    proxyBase,
+    orchestratorToken = null,
+    orchestratorUsername = null,
+  ) {
     // Add a cache-busting version to force fresh fetches from Cloudflare edge
     // Using a static version that should be incremented when URL rewriting logic changes
     const cacheVersion = "v3"; // Increment this when rewriting logic changes
@@ -660,13 +691,17 @@ export class OrchestratorClient extends EventEmitter {
     // 2. Patch fetch() to redirect API calls through the proxy
     //
     // Note: React app uses 'auth-token' as the localStorage key
-    // IMPORTANT: Only set token if NONE exists. Don't compare values because
-    // each proxy request generates a new JWT (with new timestamps), which would
-    // cause an infinite reload loop if we compared and updated on every change.
+    // We need to check if the existing token belongs to the same orchestrator user.
+    // If not, we update the token. We also store the orchestrator username separately
+    // to detect user changes without decoding the JWT on every request.
     const proxyPatchScript = `<script>
-// Patch fetch to redirect absolute paths through the proxy
+// Patch fetch and WebSocket to redirect through the proxy
 (function() {
   const proxyBase = "${proxyBase}";
+
+  // Make proxyBase available globally for React app components
+  window.__ORCHESTRATOR_PROXY_BASE__ = proxyBase;
+
   const originalFetch = window.fetch;
 
   window.fetch = function(url, options) {
@@ -699,18 +734,29 @@ export class OrchestratorClient extends EventEmitter {
 // Auto-authenticate via orchestrator token
 (function() {
   const existingToken = localStorage.getItem('auth-token');
+  const storedOrchestratorUser = localStorage.getItem('orchestrator-user');
+  const orchestratorUsername = "${orchestratorUsername || ""}";
 
-  // Only set token if no token exists at all
-  // Don't compare values - token changes on each request due to JWT timestamps
-  if (!existingToken) {
+  // Check if we need to update the token:
+  // 1. No existing token
+  // 2. Orchestrator user changed (different GitHub user accessing via proxy)
+  // 3. Token exists but no stored orchestrator user (legacy direct login token)
+  const needsUpdate = !existingToken ||
+    (orchestratorUsername && storedOrchestratorUser !== orchestratorUsername) ||
+    (existingToken && !storedOrchestratorUser && orchestratorUsername);
+
+  if (needsUpdate) {
     const token = "${orchestratorToken}";
     localStorage.setItem('auth-token', token);
-    console.log('[ORCHESTRATOR] Auto-authenticated via orchestrator proxy, reloading...');
+    if (orchestratorUsername) {
+      localStorage.setItem('orchestrator-user', orchestratorUsername);
+    }
+    console.log('[ORCHESTRATOR] Auto-authenticated via orchestrator proxy for user:', orchestratorUsername || 'unknown');
     // Reload the page so the app initializes with the token
     window.location.reload();
     return;
   }
-  console.log('[ORCHESTRATOR] Already have auth token, skipping auto-auth');
+  console.log('[ORCHESTRATOR] Already have valid auth token for user:', storedOrchestratorUser);
 })();
 </script>`
       : "";
@@ -749,18 +795,20 @@ export class OrchestratorClient extends EventEmitter {
 
     let result = js;
     for (const prefix of urlPrefixes) {
+      // Escape regex metacharacters in the prefix to match literal characters
+      const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       // Match "/${prefix}, '/${prefix}, `/${prefix} patterns
       result = result
         .replace(
-          new RegExp(`"\\/${prefix}(?=[\\/"])`, "g"),
+          new RegExp(`"\\/${escapedPrefix}(?=[\\/"])`, "g"),
           `"${proxyBase}/${prefix}`,
         )
         .replace(
-          new RegExp(`'\\/${prefix}(?=[\\/'])`, "g"),
+          new RegExp(`'\\/${escapedPrefix}(?=[\\/'])`, "g"),
           `'${proxyBase}/${prefix}`,
         )
         .replace(
-          new RegExp(`\`\\/${prefix}(?=[\\/\`])`, "g"),
+          new RegExp(`\`\\/${escapedPrefix}(?=[\\/\`])`, "g"),
           `\`${proxyBase}/${prefix}`,
         );
     }
