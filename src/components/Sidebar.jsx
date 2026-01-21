@@ -583,7 +583,7 @@ function Sidebar({
                   <p className="text-sm text-muted-foreground mb-1">
                     {t('deleteConfirmation.confirmDelete')}{' '}
                     <span className="font-medium text-foreground">
-                      {sessionDeleteConfirmation.sessionTitle}
+                      {sessionDeleteConfirmation.sessionTitle || t('sessions.unnamed')}
                     </span>?
                   </p>
                   <p className="text-xs text-muted-foreground mt-3">

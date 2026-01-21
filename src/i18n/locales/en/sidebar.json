@@ -103,8 +103,8 @@
     "deleteProject": "Delete Project",
     "deleteSession": "Delete Session",
     "confirmDelete": "Are you sure you want to delete",
-    "sessionCount": "This project contains {{count}} conversation.",
-    "sessionCount_plural": "This project contains {{count}} conversations.",
+    "sessionCount_one": "This project contains {{count}} conversation.",
+    "sessionCount_other": "This project contains {{count}} conversations.",
     "allConversationsDeleted": "All conversations will be permanently deleted.",
     "cannotUndo": "This action cannot be undone."
   }
