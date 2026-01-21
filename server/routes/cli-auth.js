@@ -114,85 +114,67 @@ async function checkClaudeCredentials() {
 // Check macOS Keychain for Claude credentials
 function checkMacOSKeychain() {
   return new Promise((resolve) => {
-    // Claude Code uses "claude.ai" as the service name for OAuth tokens
-    // Try multiple possible service names that Claude might use
-    const serviceNames = [
-      "claude.ai",
-      "Claude",
-      "claude-code",
-      "anthropic.com",
-    ];
+    const username = os.userInfo().username;
 
-    let attempts = 0;
-    const tryNextService = () => {
-      if (attempts >= serviceNames.length) {
-        resolve({ authenticated: false, email: null });
-        return;
-      }
+    const childProcess = spawn("security", [
+      "find-generic-password",
+      "-a",
+      username,
+      "-s",
+      "Claude Code-credentials",
+      "-w", // Output only the password
+    ]);
 
-      const serviceName = serviceNames[attempts];
-      attempts++;
+    let stdout = "";
+    let stderr = "";
 
-      const childProcess = spawn("security", [
-        "find-generic-password",
-        "-s",
-        serviceName,
-        "-w", // Output only the password
-      ]);
+    childProcess.stdout.on("data", (data) => {
+      stdout += data.toString();
+    });
 
-      let stdout = "";
-      let stderr = "";
+    childProcess.stderr.on("data", (data) => {
+      stderr += data.toString();
+    });
 
-      childProcess.stdout.on("data", (data) => {
-        stdout += data.toString();
-      });
+    childProcess.on("close", (code) => {
+      if (code === 0 && stdout.trim()) {
+        // Found a credential - try to parse it as JSON
+        try {
+          const creds = JSON.parse(stdout.trim());
 
-      childProcess.stderr.on("data", (data) => {
-        stderr += data.toString();
-      });
-
-      childProcess.on("close", (code) => {
-        if (code === 0 && stdout.trim()) {
-          // Found a credential - try to parse it as JSON (Claude stores OAuth data as JSON)
-          try {
-            const creds = JSON.parse(stdout.trim());
-            // Check if it looks like valid OAuth data
-            if (creds.accessToken || creds.claudeAiOauth?.accessToken) {
-              const oauth = creds.claudeAiOauth || creds;
-              const isExpired =
-                oauth.expiresAt && Date.now() >= oauth.expiresAt;
-
-              if (!isExpired) {
-                resolve({
-                  authenticated: true,
-                  email: creds.email || oauth.email || "Keychain Auth",
-                  method: "macos_keychain",
-                });
-                return;
-              }
-            }
-          } catch {
-            // Not JSON - might still be valid if it's just a token string
-            // Consider it authenticated if we got any non-empty value
+          // Check for expiry timestamp
+          if (creds.expiresAt && Date.now() >= creds.expiresAt) {
             resolve({
-              authenticated: true,
-              email: "Keychain Auth",
-              method: "macos_keychain",
+              authenticated: false,
+              email: null,
+              error: "Credentials expired",
             });
             return;
           }
+
+          // Extract email/plan info if available
+          resolve({
+            authenticated: true,
+            email: creds.email || creds.accountEmail || "Keychain Auth",
+            plan: creds.plan || null,
+            method: "macos_keychain",
+          });
+        } catch {
+          // Not JSON - might still be valid if it's just a token string
+          resolve({
+            authenticated: true,
+            email: "Keychain Auth",
+            method: "macos_keychain",
+          });
         }
-        // Try next service name
-        tryNextService();
-      });
+      } else {
+        resolve({ authenticated: false, email: null });
+      }
+    });
 
-      childProcess.on("error", () => {
-        // Try next service name
-        tryNextService();
-      });
-    };
-
-    tryNextService();
+    childProcess.on("error", () => {
+      resolve({ authenticated: false, email: null });
+    });
   });
 }
 
