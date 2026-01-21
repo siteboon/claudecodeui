@@ -1166,11 +1166,11 @@ function Sidebar({
                                         {formatTimeAgo(sessionTime, currentTime)}
                                       </span>
                                       {messageCount > 0 && (
-                                        <Badge variant="secondary" className="text-xs px-1 py-0 ml-auto">
+                                        <Badge variant="secondary" className="text-xs px-1 py-0 ml-auto group-hover:opacity-0 transition-opacity">
                                           {messageCount}
                                         </Badge>
                                       )}
-                                      <span className="ml-1 opacity-70">
+                                      <span className="ml-1 opacity-70 group-hover:opacity-0 transition-opacity">
                                         {isCursorSession ? (
                                           <CursorLogo className="w-3 h-3" />
                                         ) : isCodexSession ? (
