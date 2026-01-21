@@ -380,7 +380,7 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
                       type="text"
                       value={githubUrl}
                       onChange={(e) => setGithubUrl(e.target.value)}
-                      placeholder={t('projectWizard.step2.githubPlaceholder')}
+                      placeholder="https://github.com/username/repository"
                       className="w-full"
                     />
                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -475,7 +475,7 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
                                 type="password"
                                 value={newGithubToken}
                                 onChange={(e) => setNewGithubToken(e.target.value)}
-                                placeholder={t('projectWizard.step2.tokenPlaceholder')}
+                                placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
                                 className="w-full"
                               />
                               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
