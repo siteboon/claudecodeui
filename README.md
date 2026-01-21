@@ -3,6 +3,8 @@
   <h1>Cloud CLI (aka Claude Code UI)</h1>
 </div>
 
+> **Note:** This is a fork of [siteboon/claudecodeui](https://github.com/siteboon/claudecodeui), the original Claude Code UI project created by the Siteboon team. This fork is published to npm under the `@epiphytic` scope for convenience.
+
 A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor CLI](https://docs.cursor.com/en/cli/overview) and [Codex](https://developers.openai.com/codex). You can use it locally or remotely to view your active projects and sessions in Claude Code, Cursor, or Codex and make changes to them from everywhere (mobile or desktop). This gives you a proper interface that works everywhere.
 
 ## Screenshots
@@ -61,6 +63,10 @@ A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/cla
 No installation required, direct operation:
 
 ```bash
+# Using @epiphytic fork
+npx @epiphytic/claudecodeui
+
+# Or using original @siteboon package
 npx @siteboon/claude-code-ui
 ```
 
@@ -73,6 +79,10 @@ The server will start and be accessible at `http://localhost:3001` (or your conf
 For frequent use, install globally once:
 
 ```bash
+# Using @epiphytic fork
+npm install -g @epiphytic/claudecodeui
+
+# Or using original @siteboon package
 npm install -g @siteboon/claude-code-ui
 ```
 
@@ -153,6 +163,11 @@ pm2 save
 1. **Clone the repository:**
 
 ```bash
+# Clone this fork
+git clone https://github.com/Epiphytic/claudecodeui.git
+cd claudecodeui
+
+# Or clone the original upstream repository
 git clone https://github.com/siteboon/claudecodeui.git
 cd claudecodeui
 ```
@@ -364,6 +379,10 @@ GNU General Public License v3.0 - see [LICENSE](LICENSE) file for details.
 This project is open source and free to use, modify, and distribute under the GPL v3 license.
 
 ## Acknowledgments
+
+### Original Project
+
+This project is a fork of **[siteboon/claudecodeui](https://github.com/siteboon/claudecodeui)**, created and maintained by the [Siteboon](https://siteboon.ai) team. We are grateful for their work in creating this excellent tool for the Claude Code community.
 
 ### Built With
 
