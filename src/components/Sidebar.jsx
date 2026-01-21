@@ -52,6 +52,7 @@ function Sidebar({
   onSessionDelete,
   onProjectDelete,
   isLoading,
+  loadingProgress,
   onRefresh,
   onShowSettings,
   updateAvailable,
@@ -663,9 +664,28 @@ function Sidebar({
                 <div className="w-6 h-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
               </div>
               <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">Loading projects...</h3>
-              <p className="text-sm text-muted-foreground">
-                Fetching your Claude projects and sessions
-              </p>
+              {loadingProgress && loadingProgress.total > 0 ? (
+                <div className="space-y-2">
+                  <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+                    <div
+                      className="bg-primary h-full transition-all duration-300 ease-out"
+                      style={{ width: `${(loadingProgress.current / loadingProgress.total) * 100}%` }}
+                    />
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {loadingProgress.current}/{loadingProgress.total} projects
+                  </p>
+                  {loadingProgress.currentProject && (
+                    <p className="text-xs text-muted-foreground/70 truncate max-w-[200px] mx-auto" title={loadingProgress.currentProject}>
+                      {loadingProgress.currentProject.split('-').slice(-2).join('/')}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Fetching your Claude projects and sessions
+                </p>
+              )}
             </div>
           ) : projects.length === 0 ? (
             <div className="text-center py-12 md:py-8 px-4">
