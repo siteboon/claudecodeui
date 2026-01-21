@@ -550,6 +550,8 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
     }
 });
 
+const FORBIDDEN_PATHS = ['/', '/etc', '/bin', '/sbin', '/usr', '/dev', '/proc', '/sys', '/var', '/boot', '/root', '/lib', '/lib64', '/opt', '/tmp', '/run'];
+
 app.post('/api/create-folder', authenticateToken, async (req, res) => {
     try {
         const { path: folderPath } = req.body;
@@ -558,6 +560,18 @@ app.post('/api/create-folder', authenticateToken, async (req, res) => {
         }
         const homeDir = os.homedir();
         const targetPath = path.resolve(folderPath.replace('~', homeDir));
+        const normalizedPath = path.normalize(targetPath);
+        if (FORBIDDEN_PATHS.includes(normalizedPath) || normalizedPath === '/') {
+            return res.status(403).json({ error: 'Cannot create folders in system directories' });
+        }
+        for (const forbidden of FORBIDDEN_PATHS) {
+            if (normalizedPath.startsWith(forbidden + path.sep)) {
+                if (forbidden === '/var' && (normalizedPath.startsWith('/var/tmp') || normalizedPath.startsWith('/var/folders'))) {
+                    continue;
+                }
+                return res.status(403).json({ error: `Cannot create folders in system directory: ${forbidden}` });
+            }
+        }
         const parentDir = path.dirname(targetPath);
         try {
             await fs.promises.access(parentDir);

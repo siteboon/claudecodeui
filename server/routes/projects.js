@@ -234,7 +234,8 @@ router.post('/create-workspace', async (req, res) => {
         }
 
         // Extract repo name from URL for the clone destination
-        const repoName = githubUrl.replace(/\.git$/, '').split('/').pop();
+        const normalizedUrl = githubUrl.replace(/\/+$/, '').replace(/\.git$/, '');
+        const repoName = normalizedUrl.split('/').pop() || 'repository';
         const clonePath = path.join(absolutePath, repoName);
 
         // Clone the repository into a subfolder
@@ -267,9 +268,7 @@ router.post('/create-workspace', async (req, res) => {
       return res.json({
         success: true,
         project,
-        message: githubUrl
-          ? 'New workspace created and repository cloned successfully'
-          : 'New workspace created successfully'
+        message: 'New workspace created successfully'
       });
     }
 
@@ -349,7 +348,8 @@ router.get('/clone-progress', async (req, res) => {
       githubToken = newGithubToken;
     }
 
-    const repoName = githubUrl.replace(/\.git$/, '').split('/').pop();
+    const normalizedUrl = githubUrl.replace(/\/+$/, '').replace(/\.git$/, '');
+    const repoName = normalizedUrl.split('/').pop() || 'repository';
     const clonePath = path.join(absolutePath, repoName);
 
     let cloneUrl = githubUrl;
@@ -409,6 +409,11 @@ router.get('/clone-progress', async (req, res) => {
           errorMessage = 'Directory already exists';
         } else if (lastError) {
           errorMessage = lastError;
+        }
+        try {
+          await fs.rm(clonePath, { recursive: true, force: true });
+        } catch (cleanupError) {
+          console.error('Failed to clean up after clone failure:', cleanupError);
         }
         sendEvent('error', { message: errorMessage });
       }
