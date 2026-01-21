@@ -745,7 +745,9 @@ export class OrchestratorClient extends EventEmitter {
 
     // If it's an absolute path (starts with /) but not a full URL (no protocol)
     // and not already going through the proxy, redirect it
-    if (urlStr.startsWith('/') && !urlStr.startsWith('//') && !urlStr.startsWith(proxyBase)) {
+    // EXCEPT: Orchestrator API paths should go directly to the orchestrator, not through the proxy
+    const isOrchestratorApi = urlStr.startsWith('/api/clients/') || urlStr.startsWith('/api/tokens');
+    if (urlStr.startsWith('/') && !urlStr.startsWith('//') && !urlStr.startsWith(proxyBase) && !isOrchestratorApi) {
       const newUrl = proxyBase + urlStr;
       console.log('[ORCHESTRATOR] Redirecting fetch:', urlStr, '->', newUrl);
 
@@ -832,6 +834,9 @@ export class OrchestratorClient extends EventEmitter {
       "icons",
     ];
 
+    // Orchestrator API paths that should NOT be rewritten (they go directly to the orchestrator)
+    const orchestratorApiPaths = ["/api/clients/", "/api/tokens"];
+
     let result = js;
     for (const prefix of urlPrefixes) {
       // Escape regex metacharacters in the prefix to match literal characters
@@ -850,6 +855,21 @@ export class OrchestratorClient extends EventEmitter {
           new RegExp(`\`\\/${escapedPrefix}(?=[\\/\`])`, "g"),
           `\`${proxyBase}/${prefix}`,
         );
+    }
+
+    // Undo rewriting for orchestrator API paths - these should go directly to orchestrator
+    for (const path of orchestratorApiPaths) {
+      const escapedPath = path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const rewrittenPath = `${proxyBase}${path}`;
+      const escapedRewrittenPath = rewrittenPath.replace(
+        /[.*+?^${}()|[\]\\]/g,
+        "\\$&",
+      );
+      // Restore the original path by replacing the rewritten version
+      result = result
+        .replace(new RegExp(`"${escapedRewrittenPath}`, "g"), `"${path}`)
+        .replace(new RegExp(`'${escapedRewrittenPath}`, "g"), `'${path}`)
+        .replace(new RegExp(`\`${escapedRewrittenPath}`, "g"), `\`${path}`);
     }
 
     return result;

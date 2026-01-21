@@ -75,19 +75,72 @@ function Shell({
       if (isPlatform) {
         wsUrl = `${protocol}//${window.location.host}/shell`;
       } else if (proxyBase) {
-        // Orchestrator proxy mode: WebSocket URL goes through the proxy path
-        const token = localStorage.getItem("auth-token");
-        if (!token) {
+        // Orchestrator proxy mode: Get direct WebSocket URL from orchestrator API
+        // Extract client ID from proxyBase (e.g., /clients/badal-laptop/proxy -> badal-laptop)
+        const clientIdMatch = proxyBase.match(/\/clients\/([^/]+)\/proxy/);
+        if (!clientIdMatch) {
           console.error(
-            "No authentication token found for Shell WebSocket connection",
+            "[ORCHESTRATOR] Could not extract client ID from proxyBase:",
+            proxyBase,
           );
           return;
         }
-        wsUrl = `${protocol}//${window.location.host}${proxyBase}/shell?token=${encodeURIComponent(token)}`;
+        const clientId = clientIdMatch[1];
+
         console.log(
-          "[ORCHESTRATOR] Shell WebSocket connecting through proxy:",
-          wsUrl,
+          "[ORCHESTRATOR] Fetching Shell WebSocket info for client:",
+          clientId,
         );
+
+        try {
+          // Fetch the direct WebSocket URL from the orchestrator API
+          const response = await fetch(`/api/clients/${clientId}/ws-info`, {
+            credentials: "include", // Include session cookies
+          });
+
+          if (!response.ok) {
+            console.error(
+              "[ORCHESTRATOR] Failed to fetch Shell WebSocket info:",
+              response.status,
+            );
+            return;
+          }
+
+          const wsInfo = await response.json();
+          console.log("[ORCHESTRATOR] Shell WebSocket info:", wsInfo);
+
+          if (wsInfo.error) {
+            console.error(
+              "[ORCHESTRATOR] Shell WebSocket info error:",
+              wsInfo.error,
+            );
+            return;
+          }
+
+          if (wsInfo.is_local) {
+            console.warn(
+              "[ORCHESTRATOR] Client is running locally - Shell WebSocket may not be accessible",
+            );
+          }
+
+          // Connect directly to the claudecodeui Shell WebSocket
+          const token = localStorage.getItem("auth-token");
+          if (!token) {
+            console.error(
+              "No authentication token found for Shell WebSocket connection",
+            );
+            return;
+          }
+
+          wsUrl = `${wsInfo.ws_base}/shell?token=${encodeURIComponent(token)}`;
+          console.log("[ORCHESTRATOR] Shell connecting directly to:", wsUrl);
+        } catch (fetchError) {
+          console.error(
+            "[ORCHESTRATOR] Error fetching Shell WebSocket info:",
+            fetchError,
+          );
+          return;
+        }
       } else {
         const token = localStorage.getItem("auth-token");
         if (!token) {
