@@ -654,17 +654,21 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
                 </div>
-              ) : browserFolders.length === 0 ? (
-                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                  No folders found
-                </div>
               ) : (
                 <div className="space-y-1">
-                  {/* Parent Directory */}
-                  {browserCurrentPath !== '~' && browserCurrentPath !== '/' && (
+                  {/* Parent Directory - check for Windows root (e.g., C:\) and Unix root */}
+                  {browserCurrentPath !== '~' && browserCurrentPath !== '/' && !/^[A-Za-z]:\\?$/.test(browserCurrentPath) && (
                     <button
                       onClick={() => {
-                        const parentPath = browserCurrentPath.substring(0, browserCurrentPath.lastIndexOf('/')) || '/';
+                        const lastSlash = Math.max(browserCurrentPath.lastIndexOf('/'), browserCurrentPath.lastIndexOf('\\'));
+                        let parentPath;
+                        if (lastSlash <= 0) {
+                          parentPath = '/';
+                        } else if (lastSlash === 2 && /^[A-Za-z]:/.test(browserCurrentPath)) {
+                          parentPath = browserCurrentPath.substring(0, 3);
+                        } else {
+                          parentPath = browserCurrentPath.substring(0, lastSlash);
+                        }
                         navigateToFolder(parentPath);
                       }}
                       className="w-full px-4 py-3 text-left hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg flex items-center gap-3"
@@ -675,28 +679,34 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
                   )}
 
                   {/* Folders */}
-                  {browserFolders
-                    .filter(folder => showHiddenFolders || !folder.name.startsWith('.'))
-                    .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
-                    .map((folder, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      <button
-                        onClick={() => navigateToFolder(folder.path)}
-                        className="flex-1 px-4 py-3 text-left hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg flex items-center gap-3"
-                      >
-                        <FolderPlus className="w-5 h-5 text-blue-500" />
-                        <span className="font-medium text-gray-900 dark:text-white">{folder.name}</span>
-                      </button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => selectFolder(folder.path, true)}
-                        className="text-xs px-3"
-                      >
-                        Select
-                      </Button>
+                  {browserFolders.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                      No subfolders found
                     </div>
-                  ))}
+                  ) : (
+                    browserFolders
+                      .filter(folder => showHiddenFolders || !folder.name.startsWith('.'))
+                      .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
+                      .map((folder, index) => (
+                      <div key={index} className="flex items-center gap-2">
+                        <button
+                          onClick={() => navigateToFolder(folder.path)}
+                          className="flex-1 px-4 py-3 text-left hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg flex items-center gap-3"
+                        >
+                          <FolderPlus className="w-5 h-5 text-blue-500" />
+                          <span className="font-medium text-gray-900 dark:text-white">{folder.name}</span>
+                        </button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => selectFolder(folder.path, true)}
+                          className="text-xs px-3"
+                        >
+                          Select
+                        </Button>
+                      </div>
+                    ))
+                  )}
                 </div>
               )}
             </div>
