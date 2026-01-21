@@ -107,5 +107,41 @@
     },
     "clickToChangeMode": "点击更改权限模式（或在输入框中按 Tab）",
     "showAllCommands": "显示所有命令"
+  },
+  "thinkingMode": {
+    "selector": {
+      "title": "思考模式",
+      "description": "扩展思考给 Claude 更多时间来评估替代方案",
+      "active": "激活",
+      "tip": "更高的思考模式需要更多时间，但提供更彻底的分析"
+    },
+    "modes": {
+      "none": {
+        "name": "标准",
+        "description": "常规 Claude 响应",
+        "prefix": ""
+      },
+      "think": {
+        "name": "思考",
+        "description": "基本扩展思考",
+        "prefix": "思考"
+      },
+      "thinkHard": {
+        "name": "深入思考",
+        "description": "更彻底的评估",
+        "prefix": "深入思考"
+      },
+      "thinkHarder": {
+        "name": "更深入思考",
+        "description": "考虑替代方案的深度分析",
+        "prefix": "更深入思考"
+      },
+      "ultrathink": {
+        "name": "超级思考",
+        "description": "最大思考预算",
+        "prefix": "超级思考"
+      }
+    },
+    "buttonTitle": "思考模式：{{mode}}"
   }
 }
