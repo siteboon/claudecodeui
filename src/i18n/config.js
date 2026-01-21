@@ -18,11 +18,13 @@ import enCommon from './locales/en/common.json';
 import enSettings from './locales/en/settings.json';
 import enAuth from './locales/en/auth.json';
 import enSidebar from './locales/en/sidebar.json';
+import enChat from './locales/en/chat.json';
 
 import zhCommon from './locales/zh-CN/common.json';
 import zhSettings from './locales/zh-CN/settings.json';
 import zhAuth from './locales/zh-CN/auth.json';
 import zhSidebar from './locales/zh-CN/sidebar.json';
+import zhChat from './locales/zh-CN/chat.json';
 
 // Import supported languages configuration
 import { languages } from './languages.js';
@@ -53,12 +55,14 @@ i18n
         settings: enSettings,
         auth: enAuth,
         sidebar: enSidebar,
+        chat: enChat,
       },
       'zh-CN': {
         common: zhCommon,
         settings: zhSettings,
         auth: zhAuth,
         sidebar: zhSidebar,
+        chat: zhChat,
       },
     },
 
@@ -72,7 +76,7 @@ i18n
     debug: import.meta.env.DEV,
 
     // Namespaces - load only what's needed
-    ns: ['common', 'settings', 'auth', 'sidebar'],
+    ns: ['common', 'settings', 'auth', 'sidebar', 'chat'],
     defaultNS: 'common',
 
     // Key separator for nested keys (default: '.')

@@ -950,7 +950,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
           <div className="flex items-center gap-3">
             <SettingsIcon className="w-5 h-5 md:w-6 md:h-6 text-blue-600" />
             <h2 className="text-lg md:text-xl font-semibold text-foreground">
-              Settings
+              {t('title')}
             </h2>
           </div>
           <Button
@@ -975,7 +975,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                     : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
               >
-                Agents
+                {t('mainTabs.agents')}
               </button>
               <button
                 onClick={() => setActiveTab('appearance')}
@@ -985,7 +985,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                     : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
               >
-                Appearance
+                {t('mainTabs.appearance')}
               </button>
               <button
                 onClick={() => setActiveTab('git')}
@@ -996,7 +996,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                 }`}
               >
                 <GitBranch className="w-4 h-4 inline mr-2" />
-                Git
+                {t('mainTabs.git')}
               </button>
               <button
                 onClick={() => setActiveTab('api')}
@@ -1007,7 +1007,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                 }`}
               >
                 <Key className="w-4 h-4 inline mr-2" />
-                API & Tokens
+                {t('mainTabs.apiTokens')}
               </button>
               <button
                 onClick={() => setActiveTab('tasks')}
@@ -1017,7 +1017,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                     : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
               >
-                Tasks
+                {t('mainTabs.tasks')}
               </button>
             </div>
           </div>
@@ -1035,10 +1035,10 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
         <div className="flex items-center justify-between">
           <div>
             <div className="font-medium text-foreground">
-              Dark Mode
+              {t('appearanceSettings.darkMode.label')}
             </div>
             <div className="text-sm text-muted-foreground">
-              Toggle between light and dark themes
+              {t('appearanceSettings.darkMode.description')}
             </div>
           </div>
           <button
@@ -1076,10 +1076,10 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
         <div className="flex items-center justify-between">
           <div>
             <div className="font-medium text-foreground">
-              Project Sorting
+              {t('appearanceSettings.projectSorting.label')}
             </div>
             <div className="text-sm text-muted-foreground">
-              How projects are ordered in the sidebar
+              {t('appearanceSettings.projectSorting.description')}
             </div>
           </div>
           <select
@@ -1087,8 +1087,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
             onChange={(e) => setProjectSortOrder(e.target.value)}
             className="text-sm bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 w-32"
           >
-            <option value="name">Alphabetical</option>
-            <option value="date">Recent Activity</option>
+            <option value="name">{t('appearanceSettings.projectSorting.alphabetical')}</option>
+            <option value="date">{t('appearanceSettings.projectSorting.recentActivity')}</option>
           </select>
         </div>
       </div>
@@ -1096,17 +1096,17 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
 
     {/* Code Editor Settings */}
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold text-foreground">Code Editor</h3>
+      <h3 className="text-lg font-semibold text-foreground">{t('appearanceSettings.codeEditor.title')}</h3>
 
       {/* Editor Theme */}
       <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
         <div className="flex items-center justify-between">
           <div>
             <div className="font-medium text-foreground">
-              Editor Theme
+              {t('appearanceSettings.codeEditor.theme.label')}
             </div>
             <div className="text-sm text-muted-foreground">
-              Default theme for the code editor
+              {t('appearanceSettings.codeEditor.theme.description')}
             </div>
           </div>
           <button
@@ -1137,10 +1137,10 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
         <div className="flex items-center justify-between">
           <div>
             <div className="font-medium text-foreground">
-              Word Wrap
+              {t('appearanceSettings.codeEditor.wordWrap.label')}
             </div>
             <div className="text-sm text-muted-foreground">
-              Enable word wrapping by default in the editor
+              {t('appearanceSettings.codeEditor.wordWrap.description')}
             </div>
           </div>
           <button
@@ -1165,10 +1165,10 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
         <div className="flex items-center justify-between">
           <div>
             <div className="font-medium text-foreground">
-              Show Minimap
+              {t('appearanceSettings.codeEditor.showMinimap.label')}
             </div>
             <div className="text-sm text-muted-foreground">
-              Display a minimap for easier navigation in diff view
+              {t('appearanceSettings.codeEditor.showMinimap.description')}
             </div>
           </div>
           <button
@@ -1193,10 +1193,10 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
         <div className="flex items-center justify-between">
           <div>
             <div className="font-medium text-foreground">
-              Show Line Numbers
+              {t('appearanceSettings.codeEditor.lineNumbers.label')}
             </div>
             <div className="text-sm text-muted-foreground">
-              Display line numbers in the editor
+              {t('appearanceSettings.codeEditor.lineNumbers.description')}
             </div>
           </div>
           <button
@@ -1221,10 +1221,10 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
         <div className="flex items-center justify-between">
           <div>
             <div className="font-medium text-foreground">
-              Font Size
+              {t('appearanceSettings.codeEditor.fontSize.label')}
             </div>
             <div className="text-sm text-muted-foreground">
-              Editor font size in pixels
+              {t('appearanceSettings.codeEditor.fontSize.description')}
             </div>
           </div>
           <select
@@ -1452,7 +1452,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                 <div className="bg-background border border-border rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
                   <div className="flex items-center justify-between p-4 border-b border-border">
                     <h3 className="text-lg font-medium text-foreground">
-                      {editingMcpServer ? 'Edit MCP Server' : 'Add MCP Server'}
+                      {editingMcpServer ? t('mcpForm.title.edit') : t('mcpForm.title.add')}
                     </h3>
                     <Button variant="ghost" size="sm" onClick={resetMcpForm}>
                       <X className="w-4 h-4" />
@@ -1472,7 +1472,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                             : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                         }`}
                       >
-                        Form Input
+                        {t('mcpForm.importMode.form')}
                       </button>
                       <button
                         type="button"
@@ -1483,7 +1483,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                             : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                         }`}
                       >
-                        JSON Import
+                        {t('mcpForm.importMode.json')}
                       </button>
                     </div>
                     )}
@@ -1492,12 +1492,12 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                     {mcpFormData.importMode === 'form' && editingMcpServer && (
                       <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-3">
                         <label className="block text-sm font-medium text-foreground mb-2">
-                          Scope
+                          {t('mcpForm.scope.label')}
                         </label>
                         <div className="flex items-center gap-2">
                           {mcpFormData.scope === 'user' ? <Globe className="w-4 h-4" /> : <FolderOpen className="w-4 h-4" />}
                           <span className="text-sm">
-                            {mcpFormData.scope === 'user' ? 'User (Global)' : 'Project (Local)'}
+                            {mcpFormData.scope === 'user' ? t('mcpForm.scope.userGlobal') : t('mcpForm.scope.projectLocal')}
                           </span>
                           {mcpFormData.scope === 'local' && mcpFormData.projectPath && (
                             <span className="text-xs text-muted-foreground">
@@ -1506,7 +1506,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                           )}
                         </div>
                         <p className="text-xs text-muted-foreground mt-2">
-                          Scope cannot be changed when editing an existing server
+                          {t('mcpForm.scope.cannotChange')}
                         </p>
                       </div>
                     )}
@@ -1516,7 +1516,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                       <div className="space-y-4">
                         <div>
                           <label className="block text-sm font-medium text-foreground mb-2">
-                            Scope *
+                            {t('mcpForm.scope.label')} *
                           </label>
                           <div className="flex gap-2">
                             <button
@@ -1530,7 +1530,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                             >
                               <div className="flex items-center justify-center gap-2">
                                 <Globe className="w-4 h-4" />
-                                <span>User (Global)</span>
+                                <span>{t('mcpForm.scope.userGlobal')}</span>
                               </div>
                             </button>
                             <button
@@ -1544,14 +1544,14 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                             >
                               <div className="flex items-center justify-center gap-2">
                                 <FolderOpen className="w-4 h-4" />
-                                <span>Project (Local)</span>
+                                <span>{t('mcpForm.scope.projectLocal')}</span>
                               </div>
                             </button>
                           </div>
                           <p className="text-xs text-muted-foreground mt-2">
-                            {mcpFormData.scope === 'user' 
-                              ? 'User scope: Available across all projects on your machine'
-                              : 'Local scope: Only available in the selected project'
+                            {mcpFormData.scope === 'user'
+                              ? t('mcpForm.scope.userDescription')
+                              : t('mcpForm.scope.projectDescription')
                             }
                           </p>
                         </div>
@@ -1560,7 +1560,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                         {mcpFormData.scope === 'local' && !editingMcpServer && (
                           <div>
                             <label className="block text-sm font-medium text-foreground mb-2">
-                              Project *
+                              {t('mcpForm.fields.selectProject')} *
                             </label>
                             <select
                               value={mcpFormData.projectPath}
@@ -1568,7 +1568,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                               required={mcpFormData.scope === 'local'}
                             >
-                              <option value="">Select a project...</option>
+                              <option value="">{t('mcpForm.fields.selectProject')}...</option>
                               {projects.map(project => (
                                 <option key={project.name} value={project.path || project.fullPath}>
                                   {project.displayName || project.name}
@@ -1577,7 +1577,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                             </select>
                             {mcpFormData.projectPath && (
                               <p className="text-xs text-muted-foreground mt-1">
-                                Path: {mcpFormData.projectPath}
+                                {t('mcpForm.projectPath', { path: mcpFormData.projectPath })}
                               </p>
                             )}
                           </div>
@@ -1589,22 +1589,22 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className={mcpFormData.importMode === 'json' ? 'md:col-span-2' : ''}>
                         <label className="block text-sm font-medium text-foreground mb-2">
-                          Server Name *
+                          {t('mcpForm.fields.serverName')} *
                         </label>
                         <Input
                           value={mcpFormData.name}
                           onChange={(e) => {
                             setMcpFormData(prev => ({...prev, name: e.target.value}));
                           }}
-                          placeholder="my-server"
+                          placeholder={t('mcpForm.placeholders.serverName')}
                           required
                         />
                       </div>
-                      
+
                       {mcpFormData.importMode === 'form' && (
                         <div>
                           <label className="block text-sm font-medium text-foreground mb-2">
-                            Transport Type *
+                            {t('mcpForm.fields.transportType')} *
                           </label>
                           <select
                             value={mcpFormData.type}
@@ -1626,7 +1626,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                     {editingMcpServer && mcpFormData.raw && mcpFormData.importMode === 'form' && (
                       <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
                         <h4 className="text-sm font-medium text-foreground mb-2">
-                          Configuration Details (from {editingMcpServer.scope === 'global' ? '~/.claude.json' : 'project config'})
+                          {t('mcpForm.configDetails', { configFile: editingMcpServer.scope === 'global' ? '~/.claude.json' : 'project config' })}
                         </h4>
                         <pre className="text-xs bg-gray-100 dark:bg-gray-800 p-3 rounded overflow-x-auto">
                           {JSON.stringify(mcpFormData.raw, null, 2)}
@@ -1639,7 +1639,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                       <div className="space-y-4">
                         <div>
                           <label className="block text-sm font-medium text-foreground mb-2">
-                            JSON Configuration *
+                            {t('mcpForm.fields.jsonConfig')} *
                           </label>
                           <textarea
                             value={mcpFormData.jsonInput}
@@ -1651,18 +1651,18 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                                   const parsed = JSON.parse(e.target.value);
                                   // Basic validation
                                   if (!parsed.type) {
-                                    setJsonValidationError('Missing required field: type');
+                                    setJsonValidationError(t('mcpForm.validation.missingType'));
                                   } else if (parsed.type === 'stdio' && !parsed.command) {
-                                    setJsonValidationError('stdio type requires a command field');
+                                    setJsonValidationError(t('mcpForm.validation.stdioRequiresCommand'));
                                   } else if ((parsed.type === 'http' || parsed.type === 'sse') && !parsed.url) {
-                                    setJsonValidationError(`${parsed.type} type requires a url field`);
+                                    setJsonValidationError(t('mcpForm.validation.httpRequiresUrl', { type: parsed.type }));
                                   } else {
                                     setJsonValidationError('');
                                   }
                                 }
                               } catch (err) {
                                 if (e.target.value.trim()) {
-                                  setJsonValidationError('Invalid JSON format');
+                                  setJsonValidationError(t('mcpForm.validation.invalidJson'));
                                 } else {
                                   setJsonValidationError('');
                                 }
@@ -1677,7 +1677,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                             <p className="text-xs text-red-500 mt-1">{jsonValidationError}</p>
                           )}
                           <p className="text-xs text-muted-foreground mt-2">
-                            Paste your MCP server configuration in JSON format. Example formats:
+                            {t('mcpForm.validation.jsonHelp')}
                             <br />• stdio: {`{"type":"stdio","command":"npx","args":["@upstash/context7-mcp"]}`}
                             <br />• http/sse: {`{"type":"http","url":"https://api.example.com/mcp"}`}
                           </p>
@@ -1690,7 +1690,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                       <div className="space-y-4">
                         <div>
                           <label className="block text-sm font-medium text-foreground mb-2">
-                            Command *
+                            {t('mcpForm.fields.command')} *
                           </label>
                           <Input
                             value={mcpFormData.config.command}
@@ -1699,10 +1699,10 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                             required
                           />
                         </div>
-                        
+
                         <div>
                           <label className="block text-sm font-medium text-foreground mb-2">
-                            Arguments (one per line)
+                            {t('mcpForm.fields.arguments')}
                           </label>
                           <textarea
                             value={Array.isArray(mcpFormData.config.args) ? mcpFormData.config.args.join('\n') : ''}
@@ -1718,7 +1718,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                     {mcpFormData.importMode === 'form' && (mcpFormData.type === 'sse' || mcpFormData.type === 'http') && (
                       <div>
                         <label className="block text-sm font-medium text-foreground mb-2">
-                          URL *
+                          {t('mcpForm.fields.url')} *
                         </label>
                         <Input
                           value={mcpFormData.config.url}
@@ -1734,7 +1734,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                     {mcpFormData.importMode === 'form' && (
                       <div>
                       <label className="block text-sm font-medium text-foreground mb-2">
-                        Environment Variables (KEY=value, one per line)
+                        {t('mcpForm.fields.envVars')}
                       </label>
                       <textarea
                         value={Object.entries(mcpFormData.config.env || {}).map(([k, v]) => `${k}=${v}`).join('\n')}
@@ -1758,7 +1758,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                     {mcpFormData.importMode === 'form' && (mcpFormData.type === 'sse' || mcpFormData.type === 'http') && (
                       <div>
                         <label className="block text-sm font-medium text-foreground mb-2">
-                          Headers (KEY=value, one per line)
+                          {t('mcpForm.fields.headers')}
                         </label>
                         <textarea
                           value={Object.entries(mcpFormData.config.headers || {}).map(([k, v]) => `${k}=${v}`).join('\n')}
@@ -1782,14 +1782,14 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
 
                     <div className="flex justify-end gap-2 pt-4">
                       <Button type="button" variant="outline" onClick={resetMcpForm}>
-                        Cancel
+                        {t('mcpForm.actions.cancel')}
                       </Button>
-                      <Button 
-                        type="submit" 
-                        disabled={mcpLoading} 
+                      <Button
+                        type="submit"
+                        disabled={mcpLoading}
                         className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50"
                       >
-                        {mcpLoading ? 'Saving...' : (editingMcpServer ? 'Update Server' : 'Add Server')}
+                        {mcpLoading ? t('mcpForm.actions.saving') : (editingMcpServer ? t('mcpForm.actions.updateServer') : t('mcpForm.actions.addServer'))}
                       </Button>
                     </div>
                   </form>
@@ -1803,7 +1803,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                 <div className="bg-background border border-border rounded-lg w-full max-w-lg max-h-[90vh] overflow-y-auto">
                   <div className="flex items-center justify-between p-4 border-b border-border">
                     <h3 className="text-lg font-medium text-foreground">
-                      {editingCodexMcpServer ? 'Edit MCP Server' : 'Add MCP Server'}
+                      {editingCodexMcpServer ? t('mcpForm.title.edit') : t('mcpForm.title.add')}
                     </h3>
                     <Button variant="ghost" size="sm" onClick={resetCodexMcpForm}>
                       <X className="w-4 h-4" />
@@ -1813,19 +1813,19 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                   <form onSubmit={handleCodexMcpSubmit} className="p-4 space-y-4">
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-2">
-                        Server Name *
+                        {t('mcpForm.fields.serverName')} *
                       </label>
                       <Input
                         value={codexMcpFormData.name}
                         onChange={(e) => setCodexMcpFormData(prev => ({...prev, name: e.target.value}))}
-                        placeholder="my-mcp-server"
+                        placeholder={t('mcpForm.placeholders.serverName')}
                         required
                       />
                     </div>
 
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-2">
-                        Command *
+                        {t('mcpForm.fields.command')} *
                       </label>
                       <Input
                         value={codexMcpFormData.config?.command || ''}
@@ -1840,7 +1840,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
 
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-2">
-                        Arguments (one per line)
+                        {t('mcpForm.fields.arguments')}
                       </label>
                       <textarea
                         value={(codexMcpFormData.config?.args || []).join('\n')}
@@ -1856,7 +1856,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
 
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-2">
-                        Environment Variables (KEY=VALUE, one per line)
+                        {t('mcpForm.fields.envVars')}
                       </label>
                       <textarea
                         value={Object.entries(codexMcpFormData.config?.env || {}).map(([k, v]) => `${k}=${v}`).join('\n')}
@@ -1881,14 +1881,14 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
 
                     <div className="flex justify-end gap-2 pt-4 border-t border-border">
                       <Button type="button" variant="outline" onClick={resetCodexMcpForm}>
-                        Cancel
+                        {t('mcpForm.actions.cancel')}
                       </Button>
                       <Button
                         type="submit"
                         disabled={codexMcpLoading || !codexMcpFormData.name || !codexMcpFormData.config?.command}
                         className="bg-green-600 hover:bg-green-700 text-white"
                       >
-                        {codexMcpLoading ? 'Saving...' : (editingCodexMcpServer ? 'Update Server' : 'Add Server')}
+                        {codexMcpLoading ? t('mcpForm.actions.saving') : (editingCodexMcpServer ? t('mcpForm.actions.updateServer') : t('mcpForm.actions.addServer'))}
                       </Button>
                     </div>
                   </form>
@@ -1919,7 +1919,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
-                Settings saved successfully!
+                {t('saveStatus.success')}
               </div>
             )}
             {saveStatus === 'error' && (
@@ -1927,31 +1927,31 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                 </svg>
-                Failed to save settings
+                {t('saveStatus.error')}
               </div>
             )}
           </div>
           <div className="flex items-center gap-3 order-1 sm:order-2">
-            <Button 
-              variant="outline" 
-              onClick={onClose} 
+            <Button
+              variant="outline"
+              onClick={onClose}
               disabled={isSaving}
               className="flex-1 sm:flex-none h-10 touch-manipulation"
             >
-              Cancel
+              {t('footerActions.cancel')}
             </Button>
-            <Button 
-              onClick={saveSettings} 
+            <Button
+              onClick={saveSettings}
               disabled={isSaving}
               className="flex-1 sm:flex-none h-10 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 touch-manipulation"
             >
               {isSaving ? (
                 <div className="flex items-center gap-2">
                   <div className="w-4 h-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  Saving...
+                  {t('saveStatus.saving')}
                 </div>
               ) : (
-                'Save Settings'
+                t('footerActions.save')
               )}
             </Button>
           </div>
