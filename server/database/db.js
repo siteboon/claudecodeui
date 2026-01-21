@@ -1,30 +1,31 @@
-import Database from 'better-sqlite3';
-import path from 'path';
-import fs from 'fs';
-import crypto from 'crypto';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
+import Database from "better-sqlite3";
+import path from "path";
+import fs from "fs";
+import crypto from "crypto";
+import bcrypt from "bcrypt";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // ANSI color codes for terminal output
 const colors = {
-    reset: '\x1b[0m',
-    bright: '\x1b[1m',
-    cyan: '\x1b[36m',
-    dim: '\x1b[2m',
+  reset: "\x1b[0m",
+  bright: "\x1b[1m",
+  cyan: "\x1b[36m",
+  dim: "\x1b[2m",
 };
 
 const c = {
-    info: (text) => `${colors.cyan}${text}${colors.reset}`,
-    bright: (text) => `${colors.bright}${text}${colors.reset}`,
-    dim: (text) => `${colors.dim}${text}${colors.reset}`,
+  info: (text) => `${colors.cyan}${text}${colors.reset}`,
+  bright: (text) => `${colors.bright}${text}${colors.reset}`,
+  dim: (text) => `${colors.dim}${text}${colors.reset}`,
 };
 
 // Use DATABASE_PATH environment variable if set, otherwise use default location
-const DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, 'auth.db');
-const INIT_SQL_PATH = path.join(__dirname, 'init.sql');
+const DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, "auth.db");
+const INIT_SQL_PATH = path.join(__dirname, "init.sql");
 
 // Ensure database directory exists if custom path is provided
 if (process.env.DATABASE_PATH) {
@@ -35,7 +36,10 @@ if (process.env.DATABASE_PATH) {
       console.log(`Created database directory: ${dbDir}`);
     }
   } catch (error) {
-    console.error(`Failed to create database directory ${dbDir}:`, error.message);
+    console.error(
+      `Failed to create database directory ${dbDir}:`,
+      error.message,
+    );
     throw error;
   }
 }
@@ -44,40 +48,58 @@ if (process.env.DATABASE_PATH) {
 const db = new Database(DB_PATH);
 
 // Show app installation path prominently
-const appInstallPath = path.join(__dirname, '../..');
-console.log('');
-console.log(c.dim('═'.repeat(60)));
-console.log(`${c.info('[INFO]')} App Installation: ${c.bright(appInstallPath)}`);
-console.log(`${c.info('[INFO]')} Database: ${c.dim(path.relative(appInstallPath, DB_PATH))}`);
+const appInstallPath = path.join(__dirname, "../..");
+console.log("");
+console.log(c.dim("═".repeat(60)));
+console.log(
+  `${c.info("[INFO]")} App Installation: ${c.bright(appInstallPath)}`,
+);
+console.log(
+  `${c.info("[INFO]")} Database: ${c.dim(path.relative(appInstallPath, DB_PATH))}`,
+);
 if (process.env.DATABASE_PATH) {
-  console.log(`       ${c.dim('(Using custom DATABASE_PATH from environment)')}`);
+  console.log(
+    `       ${c.dim("(Using custom DATABASE_PATH from environment)")}`,
+  );
 }
-console.log(c.dim('═'.repeat(60)));
-console.log('');
+console.log(c.dim("═".repeat(60)));
+console.log("");
 
 const runMigrations = () => {
   try {
     const tableInfo = db.prepare("PRAGMA table_info(users)").all();
-    const columnNames = tableInfo.map(col => col.name);
+    const columnNames = tableInfo.map((col) => col.name);
 
-    if (!columnNames.includes('git_name')) {
-      console.log('Running migration: Adding git_name column');
-      db.exec('ALTER TABLE users ADD COLUMN git_name TEXT');
+    if (!columnNames.includes("git_name")) {
+      console.log("Running migration: Adding git_name column");
+      db.exec("ALTER TABLE users ADD COLUMN git_name TEXT");
     }
 
-    if (!columnNames.includes('git_email')) {
-      console.log('Running migration: Adding git_email column');
-      db.exec('ALTER TABLE users ADD COLUMN git_email TEXT');
+    if (!columnNames.includes("git_email")) {
+      console.log("Running migration: Adding git_email column");
+      db.exec("ALTER TABLE users ADD COLUMN git_email TEXT");
     }
 
-    if (!columnNames.includes('has_completed_onboarding')) {
-      console.log('Running migration: Adding has_completed_onboarding column');
-      db.exec('ALTER TABLE users ADD COLUMN has_completed_onboarding BOOLEAN DEFAULT 0');
+    if (!columnNames.includes("has_completed_onboarding")) {
+      console.log("Running migration: Adding has_completed_onboarding column");
+      db.exec(
+        "ALTER TABLE users ADD COLUMN has_completed_onboarding BOOLEAN DEFAULT 0",
+      );
     }
 
-    console.log('Database migrations completed successfully');
+    if (!columnNames.includes("github_id")) {
+      console.log("Running migration: Adding github_id column");
+      // SQLite doesn't allow adding UNIQUE columns directly with ALTER TABLE
+      // Add column first, then create unique index
+      db.exec("ALTER TABLE users ADD COLUMN github_id TEXT");
+      db.exec(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_github_id ON users(github_id)",
+      );
+    }
+
+    console.log("Database migrations completed successfully");
   } catch (error) {
-    console.error('Error running migrations:', error.message);
+    console.error("Error running migrations:", error.message);
     throw error;
   }
 };
@@ -85,12 +107,12 @@ const runMigrations = () => {
 // Initialize database with schema
 const initializeDatabase = async () => {
   try {
-    const initSQL = fs.readFileSync(INIT_SQL_PATH, 'utf8');
+    const initSQL = fs.readFileSync(INIT_SQL_PATH, "utf8");
     db.exec(initSQL);
-    console.log('Database initialized successfully');
+    console.log("Database initialized successfully");
     runMigrations();
   } catch (error) {
-    console.error('Error initializing database:', error.message);
+    console.error("Error initializing database:", error.message);
     throw error;
   }
 };
@@ -100,7 +122,7 @@ const userDb = {
   // Check if any users exist
   hasUsers: () => {
     try {
-      const row = db.prepare('SELECT COUNT(*) as count FROM users').get();
+      const row = db.prepare("SELECT COUNT(*) as count FROM users").get();
       return row.count > 0;
     } catch (err) {
       throw err;
@@ -110,7 +132,9 @@ const userDb = {
   // Create a new user
   createUser: (username, passwordHash) => {
     try {
-      const stmt = db.prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)');
+      const stmt = db.prepare(
+        "INSERT INTO users (username, password_hash) VALUES (?, ?)",
+      );
       const result = stmt.run(username, passwordHash);
       return { id: result.lastInsertRowid, username };
     } catch (err) {
@@ -121,7 +145,9 @@ const userDb = {
   // Get user by username
   getUserByUsername: (username) => {
     try {
-      const row = db.prepare('SELECT * FROM users WHERE username = ? AND is_active = 1').get(username);
+      const row = db
+        .prepare("SELECT * FROM users WHERE username = ? AND is_active = 1")
+        .get(username);
       return row;
     } catch (err) {
       throw err;
@@ -131,7 +157,9 @@ const userDb = {
   // Update last login time
   updateLastLogin: (userId) => {
     try {
-      db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(userId);
+      db.prepare(
+        "UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?",
+      ).run(userId);
     } catch (err) {
       throw err;
     }
@@ -140,7 +168,11 @@ const userDb = {
   // Get user by ID
   getUserById: (userId) => {
     try {
-      const row = db.prepare('SELECT id, username, created_at, last_login FROM users WHERE id = ? AND is_active = 1').get(userId);
+      const row = db
+        .prepare(
+          "SELECT id, username, created_at, last_login FROM users WHERE id = ? AND is_active = 1",
+        )
+        .get(userId);
       return row;
     } catch (err) {
       throw err;
@@ -149,7 +181,11 @@ const userDb = {
 
   getFirstUser: () => {
     try {
-      const row = db.prepare('SELECT id, username, created_at, last_login FROM users WHERE is_active = 1 LIMIT 1').get();
+      const row = db
+        .prepare(
+          "SELECT id, username, created_at, last_login FROM users WHERE is_active = 1 LIMIT 1",
+        )
+        .get();
       return row;
     } catch (err) {
       throw err;
@@ -158,7 +194,9 @@ const userDb = {
 
   updateGitConfig: (userId, gitName, gitEmail) => {
     try {
-      const stmt = db.prepare('UPDATE users SET git_name = ?, git_email = ? WHERE id = ?');
+      const stmt = db.prepare(
+        "UPDATE users SET git_name = ?, git_email = ? WHERE id = ?",
+      );
       stmt.run(gitName, gitEmail, userId);
     } catch (err) {
       throw err;
@@ -167,7 +205,9 @@ const userDb = {
 
   getGitConfig: (userId) => {
     try {
-      const row = db.prepare('SELECT git_name, git_email FROM users WHERE id = ?').get(userId);
+      const row = db
+        .prepare("SELECT git_name, git_email FROM users WHERE id = ?")
+        .get(userId);
       return row;
     } catch (err) {
       throw err;
@@ -176,7 +216,9 @@ const userDb = {
 
   completeOnboarding: (userId) => {
     try {
-      const stmt = db.prepare('UPDATE users SET has_completed_onboarding = 1 WHERE id = ?');
+      const stmt = db.prepare(
+        "UPDATE users SET has_completed_onboarding = 1 WHERE id = ?",
+      );
       stmt.run(userId);
     } catch (err) {
       throw err;
@@ -185,26 +227,134 @@ const userDb = {
 
   hasCompletedOnboarding: (userId) => {
     try {
-      const row = db.prepare('SELECT has_completed_onboarding FROM users WHERE id = ?').get(userId);
+      const row = db
+        .prepare("SELECT has_completed_onboarding FROM users WHERE id = ?")
+        .get(userId);
       return row?.has_completed_onboarding === 1;
     } catch (err) {
       throw err;
     }
-  }
+  },
+
+  // Get or create user for orchestrator authentication
+  // When connecting via orchestrator proxy, auto-create user if needed
+  getOrCreateOrchestratorUser: async (githubId, githubUsername) => {
+    try {
+      // Validate required parameters
+      if (
+        !githubUsername ||
+        typeof githubUsername !== "string" ||
+        !githubUsername.trim()
+      ) {
+        throw new Error(
+          "githubUsername is required and must be a non-empty string",
+        );
+      }
+      if (!githubId || typeof githubId !== "string" || !githubId.trim()) {
+        throw new Error("githubId is required and must be a non-empty string");
+      }
+
+      // First, try to find user by github_id (most authoritative)
+      let user = db
+        .prepare(
+          "SELECT id, username, github_id, created_at, last_login FROM users WHERE github_id = ? AND is_active = 1",
+        )
+        .get(githubId);
+
+      if (user) {
+        // Found user by github_id, update last_login
+        db.prepare(
+          "UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?",
+        ).run(user.id);
+        return user;
+      }
+
+      // No user found by github_id, check if username exists
+      const existingByUsername = db
+        .prepare(
+          "SELECT id, username, github_id, created_at, last_login FROM users WHERE username = ? AND is_active = 1",
+        )
+        .get(githubUsername);
+
+      if (existingByUsername) {
+        // Username exists - check if it has a different github_id
+        if (
+          existingByUsername.github_id &&
+          existingByUsername.github_id !== githubId
+        ) {
+          // Username collision: local account has different github_id
+          // Create namespaced orchestrator user instead of reusing
+          const namespacedUsername = `orch_${githubId}_${githubUsername}`;
+          const randomPassword = crypto.randomBytes(32).toString("hex");
+          const passwordHash = await bcrypt.hash(randomPassword, 12);
+
+          const stmt = db.prepare(
+            "INSERT INTO users (username, password_hash, github_id, has_completed_onboarding, last_login) VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)",
+          );
+          const result = stmt.run(namespacedUsername, passwordHash, githubId);
+          user = {
+            id: result.lastInsertRowid,
+            username: namespacedUsername,
+            github_id: githubId,
+          };
+          console.log(
+            `[ORCHESTRATOR] Created namespaced user for orchestrator auth: ${namespacedUsername} (GitHub ID: ${githubId})`,
+          );
+          return user;
+        }
+
+        // Username exists with no github_id or matching github_id - bind the github_id
+        db.prepare(
+          "UPDATE users SET github_id = ?, last_login = CURRENT_TIMESTAMP WHERE id = ?",
+        ).run(githubId, existingByUsername.id);
+        console.log(
+          `[ORCHESTRATOR] Bound github_id ${githubId} to existing user: ${githubUsername}`,
+        );
+        return { ...existingByUsername, github_id: githubId };
+      }
+
+      // No existing user found, create new one
+      const randomPassword = crypto.randomBytes(32).toString("hex");
+      const passwordHash = await bcrypt.hash(randomPassword, 12);
+
+      const stmt = db.prepare(
+        "INSERT INTO users (username, password_hash, github_id, has_completed_onboarding, last_login) VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)",
+      );
+      const result = stmt.run(githubUsername, passwordHash, githubId);
+      user = {
+        id: result.lastInsertRowid,
+        username: githubUsername,
+        github_id: githubId,
+      };
+      console.log(
+        `[ORCHESTRATOR] Created new user for orchestrator auth: ${githubUsername} (GitHub ID: ${githubId})`,
+      );
+
+      return user;
+    } catch (err) {
+      console.error(
+        "[ORCHESTRATOR] Error in getOrCreateOrchestratorUser:",
+        err,
+      );
+      throw err;
+    }
+  },
 };
 
 // API Keys database operations
 const apiKeysDb = {
   // Generate a new API key
   generateApiKey: () => {
-    return 'ck_' + crypto.randomBytes(32).toString('hex');
+    return "ck_" + crypto.randomBytes(32).toString("hex");
   },
 
   // Create a new API key
   createApiKey: (userId, keyName) => {
     try {
       const apiKey = apiKeysDb.generateApiKey();
-      const stmt = db.prepare('INSERT INTO api_keys (user_id, key_name, api_key) VALUES (?, ?, ?)');
+      const stmt = db.prepare(
+        "INSERT INTO api_keys (user_id, key_name, api_key) VALUES (?, ?, ?)",
+      );
       const result = stmt.run(userId, keyName, apiKey);
       return { id: result.lastInsertRowid, keyName, apiKey };
     } catch (err) {
@@ -215,7 +365,11 @@ const apiKeysDb = {
   // Get all API keys for a user
   getApiKeys: (userId) => {
     try {
-      const rows = db.prepare('SELECT id, key_name, api_key, created_at, last_used, is_active FROM api_keys WHERE user_id = ? ORDER BY created_at DESC').all(userId);
+      const rows = db
+        .prepare(
+          "SELECT id, key_name, api_key, created_at, last_used, is_active FROM api_keys WHERE user_id = ? ORDER BY created_at DESC",
+        )
+        .all(userId);
       return rows;
     } catch (err) {
       throw err;
@@ -225,16 +379,22 @@ const apiKeysDb = {
   // Validate API key and get user
   validateApiKey: (apiKey) => {
     try {
-      const row = db.prepare(`
+      const row = db
+        .prepare(
+          `
         SELECT u.id, u.username, ak.id as api_key_id
         FROM api_keys ak
         JOIN users u ON ak.user_id = u.id
         WHERE ak.api_key = ? AND ak.is_active = 1 AND u.is_active = 1
-      `).get(apiKey);
+      `,
+        )
+        .get(apiKey);
 
       if (row) {
         // Update last_used timestamp
-        db.prepare('UPDATE api_keys SET last_used = CURRENT_TIMESTAMP WHERE id = ?').run(row.api_key_id);
+        db.prepare(
+          "UPDATE api_keys SET last_used = CURRENT_TIMESTAMP WHERE id = ?",
+        ).run(row.api_key_id);
       }
 
       return row;
@@ -246,7 +406,9 @@ const apiKeysDb = {
   // Delete an API key
   deleteApiKey: (userId, apiKeyId) => {
     try {
-      const stmt = db.prepare('DELETE FROM api_keys WHERE id = ? AND user_id = ?');
+      const stmt = db.prepare(
+        "DELETE FROM api_keys WHERE id = ? AND user_id = ?",
+      );
       const result = stmt.run(apiKeyId, userId);
       return result.changes > 0;
     } catch (err) {
@@ -257,22 +419,38 @@ const apiKeysDb = {
   // Toggle API key active status
   toggleApiKey: (userId, apiKeyId, isActive) => {
     try {
-      const stmt = db.prepare('UPDATE api_keys SET is_active = ? WHERE id = ? AND user_id = ?');
+      const stmt = db.prepare(
+        "UPDATE api_keys SET is_active = ? WHERE id = ? AND user_id = ?",
+      );
       const result = stmt.run(isActive ? 1 : 0, apiKeyId, userId);
       return result.changes > 0;
     } catch (err) {
       throw err;
     }
-  }
+  },
 };
 
 // User credentials database operations (for GitHub tokens, GitLab tokens, etc.)
 const credentialsDb = {
   // Create a new credential
-  createCredential: (userId, credentialName, credentialType, credentialValue, description = null) => {
+  createCredential: (
+    userId,
+    credentialName,
+    credentialType,
+    credentialValue,
+    description = null,
+  ) => {
     try {
-      const stmt = db.prepare('INSERT INTO user_credentials (user_id, credential_name, credential_type, credential_value, description) VALUES (?, ?, ?, ?, ?)');
-      const result = stmt.run(userId, credentialName, credentialType, credentialValue, description);
+      const stmt = db.prepare(
+        "INSERT INTO user_credentials (user_id, credential_name, credential_type, credential_value, description) VALUES (?, ?, ?, ?, ?)",
+      );
+      const result = stmt.run(
+        userId,
+        credentialName,
+        credentialType,
+        credentialValue,
+        description,
+      );
       return { id: result.lastInsertRowid, credentialName, credentialType };
     } catch (err) {
       throw err;
@@ -282,15 +460,16 @@ const credentialsDb = {
   // Get all credentials for a user, optionally filtered by type
   getCredentials: (userId, credentialType = null) => {
     try {
-      let query = 'SELECT id, credential_name, credential_type, description, created_at, is_active FROM user_credentials WHERE user_id = ?';
+      let query =
+        "SELECT id, credential_name, credential_type, description, created_at, is_active FROM user_credentials WHERE user_id = ?";
       const params = [userId];
 
       if (credentialType) {
-        query += ' AND credential_type = ?';
+        query += " AND credential_type = ?";
         params.push(credentialType);
       }
 
-      query += ' ORDER BY created_at DESC';
+      query += " ORDER BY created_at DESC";
 
       const rows = db.prepare(query).all(...params);
       return rows;
@@ -302,7 +481,11 @@ const credentialsDb = {
   // Get active credential value for a user by type (returns most recent active)
   getActiveCredential: (userId, credentialType) => {
     try {
-      const row = db.prepare('SELECT credential_value FROM user_credentials WHERE user_id = ? AND credential_type = ? AND is_active = 1 ORDER BY created_at DESC LIMIT 1').get(userId, credentialType);
+      const row = db
+        .prepare(
+          "SELECT credential_value FROM user_credentials WHERE user_id = ? AND credential_type = ? AND is_active = 1 ORDER BY created_at DESC LIMIT 1",
+        )
+        .get(userId, credentialType);
       return row?.credential_value || null;
     } catch (err) {
       throw err;
@@ -312,7 +495,9 @@ const credentialsDb = {
   // Delete a credential
   deleteCredential: (userId, credentialId) => {
     try {
-      const stmt = db.prepare('DELETE FROM user_credentials WHERE id = ? AND user_id = ?');
+      const stmt = db.prepare(
+        "DELETE FROM user_credentials WHERE id = ? AND user_id = ?",
+      );
       const result = stmt.run(credentialId, userId);
       return result.changes > 0;
     } catch (err) {
@@ -323,32 +508,40 @@ const credentialsDb = {
   // Toggle credential active status
   toggleCredential: (userId, credentialId, isActive) => {
     try {
-      const stmt = db.prepare('UPDATE user_credentials SET is_active = ? WHERE id = ? AND user_id = ?');
+      const stmt = db.prepare(
+        "UPDATE user_credentials SET is_active = ? WHERE id = ? AND user_id = ?",
+      );
       const result = stmt.run(isActive ? 1 : 0, credentialId, userId);
       return result.changes > 0;
     } catch (err) {
       throw err;
     }
-  }
+  },
 };
 
 // Backward compatibility - keep old names pointing to new system
 const githubTokensDb = {
   createGithubToken: (userId, tokenName, githubToken, description = null) => {
-    return credentialsDb.createCredential(userId, tokenName, 'github_token', githubToken, description);
+    return credentialsDb.createCredential(
+      userId,
+      tokenName,
+      "github_token",
+      githubToken,
+      description,
+    );
   },
   getGithubTokens: (userId) => {
-    return credentialsDb.getCredentials(userId, 'github_token');
+    return credentialsDb.getCredentials(userId, "github_token");
   },
   getActiveGithubToken: (userId) => {
-    return credentialsDb.getActiveCredential(userId, 'github_token');
+    return credentialsDb.getActiveCredential(userId, "github_token");
   },
   deleteGithubToken: (userId, tokenId) => {
     return credentialsDb.deleteCredential(userId, tokenId);
   },
   toggleGithubToken: (userId, tokenId, isActive) => {
     return credentialsDb.toggleCredential(userId, tokenId, isActive);
-  }
+  },
 };
 
 export {
@@ -357,5 +550,5 @@ export {
   userDb,
   apiKeysDb,
   credentialsDb,
-  githubTokensDb // Backward compatibility
+  githubTokensDb, // Backward compatibility
 };
