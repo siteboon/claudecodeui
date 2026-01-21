@@ -234,18 +234,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = "agents" }) {
   // MCP API functions
   const fetchMcpServers = async () => {
     try {
-      // Try to read directly from config files for complete details
-      const configResponse = await authenticatedFetch("/api/mcp/config/read");
-
-      if (configResponse.ok) {
-        const configData = await configResponse.json();
-        if (configData.success && configData.servers) {
-          setMcpServers(configData.servers);
-          return;
-        }
-      }
-
-      // Fallback to Claude CLI
+      // Use Claude CLI to get live MCP server status
       const cliResponse = await authenticatedFetch("/api/mcp/cli/list");
 
       if (cliResponse.ok) {
@@ -253,10 +242,11 @@ function Settings({ isOpen, onClose, projects = [], initialTab = "agents" }) {
         if (cliData.success && cliData.servers) {
           // Convert CLI format to our format
           const servers = cliData.servers.map((server) => ({
-            id: server.name,
+            id: server.id || server.name,
             name: server.name,
             type: server.type,
             scope: "user",
+            status: server.status,
             config: {
               command: server.command || "",
               args: server.args || [],
@@ -265,10 +255,22 @@ function Settings({ isOpen, onClose, projects = [], initialTab = "agents" }) {
               headers: server.headers || {},
               timeout: 30000,
             },
+            description: server.description,
             created: new Date().toISOString(),
             updated: new Date().toISOString(),
           }));
           setMcpServers(servers);
+          return;
+        }
+      }
+
+      // Fallback to config file reading if CLI fails
+      const configResponse = await authenticatedFetch("/api/mcp/config/read");
+
+      if (configResponse.ok) {
+        const configData = await configResponse.json();
+        if (configData.success && configData.servers) {
+          setMcpServers(configData.servers);
           return;
         }
       }
