@@ -53,6 +53,7 @@ function Sidebar({
   onSessionDelete,
   onProjectDelete,
   isLoading,
+  loadingProgress,
   onRefresh,
   onShowSettings,
   updateAvailable,
@@ -668,6 +669,29 @@ function Sidebar({
               <p className="text-sm text-muted-foreground">
                 {t('projects.fetchingProjects')}
               </p>
+              <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">Loading projects...</h3>
+              {loadingProgress && loadingProgress.total > 0 ? (
+                <div className="space-y-2">
+                  <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+                    <div
+                      className="bg-primary h-full transition-all duration-300 ease-out"
+                      style={{ width: `${(loadingProgress.current / loadingProgress.total) * 100}%` }}
+                    />
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {loadingProgress.current}/{loadingProgress.total} projects
+                  </p>
+                  {loadingProgress.currentProject && (
+                    <p className="text-xs text-muted-foreground/70 truncate max-w-[200px] mx-auto" title={loadingProgress.currentProject}>
+                      {loadingProgress.currentProject.split('-').slice(-2).join('/')}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Fetching your Claude projects and sessions
+                </p>
+              )}
             </div>
           ) : projects.length === 0 ? (
             <div className="text-center py-12 md:py-8 px-4">
@@ -1168,11 +1192,11 @@ function Sidebar({
                                         {formatTimeAgo(sessionTime, currentTime, t)}
                                       </span>
                                       {messageCount > 0 && (
-                                        <Badge variant="secondary" className="text-xs px-1 py-0 ml-auto">
+                                        <Badge variant="secondary" className="text-xs px-1 py-0 ml-auto group-hover:opacity-0 transition-opacity">
                                           {messageCount}
                                         </Badge>
                                       )}
-                                      <span className="ml-1 opacity-70">
+                                      <span className="ml-1 opacity-70 group-hover:opacity-0 transition-opacity">
                                         {isCursorSession ? (
                                           <CursorLogo className="w-3 h-3" />
                                         ) : isCodexSession ? (
