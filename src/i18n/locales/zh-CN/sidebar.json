@@ -98,5 +98,14 @@
   },
   "version": {
     "updateAvailable": "有可用更新"
+  },
+  "deleteConfirmation": {
+    "deleteProject": "删除项目",
+    "deleteSession": "删除会话",
+    "confirmDelete": "您确定要删除",
+    "sessionCount": "此项目包含 {{count}} 个对话。",
+    "sessionCount_plural": "此项目包含 {{count}} 个对话。",
+    "allConversationsDeleted": "所有对话将被永久删除。",
+    "cannotUndo": "此操作无法撤销。"
   }
 }

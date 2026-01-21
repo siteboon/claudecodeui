@@ -521,10 +521,10 @@ function Sidebar({
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="text-lg font-semibold text-foreground mb-2">
-                    Delete Project
+                    {t('deleteConfirmation.deleteProject')}
                   </h3>
                   <p className="text-sm text-muted-foreground mb-1">
-                    Are you sure you want to delete{' '}
+                    {t('deleteConfirmation.confirmDelete')}{' '}
                     <span className="font-medium text-foreground">
                       {deleteConfirmation.project.displayName || deleteConfirmation.project.name}
                     </span>?
@@ -532,15 +532,15 @@ function Sidebar({
                   {deleteConfirmation.sessionCount > 0 && (
                     <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
                       <p className="text-sm text-red-700 dark:text-red-300 font-medium">
-                        This project contains {deleteConfirmation.sessionCount} conversation{deleteConfirmation.sessionCount > 1 ? 's' : ''}.
+                        {t('deleteConfirmation.sessionCount', { count: deleteConfirmation.sessionCount })}
                       </p>
                       <p className="text-xs text-red-600 dark:text-red-400 mt-1">
-                        All conversations will be permanently deleted.
+                        {t('deleteConfirmation.allConversationsDeleted')}
                       </p>
                     </div>
                   )}
                   <p className="text-xs text-muted-foreground mt-3">
-                    This action cannot be undone.
+                    {t('deleteConfirmation.cannotUndo')}
                   </p>
                 </div>
               </div>
@@ -551,7 +551,7 @@ function Sidebar({
                 className="flex-1"
                 onClick={() => setDeleteConfirmation(null)}
               >
-                Cancel
+                {t('actions.cancel')}
               </Button>
               <Button
                 variant="destructive"
@@ -559,7 +559,7 @@ function Sidebar({
                 onClick={confirmDeleteProject}
               >
                 <Trash2 className="w-4 h-4 mr-2" />
-                Delete
+                {t('actions.delete')}
               </Button>
             </div>
           </div>
@@ -578,16 +578,16 @@ function Sidebar({
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="text-lg font-semibold text-foreground mb-2">
-                    Delete Session
+                    {t('deleteConfirmation.deleteSession')}
                   </h3>
                   <p className="text-sm text-muted-foreground mb-1">
-                    Are you sure you want to delete{' '}
+                    {t('deleteConfirmation.confirmDelete')}{' '}
                     <span className="font-medium text-foreground">
                       {sessionDeleteConfirmation.sessionTitle}
                     </span>?
                   </p>
                   <p className="text-xs text-muted-foreground mt-3">
-                    This action cannot be undone.
+                    {t('deleteConfirmation.cannotUndo')}
                   </p>
                 </div>
               </div>
@@ -598,7 +598,7 @@ function Sidebar({
                 className="flex-1"
                 onClick={() => setSessionDeleteConfirmation(null)}
               >
-                Cancel
+                {t('actions.cancel')}
               </Button>
               <Button
                 variant="destructive"
@@ -606,7 +606,7 @@ function Sidebar({
                 onClick={confirmDeleteSession}
               >
                 <Trash2 className="w-4 h-4 mr-2" />
-                Delete
+                {t('actions.delete')}
               </Button>
             </div>
           </div>
