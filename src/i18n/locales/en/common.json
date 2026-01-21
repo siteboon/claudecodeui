@@ -170,21 +170,25 @@
       "usingStoredToken": "Using stored token:",
       "usingProvidedToken": "Using provided token",
       "noAuthentication": "No authentication",
+      "sshKey": "SSH Key",
       "existingInfo": "The workspace will be added to your project list and will be available for Claude/Cursor sessions.",
-      "newWithClone": "A new workspace will be created and the repository will be cloned from GitHub.",
-      "newEmpty": "An empty workspace directory will be created at the specified path."
+      "newWithClone": "The repository will be cloned from this folder.",
+      "newEmpty": "The workspace will be added to your project list and will be available for Claude/Cursor sessions.",
+      "cloningRepository": "Cloning repository..."
     },
     "buttons": {
       "cancel": "Cancel",
       "back": "Back",
       "next": "Next",
       "createProject": "Create Project",
-      "creating": "Creating..."
+      "creating": "Creating...",
+      "cloning": "Cloning..."
     },
     "errors": {
       "selectType": "Please select whether you have an existing workspace or want to create a new one",
       "providePath": "Please provide a workspace path",
-      "failedToCreate": "Failed to create workspace"
+      "failedToCreate": "Failed to create workspace",
+      "failedToCreateFolder": "Failed to create folder"
     }
   },
   "versionUpdate": {

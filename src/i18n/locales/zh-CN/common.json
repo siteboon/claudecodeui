@@ -170,21 +170,25 @@
       "usingStoredToken": "使用已保存的令牌：",
       "usingProvidedToken": "使用提供的令牌",
       "noAuthentication": "无身份验证",
+      "sshKey": "SSH 密钥",
       "existingInfo": "工作区将被添加到您的项目列表中，并可用于 Claude/Cursor 会话。",
-      "newWithClone": "将创建新工作区，并从 GitHub 克隆仓库。",
-      "newEmpty": "将在指定路径创建一个空的工作区目录。"
+      "newWithClone": "仓库将从此文件夹克隆。",
+      "newEmpty": "工作区将被添加到您的项目列表中，并可用于 Claude/Cursor 会话。",
+      "cloningRepository": "正在克隆仓库..."
     },
     "buttons": {
       "cancel": "取消",
       "back": "返回",
       "next": "下一步",
       "createProject": "创建项目",
-      "creating": "创建中..."
+      "creating": "创建中...",
+      "cloning": "正在克隆..."
     },
     "errors": {
       "selectType": "请选择您已有现有工作区还是想创建新工作区",
       "providePath": "请提供工作区路径",
-      "failedToCreate": "创建工作区失败"
+      "failedToCreate": "创建工作区失败",
+      "failedToCreateFolder": "创建文件夹失败"
     }
   },
   "versionUpdate": {
