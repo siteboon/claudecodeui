@@ -550,6 +550,34 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
     }
 });
 
+app.post('/api/create-folder', authenticateToken, async (req, res) => {
+    try {
+        const { path: folderPath } = req.body;
+        if (!folderPath) {
+            return res.status(400).json({ error: 'Path is required' });
+        }
+        const homeDir = os.homedir();
+        const targetPath = path.resolve(folderPath.replace('~', homeDir));
+        const parentDir = path.dirname(targetPath);
+        try {
+            await fs.promises.access(parentDir);
+        } catch (err) {
+            return res.status(404).json({ error: 'Parent directory does not exist' });
+        }
+        try {
+            await fs.promises.access(targetPath);
+            return res.status(409).json({ error: 'Folder already exists' });
+        } catch (err) {
+            // Folder doesn't exist, which is what we want
+        }
+        await fs.promises.mkdir(targetPath, { recursive: false });
+        res.json({ success: true, path: targetPath });
+    } catch (error) {
+        console.error('Error creating folder:', error);
+        res.status(500).json({ error: 'Failed to create folder' });
+    }
+});
+
 // Read file content endpoint
 app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) => {
     try {

@@ -37,7 +37,12 @@ const authenticateToken = async (req, res, next) => {
 
   // Normal OSS JWT validation
   const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+  let token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+
+  // Also check query param for SSE endpoints (EventSource can't set headers)
+  if (!token && req.query.token) {
+    token = req.query.token;
+  }
 
   if (!token) {
     return res.status(401).json({ error: 'Access denied. No token provided.' });

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, FolderPlus, GitBranch, Key, ChevronRight, ChevronLeft, Check, Loader2, AlertCircle, FolderOpen, Eye, EyeOff } from 'lucide-react';
+import { X, FolderPlus, GitBranch, Key, ChevronRight, ChevronLeft, Check, Loader2, AlertCircle, FolderOpen, Eye, EyeOff, Plus } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { api } from '../utils/api';
@@ -30,6 +30,10 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
   const [browserFolders, setBrowserFolders] = useState([]);
   const [loadingFolders, setLoadingFolders] = useState(false);
   const [showHiddenFolders, setShowHiddenFolders] = useState(false);
+  const [showNewFolderInput, setShowNewFolderInput] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [cloneProgress, setCloneProgress] = useState('');
 
   // Load available GitHub tokens when needed
   useEffect(() => {
@@ -78,9 +82,10 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
       const data = await response.json();
 
       if (data.suggestions) {
-        // Filter suggestions based on the input
+        // Filter suggestions based on the input, excluding exact match
         const filtered = data.suggestions.filter(s =>
-          s.path.toLowerCase().startsWith(inputPath.toLowerCase())
+          s.path.toLowerCase().startsWith(inputPath.toLowerCase()) &&
+          s.path.toLowerCase() !== inputPath.toLowerCase()
         );
         setPathSuggestions(filtered.slice(0, 5));
         setShowPathDropdown(filtered.length > 0);
@@ -118,23 +123,61 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
   const handleCreate = async () => {
     setIsCreating(true);
     setError(null);
+    setCloneProgress('');
 
     try {
+      if (workspaceType === 'new' && githubUrl) {
+        const params = new URLSearchParams({
+          path: workspacePath.trim(),
+          githubUrl: githubUrl.trim(),
+        });
+
+        if (tokenMode === 'stored' && selectedGithubToken) {
+          params.append('githubTokenId', selectedGithubToken);
+        } else if (tokenMode === 'new' && newGithubToken) {
+          params.append('newGithubToken', newGithubToken.trim());
+        }
+
+        const token = localStorage.getItem('auth-token');
+        const url = `/api/projects/clone-progress?${params}${token ? `&token=${token}` : ''}`;
+
+        await new Promise((resolve, reject) => {
+          const eventSource = new EventSource(url);
+
+          eventSource.onmessage = (event) => {
+            try {
+              const data = JSON.parse(event.data);
+
+              if (data.type === 'progress') {
+                setCloneProgress(data.message);
+              } else if (data.type === 'complete') {
+                eventSource.close();
+                if (onProjectCreated) {
+                  onProjectCreated(data.project);
+                }
+                onClose();
+                resolve();
+              } else if (data.type === 'error') {
+                eventSource.close();
+                reject(new Error(data.message));
+              }
+            } catch (e) {
+              console.error('Error parsing SSE event:', e);
+            }
+          };
+
+          eventSource.onerror = () => {
+            eventSource.close();
+            reject(new Error('Connection lost during clone'));
+          };
+        });
+        return;
+      }
+
       const payload = {
         workspaceType,
         path: workspacePath.trim(),
       };
-
-      // Add GitHub info if creating new workspace with GitHub URL
-      if (workspaceType === 'new' && githubUrl) {
-        payload.githubUrl = githubUrl.trim();
-
-        if (tokenMode === 'stored' && selectedGithubToken) {
-          payload.githubTokenId = parseInt(selectedGithubToken);
-        } else if (tokenMode === 'new' && newGithubToken) {
-          payload.newGithubToken = newGithubToken.trim();
-        }
-      }
 
       const response = await api.createWorkspace(payload);
       const data = await response.json();
@@ -143,7 +186,6 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
         throw new Error(data.error || t('projectWizard.errors.failedToCreate'));
       }
 
-      // Success!
       if (onProjectCreated) {
         onProjectCreated(data.project);
       }
@@ -191,6 +233,29 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
 
   const navigateToFolder = async (folderPath) => {
     await loadBrowserFolders(folderPath);
+  };
+
+  const createNewFolder = async () => {
+    if (!newFolderName.trim()) return;
+    setCreatingFolder(true);
+    setError(null);
+    try {
+      const separator = browserCurrentPath.includes('\\') ? '\\' : '/';
+      const folderPath = `${browserCurrentPath}${separator}${newFolderName.trim()}`;
+      const response = await api.createFolder(folderPath);
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || t('projectWizard.errors.failedToCreateFolder', 'Failed to create folder'));
+      }
+      setNewFolderName('');
+      setShowNewFolderInput(false);
+      await loadBrowserFolders(data.path || folderPath);
+    } catch (error) {
+      console.error('Error creating folder:', error);
+      setError(error.message || t('projectWizard.errors.failedToCreateFolder', 'Failed to create folder'));
+    } finally {
+      setCreatingFolder(false);
+    }
   };
 
   return (
@@ -388,8 +453,8 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
                     </p>
                   </div>
 
-                  {/* GitHub Token (only if GitHub URL is provided) */}
-                  {githubUrl && (
+                  {/* GitHub Token (only for HTTPS URLs - SSH uses SSH keys) */}
+                  {githubUrl && !githubUrl.startsWith('git@') && !githubUrl.startsWith('ssh://') && (
                     <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
                       <div className="flex items-start gap-3 mb-4">
                         <Key className="w-5 h-5 text-gray-600 dark:text-gray-400 flex-shrink-0 mt-0.5" />
@@ -551,6 +616,8 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
                             ? `${t('projectWizard.step3.usingStoredToken')} ${availableTokens.find(t => t.id.toString() === selectedGithubToken)?.credential_name || 'Unknown'}`
                             : tokenMode === 'new' && newGithubToken
                             ? t('projectWizard.step3.usingProvidedToken')
+                            : (githubUrl.startsWith('git@') || githubUrl.startsWith('ssh://'))
+                            ? t('projectWizard.step3.sshKey', 'SSH Key')
                             : t('projectWizard.step3.noAuthentication')}
                         </span>
                       </div>
@@ -560,13 +627,22 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
               </div>
 
               <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
-                <p className="text-sm text-blue-800 dark:text-blue-200">
-                  {workspaceType === 'existing'
-                    ? t('projectWizard.step3.existingInfo')
-                    : githubUrl
-                    ? t('projectWizard.step3.newWithClone')
-                    : t('projectWizard.step3.newEmpty')}
-                </p>
+                {isCreating && cloneProgress ? (
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-blue-800 dark:text-blue-200">{t('projectWizard.step3.cloningRepository', 'Cloning repository...')}</p>
+                    <code className="block text-xs font-mono text-blue-700 dark:text-blue-300 whitespace-pre-wrap break-all">
+                      {cloneProgress}
+                    </code>
+                  </div>
+                ) : (
+                  <p className="text-sm text-blue-800 dark:text-blue-200">
+                    {workspaceType === 'existing'
+                      ? t('projectWizard.step3.existingInfo')
+                      : githubUrl
+                      ? t('projectWizard.step3.newWithClone')
+                      : t('projectWizard.step3.newEmpty')}
+                  </p>
+                )}
               </div>
             </div>
           )}
@@ -596,7 +672,7 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
             {isCreating ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                {t('projectWizard.buttons.creating')}
+                {githubUrl ? t('projectWizard.buttons.cloning', 'Cloning...') : t('projectWizard.buttons.creating')}
               </>
             ) : step === 3 ? (
               <>
@@ -640,6 +716,17 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
                   {showHiddenFolders ? <Eye className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
                 </button>
                 <button
+                  onClick={() => setShowNewFolderInput(!showNewFolderInput)}
+                  className={`p-2 rounded-md transition-colors ${
+                    showNewFolderInput
+                      ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30'
+                      : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  }`}
+                  title="Create new folder"
+                >
+                  <Plus className="w-5 h-5" />
+                </button>
+                <button
                   onClick={() => setShowFolderBrowser(false)}
                   className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
                 >
@@ -647,6 +734,46 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
                 </button>
               </div>
             </div>
+
+            {/* New Folder Input */}
+            {showNewFolderInput && (
+              <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-blue-50 dark:bg-blue-900/20">
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="text"
+                    value={newFolderName}
+                    onChange={(e) => setNewFolderName(e.target.value)}
+                    placeholder="New folder name"
+                    className="flex-1"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') createNewFolder();
+                      if (e.key === 'Escape') {
+                        setShowNewFolderInput(false);
+                        setNewFolderName('');
+                      }
+                    }}
+                    autoFocus
+                  />
+                  <Button
+                    size="sm"
+                    onClick={createNewFolder}
+                    disabled={!newFolderName.trim() || creatingFolder}
+                  >
+                    {creatingFolder ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Create'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setShowNewFolderInput(false);
+                      setNewFolderName('');
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {/* Folder List */}
             <div className="flex-1 overflow-y-auto p-4">
@@ -699,7 +826,7 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => selectFolder(folder.path, true)}
+                          onClick={() => selectFolder(folder.path, workspaceType === 'existing')}
                           className="text-xs px-3"
                         >
                           Select
@@ -722,13 +849,17 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
               <div className="flex items-center justify-end gap-2 p-4">
                 <Button
                   variant="outline"
-                  onClick={() => setShowFolderBrowser(false)}
+                  onClick={() => {
+                    setShowFolderBrowser(false);
+                    setShowNewFolderInput(false);
+                    setNewFolderName('');
+                  }}
                 >
                   Cancel
                 </Button>
                 <Button
                   variant="outline"
-                  onClick={() => selectFolder(browserCurrentPath, true)}
+                  onClick={() => selectFolder(browserCurrentPath, workspaceType === 'existing')}
                 >
                   Use this folder
                 </Button>
