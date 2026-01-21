@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Brain, Zap, Sparkles, Atom, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 const thinkingModes = [
   {
@@ -45,6 +46,24 @@ const thinkingModes = [
 ];
 
 function ThinkingModeSelector({ selectedMode, onModeChange, onClose, className = '' }) {
+  const { t } = useTranslation('chat');
+
+  // Mapping from mode ID to translation key
+  const modeKeyMap = {
+    'think-hard': 'thinkHard',
+    'think-harder': 'thinkHarder'
+  };
+  // Create translated modes for display
+  const translatedModes = thinkingModes.map(mode => {
+    const modeKey = modeKeyMap[mode.id] || mode.id;
+    return {
+      ...mode,
+      name: t(`thinkingMode.modes.${modeKey}.name`),
+      description: t(`thinkingMode.modes.${modeKey}.description`),
+      prefix: t(`thinkingMode.modes.${modeKey}.prefix`)
+    };
+  });
+
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
 
@@ -60,7 +79,7 @@ function ThinkingModeSelector({ selectedMode, onModeChange, onClose, className =
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [onClose]);
 
-  const currentMode = thinkingModes.find(mode => mode.id === selectedMode) || thinkingModes[0];
+  const currentMode = translatedModes.find(mode => mode.id === selectedMode) || translatedModes[0];
   const IconComponent = currentMode.icon || Brain;
 
   return (
@@ -69,11 +88,11 @@ function ThinkingModeSelector({ selectedMode, onModeChange, onClose, className =
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         className={`w-10 h-10 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all duration-200 ${
-          selectedMode === 'none' 
-            ? 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600' 
+          selectedMode === 'none'
+            ? 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600'
             : 'bg-blue-100 hover:bg-blue-200 dark:bg-blue-900 dark:hover:bg-blue-800'
         }`}
-        title={`Thinking mode: ${currentMode.name}`}
+        title={t('thinkingMode.buttonTitle', { mode: currentMode.name })}
       >
         <IconComponent className={`w-5 h-5 ${currentMode.color}`} />
       </button>
@@ -83,7 +102,7 @@ function ThinkingModeSelector({ selectedMode, onModeChange, onClose, className =
           <div className="p-3 border-b border-gray-200 dark:border-gray-700">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
-                Thinking Mode
+                {t('thinkingMode.selector.title')}
               </h3>
               <button
                 onClick={() => {
@@ -96,12 +115,12 @@ function ThinkingModeSelector({ selectedMode, onModeChange, onClose, className =
               </button>
             </div>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              Extended thinking gives Claude more time to evaluate alternatives
+              {t('thinkingMode.selector.description')}
             </p>
           </div>
-          
+
           <div className="py-1">
-            {thinkingModes.map((mode) => {
+            {translatedModes.map((mode) => {
               const ModeIcon = mode.icon;
               const isSelected = mode.id === selectedMode;
               
@@ -130,7 +149,7 @@ function ThinkingModeSelector({ selectedMode, onModeChange, onClose, className =
                         </span>
                         {isSelected && (
                           <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded">
-                            Active
+                            {t('thinkingMode.selector.active')}
                           </span>
                         )}
                       </div>
@@ -148,10 +167,10 @@ function ThinkingModeSelector({ selectedMode, onModeChange, onClose, className =
               );
             })}
           </div>
-          
+
           <div className="p-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
             <p className="text-xs text-gray-600 dark:text-gray-400">
-              <strong>Tip:</strong> Higher thinking modes take more time but provide more thorough analysis
+              <strong>Tip:</strong> {t('thinkingMode.selector.tip')}
             </p>
           </div>
         </div>
