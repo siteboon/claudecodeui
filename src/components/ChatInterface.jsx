@@ -36,6 +36,7 @@ import ClaudeStatus from './ClaudeStatus';
 import TokenUsagePie from './TokenUsagePie';
 import { MicButton } from './MicButton.jsx';
 import { api, authenticatedFetch } from '../utils/api';
+import ThinkingModeSelector, { thinkingModes } from './ThinkingModeSelector.jsx';
 import Fuse from 'fuse.js';
 import CommandMenu from './CommandMenu';
 import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '../../shared/modelConstants';
@@ -1922,6 +1923,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [slashPosition, setSlashPosition] = useState(-1);
   const [visibleMessageCount, setVisibleMessageCount] = useState(100);
   const [claudeStatus, setClaudeStatus] = useState(null);
+  const [thinkingMode, setThinkingMode] = useState('none');
   const [provider, setProvider] = useState(() => {
     return localStorage.getItem('selected-provider') || 'claude';
   });
@@ -4264,6 +4266,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     e.preventDefault();
     if (!input.trim() || isLoading || !selectedProject) return;
 
+    // Apply thinking mode prefix if selected
+    let messageContent = input;
+    const selectedThinkingMode = thinkingModes.find(mode => mode.id === thinkingMode);
+    if (selectedThinkingMode && selectedThinkingMode.prefix) {
+      messageContent = `${selectedThinkingMode.prefix}: ${input}`;
+    }
+
     // Upload images first if any
     let uploadedImages = [];
     if (attachedImages.length > 0) {
@@ -4403,6 +4412,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     setUploadingImages(new Map());
     setImageErrors(new Map());
     setIsTextareaExpanded(false);
+    setThinkingMode('none'); // Reset thinking mode after sending
 
     // Reset textarea height
     if (textareaRef.current) {
@@ -5218,6 +5228,17 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 </span>
               </div>
             </button>
+            
+              {/* Thinking Mode Selector */}
+              {
+                provider === 'claude' && (
+
+                  <ThinkingModeSelector
+                    selectedMode={thinkingMode}
+                    onModeChange={setThinkingMode}
+                    className=""
+                  />
+                )}
             {/* Token usage pie chart - positioned next to mode indicator */}
             <TokenUsagePie
               used={tokenBudget?.used || 0}
