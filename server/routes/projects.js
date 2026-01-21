@@ -238,16 +238,29 @@ router.post('/create-workspace', async (req, res) => {
         const repoName = normalizedUrl.split('/').pop() || 'repository';
         const clonePath = path.join(absolutePath, repoName);
 
+        // Check if clone destination already exists to prevent data loss
+        try {
+          await fs.access(clonePath);
+          return res.status(409).json({
+            error: 'Directory already exists',
+            details: `The destination path "${clonePath}" already exists. Please choose a different location or remove the existing directory.`
+          });
+        } catch (err) {
+          // Directory doesn't exist, which is what we want
+        }
+
         // Clone the repository into a subfolder
         try {
           await cloneGitHubRepository(githubUrl, clonePath, githubToken);
         } catch (error) {
-          // Clean up created directory on failure
+          // Only clean up if clone created partial data (check if dir exists and is empty or partial)
           try {
-            await fs.rm(clonePath, { recursive: true, force: true });
+            const stats = await fs.stat(clonePath);
+            if (stats.isDirectory()) {
+              await fs.rm(clonePath, { recursive: true, force: true });
+            }
           } catch (cleanupError) {
-            console.error('Failed to clean up directory after clone failure:', cleanupError);
-            // Continue to throw original error
+            // Directory doesn't exist or cleanup failed - ignore
           }
           throw new Error(`Failed to clone repository: ${error.message}`);
         }
@@ -351,6 +364,16 @@ router.get('/clone-progress', async (req, res) => {
     const normalizedUrl = githubUrl.replace(/\/+$/, '').replace(/\.git$/, '');
     const repoName = normalizedUrl.split('/').pop() || 'repository';
     const clonePath = path.join(absolutePath, repoName);
+
+    // Check if clone destination already exists to prevent data loss
+    try {
+      await fs.access(clonePath);
+      sendEvent('error', { message: `Directory "${repoName}" already exists. Please choose a different location or remove the existing directory.` });
+      res.end();
+      return;
+    } catch (err) {
+      // Directory doesn't exist, which is what we want
+    }
 
     let cloneUrl = githubUrl;
     if (githubToken) {

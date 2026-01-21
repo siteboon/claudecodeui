@@ -584,8 +584,15 @@ app.post('/api/create-folder', authenticateToken, async (req, res) => {
         } catch (err) {
             // Folder doesn't exist, which is what we want
         }
-        await fs.promises.mkdir(targetPath, { recursive: false });
-        res.json({ success: true, path: targetPath });
+        try {
+            await fs.promises.mkdir(targetPath, { recursive: false });
+            res.json({ success: true, path: targetPath });
+        } catch (mkdirError) {
+            if (mkdirError.code === 'EEXIST') {
+                return res.status(409).json({ error: 'Folder already exists' });
+            }
+            throw mkdirError;
+        }
     } catch (error) {
         console.error('Error creating folder:', error);
         res.status(500).json({ error: 'Failed to create folder' });
