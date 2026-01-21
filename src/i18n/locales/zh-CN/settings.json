@@ -168,7 +168,7 @@
   },
   "git": {
     "title": "Git 配置",
-    "description": "配置您的 git 提交身份。这些设置将通过 <code />git config --global<code /> 全局应用",
+    "description": "配置您的 git 提交身份。这些设置将通过 git config --global 全局应用",
     "name": {
       "label": "Git 名称",
       "help": "您的 git 提交名称"

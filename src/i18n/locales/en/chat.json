@@ -61,7 +61,7 @@
   "permissions": {
     "grant": "Grant permission for {{tool}}",
     "added": "Permission added",
-    "addTo": "Adds <span class=\"font-mono\">{{entry}}</span> to Allowed Tools.",
+    "addTo": "Adds {{entry}} to Allowed Tools.",
     "retry": "Permission saved. Retry the request to use the tool.",
     "error": "Unable to update permissions. Please try again.",
     "openSettings": "Open settings"

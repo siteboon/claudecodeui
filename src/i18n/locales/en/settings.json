@@ -168,7 +168,7 @@
   },
   "git": {
     "title": "Git Configuration",
-    "description": "Configure your git identity for commits. These settings will be applied globally via <code />git config --global<code />",
+    "description": "Configure your git identity for commits. These settings will be applied globally via git config --global",
     "name": {
       "label": "Git Name",
       "help": "Your name for git commits"

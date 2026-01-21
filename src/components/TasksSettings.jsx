@@ -65,7 +65,7 @@ function TasksSettings() {
                       <ol className="list-decimal list-inside space-y-1 text-xs">
                         <li>{t('tasks.notInstalled.steps.restart')}</li>
                         <li>{t('tasks.notInstalled.steps.autoAvailable')}</li>
-                        <li>Use <code className="bg-orange-100 dark:bg-orange-800 px-1 rounded">task-master init</code> {t('tasks.notInstalled.steps.initCommand')}</li>
+                        <li>{t('tasks.notInstalled.steps.initCommand')}</li>
                       </ol>
                     </div>
                   </div>
