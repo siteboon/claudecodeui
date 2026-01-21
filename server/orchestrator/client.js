@@ -104,13 +104,17 @@ export class OrchestratorClient extends EventEmitter {
       this.shouldReconnect = true;
 
       try {
-        // Build connection URL with client_id for hibernation-aware tagging
+        // Build connection URL with token and client_id
+        // This allows ORCHESTRATOR_URL to just be the base URL (e.g., wss://host/ws/connect)
+        // and the token from ORCHESTRATOR_TOKEN is automatically appended
         const connectionUrl = new URL(this.config.url);
+        connectionUrl.searchParams.set("token", this.config.token);
         connectionUrl.searchParams.set("client_id", this.config.clientId);
         const urlString = connectionUrl.toString();
 
+        // Log connection without exposing token
         console.log(
-          `[ORCHESTRATOR] Connecting to ${urlString} as ${this.config.clientId}`,
+          `[ORCHESTRATOR] Connecting to ${this.config.url} as ${this.config.clientId}`,
         );
         this.ws = new WebSocket(urlString);
 
