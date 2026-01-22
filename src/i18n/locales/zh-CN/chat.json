@@ -143,5 +143,37 @@
       }
     },
     "buttonTitle": "思考模式：{{mode}}"
+  },
+  "providerSelection": {
+    "title": "选择您的 AI 助手",
+    "description": "选择一个供应商以开始新对话",
+    "selectModel": "选择模型",
+    "providerInfo": {
+      "anthropic": "Anthropic",
+      "openai": "OpenAI",
+      "cursorEditor": "AI 代码编辑器"
+    },
+    "readyPrompt": {
+      "claude": "已准备好使用 Claude {{model}}。在下方输入您的消息。",
+      "cursor": "已准备好使用 Cursor {{model}}。在下方输入您的消息。",
+      "codex": "已准备好使用 Codex {{model}}。在下方输入您的消息。",
+      "default": "请在上方选择一个供应商以开始"
+    }
+  },
+  "session": {
+    "continue": {
+      "title": "继续您的对话",
+      "description": "询问有关代码的问题、请求更改或获取开发任务的帮助"
+    },
+    "loading": {
+      "olderMessages": "正在加载更早的消息...",
+      "sessionMessages": "正在加载会话消息..."
+    },
+    "messages": {
+      "showingOf": "显示 {{shown}} / {{total}} 条消息",
+      "scrollToLoad": "向上滚动以加载更多",
+      "showingLast": "显示最近 {{count}} 条消息（共 {{total}} 条）",
+      "loadEarlier": "加载更早的消息"
+    }
   }
 }
