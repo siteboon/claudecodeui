@@ -44,6 +44,7 @@ import i18n from './i18n/config.js';
 function AppContent() {
   const navigate = useNavigate();
   const { sessionId } = useParams();
+  const { t } = useTranslation('common');
   
   const { updateAvailable, latestVersion, currentVersion, releaseInfo } = useVersionCheck('siteboon', 'claudecodeui');
   const [showVersionModal, setShowVersionModal] = useState(false);
