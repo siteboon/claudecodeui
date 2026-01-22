@@ -199,6 +199,7 @@
     "startSession": "启动新的 Claude 会话",
     "resumeSession": "恢复会话：{{displayName}}...",
     "runCommand": "在 {{projectName}} 中运行 {{command}}",
-    "startCli": "在 {{projectName}} 中启动 Claude CLI"
+    "startCli": "在 {{projectName}} 中启动 Claude CLI",
+    "defaultCommand": "命令"
   }
 }
