@@ -53,7 +53,6 @@ import http from 'http';
 import cors from 'cors';
 import { promises as fsPromises } from 'fs';
 import { spawn } from 'child_process';
-import pty from 'node-pty';
 import fetch from 'node-fetch';
 import mime from 'mime-types';
 
@@ -76,6 +75,16 @@ import userRoutes from './routes/user.js';
 import codexRoutes from './routes/codex.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
+
+let ptyModulePromise = null;
+async function getPtyModule() {
+    if (!ptyModulePromise) {
+        ptyModulePromise = import('node-pty')
+            .then((mod) => mod?.default || mod)
+            .catch(() => null);
+    }
+    return ptyModulePromise;
+}
 
 // File system watcher for projects folder
 let projectsWatcher = null;
@@ -1051,7 +1060,16 @@ function handleShellConnection(ws) {
                     const termRows = data.rows || 24;
                     console.log('📐 Using terminal dimensions:', termCols, 'x', termRows);
 
-                    shellProcess = pty.spawn(shell, shellArgs, {
+                    const ptyModule = await getPtyModule();
+                    if (!ptyModule) {
+                        ws.send(JSON.stringify({
+                            type: 'output',
+                            data: '[ERROR] node-pty is not available, cannot start an interactive terminal. Please use Node.js 20 and reinstall dependencies with C++ Build Tools available, or skip the terminal feature.\r\n[错误] node-pty 不可用，无法启动交互终端。请使用 Node.js 20 并在具备 C++ Build Tools 的环境重新安装依赖，或跳过终端功能。'
+                        }));
+                        return;
+                    }
+
+                    shellProcess = ptyModule.spawn(shell, shellArgs, {
                         name: 'xterm-256color',
                         cols: termCols,
                         rows: termRows,

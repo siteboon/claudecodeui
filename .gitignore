@@ -95,6 +95,10 @@ temp/
 # Vite
 .vite/
 
+# Local toolchains / installers
+.node/
+node-v*-win-*.zip
+
 # Local Netlify folder
 .netlify
 
