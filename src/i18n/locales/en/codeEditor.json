@@ -1,0 +1,30 @@
+{
+  "toolbar": {
+    "changes": "changes",
+    "previousChange": "Previous change",
+    "nextChange": "Next change",
+    "hideDiff": "Hide diff highlighting",
+    "showDiff": "Show diff highlighting",
+    "settings": "Editor Settings",
+    "collapse": "Collapse editor",
+    "expand": "Expand editor to full width"
+  },
+  "loading": "Loading {{fileName}}...",
+  "header": {
+    "showingChanges": "Showing changes"
+  },
+  "actions": {
+    "download": "Download file",
+    "save": "Save",
+    "saving": "Saving...",
+    "saved": "Saved!",
+    "exitFullscreen": "Exit fullscreen",
+    "fullscreen": "Fullscreen",
+    "close": "Close"
+  },
+  "footer": {
+    "lines": "Lines:",
+    "characters": "Characters:",
+    "shortcuts": "Press Ctrl+S to save • Esc to close"
+  }
+}

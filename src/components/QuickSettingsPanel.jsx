@@ -233,8 +233,8 @@ const QuickSettingsPanel = ({
           isDragging ? 'cursor-grabbing' : 'cursor-pointer'
         } touch-none`}
         style={{ ...getPositionStyle(), touchAction: 'none', WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
-        aria-label={isDragging ? 'Dragging handle' : localIsOpen ? 'Close settings panel' : 'Open settings panel'}
-        title={isDragging ? 'Dragging...' : 'Click to toggle, drag to move'}
+        aria-label={isDragging ? t('quickSettings.dragHandle.dragging') : localIsOpen ? t('quickSettings.dragHandle.closePanel') : t('quickSettings.dragHandle.openPanel')}
+        title={isDragging ? t('quickSettings.dragHandle.draggingStatus') : t('quickSettings.dragHandle.toggleAndMove')}
       >
         {isDragging ? (
           <GripVertical className="h-5 w-5 text-blue-500 dark:text-blue-400" />
@@ -383,10 +383,10 @@ const QuickSettingsPanel = ({
                   <div className="ml-3 flex-1">
                     <span className="flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-white">
                       <Mic className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                      Default Mode
+                      {t('quickSettings.whisper.modes.default')}
                     </span>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      Direct transcription of your speech
+                      {t('quickSettings.whisper.modes.defaultDescription')}
                     </p>
                   </div>
                 </label>
@@ -407,10 +407,10 @@ const QuickSettingsPanel = ({
                   <div className="ml-3 flex-1">
                     <span className="flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-white">
                       <Sparkles className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                      Prompt Enhancement
+                      {t('quickSettings.whisper.modes.prompt')}
                     </span>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      Transform rough ideas into clear, detailed AI prompts
+                      {t('quickSettings.whisper.modes.promptDescription')}
                     </p>
                   </div>
                 </label>
@@ -431,10 +431,10 @@ const QuickSettingsPanel = ({
                   <div className="ml-3 flex-1">
                     <span className="flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-white">
                       <FileText className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                      Vibe Mode
+                      {t('quickSettings.whisper.modes.vibe')}
                     </span>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      Format ideas as clear agent instructions with details
+                      {t('quickSettings.whisper.modes.vibeDescription')}
                     </p>
                   </div>
                 </label>
