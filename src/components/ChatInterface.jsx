@@ -4393,7 +4393,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       // Send Claude command (existing code)
       sendMessage({
         type: 'claude-command',
-        command: input,
+        command: messageContent,
         options: {
           projectPath: selectedProject.path,
           cwd: selectedProject.fullPath,
