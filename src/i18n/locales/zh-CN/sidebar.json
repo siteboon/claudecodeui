@@ -14,6 +14,7 @@
     "newSession": "新会话",
     "codexSession": "Codex 会话",
     "fetchingProjects": "正在获取您的 Claude 项目和会话",
+    "projects": "项目",
     "noMatchingProjects": "未找到匹配的项目",
     "tryDifferentSearch": "尝试调整您的搜索词",
     "runClaudeCli": "在项目目录中运行 Claude CLI 以开始使用"

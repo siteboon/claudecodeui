@@ -669,7 +669,7 @@ function Sidebar({
               <p className="text-sm text-muted-foreground">
                 {t('projects.fetchingProjects')}
               </p>
-              <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">Loading projects...</h3>
+              <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">{t('projects.loadingProjects')}</h3>
               {loadingProgress && loadingProgress.total > 0 ? (
                 <div className="space-y-2">
                   <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
@@ -679,7 +679,7 @@ function Sidebar({
                     />
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    {loadingProgress.current}/{loadingProgress.total} projects
+                    {loadingProgress.current}/{loadingProgress.total} {t('projects.projects')}
                   </p>
                   {loadingProgress.currentProject && (
                     <p className="text-xs text-muted-foreground/70 truncate max-w-[200px] mx-auto" title={loadingProgress.currentProject}>
@@ -689,7 +689,7 @@ function Sidebar({
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  Fetching your Claude projects and sessions
+                  {t('projects.fetchingProjects')}
                 </p>
               )}
             </div>
