@@ -9,6 +9,7 @@ const thinkingModes = [
     description: 'Regular Claude response',
     icon: null,
     prefix: '',
+    budgetTokens: null,
     color: 'text-gray-600'
   },
   {
@@ -17,6 +18,7 @@ const thinkingModes = [
     description: 'Basic extended thinking',
     icon: Brain,
     prefix: 'think',
+    budgetTokens: 10000,
     color: 'text-blue-600'
   },
   {
@@ -25,6 +27,7 @@ const thinkingModes = [
     description: 'More thorough evaluation',
     icon: Zap,
     prefix: 'think hard',
+    budgetTokens: 31999,
     color: 'text-purple-600'
   },
   {
@@ -33,6 +36,7 @@ const thinkingModes = [
     description: 'Deep analysis with alternatives',
     icon: Sparkles,
     prefix: 'think harder',
+    budgetTokens: 64000,
     color: 'text-indigo-600'
   },
   {
@@ -41,6 +45,7 @@ const thinkingModes = [
     description: 'Maximum thinking budget',
     icon: Atom,
     prefix: 'ultrathink',
+    budgetTokens: 128000,
     color: 'text-red-600'
   }
 ];

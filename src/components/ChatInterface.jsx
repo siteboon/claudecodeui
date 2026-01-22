@@ -4266,12 +4266,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     e.preventDefault();
     if (!input.trim() || isLoading || !selectedProject) return;
 
-    // Apply thinking mode prefix if selected
-    let messageContent = input;
+    // Get thinking mode budget tokens for extended thinking
     const selectedThinkingMode = thinkingModes.find(mode => mode.id === thinkingMode);
-    if (selectedThinkingMode && selectedThinkingMode.prefix) {
-      messageContent = `${selectedThinkingMode.prefix}: ${input}`;
-    }
+    const maxThinkingTokens = selectedThinkingMode?.budgetTokens || null;
 
     // Upload images first if any
     let uploadedImages = [];
@@ -4402,7 +4399,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           toolsSettings: toolsSettings,
           permissionMode: permissionMode,
           model: claudeModel,
-          images: uploadedImages // Pass images to backend
+          images: uploadedImages,
+          maxThinkingTokens: maxThinkingTokens
         }
       });
     }

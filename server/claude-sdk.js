@@ -201,6 +201,12 @@ function mapCliOptionsToSDK(options = {}) {
   sdkOptions.model = options.model || CLAUDE_MODELS.DEFAULT;
   console.log(`Using model: ${sdkOptions.model}`);
 
+  // Map maxThinkingTokens for extended thinking
+  if (options.maxThinkingTokens && typeof options.maxThinkingTokens === 'number') {
+    sdkOptions.maxThinkingTokens = options.maxThinkingTokens;
+    console.log(`Using maxThinkingTokens: ${sdkOptions.maxThinkingTokens}`);
+  }
+
   // Map system prompt configuration
   sdkOptions.systemPrompt = {
     type: 'preset',
