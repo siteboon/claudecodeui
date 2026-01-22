@@ -1,5 +1,5 @@
 {
-  "name": "@siteboon/claude-code-ui",
+  "name": "@epiphytic/claudecodeui",
   "version": "1.13.6",
   "description": "A web-based UI for Claude Code CLI",
   "type": "module",
@@ -17,10 +17,13 @@
   "homepage": "https://claudecodeui.siteboon.ai",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/siteboon/claudecodeui.git"
+    "url": "git+https://github.com/Epiphytic/claudecodeui.git"
   },
   "bugs": {
-    "url": "https://github.com/siteboon/claudecodeui/issues"
+    "url": "https://github.com/Epiphytic/claudecodeui/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "dev": "concurrently --kill-others \"npm run server\" \"npm run client\"",
