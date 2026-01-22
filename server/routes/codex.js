@@ -8,6 +8,85 @@ import { getCodexSessions, getCodexSessionMessages, deleteCodexSession } from '.
 
 const router = express.Router();
 
+router.get('/health', async (req, res) => {
+  const codexSessionsDir = path.join(os.homedir(), '.codex', 'sessions');
+
+  const result = {
+    success: true,
+    cli: { installed: false, version: null, error: null },
+    sessions: { dir: codexSessionsDir, exists: false, totalJsonl: 0, recent: [] },
+    env: {
+      OPENAI_API_KEY: Boolean(process.env.OPENAI_API_KEY),
+      OPENAI_BASE_URL: Boolean(process.env.OPENAI_BASE_URL),
+      OPENAI_ORG_ID: Boolean(process.env.OPENAI_ORG_ID)
+    }
+  };
+
+  // CLI availability
+  await new Promise((resolve) => {
+    const proc = spawn('codex', ['--version'], { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    proc.stdout?.on('data', (d) => { stdout += d.toString(); });
+    proc.stderr?.on('data', (d) => { stderr += d.toString(); });
+    proc.on('close', (code) => {
+      if (code === 0) {
+        result.cli.installed = true;
+        result.cli.version = stdout.trim() || null;
+      } else {
+        result.cli.error = stderr.trim() || `Exited with code ${code}`;
+      }
+      resolve();
+    });
+    proc.on('error', (error) => {
+      result.cli.error = error?.code === 'ENOENT' ? 'Codex CLI not installed' : error.message;
+      resolve();
+    });
+  });
+
+  // Sessions directory stats (best-effort)
+  try {
+    await fs.access(codexSessionsDir);
+    result.sessions.exists = true;
+
+    const findJsonlFiles = async (dir) => {
+      const files = [];
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          files.push(...await findJsonlFiles(fullPath));
+        } else if (entry.name.endsWith('.jsonl')) {
+          files.push(fullPath);
+        }
+      }
+      return files;
+    };
+
+    const jsonlFiles = await findJsonlFiles(codexSessionsDir);
+    result.sessions.totalJsonl = jsonlFiles.length;
+
+    const stats = await Promise.all(jsonlFiles.map(async (file) => {
+      try {
+        const st = await fs.stat(file);
+        return { file, mtimeMs: st.mtimeMs };
+      } catch {
+        return null;
+      }
+    }));
+
+    result.sessions.recent = stats
+      .filter(Boolean)
+      .sort((a, b) => b.mtimeMs - a.mtimeMs)
+      .slice(0, 5)
+      .map((s) => ({ file: s.file, mtime: new Date(s.mtimeMs).toISOString() }));
+  } catch {
+    // ignore
+  }
+
+  res.json(result);
+});
+
 function createCliResponder(res) {
   let responded = false;
   return (status, payload) => {

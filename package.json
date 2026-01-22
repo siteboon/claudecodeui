@@ -79,7 +79,6 @@
     "mime-types": "^3.0.1",
     "multer": "^2.0.1",
     "node-fetch": "^2.7.0",
-    "node-pty": "^1.1.0-beta34",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-dropzone": "^14.2.3",
@@ -95,7 +94,11 @@
     "tailwind-merge": "^3.3.1",
     "ws": "^8.14.2"
   },
+  "optionalDependencies": {
+    "node-pty": "^1.1.0-beta34"
+  },
   "devDependencies": {
+    "@rollup/rollup-win32-x64-msvc": "^4.55.3",
     "@types/react": "^18.2.43",
     "@types/react-dom": "^18.2.17",
     "@vitejs/plugin-react": "^4.6.0",

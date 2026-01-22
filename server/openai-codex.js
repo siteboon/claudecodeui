@@ -177,9 +177,50 @@ function mapPermissionModeToCodexOptions(permissionMode) {
     default:
       return {
         sandboxMode: 'workspace-write',
-        approvalPolicy: 'untrusted'
+        // UI 暂未实现 Codex 的审批交互，默认避免进入“等待审批/卡住”的状态
+        approvalPolicy: 'never'
       };
   }
+}
+
+function codexErrorToPayload(error) {
+  const rawMessage = String(error?.message || 'Unknown error');
+  const status = error?.status || error?.response?.status;
+
+  const lower = rawMessage.toLowerCase();
+  const looksLikeNotFound =
+    status === 404 ||
+    lower.includes('not found') ||
+    lower.includes('thread') && lower.includes('missing');
+
+  if (looksLikeNotFound) {
+    return {
+      code: 'CODEX_THREAD_NOT_FOUND',
+      message: 'Codex 会话不存在或已失效：请在侧边栏选择一个有效会话，或新建会话后重试。',
+      details: rawMessage
+    };
+  }
+
+  const looksLikeAuth =
+    status === 401 ||
+    status === 403 ||
+    lower.includes('api key') ||
+    lower.includes('unauthorized') ||
+    lower.includes('forbidden');
+
+  if (looksLikeAuth) {
+    return {
+      code: 'CODEX_AUTH_FAILED',
+      message: 'Codex 认证失败：请检查环境变量/配置（如 OPENAI_API_KEY），或确认本机已完成 Codex 登录。',
+      details: rawMessage
+    };
+  }
+
+  return {
+    code: 'CODEX_ERROR',
+    message: rawMessage,
+    details: rawMessage
+  };
 }
 
 /**
@@ -205,6 +246,16 @@ export async function queryCodex(command, options = {}, ws) {
   let currentSessionId = sessionId;
 
   try {
+    console.info('[Codex] query', {
+      projectPath,
+      cwd,
+      sessionId,
+      model,
+      permissionMode,
+      mapped: { sandboxMode, approvalPolicy },
+      workingDirectory
+    });
+
     // Initialize Codex SDK
     codex = new Codex();
 
@@ -219,7 +270,15 @@ export async function queryCodex(command, options = {}, ws) {
 
     // Start or resume thread
     if (sessionId) {
-      thread = codex.resumeThread(sessionId, threadOptions);
+      try {
+        thread = codex.resumeThread(sessionId, threadOptions);
+      } catch (resumeError) {
+        const payload = codexErrorToPayload(resumeError);
+        const err = new Error(payload.message);
+        err.code = payload.code;
+        err.details = payload.details;
+        throw err;
+      }
     } else {
       thread = codex.startThread(threadOptions);
     }
@@ -285,11 +344,14 @@ export async function queryCodex(command, options = {}, ws) {
     });
 
   } catch (error) {
-    console.error('[Codex] Error:', error);
+    const payload = codexErrorToPayload(error);
+    console.error('[Codex] Error:', { code: payload.code, message: payload.message, details: payload.details });
 
     sendMessage(ws, {
       type: 'codex-error',
-      error: error.message,
+      error: payload.message,
+      code: payload.code,
+      details: payload.details,
       sessionId: currentSessionId
     });
 

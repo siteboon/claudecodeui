@@ -197,6 +197,232 @@ async function detectTaskMasterFolder(projectPath) {
 // Cache for extracted project directories
 const projectDirectoryCache = new Map();
 
+// Codex sessions scan cache (避免每个 project 重复全盘扫描 ~/.codex/sessions)
+const codexSessionsScanCache = {
+  scannedAt: 0,
+  ttlMs: 15 * 1000,
+  sessions: null
+};
+
+const codexAutoProjectCache = {
+  syncedAt: 0,
+  ttlMs: 30 * 1000
+};
+
+function encodeProjectNameFromPath(absolutePath) {
+  return String(absolutePath)
+    .replace(/[:/\\]/g, '-') // Windows drive colon + both slashes
+}
+
+function normalizeComparablePathForConfig(value) {
+  if (!value || typeof value !== 'string') return null;
+  const isWindows = process.platform === 'win32';
+  const stripLongPath = (p) => {
+    if (!isWindows) return p;
+    if (!p.startsWith('\\\\?\\')) return p;
+    const rest = p.slice(4);
+    if (rest.toUpperCase().startsWith('UNC\\')) return '\\\\' + rest.slice(4);
+    return rest;
+  };
+
+  const trimTrailingSeparator = (p) => {
+    const root = path.parse(p).root;
+    let out = p;
+    while (out.length > root.length && (out.endsWith('/') || out.endsWith('\\'))) {
+      out = out.slice(0, -1);
+    }
+    return out;
+  };
+
+  const normalized = trimTrailingSeparator(path.normalize(stripLongPath(value)));
+  const absolute = path.isAbsolute(normalized) ? normalized : path.resolve(normalized);
+  return isWindows ? absolute.toLowerCase() : absolute;
+}
+
+async function findGitRoot(startDir) {
+  try {
+    let current = path.resolve(startDir);
+    for (let i = 0; i < 30; i++) {
+      const gitPath = path.join(current, '.git');
+      try {
+        const st = await fs.stat(gitPath);
+        if (st.isDirectory() || st.isFile()) {
+          return current;
+        }
+      } catch {}
+
+      const parent = path.dirname(current);
+      if (parent === current) break;
+      current = parent;
+    }
+  } catch {}
+  return path.resolve(startDir);
+}
+
+async function scanAllCodexSessionsFiles(codexSessionsDir) {
+  const findJsonlFiles = async (dir) => {
+    const files = [];
+    try {
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          files.push(...await findJsonlFiles(fullPath));
+        } else if (entry.name.endsWith('.jsonl')) {
+          files.push(fullPath);
+        }
+      }
+    } catch {}
+    return files;
+  };
+
+  const jsonlFiles = await findJsonlFiles(codexSessionsDir);
+  const all = [];
+
+  for (const filePath of jsonlFiles) {
+    try {
+      const sessionData = await parseCodexSessionFile(filePath);
+      if (!sessionData) continue;
+      all.push({
+        id: sessionData.id,
+        summary: sessionData.summary || 'Codex Session',
+        messageCount: sessionData.messageCount || 0,
+        lastActivity: sessionData.timestamp ? new Date(sessionData.timestamp) : new Date(),
+        cwd: sessionData.cwd,
+        model: sessionData.model,
+        filePath: filePath,
+        provider: 'codex'
+      });
+    } catch (error) {
+      console.warn(`Could not parse Codex session file ${filePath}:`, error.message);
+    }
+  }
+
+  all.sort((a, b) => new Date(b.lastActivity) - new Date(a.lastActivity));
+  return all;
+}
+
+async function refreshCodexSessionsScanCache() {
+  const codexSessionsDir = path.join(os.homedir(), '.codex', 'sessions');
+  try {
+    await fs.access(codexSessionsDir);
+  } catch {
+    codexSessionsScanCache.sessions = [];
+    codexSessionsScanCache.scannedAt = Date.now();
+    return;
+  }
+
+  const now = Date.now();
+  if (!codexSessionsScanCache.sessions || now - codexSessionsScanCache.scannedAt > codexSessionsScanCache.ttlMs) {
+    codexSessionsScanCache.sessions = await scanAllCodexSessionsFiles(codexSessionsDir);
+    codexSessionsScanCache.scannedAt = now;
+  }
+}
+
+async function autoAddCodexProjectsToConfig(config) {
+  const now = Date.now();
+  if (now - codexAutoProjectCache.syncedAt < codexAutoProjectCache.ttlMs) {
+    return config;
+  }
+  codexAutoProjectCache.syncedAt = now;
+
+  await refreshCodexSessionsScanCache();
+
+  const claudeProjectsDir = path.join(os.homedir(), '.claude', 'projects');
+  let existingClaudeProjectDirByLower = new Map(); // lowerName -> actualName
+  try {
+    const entries = await fs.readdir(claudeProjectsDir, { withFileTypes: true });
+    existingClaudeProjectDirByLower = new Map(
+      entries
+        .filter(e => e.isDirectory())
+        .map(e => [e.name.toLowerCase(), e.name])
+    );
+  } catch {}
+
+  const existingOriginalPaths = new Set(
+    Object.values(config || {})
+      .map(v => v?.originalPath)
+      .map(normalizeComparablePathForConfig)
+      .filter(Boolean)
+  );
+
+  const roots = new Map(); // normalizedRoot -> realRoot
+  for (const s of codexSessionsScanCache.sessions || []) {
+    const cwd = s?.cwd;
+    if (!cwd) continue;
+
+    // Use raw cwd for git-root probing (to preserve casing), but compare via normalized form.
+    const root = await findGitRoot(cwd);
+    let canonicalRoot = root;
+    try {
+      canonicalRoot = await fs.realpath(root);
+    } catch {}
+
+    const normRoot = normalizeComparablePathForConfig(canonicalRoot);
+    if (!normRoot) continue;
+    if (!roots.has(normRoot)) roots.set(normRoot, canonicalRoot);
+  }
+
+  let changed = false;
+  for (const [, rootPath] of roots.entries()) {
+    const normRoot = normalizeComparablePathForConfig(rootPath);
+    if (!normRoot) continue;
+    if (existingOriginalPaths.has(normRoot)) continue;
+
+    // Only add if the directory currently exists (avoid polluting config with stale paths)
+    try {
+      await fs.access(rootPath);
+    } catch {
+      continue;
+    }
+
+    const projectName = encodeProjectNameFromPath(rootPath);
+
+    // If this path already has a Claude project folder, don't auto-add a manual project for it.
+    if (existingClaudeProjectDirByLower.has(projectName.toLowerCase())) {
+      existingOriginalPaths.add(normRoot);
+      continue;
+    }
+
+    if (config[projectName]) {
+      existingOriginalPaths.add(normRoot);
+      continue;
+    }
+
+    config[projectName] = {
+      manuallyAdded: true,
+      originalPath: rootPath,
+      source: 'codex-auto',
+      createdAt: new Date().toISOString()
+    };
+    existingOriginalPaths.add(normRoot);
+    changed = true;
+  }
+
+  // Cleanup: if we previously auto-added a project for a path that later exists as a Claude project folder,
+  // remove the auto-added config entry to avoid duplicate projects in the sidebar.
+  for (const [projectName, entry] of Object.entries(config || {})) {
+    if (entry?.source !== 'codex-auto' || !entry?.originalPath) continue;
+    const canonical = (() => {
+      try { return fsSync.realpathSync(entry.originalPath); } catch { return entry.originalPath; }
+    })();
+    const encoded = encodeProjectNameFromPath(canonical);
+    const lower = encoded.toLowerCase();
+    if (lower !== projectName.toLowerCase()) continue;
+    const actualClaudeDirName = existingClaudeProjectDirByLower.get(lower);
+    if (actualClaudeDirName && actualClaudeDirName !== projectName) {
+      delete config[projectName];
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    await saveProjectConfig(config);
+  }
+
+  return config;
+}
+
 // Clear cache when needed (called when project files change)
 function clearProjectDirectoryCache() {
   projectDirectoryCache.clear();
@@ -381,7 +607,13 @@ async function extractProjectDirectory(projectName) {
 
 async function getProjects(progressCallback = null) {
   const claudeDir = path.join(os.homedir(), '.claude', 'projects');
-  const config = await loadProjectConfig();
+  let config = await loadProjectConfig();
+  // 自动发现 Codex-only 项目（基于 ~/.codex/sessions 的 cwd/git root）
+  try {
+    config = await autoAddCodexProjectsToConfig(config);
+  } catch (e) {
+    console.warn('Codex auto project discovery failed:', e?.message || e);
+  }
   const projects = [];
   const existingProjects = new Set();
   let totalProjects = 0;
@@ -1064,7 +1296,7 @@ async function addProjectManually(projectPath, displayName = null) {
   }
   
   // Generate project name (encode path for use as directory name)
-  const projectName = absolutePath.replace(/\//g, '-');
+  const projectName = encodeProjectNameFromPath(absolutePath);
   
   // Check if project already exists in config
   const config = await loadProjectConfig();
@@ -1097,7 +1329,8 @@ async function addProjectManually(projectPath, displayName = null) {
     displayName: displayName || await generateDisplayName(projectName, absolutePath),
     isManuallyAdded: true,
     sessions: [],
-    cursorSessions: []
+    cursorSessions: [],
+    codexSessions: []
   };
 }
 
@@ -1227,60 +1460,104 @@ async function getCodexSessions(projectPath) {
       return [];
     }
 
-    // Recursively find all .jsonl files in the sessions directory
-    const findJsonlFiles = async (dir) => {
-      const files = [];
-      try {
-        const entries = await fs.readdir(dir, { withFileTypes: true });
-        for (const entry of entries) {
-          const fullPath = path.join(dir, entry.name);
-          if (entry.isDirectory()) {
-            files.push(...await findJsonlFiles(fullPath));
-          } else if (entry.name.endsWith('.jsonl')) {
-            files.push(fullPath);
-          }
-        }
-      } catch (error) {
-        // Skip directories we can't read
+    await refreshCodexSessionsScanCache();
+
+    const isWindows = process.platform === 'win32';
+
+    const stripWindowsLongPathPrefix = (value) => {
+      if (!value || typeof value !== 'string') return value;
+      if (!isWindows) return value;
+      if (!value.startsWith('\\\\?\\')) return value;
+      const rest = value.slice(4);
+      if (rest.toUpperCase().startsWith('UNC\\')) {
+        return '\\\\' + rest.slice(4);
       }
-      return files;
+      return rest;
     };
 
-    const jsonlFiles = await findJsonlFiles(codexSessionsDir);
+    const trimTrailingSeparator = (value) => {
+      if (!value || typeof value !== 'string') return value;
+      const root = path.parse(value).root;
+      let out = value;
+      while (out.length > root.length && (out.endsWith('/') || out.endsWith('\\'))) {
+        out = out.slice(0, -1);
+      }
+      return out;
+    };
 
-    // Process each file to find sessions matching the project path
-    for (const filePath of jsonlFiles) {
+    const normalizeComparablePath = (value) => {
+      if (!value || typeof value !== 'string') return null;
+      const stripped = stripWindowsLongPathPrefix(value);
+      const normalized = trimTrailingSeparator(path.normalize(stripped));
+      const absolute = path.isAbsolute(normalized) ? normalized : path.resolve(normalized);
+      const comparable = isWindows ? absolute.toLowerCase() : absolute;
+      return trimTrailingSeparator(comparable);
+    };
+
+    const getPathCandidates = async (value) => {
+      const candidates = new Set();
+      const base = normalizeComparablePath(value);
+      if (base) candidates.add(base);
+
+      // Best-effort symlink/realpath normalization when the path exists.
       try {
-        const sessionData = await parseCodexSessionFile(filePath);
-
-        // Check if this session matches the project path
-        // Handle Windows long paths with \\?\ prefix
-        const sessionCwd = sessionData?.cwd || '';
-        const cleanSessionCwd = sessionCwd.startsWith('\\\\?\\') ? sessionCwd.slice(4) : sessionCwd;
-        const cleanProjectPath = projectPath.startsWith('\\\\?\\') ? projectPath.slice(4) : projectPath;
-
-        if (sessionData && (sessionData.cwd === projectPath || cleanSessionCwd === cleanProjectPath || path.relative(cleanSessionCwd, cleanProjectPath) === '')) {
-          sessions.push({
-            id: sessionData.id,
-            summary: sessionData.summary || 'Codex Session',
-            messageCount: sessionData.messageCount || 0,
-            lastActivity: sessionData.timestamp ? new Date(sessionData.timestamp) : new Date(),
-            cwd: sessionData.cwd,
-            model: sessionData.model,
-            filePath: filePath,
-            provider: 'codex'
-          });
+        if (base) {
+          const real = await fs.realpath(base);
+          const realNorm = normalizeComparablePath(real);
+          if (realNorm) candidates.add(realNorm);
         }
-      } catch (error) {
-        console.warn(`Could not parse Codex session file ${filePath}:`, error.message);
+      } catch {
+        // ignore
+      }
+
+      return [...candidates];
+    };
+
+    const isPathWithin = (child, parent) => {
+      try {
+        const rel = path.relative(parent, child);
+        if (rel === '') return true;
+        if (rel.startsWith('..')) return false;
+        if (path.isAbsolute(rel)) return false;
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    const projectCandidates = await getPathCandidates(projectPath);
+    const sessionCandidateCache = new Map();
+
+    const getCachedSessionCandidates = async (sessionCwd) => {
+      const key = String(sessionCwd || '');
+      if (sessionCandidateCache.has(key)) return sessionCandidateCache.get(key);
+      const candidates = await getPathCandidates(sessionCwd);
+      sessionCandidateCache.set(key, candidates);
+      return candidates;
+    };
+
+    const sessionBelongsToProject = async (sessionCwd) => {
+      const sessionCandidates = await getCachedSessionCandidates(sessionCwd);
+
+      for (const sc of sessionCandidates) {
+        for (const pc of projectCandidates) {
+          if (sc === pc) return true;
+          // Primary requirement: session created in project root OR any subdirectory.
+          if (isPathWithin(sc, pc)) return true;
+        }
+      }
+
+      return false;
+    };
+
+    // Filter cached sessions by project path
+    for (const session of codexSessionsScanCache.sessions || []) {
+      if (await sessionBelongsToProject(session.cwd || '')) {
+        sessions.push(session);
       }
     }
 
-    // Sort sessions by last activity (newest first)
-    sessions.sort((a, b) => new Date(b.lastActivity) - new Date(a.lastActivity));
-
-    // Return only the first 5 sessions for performance
-    return sessions.slice(0, 5);
+    return sessions;
 
   } catch (error) {
     console.error('Error fetching Codex sessions:', error);
@@ -1456,6 +1733,25 @@ async function getCodexSessionMessages(sessionId, limit = null, offset = 0) {
             }
           }
 
+          // Extract user messages from event_msg (Codex JSONL 常见格式)
+          if (entry.type === 'event_msg' && entry.payload?.type === 'user_message') {
+            const textContent = entry.payload?.message;
+            if (typeof textContent === 'string' && textContent.trim()) {
+              // Skip system context messages (environment_context)
+              if (textContent.includes('<environment_context>')) {
+                continue;
+              }
+              messages.push({
+                type: 'user',
+                timestamp: entry.timestamp,
+                message: {
+                  role: 'user',
+                  content: textContent
+                }
+              });
+            }
+          }
+
           if (entry.type === 'response_item' && entry.payload?.type === 'reasoning') {
             const summaryText = entry.payload.summary
               ?.map(s => s.text)
@@ -1568,13 +1864,25 @@ async function getCodexSessionMessages(sessionId, limit = null, offset = 0) {
     // Sort by timestamp
     messages.sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
 
-    const total = messages.length;
+    // Best-effort de-duplication (某些日志会同时记录 event_msg 与 response_item)
+    const deduped = [];
+    const seen = new Set();
+    for (const m of messages) {
+      const role = m?.message?.role || m.type || '';
+      const content = typeof m?.message?.content === 'string' ? m.message.content : (m.output || '');
+      const key = `${m.timestamp || ''}::${role}::${content}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      deduped.push(m);
+    }
+
+    const total = deduped.length;
 
     // Apply pagination if limit is specified
     if (limit !== null) {
       const startIndex = Math.max(0, total - offset - limit);
       const endIndex = total - offset;
-      const paginatedMessages = messages.slice(startIndex, endIndex);
+      const paginatedMessages = deduped.slice(startIndex, endIndex);
       const hasMore = startIndex > 0;
 
       return {
@@ -1587,7 +1895,7 @@ async function getCodexSessionMessages(sessionId, limit = null, offset = 0) {
       };
     }
 
-    return { messages, tokenUsage };
+    return { messages: deduped, tokenUsage };
 
   } catch (error) {
     console.error(`Error reading Codex session messages for ${sessionId}:`, error);

@@ -3867,9 +3867,22 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           // Handle Codex errors
           setIsLoading(false);
           setCanAbortSession(false);
+          const codexErrorCode = latestMessage.code;
+          const codexErrorDetails = latestMessage.details;
+          const codexErrorHint = (() => {
+            if (codexErrorCode === 'CODEX_THREAD_NOT_FOUND') {
+              return '提示：请新建一个 Codex 会话，或在侧边栏重新选择有效会话后重试。';
+            }
+            if (codexErrorCode === 'CODEX_AUTH_FAILED') {
+              return '提示：请检查 OPENAI_API_KEY / 本机 Codex 登录状态，然后访问 设置 → Codex → Health 查看诊断信息。';
+            }
+            return null;
+          })();
           setChatMessages(prev => [...prev, {
             type: 'error',
-            content: latestMessage.error || 'An error occurred with Codex',
+            content: [latestMessage.error || 'Codex 出错', codexErrorHint, codexErrorDetails ? `详情：${codexErrorDetails}` : null]
+              .filter(Boolean)
+              .join('\n'),
             timestamp: new Date()
           }]);
           break;
@@ -4327,7 +4340,16 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     setTimeout(() => scrollToBottom(), 100); // Longer delay to ensure message is rendered
 
     // Determine effective session id for replies to avoid race on state updates
-    const effectiveSessionId = currentSessionId || selectedSession?.id || sessionStorage.getItem('cursorSessionId');
+    // IMPORTANT: do not cross-use session IDs across providers (e.g., Codex must not reuse Cursor sessionId)
+    const effectiveSessionId = (() => {
+      if (provider === 'cursor') {
+        return currentSessionId || selectedSession?.id || sessionStorage.getItem('cursorSessionId');
+      }
+      if (provider === 'codex') {
+        return currentSessionId || selectedSession?.id || null;
+      }
+      return currentSessionId || selectedSession?.id || null;
+    })();
 
     // Session Protection: Mark session as active to prevent automatic project updates during conversation
     // Use existing session if available; otherwise a temporary placeholder until backend provides real ID
