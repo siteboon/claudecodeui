@@ -1,24 +1,25 @@
-name: Publish to npm
+name: Release and Publish
 
 on:
-  release:
-    types: [published]
+  push:
+    branches:
+      - main
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version to publish (leave empty to use package.json version)'
-        required: false
-        type: string
 
 jobs:
-  publish:
+  release:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
+      issues: write
+      pull-requests: write
       id-token: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -29,54 +30,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install semantic-release plugins
+        run: |
+          npm install --save-dev semantic-release @semantic-release/changelog @semantic-release/git @semantic-release/github
+
       - name: Build project
         run: npm run build
 
-      - name: Configure package for @epiphytic scope
-        run: |
-          # Update package name for @epiphytic scope
-          node -e "
-            const fs = require('fs');
-            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-            pkg.name = '@epiphytic/claudecodeui';
-            pkg.repository = {
-              type: 'git',
-              url: 'git+https://github.com/Epiphytic/claudecodeui.git'
-            };
-            pkg.bugs = {
-              url: 'https://github.com/Epiphytic/claudecodeui/issues'
-            };
-            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
-          "
-          echo "Package configured as @epiphytic/claudecodeui"
-          cat package.json | head -30
-
-      - name: Update version if specified
-        if: ${{ github.event.inputs.version != '' }}
+      - name: Release
         env:
-          INPUT_VERSION: ${{ github.event.inputs.version }}
-        run: |
-          npm version "$INPUT_VERSION" --no-git-tag-version
-          echo "Version updated to $INPUT_VERSION"
-
-      - name: Publish to npm
-        run: npm publish --access public --provenance
-        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Summary
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          echo "## Published to npm" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Package:** @epiphytic/claudecodeui@${VERSION}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Install with:**" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-          echo "npx @epiphytic/claudecodeui" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Or install globally:**" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-          echo "npm install -g @epiphytic/claudecodeui" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        run: npx semantic-release
