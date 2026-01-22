@@ -8,6 +8,147 @@ import { getCodexSessions, getCodexSessionMessages, deleteCodexSession } from '.
 
 const router = express.Router();
 
+const codexHealthSessionsCache = {
+  computedAt: 0,
+  ttlMs: 10 * 1000,
+  value: null
+};
+
+async function computeCodexSessionsHealth(codexSessionsDir) {
+  const sessions = { dir: codexSessionsDir, exists: false, totalJsonl: 0, recent: [] };
+
+  try {
+    await fs.access(codexSessionsDir);
+    sessions.exists = true;
+  } catch {
+    return sessions;
+  }
+
+  const findJsonlFiles = async (dir) => {
+    const files = [];
+    const stack = [dir];
+    const maxFiles = 5000;
+
+    while (stack.length) {
+      const current = stack.pop();
+      let entries = [];
+      try {
+        entries = await fs.readdir(current, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+
+      for (const entry of entries) {
+        const fullPath = path.join(current, entry.name);
+        if (entry.isDirectory()) {
+          stack.push(fullPath);
+        } else if (entry.name.endsWith('.jsonl')) {
+          files.push(fullPath);
+          if (files.length >= maxFiles) {
+            return files;
+          }
+        }
+      }
+    }
+
+    return files;
+  };
+
+  const jsonlFiles = await findJsonlFiles(codexSessionsDir);
+  sessions.totalJsonl = jsonlFiles.length;
+
+  const stats = await Promise.all(jsonlFiles.map(async (file) => {
+    try {
+      const st = await fs.stat(file);
+      return { file, mtimeMs: st.mtimeMs };
+    } catch {
+      return null;
+    }
+  }));
+
+  sessions.recent = stats
+    .filter(Boolean)
+    .sort((a, b) => b.mtimeMs - a.mtimeMs)
+    .slice(0, 5)
+    .map((s) => ({ file: s.file, mtime: new Date(s.mtimeMs).toISOString() }));
+
+  return sessions;
+}
+
+async function getCachedCodexSessionsHealth(codexSessionsDir) {
+  const now = Date.now();
+  if (codexHealthSessionsCache.value && (now - codexHealthSessionsCache.computedAt) < codexHealthSessionsCache.ttlMs) {
+    return codexHealthSessionsCache.value;
+  }
+
+  codexHealthSessionsCache.value = await computeCodexSessionsHealth(codexSessionsDir);
+  codexHealthSessionsCache.computedAt = now;
+  return codexHealthSessionsCache.value;
+}
+
+router.get('/health', async (req, res) => {
+  const codexSessionsDir = path.join(os.homedir(), '.codex', 'sessions');
+
+  const result = {
+    success: true,
+    cli: { installed: false, version: null, error: null },
+    sessions: { dir: codexSessionsDir, exists: false, totalJsonl: 0, recent: [] },
+    env: {
+      OPENAI_API_KEY: Boolean(process.env.OPENAI_API_KEY),
+      OPENAI_BASE_URL: Boolean(process.env.OPENAI_BASE_URL),
+      OPENAI_ORG_ID: Boolean(process.env.OPENAI_ORG_ID)
+    }
+  };
+
+  // CLI availability
+  await new Promise((resolve) => {
+    const proc = spawn('codex', ['--version'], { stdio: ['ignore', 'pipe', 'pipe'] });
+    let finished = false;
+    let stdout = '';
+    let stderr = '';
+
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      resolve();
+    };
+
+    const timer = setTimeout(() => {
+      try { proc.kill(); } catch {}
+      result.cli.error = 'Codex CLI version check timed out';
+      finish();
+    }, 5000);
+
+    proc.stdout?.on('data', (d) => { stdout += d.toString(); });
+    proc.stderr?.on('data', (d) => { stderr += d.toString(); });
+    proc.on('close', (code) => {
+      if (finished) return;
+      if (code === 0) {
+        result.cli.installed = true;
+        result.cli.version = stdout.trim() || null;
+      } else {
+        result.cli.error = stderr.trim() || `Exited with code ${code}`;
+      }
+      finish();
+    });
+    proc.on('error', (error) => {
+      if (finished) return;
+      result.cli.error = error?.code === 'ENOENT' ? 'Codex CLI not installed' : error.message;
+      finish();
+    });
+  });
+
+  // Sessions directory stats (best-effort)
+  try {
+    result.sessions = await getCachedCodexSessionsHealth(codexSessionsDir);
+  } catch {
+    // ignore
+  }
+
+  res.json(result);
+});
+
 function createCliResponder(res) {
   let responded = false;
   return (status, payload) => {
