@@ -175,5 +175,30 @@
       "showingLast": "显示最近 {{count}} 条消息（共 {{total}} 条）",
       "loadEarlier": "加载更早的消息"
     }
+  },
+  "shell": {
+    "selectProject": {
+      "title": "选择项目",
+      "description": "选择一个项目以在该目录中打开交互式 Shell"
+    },
+    "status": {
+      "newSession": "新会话",
+      "initializing": "初始化中...",
+      "restarting": "重启中..."
+    },
+    "actions": {
+      "disconnect": "断开连接",
+      "disconnectTitle": "断开 Shell 连接",
+      "restart": "重启",
+      "restartTitle": "重启 Shell（请先断开连接）",
+      "connect": "在 Shell 中继续",
+      "connectTitle": "连接到 Shell"
+    },
+    "loading": "正在加载终端...",
+    "connecting": "正在连接到 Shell...",
+    "startSession": "启动新的 Claude 会话",
+    "resumeSession": "恢复会话：{{displayName}}...",
+    "runCommand": "在 {{projectName}} 中运行 {{command}}",
+    "startCli": "在 {{projectName}} 中启动 Claude CLI"
   }
 }

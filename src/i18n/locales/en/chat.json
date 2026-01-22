@@ -175,5 +175,30 @@
       "showingLast": "Showing last {{count}} messages ({{total}} total)",
       "loadEarlier": "Load earlier messages"
     }
+  },
+  "shell": {
+    "selectProject": {
+      "title": "Select a Project",
+      "description": "Choose a project to open an interactive shell in that directory"
+    },
+    "status": {
+      "newSession": "New Session",
+      "initializing": "Initializing...",
+      "restarting": "Restarting..."
+    },
+    "actions": {
+      "disconnect": "Disconnect",
+      "disconnectTitle": "Disconnect from shell",
+      "restart": "Restart",
+      "restartTitle": "Restart Shell (disconnect first)",
+      "connect": "Continue in Shell",
+      "connectTitle": "Connect to shell"
+    },
+    "loading": "Loading terminal...",
+    "connecting": "Connecting to shell...",
+    "startSession": "Start a new Claude session",
+    "resumeSession": "Resume session: {{displayName}}...",
+    "runCommand": "Run {{command}} in {{projectName}}",
+    "startCli": "Starting Claude CLI in {{projectName}}"
   }
 }
