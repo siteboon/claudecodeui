@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/Epiphytic/claudecodeui/compare/v1.0.0...v1.0.1) (2026-01-23)
+
+
+### Bug Fixes
+
+* macos hibernate wakeup issue ([c995b2a](https://github.com/Epiphytic/claudecodeui/commit/c995b2a40b9a5e19cf6d4c1039227f11557895b6))
+
 # 1.0.0 (2026-01-22)
 
 

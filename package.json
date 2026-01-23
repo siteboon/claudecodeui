@@ -1,6 +1,6 @@
 {
   "name": "@epiphytic/claudecodeui",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A web-based UI for Claude Code CLI",
   "type": "module",
   "main": "server/index.js",
