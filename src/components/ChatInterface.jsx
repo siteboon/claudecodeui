@@ -4361,7 +4361,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       // Send Cursor command (always use cursor-command; include resume/sessionId when replying)
       sendMessage({
         type: 'cursor-command',
-        command: input,
+        command: messageContent,
         sessionId: effectiveSessionId,
         options: {
           // Prefer fullPath (actual cwd for project), fallback to path
@@ -4378,7 +4378,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       // Send Codex command
       sendMessage({
         type: 'codex-command',
-        command: input,
+        command: messageContent,
         sessionId: effectiveSessionId,
         options: {
           cwd: selectedProject.fullPath || selectedProject.path,
@@ -4393,7 +4393,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       // Send Claude command (existing code)
       sendMessage({
         type: 'claude-command',
-        command: input,
+        command: messageContent,
         options: {
           projectPath: selectedProject.path,
           cwd: selectedProject.fullPath,
@@ -4423,7 +4423,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     if (selectedProject) {
       safeLocalStorage.removeItem(`draft_input_${selectedProject.name}`);
     }
-  }, [input, isLoading, selectedProject, attachedImages, currentSessionId, selectedSession, provider, permissionMode, onSessionActive, cursorModel, claudeModel, codexModel, sendMessage, setInput, setAttachedImages, setUploadingImages, setImageErrors, setIsTextareaExpanded, textareaRef, setChatMessages, setIsLoading, setCanAbortSession, setClaudeStatus, setIsUserScrolledUp, scrollToBottom]);
+  }, [input, isLoading, selectedProject, attachedImages, currentSessionId, selectedSession, provider, permissionMode, onSessionActive, cursorModel, claudeModel, codexModel, sendMessage, setInput, setAttachedImages, setUploadingImages, setImageErrors, setIsTextareaExpanded, textareaRef, setChatMessages, setIsLoading, setCanAbortSession, setClaudeStatus, setIsUserScrolledUp, scrollToBottom, thinkingMode]);
 
   const handleGrantToolPermission = useCallback((suggestion) => {
     if (!suggestion || provider !== 'claude') {
