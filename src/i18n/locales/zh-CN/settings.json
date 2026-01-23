@@ -64,7 +64,24 @@
     "showThinking": "显示思考过程",
     "autoScrollToBottom": "自动滚动到底部",
     "sendByCtrlEnter": "使用 Ctrl+Enter 发送",
-    "sendByCtrlEnterDescription": "启用后，按 Ctrl+Enter 发送消息，而不是仅按 Enter。这对于使用输入法的用户可以避免意外发送。"
+    "sendByCtrlEnterDescription": "启用后，按 Ctrl+Enter 发送消息，而不是仅按 Enter。这对于使用输入法的用户可以避免意外发送。",
+    "dragHandle": {
+      "dragging": "正在拖拽手柄",
+      "closePanel": "关闭设置面板",
+      "openPanel": "打开设置面板",
+      "draggingStatus": "正在拖拽...",
+      "toggleAndMove": "点击切换，拖拽移动"
+    },
+    "whisper": {
+      "modes": {
+        "default": "默认模式",
+        "defaultDescription": "直接转录您的语音",
+        "prompt": "提示词增强",
+        "promptDescription": "将粗略的想法转化为清晰、详细的 AI 提示词",
+        "vibe": "Vibe 模式",
+        "vibeDescription": "将想法格式化为带有详细说明的清晰智能体指令"
+      }
+    }
   },
   "mainTabs": {
     "agents": "智能体",

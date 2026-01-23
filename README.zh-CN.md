@@ -1,6 +1,6 @@
 <div align="center">
   <img src="public/logo.svg" alt="Claude Code UI" width="64" height="64">
-  <h1>Cloud CLI (aka Claude Code UI)</h1>
+  <h1>Cloud CLI (又名 Claude Code UI)</h1>
 </div>
 
 

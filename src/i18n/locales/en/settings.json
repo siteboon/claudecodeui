@@ -64,7 +64,24 @@
     "showThinking": "Show thinking",
     "autoScrollToBottom": "Auto-scroll to bottom",
     "sendByCtrlEnter": "Send by Ctrl+Enter",
-    "sendByCtrlEnterDescription": "When enabled, pressing Ctrl+Enter will send the message instead of just Enter. This is useful for IME users to avoid accidental sends."
+    "sendByCtrlEnterDescription": "When enabled, pressing Ctrl+Enter will send the message instead of just Enter. This is useful for IME users to avoid accidental sends.",
+    "dragHandle": {
+      "dragging": "Dragging handle",
+      "closePanel": "Close settings panel",
+      "openPanel": "Open settings panel",
+      "draggingStatus": "Dragging...",
+      "toggleAndMove": "Click to toggle, drag to move"
+    },
+    "whisper": {
+      "modes": {
+        "default": "Default Mode",
+        "defaultDescription": "Direct transcription of your speech",
+        "prompt": "Prompt Enhancement",
+        "promptDescription": "Transform rough ideas into clear, detailed AI prompts",
+        "vibe": "Vibe Mode",
+        "vibeDescription": "Format ideas as clear agent instructions with details"
+      }
+    }
   },
   "mainTabs": {
     "agents": "Agents",
