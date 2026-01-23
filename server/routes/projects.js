@@ -353,7 +353,7 @@ router.get('/clone-progress', async (req, res) => {
 
     let githubToken = null;
     if (githubTokenId) {
-      const token = await getGithubTokenById(parseInt(githubTokenId), req.user?.id);
+      const token = await getGithubTokenById(parseInt(githubTokenId), req.user.id);
       if (token) {
         githubToken = token.github_token;
       }
