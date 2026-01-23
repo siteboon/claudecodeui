@@ -277,7 +277,8 @@ export class OrchestratorClient extends EventEmitter {
     // Set timeout for pong response
     this.heartbeatTimeoutTimer = setTimeout(() => {
       console.warn("[ORCHESTRATOR] Heartbeat timeout, reconnecting...");
-      this.ws?.terminate();
+      // Force close without waiting - terminate() can block if socket is dead
+      this.forceReconnect();
     }, DEFAULTS.heartbeatTimeout);
   }
 
@@ -877,6 +878,41 @@ export class OrchestratorClient extends EventEmitter {
     }
 
     return result;
+  }
+
+  /**
+   * Force reconnect without waiting for socket close
+   * This handles the case where the socket is dead (e.g., after macOS sleep)
+   * and terminate() would block indefinitely
+   */
+  forceReconnect() {
+    console.log("[ORCHESTRATOR] Force reconnecting...");
+
+    // Mark as disconnected immediately
+    this.isConnected = false;
+    this.isRegistered = false;
+    this.stopHeartbeat();
+
+    // Try to close the socket, but don't wait for it
+    if (this.ws) {
+      try {
+        // Destroy the underlying socket directly to avoid blocking
+        if (this.ws._socket) {
+          this.ws._socket.destroy();
+        }
+        this.ws.terminate();
+      } catch (e) {
+        // Ignore errors - socket may already be dead
+      }
+      this.ws = null;
+    }
+
+    this.emit("disconnected", { code: 1006, reason: "Force reconnect" });
+
+    // Schedule reconnect
+    if (this.shouldReconnect) {
+      this.scheduleReconnect();
+    }
   }
 
   /**
