@@ -70,7 +70,7 @@ import mcpUtilsRoutes from './routes/mcp-utils.js';
 import commandsRoutes from './routes/commands.js';
 import settingsRoutes from './routes/settings.js';
 import agentRoutes from './routes/agent.js';
-import projectsRoutes from './routes/projects.js';
+import projectsRoutes, { FORBIDDEN_PATHS } from './routes/projects.js';
 import cliAuthRoutes from './routes/cli-auth.js';
 import userRoutes from './routes/user.js';
 import codexRoutes from './routes/codex.js';
@@ -550,8 +550,6 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
     }
 });
 
-const FORBIDDEN_PATHS = ['/', '/etc', '/bin', '/sbin', '/usr', '/dev', '/proc', '/sys', '/var', '/boot', '/root', '/lib', '/lib64', '/opt', '/tmp', '/run'];
-
 app.post('/api/create-folder', authenticateToken, async (req, res) => {
     try {
         const { path: folderPath } = req.body;
@@ -561,12 +559,14 @@ app.post('/api/create-folder', authenticateToken, async (req, res) => {
         const homeDir = os.homedir();
         const targetPath = path.resolve(folderPath.replace('~', homeDir));
         const normalizedPath = path.normalize(targetPath);
-        if (FORBIDDEN_PATHS.includes(normalizedPath) || normalizedPath === '/') {
+        const comparePath = normalizedPath.toLowerCase();
+        const forbiddenLower = FORBIDDEN_PATHS.map(p => p.toLowerCase());
+        if (forbiddenLower.includes(comparePath) || comparePath === '/') {
             return res.status(403).json({ error: 'Cannot create folders in system directories' });
         }
-        for (const forbidden of FORBIDDEN_PATHS) {
-            if (normalizedPath.startsWith(forbidden + path.sep)) {
-                if (forbidden === '/var' && (normalizedPath.startsWith('/var/tmp') || normalizedPath.startsWith('/var/folders'))) {
+        for (const forbidden of forbiddenLower) {
+            if (comparePath.startsWith(forbidden + path.sep)) {
+                if (forbidden === '/var' && (comparePath.startsWith('/var/tmp') || comparePath.startsWith('/var/folders'))) {
                     continue;
                 }
                 return res.status(403).json({ error: `Cannot create folders in system directory: ${forbidden}` });

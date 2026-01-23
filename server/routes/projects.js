@@ -7,11 +7,17 @@ import { addProjectManually } from '../projects.js';
 
 const router = express.Router();
 
+function sanitizeGitError(message, token) {
+  if (!message || !token) return message;
+  return message.replace(new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), '***');
+}
+
 // Configure allowed workspace root (defaults to user's home directory)
 const WORKSPACES_ROOT = process.env.WORKSPACES_ROOT || os.homedir();
 
 // System-critical paths that should never be used as workspace directories
-const FORBIDDEN_PATHS = [
+export const FORBIDDEN_PATHS = [
+  // Unix
   '/',
   '/etc',
   '/bin',
@@ -27,7 +33,14 @@ const FORBIDDEN_PATHS = [
   '/lib64',
   '/opt',
   '/tmp',
-  '/run'
+  '/run',
+  // Windows
+  'C:\\Windows',
+  'C:\\Program Files',
+  'C:\\Program Files (x86)',
+  'C:\\ProgramData',
+  'C:\\System Volume Information',
+  'C:\\$Recycle.Bin'
 ];
 
 /**
@@ -354,9 +367,13 @@ router.get('/clone-progress', async (req, res) => {
     let githubToken = null;
     if (githubTokenId) {
       const token = await getGithubTokenById(parseInt(githubTokenId), req.user.id);
-      if (token) {
-        githubToken = token.github_token;
+      if (!token) {
+        await fs.rm(absolutePath, { recursive: true, force: true });
+        sendEvent('error', { message: 'GitHub token not found' });
+        res.end();
+        return;
       }
+      githubToken = token.github_token;
     } else if (newGithubToken) {
       githubToken = newGithubToken;
     }
@@ -423,6 +440,7 @@ router.get('/clone-progress', async (req, res) => {
           sendEvent('error', { message: `Clone succeeded but failed to add project: ${error.message}` });
         }
       } else {
+        const sanitizedError = sanitizeGitError(lastError, githubToken);
         let errorMessage = 'Git clone failed';
         if (lastError.includes('Authentication failed') || lastError.includes('could not read Username')) {
           errorMessage = 'Authentication failed. Please check your credentials.';
@@ -430,13 +448,13 @@ router.get('/clone-progress', async (req, res) => {
           errorMessage = 'Repository not found. Please check the URL and ensure you have access.';
         } else if (lastError.includes('already exists')) {
           errorMessage = 'Directory already exists';
-        } else if (lastError) {
-          errorMessage = lastError;
+        } else if (sanitizedError) {
+          errorMessage = sanitizedError;
         }
         try {
           await fs.rm(clonePath, { recursive: true, force: true });
         } catch (cleanupError) {
-          console.error('Failed to clean up after clone failure:', cleanupError);
+          console.error('Failed to clean up after clone failure:', sanitizeGitError(cleanupError.message, githubToken));
         }
         sendEvent('error', { message: errorMessage });
       }
