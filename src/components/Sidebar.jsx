@@ -6,7 +6,7 @@ import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 import { useTranslation } from 'react-i18next';
 
-import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2, Star, Search } from 'lucide-react';
+import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2, Star, Search, AlertTriangle } from 'lucide-react';
 import { cn } from '../lib/utils';
 import ClaudeLogo from './ClaudeLogo';
 import CursorLogo from './CursorLogo.jsx';
@@ -80,6 +80,9 @@ function Sidebar({
   const [editingSessionName, setEditingSessionName] = useState('');
   const [generatingSummary, setGeneratingSummary] = useState({});
   const [searchFilter, setSearchFilter] = useState('');
+  const [deletingProjects, setDeletingProjects] = useState(new Set());
+  const [deleteConfirmation, setDeleteConfirmation] = useState(null); // { project, sessionCount }
+  const [sessionDeleteConfirmation, setSessionDeleteConfirmation] = useState(null); // { projectName, sessionId, sessionTitle, provider }
 
   // TaskMaster context
   const { setCurrentProject, mcpServerStatus } = useTaskMaster();
@@ -306,10 +309,15 @@ function Sidebar({
     setEditingName('');
   };
 
-  const deleteSession = async (projectName, sessionId, provider = 'claude') => {
-    if (!confirm(t('messages.deleteSessionConfirm'))) {
-      return;
-    }
+  const showDeleteSessionConfirmation = (projectName, sessionId, sessionTitle, provider = 'claude') => {
+    setSessionDeleteConfirmation({ projectName, sessionId, sessionTitle, provider });
+  };
+
+  const confirmDeleteSession = async () => {
+    if (!sessionDeleteConfirmation) return;
+
+    const { projectName, sessionId, provider } = sessionDeleteConfirmation;
+    setSessionDeleteConfirmation(null);
 
     try {
       console.log('[Sidebar] Deleting session:', { projectName, sessionId, provider });
@@ -343,18 +351,26 @@ function Sidebar({
     }
   };
 
-  const deleteProject = async (projectName) => {
-    if (!confirm(t('messages.deleteProjectConfirm'))) {
-      return;
-    }
+  const deleteProject = (project) => {
+    const sessionCount = getAllSessions(project).length;
+    setDeleteConfirmation({ project, sessionCount });
+  };
+
+  const confirmDeleteProject = async () => {
+    if (!deleteConfirmation) return;
+
+    const { project, sessionCount } = deleteConfirmation;
+    const isEmpty = sessionCount === 0;
+
+    setDeleteConfirmation(null);
+    setDeletingProjects(prev => new Set([...prev, project.name]));
 
     try {
-      const response = await api.deleteProject(projectName);
+      const response = await api.deleteProject(project.name, !isEmpty);
 
       if (response.ok) {
-        // Call parent callback if provided
         if (onProjectDelete) {
-          onProjectDelete(projectName);
+          onProjectDelete(project.name);
         }
       } else {
         const error = await response.json();
@@ -364,6 +380,12 @@ function Sidebar({
     } catch (error) {
       console.error('Error deleting project:', error);
       alert(t('messages.deleteProjectError'));
+    } finally {
+      setDeletingProjects(prev => {
+        const next = new Set(prev);
+        next.delete(project.name);
+        return next;
+      });
     }
   };
 
@@ -485,6 +507,110 @@ function Sidebar({
             }
           }}
         />,
+        document.body
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmation && ReactDOM.createPortal(
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-card border border-border rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center flex-shrink-0">
+                  <AlertTriangle className="w-6 h-6 text-red-600 dark:text-red-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-lg font-semibold text-foreground mb-2">
+                    {t('deleteConfirmation.deleteProject')}
+                  </h3>
+                  <p className="text-sm text-muted-foreground mb-1">
+                    {t('deleteConfirmation.confirmDelete')}{' '}
+                    <span className="font-medium text-foreground">
+                      {deleteConfirmation.project.displayName || deleteConfirmation.project.name}
+                    </span>?
+                  </p>
+                  {deleteConfirmation.sessionCount > 0 && (
+                    <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                      <p className="text-sm text-red-700 dark:text-red-300 font-medium">
+                        {t('deleteConfirmation.sessionCount', { count: deleteConfirmation.sessionCount })}
+                      </p>
+                      <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                        {t('deleteConfirmation.allConversationsDeleted')}
+                      </p>
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground mt-3">
+                    {t('deleteConfirmation.cannotUndo')}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-3 p-4 bg-muted/30 border-t border-border">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setDeleteConfirmation(null)}
+              >
+                {t('actions.cancel')}
+              </Button>
+              <Button
+                variant="destructive"
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                onClick={confirmDeleteProject}
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                {t('actions.delete')}
+              </Button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Session Delete Confirmation Modal */}
+      {sessionDeleteConfirmation && ReactDOM.createPortal(
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-card border border-border rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center flex-shrink-0">
+                  <AlertTriangle className="w-6 h-6 text-red-600 dark:text-red-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-lg font-semibold text-foreground mb-2">
+                    {t('deleteConfirmation.deleteSession')}
+                  </h3>
+                  <p className="text-sm text-muted-foreground mb-1">
+                    {t('deleteConfirmation.confirmDelete')}{' '}
+                    <span className="font-medium text-foreground">
+                      {sessionDeleteConfirmation.sessionTitle || t('sessions.unnamed')}
+                    </span>?
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-3">
+                    {t('deleteConfirmation.cannotUndo')}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-3 p-4 bg-muted/30 border-t border-border">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setSessionDeleteConfirmation(null)}
+              >
+                {t('actions.cancel')}
+              </Button>
+              <Button
+                variant="destructive"
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                onClick={confirmDeleteSession}
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                {t('actions.delete')}
+              </Button>
+            </div>
+          </div>
+        </div>,
         document.body
       )}
 
@@ -718,9 +844,10 @@ function Sidebar({
               const isExpanded = expandedProjects.has(project.name);
               const isSelected = selectedProject?.name === project.name;
               const isStarred = isProjectStarred(project.name);
-              
+              const isDeleting = deletingProjects.has(project.name);
+
               return (
-                <div key={project.name} className="md:space-y-1">
+                <div key={project.name} className={cn("md:space-y-1", isDeleting && "opacity-50 pointer-events-none")}>
                   {/* Project Header */}
                   <div className="group md:group">
                     {/* Mobile Project Item */}
@@ -849,18 +976,16 @@ function Sidebar({
                                       : "text-gray-600 dark:text-gray-400"
                                   )} />
                                 </button>
-                                {getAllSessions(project).length === 0 && (
-                                  <button
+                                <button
                                     className="w-8 h-8 rounded-lg bg-red-500/10 dark:bg-red-900/30 flex items-center justify-center active:scale-90 border border-red-200 dark:border-red-800"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      deleteProject(project.name);
+                                      deleteProject(project);
                                     }}
-                                    onTouchEnd={handleTouchClick(() => deleteProject(project.name))}
+                                    onTouchEnd={handleTouchClick(() => deleteProject(project))}
                                   >
                                     <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400" />
                                   </button>
-                                )}
                                 <button
                                   className="w-8 h-8 rounded-lg bg-primary/10 dark:bg-primary/20 flex items-center justify-center active:scale-90 border border-primary/20 dark:border-primary/30"
                                   onClick={(e) => {
@@ -1009,18 +1134,16 @@ function Sidebar({
                             >
                               <Edit3 className="w-3 h-3" />
                             </div>
-                            {getAllSessions(project).length === 0 && (
-                              <div
+                            <div
                                 className="w-6 h-6 opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center justify-center rounded cursor-pointer touch:opacity-100"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  deleteProject(project.name);
+                                  deleteProject(project);
                                 }}
                                 title={t('tooltips.deleteProject')}
                               >
                                 <Trash2 className="w-3 h-3 text-red-600 dark:text-red-400" />
                               </div>
-                            )}
                             {isExpanded ? (
                               <ChevronDown className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
                             ) : (
@@ -1152,9 +1275,9 @@ function Sidebar({
                                       className="w-5 h-5 rounded-md bg-red-50 dark:bg-red-900/20 flex items-center justify-center active:scale-95 transition-transform opacity-70 ml-1"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        deleteSession(project.name, session.id, session.__provider);
+                                        showDeleteSessionConfirmation(project.name, session.id, sessionName, session.__provider);
                                       }}
-                                      onTouchEnd={handleTouchClick(() => deleteSession(project.name, session.id, session.__provider))}
+                                      onTouchEnd={handleTouchClick(() => showDeleteSessionConfirmation(project.name, session.id, sessionName, session.__provider))}
                                     >
                                       <Trash2 className="w-2.5 h-2.5 text-red-600 dark:text-red-400" />
                                     </button>
@@ -1271,7 +1394,7 @@ function Sidebar({
                                       className="w-6 h-6 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 rounded flex items-center justify-center"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        deleteSession(project.name, session.id, session.__provider);
+                                        showDeleteSessionConfirmation(project.name, session.id, sessionName, session.__provider);
                                       }}
                                       title={t('tooltips.deleteSession')}
                                     >

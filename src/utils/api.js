@@ -79,8 +79,8 @@ export const api = {
     authenticatedFetch(`/api/codex/sessions/${sessionId}`, {
       method: 'DELETE',
     }),
-  deleteProject: (projectName) =>
-    authenticatedFetch(`/api/projects/${projectName}`, {
+  deleteProject: (projectName, force = false) =>
+    authenticatedFetch(`/api/projects/${projectName}${force ? '?force=true' : ''}`, {
       method: 'DELETE',
     }),
   createProject: (path) =>

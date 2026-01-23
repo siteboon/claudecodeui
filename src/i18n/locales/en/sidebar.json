@@ -98,5 +98,14 @@
   },
   "version": {
     "updateAvailable": "Update available"
+  },
+  "deleteConfirmation": {
+    "deleteProject": "Delete Project",
+    "deleteSession": "Delete Session",
+    "confirmDelete": "Are you sure you want to delete",
+    "sessionCount_one": "This project contains {{count}} conversation.",
+    "sessionCount_other": "This project contains {{count}} conversations.",
+    "allConversationsDeleted": "All conversations will be permanently deleted.",
+    "cannotUndo": "This action cannot be undone."
   }
 }
