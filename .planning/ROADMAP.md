@@ -45,10 +45,11 @@ Plans:
   3. Initial `/api/projects` response contains minimal metadata per project
   4. New API endpoint exists for fetching session summaries separately
   5. Full message content still available when user opens a session
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] TBD
+- [ ] 02-01-PLAN.md - Server-side minimal project metadata extraction
+- [ ] 02-02-PLAN.md - API and frontend lazy loading integration
 
 ### Phase 3: UI Size Indicators
 **Goal**: Users can see which projects and sessions are large
@@ -71,5 +72,5 @@ Phases execute in numeric order: 1 → 2 → 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. File Reading Optimization | 3/3 | Complete | 2026-01-24 |
-| 2. Lazy Loading Architecture | 0/? | Not started | - |
+| 2. Lazy Loading Architecture | 0/2 | Not started | - |
 | 3. UI Size Indicators | 0/? | Not started | - |
