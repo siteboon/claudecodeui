@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-01-24)
 ## Current Position
 
 Phase: 2 of 3 (Lazy Loading Architecture)
-Plan: 01 of 3 (completed)
-Status: In progress
-Last activity: 2026-01-24 - Completed 02-01-PLAN.md (minimal project metadata)
+Plan: 02 of 2 (completed)
+Status: Phase 2 complete
+Last activity: 2026-01-24 - Completed 02-02-PLAN.md (API and frontend lazy loading integration)
 
-Progress: [████░░░░░░] 44% (4/9 plans complete)
+Progress: [██████░░░░] 56% (5/9 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
-- Average duration: 3.5 min
-- Total execution time: 0.23 hours
+- Total plans completed: 5
+- Average duration: 3.4 min
+- Total execution time: 0.28 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-file-reading-optimization | 3/3 | 12 min | 4 min |
-| 02-lazy-loading-architecture | 1/3 | 2 min | 2 min |
+| 02-lazy-loading-architecture | 2/2 | 5 min | 2.5 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (2 min), 01-02 (3 min), 01-03 (8 min), 02-01 (2 min)
+- Last 5 plans: 01-02 (3 min), 01-03 (8 min), 02-01 (2 min), 02-02 (3 min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -55,6 +55,9 @@ Recent decisions affecting current work:
 | Use fs.stat for size/mtime without reading file content | 02-01 | Enables metadata extraction without JSONL parsing |
 | Batch stat operations at 50 files | 02-01 | Prevents EMFILE errors in large directories |
 | Return empty sessions arrays for lazy loading | 02-01 | Sessions loaded separately via dedicated endpoint |
+| Use getProjectsMinimal for /api/projects endpoint and file watcher | 02-02 | API returns minimal data, sessions fetched on-demand |
+| Store loaded sessions in separate state from additional sessions | 02-02 | Clean separation between expansion fetch and "show more" |
+| Display project.sessionCount and totalSizeBytes before sessions load | 02-02 | Users see project size at a glance before expanding |
 
 ### Pending Todos
 
@@ -66,7 +69,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-01-24T19:08:33Z
-Stopped at: Completed 02-01-PLAN.md
-Resume file: .planning/phases/02-lazy-loading-architecture/02-01-SUMMARY.md
-Next: 02-02-PLAN.md (API endpoint integration)
+Last session: 2026-01-24T19:14:03Z
+Stopped at: Completed 02-02-PLAN.md (Phase 2 complete)
+Resume file: .planning/phases/02-lazy-loading-architecture/02-02-SUMMARY.md
+Next: Phase 3 (if exists) or project complete
