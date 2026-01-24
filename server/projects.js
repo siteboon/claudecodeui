@@ -2190,6 +2190,38 @@ async function extractCwdFromFirstBytes(filePath, maxBytes = 100 * 1024) {
   }
 }
 
+// Self-test when run directly with --test flag
+if (process.argv.includes('--test')) {
+  (async () => {
+    console.log('Testing getProjectsMinimal...');
+    const start = Date.now();
+    const projects = await getProjectsMinimal();
+    const duration = Date.now() - start;
+
+    console.log(`Found ${projects.length} projects in ${duration}ms`);
+
+    // Verify structure
+    if (projects.length > 0) {
+      const p = projects[0];
+      const hasRequired = 'sessionCount' in p && 'totalSizeBytes' in p && 'lastActivity' in p;
+      console.log('Has required fields:', hasRequired);
+      console.log('Sample project:', JSON.stringify({
+        name: p.name,
+        sessionCount: p.sessionCount,
+        totalSizeBytes: p.totalSizeBytes,
+        lastActivity: p.lastActivity,
+        sessions: p.sessions?.length ?? 'undefined'
+      }, null, 2));
+
+      // Verify sessions array is empty (lazy loading)
+      const allEmpty = projects.every(proj => Array.isArray(proj.sessions) && proj.sessions.length === 0);
+      console.log('All sessions arrays empty (lazy loading):', allEmpty);
+    }
+
+    console.log('Test complete!');
+  })();
+}
+
 export {
   getProjects,
   getProjectsMinimal,
