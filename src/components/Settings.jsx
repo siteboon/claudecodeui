@@ -49,6 +49,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = "agents" }) {
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null);
   const [projectSortOrder, setProjectSortOrder] = useState("name");
+  const [sidebarViewMode, setSidebarViewMode] = useState("repo");
+  const [sidebarTimeframe, setSidebarTimeframe] = useState("1w");
 
   const [mcpServers, setMcpServers] = useState([]);
   const [showMcpForm, setShowMcpForm] = useState(false);
@@ -584,12 +586,16 @@ function Settings({ isOpen, onClose, projects = [], initialTab = "agents" }) {
         setDisallowedTools(settings.disallowedTools || []);
         setSkipPermissions(settings.skipPermissions || false);
         setProjectSortOrder(settings.projectSortOrder || "name");
+        setSidebarViewMode(settings.sidebarViewMode || "repo");
+        setSidebarTimeframe(settings.sidebarTimeframe || "1w");
       } else {
         // Set defaults
         setAllowedTools([]);
         setDisallowedTools([]);
         setSkipPermissions(false);
         setProjectSortOrder("name");
+        setSidebarViewMode("repo");
+        setSidebarTimeframe("1w");
       }
 
       // Load Cursor settings from localStorage
@@ -776,6 +782,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = "agents" }) {
         disallowedTools,
         skipPermissions,
         projectSortOrder,
+        sidebarViewMode,
+        sidebarTimeframe,
         lastUpdated: new Date().toISOString(),
       };
 
@@ -1139,6 +1147,64 @@ function Settings({ isOpen, onClose, projects = [], initialTab = "agents" }) {
                           >
                             <option value="name">Alphabetical</option>
                             <option value="date">Recent Activity</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Sessions View Preferences */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold text-foreground">
+                        Sessions View
+                      </h3>
+
+                      {/* Default View Mode */}
+                      <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="font-medium text-foreground">
+                              Default View Mode
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                              How sessions are displayed in the sidebar
+                            </div>
+                          </div>
+                          <select
+                            value={sidebarViewMode}
+                            onChange={(e) => setSidebarViewMode(e.target.value)}
+                            className="text-sm bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 w-32"
+                          >
+                            <option value="repo">Repo View</option>
+                            <option value="session">Session View</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Default Timeframe */}
+                      <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="font-medium text-foreground">
+                              Default Timeframe
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                              Default time filter for session view
+                            </div>
+                          </div>
+                          <select
+                            value={sidebarTimeframe}
+                            onChange={(e) =>
+                              setSidebarTimeframe(e.target.value)
+                            }
+                            className="text-sm bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 w-32"
+                          >
+                            <option value="1h">1 hour</option>
+                            <option value="8h">8 hours</option>
+                            <option value="1d">1 day</option>
+                            <option value="1w">1 week</option>
+                            <option value="2w">2 weeks</option>
+                            <option value="1m">1 month</option>
+                            <option value="all">All time</option>
                           </select>
                         </div>
                       </div>

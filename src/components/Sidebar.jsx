@@ -24,6 +24,7 @@ import {
   Edit2,
   Star,
   Search,
+  Save,
 } from "lucide-react";
 import { cn } from "../lib/utils";
 import ClaudeLogo from "./ClaudeLogo";
@@ -102,16 +103,39 @@ function Sidebar({
   const [searchFilter, setSearchFilter] = useState("");
 
   // View selector state - persisted in localStorage
+  // First check individual storage keys, then fall back to claude-settings
   const [viewMode, setViewMode] = useState(() => {
     try {
-      return localStorage.getItem("sidebar-view-mode") || "repo";
+      // Check individual key first
+      const individualSetting = localStorage.getItem("sidebar-view-mode");
+      if (individualSetting) return individualSetting;
+
+      // Fall back to claude-settings
+      const savedSettings = localStorage.getItem("claude-settings");
+      if (savedSettings) {
+        const settings = JSON.parse(savedSettings);
+        return settings.sidebarViewMode || "repo";
+      }
+
+      return "repo";
     } catch {
       return "repo";
     }
   });
   const [timeframe, setTimeframe] = useState(() => {
     try {
-      return localStorage.getItem("sidebar-timeframe") || "1w";
+      // Check individual key first
+      const individualSetting = localStorage.getItem("sidebar-timeframe");
+      if (individualSetting) return individualSetting;
+
+      // Fall back to claude-settings
+      const savedSettings = localStorage.getItem("claude-settings");
+      if (savedSettings) {
+        const settings = JSON.parse(savedSettings);
+        return settings.sidebarTimeframe || "1w";
+      }
+
+      return "1w";
     } catch {
       return "1w";
     }
@@ -541,7 +565,14 @@ function Sidebar({
   const handleViewModeChange = (mode) => {
     setViewMode(mode);
     try {
+      // Update individual storage key for immediate use
       localStorage.setItem("sidebar-view-mode", mode);
+
+      // Also update claude-settings to keep in sync
+      const savedSettings = localStorage.getItem("claude-settings");
+      const settings = savedSettings ? JSON.parse(savedSettings) : {};
+      settings.sidebarViewMode = mode;
+      localStorage.setItem("claude-settings", JSON.stringify(settings));
     } catch {
       // Ignore localStorage errors
     }
@@ -550,7 +581,14 @@ function Sidebar({
   const handleTimeframeChange = (tf) => {
     setTimeframe(tf);
     try {
+      // Update individual storage key for immediate use
       localStorage.setItem("sidebar-timeframe", tf);
+
+      // Also update claude-settings to keep in sync
+      const savedSettings = localStorage.getItem("claude-settings");
+      const settings = savedSettings ? JSON.parse(savedSettings) : {};
+      settings.sidebarTimeframe = tf;
+      localStorage.setItem("claude-settings", JSON.stringify(settings));
     } catch {
       // Ignore localStorage errors
     }
@@ -577,6 +615,26 @@ function Sidebar({
 
     // Update TaskMaster context with the selected project
     setCurrentProject(project);
+  };
+
+  // Save current view preferences to settings
+  const saveViewPreferences = () => {
+    try {
+      const savedSettings = localStorage.getItem("claude-settings");
+      const settings = savedSettings ? JSON.parse(savedSettings) : {};
+
+      settings.sidebarViewMode = viewMode;
+      settings.sidebarTimeframe = timeframe;
+      settings.lastUpdated = new Date().toISOString();
+
+      localStorage.setItem("claude-settings", JSON.stringify(settings));
+
+      // Show success feedback
+      alert("View preferences saved successfully!");
+    } catch (error) {
+      console.error("Error saving view preferences:", error);
+      alert("Failed to save view preferences. Please try again.");
+    }
   };
 
   return (
@@ -806,6 +864,20 @@ function Sidebar({
                 {sessionsMeta.filteredCount} / {sessionsMeta.totalCount}
               </span>
             )}
+          </div>
+
+          {/* Save Preferences Button */}
+          <div className="mt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full h-8 text-xs hover:bg-accent transition-colors duration-200"
+              onClick={saveViewPreferences}
+              title="Save current view preferences to settings"
+            >
+              <Save className="w-3 h-3 mr-1.5" />
+              Save View Preferences
+            </Button>
           </div>
         </div>
 
