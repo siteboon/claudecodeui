@@ -57,7 +57,7 @@ import pty from 'node-pty';
 import fetch from 'node-fetch';
 import mime from 'mime-types';
 
-import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
+import { getProjects, getProjectsMinimal, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
 import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions, resolveToolApproval } from './claude-sdk.js';
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
 import { queryCodex, abortCodexSession, isCodexSessionActive, getActiveCodexSessions } from './openai-codex.js';
@@ -142,8 +142,8 @@ async function setupProjectsWatcher() {
                     // Clear project directory cache when files change
                     clearProjectDirectoryCache();
 
-                    // Get updated projects list
-                    const updatedProjects = await getProjects(broadcastProgress);
+                    // Get updated projects list (minimal metadata for lazy loading)
+                    const updatedProjects = await getProjectsMinimal(broadcastProgress);
 
                     // Notify all connected clients about the project changes
                     const updateMessage = JSON.stringify({
@@ -388,7 +388,7 @@ app.post('/api/system/update', authenticateToken, async (req, res) => {
 
 app.get('/api/projects', authenticateToken, async (req, res) => {
     try {
-        const projects = await getProjects(broadcastProgress);
+        const projects = await getProjectsMinimal(broadcastProgress);
         res.json(projects);
     } catch (error) {
         res.status(500).json({ error: error.message });
