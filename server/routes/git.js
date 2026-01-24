@@ -68,8 +68,8 @@ async function validateGitRepository(projectPath) {
 
   try {
     // Use --show-toplevel to get the root of the git repository
-    const { stdout: gitRoot } = await execAsync('git rev-parse --show-toplevel', { cwd: gitRoot });
-    const normalizedGitRoot = path.resolve(gitRoot.trim());
+    const { stdout } = await execAsync('git rev-parse --show-toplevel', { cwd: projectPath });
+    const normalizedGitRoot = path.resolve(stdout.trim());
 
     // Return the git root - this allows subdirectories to work correctly
     console.log('🔧 Git root for source control:', normalizedGitRoot, 'from:', projectPath);
@@ -405,7 +405,8 @@ router.post('/checkout', async (req, res) => {
 
   try {
     const projectPath = await getActualProjectPath(project);
-    
+    const gitRoot = await validateGitRepository(projectPath);
+
     // Checkout the branch
     const { stdout } = await execAsync(`git checkout "${branch}"`, { cwd: gitRoot });
     
@@ -426,7 +427,8 @@ router.post('/create-branch', async (req, res) => {
 
   try {
     const projectPath = await getActualProjectPath(project);
-    
+    const gitRoot = await validateGitRepository(projectPath);
+
     // Create and checkout new branch
     const { stdout } = await execAsync(`git checkout -b "${branch}"`, { cwd: gitRoot });
     
@@ -447,7 +449,8 @@ router.get('/commits', async (req, res) => {
 
   try {
     const projectPath = await getActualProjectPath(project);
-    
+    const gitRoot = await validateGitRepository(projectPath);
+
     // Get commit log with stats
     const { stdout } = await execAsync(
       `git log --pretty=format:'%H|%an|%ae|%ad|%s' --date=relative -n ${limit}`,
@@ -498,7 +501,8 @@ router.get('/commit-diff', async (req, res) => {
 
   try {
     const projectPath = await getActualProjectPath(project);
-    
+    const gitRoot = await validateGitRepository(projectPath);
+
     // Get diff for the commit
     const { stdout } = await execAsync(
       `git show ${commit}`,
@@ -527,6 +531,7 @@ router.post('/generate-commit-message', async (req, res) => {
 
   try {
     const projectPath = await getActualProjectPath(project);
+    const gitRoot = await validateGitRepository(projectPath);
 
     // Get diff for selected files
     let diffContext = '';
