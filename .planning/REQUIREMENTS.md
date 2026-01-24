@@ -67,6 +67,9 @@ Deferred to future release.
 | READ-02 | Phase 1 | Pending |
 | READ-03 | Phase 1 | Pending |
 | READ-04 | Phase 1 | Pending |
+| COMPAT-01 | Phase 1 | Pending |
+| COMPAT-02 | Phase 1 | Pending |
+| COMPAT-03 | Phase 1 | Pending |
 | LAZY-01 | Phase 2 | Pending |
 | LAZY-02 | Phase 2 | Pending |
 | LAZY-03 | Phase 2 | Pending |
@@ -74,9 +77,6 @@ Deferred to future release.
 | UI-01 | Phase 3 | Pending |
 | UI-02 | Phase 3 | Pending |
 | UI-03 | Phase 3 | Pending |
-| COMPAT-01 | Phase 1 | Pending |
-| COMPAT-02 | Phase 1 | Pending |
-| COMPAT-03 | Phase 1 | Pending |
 
 **Coverage:**
 - v1 requirements: 14 total
@@ -85,4 +85,4 @@ Deferred to future release.
 
 ---
 *Requirements defined: 2026-01-24*
-*Last updated: 2026-01-24 after initial definition*
+*Last updated: 2026-01-24 after roadmap creation*
