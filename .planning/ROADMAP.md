@@ -28,10 +28,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Session timestamps derived from file `mtime` without parsing content
   4. When metadata not found in byte-limited read, defaults are used and server continues
   5. Existing skip patterns and size limits continue to work unchanged
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] TBD
+- [ ] 01-01-PLAN.md - TDD: Byte-limited cwd extraction function
+- [ ] 01-02-PLAN.md - Integrate byte-limited extraction with fallbacks
+- [ ] 01-03-PLAN.md - Use file mtime for session timestamps
 
 ### Phase 2: Lazy Loading Architecture
 **Goal**: Projects load instantly with minimal data, session details fetched on-demand
@@ -68,6 +70,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. File Reading Optimization | 0/? | Not started | - |
+| 1. File Reading Optimization | 0/3 | Planned | - |
 | 2. Lazy Loading Architecture | 0/? | Not started | - |
 | 3. UI Size Indicators | 0/? | Not started | - |
