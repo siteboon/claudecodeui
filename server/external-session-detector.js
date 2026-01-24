@@ -11,10 +11,10 @@
  * 3. Session lock file detection (.claude/session.lock)
  */
 
-const { spawnSync } = require("child_process");
-const fs = require("fs");
-const path = require("path");
-const os = require("os");
+import { spawnSync } from "child_process";
+import fs from "fs";
+import path from "path";
+import os from "os";
 
 // Cache to avoid repeated process scans
 const detectionCache = new Map();
@@ -392,7 +392,7 @@ function removeSessionLock(projectPath) {
   }
 }
 
-module.exports = {
+export {
   detectExternalClaude,
   detectClaudeProcesses,
   detectClaudeTmuxSessions,

@@ -250,4 +250,4 @@ setInterval(
   5 * 60 * 1000,
 );
 
-module.exports = { SessionLock, sessionLock };
+export { SessionLock, sessionLock };

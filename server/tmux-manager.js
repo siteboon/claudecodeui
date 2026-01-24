@@ -8,9 +8,9 @@
  * Session naming convention: claudeui-{projectHash}-{sessionId}
  */
 
-const { execFileSync, spawnSync } = require("child_process");
-const crypto = require("crypto");
-const os = require("os");
+import { spawnSync } from "child_process";
+import crypto from "crypto";
+import os from "os";
 
 // tmux availability cache
 let tmuxAvailable = null;
@@ -387,7 +387,7 @@ function cleanupStaleSessions(maxAgeMs = 24 * 60 * 60 * 1000) {
   return cleaned;
 }
 
-module.exports = {
+export {
   checkTmuxAvailable,
   hashProjectPath,
   generateTmuxSessionName,
