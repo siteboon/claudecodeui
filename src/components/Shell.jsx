@@ -10,6 +10,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
+import { SessionStatusBadge } from "./SessionStatusIndicator";
 
 const xtermStyles = `
   .xterm .xterm-screen {
@@ -48,6 +49,7 @@ function Shell({
   const [isRestarting, setIsRestarting] = useState(false);
   const [lastSessionId, setLastSessionId] = useState(null);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [sessionState, setSessionState] = useState(null);
 
   const selectedProjectRef = useRef(selectedProject);
   const selectedSessionRef = useRef(selectedSession);
@@ -214,6 +216,12 @@ function Shell({
             }
           } else if (data.type === "url_open") {
             window.open(data.url, "_blank");
+          } else if (data.type === "session-state-update") {
+            // Update session state (mode, client count, lock status)
+            setSessionState(data.state);
+          } else if (data.type === "conflict-resolved") {
+            // Session conflict was resolved
+            console.log("[Shell] Conflict resolved:", data.action);
           }
         } catch (error) {
           console.error(
@@ -565,6 +573,12 @@ function Shell({
             )}
             {isRestarting && (
               <span className="text-xs text-blue-400">(Restarting...)</span>
+            )}
+            {sessionState && (
+              <SessionStatusBadge
+                mode={sessionState.mode}
+                clientCount={sessionState.clientCount}
+              />
             )}
           </div>
           <div className="flex items-center space-x-3">
