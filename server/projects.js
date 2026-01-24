@@ -803,7 +803,7 @@ async function getSessions(projectName, limit = 5, offset = 0) {
       jsonlFiles.map(async (file) => {
         const filePath = path.join(projectDir, file);
         const stats = await fs.stat(filePath);
-        return { file, mtime: stats.mtime };
+        return { file, mtime: stats.mtime, size: stats.size };
       })
     );
     filesWithStats.sort((a, b) => b.mtime - a.mtime);
@@ -816,10 +816,10 @@ async function getSessions(projectName, limit = 5, offset = 0) {
     // Limit entries parsed from each file to reduce memory usage
     const MAX_ENTRIES_PER_FILE = 5000;
 
-    for (const { file, mtime } of filesWithStats) {
+    for (const { file, mtime, size } of filesWithStats) {
       const jsonlFile = path.join(projectDir, file);
       // Only parse up to MAX_ENTRIES_PER_FILE to avoid memory overload
-      const result = await parseJsonlSessions(jsonlFile, MAX_ENTRIES_PER_FILE, mtime);
+      const result = await parseJsonlSessions(jsonlFile, MAX_ENTRIES_PER_FILE, mtime, size);
 
       result.sessions.forEach(session => {
         if (!allSessions.has(session.id)) {
@@ -919,7 +919,7 @@ async function getSessions(projectName, limit = 5, offset = 0) {
   }
 }
 
-async function parseJsonlSessions(filePath, maxEntries = null, fileMtime = null) {
+async function parseJsonlSessions(filePath, maxEntries = null, fileMtime = null, fileSize = null) {
   const sessions = new Map();
   const entries = [];
   const pendingSummaries = new Map(); // leafUuid -> summary for entries without sessionId
@@ -954,7 +954,8 @@ async function parseJsonlSessions(filePath, maxEntries = null, fileMtime = null)
                 cwd: entry.cwd || '',
                 lastUserMessage: null,
                 lastAssistantMessage: null,
-                timestampSource: fileMtime ? 'mtime' : 'fallback'
+                timestampSource: fileMtime ? 'mtime' : 'fallback',
+                sizeBytes: fileSize || 0
               });
             }
 
