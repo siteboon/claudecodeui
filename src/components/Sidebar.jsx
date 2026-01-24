@@ -788,28 +788,26 @@ function Sidebar({
           </div>
         )}
 
-        {/* View Selector and Time Filter - Only show when there are projects */}
-        {projects.length > 0 && !isLoading && (
-          <div className="px-3 md:px-4 py-2 border-b border-border">
-            <div className="flex items-center gap-2">
-              <SessionsViewSelector
-                value={viewMode}
-                onChange={handleViewModeChange}
+        {/* View Selector and Time Filter - Always visible to allow session view independent of projects */}
+        <div className="px-3 md:px-4 py-2 border-b border-border">
+          <div className="flex items-center gap-2">
+            <SessionsViewSelector
+              value={viewMode}
+              onChange={handleViewModeChange}
+            />
+            {viewMode === "session" && (
+              <TimeframeFilter
+                value={timeframe}
+                onChange={handleTimeframeChange}
               />
-              {viewMode === "session" && (
-                <TimeframeFilter
-                  value={timeframe}
-                  onChange={handleTimeframeChange}
-                />
-              )}
-              {viewMode === "session" && sessionsMeta && (
-                <span className="text-xs text-muted-foreground ml-auto">
-                  {sessionsMeta.filteredCount} / {sessionsMeta.totalCount}
-                </span>
-              )}
-            </div>
+            )}
+            {viewMode === "session" && sessionsMeta && (
+              <span className="text-xs text-muted-foreground ml-auto">
+                {sessionsMeta.filteredCount} / {sessionsMeta.totalCount}
+              </span>
+            )}
           </div>
-        )}
+        </div>
 
         {/* Projects List / Session List */}
         <ScrollArea className="flex-1 md:px-2 md:py-3 overflow-y-auto overscroll-contain">
