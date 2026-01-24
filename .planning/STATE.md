@@ -30,7 +30,7 @@ Progress: [███░░░░░░░] 33% (1/3 phases, 3/3 plans in phase 1
 | 01-file-reading-optimization | 3/3 | 12 min | 4 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (2 min), 01-03 (8 min)
+- Last 5 plans: 01-01 (2 min), 01-02 (3 min), 01-03 (8 min)
 - Trend: Baseline established
 
 *Updated after each plan completion*
@@ -47,6 +47,8 @@ Recent decisions affecting current work:
 | Use createReadStream with end option for byte-limited reading | 01-01 | Prevents reading entire 600MB files into memory |
 | Read maximum 100KB to find cwd field | 01-01 | Provides safety margin while ensuring metadata is found |
 | Early exit immediately when cwd found | 01-01 | Optimizes performance by avoiding unnecessary line processing |
+| Cache stores source metadata ('file', 'config', 'fallback') | 01-02 | Enables tracking when cwd came from fallback |
+| Add incompleteMetadata flag only when source is 'fallback' | 01-02 | API backward compatible (additive optional field) |
 | Use file mtime as primary timestamp source | 01-03 | Reduces content parsing by using file stats for timestamps |
 | Track timestampSource for debugging | 01-03 | Helps diagnose timestamp-related issues |
 
