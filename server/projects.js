@@ -1875,6 +1875,68 @@ async function deleteCodexSession(sessionId) {
   }
 }
 
+/**
+ * Extract cwd from first bytes of a JSONL file (byte-limited).
+ * Reads at most maxBytes from the file to find the cwd field.
+ * This prevents memory issues when reading large session files.
+ *
+ * @param {string} filePath - Path to the JSONL file
+ * @param {number} maxBytes - Maximum bytes to read (default: 100KB)
+ * @returns {Promise<string|null>} - The cwd value or null if not found
+ */
+async function extractCwdFromFirstBytes(filePath, maxBytes = 100 * 1024) {
+  let foundCwd = null;
+  let rl = null;
+
+  try {
+    // Create file stream with byte limit
+    // end is INCLUSIVE, so we use maxBytes - 1 to read exactly maxBytes
+    const fileStream = fsSync.createReadStream(filePath, {
+      encoding: 'utf8',
+      start: 0,
+      end: maxBytes - 1
+    });
+
+    // Create readline interface
+    rl = readline.createInterface({
+      input: fileStream,
+      crlfDelay: Infinity
+    });
+
+    // Process lines until cwd is found
+    for await (const line of rl) {
+      if (line.trim()) {
+        try {
+          const entry = JSON.parse(line);
+          if (entry.cwd) {
+            foundCwd = entry.cwd;
+            // Close readline and break immediately when found
+            rl.close();
+            break;
+          }
+        } catch (parseError) {
+          // Skip malformed JSON lines (may be truncated at byte boundary)
+          continue;
+        }
+      }
+    }
+
+    return foundCwd;
+  } catch (error) {
+    // Handle file not found or other errors
+    if (error.code === 'ENOENT') {
+      return null;
+    }
+    console.error(`Error extracting cwd from ${filePath}:`, error);
+    return null;
+  } finally {
+    // Ensure readline is closed
+    if (rl) {
+      rl.close();
+    }
+  }
+}
+
 export {
   getProjects,
   getSessions,
@@ -1891,5 +1953,6 @@ export {
   clearProjectDirectoryCache,
   getCodexSessions,
   getCodexSessionMessages,
-  deleteCodexSession
+  deleteCodexSession,
+  extractCwdFromFirstBytes
 };
