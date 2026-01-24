@@ -17,6 +17,15 @@ import { api } from '../utils/api';
 import { useTaskMaster } from '../contexts/TaskMasterContext';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
 
+// Format bytes to human-readable format (KB, MB, GB)
+const formatBytes = (bytes) => {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+};
+
 // Move formatTimeAgo outside component to avoid recreation on every render
 const formatTimeAgo = (dateString, currentTime, t) => {
   const date = new Date(dateString);
@@ -858,11 +867,18 @@ function Sidebar({
                                   </div>
                                   <p className="text-xs text-muted-foreground">
                                     {(() => {
-                                      const sessionCount = getAllSessions(project).length;
-                                      const hasMore = project.sessionMeta?.hasMore !== false;
+                                      // Use project.sessionCount from minimal API if sessions not loaded yet
+                                      const loadedCount = getAllSessions(project).length;
+                                      const sessionCount = loadedCount > 0 ? loadedCount : (project.sessionCount || 0);
+                                      const hasMore = loadedProjectSessions[project.name]?.hasMore !== false && project.sessionMeta?.hasMore !== false;
                                       const count = hasMore && sessionCount >= 5 ? `${sessionCount}+` : sessionCount;
                                       return `${count} session${count === 1 ? '' : 's'}`;
                                     })()}
+                                    {project.totalSizeBytes > 0 && (
+                                      <span className="ml-1 opacity-60">
+                                        {' '}{formatBytes(project.totalSizeBytes)}
+                                      </span>
+                                    )}
                                   </p>
                                 </>
                               )}
@@ -1004,10 +1020,17 @@ function Sidebar({
                               </div>
                               <div className="text-xs text-muted-foreground">
                                 {(() => {
-                                  const sessionCount = getAllSessions(project).length;
-                                  const hasMore = project.sessionMeta?.hasMore !== false;
+                                  // Use project.sessionCount from minimal API if sessions not loaded yet
+                                  const loadedCount = getAllSessions(project).length;
+                                  const sessionCount = loadedCount > 0 ? loadedCount : (project.sessionCount || 0);
+                                  const hasMore = loadedProjectSessions[project.name]?.hasMore !== false && project.sessionMeta?.hasMore !== false;
                                   return hasMore && sessionCount >= 5 ? `${sessionCount}+` : sessionCount;
                                 })()}
+                                {project.totalSizeBytes > 0 && (
+                                  <span className="ml-1 opacity-60">
+                                    {' '}{formatBytes(project.totalSizeBytes)}
+                                  </span>
+                                )}
                                 {project.fullPath !== project.displayName && (
                                   <span className="ml-1 opacity-60" title={project.fullPath}>
                                     • {project.fullPath.length > 25 ? '...' + project.fullPath.slice(-22) : project.fullPath}
