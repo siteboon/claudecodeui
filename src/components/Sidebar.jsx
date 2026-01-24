@@ -39,6 +39,7 @@ import SessionsViewSelector from "./SessionsViewSelector";
 import TimeframeFilter from "./TimeframeFilter";
 import SessionListView from "./SessionListView";
 import useSessionsList from "../hooks/useSessionsList";
+import useProjectsList from "../hooks/useProjectsList";
 
 // Move formatTimeAgo outside component to avoid recreation on every render
 const formatTimeAgo = (dateString, currentTime) => {
@@ -148,6 +149,14 @@ function Sidebar({
     isLoading: isSessionsLoading,
     refresh: refreshSessions,
   } = useSessionsList(timeframe, viewMode === "session");
+
+  // Projects list hook for Repo View with timeframe filtering
+  const {
+    projects: projectsList,
+    meta: projectsMeta,
+    isLoading: isProjectsListLoading,
+    refresh: refreshProjectsList,
+  } = useProjectsList(timeframe, viewMode === "repo");
 
   // TaskMaster context
   const { setCurrentProject, mcpServerStatus } = useTaskMaster();
@@ -334,8 +343,20 @@ function Sidebar({
     return mostRecentDate;
   };
 
+  // Filter projects based on timeframe when in repo view
+  // Use projectsList from the hook for filtering (contains only projects within timeframe)
+  const timeframeFilteredProjects = React.useMemo(() => {
+    if (viewMode !== "repo" || !projectsList || projectsList.length === 0) {
+      return projects;
+    }
+    // Create a Set of project names that are within the timeframe
+    const projectNamesInTimeframe = new Set(projectsList.map((p) => p.name));
+    // Filter the full projects data to only include those in the timeframe
+    return projects.filter((p) => projectNamesInTimeframe.has(p.name));
+  }, [projects, projectsList, viewMode]);
+
   // Combined sorting: starred projects first, then by selected order
-  const sortedProjects = [...projects].sort((a, b) => {
+  const sortedProjects = [...timeframeFilteredProjects].sort((a, b) => {
     const aStarred = isProjectStarred(a.name);
     const bStarred = isProjectStarred(b.name);
 
@@ -846,22 +867,25 @@ function Sidebar({
           </div>
         )}
 
-        {/* View Selector and Time Filter - Always visible to allow session view independent of projects */}
+        {/* View Selector and Time Filter - Always visible for both views */}
         <div className="px-3 md:px-4 py-2 border-b border-border">
           <div className="flex items-center gap-2">
             <SessionsViewSelector
               value={viewMode}
               onChange={handleViewModeChange}
             />
-            {viewMode === "session" && (
-              <TimeframeFilter
-                value={timeframe}
-                onChange={handleTimeframeChange}
-              />
-            )}
+            <TimeframeFilter
+              value={timeframe}
+              onChange={handleTimeframeChange}
+            />
             {viewMode === "session" && sessionsMeta && (
               <span className="text-xs text-muted-foreground ml-auto">
                 {sessionsMeta.filteredCount} / {sessionsMeta.totalCount}
+              </span>
+            )}
+            {viewMode === "repo" && projectsMeta && (
+              <span className="text-xs text-muted-foreground ml-auto">
+                {projectsMeta.filteredCount} / {projectsMeta.totalCount}
               </span>
             )}
           </div>

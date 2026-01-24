@@ -56,6 +56,19 @@ export const api = {
       headers,
     });
   },
+  projectsList: (timeframe = "1w", etag = null) => {
+    const headers = {};
+    if (etag) {
+      headers["If-None-Match"] = etag;
+    }
+    return authenticatedFetch(`/api/projects/list?timeframe=${timeframe}`, {
+      headers,
+    });
+  },
+  projectDetail: (projectName) =>
+    authenticatedFetch(
+      `/api/projects/${encodeURIComponent(projectName)}/detail`,
+    ),
   sessions: (projectName, limit = 5, offset = 0) =>
     authenticatedFetch(
       `/api/projects/${projectName}/sessions?limit=${limit}&offset=${offset}`,
