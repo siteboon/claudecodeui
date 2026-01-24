@@ -51,10 +51,43 @@
  * - Empty arrays returned when no projects/sessions exist
  * 
  * ## Caching Strategy
- * 
+ *
  * - Project directory extraction is cached to minimize file I/O
  * - Cache is cleared when project configuration changes
  * - Session data is fetched on-demand, not cached
+ *
+ * ## Memory Optimization Strategies
+ *
+ * To handle large monorepos and projects without crashing, several optimizations are in place:
+ *
+ * 1. **Project Filtering** (Environment Variables):
+ *    - `SKIP_LARGE_PROJECTS_MB`: Skip projects larger than specified size (default: none)
+ *    - `SKIP_PROJECTS_PATTERN`: Comma-separated patterns to exclude (e.g., "node_modules,monorepo-backend")
+ *    - Example: `SKIP_LARGE_PROJECTS_MB=500 SKIP_PROJECTS_PATTERN="backend,data" npm start`
+ *
+ * 2. **Smart Directory Size Calculation**:
+ *    - Automatically skips common large directories: node_modules, .git, dist, build, .next, etc.
+ *    - Limited traversal depth (max 10 levels) to prevent deep recursion
+ *    - Caches size results to avoid recalculation
+ *
+ * 3. **Lazy Loading of Session Data**:
+ *    - parseJsonlSessions() uses early exit after MAX_ENTRIES_PER_FILE (5000 entries)
+ *    - getSessions() stops reading files once enough sessions are collected
+ *    - Limits session results returned to what UI needs (pagination-based)
+ *
+ * 4. **Project Path Extraction Optimization**:
+ *    - extractProjectDirectory() stops after finding first cwd value
+ *    - Limits entries checked to MAX_ENTRIES_TO_CHECK (1000) per file
+ *    - Early termination once a project path is identified
+ *
+ * 5. **TaskMaster Metadata**:
+ *    - Skips parsing tasks.json if larger than 10MB
+ *    - Returns error message instead of attempting to parse huge files
+ *
+ * 6. **Session Limits**:
+ *    - Cursor sessions: limited to 5 per project with early exit
+ *    - Codex sessions: limited to 5 per project with early exit
+ *    - Claude sessions: paginated with limit parameter
  */
 
 import { promises as fs } from 'fs';
@@ -112,13 +145,21 @@ async function detectTaskMasterFolder(projectPath) {
             }
         }
 
-        // Parse tasks.json if it exists for metadata
+        // Parse tasks.json if it exists for metadata (with size limit to prevent memory issues)
         let taskMetadata = null;
         if (fileStatus['tasks/tasks.json']) {
             try {
                 const tasksPath = path.join(taskMasterPath, 'tasks/tasks.json');
-                const tasksContent = await fs.readFile(tasksPath, 'utf8');
-                const tasksData = JSON.parse(tasksContent);
+                const tasksStat = await fs.stat(tasksPath);
+
+                // Skip parsing very large tasks.json files (>10MB) to prevent memory overload
+                if (tasksStat.size > 10 * 1024 * 1024) {
+                    taskMetadata = {
+                        error: `tasks.json too large (${(tasksStat.size / 1024 / 1024).toFixed(1)}MB), skipped parsing to conserve memory`
+                    };
+                } else {
+                    const tasksContent = await fs.readFile(tasksPath, 'utf8');
+                    const tasksData = JSON.parse(tasksContent);
                 
                 // Handle both tagged and legacy formats
                 let tasks = [];
@@ -161,16 +202,17 @@ async function detectTaskMasterFolder(projectPath) {
                     subtasks: {}
                 });
 
-                taskMetadata = {
-                    taskCount: stats.total,
-                    subtaskCount: stats.subtotalTasks,
-                    completed: stats.done || 0,
-                    pending: stats.pending || 0,
-                    inProgress: stats['in-progress'] || 0,
-                    review: stats.review || 0,
-                    completionPercentage: stats.total > 0 ? Math.round((stats.done / stats.total) * 100) : 0,
-                    lastModified: (await fs.stat(tasksPath)).mtime.toISOString()
-                };
+                    taskMetadata = {
+                        taskCount: stats.total,
+                        subtaskCount: stats.subtotalTasks,
+                        completed: stats.done || 0,
+                        pending: stats.pending || 0,
+                        inProgress: stats['in-progress'] || 0,
+                        review: stats.review || 0,
+                        completionPercentage: stats.total > 0 ? Math.round((stats.done / stats.total) * 100) : 0,
+                        lastModified: (await fs.stat(tasksPath)).mtime.toISOString()
+                    };
+                }
             } catch (parseError) {
                 console.warn('Failed to parse tasks.json:', parseError.message);
                 taskMetadata = { error: 'Failed to parse tasks.json' };
@@ -231,7 +273,31 @@ function formatMegabytes(bytes) {
   return (bytes / MB_BYTES).toFixed(1);
 }
 
-async function getDirectorySizeBytes(directoryPath) {
+// Directories to skip when calculating project size (common build/dependency folders)
+const SIZE_SKIP_DIRS = new Set([
+  'node_modules',
+  '.git',
+  'dist',
+  'build',
+  'out',
+  '.next',
+  '.nuxt',
+  '.cache',
+  '.venv',
+  'venv',
+  '__pycache__',
+  'target',
+  '.gradle',
+  'coverage',
+  '.nyc_output'
+]);
+
+async function getDirectorySizeBytes(directoryPath, depth = 0, maxDepth = 10) {
+  // Limit depth to avoid traversing too deep
+  if (depth > maxDepth) {
+    return 0;
+  }
+
   try {
     const entries = await fs.readdir(directoryPath, { withFileTypes: true });
     let total = 0;
@@ -243,8 +309,13 @@ async function getDirectorySizeBytes(directoryPath) {
         continue;
       }
 
+      // Skip certain directories that commonly contain large files
+      if (entry.isDirectory() && SIZE_SKIP_DIRS.has(entry.name)) {
+        continue;
+      }
+
       if (entry.isDirectory()) {
-        total += await getDirectorySizeBytes(entryPath);
+        total += await getDirectorySizeBytes(entryPath, depth + 1, maxDepth);
         continue;
       }
 
@@ -407,7 +478,10 @@ async function extractProjectDirectory(projectName) {
       // Fall back to decoded project name if no sessions
       extractedPath = projectName.replace(/-/g, '/');
     } else {
-      // Process all JSONL files to collect cwd values
+      // Process all JSONL files to collect cwd values (with early exit)
+      let totalEntriesProcessed = 0;
+      const MAX_ENTRIES_TO_CHECK = 1000; // Limit entries checked per file
+
       for (const file of jsonlFiles) {
         const jsonlFile = path.join(projectDir, file);
         const fileStream = fsSync.createReadStream(jsonlFile);
@@ -415,16 +489,18 @@ async function extractProjectDirectory(projectName) {
           input: fileStream,
           crlfDelay: Infinity
         });
-        
+
+        let entriesInThisFile = 0;
+
         for await (const line of rl) {
           if (line.trim()) {
             try {
               const entry = JSON.parse(line);
-              
+
               if (entry.cwd) {
                 // Count occurrences of each cwd
                 cwdCounts.set(entry.cwd, (cwdCounts.get(entry.cwd) || 0) + 1);
-                
+
                 // Track the most recent cwd
                 const timestamp = new Date(entry.timestamp || 0).getTime();
                 if (timestamp > latestTimestamp) {
@@ -432,10 +508,24 @@ async function extractProjectDirectory(projectName) {
                   latestCwd = entry.cwd;
                 }
               }
+
+              entriesInThisFile++;
+              totalEntriesProcessed++;
+
+              // Stop reading this file if we've seen enough entries
+              if (entriesInThisFile >= MAX_ENTRIES_TO_CHECK) {
+                rl.close();
+                break;
+              }
             } catch (parseError) {
               // Skip malformed lines
             }
           }
+        }
+
+        // If we have found multiple cwds, we likely have enough info to determine the project path
+        if (cwdCounts.size > 0) {
+          break;
         }
       }
       
@@ -753,21 +843,27 @@ async function getSessions(projectName, limit = 5, offset = 0) {
     const allEntries = [];
     const uuidToSessionMap = new Map();
     
-    // Collect all sessions and entries from all files
+    // Collect sessions from files (with early exit for large projects)
+    // Limit entries parsed from each file to reduce memory usage
+    const MAX_ENTRIES_PER_FILE = 5000;
+
     for (const { file } of filesWithStats) {
       const jsonlFile = path.join(projectDir, file);
-      const result = await parseJsonlSessions(jsonlFile);
-      
+      // Only parse up to MAX_ENTRIES_PER_FILE to avoid memory overload
+      const result = await parseJsonlSessions(jsonlFile, MAX_ENTRIES_PER_FILE);
+
       result.sessions.forEach(session => {
         if (!allSessions.has(session.id)) {
           allSessions.set(session.id, session);
         }
       });
-      
+
       allEntries.push(...result.entries);
-      
-      // Early exit optimization for large projects
-      if (allSessions.size >= (limit + offset) * 2 && allEntries.length >= Math.min(3, filesWithStats.length)) {
+
+      // Early exit: stop processing files once we have enough sessions
+      // We want roughly (limit + offset) * 3 sessions to account for grouping
+      if (allSessions.size >= Math.min((limit + offset) * 3, 50) && allEntries.length >= Math.min(5, filesWithStats.length)) {
+        console.log(`[INFO] Early exit in getSessions: collected ${allSessions.size} sessions from ${filesWithStats.indexOf({file}) + 1}/${filesWithStats.length} files`);
         break;
       }
     }
@@ -854,10 +950,11 @@ async function getSessions(projectName, limit = 5, offset = 0) {
   }
 }
 
-async function parseJsonlSessions(filePath) {
+async function parseJsonlSessions(filePath, maxEntries = null) {
   const sessions = new Map();
   const entries = [];
   const pendingSummaries = new Map(); // leafUuid -> summary for entries without sessionId
+  let entryCount = 0;
 
   try {
     const fileStream = fsSync.createReadStream(filePath);
@@ -871,6 +968,7 @@ async function parseJsonlSessions(filePath) {
         try {
           const entry = JSON.parse(line);
           entries.push(entry);
+          entryCount++;
 
           // Handle summary entries that don't have sessionId yet
           if (entry.type === 'summary' && entry.summary && !entry.sessionId && entry.leafUuid) {
@@ -968,6 +1066,12 @@ async function parseJsonlSessions(filePath) {
           }
         } catch (parseError) {
           // Skip malformed lines silently
+        }
+
+        // Early exit if we've collected enough entries (for large files)
+        if (maxEntries && entryCount >= maxEntries) {
+          rl.close();
+          break;
         }
       }
     }
