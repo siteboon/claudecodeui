@@ -447,13 +447,36 @@ app.use("/api/sessions", authenticateToken, sessionsRoutes);
 // Agent API Routes (uses API key authentication)
 app.use("/api/agent", agentRoutes);
 
-// Serve public files (like api-docs.html)
-app.use(express.static(path.join(__dirname, "../public")));
+// Serve public files (like api-docs.html, icons)
+// Enable ETag generation for conditional requests (304 support)
+app.use(
+  express.static(path.join(__dirname, "../public"), {
+    etag: true,
+    lastModified: true,
+    setHeaders: (res, filePath) => {
+      // Cache icons and other static assets
+      if (filePath.match(/\.(svg|png|jpg|jpeg|gif|ico|woff2?|ttf|eot)$/)) {
+        // Cache for 1 week, allow revalidation
+        res.setHeader(
+          "Cache-Control",
+          "public, max-age=604800, must-revalidate",
+        );
+      } else if (filePath.endsWith(".html")) {
+        // HTML files should not be cached
+        res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        res.setHeader("Pragma", "no-cache");
+        res.setHeader("Expires", "0");
+      }
+    },
+  }),
+);
 
 // Static files served after API routes
 // Add cache control: HTML files should not be cached, but assets can be cached
 app.use(
   express.static(path.join(__dirname, "../dist"), {
+    etag: true,
+    lastModified: true,
     setHeaders: (res, filePath) => {
       if (filePath.endsWith(".html")) {
         // Prevent HTML caching to avoid service worker issues after builds
