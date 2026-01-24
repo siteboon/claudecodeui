@@ -76,9 +76,10 @@
  *    - Limits session results returned to what UI needs (pagination-based)
  *
  * 4. **Project Path Extraction Optimization**:
- *    - extractProjectDirectory() stops after finding first cwd value
- *    - Limits entries checked to MAX_ENTRIES_TO_CHECK (1000) per file
- *    - Early termination once a project path is identified
+ *    - extractProjectDirectory() uses byte-limited reading (100KB max)
+ *    - extractCwdFromFirstBytes() reads only first 100KB of each JSONL file
+ *    - Falls back to folder name if cwd not found within byte limit
+ *    - Projects with fallback paths are marked with incompleteMetadata: true
  *
  * 5. **TaskMaster Metadata**:
  *    - Skips parsing tasks.json if larger than 10MB
@@ -244,6 +245,15 @@ const projectSizeCache = new Map();
 function clearProjectDirectoryCache() {
   projectDirectoryCache.clear();
   projectSizeCache.clear();
+}
+
+// Get the source of a cached project directory ('file', 'config', or 'fallback')
+// Returns null if project is not in cache
+function getProjectDirectorySource(projectName) {
+  const cached = projectDirectoryCache.get(projectName);
+  if (!cached) return null;
+  // Handle old string-format cache entries (from previous versions)
+  return typeof cached === 'string' ? 'unknown' : cached.source;
 }
 
 const MB_BYTES = 1024 * 1024;
@@ -449,7 +459,9 @@ async function generateDisplayName(projectName, actualProjectDir = null) {
 async function extractProjectDirectory(projectName) {
   // Check cache first
   if (projectDirectoryCache.has(projectName)) {
-    return projectDirectoryCache.get(projectName);
+    const cached = projectDirectoryCache.get(projectName);
+    // Return just the path if cached as string (old format) or extract path from object
+    return typeof cached === 'string' ? cached : cached.path;
   }
 
   // Check project config for originalPath (manually added projects via UI or platform)
@@ -457,115 +469,54 @@ async function extractProjectDirectory(projectName) {
   const config = await loadProjectConfig();
   if (config[projectName]?.originalPath) {
     const originalPath = config[projectName].originalPath;
-    projectDirectoryCache.set(projectName, originalPath);
+    projectDirectoryCache.set(projectName, { path: originalPath, source: 'config' });
     return originalPath;
   }
 
   const projectDir = path.join(os.homedir(), '.claude', 'projects', projectName);
-  const cwdCounts = new Map();
-  let latestTimestamp = 0;
-  let latestCwd = null;
   let extractedPath;
-  
+  let source;
+
   try {
     // Check if the project directory exists
     await fs.access(projectDir);
-    
+
     const files = await fs.readdir(projectDir);
     const jsonlFiles = files.filter(file => file.endsWith('.jsonl'));
-    
+
     if (jsonlFiles.length === 0) {
       // Fall back to decoded project name if no sessions
       extractedPath = projectName.replace(/-/g, '/');
+      source = 'fallback';
     } else {
-      // Process all JSONL files to collect cwd values (with early exit)
-      let totalEntriesProcessed = 0;
-      const MAX_ENTRIES_TO_CHECK = 1000; // Limit entries checked per file
+      // Use byte-limited extraction for each JSONL file
+      let foundCwd = null;
 
       for (const file of jsonlFiles) {
         const jsonlFile = path.join(projectDir, file);
-        const fileStream = fsSync.createReadStream(jsonlFile);
-        const rl = readline.createInterface({
-          input: fileStream,
-          crlfDelay: Infinity
-        });
+        foundCwd = await extractCwdFromFirstBytes(jsonlFile);
 
-        let entriesInThisFile = 0;
-
-        for await (const line of rl) {
-          if (line.trim()) {
-            try {
-              const entry = JSON.parse(line);
-
-              if (entry.cwd) {
-                // Count occurrences of each cwd
-                cwdCounts.set(entry.cwd, (cwdCounts.get(entry.cwd) || 0) + 1);
-
-                // Track the most recent cwd
-                const timestamp = new Date(entry.timestamp || 0).getTime();
-                if (timestamp > latestTimestamp) {
-                  latestTimestamp = timestamp;
-                  latestCwd = entry.cwd;
-                }
-              }
-
-              entriesInThisFile++;
-              totalEntriesProcessed++;
-
-              // Stop reading this file if we've seen enough entries
-              if (entriesInThisFile >= MAX_ENTRIES_TO_CHECK) {
-                rl.close();
-                break;
-              }
-            } catch (parseError) {
-              // Skip malformed lines
-            }
-          }
-        }
-
-        // If we have found multiple cwds, we likely have enough info to determine the project path
-        if (cwdCounts.size > 0) {
+        // Early exit when cwd found
+        if (foundCwd) {
           break;
         }
       }
-      
-      // Determine the best cwd to use
-      if (cwdCounts.size === 0) {
-        // No cwd found, fall back to decoded project name
-        extractedPath = projectName.replace(/-/g, '/');
-      } else if (cwdCounts.size === 1) {
-        // Only one cwd, use it
-        extractedPath = Array.from(cwdCounts.keys())[0];
+
+      if (foundCwd) {
+        extractedPath = foundCwd;
+        source = 'file';
       } else {
-        // Multiple cwd values - prefer the most recent one if it has reasonable usage
-        const mostRecentCount = cwdCounts.get(latestCwd) || 0;
-        const maxCount = Math.max(...cwdCounts.values());
-        
-        // Use most recent if it has at least 25% of the max count
-        if (mostRecentCount >= maxCount * 0.25) {
-          extractedPath = latestCwd;
-        } else {
-          // Otherwise use the most frequently used cwd
-          for (const [cwd, count] of cwdCounts.entries()) {
-            if (count === maxCount) {
-              extractedPath = cwd;
-              break;
-            }
-          }
-        }
-        
-        // Fallback (shouldn't reach here)
-        if (!extractedPath) {
-          extractedPath = latestCwd || projectName.replace(/-/g, '/');
-        }
+        // No cwd found within byte limit - use fallback
+        extractedPath = projectName.replace(/-/g, '/');
+        source = 'fallback';
       }
     }
-    
-    // Cache the result
-    projectDirectoryCache.set(projectName, extractedPath);
-    
+
+    // Cache the result with metadata
+    projectDirectoryCache.set(projectName, { path: extractedPath, source });
+
     return extractedPath;
-    
+
   } catch (error) {
     // If the directory doesn't exist, just use the decoded project name
     if (error.code === 'ENOENT') {
@@ -575,10 +526,10 @@ async function extractProjectDirectory(projectName) {
       // Fall back to decoded project name for other errors
       extractedPath = projectName.replace(/-/g, '/');
     }
-    
-    // Cache the fallback result too
-    projectDirectoryCache.set(projectName, extractedPath);
-    
+
+    // Cache the fallback result with metadata
+    projectDirectoryCache.set(projectName, { path: extractedPath, source: 'fallback' });
+
     return extractedPath;
   }
 }
@@ -633,12 +584,15 @@ async function getProjects(progressCallback = null) {
         
         // Extract actual project directory from JSONL sessions
         const actualProjectDir = await extractProjectDirectory(entry.name);
-        
+
+        // Check if cwd came from fallback (couldn't be read from file within 100KB)
+        const dirSource = getProjectDirectorySource(entry.name);
+
         // Get display name from config or generate one
         const customName = config[entry.name]?.displayName;
         const autoDisplayName = await generateDisplayName(entry.name, actualProjectDir);
         const fullPath = actualProjectDir;
-        
+
         const project = {
           name: entry.name,
           path: actualProjectDir,
@@ -647,6 +601,11 @@ async function getProjects(progressCallback = null) {
           isCustomName: !!customName,
           sessions: []
         };
+
+        // Add incompleteMetadata flag when cwd couldn't be read from file content
+        if (dirSource === 'fallback') {
+          project.incompleteMetadata = true;
+        }
         
         // Try to get sessions for this project (just first 5 for performance)
         try {
@@ -732,27 +691,37 @@ async function getProjects(progressCallback = null) {
 
       // Use the original path if available, otherwise extract from potential sessions
       let actualProjectDir = projectConfig.originalPath;
-      
+      let isFromFallback = false;
+
       if (!actualProjectDir) {
         try {
           actualProjectDir = await extractProjectDirectory(projectName);
+          // Check if it came from fallback
+          const dirSource = getProjectDirectorySource(projectName);
+          isFromFallback = dirSource === 'fallback';
         } catch (error) {
           // Fall back to decoded project name
           actualProjectDir = projectName.replace(/-/g, '/');
+          isFromFallback = true;
         }
       }
-      
-              const project = {
-          name: projectName,
-          path: actualProjectDir,
-          displayName: projectConfig.displayName || await generateDisplayName(projectName, actualProjectDir),
-          fullPath: actualProjectDir,
-          isCustomName: !!projectConfig.displayName,
-          isManuallyAdded: true,
-          sessions: [],
-          cursorSessions: [],
-          codexSessions: []
-        };
+
+      const project = {
+        name: projectName,
+        path: actualProjectDir,
+        displayName: projectConfig.displayName || await generateDisplayName(projectName, actualProjectDir),
+        fullPath: actualProjectDir,
+        isCustomName: !!projectConfig.displayName,
+        isManuallyAdded: true,
+        sessions: [],
+        cursorSessions: [],
+        codexSessions: []
+      };
+
+      // Add incompleteMetadata flag when cwd couldn't be read from file content
+      if (isFromFallback) {
+        project.incompleteMetadata = true;
+      }
 
       // Try to fetch Cursor sessions for manual projects too
       try {
@@ -950,7 +919,7 @@ async function getSessions(projectName, limit = 5, offset = 0) {
   }
 }
 
-async function parseJsonlSessions(filePath, maxEntries = null) {
+async function parseJsonlSessions(filePath, maxEntries = null, fileMtime = null) {
   const sessions = new Map();
   const entries = [];
   const pendingSummaries = new Map(); // leafUuid -> summary for entries without sessionId
@@ -981,10 +950,11 @@ async function parseJsonlSessions(filePath, maxEntries = null) {
                 id: entry.sessionId,
                 summary: 'New Session',
                 messageCount: 0,
-                lastActivity: new Date(),
+                lastActivity: fileMtime || new Date(),
                 cwd: entry.cwd || '',
                 lastUserMessage: null,
-                lastAssistantMessage: null
+                lastAssistantMessage: null,
+                timestampSource: fileMtime ? 'mtime' : 'fallback'
               });
             }
 
@@ -1060,8 +1030,15 @@ async function parseJsonlSessions(filePath, maxEntries = null) {
 
             session.messageCount++;
 
+            // Only update lastActivity from parsed timestamp if it's more recent than fileMtime
+            // This handles edge cases while primarily relying on file mtime
             if (entry.timestamp) {
-              session.lastActivity = new Date(entry.timestamp);
+              const parsedTime = new Date(entry.timestamp);
+              const currentLastActivity = new Date(session.lastActivity);
+              if (parsedTime > currentLastActivity) {
+                session.lastActivity = parsedTime;
+                session.timestampSource = 'parsed';
+              }
             }
           }
         } catch (parseError) {
