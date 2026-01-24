@@ -619,6 +619,75 @@ app.delete(
   },
 );
 
+// Terminate shell session endpoint (for conflict resolution from chat interface)
+app.post("/api/shell/terminate", authenticateToken, async (req, res) => {
+  try {
+    const { projectPath, sessionId } = req.body;
+
+    if (!projectPath) {
+      return res.status(400).json({ error: "projectPath is required" });
+    }
+
+    // Build session key (same format as in handleShellConnection)
+    const sessionKey = sessionId
+      ? `${projectPath}:${sessionId}`
+      : `${projectPath}:plain-shell`;
+
+    console.log("🔪 API: Force closing shell session:", sessionKey);
+
+    const session = ptySessionsMap.get(sessionKey);
+
+    if (!session) {
+      // Session not found - might already be closed
+      return res.json({
+        success: true,
+        message: "Session not found or already closed",
+      });
+    }
+
+    // Notify all shell clients
+    const closeMsg = JSON.stringify({
+      type: "output",
+      data: `\r\n\x1b[31m[Session terminated by another client]\x1b[0m\r\n`,
+    });
+
+    for (const client of session.clients) {
+      if (client.readyState === WebSocket.OPEN) {
+        try {
+          client.send(closeMsg);
+          // Also send a session-closed message so clients know to disconnect
+          client.send(JSON.stringify({ type: "session-closed" }));
+        } catch {
+          // Ignore send errors
+        }
+      }
+    }
+
+    // Kill the PTY process
+    if (session.pty && session.pty.kill) {
+      session.pty.kill();
+    }
+
+    // Kill tmux session if exists
+    if (session.tmuxSessionName) {
+      killTmuxSession(session.tmuxSessionName);
+    }
+
+    // Clear any pending timeout
+    if (session.timeoutId) {
+      clearTimeout(session.timeoutId);
+    }
+
+    ptySessionsMap.delete(sessionKey);
+
+    console.log("✅ Shell session terminated:", sessionKey);
+    res.json({ success: true, sessionKey });
+  } catch (error) {
+    console.error("[API] Error terminating shell session:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Create project endpoint
 app.post("/api/projects/create", authenticateToken, async (req, res) => {
   try {
@@ -1677,6 +1746,50 @@ function handleShellConnection(ws) {
               : null,
           }),
         );
+      } else if (data.type === "terminate") {
+        // Handle client request to terminate their session
+        const session = ptySessionsMap.get(ptySessionKey);
+        if (session) {
+          console.log(
+            "🔪 Client requested session termination:",
+            ptySessionKey,
+          );
+
+          // Notify all shell clients
+          const closeMsg = JSON.stringify({
+            type: "output",
+            data: `\r\n\x1b[33m[Session terminated]\x1b[0m\r\n`,
+          });
+
+          for (const client of session.clients) {
+            if (client.readyState === WebSocket.OPEN) {
+              try {
+                client.send(closeMsg);
+                client.send(JSON.stringify({ type: "session-closed" }));
+              } catch {
+                // Ignore
+              }
+            }
+          }
+
+          // Kill the PTY process
+          if (session.pty && session.pty.kill) {
+            session.pty.kill();
+          }
+
+          // Kill tmux session if exists
+          if (session.tmuxSessionName) {
+            killTmuxSession(session.tmuxSessionName);
+          }
+
+          // Clear any pending timeout
+          if (session.timeoutId) {
+            clearTimeout(session.timeoutId);
+          }
+
+          ptySessionsMap.delete(ptySessionKey);
+          console.log("✅ Shell session terminated by client:", ptySessionKey);
+        }
       } else if (data.type === "resolve-conflict") {
         // Handle conflict resolution
         const targetSessionKey = data.sessionKey || ptySessionKey;

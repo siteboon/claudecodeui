@@ -6061,12 +6061,41 @@ function ChatInterface({
 
   // Handle conflict resolution
   const handleConflictResolve = useCallback(
-    (action) => {
+    async (action) => {
       if (action === "close-shell" && sessionConflict?.sessionKey) {
-        // Send resolve-conflict message to server via shell WebSocket
-        // For now, we'll just close the dialog - the server integration would
-        // need the shell WebSocket connection which we don't have direct access to here
-        console.log("[ChatInterface] Resolving conflict:", action);
+        // Call REST API to terminate the shell session
+        console.log(
+          "[ChatInterface] Terminating shell session:",
+          sessionConflict.sessionKey,
+        );
+        try {
+          const projectPath =
+            selectedProject?.fullPath || selectedProject?.path;
+          const sessionId = selectedSession?.id;
+
+          const token = localStorage.getItem("auth-token");
+          const response = await fetch("/api/shell/terminate", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({ projectPath, sessionId }),
+          });
+
+          if (!response.ok) {
+            console.error(
+              "[ChatInterface] Failed to terminate shell:",
+              await response.text(),
+            );
+          } else {
+            console.log(
+              "[ChatInterface] Shell session terminated successfully",
+            );
+          }
+        } catch (error) {
+          console.error("[ChatInterface] Error terminating shell:", error);
+        }
         setSessionConflict(null);
       } else if (action === "fork-session") {
         // Fork to new session - clear the session and start fresh
@@ -6081,7 +6110,7 @@ function ChatInterface({
         setExternalSessionWarning(null);
       }
     },
-    [sessionConflict?.sessionKey],
+    [sessionConflict?.sessionKey, selectedProject, selectedSession],
   );
 
   return (

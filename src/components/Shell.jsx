@@ -222,6 +222,18 @@ function Shell({
           } else if (data.type === "conflict-resolved") {
             // Session conflict was resolved
             console.log("[Shell] Conflict resolved:", data.action);
+          } else if (data.type === "session-closed") {
+            // Session was closed by server (another client terminated it)
+            console.log("[Shell] Session closed by server");
+            if (terminal.current) {
+              terminal.current.write("\r\n");
+            }
+            setIsConnected(false);
+            setIsConnecting(false);
+            if (ws.current) {
+              ws.current.close();
+              ws.current = null;
+            }
           }
         } catch (error) {
           console.error(
@@ -258,8 +270,12 @@ function Shell({
     connectWebSocket();
   }, [isInitialized, isConnected, isConnecting, connectWebSocket]);
 
-  const disconnectFromShell = useCallback(() => {
+  const disconnectFromShell = useCallback((terminate = false) => {
     if (ws.current) {
+      // If terminate is true, send terminate message to kill the PTY on server
+      if (terminate && ws.current.readyState === WebSocket.OPEN) {
+        ws.current.send(JSON.stringify({ type: "terminate" }));
+      }
       ws.current.close();
       ws.current = null;
     }
@@ -584,9 +600,9 @@ function Shell({
           <div className="flex items-center space-x-3">
             {isConnected && (
               <button
-                onClick={disconnectFromShell}
+                onClick={() => disconnectFromShell(true)}
                 className="px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 flex items-center space-x-1"
-                title="Disconnect from shell"
+                title="Disconnect and terminate shell session"
               >
                 <svg
                   className="w-3 h-3"
