@@ -1853,6 +1853,282 @@ async function deleteCodexSession(sessionId) {
 }
 
 /**
+ * Get session file metadata from filesystem without parsing JSONL content.
+ * Returns session count, total size, and last activity from fs.stat operations.
+ *
+ * @param {string} projectDir - Path to the project directory
+ * @param {number} batchSize - Number of concurrent stat operations (default: 50)
+ * @returns {Promise<{sessionCount: number, totalSizeBytes: number, lastActivity: Date|null, files: Array}>}
+ */
+async function getSessionFilesMetadata(projectDir, batchSize = 50) {
+  try {
+    // Use withFileTypes to avoid redundant stat calls for type checking
+    const entries = await fs.readdir(projectDir, { withFileTypes: true });
+
+    // Filter JSONL files excluding agent-*.jsonl
+    const jsonlFiles = entries.filter(e =>
+      e.isFile() && e.name.endsWith('.jsonl') && !e.name.startsWith('agent-')
+    );
+
+    if (jsonlFiles.length === 0) {
+      return {
+        sessionCount: 0,
+        totalSizeBytes: 0,
+        lastActivity: null,
+        files: []
+      };
+    }
+
+    // Build file paths for stat operations
+    const filePaths = jsonlFiles.map(e => ({
+      filename: e.name,
+      fullPath: path.join(projectDir, e.name)
+    }));
+
+    // Batch stat operations to avoid EMFILE errors
+    const files = [];
+    let totalSizeBytes = 0;
+    let lastActivity = null;
+
+    for (let i = 0; i < filePaths.length; i += batchSize) {
+      const batch = filePaths.slice(i, i + batchSize);
+      const batchResults = await Promise.all(
+        batch.map(async ({ filename, fullPath }) => {
+          try {
+            const stats = await fs.stat(fullPath);
+            return {
+              filename,
+              size: stats.size,
+              mtime: stats.mtime
+            };
+          } catch (error) {
+            // Handle individual file errors gracefully
+            console.warn(`Failed to stat ${fullPath}:`, error.message);
+            return null;
+          }
+        })
+      );
+
+      // Process batch results
+      for (const result of batchResults) {
+        if (result) {
+          files.push(result);
+          totalSizeBytes += result.size;
+          if (!lastActivity || result.mtime > lastActivity) {
+            lastActivity = result.mtime;
+          }
+        }
+      }
+    }
+
+    return {
+      sessionCount: files.length,
+      totalSizeBytes,
+      lastActivity,
+      files
+    };
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return {
+        sessionCount: 0,
+        totalSizeBytes: 0,
+        lastActivity: null,
+        files: []
+      };
+    }
+    console.error(`Error getting session files metadata for ${projectDir}:`, error);
+    return {
+      sessionCount: 0,
+      totalSizeBytes: 0,
+      lastActivity: null,
+      files: []
+    };
+  }
+}
+
+/**
+ * Get minimal project metadata from filesystem without parsing JSONL content.
+ * Returns project list with session count, total size, and last activity computed
+ * from filesystem stats only - no file content is read.
+ *
+ * This enables instant project list loading for lazy loading architecture.
+ *
+ * @param {Function} progressCallback - Optional callback for progress updates
+ * @returns {Promise<Array>} - Array of project objects with minimal metadata
+ */
+async function getProjectsMinimal(progressCallback = null) {
+  const claudeDir = path.join(os.homedir(), '.claude', 'projects');
+  const config = await loadProjectConfig();
+  const projects = [];
+  const existingProjects = new Set();
+  let totalProjects = 0;
+  let processedProjects = 0;
+  let directories = [];
+
+  try {
+    // Check if the .claude/projects directory exists
+    await fs.access(claudeDir);
+
+    // Get existing Claude projects from the file system
+    const entries = await fs.readdir(claudeDir, { withFileTypes: true });
+    directories = entries.filter(e => e.isDirectory());
+
+    // Build set of existing project names
+    directories.forEach(e => existingProjects.add(e.name));
+
+    // Count manual projects not already in directories
+    const manualProjectsCount = Object.entries(config)
+      .filter(([name, cfg]) => cfg.manuallyAdded && !existingProjects.has(name))
+      .length;
+
+    totalProjects = directories.length + manualProjectsCount;
+
+    for (const entry of directories) {
+      processedProjects++;
+
+      // Emit progress
+      if (progressCallback) {
+        progressCallback({
+          phase: 'loading',
+          current: processedProjects,
+          total: totalProjects,
+          currentProject: entry.name
+        });
+      }
+
+      const projectPath = path.join(claudeDir, entry.name);
+
+      const skipReason = await getProjectSkipReason(entry.name, projectPath);
+      if (skipReason.skip) {
+        logProjectSkip(entry.name, skipReason.reason, skipReason.detail);
+        continue;
+      }
+
+      // Extract actual project directory (byte-limited from Phase 1)
+      const actualProjectDir = await extractProjectDirectory(entry.name);
+
+      // Check if cwd came from fallback (couldn't be read from file within 100KB)
+      const dirSource = getProjectDirectorySource(entry.name);
+
+      // Get display name from config or generate one
+      const customName = config[entry.name]?.displayName;
+      const autoDisplayName = await generateDisplayName(entry.name, actualProjectDir);
+      const fullPath = actualProjectDir;
+
+      // Get session metadata from filesystem (NO JSONL parsing)
+      const sessionMetadata = await getSessionFilesMetadata(projectPath);
+
+      const project = {
+        name: entry.name,
+        path: actualProjectDir,
+        displayName: customName || autoDisplayName,
+        fullPath: fullPath,
+        isCustomName: !!customName,
+        sessionCount: sessionMetadata.sessionCount,
+        totalSizeBytes: sessionMetadata.totalSizeBytes,
+        lastActivity: sessionMetadata.lastActivity,
+        sessions: [],           // Empty - will be loaded separately
+        cursorSessions: [],     // Empty - will be loaded separately
+        codexSessions: []       // Empty - will be loaded separately
+      };
+
+      // Add incompleteMetadata flag when cwd couldn't be read from file content
+      if (dirSource === 'fallback') {
+        project.incompleteMetadata = true;
+      }
+
+      projects.push(project);
+    }
+  } catch (error) {
+    // If the directory doesn't exist (ENOENT), that's okay - continue with empty projects
+    if (error.code !== 'ENOENT') {
+      console.error('Error reading projects directory:', error);
+    }
+    // Calculate total for manual projects only (no directories exist)
+    totalProjects = Object.entries(config)
+      .filter(([name, cfg]) => cfg.manuallyAdded)
+      .length;
+  }
+
+  // Add manually configured projects that don't exist as folders yet
+  for (const [projectName, projectConfig] of Object.entries(config)) {
+    if (!existingProjects.has(projectName) && projectConfig.manuallyAdded) {
+      processedProjects++;
+
+      // Emit progress for manual projects
+      if (progressCallback) {
+        progressCallback({
+          phase: 'loading',
+          current: processedProjects,
+          total: totalProjects,
+          currentProject: projectName
+        });
+      }
+
+      const projectPath = path.join(claudeDir, projectName);
+      const skipReason = await getProjectSkipReason(projectName, projectPath);
+      if (skipReason.skip) {
+        logProjectSkip(projectName, skipReason.reason, skipReason.detail);
+        continue;
+      }
+
+      // Use the original path if available, otherwise extract from potential sessions
+      let actualProjectDir = projectConfig.originalPath;
+      let isFromFallback = false;
+
+      if (!actualProjectDir) {
+        try {
+          actualProjectDir = await extractProjectDirectory(projectName);
+          // Check if it came from fallback
+          const dirSource = getProjectDirectorySource(projectName);
+          isFromFallback = dirSource === 'fallback';
+        } catch (error) {
+          // Fall back to decoded project name
+          actualProjectDir = projectName.replace(/-/g, '/');
+          isFromFallback = true;
+        }
+      }
+
+      // Get session metadata from filesystem (NO JSONL parsing)
+      const sessionMetadata = await getSessionFilesMetadata(projectPath);
+
+      const project = {
+        name: projectName,
+        path: actualProjectDir,
+        displayName: projectConfig.displayName || await generateDisplayName(projectName, actualProjectDir),
+        fullPath: actualProjectDir,
+        isCustomName: !!projectConfig.displayName,
+        isManuallyAdded: true,
+        sessionCount: sessionMetadata.sessionCount,
+        totalSizeBytes: sessionMetadata.totalSizeBytes,
+        lastActivity: sessionMetadata.lastActivity,
+        sessions: [],           // Empty - will be loaded separately
+        cursorSessions: [],     // Empty - will be loaded separately
+        codexSessions: []       // Empty - will be loaded separately
+      };
+
+      // Add incompleteMetadata flag when cwd couldn't be read from file content
+      if (isFromFallback) {
+        project.incompleteMetadata = true;
+      }
+
+      projects.push(project);
+    }
+  }
+
+  // Emit completion after all projects processed
+  if (progressCallback) {
+    progressCallback({
+      phase: 'complete',
+      current: totalProjects,
+      total: totalProjects
+    });
+  }
+
+  return projects;
+}
+
+/**
  * Extract cwd from first bytes of a JSONL file (byte-limited).
  * Reads at most maxBytes from the file to find the cwd field.
  * This prevents memory issues when reading large session files.
@@ -1916,6 +2192,7 @@ async function extractCwdFromFirstBytes(filePath, maxBytes = 100 * 1024) {
 
 export {
   getProjects,
+  getProjectsMinimal,
   getSessions,
   getSessionMessages,
   parseJsonlSessions,
@@ -1931,5 +2208,6 @@ export {
   getCodexSessions,
   getCodexSessionMessages,
   deleteCodexSession,
-  extractCwdFromFirstBytes
+  extractCwdFromFirstBytes,
+  getSessionFilesMetadata
 };
