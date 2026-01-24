@@ -847,10 +847,10 @@ async function getSessions(projectName, limit = 5, offset = 0) {
     // Limit entries parsed from each file to reduce memory usage
     const MAX_ENTRIES_PER_FILE = 5000;
 
-    for (const { file } of filesWithStats) {
+    for (const { file, mtime } of filesWithStats) {
       const jsonlFile = path.join(projectDir, file);
       // Only parse up to MAX_ENTRIES_PER_FILE to avoid memory overload
-      const result = await parseJsonlSessions(jsonlFile, MAX_ENTRIES_PER_FILE);
+      const result = await parseJsonlSessions(jsonlFile, MAX_ENTRIES_PER_FILE, mtime);
 
       result.sessions.forEach(session => {
         if (!allSessions.has(session.id)) {
