@@ -11,7 +11,7 @@ See: .planning/PROJECT.md (updated 2026-01-24)
 
 Phase: 3 of 3 (UI Size Indicators)
 Plan: 01 of 1 (completed)
-Status: Phase 3 complete - All phases complete
+Status: Phase 3 complete — MILESTONE COMPLETE
 Last activity: 2026-01-24 - Completed 03-01-PLAN.md (Session size display in sidebar)
 
 Progress: [██████████] 100% (6/6 plans complete)

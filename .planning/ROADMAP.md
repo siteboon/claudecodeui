@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: File Reading Optimization** - Byte-limit JSONL reads and graceful fallbacks
 - [x] **Phase 2: Lazy Loading Architecture** - On-demand session metadata and new API endpoints
-- [ ] **Phase 3: UI Size Indicators** - Display project and session sizes for visibility
+- [x] **Phase 3: UI Size Indicators** - Display project and session sizes for visibility
 
 ## Phase Details
 
@@ -62,7 +62,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 03-01-PLAN.md - Add session file size to backend and display in sidebar
+- [x] 03-01-PLAN.md - Add session file size to backend and display in sidebar
 
 ## Progress
 
@@ -73,4 +73,4 @@ Phases execute in numeric order: 1 -> 2 -> 3
 |-------|----------------|--------|-----------|
 | 1. File Reading Optimization | 3/3 | Complete | 2026-01-24 |
 | 2. Lazy Loading Architecture | 2/2 | Complete | 2026-01-24 |
-| 3. UI Size Indicators | 0/1 | Not started | - |
+| 3. UI Size Indicators | 1/1 | Complete | 2026-01-24 |

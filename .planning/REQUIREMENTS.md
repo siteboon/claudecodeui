@@ -23,9 +23,9 @@ Requirements for memory optimization release.
 
 ### UI Indicators
 
-- [ ] **UI-01**: Display total project size (sum of session files) in project card
-- [ ] **UI-02**: Display individual session file size in session list
-- [ ] **UI-03**: Format sizes appropriately (KB, MB, GB with 1 decimal)
+- [x] **UI-01**: Display total project size (sum of session files) in project card
+- [x] **UI-02**: Display individual session file size in session list
+- [x] **UI-03**: Format sizes appropriately (KB, MB, GB with 1 decimal)
 
 ### Backward Compatibility
 
@@ -74,9 +74,9 @@ Deferred to future release.
 | LAZY-02 | Phase 2 | Complete |
 | LAZY-03 | Phase 2 | Complete |
 | LAZY-04 | Phase 2 | Complete |
-| UI-01 | Phase 3 | Pending |
-| UI-02 | Phase 3 | Pending |
-| UI-03 | Phase 3 | Pending |
+| UI-01 | Phase 3 | Complete |
+| UI-02 | Phase 3 | Complete |
+| UI-03 | Phase 3 | Complete |
 
 **Coverage:**
 - v1 requirements: 14 total
@@ -85,4 +85,4 @@ Deferred to future release.
 
 ---
 *Requirements defined: 2026-01-24*
-*Last updated: 2026-01-24 after Phase 2 completion*
+*Last updated: 2026-01-24 after Phase 3 completion*
