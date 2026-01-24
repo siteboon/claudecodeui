@@ -1218,6 +1218,11 @@ function Sidebar({
                                       <span className="text-xs text-muted-foreground">
                                         {formatTimeAgo(sessionTime, currentTime, t)}
                                       </span>
+                                      {session.sizeBytes > 0 && (
+                                        <span className="text-xs text-muted-foreground opacity-60">
+                                          {formatBytes(session.sizeBytes)}
+                                        </span>
+                                      )}
                                       {messageCount > 0 && (
                                         <Badge variant="secondary" className="text-xs px-1 py-0 ml-auto">
                                           {messageCount}
@@ -1279,6 +1284,11 @@ function Sidebar({
                                       <span className="text-xs text-muted-foreground">
                                         {formatTimeAgo(sessionTime, currentTime, t)}
                                       </span>
+                                      {session.sizeBytes > 0 && (
+                                        <span className="text-xs text-muted-foreground opacity-60">
+                                          {formatBytes(session.sizeBytes)}
+                                        </span>
+                                      )}
                                       {messageCount > 0 && (
                                         <Badge variant="secondary" className="text-xs px-1 py-0 ml-auto group-hover:opacity-0 transition-opacity">
                                           {messageCount}
