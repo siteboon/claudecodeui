@@ -16,10 +16,10 @@ Requirements for memory optimization release.
 
 ### Lazy Loading
 
-- [ ] **LAZY-01**: Derive session list from JSONL filenames without parsing file content
-- [ ] **LAZY-02**: Load session summaries on-demand only when project is expanded in sidebar
-- [ ] **LAZY-03**: Return minimal project metadata on initial `/api/projects` call
-- [ ] **LAZY-04**: Add endpoint for fetching session summaries separately
+- [x] **LAZY-01**: Derive session list from JSONL filenames without parsing file content
+- [x] **LAZY-02**: Load session summaries on-demand only when project is expanded in sidebar
+- [x] **LAZY-03**: Return minimal project metadata on initial `/api/projects` call
+- [x] **LAZY-04**: Add endpoint for fetching session summaries separately
 
 ### UI Indicators
 
@@ -70,10 +70,10 @@ Deferred to future release.
 | COMPAT-01 | Phase 1 | Complete |
 | COMPAT-02 | Phase 1 | Complete |
 | COMPAT-03 | Phase 1 | Complete |
-| LAZY-01 | Phase 2 | Pending |
-| LAZY-02 | Phase 2 | Pending |
-| LAZY-03 | Phase 2 | Pending |
-| LAZY-04 | Phase 2 | Pending |
+| LAZY-01 | Phase 2 | Complete |
+| LAZY-02 | Phase 2 | Complete |
+| LAZY-03 | Phase 2 | Complete |
+| LAZY-04 | Phase 2 | Complete |
 | UI-01 | Phase 3 | Pending |
 | UI-02 | Phase 3 | Pending |
 | UI-03 | Phase 3 | Pending |
@@ -85,4 +85,4 @@ Deferred to future release.
 
 ---
 *Requirements defined: 2026-01-24*
-*Last updated: 2026-01-24 after roadmap creation*
+*Last updated: 2026-01-24 after Phase 2 completion*

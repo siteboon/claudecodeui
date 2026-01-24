@@ -13,7 +13,7 @@ Transform ClaudeCodeUI from crashing on large projects to handling projects of a
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: File Reading Optimization** - Byte-limit JSONL reads and graceful fallbacks
-- [ ] **Phase 2: Lazy Loading Architecture** - On-demand session metadata and new API endpoints
+- [x] **Phase 2: Lazy Loading Architecture** - On-demand session metadata and new API endpoints
 - [ ] **Phase 3: UI Size Indicators** - Display project and session sizes for visibility
 
 ## Phase Details
@@ -48,8 +48,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 02-01-PLAN.md - Server-side minimal project metadata extraction
-- [ ] 02-02-PLAN.md - API and frontend lazy loading integration
+- [x] 02-01-PLAN.md - Server-side minimal project metadata extraction
+- [x] 02-02-PLAN.md - API and frontend lazy loading integration
 
 ### Phase 3: UI Size Indicators
 **Goal**: Users can see which projects and sessions are large
@@ -72,5 +72,5 @@ Phases execute in numeric order: 1 → 2 → 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. File Reading Optimization | 3/3 | Complete | 2026-01-24 |
-| 2. Lazy Loading Architecture | 0/2 | Not started | - |
+| 2. Lazy Loading Architecture | 2/2 | Complete | 2026-01-24 |
 | 3. UI Size Indicators | 0/? | Not started | - |
