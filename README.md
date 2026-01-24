@@ -184,6 +184,16 @@ The application will start at the port you specified in your .env
 5. **Open your browser:**
    - Development: `http://localhost:3001`
 
+### Project Loading Filters (Optional)
+
+Claude Code UI can skip loading projects at startup to reduce memory use and improve responsiveness when you have many or very large sessions.
+
+Environment variables:
+- `SKIP_PROJECTS_PATTERN` - Comma-separated substrings; if a project name contains any, it is skipped.
+  - Example: `SKIP_PROJECTS_PATTERN=one-fleet,vicinity`
+- `SKIP_LARGE_PROJECTS_MB` - Skip projects whose Claude project folder exceeds this size (in MB).
+  - Example: `SKIP_LARGE_PROJECTS_MB=500`
+
 ## Security & Tools Configuration
 
 **🔒 Important Notice**: All Claude Code tools are **disabled by default**. This prevents potentially harmful operations from running automatically.

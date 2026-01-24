@@ -196,10 +196,124 @@ async function detectTaskMasterFolder(projectPath) {
 
 // Cache for extracted project directories
 const projectDirectoryCache = new Map();
+const projectSizeCache = new Map();
 
 // Clear cache when needed (called when project files change)
 function clearProjectDirectoryCache() {
   projectDirectoryCache.clear();
+  projectSizeCache.clear();
+}
+
+const MB_BYTES = 1024 * 1024;
+
+function getSkipPatterns() {
+  return (process.env.SKIP_PROJECTS_PATTERN || '')
+    .split(',')
+    .map((pattern) => pattern.trim())
+    .filter(Boolean);
+}
+
+function getSkipLargeProjectsBytes() {
+  const rawValue = process.env.SKIP_LARGE_PROJECTS_MB;
+  if (!rawValue) {
+    return null;
+  }
+
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return parsed * MB_BYTES;
+}
+
+function formatMegabytes(bytes) {
+  return (bytes / MB_BYTES).toFixed(1);
+}
+
+async function getDirectorySizeBytes(directoryPath) {
+  try {
+    const entries = await fs.readdir(directoryPath, { withFileTypes: true });
+    let total = 0;
+
+    for (const entry of entries) {
+      const entryPath = path.join(directoryPath, entry.name);
+
+      if (entry.isSymbolicLink()) {
+        continue;
+      }
+
+      if (entry.isDirectory()) {
+        total += await getDirectorySizeBytes(entryPath);
+        continue;
+      }
+
+      if (entry.isFile()) {
+        const stats = await fs.lstat(entryPath);
+        total += stats.size;
+      }
+    }
+
+    return total;
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return 0;
+    }
+
+    console.warn(`Failed to calculate project size for ${directoryPath}:`, error.message);
+    return 0;
+  }
+}
+
+async function getCachedProjectSizeBytes(projectDir) {
+  if (!projectDir) {
+    return 0;
+  }
+
+  if (projectSizeCache.has(projectDir)) {
+    return projectSizeCache.get(projectDir);
+  }
+
+  const size = await getDirectorySizeBytes(projectDir);
+  projectSizeCache.set(projectDir, size);
+  return size;
+}
+
+async function getProjectSkipReason(projectName, projectDir) {
+  const patterns = getSkipPatterns();
+  if (patterns.length > 0) {
+    const decodedName = projectName.replace(/-/g, '/');
+    const matchedPattern = patterns.find((pattern) => (
+      projectName.includes(pattern) || decodedName.includes(pattern)
+    ));
+
+    if (matchedPattern) {
+      return {
+        skip: true,
+        reason: 'name pattern',
+        detail: `matched "${matchedPattern}"`
+      };
+    }
+  }
+
+  const maxBytes = getSkipLargeProjectsBytes();
+  if (maxBytes && projectDir) {
+    const sizeBytes = await getCachedProjectSizeBytes(projectDir);
+    if (sizeBytes > maxBytes) {
+      return {
+        skip: true,
+        reason: 'size limit',
+        detail: `${formatMegabytes(sizeBytes)}MB > ${formatMegabytes(maxBytes)}MB`
+      };
+    }
+  }
+
+  return { skip: false };
+}
+
+function logProjectSkip(projectName, reason, detail = '') {
+  const detailSuffix = detail ? ` (${detail})` : '';
+  console.log(`[INFO] Skipping project ${projectName} due to ${reason}${detailSuffix}`);
 }
 
 // Load project configuration file
@@ -420,6 +534,12 @@ async function getProjects(progressCallback = null) {
         }
 
         const projectPath = path.join(claudeDir, entry.name);
+
+        const skipReason = await getProjectSkipReason(entry.name, projectPath);
+        if (skipReason.skip) {
+          logProjectSkip(entry.name, skipReason.reason, skipReason.detail);
+          continue;
+        }
         
         // Extract actual project directory from JSONL sessions
         const actualProjectDir = await extractProjectDirectory(entry.name);
@@ -513,6 +633,13 @@ async function getProjects(progressCallback = null) {
         });
       }
 
+      const projectPath = path.join(claudeDir, projectName);
+      const skipReason = await getProjectSkipReason(projectName, projectPath);
+      if (skipReason.skip) {
+        logProjectSkip(projectName, skipReason.reason, skipReason.detail);
+        continue;
+      }
+
       // Use the original path if available, otherwise extract from potential sessions
       let actualProjectDir = projectConfig.originalPath;
       
@@ -595,6 +722,12 @@ async function getProjects(progressCallback = null) {
 
 async function getSessions(projectName, limit = 5, offset = 0) {
   const projectDir = path.join(os.homedir(), '.claude', 'projects', projectName);
+
+  const skipReason = await getProjectSkipReason(projectName, projectDir);
+  if (skipReason.skip) {
+    logProjectSkip(projectName, skipReason.reason, skipReason.detail);
+    return { sessions: [], hasMore: false, total: 0, offset, limit };
+  }
 
   try {
     const files = await fs.readdir(projectDir);
@@ -877,6 +1010,12 @@ async function parseJsonlSessions(filePath) {
 // Get messages for a specific session with pagination support
 async function getSessionMessages(projectName, sessionId, limit = null, offset = 0) {
   const projectDir = path.join(os.homedir(), '.claude', 'projects', projectName);
+
+  const skipReason = await getProjectSkipReason(projectName, projectDir);
+  if (skipReason.skip) {
+    logProjectSkip(projectName, skipReason.reason, skipReason.detail);
+    return limit === null ? [] : { messages: [], total: 0, hasMore: false };
+  }
 
   try {
     const files = await fs.readdir(projectDir);
