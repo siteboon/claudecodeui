@@ -262,7 +262,7 @@ router.get('/mcp/config/read', async (req, res) => {
     }
 
     if (!configData) {
-      return res.json({ success: false, message: 'No Codex configuration file found', servers: [] });
+      return res.json({ success: true, servers: [] });
     }
 
     const servers = [];
