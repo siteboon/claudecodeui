@@ -73,6 +73,7 @@ function Sidebar({
   const [loadingSessions, setLoadingSessions] = useState({});
   const [additionalSessions, setAdditionalSessions] = useState({});
   const [initialSessionsLoaded, setInitialSessionsLoaded] = useState(new Set());
+  const [loadedProjectSessions, setLoadedProjectSessions] = useState({}); // Sessions loaded on project expansion
   const [currentTime, setCurrentTime] = useState(new Date());
   const [projectSortOrder, setProjectSortOrder] = useState('name');
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -123,6 +124,7 @@ function Sidebar({
   useEffect(() => {
     setAdditionalSessions({});
     setInitialSessionsLoaded(new Set());
+    setLoadedProjectSessions({});
   }, [projects]);
 
   // Auto-expand project folder when a session is selected
@@ -185,12 +187,59 @@ function Sidebar({
   }, []);
 
 
+  // Load sessions for a project when expanded (lazy loading)
+  const loadSessionsForProject = async (project) => {
+    // Skip if sessions already loaded for this project
+    if (loadedProjectSessions[project.name]) {
+      return;
+    }
+
+    // Skip if already loading
+    if (loadingSessions[project.name]) {
+      return;
+    }
+
+    // Mark as loading
+    setLoadingSessions(prev => ({ ...prev, [project.name]: true }));
+
+    try {
+      const response = await api.sessions(project.name, 5, 0);
+
+      if (response.ok) {
+        const result = await response.json();
+
+        // Store loaded sessions
+        setLoadedProjectSessions(prev => ({
+          ...prev,
+          [project.name]: {
+            sessions: result.sessions || [],
+            hasMore: result.hasMore,
+            total: result.total
+          }
+        }));
+
+        // Mark initial sessions as loaded
+        setInitialSessionsLoaded(prev => new Set([...prev, project.name]));
+      }
+    } catch (error) {
+      console.error(`Error loading sessions for project ${project.name}:`, error);
+    } finally {
+      setLoadingSessions(prev => ({ ...prev, [project.name]: false }));
+    }
+  };
+
   const toggleProject = (projectName) => {
     const newExpanded = new Set();
     // If clicking the already-expanded project, collapse it (newExpanded stays empty)
     // If clicking a different project, expand only that one
     if (!expandedProjects.has(projectName)) {
       newExpanded.add(projectName);
+
+      // Find the project and load sessions if needed
+      const project = projects.find(p => p.name === projectName);
+      if (project && project.sessions?.length === 0 && !loadedProjectSessions[projectName]) {
+        loadSessionsForProject(project);
+      }
     }
     setExpandedProjects(newExpanded);
   };
@@ -222,10 +271,18 @@ function Sidebar({
     return starredProjects.has(projectName);
   };
 
-  // Helper function to get all sessions for a project (initial + additional)
+  // Helper function to get all sessions for a project (initial + loaded on expansion + additional from "show more")
   const getAllSessions = (project) => {
-    // Combine Claude, Cursor, and Codex sessions; Sidebar will display icon per row
-    const claudeSessions = [...(project.sessions || []), ...(additionalSessions[project.name] || [])].map(s => ({ ...s, __provider: 'claude' }));
+    // Combine Claude sessions from:
+    // 1. project.sessions (from initial load - now empty in lazy loading mode)
+    // 2. loadedProjectSessions[project.name]?.sessions (from on-demand fetch when expanded)
+    // 3. additionalSessions[project.name] (from "show more" loads)
+    const loadedSessions = loadedProjectSessions[project.name]?.sessions || [];
+    const claudeSessions = [
+      ...(project.sessions || []),
+      ...loadedSessions,
+      ...(additionalSessions[project.name] || [])
+    ].map(s => ({ ...s, __provider: 'claude' }));
     const cursorSessions = (project.cursorSessions || []).map(s => ({ ...s, __provider: 'cursor' }));
     const codexSessions = (project.codexSessions || []).map(s => ({ ...s, __provider: 'codex' }));
     // Sort by most recent activity/date
@@ -239,17 +296,22 @@ function Sidebar({
 
   // Helper function to get the last activity date for a project
   const getProjectLastActivity = (project) => {
+    // In lazy loading mode, use project.lastActivity from minimal API if sessions not yet loaded
+    if (project.lastActivity && getAllSessions(project).length === 0) {
+      return new Date(project.lastActivity);
+    }
+
     const allSessions = getAllSessions(project);
     if (allSessions.length === 0) {
       return new Date(0); // Return epoch date for projects with no sessions
     }
-    
+
     // Find the most recent session activity
     const mostRecentDate = allSessions.reduce((latest, session) => {
       const sessionDate = new Date(session.lastActivity);
       return sessionDate > latest ? sessionDate : latest;
     }, new Date(0));
-    
+
     return mostRecentDate;
   };
 
@@ -411,9 +473,10 @@ function Sidebar({
   };
 
   const loadMoreSessions = async (project) => {
-    // Check if we can load more sessions
-    const canLoadMore = project.sessionMeta?.hasMore !== false;
-    
+    // Check if we can load more sessions - use loadedProjectSessions for lazy loading
+    const loadedData = loadedProjectSessions[project.name];
+    const canLoadMore = loadedData ? loadedData.hasMore !== false : project.sessionMeta?.hasMore !== false;
+
     if (!canLoadMore || loadingSessions[project.name]) {
       return;
     }
@@ -421,7 +484,9 @@ function Sidebar({
     setLoadingSessions(prev => ({ ...prev, [project.name]: true }));
 
     try {
-      const currentSessionCount = (project.sessions?.length || 0) + (additionalSessions[project.name]?.length || 0);
+      // Account for sessions from: project.sessions + loaded on expansion + additional from show more
+      const loadedSessionCount = loadedData?.sessions?.length || 0;
+      const currentSessionCount = (project.sessions?.length || 0) + loadedSessionCount + (additionalSessions[project.name]?.length || 0);
       const response = await api.sessions(project.name, 5, currentSessionCount);
       
       if (response.ok) {
@@ -1035,8 +1100,8 @@ function Sidebar({
                   {/* Sessions List */}
                   {isExpanded && (
                     <div className="ml-3 space-y-1 border-l border-border pl-3">
-                      {!initialSessionsLoaded.has(project.name) ? (
-                        // Loading skeleton for sessions
+                      {(!initialSessionsLoaded.has(project.name) || loadingSessions[project.name]) && !loadedProjectSessions[project.name] ? (
+                        // Loading skeleton for sessions (shown when loading sessions on expansion)
                         Array.from({ length: 3 }).map((_, i) => (
                           <div key={i} className="p-2 rounded-md">
                             <div className="flex items-start gap-2">
@@ -1288,7 +1353,7 @@ function Sidebar({
                       )}
 
                       {/* Show More Sessions Button */}
-                      {getAllSessions(project).length > 0 && project.sessionMeta?.hasMore !== false && (
+                      {getAllSessions(project).length > 0 && (loadedProjectSessions[project.name]?.hasMore !== false && project.sessionMeta?.hasMore !== false) && (
                         <Button
                           variant="ghost"
                           size="sm"
