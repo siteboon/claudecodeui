@@ -100,6 +100,8 @@ import projectsRoutes from "./routes/projects.js";
 import cliAuthRoutes from "./routes/cli-auth.js";
 import userRoutes from "./routes/user.js";
 import codexRoutes from "./routes/codex.js";
+import sessionsRoutes from "./routes/sessions.js";
+import { updateSessionsCache } from "./sessions-cache.js";
 import { initializeDatabase } from "./database/db.js";
 import {
   validateApiKey,
@@ -158,6 +160,9 @@ async function setupProjectsWatcher() {
 
           // Get updated projects list
           const updatedProjects = await getProjects();
+
+          // Update sessions cache with new projects data
+          updateSessionsCache(updatedProjects);
 
           // Notify all connected clients about the project changes
           const updateMessage = JSON.stringify({
@@ -308,6 +313,9 @@ app.use("/api/user", authenticateToken, userRoutes);
 
 // Codex API Routes (protected)
 app.use("/api/codex", authenticateToken, codexRoutes);
+
+// Sessions API Routes (protected)
+app.use("/api/sessions", authenticateToken, sessionsRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use("/api/agent", agentRoutes);
@@ -2110,6 +2118,19 @@ async function startServer() {
 
       // Start watching the projects folder for changes
       await setupProjectsWatcher();
+
+      // Initialize sessions cache with initial project data
+      try {
+        const initialProjects = await getProjects();
+        updateSessionsCache(initialProjects);
+        console.log(
+          `${c.ok("[OK]")} Sessions cache initialized with ${initialProjects.length} projects`,
+        );
+      } catch (cacheError) {
+        console.warn(
+          `${c.warn("[WARN]")} Failed to initialize sessions cache: ${cacheError.message}`,
+        );
+      }
     });
   } catch (error) {
     console.error("[ERROR] Failed to start server:", error);
