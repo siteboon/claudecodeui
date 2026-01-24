@@ -446,7 +446,8 @@ router.post('/checkout', async (req, res) => {
 
   try {
     const projectPath = await getActualProjectPath(project);
-    
+    const gitRoot = await validateGitRepository(projectPath);
+
     // Checkout the branch
     const { stdout } = await execAsync(`git checkout "${branch}"`, { cwd: gitRoot });
     
@@ -467,7 +468,8 @@ router.post('/create-branch', async (req, res) => {
 
   try {
     const projectPath = await getActualProjectPath(project);
-    
+    const gitRoot = await validateGitRepository(projectPath);
+
     // Create and checkout new branch
     const { stdout } = await execAsync(`git checkout -b "${branch}"`, { cwd: gitRoot });
     
@@ -488,12 +490,12 @@ router.get('/commits', async (req, res) => {
 
   try {
     const projectPath = await getActualProjectPath(project);
-    await validateGitRepository(projectPath);
+    const gitRoot = await validateGitRepository(projectPath);
     const parsedLimit = Number.parseInt(String(limit), 10);
     const safeLimit = Number.isFinite(parsedLimit) && parsedLimit > 0
       ? Math.min(parsedLimit, 100)
       : 10;
-    
+
     // Get commit log with stats
     const { stdout } = await spawnAsync(
       'git',
@@ -545,7 +547,8 @@ router.get('/commit-diff', async (req, res) => {
 
   try {
     const projectPath = await getActualProjectPath(project);
-    
+    const gitRoot = await validateGitRepository(projectPath);
+
     // Get diff for the commit
     const { stdout } = await execAsync(
       `git show ${commit}`,
@@ -574,6 +577,7 @@ router.post('/generate-commit-message', async (req, res) => {
 
   try {
     const projectPath = await getActualProjectPath(project);
+    const gitRoot = await validateGitRepository(projectPath);
 
     // Get diff for selected files
     let diffContext = '';
