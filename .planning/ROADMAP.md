@@ -56,21 +56,21 @@ Plans:
 **Depends on**: Phase 2
 **Requirements**: UI-01, UI-02, UI-03
 **Success Criteria** (what must be TRUE):
-  1. Project card displays total size (sum of all session files)
+  1. Project card displays total size (sum of all session files) - DONE in Phase 2
   2. Session list shows individual session file size
-  3. Sizes formatted appropriately (KB, MB, GB with 1 decimal place)
-**Plans**: TBD
+  3. Sizes formatted appropriately (KB, MB, GB with 1 decimal place) - DONE in Phase 2
+**Plans**: 1 plan
 
 Plans:
-- [ ] TBD
+- [ ] 03-01-PLAN.md - Add session file size to backend and display in sidebar
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3
+Phases execute in numeric order: 1 -> 2 -> 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. File Reading Optimization | 3/3 | Complete | 2026-01-24 |
 | 2. Lazy Loading Architecture | 2/2 | Complete | 2026-01-24 |
-| 3. UI Size Indicators | 0/? | Not started | - |
+| 3. UI Size Indicators | 0/1 | Not started | - |
