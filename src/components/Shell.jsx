@@ -538,9 +538,24 @@ function Shell({
   }, [selectedProject?.path || selectedProject?.fullPath, isRestarting]);
 
   useEffect(() => {
-    if (!autoConnect || !isInitialized || isConnecting || isConnected) return;
+    // Don't auto-connect if user explicitly disconnected
+    if (
+      !autoConnect ||
+      !isInitialized ||
+      isConnecting ||
+      isConnected ||
+      isDisconnected
+    )
+      return;
     connectToShell();
-  }, [autoConnect, isInitialized, isConnecting, isConnected, connectToShell]);
+  }, [
+    autoConnect,
+    isInitialized,
+    isConnecting,
+    isConnected,
+    isDisconnected,
+    connectToShell,
+  ]);
 
   if (!selectedProject) {
     return (

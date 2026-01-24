@@ -114,7 +114,7 @@ import codexRoutes from "./routes/codex.js";
 import sessionsRoutes from "./routes/sessions.js";
 import { updateSessionsCache } from "./sessions-cache.js";
 import { updateProjectsCache } from "./projects-cache.js";
-import { initializeDatabase } from "./database/db.js";
+import { initializeDatabase, tmuxSessionsDb } from "./database/db.js";
 import {
   validateApiKey,
   authenticateToken,
@@ -129,6 +129,37 @@ const connectedClients = new Set();
 // Orchestrator integration (initialized in startServer if enabled)
 let orchestrator = null;
 let orchestratorStatusHooks = null;
+
+/**
+ * Clean up stale tmux session entries from the database
+ * Called when projects are rescanned to remove entries for tmux sessions that no longer exist
+ */
+function cleanupStaleTmuxSessions() {
+  try {
+    const allSessions = tmuxSessionsDb.getAllTmuxSessions();
+    const staleIds = [];
+
+    for (const session of allSessions) {
+      // Check if the tmux session still exists
+      if (!tmuxSessionExists(session.tmux_session_name)) {
+        console.log(
+          `🧹 Cleaning up stale tmux entry: ${session.tmux_session_name}`,
+        );
+        staleIds.push(session.id);
+      }
+    }
+
+    if (staleIds.length > 0) {
+      const deleted = tmuxSessionsDb.deleteByIds(staleIds);
+      console.log(`🧹 Cleaned up ${deleted} stale tmux session entries`);
+    }
+  } catch (error) {
+    console.error(
+      "[ERROR] Error cleaning up stale tmux sessions:",
+      error.message,
+    );
+  }
+}
 
 // Setup file system watcher for Claude projects folder using chokidar
 async function setupProjectsWatcher() {
@@ -176,6 +207,9 @@ async function setupProjectsWatcher() {
           // Update sessions and projects caches with new projects data
           updateSessionsCache(updatedProjects);
           updateProjectsCache(updatedProjects);
+
+          // Clean up stale tmux session entries from database
+          cleanupStaleTmuxSessions();
 
           // Notify all connected clients about the project changes
           const updateMessage = JSON.stringify({
@@ -1370,6 +1404,102 @@ function handleShellConnection(ws) {
           ? null
           : ptySessionsMap.get(ptySessionKey);
 
+        // Check for saved tmux session in database (for server restarts)
+        if (!existingSession && !isLoginCommand && !isPlainShell) {
+          const savedTmuxName = tmuxSessionsDb.getTmuxSession(
+            projectPath,
+            sessionId,
+          );
+          if (savedTmuxName && tmuxSessionExists(savedTmuxName)) {
+            console.log(
+              "♻️  Found existing tmux session from database:",
+              savedTmuxName,
+            );
+
+            // Reconnect to the existing tmux session
+            const termCols = data.cols || 80;
+            const termRows = data.rows || 24;
+
+            const attachResult = attachToTmuxSession(savedTmuxName, pty, {
+              cols: termCols,
+              rows: termRows,
+            });
+
+            if (attachResult && attachResult.pty) {
+              shellProcess = attachResult.pty;
+
+              // Update last used timestamp
+              tmuxSessionsDb.touchTmuxSession(projectPath, sessionId);
+
+              // Create session with multi-client support
+              const clients = new Set([ws]);
+              ptySessionsMap.set(ptySessionKey, {
+                pty: shellProcess,
+                clients,
+                buffer: [],
+                mode: "shell",
+                lockedBy: null,
+                tmuxSessionName: savedTmuxName,
+                timeoutId: null,
+                projectPath,
+                sessionId,
+                createdAt: Date.now(),
+                lastActivity: Date.now(),
+              });
+
+              // Handle data output - broadcast to all clients
+              shellProcess.onData((outputData) => {
+                const session = ptySessionsMap.get(ptySessionKey);
+                if (!session) return;
+                session.lastActivity = Date.now();
+
+                // Add to buffer
+                if (session.buffer.length < 5000) {
+                  session.buffer.push(outputData);
+                } else {
+                  session.buffer.shift();
+                  session.buffer.push(outputData);
+                }
+
+                // Broadcast to all clients
+                broadcastToSession(ptySessionKey, {
+                  type: "output",
+                  data: outputData,
+                });
+              });
+
+              shellProcess.onExit(({ exitCode }) => {
+                console.log(`🔴 Tmux process exited with code ${exitCode}`);
+                const session = ptySessionsMap.get(ptySessionKey);
+                if (session) {
+                  broadcastToSession(ptySessionKey, {
+                    type: "output",
+                    data: `\r\n\x1b[33mSession ended with exit code ${exitCode}\x1b[0m\r\n`,
+                  });
+                  ptySessionsMap.delete(ptySessionKey);
+                }
+              });
+
+              ws.send(
+                JSON.stringify({
+                  type: "output",
+                  data: `\x1b[36m[Reconnected to existing tmux session]\x1b[0m\r\n`,
+                }),
+              );
+
+              broadcastSessionState(ptySessionKey);
+              return;
+            } else {
+              // Failed to attach, will create new session below
+              console.log(
+                "⚠️  Failed to attach to saved tmux session, creating new one",
+              );
+              // Clean up stale database entry
+              tmuxSessionsDb.deleteTmuxSession(projectPath, sessionId);
+            }
+          }
+        }
+
         if (existingSession) {
           // Multi-client: Add this client to the existing session
           console.log(
@@ -1509,39 +1639,101 @@ function handleShellConnection(ws) {
 
           console.log("🔧 Executing shell command:", shellCommand);
 
-          // Use appropriate shell based on platform
-          const shell = os.platform() === "win32" ? "powershell.exe" : "bash";
-          const shellArgs =
-            os.platform() === "win32"
-              ? ["-Command", shellCommand]
-              : ["-c", shellCommand];
-
           // Use terminal dimensions from client if provided, otherwise use defaults
           const termCols = data.cols || 80;
           const termRows = data.rows || 24;
           console.log("📐 Using terminal dimensions:", termCols, "x", termRows);
 
-          shellProcess = pty.spawn(shell, shellArgs, {
-            name: "xterm-256color",
-            cols: termCols,
-            rows: termRows,
-            cwd: os.homedir(),
-            env: {
-              ...process.env,
-              TERM: "xterm-256color",
-              COLORTERM: "truecolor",
-              FORCE_COLOR: "3",
-              // Override browser opening commands to echo URL for detection
-              BROWSER:
-                os.platform() === "win32"
-                  ? 'echo "OPEN_URL:"'
-                  : 'echo "OPEN_URL:"',
-            },
-          });
+          // Track tmux session name if we use tmux
+          let tmuxSessionName = null;
+
+          // For non-plain-shell sessions on Unix, use tmux for session persistence
+          const useTmux =
+            !isPlainShell &&
+            os.platform() !== "win32" &&
+            checkTmuxAvailable().available;
+
+          if (useTmux) {
+            // Create tmux session
+            const tmuxResult = createTmuxSession(
+              projectPath,
+              sessionId || "shell",
+              {
+                cols: termCols,
+                rows: termRows,
+              },
+            );
+
+            if (tmuxResult.success) {
+              tmuxSessionName = tmuxResult.tmuxSessionName;
+              console.log("📺 Created/found tmux session:", tmuxSessionName);
+
+              // Save to database for persistence across server restarts
+              tmuxSessionsDb.saveTmuxSession(
+                projectPath,
+                sessionId,
+                tmuxSessionName,
+              );
+
+              // Send the shell command to tmux
+              const { spawnSync } = await import("child_process");
+              spawnSync(
+                "tmux",
+                ["send-keys", "-t", tmuxSessionName, shellCommand, "Enter"],
+                {
+                  encoding: "utf8",
+                },
+              );
+
+              // Attach to tmux session
+              const attachResult = attachToTmuxSession(tmuxSessionName, pty, {
+                cols: termCols,
+                rows: termRows,
+              });
+
+              if (attachResult && attachResult.pty) {
+                shellProcess = attachResult.pty;
+              } else {
+                // Fallback to direct PTY if tmux attach fails
+                console.log(
+                  "⚠️  Tmux attach failed, falling back to direct PTY",
+                );
+                tmuxSessionName = null;
+              }
+            }
+          }
+
+          // Fallback to direct PTY spawn (for plain shell, Windows, or tmux failure)
+          if (!shellProcess) {
+            const shell = os.platform() === "win32" ? "powershell.exe" : "bash";
+            const shellArgs =
+              os.platform() === "win32"
+                ? ["-Command", shellCommand]
+                : ["-c", shellCommand];
+
+            shellProcess = pty.spawn(shell, shellArgs, {
+              name: "xterm-256color",
+              cols: termCols,
+              rows: termRows,
+              cwd: os.homedir(),
+              env: {
+                ...process.env,
+                TERM: "xterm-256color",
+                COLORTERM: "truecolor",
+                FORCE_COLOR: "3",
+                // Override browser opening commands to echo URL for detection
+                BROWSER:
+                  os.platform() === "win32"
+                    ? 'echo "OPEN_URL:"'
+                    : 'echo "OPEN_URL:"',
+              },
+            });
+          }
 
           console.log(
             "🟢 Shell process started with PTY, PID:",
             shellProcess.pid,
+            tmuxSessionName ? `(tmux: ${tmuxSessionName})` : "(direct)",
           );
 
           // Create session with multi-client support
@@ -1552,7 +1744,7 @@ function handleShellConnection(ws) {
             buffer: [],
             mode: "shell",
             lockedBy: null,
-            tmuxSessionName: null,
+            tmuxSessionName,
             timeoutId: null,
             projectPath,
             sessionId,
@@ -2593,6 +2785,9 @@ async function startServer() {
         console.log(
           `${c.ok("[OK]")} Projects cache initialized with ${initialProjects.length} projects`,
         );
+
+        // Clean up stale tmux session entries on startup
+        cleanupStaleTmuxSessions();
       } catch (cacheError) {
         console.warn(
           `${c.warn("[WARN]")} Failed to initialize caches: ${cacheError.message}`,

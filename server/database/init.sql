@@ -52,3 +52,17 @@ CREATE TABLE IF NOT EXISTS user_credentials (
 CREATE INDEX IF NOT EXISTS idx_user_credentials_user_id ON user_credentials(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_credentials_type ON user_credentials(credential_type);
 CREATE INDEX IF NOT EXISTS idx_user_credentials_active ON user_credentials(is_active);
+
+-- tmux sessions table for persisting shell session mappings across server restarts
+CREATE TABLE IF NOT EXISTS tmux_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_path TEXT NOT NULL,
+    session_id TEXT,  -- null for plain shell sessions
+    tmux_session_name TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_used DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(project_path, session_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tmux_sessions_project ON tmux_sessions(project_path);
+CREATE INDEX IF NOT EXISTS idx_tmux_sessions_name ON tmux_sessions(tmux_session_name);

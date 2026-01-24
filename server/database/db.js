@@ -97,6 +97,29 @@ const runMigrations = () => {
       );
     }
 
+    // Check if tmux_sessions table exists
+    const tables = db
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='tmux_sessions'",
+      )
+      .all();
+    if (tables.length === 0) {
+      console.log("Running migration: Creating tmux_sessions table");
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS tmux_sessions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          project_path TEXT NOT NULL,
+          session_id TEXT,
+          tmux_session_name TEXT NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          last_used DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(project_path, session_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_tmux_sessions_project ON tmux_sessions(project_path);
+        CREATE INDEX IF NOT EXISTS idx_tmux_sessions_name ON tmux_sessions(tmux_session_name);
+      `);
+    }
+
     console.log("Database migrations completed successfully");
   } catch (error) {
     console.error("Error running migrations:", error.message);
@@ -519,6 +542,106 @@ const credentialsDb = {
   },
 };
 
+// tmux sessions database operations (for persisting shell session mappings)
+const tmuxSessionsDb = {
+  // Get tmux session name for a project+session combo
+  getTmuxSession: (projectPath, sessionId) => {
+    try {
+      const row = db
+        .prepare(
+          "SELECT tmux_session_name FROM tmux_sessions WHERE project_path = ? AND (session_id = ? OR (session_id IS NULL AND ? IS NULL))",
+        )
+        .get(projectPath, sessionId, sessionId);
+      return row?.tmux_session_name || null;
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  // Save or update tmux session mapping
+  saveTmuxSession: (projectPath, sessionId, tmuxSessionName) => {
+    try {
+      const stmt = db.prepare(`
+        INSERT INTO tmux_sessions (project_path, session_id, tmux_session_name, last_used)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(project_path, session_id) DO UPDATE SET
+          tmux_session_name = excluded.tmux_session_name,
+          last_used = CURRENT_TIMESTAMP
+      `);
+      stmt.run(projectPath, sessionId, tmuxSessionName);
+      return true;
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  // Update last_used timestamp
+  touchTmuxSession: (projectPath, sessionId) => {
+    try {
+      db.prepare(
+        "UPDATE tmux_sessions SET last_used = CURRENT_TIMESTAMP WHERE project_path = ? AND (session_id = ? OR (session_id IS NULL AND ? IS NULL))",
+      ).run(projectPath, sessionId, sessionId);
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  // Delete a tmux session mapping
+  deleteTmuxSession: (projectPath, sessionId) => {
+    try {
+      const stmt = db.prepare(
+        "DELETE FROM tmux_sessions WHERE project_path = ? AND (session_id = ? OR (session_id IS NULL AND ? IS NULL))",
+      );
+      const result = stmt.run(projectPath, sessionId, sessionId);
+      return result.changes > 0;
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  // Delete by tmux session name
+  deleteByTmuxName: (tmuxSessionName) => {
+    try {
+      const stmt = db.prepare(
+        "DELETE FROM tmux_sessions WHERE tmux_session_name = ?",
+      );
+      const result = stmt.run(tmuxSessionName);
+      return result.changes > 0;
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  // Get all tmux sessions for cleanup
+  getAllTmuxSessions: () => {
+    try {
+      const rows = db
+        .prepare(
+          "SELECT id, project_path, session_id, tmux_session_name, created_at, last_used FROM tmux_sessions ORDER BY last_used DESC",
+        )
+        .all();
+      return rows;
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  // Delete multiple sessions by their IDs
+  deleteByIds: (ids) => {
+    try {
+      if (!ids || ids.length === 0) return 0;
+      const placeholders = ids.map(() => "?").join(",");
+      const stmt = db.prepare(
+        `DELETE FROM tmux_sessions WHERE id IN (${placeholders})`,
+      );
+      const result = stmt.run(...ids);
+      return result.changes;
+    } catch (err) {
+      throw err;
+    }
+  },
+};
+
 // Backward compatibility - keep old names pointing to new system
 const githubTokensDb = {
   createGithubToken: (userId, tokenName, githubToken, description = null) => {
@@ -551,4 +674,5 @@ export {
   apiKeysDb,
   credentialsDb,
   githubTokensDb, // Backward compatibility
+  tmuxSessionsDb,
 };
