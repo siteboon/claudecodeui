@@ -63,13 +63,13 @@ Deferred to future release.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| READ-01 | Phase 1 | Pending |
-| READ-02 | Phase 1 | Pending |
-| READ-03 | Phase 1 | Pending |
-| READ-04 | Phase 1 | Pending |
-| COMPAT-01 | Phase 1 | Pending |
-| COMPAT-02 | Phase 1 | Pending |
-| COMPAT-03 | Phase 1 | Pending |
+| READ-01 | Phase 1 | Complete |
+| READ-02 | Phase 1 | Complete |
+| READ-03 | Phase 1 | Complete |
+| READ-04 | Phase 1 | Complete |
+| COMPAT-01 | Phase 1 | Complete |
+| COMPAT-02 | Phase 1 | Complete |
+| COMPAT-03 | Phase 1 | Complete |
 | LAZY-01 | Phase 2 | Pending |
 | LAZY-02 | Phase 2 | Pending |
 | LAZY-03 | Phase 2 | Pending |
