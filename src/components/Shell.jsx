@@ -234,7 +234,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
       tabStopWidth: 4,
       windowsMode: false,
       macOptionIsMeta: true,
-      macOptionClickForcesSelection: false,
+      macOptionClickForcesSelection: true,
       theme: {
         background: '#1e1e1e',
         foreground: '#d4d4d4',

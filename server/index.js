@@ -70,7 +70,7 @@ import mcpUtilsRoutes from './routes/mcp-utils.js';
 import commandsRoutes from './routes/commands.js';
 import settingsRoutes from './routes/settings.js';
 import agentRoutes from './routes/agent.js';
-import projectsRoutes from './routes/projects.js';
+import projectsRoutes, { WORKSPACES_ROOT, validateWorkspacePath } from './routes/projects.js';
 import cliAuthRoutes from './routes/cli-auth.js';
 import userRoutes from './routes/user.js';
 import codexRoutes from './routes/codex.js';
@@ -484,22 +484,42 @@ app.post('/api/projects/create', authenticateToken, async (req, res) => {
     }
 });
 
+const expandWorkspacePath = (inputPath) => {
+    if (!inputPath) return inputPath;
+    if (inputPath === '~') {
+        return WORKSPACES_ROOT;
+    }
+    if (inputPath.startsWith('~/') || inputPath.startsWith('~\\')) {
+        return path.join(WORKSPACES_ROOT, inputPath.slice(2));
+    }
+    return inputPath;
+};
+
 // Browse filesystem endpoint for project suggestions - uses existing getFileTree
 app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
     try {
         const { path: dirPath } = req.query;
         
+        console.log('[API] Browse filesystem request for path:', dirPath);
+        console.log('[API] WORKSPACES_ROOT is:', WORKSPACES_ROOT);
         // Default to home directory if no path provided
-        const homeDir = os.homedir();
-        let targetPath = dirPath ? dirPath.replace('~', homeDir) : homeDir;
+        const defaultRoot = WORKSPACES_ROOT;
+        let targetPath = dirPath ? expandWorkspacePath(dirPath) : defaultRoot;
         
         // Resolve and normalize the path
         targetPath = path.resolve(targetPath);
+
+        // Security check - ensure path is within allowed workspace root
+        const validation = await validateWorkspacePath(targetPath);
+        if (!validation.valid) {
+            return res.status(403).json({ error: validation.error });
+        }
+        const resolvedPath = validation.resolvedPath || targetPath;
         
         // Security check - ensure path is accessible
         try {
-            await fs.promises.access(targetPath);
-            const stats = await fs.promises.stat(targetPath);
+            await fs.promises.access(resolvedPath);
+            const stats = await fs.promises.stat(resolvedPath);
             
             if (!stats.isDirectory()) {
                 return res.status(400).json({ error: 'Path is not a directory' });
@@ -509,7 +529,7 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
         }
         
         // Use existing getFileTree function with shallow depth (only direct children)
-        const fileTree = await getFileTree(targetPath, 1, 0, false); // maxDepth=1, showHidden=false
+        const fileTree = await getFileTree(resolvedPath, 1, 0, false); // maxDepth=1, showHidden=false
         
         // Filter only directories and format for suggestions
         const directories = fileTree
@@ -529,7 +549,13 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
             
         // Add common directories if browsing home directory
         const suggestions = [];
-        if (targetPath === homeDir) {
+        let resolvedWorkspaceRoot = defaultRoot;
+        try {
+            resolvedWorkspaceRoot = await fsPromises.realpath(defaultRoot);
+        } catch (error) {
+            // Use default root as-is if realpath fails
+        }
+        if (resolvedPath === resolvedWorkspaceRoot) {
             const commonDirs = ['Desktop', 'Documents', 'Projects', 'Development', 'Dev', 'Code', 'workspace'];
             const existingCommon = directories.filter(dir => commonDirs.includes(dir.name));
             const otherDirs = directories.filter(dir => !commonDirs.includes(dir.name));
@@ -540,13 +566,53 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
         }
         
         res.json({
-            path: targetPath,
+            path: resolvedPath,
             suggestions: suggestions
         });
         
     } catch (error) {
         console.error('Error browsing filesystem:', error);
         res.status(500).json({ error: 'Failed to browse filesystem' });
+    }
+});
+
+app.post('/api/create-folder', authenticateToken, async (req, res) => {
+    try {
+        const { path: folderPath } = req.body;
+        if (!folderPath) {
+            return res.status(400).json({ error: 'Path is required' });
+        }
+        const expandedPath = expandWorkspacePath(folderPath);
+        const resolvedInput = path.resolve(expandedPath);
+        const validation = await validateWorkspacePath(resolvedInput);
+        if (!validation.valid) {
+            return res.status(403).json({ error: validation.error });
+        }
+        const targetPath = validation.resolvedPath || resolvedInput;
+        const parentDir = path.dirname(targetPath);
+        try {
+            await fs.promises.access(parentDir);
+        } catch (err) {
+            return res.status(404).json({ error: 'Parent directory does not exist' });
+        }
+        try {
+            await fs.promises.access(targetPath);
+            return res.status(409).json({ error: 'Folder already exists' });
+        } catch (err) {
+            // Folder doesn't exist, which is what we want
+        }
+        try {
+            await fs.promises.mkdir(targetPath, { recursive: false });
+            res.json({ success: true, path: targetPath });
+        } catch (mkdirError) {
+            if (mkdirError.code === 'EEXIST') {
+                return res.status(409).json({ error: 'Folder already exists' });
+            }
+            throw mkdirError;
+        }
+    } catch (error) {
+        console.error('Error creating folder:', error);
+        res.status(500).json({ error: 'Failed to create folder' });
     }
 });
 
