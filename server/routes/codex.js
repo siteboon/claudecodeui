@@ -262,8 +262,7 @@ router.get('/mcp/config/read', async (req, res) => {
     }
 
     if (!configData) {
-      return res.json({ success: true, servers: [] });
-    }
+      return res.json({ success: true, configPath, servers: [] });    }
 
     const servers = [];
 
