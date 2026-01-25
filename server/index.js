@@ -1094,7 +1094,9 @@ function handleShellConnection(ws) {
 
             if (data.type === 'init') {
                 const projectPath = data.projectPath || process.cwd();
-                const sessionId = data.sessionId;
+                const rawSessionId = data.sessionId;
+                // Sanitize sessionId to prevent command injection
+                const sessionId = rawSessionId ? String(rawSessionId).replace(/[^a-zA-Z0-9._-]/g, '') : null;
                 const hasSession = data.hasSession;
                 const provider = data.provider || 'claude';
                 const initialCommand = data.initialCommand;
@@ -1149,6 +1151,12 @@ function handleShellConnection(ws) {
                                 data: bufferedData
                             }));
                         });
+                        // Send ANSI escape sequence to scroll terminal to bottom
+                        // CSI 999999 H moves cursor to row 999999 which scrolls to end
+                        ws.send(JSON.stringify({
+                            type: 'output',
+                            data: '\x1b[999999;1H'
+                        }));
                     }
 
                     existingSession.ws = ws;
