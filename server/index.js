@@ -41,7 +41,11 @@ console.log('PORT from env:', process.env.PORT);
 function getGitRoot(projectPath) {
     if (!projectPath) return projectPath;
     try {
-        const gitRoot = execSync(`git -C "${projectPath}" rev-parse --show-toplevel 2>/dev/null`, { encoding: 'utf8' }).trim();
+        const gitRoot = execFileSync(
+            'git',
+            ['-C', projectPath, 'rev-parse', '--show-toplevel'],
+            { encoding: 'utf8' }
+        ).trim();
         if (gitRoot) {
             console.log('🔧 Git root detected:', gitRoot, 'from:', projectPath);
             return gitRoot;
@@ -58,7 +62,7 @@ import os from 'os';
 import http from 'http';
 import cors from 'cors';
 import { promises as fsPromises } from 'fs';
-import { spawn, execSync } from 'child_process';
+import { spawn, execFileSync } from 'child_process';
 import pty from 'node-pty';
 import fetch from 'node-fetch';
 import mime from 'mime-types';
