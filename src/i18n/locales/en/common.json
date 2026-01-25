@@ -1,0 +1,218 @@
+{
+  "buttons": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "create": "Create",
+    "edit": "Edit",
+    "close": "Close",
+    "confirm": "Confirm",
+    "submit": "Submit",
+    "retry": "Retry",
+    "refresh": "Refresh",
+    "search": "Search",
+    "clear": "Clear",
+    "copy": "Copy",
+    "download": "Download",
+    "upload": "Upload",
+    "browse": "Browse"
+  },
+  "tabs": {
+    "chat": "Chat",
+    "shell": "Shell",
+    "files": "Files",
+    "git": "Source Control",
+    "tasks": "Tasks"
+  },
+  "status": {
+    "loading": "Loading...",
+    "success": "Success",
+    "error": "Error",
+    "failed": "Failed",
+    "pending": "Pending",
+    "completed": "Completed",
+    "inProgress": "In Progress"
+  },
+  "messages": {
+    "savedSuccessfully": "Saved successfully",
+    "deletedSuccessfully": "Deleted successfully",
+    "updatedSuccessfully": "Updated successfully",
+    "operationFailed": "Operation failed",
+    "networkError": "Network error. Please check your connection.",
+    "unauthorized": "Unauthorized. Please log in.",
+    "notFound": "Not found",
+    "invalidInput": "Invalid input",
+    "requiredField": "This field is required",
+    "unknownError": "An unknown error occurred"
+  },
+  "navigation": {
+    "settings": "Settings",
+    "home": "Home",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "logout": "Logout"
+  },
+  "common": {
+    "language": "Language",
+    "theme": "Theme",
+    "darkMode": "Dark Mode",
+    "lightMode": "Light Mode",
+    "name": "Name",
+    "description": "Description",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "optional": "Optional",
+    "version": "Version",
+    "select": "Select",
+    "selectAll": "Select All",
+    "deselectAll": "Deselect All"
+  },
+  "time": {
+    "justNow": "Just now",
+    "minutesAgo": "{{count}} mins ago",
+    "hoursAgo": "{{count}} hours ago",
+    "daysAgo": "{{count}} days ago",
+    "yesterday": "Yesterday"
+  },
+  "fileOperations": {
+    "newFile": "New File",
+    "newFolder": "New Folder",
+    "rename": "Rename",
+    "move": "Move",
+    "copyPath": "Copy Path",
+    "openInEditor": "Open in Editor"
+  },
+  "mainContent": {
+    "loading": "Loading Claude Code UI",
+    "settingUpWorkspace": "Setting up your workspace...",
+    "chooseProject": "Choose Your Project",
+    "selectProjectDescription": "Select a project from the sidebar to start coding with Claude. Each project contains your chat sessions and file history.",
+    "tip": "Tip",
+    "createProjectMobile": "Tap the menu button above to access projects",
+    "createProjectDesktop": "Create a new project by clicking the folder icon in the sidebar",
+    "newSession": "New Session",
+    "untitledSession": "Untitled Session",
+    "projectFiles": "Project Files"
+  },
+  "fileTree": {
+    "loading": "Loading files...",
+    "files": "Files",
+    "simpleView": "Simple view",
+    "compactView": "Compact view",
+    "detailedView": "Detailed view",
+    "searchPlaceholder": "Search files and folders...",
+    "clearSearch": "Clear search",
+    "name": "Name",
+    "size": "Size",
+    "modified": "Modified",
+    "permissions": "Permissions",
+    "noFilesFound": "No files found",
+    "checkProjectPath": "Check if the project path is accessible",
+    "noMatchesFound": "No matches found",
+    "tryDifferentSearch": "Try a different search term or clear the search",
+    "justNow": "just now",
+    "minAgo": "{{count}} min ago",
+    "hoursAgo": "{{count}} hours ago",
+    "daysAgo": "{{count}} days ago"
+  },
+  "projectWizard": {
+    "title": "Create New Project",
+    "steps": {
+      "type": "Type",
+      "configure": "Configure",
+      "confirm": "Confirm"
+    },
+    "step1": {
+      "question": "Do you already have a workspace, or would you like to create a new one?",
+      "existing": {
+        "title": "Existing Workspace",
+        "description": "I already have a workspace on my server and just need to add it to the project list"
+      },
+      "new": {
+        "title": "New Workspace",
+        "description": "Create a new workspace, optionally clone from a GitHub repository"
+      }
+    },
+    "step2": {
+      "existingPath": "Workspace Path",
+      "newPath": "Where should the workspace be created?",
+      "existingPlaceholder": "/path/to/existing/workspace",
+      "newPlaceholder": "/path/to/new/workspace",
+      "existingHelp": "Full path to your existing workspace directory",
+      "newHelp": "Full path where the new workspace will be created",
+      "githubUrl": "GitHub URL (Optional)",
+      "githubPlaceholder": "https://github.com/username/repository",
+      "githubHelp": "Leave empty to create an empty workspace, or provide a GitHub URL to clone",
+      "githubAuth": "GitHub Authentication (Optional)",
+      "githubAuthHelp": "Only required for private repositories. Public repos can be cloned without authentication.",
+      "loadingTokens": "Loading stored tokens...",
+      "storedToken": "Stored Token",
+      "newToken": "New Token",
+      "nonePublic": "None (Public)",
+      "selectToken": "Select Token",
+      "selectTokenPlaceholder": "-- Select a token --",
+      "tokenPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "tokenHelp": "This token will be used only for this operation",
+      "publicRepoInfo": "Public repositories don't require authentication. You can skip providing a token if cloning a public repo.",
+      "noTokensHelp": "No stored tokens available. You can add tokens in Settings → API Keys for easier reuse.",
+      "optionalTokenPublic": "GitHub Token (Optional for Public Repos)",
+      "tokenPublicPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (leave empty for public repos)"
+    },
+    "step3": {
+      "reviewConfig": "Review Your Configuration",
+      "workspaceType": "Workspace Type:",
+      "existingWorkspace": "Existing Workspace",
+      "newWorkspace": "New Workspace",
+      "path": "Path:",
+      "cloneFrom": "Clone From:",
+      "authentication": "Authentication:",
+      "usingStoredToken": "Using stored token:",
+      "usingProvidedToken": "Using provided token",
+      "noAuthentication": "No authentication",
+      "existingInfo": "The workspace will be added to your project list and will be available for Claude/Cursor sessions.",
+      "newWithClone": "A new workspace will be created and the repository will be cloned from GitHub.",
+      "newEmpty": "An empty workspace directory will be created at the specified path."
+    },
+    "buttons": {
+      "cancel": "Cancel",
+      "back": "Back",
+      "next": "Next",
+      "createProject": "Create Project",
+      "creating": "Creating..."
+    },
+    "errors": {
+      "selectType": "Please select whether you have an existing workspace or want to create a new one",
+      "providePath": "Please provide a workspace path",
+      "failedToCreate": "Failed to create workspace"
+    }
+  },
+  "versionUpdate": {
+    "title": "Update Available",
+    "newVersionReady": "A new version is ready",
+    "currentVersion": "Current Version",
+    "latestVersion": "Latest Version",
+    "whatsNew": "What's New:",
+    "viewFullRelease": "View full release",
+    "updateProgress": "Update Progress:",
+    "manualUpgrade": "Manual upgrade:",
+    "manualUpgradeHint": "Or click \"Update Now\" to run the update automatically.",
+    "updateCompleted": "Update completed successfully!",
+    "restartServer": "Please restart the server to apply changes.",
+    "updateFailed": "Update failed",
+    "buttons": {
+      "close": "Close",
+      "later": "Later",
+      "copyCommand": "Copy Command",
+      "updateNow": "Update Now",
+      "updating": "Updating..."
+    },
+    "ariaLabels": {
+      "closeModal": "Close version upgrade modal",
+      "showSidebar": "Show sidebar",
+      "settings": "Settings",
+      "updateAvailable": "Update available",
+      "closeSidebar": "Close sidebar"
+    }
+  }
+}

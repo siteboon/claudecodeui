@@ -21,6 +21,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useDropzone } from 'react-dropzone';
 import TodoList from './TodoList';
 import ClaudeLogo from './ClaudeLogo.jsx';
@@ -28,11 +30,13 @@ import CursorLogo from './CursorLogo.jsx';
 import CodexLogo from './CodexLogo.jsx';
 import NextTaskBanner from './NextTaskBanner.jsx';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
+import { useTranslation } from 'react-i18next';
 
 import ClaudeStatus from './ClaudeStatus';
 import TokenUsagePie from './TokenUsagePie';
 import { MicButton } from './MicButton.jsx';
 import { api, authenticatedFetch } from '../utils/api';
+import ThinkingModeSelector, { thinkingModes } from './ThinkingModeSelector.jsx';
 import Fuse from 'fuse.js';
 import CommandMenu from './CommandMenu';
 import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '../../shared/modelConstants';
@@ -338,25 +342,31 @@ function grantClaudeToolPermission(entry) {
 }
 
 // Common markdown components to ensure consistent rendering (tables, inline code, links, etc.)
-const markdownComponents = {
-  code: ({ node, inline, className, children, ...props }) => {
-    const [copied, setCopied] = React.useState(false);
-    const raw = Array.isArray(children) ? children.join('') : String(children ?? '');
-    const looksMultiline = /[\r\n]/.test(raw);
-    const inlineDetected = inline || (node && node.type === 'inlineCode');
-    const shouldInline = inlineDetected || !looksMultiline; // fallback to inline if single-line
-    if (shouldInline) {
-      return (
-        <code
-          className={`font-mono text-[0.9em] px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-900 border border-gray-200 dark:bg-gray-800/60 dark:text-gray-100 dark:border-gray-700 whitespace-pre-wrap break-words ${
-            className || ''
-          }`}
-          {...props}
-        >
-          {children}
-        </code>
-      );
-    }
+const CodeBlock = ({ node, inline, className, children, ...props }) => {
+  const { t } = useTranslation('chat');
+  const [copied, setCopied] = React.useState(false);
+  const raw = Array.isArray(children) ? children.join('') : String(children ?? '');
+  const looksMultiline = /[\r\n]/.test(raw);
+  const inlineDetected = inline || (node && node.type === 'inlineCode');
+  const shouldInline = inlineDetected || !looksMultiline; // fallback to inline if single-line
+
+  // Inline code rendering
+  if (shouldInline) {
+    return (
+      <code
+        className={`font-mono text-[0.9em] px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-900 border border-gray-200 dark:bg-gray-800/60 dark:text-gray-100 dark:border-gray-700 whitespace-pre-wrap break-words ${
+          className || ''
+        }`}
+        {...props}
+      >
+        {children}
+      </code>
+    );
+  }
+
+    // Extract language from className (format: language-xxx)
+    const match = /language-(\w+)/.exec(className || '');
+    const language = match ? match[1] : 'text';
     const textToCopy = raw;
 
     const handleCopy = () => {
@@ -392,21 +402,30 @@ const markdownComponents = {
       } catch {}
     };
 
+    // Code block with syntax highlighting
     return (
       <div className="relative group my-2">
+        {/* Language label */}
+        {language && language !== 'text' && (
+          <div className="absolute top-2 left-3 z-10 text-xs text-gray-400 font-medium uppercase">
+            {language}
+          </div>
+        )}
+
+        {/* Copy button */}
         <button
           type="button"
           onClick={handleCopy}
           className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 focus:opacity-100 active:opacity-100 transition-opacity text-xs px-2 py-1 rounded-md bg-gray-700/80 hover:bg-gray-700 text-white border border-gray-600"
-          title={copied ? 'Copied' : 'Copy code'}
-          aria-label={copied ? 'Copied' : 'Copy code'}
+          title={copied ? t('codeBlock.copied') : t('codeBlock.copyCode')}
+          aria-label={copied ? t('codeBlock.copied') : t('codeBlock.copyCode')}
         >
           {copied ? (
             <span className="flex items-center gap-1">
               <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
               </svg>
-              Copied
+              {t('codeBlock.copied')}
             </span>
           ) : (
             <span className="flex items-center gap-1">
@@ -414,18 +433,36 @@ const markdownComponents = {
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                 <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
               </svg>
-              Copy
+              {t('codeBlock.copy')}
             </span>
           )}
         </button>
-        <pre className="bg-gray-900 dark:bg-gray-900 border border-gray-700/40 rounded-lg p-3 overflow-x-auto">
-          <code className={`text-gray-100 dark:text-gray-100 text-sm font-mono ${className || ''}`} {...props}>
-            {children}
-          </code>
-        </pre>
+
+        {/* Syntax highlighted code */}
+        <SyntaxHighlighter
+          language={language}
+          style={oneDark}
+          customStyle={{
+            margin: 0,
+            borderRadius: '0.5rem',
+            fontSize: '0.875rem',
+            padding: language && language !== 'text' ? '2rem 1rem 1rem 1rem' : '1rem',
+          }}
+          codeTagProps={{
+            style: {
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+            }
+          }}
+        >
+          {raw}
+        </SyntaxHighlighter>
       </div>
     );
-  },
+  };
+
+// Common markdown components to ensure consistent rendering (tables, inline code, links, etc.)
+const markdownComponents = {
+  code: CodeBlock,
   blockquote: ({ children }) => (
     <blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-4 italic text-gray-600 dark:text-gray-400 my-2">
       {children}
@@ -458,6 +495,7 @@ const markdownComponents = {
 
 // Memoized message component to prevent unnecessary re-renders
 const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFileOpen, onShowSettings, onGrantToolPermission, autoExpandTools, showRawParameters, showThinking, selectedProject, provider }) => {
+  const { t } = useTranslation('chat');
   const isGrouped = prevMessage && prevMessage.type === message.type &&
                    ((prevMessage.type === 'assistant') ||
                     (prevMessage.type === 'user') ||
@@ -560,7 +598,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 </div>
               )}
               <div className="text-sm font-medium text-gray-900 dark:text-white">
-                {message.type === 'error' ? 'Error' : message.type === 'tool' ? 'Tool' : ((localStorage.getItem('selected-provider') || 'claude') === 'cursor' ? 'Cursor' : (localStorage.getItem('selected-provider') || 'claude') === 'codex' ? 'Codex' : 'Claude')}
+                {message.type === 'error' ? t('messageTypes.error') : message.type === 'tool' ? t('messageTypes.tool') : ((localStorage.getItem('selected-provider') || 'claude') === 'cursor' ? t('messageTypes.cursor') : (localStorage.getItem('selected-provider') || 'claude') === 'codex' ? t('messageTypes.codex') : t('messageTypes.claude'))}
               </div>
             </div>
           )}
@@ -588,8 +626,8 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                                 const input = JSON.parse(message.toolInput);
                                 return (
                                   <span className="font-mono truncate flex-1 min-w-0">
-                                    {input.pattern && <span>pattern: <span className="text-blue-600 dark:text-blue-400">{input.pattern}</span></span>}
-                                    {input.path && <span className="ml-2">in: {input.path}</span>}
+                                    {input.pattern && <span>{t('search.pattern')} <span className="text-blue-600 dark:text-blue-400">{input.pattern}</span></span>}
+                                    {input.path && <span className="ml-2">{t('search.in')} {input.path}</span>}
                                   </span>
                                 );
                               } catch (e) {
@@ -602,7 +640,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                               href={`#tool-result-${message.toolId}`}
                               className="flex-shrink-0 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium transition-colors flex items-center gap-1"
                             >
-                              <span>results</span>
+                              <span>{t('tools.searchResults')}</span>
                               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                               </svg>
@@ -646,7 +684,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                         onShowSettings();
                       }}
                       className="p-2 rounded-lg hover:bg-white/60 dark:hover:bg-gray-800/60 transition-all duration-200 group/btn backdrop-blur-sm"
-                      title="Tool Settings"
+                      title={t('tools.settings')}
                     >
                       <svg className="w-4 h-4 text-gray-600 dark:text-gray-400 group-hover/btn:text-blue-600 dark:group-hover/btn:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -1824,6 +1862,7 @@ const ImageAttachment = ({ file, onRemove, uploadProgress, error }) => {
 // This ensures uninterrupted chat experience by pausing sidebar refreshes during conversations.
 function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, messages, onFileOpen, onInputFocusChange, onSessionActive, onSessionInactive, onSessionProcessing, onSessionNotProcessing, processingSessions, onReplaceTemporarySession, onNavigateToSession, onShowSettings, autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter, externalMessageUpdate, onTaskClick, onShowAllTasks }) {
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
+  const { t } = useTranslation('chat');
   const [input, setInput] = useState(() => {
     if (typeof window !== 'undefined' && selectedProject) {
       return safeLocalStorage.getItem(`draft_input_${selectedProject.name}`) || '';
@@ -1890,6 +1929,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [slashPosition, setSlashPosition] = useState(-1);
   const [visibleMessageCount, setVisibleMessageCount] = useState(100);
   const [claudeStatus, setClaudeStatus] = useState(null);
+  const [thinkingMode, setThinkingMode] = useState('none');
   const [provider, setProvider] = useState(() => {
     return localStorage.getItem('selected-provider') || 'claude';
   });
@@ -4270,6 +4310,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     e.preventDefault();
     if (!input.trim() || isLoading || !selectedProject) return;
 
+    // Apply thinking mode prefix if selected
+    let messageContent = input;
+    const selectedThinkingMode = thinkingModes.find(mode => mode.id === thinkingMode);
+    if (selectedThinkingMode && selectedThinkingMode.prefix) {
+      messageContent = `${selectedThinkingMode.prefix}: ${input}`;
+    }
+
     // Upload images first if any
     let uploadedImages = [];
     if (attachedImages.length > 0) {
@@ -4358,7 +4405,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       // Send Cursor command (always use cursor-command; include resume/sessionId when replying)
       sendMessage({
         type: 'cursor-command',
-        command: input,
+        command: messageContent,
         sessionId: effectiveSessionId,
         options: {
           // Prefer fullPath (actual cwd for project), fallback to path
@@ -4375,7 +4422,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       // Send Codex command
       sendMessage({
         type: 'codex-command',
-        command: input,
+        command: messageContent,
         sessionId: effectiveSessionId,
         options: {
           cwd: selectedProject.fullPath || selectedProject.path,
@@ -4390,7 +4437,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       // Send Claude command (existing code)
       sendMessage({
         type: 'claude-command',
-        command: input,
+        command: messageContent,
         options: {
           projectPath: selectedProject.path,
           cwd: selectedProject.fullPath,
@@ -4409,6 +4456,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     setUploadingImages(new Map());
     setImageErrors(new Map());
     setIsTextareaExpanded(false);
+    setThinkingMode('none'); // Reset thinking mode after sending
 
     // Reset textarea height
     if (textareaRef.current) {
@@ -4419,7 +4467,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     if (selectedProject) {
       safeLocalStorage.removeItem(`draft_input_${selectedProject.name}`);
     }
-  }, [input, isLoading, selectedProject, attachedImages, currentSessionId, selectedSession, provider, permissionMode, onSessionActive, cursorModel, claudeModel, codexModel, sendMessage, setInput, setAttachedImages, setUploadingImages, setImageErrors, setIsTextareaExpanded, textareaRef, setChatMessages, setIsLoading, setCanAbortSession, setClaudeStatus, setIsUserScrolledUp, scrollToBottom]);
+  }, [input, isLoading, selectedProject, attachedImages, currentSessionId, selectedSession, provider, permissionMode, onSessionActive, cursorModel, claudeModel, codexModel, sendMessage, setInput, setAttachedImages, setUploadingImages, setImageErrors, setIsTextareaExpanded, textareaRef, setChatMessages, setIsLoading, setCanAbortSession, setClaudeStatus, setIsUserScrolledUp, scrollToBottom, thinkingMode]);
 
   const handleGrantToolPermission = useCallback((suggestion) => {
     if (!suggestion || provider !== 'claude') {
@@ -4792,16 +4840,16 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           <div className="text-center text-gray-500 dark:text-gray-400 mt-8">
             <div className="flex items-center justify-center space-x-2">
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400"></div>
-              <p>Loading session messages...</p>
+              <p>{t('session.loading.sessionMessages')}</p>
             </div>
           </div>
         ) : chatMessages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             {!selectedSession && !currentSessionId && (
               <div className="text-center px-6 sm:px-4 py-8">
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">Choose Your AI Assistant</h2>
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">{t('providerSelection.title')}</h2>
                 <p className="text-gray-600 dark:text-gray-400 mb-8">
-                  Select a provider to start a new conversation
+                  {t('providerSelection.description')}
                 </p>
                 
                 <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-8">
@@ -4823,7 +4871,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                       <ClaudeLogo className="w-10 h-10" />
                       <div>
                         <p className="font-semibold text-gray-900 dark:text-white">Claude</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">by Anthropic</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{t('providerSelection.providerInfo.anthropic')}</p>
                       </div>
                     </div>
                     {provider === 'claude' && (
@@ -4855,7 +4903,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                       <CursorLogo className="w-10 h-10" />
                       <div>
                         <p className="font-semibold text-gray-900 dark:text-white">Cursor</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">AI Code Editor</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{t('providerSelection.providerInfo.cursorEditor')}</p>
                       </div>
                     </div>
                     {provider === 'cursor' && (
@@ -4887,7 +4935,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                       <CodexLogo className="w-10 h-10" />
                       <div>
                         <p className="font-semibold text-gray-900 dark:text-white">Codex</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">by OpenAI</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{t('providerSelection.providerInfo.openai')}</p>
                       </div>
                     </div>
                     {provider === 'codex' && (
@@ -4905,7 +4953,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 {/* Model Selection - Always reserve space to prevent jumping */}
                 <div className={`mb-6 transition-opacity duration-200 ${provider ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Select Model
+                    {t('providerSelection.selectModel')}
                   </label>
                   {provider === 'claude' ? (
                     <select
@@ -4955,12 +5003,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   {provider === 'claude'
-                    ? `Ready to use Claude with ${claudeModel}. Start typing your message below.`
+                    ? t('providerSelection.readyPrompt.claude', { model: claudeModel })
                     : provider === 'cursor'
-                    ? `Ready to use Cursor with ${cursorModel}. Start typing your message below.`
+                    ? t('providerSelection.readyPrompt.cursor', { model: cursorModel })
                     : provider === 'codex'
-                    ? `Ready to use Codex with ${codexModel}. Start typing your message below.`
-                    : 'Select a provider above to begin'
+                    ? t('providerSelection.readyPrompt.codex', { model: codexModel })
+                    : t('providerSelection.readyPrompt.default')
                   }
                 </p>
                 
@@ -4977,9 +5025,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             )}
             {selectedSession && (
               <div className="text-center text-gray-500 dark:text-gray-400 px-6 sm:px-4">
-                <p className="font-bold text-lg sm:text-xl mb-3">Continue your conversation</p>
+                <p className="font-bold text-lg sm:text-xl mb-3">{t('session.continue.title')}</p>
                 <p className="text-sm sm:text-base leading-relaxed">
-                  Ask questions about your code, request changes, or get help with development tasks
+                  {t('session.continue.description')}
                 </p>
                 
                 {/* Show NextTaskBanner for existing sessions too, only if TaskMaster is installed */}
@@ -5001,7 +5049,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               <div className="text-center text-gray-500 dark:text-gray-400 py-3">
                 <div className="flex items-center justify-center space-x-2">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400"></div>
-                  <p className="text-sm">Loading older messages...</p>
+                  <p className="text-sm">{t('session.loading.olderMessages')}</p>
                 </div>
               </div>
             )}
@@ -5011,8 +5059,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               <div className="text-center text-gray-500 dark:text-gray-400 text-sm py-2 border-b border-gray-200 dark:border-gray-700">
                 {totalMessages > 0 && (
                   <span>
-                    Showing {sessionMessages.length} of {totalMessages} messages • 
-                    <span className="text-xs">Scroll up to load more</span>
+                    {t('session.messages.showingOf', { shown: sessionMessages.length, total: totalMessages })} •
+                    <span className="text-xs">{t('session.messages.scrollToLoad')}</span>
                   </span>
                 )}
               </div>
@@ -5021,12 +5069,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             {/* Legacy message count indicator (for non-paginated view) */}
             {!hasMoreMessages && chatMessages.length > visibleMessageCount && (
               <div className="text-center text-gray-500 dark:text-gray-400 text-sm py-2 border-b border-gray-200 dark:border-gray-700">
-                Showing last {visibleMessageCount} messages ({chatMessages.length} total) • 
-                <button 
+                {t('session.messages.showingLast', { count: visibleMessageCount, total: chatMessages.length })} •
+                <button
                   className="ml-1 text-blue-600 hover:text-blue-700 underline"
                   onClick={loadEarlierMessages}
                 >
-                  Load earlier messages
+                  {t('session.messages.loadEarlier')}
                 </button>
               </div>
             )}
@@ -5211,7 +5259,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 border-orange-300 dark:border-orange-600 hover:bg-orange-100 dark:hover:bg-orange-900/30'
                   : 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900/30'
               }`}
-              title="Click to change permission mode (or press Tab in input)"
+              title={t('input.clickToChangeMode')}
             >
               <div className="flex items-center gap-2">
                 <div className={`w-2 h-2 rounded-full ${
@@ -5224,13 +5272,24 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                     : 'bg-blue-500'
                 }`} />
                 <span>
-                  {permissionMode === 'default' && 'Default Mode'}
-                  {permissionMode === 'acceptEdits' && 'Accept Edits'}
-                  {permissionMode === 'bypassPermissions' && 'Bypass Permissions'}
-                  {permissionMode === 'plan' && 'Plan Mode'}
+                  {permissionMode === 'default' && t('codex.modes.default')}
+                  {permissionMode === 'acceptEdits' && t('codex.modes.acceptEdits')}
+                  {permissionMode === 'bypassPermissions' && t('codex.modes.bypassPermissions')}
+                  {permissionMode === 'plan' && t('codex.modes.plan')}
                 </span>
               </div>
             </button>
+            
+              {/* Thinking Mode Selector */}
+              {
+                provider === 'claude' && (
+
+                  <ThinkingModeSelector
+                    selectedMode={thinkingMode}
+                    onModeChange={setThinkingMode}
+                    className=""
+                  />
+                )}
             {/* Token usage pie chart - positioned next to mode indicator */}
             <TokenUsagePie
               used={tokenBudget?.used || 0}
@@ -5256,7 +5315,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 }
               }}
               className="relative w-8 h-8 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-full flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:ring-offset-gray-800"
-              title="Show all commands"
+              title={t('input.showAllCommands')}
             >
               <svg
                 className="w-5 h-5"
@@ -5453,7 +5512,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 const isExpanded = e.target.scrollHeight > lineHeight * 2;
                 setIsTextareaExpanded(isExpanded);
               }}
-              placeholder={`Type / for commands, @ for files, or ask ${provider === 'cursor' ? 'Cursor' : 'Claude'} anything...`}
+              placeholder={t('input.placeholder', { provider: provider === 'cursor' ? t('messageTypes.cursor') : provider === 'codex' ? t('messageTypes.codex') : t('messageTypes.claude') })}
               disabled={isLoading}
               className="chat-input-placeholder block w-full pl-12 pr-20 sm:pr-40 py-1.5 sm:py-4 bg-transparent rounded-2xl focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 resize-none min-h-[50px] sm:min-h-[80px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base leading-[21px] sm:leading-6 transition-all duration-200"
               style={{ height: '50px' }}
@@ -5463,7 +5522,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               type="button"
               onClick={open}
               className="absolute left-2 top-1/2 transform -translate-y-1/2 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-              title="Attach images"
+              title={t('input.attachImages')}
             >
               <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -5512,8 +5571,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               input.trim() ? 'opacity-0' : 'opacity-100'
             }`}>
               {sendByCtrlEnter
-                ? "Ctrl+Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands"
-                : "Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands"}
+                ? t('input.hintText.ctrlEnter')
+                : t('input.hintText.enter')}
             </div>
             </div>
           </div>

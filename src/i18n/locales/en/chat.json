@@ -1,0 +1,205 @@
+{
+  "codeBlock": {
+    "copy": "Copy",
+    "copied": "Copied",
+    "copyCode": "Copy code"
+  },
+  "messageTypes": {
+    "user": "U",
+    "error": "Error",
+    "tool": "Tool",
+    "claude": "Claude",
+    "cursor": "Cursor",
+    "codex": "Codex"
+  },
+  "tools": {
+    "settings": "Tool Settings",
+    "error": "Tool Error",
+    "result": "Tool Result",
+    "viewParams": "View input parameters",
+    "viewRawParams": "View raw parameters",
+    "viewDiff": "View edit diff for",
+    "creatingFile": "Creating new file:",
+    "updatingTodo": "Updating Todo List",
+    "read": "Read",
+    "readFile": "Read file",
+    "updateTodo": "Update todo list",
+    "readTodo": "Read todo list",
+    "searchResults": "results"
+  },
+  "search": {
+    "found": "Found {{count}} {{type}}",
+    "file": "file",
+    "files": "files",
+    "pattern": "pattern:",
+    "in": "in:"
+  },
+  "fileOperations": {
+    "updated": "File updated successfully",
+    "created": "File created successfully",
+    "written": "File written successfully",
+    "diff": "Diff",
+    "newFile": "New File",
+    "viewContent": "View file content",
+    "viewFullOutput": "View full output ({{count}} chars)",
+    "contentDisplayed": "The file content is displayed in the diff view above"
+  },
+  "interactive": {
+    "title": "Interactive Prompt",
+    "waiting": "Waiting for your response in the CLI",
+    "instruction": "Please select an option in your terminal where Claude is running.",
+    "selectedOption": "✓ Claude selected option {{number}}",
+    "instructionDetail": "In the CLI, you would select this option interactively using arrow keys or by typing the number."
+  },
+  "thinking": {
+    "title": "Thinking...",
+    "emoji": "💭 Thinking..."
+  },
+  "json": {
+    "response": "JSON Response"
+  },
+  "permissions": {
+    "grant": "Grant permission for {{tool}}",
+    "added": "Permission added",
+    "addTo": "Adds {{entry}} to Allowed Tools.",
+    "retry": "Permission saved. Retry the request to use the tool.",
+    "error": "Unable to update permissions. Please try again.",
+    "openSettings": "Open settings"
+  },
+  "todo": {
+    "updated": "Todo list has been updated successfully",
+    "current": "Current Todo List"
+  },
+  "plan": {
+    "viewPlan": "📋 View implementation plan",
+    "title": "Implementation Plan"
+  },
+  "usageLimit": {
+    "resetAt": "Claude usage limit reached. Your limit will reset at **{{time}} {{timezone}}** - {{date}}"
+  },
+  "codex": {
+    "permissionMode": "Permission Mode",
+    "modes": {
+      "default": "Default Mode",
+      "acceptEdits": "Accept Edits",
+      "bypassPermissions": "Bypass Permissions",
+      "plan": "Plan Mode"
+    },
+    "descriptions": {
+      "default": "Only trusted commands (ls, cat, grep, git status, etc.) run automatically. Other commands are skipped. Can write to workspace.",
+      "acceptEdits": "All commands run automatically within the workspace. Full auto mode with sandboxed execution.",
+      "bypassPermissions": "Full system access with no restrictions. All commands run automatically with full disk and network access. Use with caution.",
+      "plan": "Planning mode - no commands are executed"
+    },
+    "technicalDetails": "Technical details"
+  },
+  "input": {
+    "placeholder": "Type / for commands, @ for files, or ask {{provider}} anything...",
+    "placeholderDefault": "Type your message...",
+    "disabled": "Input disabled",
+    "attachFiles": "Attach files",
+    "attachImages": "Attach images",
+    "send": "Send",
+    "stop": "Stop",
+    "hintText": {
+      "ctrlEnter": "Ctrl+Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands",
+      "enter": "Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands"
+    },
+    "clickToChangeMode": "Click to change permission mode (or press Tab in input)",
+    "showAllCommands": "Show all commands"
+  },
+  "thinkingMode": {
+    "selector": {
+      "title": "Thinking Mode",
+      "description": "Extended thinking gives Claude more time to evaluate alternatives",
+      "active": "Active",
+      "tip": "Higher thinking modes take more time but provide more thorough analysis"
+    },
+    "modes": {
+      "none": {
+        "name": "Standard",
+        "description": "Regular Claude response",
+        "prefix": ""
+      },
+      "think": {
+        "name": "Think",
+        "description": "Basic extended thinking",
+        "prefix": "think"
+      },
+      "thinkHard": {
+        "name": "Think Hard",
+        "description": "More thorough evaluation",
+        "prefix": "think hard"
+      },
+      "thinkHarder": {
+        "name": "Think Harder",
+        "description": "Deep analysis with alternatives",
+        "prefix": "think harder"
+      },
+      "ultrathink": {
+        "name": "Ultrathink",
+        "description": "Maximum thinking budget",
+        "prefix": "ultrathink"
+      }
+    },
+    "buttonTitle": "Thinking mode: {{mode}}"
+  },
+  "providerSelection": {
+    "title": "Choose Your AI Assistant",
+    "description": "Select a provider to start a new conversation",
+    "selectModel": "Select Model",
+    "providerInfo": {
+      "anthropic": "by Anthropic",
+      "openai": "by OpenAI",
+      "cursorEditor": "AI Code Editor"
+    },
+    "readyPrompt": {
+      "claude": "Ready to use Claude with {{model}}. Start typing your message below.",
+      "cursor": "Ready to use Cursor with {{model}}. Start typing your message below.",
+      "codex": "Ready to use Codex with {{model}}. Start typing your message below.",
+      "default": "Select a provider above to begin"
+    }
+  },
+  "session": {
+    "continue": {
+      "title": "Continue your conversation",
+      "description": "Ask questions about your code, request changes, or get help with development tasks"
+    },
+    "loading": {
+      "olderMessages": "Loading older messages...",
+      "sessionMessages": "Loading session messages..."
+    },
+    "messages": {
+      "showingOf": "Showing {{shown}} of {{total}} messages",
+      "scrollToLoad": "Scroll up to load more",
+      "showingLast": "Showing last {{count}} messages ({{total}} total)",
+      "loadEarlier": "Load earlier messages"
+    }
+  },
+  "shell": {
+    "selectProject": {
+      "title": "Select a Project",
+      "description": "Choose a project to open an interactive shell in that directory"
+    },
+    "status": {
+      "newSession": "New Session",
+      "initializing": "Initializing...",
+      "restarting": "Restarting..."
+    },
+    "actions": {
+      "disconnect": "Disconnect",
+      "disconnectTitle": "Disconnect from shell",
+      "restart": "Restart",
+      "restartTitle": "Restart Shell (disconnect first)",
+      "connect": "Continue in Shell",
+      "connectTitle": "Connect to shell"
+    },
+    "loading": "Loading terminal...",
+    "connecting": "Connecting to shell...",
+    "startSession": "Start a new Claude session",
+    "resumeSession": "Resume session: {{displayName}}...",
+    "runCommand": "Run {{command}} in {{projectName}}",
+    "startCli": "Starting Claude CLI in {{projectName}}",
+    "defaultCommand": "command"
+  }
+}
