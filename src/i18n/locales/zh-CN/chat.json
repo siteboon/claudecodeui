@@ -1,0 +1,205 @@
+{
+  "codeBlock": {
+    "copy": "复制",
+    "copied": "已复制",
+    "copyCode": "复制代码"
+  },
+  "messageTypes": {
+    "user": "U",
+    "error": "错误",
+    "tool": "工具",
+    "claude": "Claude",
+    "cursor": "Cursor",
+    "codex": "Codex"
+  },
+  "tools": {
+    "settings": "工具设置",
+    "error": "工具错误",
+    "result": "工具结果",
+    "viewParams": "查看输入参数",
+    "viewRawParams": "查看原始参数",
+    "viewDiff": "查看编辑差异",
+    "creatingFile": "创建新文件：",
+    "updatingTodo": "更新待办事项",
+    "read": "读取",
+    "readFile": "读取文件",
+    "updateTodo": "更新待办列表",
+    "readTodo": "读取待办列表",
+    "searchResults": "结果"
+  },
+  "search": {
+    "found": "找到 {{count}} 个{{type}}",
+    "file": "文件",
+    "files": "文件",
+    "pattern": "模式：",
+    "in": "在："
+  },
+  "fileOperations": {
+    "updated": "文件更新成功",
+    "created": "文件创建成功",
+    "written": "文件写入成功",
+    "diff": "差异",
+    "newFile": "新文件",
+    "viewContent": "查看文件内容",
+    "viewFullOutput": "查看完整输出（{{count}} 个字符）",
+    "contentDisplayed": "文件内容显示在上面的差异视图中"
+  },
+  "interactive": {
+    "title": "交互式提示",
+    "waiting": "等待您在 CLI 中响应",
+    "instruction": "请在 Claude 运行的终端中选择一个选项。",
+    "selectedOption": "✓ Claude 选择了选项 {{number}}",
+    "instructionDetail": "在 CLI 中，您可以使用方向键或输入数字来交互式地选择此选项。"
+  },
+  "thinking": {
+    "title": "思考中...",
+    "emoji": "💭 思考中..."
+  },
+  "json": {
+    "response": "JSON 响应"
+  },
+  "permissions": {
+    "grant": "授予 {{tool}} 权限",
+    "added": "权限已添加",
+    "addTo": "将 {{entry}} 添加到允许的工具。",
+    "retry": "权限已保存。重试请求以使用该工具。",
+    "error": "无法更新权限。请重试。",
+    "openSettings": "打开设置"
+  },
+  "todo": {
+    "updated": "待办列表已成功更新",
+    "current": "当前待办列表"
+  },
+  "plan": {
+    "viewPlan": "📋 查看实施计划",
+    "title": "实施计划"
+  },
+  "usageLimit": {
+    "resetAt": "Claude 使用限制已达到。您的限制将在 **{{time}} {{timezone}}** - {{date}} 重置"
+  },
+  "codex": {
+    "permissionMode": "权限模式",
+    "modes": {
+      "default": "默认模式",
+      "acceptEdits": "编辑模式",
+      "bypassPermissions": "无限制模式",
+      "plan": "计划模式"
+    },
+    "descriptions": {
+      "default": "只有受信任的命令（ls、cat、grep、git status 等）自动运行。其他命令将被跳过。可以写入工作区。",
+      "acceptEdits": "工作区内的所有命令自动运行。完全自动模式，具有沙盒执行功能。",
+      "bypassPermissions": "完全的系统访问，无限制。所有命令自动运行，具有完整的磁盘和网络访问权限。请谨慎使用。",
+      "plan": "计划模式 - 不执行任何命令"
+    },
+    "technicalDetails": "技术细节"
+  },
+  "input": {
+    "placeholder": "输入 / 调用命令，@ 选择文件，或向 {{provider}} 提问...",
+    "placeholderDefault": "输入您的消息...",
+    "disabled": "输入已禁用",
+    "attachFiles": "附加文件",
+    "attachImages": "附加图片",
+    "send": "发送",
+    "stop": "停止",
+    "hintText": {
+      "ctrlEnter": "Ctrl+Enter 发送 • Shift+Enter 换行 • Tab 切换模式 • / 斜杠命令",
+      "enter": "Enter 发送 • Shift+Enter 换行 • Tab 切换模式 • / 斜杠命令"
+    },
+    "clickToChangeMode": "点击更改权限模式（或在输入框中按 Tab）",
+    "showAllCommands": "显示所有命令"
+  },
+  "thinkingMode": {
+    "selector": {
+      "title": "思考模式",
+      "description": "扩展思考给 Claude 更多时间来评估替代方案",
+      "active": "激活",
+      "tip": "更高的思考模式需要更多时间，但提供更彻底的分析"
+    },
+    "modes": {
+      "none": {
+        "name": "标准",
+        "description": "常规 Claude 响应",
+        "prefix": ""
+      },
+      "think": {
+        "name": "思考",
+        "description": "基本扩展思考",
+        "prefix": "思考"
+      },
+      "thinkHard": {
+        "name": "深入思考",
+        "description": "更彻底的评估",
+        "prefix": "深入思考"
+      },
+      "thinkHarder": {
+        "name": "更深入思考",
+        "description": "考虑替代方案的深度分析",
+        "prefix": "更深入思考"
+      },
+      "ultrathink": {
+        "name": "超级思考",
+        "description": "最大思考预算",
+        "prefix": "超级思考"
+      }
+    },
+    "buttonTitle": "思考模式：{{mode}}"
+  },
+  "providerSelection": {
+    "title": "选择您的 AI 助手",
+    "description": "选择一个供应商以开始新对话",
+    "selectModel": "选择模型",
+    "providerInfo": {
+      "anthropic": "Anthropic",
+      "openai": "OpenAI",
+      "cursorEditor": "AI 代码编辑器"
+    },
+    "readyPrompt": {
+      "claude": "已准备好使用 Claude {{model}}。在下方输入您的消息。",
+      "cursor": "已准备好使用 Cursor {{model}}。在下方输入您的消息。",
+      "codex": "已准备好使用 Codex {{model}}。在下方输入您的消息。",
+      "default": "请在上方选择一个供应商以开始"
+    }
+  },
+  "session": {
+    "continue": {
+      "title": "继续您的对话",
+      "description": "询问有关代码的问题、请求更改或获取开发任务的帮助"
+    },
+    "loading": {
+      "olderMessages": "正在加载更早的消息...",
+      "sessionMessages": "正在加载会话消息..."
+    },
+    "messages": {
+      "showingOf": "显示 {{shown}} / {{total}} 条消息",
+      "scrollToLoad": "向上滚动以加载更多",
+      "showingLast": "显示最近 {{count}} 条消息（共 {{total}} 条）",
+      "loadEarlier": "加载更早的消息"
+    }
+  },
+  "shell": {
+    "selectProject": {
+      "title": "选择项目",
+      "description": "选择一个项目以在该目录中打开交互式 Shell"
+    },
+    "status": {
+      "newSession": "新会话",
+      "initializing": "初始化中...",
+      "restarting": "重启中..."
+    },
+    "actions": {
+      "disconnect": "断开连接",
+      "disconnectTitle": "断开 Shell 连接",
+      "restart": "重启",
+      "restartTitle": "重启 Shell（请先断开连接）",
+      "connect": "在 Shell 中继续",
+      "connectTitle": "连接到 Shell"
+    },
+    "loading": "正在加载终端...",
+    "connecting": "正在连接到 Shell...",
+    "startSession": "启动新的 Claude 会话",
+    "resumeSession": "恢复会话：{{displayName}}...",
+    "runCommand": "在 {{projectName}} 中运行 {{command}}",
+    "startCli": "在 {{projectName}} 中启动 Claude CLI",
+    "defaultCommand": "命令"
+  }
+}
