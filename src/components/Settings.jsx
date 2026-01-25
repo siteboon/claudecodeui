@@ -1966,6 +1966,12 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
         provider={loginProvider}
         project={selectedProject}
         onComplete={handleLoginComplete}
+        isAuthenticated={
+          loginProvider === 'claude' ? claudeAuthStatus.authenticated :
+          loginProvider === 'cursor' ? cursorAuthStatus.authenticated :
+          loginProvider === 'codex' ? codexAuthStatus.authenticated :
+          false
+        }
       />
     </div>
   );

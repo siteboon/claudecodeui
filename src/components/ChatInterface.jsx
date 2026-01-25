@@ -4975,7 +4975,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                     <div className="flex flex-col items-center justify-center h-full gap-3">
                       <ClaudeLogo className="w-10 h-10" />
                       <div>
-                        <p className="font-semibold text-gray-900 dark:text-white">Claude</p>
+                        <p className="font-semibold text-gray-900 dark:text-white">Claude Code</p>
                         <p className="text-xs text-gray-500 dark:text-gray-400">{t('providerSelection.providerInfo.anthropic')}</p>
                       </div>
                     </div>
