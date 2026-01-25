@@ -603,7 +603,8 @@ async function queryClaudeSDK(command, options = {}, ws) {
       const transformedMessage = transformMessage(message);
       ws.send({
         type: 'claude-response',
-        data: transformedMessage
+        data: transformedMessage,
+        sessionId: capturedSessionId || sessionId || null
       });
 
       // Extract and send token budget updates from result messages
@@ -613,7 +614,8 @@ async function queryClaudeSDK(command, options = {}, ws) {
           console.log('Token budget from modelUsage:', tokenBudget);
           ws.send({
             type: 'token-budget',
-            data: tokenBudget
+            data: tokenBudget,
+            sessionId: capturedSessionId || sessionId || null
           });
         }
       }
@@ -651,7 +653,8 @@ async function queryClaudeSDK(command, options = {}, ws) {
     // Send error to WebSocket
     ws.send({
       type: 'claude-error',
-      error: error.message
+      error: error.message,
+      sessionId: capturedSessionId || sessionId || null
     });
 
     throw error;

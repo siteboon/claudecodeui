@@ -114,7 +114,8 @@ async function spawnCursor(command, options = {}, ws) {
                 // Send system info to frontend
                 ws.send({
                   type: 'cursor-system',
-                  data: response
+                  data: response,
+                  sessionId: capturedSessionId || sessionId || null
                 });
               }
               break;
@@ -123,7 +124,8 @@ async function spawnCursor(command, options = {}, ws) {
               // Forward user message
               ws.send({
                 type: 'cursor-user',
-                data: response
+                data: response,
+                sessionId: capturedSessionId || sessionId || null
               });
               break;
               
@@ -142,7 +144,8 @@ async function spawnCursor(command, options = {}, ws) {
                       type: 'text_delta',
                       text: textContent
                     }
-                  }
+                  },
+                  sessionId: capturedSessionId || sessionId || null
                 });
               }
               break;
@@ -157,7 +160,8 @@ async function spawnCursor(command, options = {}, ws) {
                   type: 'claude-response',
                   data: {
                     type: 'content_block_stop'
-                  }
+                  },
+                  sessionId: capturedSessionId || sessionId || null
                 });
               }
               
@@ -174,7 +178,8 @@ async function spawnCursor(command, options = {}, ws) {
               // Forward any other message types
               ws.send({
                 type: 'cursor-response',
-                data: response
+                data: response,
+                sessionId: capturedSessionId || sessionId || null
               });
           }
         } catch (parseError) {
@@ -182,7 +187,8 @@ async function spawnCursor(command, options = {}, ws) {
           // If not JSON, send as raw text
           ws.send({
             type: 'cursor-output',
-            data: line
+            data: line,
+            sessionId: capturedSessionId || sessionId || null
           });
         }
       }
@@ -193,7 +199,8 @@ async function spawnCursor(command, options = {}, ws) {
       console.error('Cursor CLI stderr:', data.toString());
       ws.send({
         type: 'cursor-error',
-        error: data.toString()
+        error: data.toString(),
+        sessionId: capturedSessionId || sessionId || null
       });
     });
     
@@ -229,7 +236,8 @@ async function spawnCursor(command, options = {}, ws) {
 
       ws.send({
         type: 'cursor-error',
-        error: error.message
+        error: error.message,
+        sessionId: capturedSessionId || sessionId || null
       });
 
       reject(error);
