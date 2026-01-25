@@ -52,6 +52,9 @@ function getGitRoot(projectPath) {
         }
     } catch (e) {
         // Not a git repository, use the original path
+        if (e?.code === 'ENOENT') {
+            console.warn('[WARN] git not found; falling back to projectPath for session tracking');
+        }
     }
     return projectPath;
 }
@@ -1096,7 +1099,17 @@ function handleShellConnection(ws) {
                 const projectPath = data.projectPath || process.cwd();
                 const rawSessionId = data.sessionId;
                 // Sanitize sessionId to prevent command injection
-                const sessionId = rawSessionId ? String(rawSessionId).replace(/[^a-zA-Z0-9._-]/g, '') : null;
+                let sessionId = rawSessionId ? String(rawSessionId).replace(/[^a-zA-Z0-9._-]/g, '') : null;
+                // Reject if sessionId was provided but sanitization removed all characters
+                if (rawSessionId && !sessionId) {
+                    console.warn('[WARN] Invalid sessionId rejected:', rawSessionId);
+                    ws.send(JSON.stringify({
+                        type: 'output',
+                        data: '\x1b[31m[Error] Invalid session ID format\x1b[0m\r\n'
+                    }));
+                    ws.close();
+                    return;
+                }
                 const hasSession = data.hasSession;
                 const provider = data.provider || 'claude';
                 const initialCommand = data.initialCommand;
