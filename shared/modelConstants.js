@@ -15,9 +15,7 @@ export const CLAUDE_MODELS = {
   OPTIONS: [
     { value: 'sonnet', label: 'Sonnet' },
     { value: 'opus', label: 'Opus' },
-    { value: 'haiku', label: 'Haiku' },
-    { value: 'opusplan', label: 'Opus Plan' },
-    { value: 'sonnet[1m]', label: 'Sonnet [1M]' }
+    { value: 'haiku', label: 'Haiku' }
   ],
 
   DEFAULT: 'sonnet'
