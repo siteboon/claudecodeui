@@ -1907,6 +1907,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   // Streaming throttle buffers
   const streamBufferRef = useRef('');
   const streamTimerRef = useRef(null);
+  // Track the session that this view expects when starting a brand‑new chat
+  // (prevents background sessions from streaming into a different view).
+  const pendingViewSessionRef = useRef(null);
   const commandQueryTimerRef = useRef(null);
   const [debouncedInput, setDebouncedInput] = useState('');
   const [showFileDropdown, setShowFileDropdown] = useState(false);
@@ -1945,6 +1948,14 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   // Track provider transitions so we only clear approvals when provider truly changes.
   // This does not sync with the backend; it just prevents UI prompts from disappearing.
   const lastProviderRef = useRef(provider);
+
+  const resetStreamingState = useCallback(() => {
+    if (streamTimerRef.current) {
+      clearTimeout(streamTimerRef.current);
+      streamTimerRef.current = null;
+    }
+    streamBufferRef.current = '';
+  }, []);
   // Load permission mode for the current session
   useEffect(() => {
     if (selectedSession?.id) {
@@ -3019,6 +3030,15 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         const sessionChanged = currentSessionId !== null && currentSessionId !== selectedSession.id;
 
         if (sessionChanged) {
+          if (!isSystemSessionChange) {
+            // Clear any streaming leftovers from the previous session
+            resetStreamingState();
+            pendingViewSessionRef.current = null;
+            setChatMessages([]);
+            setSessionMessages([]);
+            setClaudeStatus(null);
+            setCanAbortSession(false);
+          }
           // Reset pagination state when switching sessions
           setMessagesOffset(0);
           setHasMoreMessages(false);
@@ -3088,17 +3108,22 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           }
         }
       } else {
-        // Only clear messages if this is NOT a system-initiated session change AND we're not loading
-        // During system session changes or while loading, preserve the chat messages
-        if (!isSystemSessionChange && !isLoading) {
+        // New session view (no selected session) - always reset UI state
+        if (!isSystemSessionChange) {
+          resetStreamingState();
+          pendingViewSessionRef.current = null;
           setChatMessages([]);
           setSessionMessages([]);
+          setClaudeStatus(null);
+          setCanAbortSession(false);
+          setIsLoading(false);
         }
         setCurrentSessionId(null);
         sessionStorage.removeItem('cursorSessionId');
         setMessagesOffset(0);
         setHasMoreMessages(false);
         setTotalMessages(0);
+        setTokenBudget(null);
       }
 
       // Mark loading as complete after messages are set
@@ -3109,7 +3134,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     };
 
     loadMessages();
-  }, [selectedSession, selectedProject, loadCursorSessionMessages, scrollToBottom, isSystemSessionChange]);
+  }, [selectedSession, selectedProject, loadCursorSessionMessages, scrollToBottom, isSystemSessionChange, resetStreamingState]);
 
   // External Message Update Handler: Reload messages when external CLI modifies current session
   // This triggers when App.jsx detects a JSONL file change for the currently-viewed session
@@ -3147,6 +3172,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       reloadExternalMessages();
     }
   }, [externalMessageUpdate, selectedSession, selectedProject, loadCursorSessionMessages, loadSessionMessages, isNearBottom, autoScrollToBottom, scrollToBottom]);
+
+  // When the user navigates to a specific session, clear any pending "new session" marker.
+  useEffect(() => {
+    if (selectedSession?.id) {
+      pendingViewSessionRef.current = null;
+    }
+  }, [selectedSession?.id]);
 
   // Update chatMessages when convertedMessages changes
   useEffect(() => {
@@ -3212,17 +3244,77 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     // Handle WebSocket messages
     if (messages.length > 0) {
       const latestMessage = messages[messages.length - 1];
+      const messageData = latestMessage.data?.message || latestMessage.data;
 
       // Filter messages by session ID to prevent cross-session interference
       // Skip filtering for global messages that apply to all sessions
-      const globalMessageTypes = ['projects_updated', 'taskmaster-project-updated', 'session-created', 'claude-complete', 'codex-complete'];
+      const globalMessageTypes = ['projects_updated', 'taskmaster-project-updated', 'session-created'];
       const isGlobalMessage = globalMessageTypes.includes(latestMessage.type);
+      const lifecycleMessageTypes = new Set([
+        'claude-complete',
+        'codex-complete',
+        'cursor-result',
+        'session-aborted',
+        'claude-error',
+        'cursor-error',
+        'codex-error'
+      ]);
 
-      // For new sessions (currentSessionId is null), allow messages through
-      if (!isGlobalMessage && latestMessage.sessionId && currentSessionId && latestMessage.sessionId !== currentSessionId) {
-        // Message is for a different session, ignore it
-        console.log('⏭️ Skipping message for different session:', latestMessage.sessionId, 'current:', currentSessionId);
-        return;
+      const isClaudeSystemInit = latestMessage.type === 'claude-response' &&
+        messageData &&
+        messageData.type === 'system' &&
+        messageData.subtype === 'init';
+      const isCursorSystemInit = latestMessage.type === 'cursor-system' &&
+        latestMessage.data &&
+        latestMessage.data.type === 'system' &&
+        latestMessage.data.subtype === 'init';
+
+      const systemInitSessionId = isClaudeSystemInit
+        ? messageData?.session_id
+        : isCursorSystemInit
+          ? latestMessage.data?.session_id
+          : null;
+
+      const activeViewSessionId = selectedSession?.id || currentSessionId || pendingViewSessionRef.current?.sessionId || null;
+      const isSystemInitForView = systemInitSessionId && (!activeViewSessionId || systemInitSessionId === activeViewSessionId);
+      const shouldBypassSessionFilter = isGlobalMessage || isSystemInitForView;
+      const isUnscopedError = !latestMessage.sessionId &&
+        pendingViewSessionRef.current &&
+        !pendingViewSessionRef.current.sessionId &&
+        (latestMessage.type === 'claude-error' || latestMessage.type === 'cursor-error' || latestMessage.type === 'codex-error');
+
+      const handleBackgroundLifecycle = (sessionId) => {
+        if (!sessionId) return;
+        if (onSessionInactive) {
+          onSessionInactive(sessionId);
+        }
+        if (onSessionNotProcessing) {
+          onSessionNotProcessing(sessionId);
+        }
+      };
+
+      if (!shouldBypassSessionFilter) {
+        if (!activeViewSessionId) {
+          // No session in view; ignore session-scoped traffic.
+          if (latestMessage.sessionId && lifecycleMessageTypes.has(latestMessage.type)) {
+            handleBackgroundLifecycle(latestMessage.sessionId);
+          }
+          if (!isUnscopedError) {
+            return;
+          }
+        }
+        if (!latestMessage.sessionId && !isUnscopedError) {
+          // Drop unscoped messages to prevent cross-session bleed.
+          return;
+        }
+        if (latestMessage.sessionId !== activeViewSessionId) {
+          if (latestMessage.sessionId && lifecycleMessageTypes.has(latestMessage.type)) {
+            handleBackgroundLifecycle(latestMessage.sessionId);
+          }
+          // Message is for a different session, ignore it
+          console.log('??-?,? Skipping message for different session:', latestMessage.sessionId, 'current:', activeViewSessionId);
+          return;
+        }
       }
 
       switch (latestMessage.type) {
@@ -3231,6 +3323,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           // Store it temporarily until conversation completes (prevents premature session association)
           if (latestMessage.sessionId && !currentSessionId) {
             sessionStorage.setItem('pendingSessionId', latestMessage.sessionId);
+            if (pendingViewSessionRef.current && !pendingViewSessionRef.current.sessionId) {
+              pendingViewSessionRef.current.sessionId = latestMessage.sessionId;
+            }
             
             // Mark as system change to prevent clearing messages when session ID updates
             setIsSystemSessionChange(true);
@@ -3259,7 +3354,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           break;
 
         case 'claude-response':
-          const messageData = latestMessage.data.message || latestMessage.data;
           
           // Handle Cursor streaming format (content_block_delta / content_block_stop)
           if (messageData && typeof messageData === 'object' && messageData.type) {
@@ -3328,7 +3422,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               latestMessage.data.subtype === 'init' && 
               latestMessage.data.session_id && 
               currentSessionId && 
-              latestMessage.data.session_id !== currentSessionId) {
+              latestMessage.data.session_id !== currentSessionId &&
+              isSystemInitForView) {
             
             console.log('🔄 Claude CLI session duplication detected:', {
               originalSession: currentSessionId,
@@ -3351,7 +3446,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           if (latestMessage.data.type === 'system' && 
               latestMessage.data.subtype === 'init' && 
               latestMessage.data.session_id && 
-              !currentSessionId) {
+              !currentSessionId &&
+              isSystemInitForView) {
             
             console.log('🔄 New session init detected:', {
               newSession: latestMessage.data.session_id
@@ -3372,7 +3468,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               latestMessage.data.subtype === 'init' && 
               latestMessage.data.session_id && 
               currentSessionId && 
-              latestMessage.data.session_id === currentSessionId) {
+              latestMessage.data.session_id === currentSessionId &&
+              isSystemInitForView) {
             console.log('🔄 System init message for current session, ignoring');
             return; // Don't process the message further
           }
@@ -3540,6 +3637,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           try {
             const cdata = latestMessage.data;
             if (cdata && cdata.type === 'system' && cdata.subtype === 'init' && cdata.session_id) {
+              if (!isSystemInitForView) {
+                return;
+              }
               // If we already have a session and this differs, switch (duplication/redirect)
               if (currentSessionId && cdata.session_id !== currentSessionId) {
                 console.log('🔄 Cursor session switch detected:', { originalSession: currentSessionId, newSession: cdata.session_id });
@@ -4376,6 +4476,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     // Session Protection: Mark session as active to prevent automatic project updates during conversation
     // Use existing session if available; otherwise a temporary placeholder until backend provides real ID
     const sessionToActivate = effectiveSessionId || `new-session-${Date.now()}`;
+    if (!effectiveSessionId && !selectedSession?.id) {
+      // We are starting a brand-new session in this view. Track it so we only
+      // accept streaming updates for this run.
+      pendingViewSessionRef.current = { sessionId: null, startedAt: Date.now() };
+    }
     if (onSessionActive) {
       onSessionActive(sessionToActivate);
     }
