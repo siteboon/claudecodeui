@@ -1025,18 +1025,19 @@ function handleShellConnection(ws) {
                     } else {
                         // Use claude command (default) or initialCommand if provided
                         const command = initialCommand || 'claude';
+                        const toolsArg = '--tools "Edit,Read,WebFetch,WebSearch,Write"';
                         if (os.platform() === 'win32') {
                             if (hasSession && sessionId) {
                                 // Try to resume session, but with fallback to new session if it fails
-                                shellCommand = `Set-Location -Path "${projectPath}"; claude --resume ${sessionId}; if ($LASTEXITCODE -ne 0) { claude }`;
+                                shellCommand = `Set-Location -Path "${projectPath}"; claude --resume ${sessionId} ${toolsArg}; if ($LASTEXITCODE -ne 0) { claude ${toolsArg} }`;
                             } else {
-                                shellCommand = `Set-Location -Path "${projectPath}"; ${command}`;
+                                shellCommand = `Set-Location -Path "${projectPath}"; ${command === 'claude' ? `claude ${toolsArg}` : command}`;
                             }
                         } else {
                             if (hasSession && sessionId) {
-                                shellCommand = `cd "${projectPath}" && claude --resume ${sessionId} || claude`;
+                                shellCommand = `cd "${projectPath}" && claude --resume ${sessionId} ${toolsArg} || claude ${toolsArg}`;
                             } else {
-                                shellCommand = `cd "${projectPath}" && ${command}`;
+                                shellCommand = `cd "${projectPath}" && ${command === 'claude' ? `claude ${toolsArg}` : command}`;
                             }
                         }
                     }

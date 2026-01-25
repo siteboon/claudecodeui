@@ -145,9 +145,9 @@ function matchesToolPermission(entry, toolName, input) {
 /**
  * Maps CLI options to SDK-compatible options format
  * @param {Object} options - CLI options
- * @returns {Object} SDK-compatible options
+ * @returns {Promise<Object>} SDK-compatible options
  */
-function mapCliOptionsToSDK(options = {}) {
+async function mapCliOptionsToSDK(options = {}) {
   const { sessionId, cwd, toolsSettings, permissionMode, images } = options;
 
   const sdkOptions = {};
@@ -175,37 +175,50 @@ function mapCliOptionsToSDK(options = {}) {
     sdkOptions.permissionMode = 'bypassPermissions';
   }
 
-  // Map allowed tools (always set to avoid implicit "allow all" defaults).
-  // This does not grant permissions by itself; it just configures the SDK,
-  // introduced because leaving it undefined made the SDK treat it as "all tools allowed."
-  let allowedTools = [...(settings.allowedTools || [])];
+  // Set empty allowedTools and disallowedTools
+  sdkOptions.allowedTools = [];
+  sdkOptions.disallowedTools = [];
 
-  // Add plan mode default tools
-  if (permissionMode === 'plan') {
-    const planModeTools = ['Read', 'Task', 'exit_plan_mode', 'TodoRead', 'TodoWrite', 'WebFetch', 'WebSearch'];
-    for (const tool of planModeTools) {
-      if (!allowedTools.includes(tool)) {
-        allowedTools.push(tool);
-      }
-    }
-  }
-
-  sdkOptions.allowedTools = allowedTools;
-
-  // Map disallowed tools (always set so the SDK doesn't treat "undefined" as permissive).
-  // This does not override allowlists; it only feeds the canUseTool gate.
-  sdkOptions.disallowedTools = settings.disallowedTools || [];
+  // Always include core tools
+  sdkOptions.tools = ['Edit', 'Read', 'WebFetch', 'WebSearch', 'Write'];
 
   // Map model (default to sonnet)
   // Valid models: sonnet, opus, haiku, opusplan, sonnet[1m]
   sdkOptions.model = options.model || CLAUDE_MODELS.DEFAULT;
   console.log(`Using model: ${sdkOptions.model}`);
 
-  // Map system prompt configuration
-  sdkOptions.systemPrompt = {
-    type: 'preset',
-    preset: 'claude_code'  // Required to use CLAUDE.md
-  };
+  // Map system prompt configuration - read from ~/system_prompt.txt
+  const systemPromptPath = path.join(os.homedir(), 'system_prompt.txt');
+  try {
+    let systemPromptContent = await fs.readFile(systemPromptPath, 'utf8');
+
+    // Replace currentDateTime with human-readable date
+    const currentDateTime = new Date().toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+    systemPromptContent = systemPromptContent.replace(/currentDateTime/g, currentDateTime);
+
+    // Replace currentModel with appropriate model name
+    const modelName = sdkOptions.model || 'sonnet';
+    let currentModel = 'Claude Sonnet 4.5';
+    if (modelName.toLowerCase().includes('opus')) {
+      currentModel = 'Claude Opus 4.5';
+    } else if (modelName.toLowerCase().includes('haiku')) {
+      currentModel = 'Claude Haiku 4.5';
+    }
+    systemPromptContent = systemPromptContent.replace(/currentModel/g, currentModel);
+
+    sdkOptions.systemPrompt = systemPromptContent.trim();
+    console.log(`[DEBUG] Loaded system prompt from ${systemPromptPath}`);
+    console.log(`[DEBUG] Replaced currentDateTime with: ${currentDateTime}`);
+    console.log(`[DEBUG] Replaced currentModel with: ${currentModel}`);
+  } catch (error) {
+    console.log(`[DEBUG] Could not read ${systemPromptPath}, using default system prompt`);
+    sdkOptions.systemPrompt = 'You are a helpful assistant';
+  }
 
   // Map setting sources for CLAUDE.md loading
   // This loads CLAUDE.md from project, user (~/.config/claude/CLAUDE.md), and local directories
@@ -476,7 +489,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
   try {
     // Map CLI options to SDK format
-    const sdkOptions = mapCliOptionsToSDK(options);
+    const sdkOptions = await mapCliOptionsToSDK(options);
 
     // Load MCP configuration
     const mcpServers = await loadMcpConfig(options.cwd);
@@ -561,6 +574,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
     };
 
     // Create SDK query instance
+    console.log('[DEBUG] SDK options being passed:', JSON.stringify(sdkOptions, null, 2));
     const queryInstance = query({
       prompt: finalCommand,
       options: sdkOptions
