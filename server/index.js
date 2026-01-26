@@ -80,6 +80,20 @@ import { validateApiKey, authenticateToken, authenticateWebSocket } from './midd
 // File system watcher for projects folder
 let projectsWatcher = null;
 const connectedClients = new Set();
+let isGetProjectsRunning = false; // Flag to prevent reentrant calls
+
+// Broadcast progress to all connected WebSocket clients
+function broadcastProgress(progress) {
+    const message = JSON.stringify({
+        type: 'loading_progress',
+        ...progress
+    });
+    connectedClients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(message);
+        }
+    });
+}
 
 // Setup file system watcher for Claude projects folder using chokidar
 async function setupProjectsWatcher() {
@@ -117,13 +131,19 @@ async function setupProjectsWatcher() {
         const debouncedUpdate = async (eventType, filePath) => {
             clearTimeout(debounceTimer);
             debounceTimer = setTimeout(async () => {
+                // Prevent reentrant calls
+                if (isGetProjectsRunning) {
+                    return;
+                }
+
                 try {
+                    isGetProjectsRunning = true;
 
                     // Clear project directory cache when files change
                     clearProjectDirectoryCache();
 
                     // Get updated projects list
-                    const updatedProjects = await getProjects();
+                    const updatedProjects = await getProjects(broadcastProgress);
 
                     // Notify all connected clients about the project changes
                     const updateMessage = JSON.stringify({
@@ -142,6 +162,8 @@ async function setupProjectsWatcher() {
 
                 } catch (error) {
                     console.error('[ERROR] Error handling project changes:', error);
+                } finally {
+                    isGetProjectsRunning = false;
                 }
             }, 300); // 300ms debounce (slightly faster than before)
         };
@@ -366,7 +388,7 @@ app.post('/api/system/update', authenticateToken, async (req, res) => {
 
 app.get('/api/projects', authenticateToken, async (req, res) => {
     try {
-        const projects = await getProjects();
+        const projects = await getProjects(broadcastProgress);
         res.json(projects);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -433,11 +455,12 @@ app.delete('/api/projects/:projectName/sessions/:sessionId', authenticateToken, 
     }
 });
 
-// Delete project endpoint (only if empty)
+// Delete project endpoint (force=true to delete with sessions)
 app.delete('/api/projects/:projectName', authenticateToken, async (req, res) => {
     try {
         const { projectName } = req.params;
-        await deleteProject(projectName);
+        const force = req.query.force === 'true';
+        await deleteProject(projectName, force);
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -496,7 +519,13 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
                 name: item.name,
                 type: 'directory'
             }))
-            .slice(0, 20); // Limit results
+            .sort((a, b) => {
+                const aHidden = a.name.startsWith('.');
+                const bHidden = b.name.startsWith('.');
+                if (aHidden && !bHidden) return 1;
+                if (!aHidden && bHidden) return -1;
+                return a.name.localeCompare(b.name);
+            });
             
         // Add common directories if browsing home directory
         const suggestions = [];

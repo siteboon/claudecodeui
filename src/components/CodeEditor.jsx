@@ -12,8 +12,10 @@ import { unifiedMergeView, getChunks } from '@codemirror/merge';
 import { showMinimap } from '@replit/codemirror-minimap';
 import { X, Save, Download, Maximize2, Minimize2 } from 'lucide-react';
 import { api } from '../utils/api';
+import { useTranslation } from 'react-i18next';
 
 function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded = false, onToggleExpand = null }) {
+  const { t } = useTranslation('codeEditor');
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -125,13 +127,13 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
         toolbarHTML += '<div style="display: flex; align-items: center; gap: 8px;">';
         if (hasDiff) {
           toolbarHTML += `
-            <span style="font-weight: 500;">${chunkCount > 0 ? `${currentIndex + 1}/${chunkCount}` : '0'} changes</span>
-            <button class="cm-diff-nav-btn cm-diff-nav-prev" title="Previous change" ${chunkCount === 0 ? 'disabled' : ''}>
+            <span style="font-weight: 500;">${chunkCount > 0 ? `${currentIndex + 1}/${chunkCount}` : '0'} ${t('toolbar.changes')}</span>
+            <button class="cm-diff-nav-btn cm-diff-nav-prev" title="${t('toolbar.previousChange')}" ${chunkCount === 0 ? 'disabled' : ''}>
               <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
               </svg>
             </button>
-            <button class="cm-diff-nav-btn cm-diff-nav-next" title="Next change" ${chunkCount === 0 ? 'disabled' : ''}>
+            <button class="cm-diff-nav-btn cm-diff-nav-next" title="${t('toolbar.nextChange')}" ${chunkCount === 0 ? 'disabled' : ''}>
               <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
               </svg>
@@ -146,7 +148,7 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
         // Show/hide diff button (only if there's diff info)
         if (file.diffInfo) {
           toolbarHTML += `
-            <button class="cm-toolbar-btn cm-toggle-diff-btn" title="${showDiff ? 'Hide diff highlighting' : 'Show diff highlighting'}">
+            <button class="cm-toolbar-btn cm-toggle-diff-btn" title="${showDiff ? t('toolbar.hideDiff') : t('toolbar.showDiff')}">
               <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 ${showDiff ?
                   '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />' :
@@ -159,7 +161,7 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
 
         // Settings button
         toolbarHTML += `
-          <button class="cm-toolbar-btn cm-settings-btn" title="Editor Settings">
+          <button class="cm-toolbar-btn cm-settings-btn" title="${t('toolbar.settings')}">
             <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
@@ -169,7 +171,7 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
         // Expand button (only in sidebar mode)
         if (isSidebar && onToggleExpand) {
           toolbarHTML += `
-            <button class="cm-toolbar-btn cm-expand-btn" title="${isExpanded ? 'Collapse editor' : 'Expand editor to full width'}">
+            <button class="cm-toolbar-btn cm-expand-btn" title="${isExpanded ? t('toolbar.collapse') : t('toolbar.expand')}">
               <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 ${isExpanded ?
                   '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />' :
@@ -463,7 +465,7 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
           <div className="w-full h-full flex items-center justify-center bg-background">
             <div className="flex items-center gap-3">
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-              <span className="text-gray-900 dark:text-white">Loading {file.name}...</span>
+              <span className="text-gray-900 dark:text-white">{t('loading', { fileName: file.name })}</span>
             </div>
           </div>
         ) : (
@@ -471,7 +473,7 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
             <div className="code-editor-loading w-full h-full md:rounded-lg md:w-auto md:h-auto p-8 flex items-center justify-center">
               <div className="flex items-center gap-3">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-                <span className="text-gray-900 dark:text-white">Loading {file.name}...</span>
+                <span className="text-gray-900 dark:text-white">{t('loading', { fileName: file.name })}</span>
               </div>
             </div>
           </div>
@@ -574,7 +576,7 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
                 <h3 className="font-medium text-gray-900 dark:text-white truncate">{file.name}</h3>
                 {file.diffInfo && (
                   <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 px-2 py-1 rounded whitespace-nowrap">
-                    Showing changes
+                    {t('header.showingChanges')}
                   </span>
                 )}
               </div>
@@ -586,7 +588,7 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
             <button
               onClick={handleDownload}
               className="p-2 md:p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
-              title="Download file"
+              title={t('actions.download')}
             >
               <Download className="w-5 h-5 md:w-4 md:h-4" />
             </button>
@@ -605,12 +607,12 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
                   <svg className="w-5 h-5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  <span className="hidden sm:inline">Saved!</span>
+                  <span className="hidden sm:inline">{t('actions.saved')}</span>
                 </>
               ) : (
                 <>
                   <Save className="w-5 h-5 md:w-4 md:h-4" />
-                  <span className="hidden sm:inline">{saving ? 'Saving...' : 'Save'}</span>
+                  <span className="hidden sm:inline">{saving ? t('actions.saving') : t('actions.save')}</span>
                 </>
               )}
             </button>
@@ -619,7 +621,7 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
               <button
                 onClick={toggleFullscreen}
                 className="hidden md:flex p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 items-center justify-center"
-                title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+                title={isFullscreen ? t('actions.exitFullscreen') : t('actions.fullscreen')}
               >
                 {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
               </button>
@@ -628,7 +630,7 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
             <button
               onClick={onClose}
               className="p-2 md:p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
-              title="Close"
+              title={t('actions.close')}
             >
               <X className="w-6 h-6 md:w-4 md:h-4" />
             </button>
@@ -686,12 +688,12 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
         {/* Footer */}
         <div className="flex items-center justify-between p-3 border-t border-border bg-muted flex-shrink-0">
           <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
-            <span>Lines: {content.split('\n').length}</span>
-            <span>Characters: {content.length}</span>
+            <span>{t('footer.lines')} {content.split('\n').length}</span>
+            <span>{t('footer.characters')} {content.length}</span>
           </div>
 
           <div className="text-sm text-gray-500 dark:text-gray-400">
-            Press Ctrl+S to save • Esc to close
+            {t('footer.shortcuts')}
           </div>
         </div>
       </div>

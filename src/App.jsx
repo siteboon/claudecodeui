@@ -18,7 +18,7 @@
  * Handles both existing sessions (with real IDs) and new sessions (with temporary IDs).
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import { Settings as SettingsIcon, Sparkles } from 'lucide-react';
 import Sidebar from './components/Sidebar';
@@ -36,12 +36,15 @@ import ProtectedRoute from './components/ProtectedRoute';
 import { useVersionCheck } from './hooks/useVersionCheck';
 import useLocalStorage from './hooks/useLocalStorage';
 import { api, authenticatedFetch } from './utils/api';
+import { I18nextProvider, useTranslation } from 'react-i18next';
+import i18n from './i18n/config.js';
 
 
 // Main App component with routing
 function AppContent() {
   const navigate = useNavigate();
   const { sessionId } = useParams();
+  const { t } = useTranslation('common');
   
   const { updateAvailable, latestVersion, currentVersion, releaseInfo } = useVersionCheck('siteboon', 'claudecodeui');
   const [showVersionModal, setShowVersionModal] = useState(false);
@@ -53,6 +56,7 @@ function AppContent() {
   const [isMobile, setIsMobile] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
+  const [loadingProgress, setLoadingProgress] = useState(null); // { phase, current, total, currentProject }
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState('agents');
@@ -78,7 +82,10 @@ function AppContent() {
   const [externalMessageUpdate, setExternalMessageUpdate] = useState(0);
 
   const { ws, sendMessage, messages } = useWebSocketContext();
-  
+
+  // Ref to track loading progress timeout for cleanup
+  const loadingProgressTimeoutRef = useRef(null);
+
   // Detect if running as PWA
   const [isPWA, setIsPWA] = useState(false);
   
@@ -170,7 +177,23 @@ function AppContent() {
   useEffect(() => {
     if (messages.length > 0) {
       const latestMessage = messages[messages.length - 1];
-      
+
+      // Handle loading progress updates
+      if (latestMessage.type === 'loading_progress') {
+        if (loadingProgressTimeoutRef.current) {
+          clearTimeout(loadingProgressTimeoutRef.current);
+          loadingProgressTimeoutRef.current = null;
+        }
+        setLoadingProgress(latestMessage);
+        if (latestMessage.phase === 'complete') {
+          loadingProgressTimeoutRef.current = setTimeout(() => {
+            setLoadingProgress(null);
+            loadingProgressTimeoutRef.current = null;
+          }, 500);
+        }
+        return;
+      }
+
       if (latestMessage.type === 'projects_updated') {
 
         // External Session Update Detection: Check if the changed file is the current session's JSONL
@@ -247,6 +270,13 @@ function AppContent() {
         }
       }
     }
+
+    return () => {
+      if (loadingProgressTimeoutRef.current) {
+        clearTimeout(loadingProgressTimeoutRef.current);
+        loadingProgressTimeoutRef.current = null;
+      }
+    };
   }, [messages, selectedProject, selectedSession, activeSessions]);
 
   const fetchProjects = async () => {
@@ -550,6 +580,7 @@ function AppContent() {
 
   // Version Upgrade Modal Component
   const VersionUpgradeModal = () => {
+    const { t } = useTranslation('common');
     const [isUpdating, setIsUpdating] = useState(false);
     const [updateOutput, setUpdateOutput] = useState('');
     const [updateError, setUpdateError] = useState('');
@@ -610,7 +641,7 @@ function AppContent() {
         <button
           className="fixed inset-0 bg-black/50 backdrop-blur-sm"
           onClick={() => setShowVersionModal(false)}
-          aria-label="Close version upgrade modal"
+          aria-label={t('versionUpdate.ariaLabels.closeModal')}
         />
 
         {/* Modal */}
@@ -624,9 +655,9 @@ function AppContent() {
                 </svg>
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Update Available</h2>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{t('versionUpdate.title')}</h2>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {releaseInfo?.title || 'A new version is ready'}
+                  {releaseInfo?.title || t('versionUpdate.newVersionReady')}
                 </p>
               </div>
             </div>
@@ -643,11 +674,11 @@ function AppContent() {
           {/* Version Info */}
           <div className="space-y-3">
             <div className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Current Version</span>
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('versionUpdate.currentVersion')}</span>
               <span className="text-sm text-gray-900 dark:text-white font-mono">{currentVersion}</span>
             </div>
             <div className="flex justify-between items-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
-              <span className="text-sm font-medium text-blue-700 dark:text-blue-300">Latest Version</span>
+              <span className="text-sm font-medium text-blue-700 dark:text-blue-300">{t('versionUpdate.latestVersion')}</span>
               <span className="text-sm text-blue-900 dark:text-blue-100 font-mono">{latestVersion}</span>
             </div>
           </div>
@@ -656,7 +687,7 @@ function AppContent() {
           {releaseInfo?.body && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-medium text-gray-900 dark:text-white">What's New:</h3>
+                <h3 className="text-sm font-medium text-gray-900 dark:text-white">{t('versionUpdate.whatsNew')}</h3>
                 {releaseInfo?.htmlUrl && (
                   <a
                     href={releaseInfo.htmlUrl}
@@ -664,7 +695,7 @@ function AppContent() {
                     rel="noopener noreferrer"
                     className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:underline flex items-center gap-1"
                   >
-                    View full release
+                    {t('versionUpdate.viewFullRelease')}
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                     </svg>
@@ -682,7 +713,7 @@ function AppContent() {
           {/* Update Output */}
           {updateOutput && (
             <div className="space-y-2">
-              <h3 className="text-sm font-medium text-gray-900 dark:text-white">Update Progress:</h3>
+              <h3 className="text-sm font-medium text-gray-900 dark:text-white">{t('versionUpdate.updateProgress')}</h3>
               <div className="bg-gray-900 dark:bg-gray-950 rounded-lg p-4 border border-gray-700 max-h-48 overflow-y-auto">
                 <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap">{updateOutput}</pre>
               </div>
@@ -692,14 +723,14 @@ function AppContent() {
           {/* Upgrade Instructions */}
           {!isUpdating && !updateOutput && (
             <div className="space-y-3">
-              <h3 className="text-sm font-medium text-gray-900 dark:text-white">Manual upgrade:</h3>
+              <h3 className="text-sm font-medium text-gray-900 dark:text-white">{t('versionUpdate.manualUpgrade')}</h3>
               <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3 border">
                 <code className="text-sm text-gray-800 dark:text-gray-200 font-mono">
                   git checkout main && git pull && npm install
                 </code>
               </div>
               <p className="text-xs text-gray-600 dark:text-gray-400">
-                Or click "Update Now" to run the update automatically.
+                {t('versionUpdate.manualUpgradeHint')}
               </p>
             </div>
           )}
@@ -710,7 +741,7 @@ function AppContent() {
               onClick={() => setShowVersionModal(false)}
               className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md transition-colors"
             >
-              {updateOutput ? 'Close' : 'Later'}
+              {updateOutput ? t('versionUpdate.buttons.close') : t('versionUpdate.buttons.later')}
             </button>
             {!updateOutput && (
               <>
@@ -720,7 +751,7 @@ function AppContent() {
                   }}
                   className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md transition-colors"
                 >
-                  Copy Command
+                  {t('versionUpdate.buttons.copyCommand')}
                 </button>
                 <button
                   onClick={handleUpdateNow}
@@ -730,10 +761,10 @@ function AppContent() {
                   {isUpdating ? (
                     <>
                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Updating...
+                      {t('versionUpdate.buttons.updating')}
                     </>
                   ) : (
-                    'Update Now'
+                    t('versionUpdate.buttons.updateNow')
                   )}
                 </button>
               </>
@@ -765,6 +796,7 @@ function AppContent() {
                 onSessionDelete={handleSessionDelete}
                 onProjectDelete={handleProjectDelete}
                 isLoading={isLoadingProjects}
+                loadingProgress={loadingProgress}
                 onRefresh={handleSidebarRefresh}
                 onShowSettings={() => setShowSettings(true)}
                 updateAvailable={updateAvailable}
@@ -783,8 +815,8 @@ function AppContent() {
                 <button
                   onClick={() => setSidebarVisible(true)}
                   className="p-2 hover:bg-accent rounded-md transition-colors duration-200 group"
-                  aria-label="Show sidebar"
-                  title="Show sidebar"
+                  aria-label={t('versionUpdate.ariaLabels.showSidebar')}
+                  title={t('versionUpdate.ariaLabels.showSidebar')}
                 >
                   <svg
                     className="w-5 h-5 text-foreground group-hover:scale-110 transition-transform"
@@ -800,8 +832,8 @@ function AppContent() {
                 <button
                   onClick={() => setShowSettings(true)}
                   className="p-2 hover:bg-accent rounded-md transition-colors duration-200"
-                  aria-label="Settings"
-                  title="Settings"
+                  aria-label={t('versionUpdate.ariaLabels.settings')}
+                  title={t('versionUpdate.ariaLabels.settings')}
                 >
                   <SettingsIcon className="w-5 h-5 text-muted-foreground hover:text-foreground transition-colors" />
                 </button>
@@ -811,8 +843,8 @@ function AppContent() {
                   <button
                     onClick={() => setShowVersionModal(true)}
                     className="relative p-2 hover:bg-accent rounded-md transition-colors duration-200"
-                    aria-label="Update available"
-                    title="Update available"
+                    aria-label={t('versionUpdate.ariaLabels.updateAvailable')}
+                    title={t('versionUpdate.ariaLabels.updateAvailable')}
                   >
                     <Sparkles className="w-5 h-5 text-blue-500" />
                     <span className="absolute top-1 right-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
@@ -840,7 +872,7 @@ function AppContent() {
               e.stopPropagation();
               setSidebarOpen(false);
             }}
-            aria-label="Close sidebar"
+            aria-label={t('versionUpdate.ariaLabels.closeSidebar')}
           />
           <div
             className={`relative w-[85vw] max-w-sm sm:w-80 h-full bg-card border-r border-border transform transition-transform duration-150 ease-out ${
@@ -859,6 +891,7 @@ function AppContent() {
               onSessionDelete={handleSessionDelete}
               onProjectDelete={handleProjectDelete}
               isLoading={isLoadingProjects}
+              loadingProgress={loadingProgress}
               onRefresh={handleSidebarRefresh}
               onShowSettings={() => setShowSettings(true)}
               updateAvailable={updateAvailable}
@@ -950,24 +983,26 @@ function AppContent() {
 // Root App component with router
 function App() {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <WebSocketProvider>
-          <TasksSettingsProvider>
-            <TaskMasterProvider>
-              <ProtectedRoute>
-                <Router>
-                  <Routes>
-                    <Route path="/" element={<AppContent />} />
-                    <Route path="/session/:sessionId" element={<AppContent />} />
-                  </Routes>
-                </Router>
-              </ProtectedRoute>
-            </TaskMasterProvider>
-          </TasksSettingsProvider>
-        </WebSocketProvider>
-      </AuthProvider>
-    </ThemeProvider>
+    <I18nextProvider i18n={i18n}>
+      <ThemeProvider>
+        <AuthProvider>
+          <WebSocketProvider>
+            <TasksSettingsProvider>
+              <TaskMasterProvider>
+                <ProtectedRoute>
+                  <Router>
+                    <Routes>
+                      <Route path="/" element={<AppContent />} />
+                      <Route path="/session/:sessionId" element={<AppContent />} />
+                    </Routes>
+                  </Router>
+                </ProtectedRoute>
+              </TaskMasterProvider>
+            </TasksSettingsProvider>
+          </WebSocketProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </I18nextProvider>
   );
 }
 

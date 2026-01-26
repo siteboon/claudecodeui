@@ -1,0 +1,30 @@
+{
+  "toolbar": {
+    "changes": "个更改",
+    "previousChange": "上一个更改",
+    "nextChange": "下一个更改",
+    "hideDiff": "隐藏差异高亮",
+    "showDiff": "显示差异高亮",
+    "settings": "编辑器设置",
+    "collapse": "折叠编辑器",
+    "expand": "展开编辑器到全宽"
+  },
+  "loading": "正在加载 {{fileName}}...",
+  "header": {
+    "showingChanges": "显示更改"
+  },
+  "actions": {
+    "download": "下载文件",
+    "save": "保存",
+    "saving": "保存中...",
+    "saved": "已保存！",
+    "exitFullscreen": "退出全屏",
+    "fullscreen": "全屏",
+    "close": "关闭"
+  },
+  "footer": {
+    "lines": "行数：",
+    "characters": "字符数：",
+    "shortcuts": "按 Ctrl+S 保存 • Esc 关闭"
+  }
+}

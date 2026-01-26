@@ -1,0 +1,112 @@
+{
+  "projects": {
+    "title": "项目",
+    "newProject": "新建项目",
+    "deleteProject": "删除项目",
+    "renameProject": "重命名项目",
+    "noProjects": "未找到项目",
+    "loadingProjects": "加载项目中...",
+    "searchPlaceholder": "搜索项目...",
+    "projectNamePlaceholder": "项目名称",
+    "starred": "星标",
+    "all": "全部",
+    "untitledSession": "未命名会话",
+    "newSession": "新会话",
+    "codexSession": "Codex 会话",
+    "fetchingProjects": "正在获取您的 Claude 项目和会话",
+    "projects": "项目",
+    "noMatchingProjects": "未找到匹配的项目",
+    "tryDifferentSearch": "尝试调整您的搜索词",
+    "runClaudeCli": "在项目目录中运行 Claude CLI 以开始使用"
+  },
+  "app": {
+    "title": "Claude Code UI",
+    "subtitle": "AI 编程助手"
+  },
+  "sessions": {
+    "title": "会话",
+    "newSession": "新建会话",
+    "deleteSession": "删除会话",
+    "renameSession": "重命名会话",
+    "noSessions": "暂无会话",
+    "loadingSessions": "加载会话中...",
+    "unnamed": "未命名",
+    "loading": "加载中...",
+    "showMore": "显示更多会话"
+  },
+  "tooltips": {
+    "viewEnvironments": "查看环境",
+    "hideSidebar": "隐藏侧边栏",
+    "createProject": "创建新项目",
+    "refresh": "刷新项目和会话 (Ctrl+R)",
+    "renameProject": "重命名项目 (F2)",
+    "deleteProject": "删除空项目 (Delete)",
+    "addToFavorites": "添加到收藏",
+    "removeFromFavorites": "从收藏移除",
+    "editSessionName": "手动编辑会话名称",
+    "deleteSession": "永久删除此会话",
+    "save": "保存",
+    "cancel": "取消"
+  },
+  "navigation": {
+    "chat": "聊天",
+    "files": "文件",
+    "git": "Git",
+    "terminal": "终端",
+    "tasks": "任务"
+  },
+  "actions": {
+    "refresh": "刷新",
+    "settings": "设置",
+    "collapseAll": "全部折叠",
+    "expandAll": "全部展开",
+    "cancel": "取消",
+    "save": "保存",
+    "delete": "删除",
+    "rename": "重命名"
+  },
+  "status": {
+    "active": "活动",
+    "inactive": "非活动",
+    "thinking": "思考中...",
+    "error": "错误",
+    "aborted": "已中止",
+    "unknown": "未知"
+  },
+  "time": {
+    "justNow": "刚刚",
+    "oneMinuteAgo": "1 分钟前",
+    "minutesAgo": "{{count}} 分钟前",
+    "oneHourAgo": "1 小时前",
+    "hoursAgo": "{{count}} 小时前",
+    "oneDayAgo": "1 天前",
+    "daysAgo": "{{count}} 天前"
+  },
+  "messages": {
+    "deleteConfirm": "确定要删除吗？",
+    "renameSuccess": "重命名成功",
+    "deleteSuccess": "删除成功",
+    "errorOccurred": "发生错误",
+    "deleteSessionConfirm": "确定要删除此会话吗？此操作无法撤销。",
+    "deleteProjectConfirm": "确定要删除此空项目吗？此操作无法撤销。",
+    "enterProjectPath": "请输入项目路径",
+    "deleteSessionFailed": "删除会话失败，请重试。",
+    "deleteSessionError": "删除会话时出错，请重试。",
+    "deleteProjectFailed": "删除项目失败，请重试。",
+    "deleteProjectError": "删除项目时出错，请重试。",
+    "createProjectFailed": "创建项目失败，请重试。",
+    "createProjectError": "创建项目时出错，请重试。"
+  },
+  "version": {
+    "updateAvailable": "有可用更新"
+  },
+  "deleteConfirmation": {
+    "deleteProject": "删除项目",
+    "deleteSession": "删除会话",
+    "confirmDelete": "您确定要删除",
+    "sessionCount_one": "此项目包含 {{count}} 个对话。",
+    "sessionCount_other": "此项目包含 {{count}} 个对话。",
+    "allConversationsDeleted": "所有对话将被永久删除。",
+    "cannotUndo": "此操作无法撤销。"
+  }
+}
