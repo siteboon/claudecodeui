@@ -29,7 +29,7 @@ export function useWebSocket() {
       if (isPlatform) {
         // Platform mode: Use same domain as the page (goes through proxy)
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        wsUrl = `${protocol}//${window.location.host}/ws`;
+        wsUrl = `/ws`;
       } else {
         // OSS mode: Connect to same host:port that served the page
         const token = localStorage.getItem('auth-token');
