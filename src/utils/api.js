@@ -158,6 +158,12 @@ export const api = {
     return authenticatedFetch(`/api/browse-filesystem?${params}`);
   },
 
+  createFolder: (folderPath) =>
+    authenticatedFetch('/api/create-folder', {
+      method: 'POST',
+      body: JSON.stringify({ path: folderPath }),
+    }),
+
   // User endpoints
   user: {
     gitConfig: () => authenticatedFetch('/api/user/git-config'),

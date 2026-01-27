@@ -136,14 +136,14 @@
     },
     "step2": {
       "existingPath": "Workspace Path",
-      "newPath": "Where should the workspace be created?",
+      "newPath": "Workspace Path",
       "existingPlaceholder": "/path/to/existing/workspace",
       "newPlaceholder": "/path/to/new/workspace",
       "existingHelp": "Full path to your existing workspace directory",
-      "newHelp": "Full path where the new workspace will be created",
+      "newHelp": "Full path to your workspace directory",
       "githubUrl": "GitHub URL (Optional)",
       "githubPlaceholder": "https://github.com/username/repository",
-      "githubHelp": "Leave empty to create an empty workspace, or provide a GitHub URL to clone",
+      "githubHelp": "Optional: provide a GitHub URL to clone a repository",
       "githubAuth": "GitHub Authentication (Optional)",
       "githubAuthHelp": "Only required for private repositories. Public repos can be cloned without authentication.",
       "loadingTokens": "Loading stored tokens...",
@@ -170,21 +170,25 @@
       "usingStoredToken": "Using stored token:",
       "usingProvidedToken": "Using provided token",
       "noAuthentication": "No authentication",
+      "sshKey": "SSH Key",
       "existingInfo": "The workspace will be added to your project list and will be available for Claude/Cursor sessions.",
-      "newWithClone": "A new workspace will be created and the repository will be cloned from GitHub.",
-      "newEmpty": "An empty workspace directory will be created at the specified path."
+      "newWithClone": "The repository will be cloned from this folder.",
+      "newEmpty": "The workspace will be added to your project list and will be available for Claude/Cursor sessions.",
+      "cloningRepository": "Cloning repository..."
     },
     "buttons": {
       "cancel": "Cancel",
       "back": "Back",
       "next": "Next",
       "createProject": "Create Project",
-      "creating": "Creating..."
+      "creating": "Creating...",
+      "cloning": "Cloning..."
     },
     "errors": {
       "selectType": "Please select whether you have an existing workspace or want to create a new one",
       "providePath": "Please provide a workspace path",
-      "failedToCreate": "Failed to create workspace"
+      "failedToCreate": "Failed to create workspace",
+      "failedToCreateFolder": "Failed to create folder"
     }
   },
   "versionUpdate": {
