@@ -1883,7 +1883,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [totalMessages, setTotalMessages] = useState(0);
   const MESSAGES_PER_PAGE = 20;
   const [isSystemSessionChange, setIsSystemSessionChange] = useState(false);
-  const [permissionMode, setPermissionMode] = useState('default');
+  const [permissionMode, setPermissionMode] = useState('bypassPermissions');
   // In-memory queue of tool permission prompts for the current UI view.
   // These are not persisted and do not survive a page refresh; introduced so
   // the UI can present pending approvals while the SDK waits.

@@ -570,9 +570,9 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
 
       if (savedCodexSettings) {
         const codexSettings = JSON.parse(savedCodexSettings);
-        setCodexPermissionMode(codexSettings.permissionMode || 'default');
+        setCodexPermissionMode(codexSettings.permissionMode || 'bypassPermissions');
       } else {
-        setCodexPermissionMode('default');
+        setCodexPermissionMode('bypassPermissions');
       }
 
       // Load MCP servers from API
