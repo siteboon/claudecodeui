@@ -114,7 +114,11 @@
     "justNow": "just now",
     "minAgo": "{{count}} min ago",
     "hoursAgo": "{{count}} hours ago",
-    "daysAgo": "{{count}} days ago"
+    "daysAgo": "{{count}} days ago",
+    "uploadFiles": "Upload files",
+    "uploading": "Uploading files...",
+    "fileTooLarge": "File \"{{name}}\" exceeds 100MB limit",
+    "uploadFailed": "Upload failed: {{error}}"
   },
   "projectWizard": {
     "title": "Create New Project",

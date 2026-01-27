@@ -102,6 +102,15 @@ export const api = {
     }),
   getFiles: (projectName) =>
     authenticatedFetch(`/api/projects/${projectName}/files`),
+  uploadFiles: (projectName, files, targetDir = '') => {
+    const formData = new FormData();
+    for (const file of files) formData.append('files', file);
+    formData.append('targetDir', targetDir);
+    return authenticatedFetch(`/api/projects/${projectName}/upload-files`, {
+      method: 'POST',
+      body: formData,
+    });
+  },
   transcribe: (formData) =>
     authenticatedFetch('/api/transcribe', {
       method: 'POST',

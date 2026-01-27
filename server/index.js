@@ -1447,6 +1447,102 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
     }
 });
 
+// File upload endpoint
+app.post('/api/projects/:projectName/upload-files', authenticateToken, async (req, res) => {
+    try {
+        const multer = (await import('multer')).default;
+        const path = (await import('path')).default;
+        const fs = (await import('fs')).promises;
+        const os = (await import('os')).default;
+
+        const { projectName } = req.params;
+        const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+        if (!projectRoot) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+
+        // Configure multer for file uploads
+        const storage = multer.diskStorage({
+            destination: async (req, file, cb) => {
+                const uploadDir = path.join(os.tmpdir(), 'claude-ui-file-uploads', String(req.user.id));
+                await fs.mkdir(uploadDir, { recursive: true });
+                cb(null, uploadDir);
+            },
+            filename: (req, file, cb) => {
+                const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+                const sanitizedName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+                cb(null, uniqueSuffix + '-' + sanitizedName);
+            }
+        });
+
+        const upload = multer({
+            storage,
+            limits: {
+                fileSize: 100 * 1024 * 1024, // 100MB
+                files: 10
+            }
+        });
+
+        // Handle multipart form data
+        upload.array('files', 10)(req, res, async (err) => {
+            if (err) {
+                if (err.code === 'LIMIT_FILE_SIZE') {
+                    return res.status(400).json({ error: 'File exceeds 100MB size limit' });
+                }
+                return res.status(400).json({ error: err.message });
+            }
+
+            if (!req.files || req.files.length === 0) {
+                return res.status(400).json({ error: 'No files provided' });
+            }
+
+            const targetDir = req.body.targetDir || '';
+
+            // Security: ensure targetDir is within project root
+            const resolvedTarget = path.resolve(projectRoot, targetDir);
+            const normalizedRoot = path.resolve(projectRoot) + path.sep;
+            if (!resolvedTarget.startsWith(normalizedRoot) && resolvedTarget !== path.resolve(projectRoot)) {
+                // Clean up temp files
+                await Promise.all(req.files.map(f => fs.unlink(f.path).catch(() => {})));
+                return res.status(403).json({ error: 'Target directory must be within project root' });
+            }
+
+            try {
+                // Ensure target directory exists
+                await fs.mkdir(resolvedTarget, { recursive: true });
+
+                const uploadedFiles = [];
+
+                for (const file of req.files) {
+                    const sanitizedName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+                    const destPath = path.join(resolvedTarget, sanitizedName);
+
+                    // Copy file from temp to destination
+                    await fs.copyFile(file.path, destPath);
+                    // Clean up temp file
+                    await fs.unlink(file.path).catch(() => {});
+
+                    uploadedFiles.push({
+                        name: sanitizedName,
+                        size: file.size,
+                        path: path.relative(projectRoot, destPath)
+                    });
+                }
+
+                res.json({ success: true, files: uploadedFiles });
+            } catch (error) {
+                console.error('Error processing file uploads:', error);
+                // Clean up any remaining temp files
+                await Promise.all(req.files.map(f => fs.unlink(f.path).catch(() => {})));
+                res.status(500).json({ error: 'Failed to process file uploads' });
+            }
+        });
+    } catch (error) {
+        console.error('Error in file upload endpoint:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // Get token usage for a specific session
 app.get('/api/projects/:projectName/sessions/:sessionId/token-usage', authenticateToken, async (req, res) => {
   try {

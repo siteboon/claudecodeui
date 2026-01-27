@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ScrollArea } from './ui/scroll-area';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { Folder, FolderOpen, File, FileText, FileCode, List, TableProperties, Eye, Search, X } from 'lucide-react';
+import { Folder, FolderOpen, File, FileText, FileCode, List, TableProperties, Eye, Search, X, Upload, Loader2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import CodeEditor from './CodeEditor';
 import ImageViewer from './ImageViewer';
@@ -19,6 +19,11 @@ function FileTree({ selectedProject }) {
   const [viewMode, setViewMode] = useState('detailed'); // 'simple', 'detailed', 'compact'
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredFiles, setFilteredFiles] = useState([]);
+  const [contextMenu, setContextMenu] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState(null);
+  const fileInputRef = useRef(null);
+  const uploadTargetDir = useRef('');
 
   useEffect(() => {
     if (selectedProject) {
@@ -140,6 +145,83 @@ function FileTree({ selectedProject }) {
     return past.toLocaleDateString();
   };
 
+  // Close context menu on click outside or Escape
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleClick = () => setContextMenu(null);
+    const handleKeyDown = (e) => { if (e.key === 'Escape') setContextMenu(null); };
+    document.addEventListener('click', handleClick);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('click', handleClick);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [contextMenu]);
+
+  const handleContextMenu = useCallback((e, item) => {
+    if (item.type === 'directory') {
+      e.preventDefault();
+      setContextMenu({ x: e.clientX, y: e.clientY, folderPath: item.path });
+    }
+  }, []);
+
+  const handleUploadClick = useCallback(() => {
+    if (!contextMenu) return;
+    uploadTargetDir.current = contextMenu.folderPath;
+    setContextMenu(null);
+    fileInputRef.current?.click();
+  }, [contextMenu]);
+
+  const handleFileChange = useCallback(async (event) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+
+    // Client-side size validation (100MB)
+    const maxSize = 100 * 1024 * 1024;
+    for (const file of files) {
+      if (file.size > maxSize) {
+        setUploadError(t('fileTree.fileTooLarge', { name: file.name }));
+        event.target.value = '';
+        return;
+      }
+    }
+
+    setUploading(true);
+    setUploadError(null);
+
+    try {
+      const response = await api.uploadFiles(
+        selectedProject.name,
+        files,
+        uploadTargetDir.current
+      );
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Upload failed');
+      }
+
+      // Refresh file tree and expand the target folder
+      await fetchFiles();
+      setExpandedDirs(prev => {
+        const next = new Set(prev);
+        // Expand the target dir and all parent dirs
+        const parts = uploadTargetDir.current.split('/').filter(Boolean);
+        let current = '';
+        for (const part of parts) {
+          current = current ? current + '/' + part : part;
+          next.add(current);
+        }
+        return next;
+      });
+    } catch (error) {
+      setUploadError(t('fileTree.uploadFailed', { error: error.message }));
+    } finally {
+      setUploading(false);
+      event.target.value = '';
+    }
+  }, [selectedProject, t]);
+
   const renderFileTree = (items, level = 0) => {
     return items.map((item) => (
       <div key={item.path} className="select-none">
@@ -153,7 +235,6 @@ function FileTree({ selectedProject }) {
             if (item.type === 'directory') {
               toggleDirectory(item.path);
             } else if (isImageFile(item.name)) {
-              // Open image in viewer
               setSelectedImage({
                 name: item.name,
                 path: item.path,
@@ -161,7 +242,6 @@ function FileTree({ selectedProject }) {
                 projectName: selectedProject.name
               });
             } else {
-              // Open file in editor
               setSelectedFile({
                 name: item.name,
                 path: item.path,
@@ -170,6 +250,7 @@ function FileTree({ selectedProject }) {
               });
             }
           }}
+          onContextMenu={(e) => handleContextMenu(e, item)}
         >
           <div className="flex items-center gap-2 min-w-0 w-full">
             {item.type === 'directory' ? (
@@ -251,6 +332,7 @@ function FileTree({ selectedProject }) {
               });
             }
           }}
+          onContextMenu={(e) => handleContextMenu(e, item)}
         >
           <div className="col-span-5 flex items-center gap-2 min-w-0">
             {item.type === 'directory' ? (
@@ -313,6 +395,7 @@ function FileTree({ selectedProject }) {
               });
             }
           }}
+          onContextMenu={(e) => handleContextMenu(e, item)}
         >
           <div className="flex items-center gap-2 min-w-0">
             {item.type === 'directory' ? (
@@ -417,6 +500,22 @@ function FileTree({ selectedProject }) {
         </div>
       </div>
 
+      {/* Upload feedback */}
+      {uploading && (
+        <div className="px-4 py-2 border-b border-border flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          {t('fileTree.uploading')}
+        </div>
+      )}
+      {uploadError && (
+        <div className="px-4 py-2 border-b border-border flex items-center justify-between text-sm text-destructive bg-destructive/10">
+          <span>{uploadError}</span>
+          <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setUploadError(null)}>
+            <X className="w-3 h-3" />
+          </Button>
+        </div>
+      )}
+
       {/* Column Headers for Detailed View */}
       {viewMode === 'detailed' && filteredFiles.length > 0 && (
         <div className="px-4 pt-2 pb-1 border-b border-border">
@@ -475,6 +574,32 @@ function FileTree({ selectedProject }) {
           onClose={() => setSelectedImage(null)}
         />
       )}
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <div
+          className="fixed z-50 min-w-[160px] bg-popover border border-border rounded-md shadow-md py-1"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-popover-foreground hover:bg-accent cursor-pointer"
+            onClick={handleUploadClick}
+          >
+            <Upload className="w-4 h-4" />
+            {t('fileTree.uploadFiles')}
+          </button>
+        </div>
+      )}
+
+      {/* Hidden file input for uploads */}
+      <input
+        type="file"
+        multiple
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        className="hidden"
+      />
     </div>
   );
 }

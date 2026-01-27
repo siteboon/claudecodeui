@@ -114,7 +114,11 @@
     "justNow": "刚刚",
     "minAgo": "{{count}} 分钟前",
     "hoursAgo": "{{count}} 小时前",
-    "daysAgo": "{{count}} 天前"
+    "daysAgo": "{{count}} 天前",
+    "uploadFiles": "上传文件",
+    "uploading": "正在上传文件...",
+    "fileTooLarge": "文件 \"{{name}}\" 超过100MB限制",
+    "uploadFailed": "上传失败: {{error}}"
   },
   "projectWizard": {
     "title": "创建新项目",
