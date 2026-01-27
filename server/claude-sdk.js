@@ -152,6 +152,9 @@ async function mapCliOptionsToSDK(options = {}) {
 
   const sdkOptions = {};
 
+  // Check if MODE=code environment variable is set
+  const isCodeMode = process.env.MODE === 'code';
+
   // Map working directory
   if (cwd) {
     sdkOptions.cwd = cwd;
@@ -162,62 +165,72 @@ async function mapCliOptionsToSDK(options = {}) {
     sdkOptions.permissionMode = permissionMode;
   }
 
-  // Map tool settings
-  const settings = toolsSettings || {
-    allowedTools: [],
-    disallowedTools: [],
-    skipPermissions: false
-  };
+  // Map tool settings - skip tool constraints in code mode
+  if (!isCodeMode) {
+    const settings = toolsSettings || {
+      allowedTools: [],
+      disallowedTools: [],
+      skipPermissions: false
+    };
 
-  // Handle tool permissions
-  if (settings.skipPermissions && permissionMode !== 'plan') {
-    // When skipping permissions, use bypassPermissions mode
-    sdkOptions.permissionMode = 'bypassPermissions';
+    // Handle tool permissions
+    if (settings.skipPermissions && permissionMode !== 'plan') {
+      // When skipping permissions, use bypassPermissions mode
+      sdkOptions.permissionMode = 'bypassPermissions';
+    }
+
+    // Set empty allowedTools and disallowedTools
+    sdkOptions.allowedTools = [];
+    sdkOptions.disallowedTools = [];
   }
-
-  // Set empty allowedTools and disallowedTools
-  sdkOptions.allowedTools = [];
-  sdkOptions.disallowedTools = [];
-
-  // Always include core tools
-  sdkOptions.tools = ['Edit', 'Read', 'WebFetch', 'WebSearch', 'Write'];
+  // In code mode, we don't set allowedTools/disallowedTools constraints
 
   // Map model (default to sonnet)
   // Valid models: sonnet, opus, haiku, opusplan, sonnet[1m]
   sdkOptions.model = options.model || CLAUDE_MODELS.DEFAULT;
   console.log(`Using model: ${sdkOptions.model}`);
 
-  // Map system prompt configuration - read from ~/system_prompt.txt
-  const systemPromptPath = path.join(os.homedir(), 'system_prompt.txt');
-  try {
-    let systemPromptContent = await fs.readFile(systemPromptPath, 'utf8');
+  // Map system prompt configuration
+  if (isCodeMode) {
+    // Use Claude Code preset system prompt (required for CLAUDE.md support)
+    sdkOptions.systemPrompt = {
+      type: 'preset',
+      preset: 'claude_code'
+    };
+    console.log(`[DEBUG] Using Claude Code preset system prompt (MODE=code)`);
+  } else {
+    // Read custom system prompt from ~/system_prompt.txt
+    const systemPromptPath = path.join(os.homedir(), 'system_prompt.txt');
+    try {
+      let systemPromptContent = await fs.readFile(systemPromptPath, 'utf8');
 
-    // Replace currentDateTime with human-readable date
-    const currentDateTime = new Date().toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-    systemPromptContent = systemPromptContent.replace(/currentDateTime/g, currentDateTime);
+      // Replace currentDateTime with human-readable date
+      const currentDateTime = new Date().toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+      systemPromptContent = systemPromptContent.replace(/currentDateTime/g, currentDateTime);
 
-    // Replace currentModel with appropriate model name
-    const modelName = sdkOptions.model || 'sonnet';
-    let currentModel = 'Claude Sonnet 4.5';
-    if (modelName.toLowerCase().includes('opus')) {
-      currentModel = 'Claude Opus 4.5';
-    } else if (modelName.toLowerCase().includes('haiku')) {
-      currentModel = 'Claude Haiku 4.5';
+      // Replace currentModel with appropriate model name
+      const modelName = sdkOptions.model || 'sonnet';
+      let currentModel = 'Claude Sonnet 4.5';
+      if (modelName.toLowerCase().includes('opus')) {
+        currentModel = 'Claude Opus 4.5';
+      } else if (modelName.toLowerCase().includes('haiku')) {
+        currentModel = 'Claude Haiku 4.5';
+      }
+      systemPromptContent = systemPromptContent.replace(/currentModel/g, currentModel);
+
+      sdkOptions.systemPrompt = systemPromptContent.trim();
+      console.log(`[DEBUG] Loaded system prompt from ${systemPromptPath}`);
+      console.log(`[DEBUG] Replaced currentDateTime with: ${currentDateTime}`);
+      console.log(`[DEBUG] Replaced currentModel with: ${currentModel}`);
+    } catch (error) {
+      console.log(`[DEBUG] Could not read ${systemPromptPath}, using default system prompt`);
+      sdkOptions.systemPrompt = 'You are a helpful assistant';
     }
-    systemPromptContent = systemPromptContent.replace(/currentModel/g, currentModel);
-
-    sdkOptions.systemPrompt = systemPromptContent.trim();
-    console.log(`[DEBUG] Loaded system prompt from ${systemPromptPath}`);
-    console.log(`[DEBUG] Replaced currentDateTime with: ${currentDateTime}`);
-    console.log(`[DEBUG] Replaced currentModel with: ${currentModel}`);
-  } catch (error) {
-    console.log(`[DEBUG] Could not read ${systemPromptPath}, using default system prompt`);
-    sdkOptions.systemPrompt = 'You are a helpful assistant';
   }
 
   // Map setting sources for CLAUDE.md loading
