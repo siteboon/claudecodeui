@@ -70,7 +70,7 @@ import mcpUtilsRoutes from './routes/mcp-utils.js';
 import commandsRoutes from './routes/commands.js';
 import settingsRoutes from './routes/settings.js';
 import agentRoutes from './routes/agent.js';
-import projectsRoutes from './routes/projects.js';
+import projectsRoutes, { FORBIDDEN_PATHS } from './routes/projects.js';
 import cliAuthRoutes from './routes/cli-auth.js';
 import userRoutes from './routes/user.js';
 import codexRoutes from './routes/codex.js';
@@ -547,6 +547,55 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('Error browsing filesystem:', error);
         res.status(500).json({ error: 'Failed to browse filesystem' });
+    }
+});
+
+app.post('/api/create-folder', authenticateToken, async (req, res) => {
+    try {
+        const { path: folderPath } = req.body;
+        if (!folderPath) {
+            return res.status(400).json({ error: 'Path is required' });
+        }
+        const homeDir = os.homedir();
+        const targetPath = path.resolve(folderPath.replace('~', homeDir));
+        const normalizedPath = path.normalize(targetPath);
+        const comparePath = normalizedPath.toLowerCase();
+        const forbiddenLower = FORBIDDEN_PATHS.map(p => p.toLowerCase());
+        if (forbiddenLower.includes(comparePath) || comparePath === '/') {
+            return res.status(403).json({ error: 'Cannot create folders in system directories' });
+        }
+        for (const forbidden of forbiddenLower) {
+            if (comparePath.startsWith(forbidden + path.sep)) {
+                if (forbidden === '/var' && (comparePath.startsWith('/var/tmp') || comparePath.startsWith('/var/folders'))) {
+                    continue;
+                }
+                return res.status(403).json({ error: `Cannot create folders in system directory: ${forbidden}` });
+            }
+        }
+        const parentDir = path.dirname(targetPath);
+        try {
+            await fs.promises.access(parentDir);
+        } catch (err) {
+            return res.status(404).json({ error: 'Parent directory does not exist' });
+        }
+        try {
+            await fs.promises.access(targetPath);
+            return res.status(409).json({ error: 'Folder already exists' });
+        } catch (err) {
+            // Folder doesn't exist, which is what we want
+        }
+        try {
+            await fs.promises.mkdir(targetPath, { recursive: false });
+            res.json({ success: true, path: targetPath });
+        } catch (mkdirError) {
+            if (mkdirError.code === 'EEXIST') {
+                return res.status(409).json({ error: 'Folder already exists' });
+            }
+            throw mkdirError;
+        }
+    } catch (error) {
+        console.error('Error creating folder:', error);
+        res.status(500).json({ error: 'Failed to create folder' });
     }
 });
 
