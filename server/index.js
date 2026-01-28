@@ -1431,7 +1431,7 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
             },
             filename: (req, file, cb) => {
                 const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-                const sanitizedName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+                const sanitizedName = file.originalname.replace(/[^\p{L}\p{N}._-]/gu, '_');
                 cb(null, uniqueSuffix + '-' + sanitizedName);
             }
         });
@@ -1522,7 +1522,7 @@ app.post('/api/projects/:projectName/upload-files', authenticateToken, async (re
             },
             filename: (req, file, cb) => {
                 const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-                const sanitizedName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+                const sanitizedName = file.originalname.replace(/[^\p{L}\p{N}._-]/gu, '_');
                 cb(null, uniqueSuffix + '-' + sanitizedName);
             }
         });
@@ -1566,7 +1566,7 @@ app.post('/api/projects/:projectName/upload-files', authenticateToken, async (re
                 const uploadedFiles = [];
 
                 for (const file of req.files) {
-                    const sanitizedName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+                    const sanitizedName = file.originalname.replace(/[^\p{L}\p{N}._-]/gu, '_');
                     const destPath = path.join(resolvedTarget, sanitizedName);
 
                     // Copy file from temp to destination
