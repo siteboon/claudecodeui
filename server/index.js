@@ -1431,7 +1431,8 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
             },
             filename: (req, file, cb) => {
                 const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-                const sanitizedName = file.originalname.replace(/[^\p{L}\p{N}._-]/gu, '_');
+                const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+                const sanitizedName = originalName.replace(/[^\p{L}\p{N}._-]/gu, '_');
                 cb(null, uniqueSuffix + '-' + sanitizedName);
             }
         });
@@ -1451,7 +1452,7 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
             limits: {
                 fileSize: 5 * 1024 * 1024, // 5MB
                 files: 5
-            }
+            },
         });
 
         // Handle multipart form data
@@ -1477,7 +1478,7 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
                         await fs.unlink(file.path);
 
                         return {
-                            name: file.originalname,
+                            name: Buffer.from(file.originalname, 'latin1').toString('utf8'),
                             data: `data:${mimeType};base64,${base64}`,
                             size: file.size,
                             mimeType: mimeType
@@ -1522,7 +1523,8 @@ app.post('/api/projects/:projectName/upload-files', authenticateToken, async (re
             },
             filename: (req, file, cb) => {
                 const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-                const sanitizedName = file.originalname.replace(/[^\p{L}\p{N}._-]/gu, '_');
+                const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+                const sanitizedName = originalName.replace(/[^\p{L}\p{N}._-]/gu, '_');
                 cb(null, uniqueSuffix + '-' + sanitizedName);
             }
         });
@@ -1566,7 +1568,8 @@ app.post('/api/projects/:projectName/upload-files', authenticateToken, async (re
                 const uploadedFiles = [];
 
                 for (const file of req.files) {
-                    const sanitizedName = file.originalname.replace(/[^\p{L}\p{N}._-]/gu, '_');
+                    const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+                    const sanitizedName = originalName.replace(/[^\p{L}\p{N}._-]/gu, '_');
                     const destPath = path.join(resolvedTarget, sanitizedName);
 
                     // Copy file from temp to destination
