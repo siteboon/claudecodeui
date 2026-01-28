@@ -38,7 +38,7 @@ function MainContent({
   sendMessage,
   messages,
   isMobile,
-  isPWA,
+  isPWA, // ! Unused
   onMenuClick,
   isLoading,
   onInputFocusChange,

@@ -960,6 +960,7 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
           {gitStatus.details && (
             <p className="text-sm text-center leading-relaxed mb-6 max-w-md">{gitStatus.details}</p>
           )}
+          {/* // ! This can be a custom component that can be reused for " Tip: Create a new project..." as well */}
           <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 max-w-md">
             <p className="text-sm text-blue-700 dark:text-blue-300 text-center">
               <strong>Tip:</strong> Run <code className="bg-blue-100 dark:bg-blue-900 px-2 py-1 rounded font-mono text-xs">git init</code> in your project directory to initialize git source control.

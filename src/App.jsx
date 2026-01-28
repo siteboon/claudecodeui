@@ -40,11 +40,14 @@ import { I18nextProvider, useTranslation } from 'react-i18next';
 import i18n from './i18n/config.js';
 
 
+// ! Move to a separate file called AppContent.ts
 // Main App component with routing
 function AppContent() {
   const navigate = useNavigate();
   const { sessionId } = useParams();
   const { t } = useTranslation('common');
+  const renderCountRef = useRef(0);
+  console.log(`AppContent render count: ${renderCountRef.current++}`);
   
   const { updateAvailable, latestVersion, currentVersion, releaseInfo } = useVersionCheck('siteboon', 'claudecodeui');
   const [showVersionModal, setShowVersionModal] = useState(false);

@@ -43,6 +43,8 @@ import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '../../shared/modelCo
 
 import { safeJsonParse } from '../lib/utils.js';
 
+// ! Move all utility functions to utils/chatUtils.ts
+
 // Helper function to decode HTML entities in text
 function decodeHtmlEntities(text) {
   if (!text) return text;
@@ -4879,7 +4881,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   };
 
 
-
+// ! Unused
   const handleNewSession = () => {
     setChatMessages([]);
     setInput('');
