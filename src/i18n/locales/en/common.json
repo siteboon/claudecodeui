@@ -118,7 +118,11 @@
     "uploadFiles": "Upload files",
     "uploading": "Uploading files...",
     "fileTooLarge": "File \"{{name}}\" exceeds 100MB limit",
-    "uploadFailed": "Upload failed: {{error}}"
+    "uploadFailed": "Upload failed: {{error}}",
+    "delete": "Delete",
+    "confirmDelete": "Delete?",
+    "deleting": "Deleting...",
+    "deleteFailed": "Delete failed: {{error}}"
   },
   "projectWizard": {
     "title": "Create New Project",

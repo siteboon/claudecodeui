@@ -100,6 +100,11 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ filePath, content }),
     }),
+  deleteFile: (projectName, filePath) =>
+    authenticatedFetch(`/api/projects/${projectName}/file`, {
+      method: 'DELETE',
+      body: JSON.stringify({ filePath }),
+    }),
   getFiles: (projectName) =>
     authenticatedFetch(`/api/projects/${projectName}/files`),
   uploadFiles: (projectName, files, targetDir = '') => {

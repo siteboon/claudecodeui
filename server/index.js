@@ -696,6 +696,58 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
     }
 });
 
+// Delete file or directory endpoint
+app.delete('/api/projects/:projectName/file', authenticateToken, async (req, res) => {
+    try {
+        const { projectName } = req.params;
+        const { filePath } = req.body;
+
+        console.log('[DEBUG] File delete request:', projectName, filePath);
+
+        if (!filePath) {
+            return res.status(400).json({ error: 'Invalid file path' });
+        }
+
+        const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+        if (!projectRoot) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+
+        // Handle both absolute and relative paths
+        const resolved = path.isAbsolute(filePath)
+            ? path.resolve(filePath)
+            : path.resolve(projectRoot, filePath);
+        const normalizedRoot = path.resolve(projectRoot) + path.sep;
+        if (!resolved.startsWith(normalizedRoot)) {
+            return res.status(403).json({ error: 'Path must be under project root' });
+        }
+
+        // Check if file/directory exists
+        const stats = await fsPromises.stat(resolved);
+
+        if (stats.isDirectory()) {
+            await fsPromises.rm(resolved, { recursive: true });
+        } else {
+            await fsPromises.unlink(resolved);
+        }
+
+        res.json({
+            success: true,
+            path: resolved,
+            message: 'Deleted successfully'
+        });
+    } catch (error) {
+        console.error('Error deleting file:', error);
+        if (error.code === 'ENOENT') {
+            res.status(404).json({ error: 'File or directory not found' });
+        } else if (error.code === 'EACCES') {
+            res.status(403).json({ error: 'Permission denied' });
+        } else {
+            res.status(500).json({ error: error.message });
+        }
+    }
+});
+
 app.get('/api/projects/:projectName/files', authenticateToken, async (req, res) => {
     try {
 

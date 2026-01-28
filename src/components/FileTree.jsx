@@ -3,8 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { ScrollArea } from './ui/scroll-area';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { Folder, FolderOpen, File, FileText, FileCode, List, TableProperties, Eye, Search, X, Upload, Loader2 } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { Folder, FolderOpen, File, FileText, FileCode, List, TableProperties, Eye, Search, X, Upload, Loader2, Trash2 } from 'lucide-react';
+
 import CodeEditor from './CodeEditor';
 import ImageViewer from './ImageViewer';
 import { api } from '../utils/api';
@@ -22,6 +22,8 @@ function FileTree({ selectedProject }) {
   const [contextMenu, setContextMenu] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const fileInputRef = useRef(null);
   const uploadTargetDir = useRef('');
 
@@ -159,10 +161,8 @@ function FileTree({ selectedProject }) {
   }, [contextMenu]);
 
   const handleContextMenu = useCallback((e, item) => {
-    if (item.type === 'directory') {
-      e.preventDefault();
-      setContextMenu({ x: e.clientX, y: e.clientY, folderPath: item.path });
-    }
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, folderPath: item.path, itemType: item.type });
   }, []);
 
   const handleUploadClick = useCallback(() => {
@@ -222,15 +222,65 @@ function FileTree({ selectedProject }) {
     }
   }, [selectedProject, t]);
 
+  const handleDeleteConfirm = useCallback(async () => {
+    if (!deleteConfirm) return;
+    setDeleting(true);
+    try {
+      const response = await api.deleteFile(selectedProject.name, deleteConfirm);
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Delete failed');
+      }
+      await fetchFiles();
+    } catch (error) {
+      setUploadError(t('fileTree.deleteFailed', { error: error.message }));
+    } finally {
+      setDeleting(false);
+      setDeleteConfirm(null);
+    }
+  }, [deleteConfirm, selectedProject, t]);
+
+  const renderDeleteButton = (item) => (
+    deleteConfirm === item.path ? (
+      <div className="flex items-center gap-1 ml-auto flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+        <span className="text-xs text-muted-foreground">{t('fileTree.confirmDelete')}</span>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-5 w-5 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+          onClick={(e) => { e.stopPropagation(); handleDeleteConfirm(); }}
+          disabled={deleting}
+        >
+          {deleting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-5 w-5 p-0"
+          onClick={(e) => { e.stopPropagation(); setDeleteConfirm(null); }}
+        >
+          <X className="w-3 h-3" />
+        </Button>
+      </div>
+    ) : (
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 ml-auto flex-shrink-0 text-muted-foreground hover:text-destructive"
+        onClick={(e) => { e.stopPropagation(); setDeleteConfirm(item.path); }}
+        title={t('fileTree.delete')}
+      >
+        <Trash2 className="w-3 h-3" />
+      </Button>
+    )
+  );
+
   const renderFileTree = (items, level = 0) => {
     return items.map((item) => (
       <div key={item.path} className="select-none">
-        <Button
-          variant="ghost"
-          className={cn(
-            "w-full justify-start p-2 h-auto font-normal text-left hover:bg-accent",
-          )}
-          style={{ paddingLeft: `${level * 16 + 12}px` }}
+        <div
+          className="group flex items-center hover:bg-accent cursor-pointer"
+          style={{ paddingLeft: `${level * 16 + 12}px`, paddingRight: '8px' }}
           onClick={() => {
             if (item.type === 'directory') {
               toggleDirectory(item.path);
@@ -252,7 +302,7 @@ function FileTree({ selectedProject }) {
           }}
           onContextMenu={(e) => handleContextMenu(e, item)}
         >
-          <div className="flex items-center gap-2 min-w-0 w-full">
+          <div className="flex items-center gap-2 min-w-0 flex-1 p-2">
             {item.type === 'directory' ? (
               expandedDirs.has(item.path) ? (
                 <FolderOpen className="w-4 h-4 text-blue-500 flex-shrink-0" />
@@ -266,11 +316,12 @@ function FileTree({ selectedProject }) {
               {item.name}
             </span>
           </div>
-        </Button>
-        
-        {item.type === 'directory' && 
-         expandedDirs.has(item.path) && 
-         item.children && 
+          {renderDeleteButton(item)}
+        </div>
+
+        {item.type === 'directory' &&
+         expandedDirs.has(item.path) &&
+         item.children &&
          item.children.length > 0 && (
           <div>
             {renderFileTree(item.children, level + 1)}
@@ -309,9 +360,7 @@ function FileTree({ selectedProject }) {
     return items.map((item) => (
       <div key={item.path} className="select-none">
         <div
-          className={cn(
-            "grid grid-cols-12 gap-2 p-2 hover:bg-accent cursor-pointer items-center",
-          )}
+          className="group flex items-center p-2 hover:bg-accent cursor-pointer"
           style={{ paddingLeft: `${level * 16 + 12}px` }}
           onClick={() => {
             if (item.type === 'directory') {
@@ -334,34 +383,37 @@ function FileTree({ selectedProject }) {
           }}
           onContextMenu={(e) => handleContextMenu(e, item)}
         >
-          <div className="col-span-5 flex items-center gap-2 min-w-0">
-            {item.type === 'directory' ? (
-              expandedDirs.has(item.path) ? (
-                <FolderOpen className="w-4 h-4 text-blue-500 flex-shrink-0" />
+          <div className="grid grid-cols-12 gap-2 items-center flex-1 min-w-0">
+            <div className="col-span-5 flex items-center gap-2 min-w-0">
+              {item.type === 'directory' ? (
+                expandedDirs.has(item.path) ? (
+                  <FolderOpen className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                ) : (
+                  <Folder className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                )
               ) : (
-                <Folder className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-              )
-            ) : (
-              getFileIcon(item.name)
-            )}
-            <span className="text-sm truncate text-foreground">
-              {item.name}
-            </span>
+                getFileIcon(item.name)
+              )}
+              <span className="text-sm truncate text-foreground">
+                {item.name}
+              </span>
+            </div>
+            <div className="col-span-2 text-sm text-muted-foreground">
+              {item.type === 'file' ? formatFileSize(item.size) : '-'}
+            </div>
+            <div className="col-span-3 text-sm text-muted-foreground">
+              {formatRelativeTime(item.modified)}
+            </div>
+            <div className="col-span-2 text-sm text-muted-foreground font-mono">
+              {item.permissionsRwx || '-'}
+            </div>
           </div>
-          <div className="col-span-2 text-sm text-muted-foreground">
-            {item.type === 'file' ? formatFileSize(item.size) : '-'}
-          </div>
-          <div className="col-span-3 text-sm text-muted-foreground">
-            {formatRelativeTime(item.modified)}
-          </div>
-          <div className="col-span-2 text-sm text-muted-foreground font-mono">
-            {item.permissionsRwx || '-'}
-          </div>
+          {renderDeleteButton(item)}
         </div>
-        
-        {item.type === 'directory' && 
-         expandedDirs.has(item.path) && 
-         item.children && 
+
+        {item.type === 'directory' &&
+         expandedDirs.has(item.path) &&
+         item.children &&
          renderDetailedView(item.children, level + 1)}
       </div>
     ));
@@ -372,9 +424,7 @@ function FileTree({ selectedProject }) {
     return items.map((item) => (
       <div key={item.path} className="select-none">
         <div
-          className={cn(
-            "flex items-center justify-between p-2 hover:bg-accent cursor-pointer",
-          )}
+          className="group flex items-center justify-between p-2 hover:bg-accent cursor-pointer"
           style={{ paddingLeft: `${level * 16 + 12}px` }}
           onClick={() => {
             if (item.type === 'directory') {
@@ -418,12 +468,13 @@ function FileTree({ selectedProject }) {
                 <span className="font-mono">{item.permissionsRwx}</span>
               </>
             )}
+            {renderDeleteButton(item)}
           </div>
         </div>
-        
-        {item.type === 'directory' && 
-         expandedDirs.has(item.path) && 
-         item.children && 
+
+        {item.type === 'directory' &&
+         expandedDirs.has(item.path) &&
+         item.children &&
          renderCompactView(item.children, level + 1)}
       </div>
     ));
@@ -582,12 +633,24 @@ function FileTree({ selectedProject }) {
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(e) => e.stopPropagation()}
         >
+          {contextMenu.itemType === 'directory' && (
+            <button
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-popover-foreground hover:bg-accent cursor-pointer"
+              onClick={handleUploadClick}
+            >
+              <Upload className="w-4 h-4" />
+              {t('fileTree.uploadFiles')}
+            </button>
+          )}
           <button
-            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-popover-foreground hover:bg-accent cursor-pointer"
-            onClick={handleUploadClick}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-accent cursor-pointer"
+            onClick={() => {
+              setDeleteConfirm(contextMenu.folderPath);
+              setContextMenu(null);
+            }}
           >
-            <Upload className="w-4 h-4" />
-            {t('fileTree.uploadFiles')}
+            <Trash2 className="w-4 h-4" />
+            {t('fileTree.delete')}
           </button>
         </div>
       )}
