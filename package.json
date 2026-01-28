@@ -29,7 +29,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "npm run build && npm run server",
-    "release": "./release.sh"
+    "release": "./release.sh",
+    "postinstall": "node scripts/fix-node-pty.js"
   },
   "keywords": [
     "claude coode",
