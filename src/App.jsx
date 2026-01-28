@@ -46,6 +46,7 @@ function AppContent() {
   const navigate = useNavigate();
   const { sessionId } = useParams();
   const { t } = useTranslation('common');
+  // * This is a tracker for avoiding excessive re-renders during development 
   const renderCountRef = useRef(0);
   console.log(`AppContent render count: ${renderCountRef.current++}`);
   
