@@ -15,7 +15,8 @@ const Onboarding = ({ onComplete }) => {
   const [error, setError] = useState('');
 
   const [activeLoginProvider, setActiveLoginProvider] = useState(null);
-  const [selectedProject] = useState({ name: 'default', fullPath: '' });
+  const isPlatform = import.meta.env.VITE_IS_PLATFORM === 'true';
+  const [selectedProject] = useState({ name: 'default', fullPath: isPlatform ? '/workspace' : '' });
 
   const [claudeAuthStatus, setClaudeAuthStatus] = useState({
     authenticated: false,
