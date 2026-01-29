@@ -40,6 +40,7 @@ import ThinkingModeSelector, { thinkingModes } from './ThinkingModeSelector.jsx'
 import Fuse from 'fuse.js';
 import CommandMenu from './CommandMenu';
 import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '../../shared/modelConstants';
+import { isProviderEnabled, getDefaultProvider } from '../utils/providers';
 
 import { safeJsonParse } from '../lib/utils.js';
 
@@ -1934,7 +1935,15 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [claudeStatus, setClaudeStatus] = useState(null);
   const [thinkingMode, setThinkingMode] = useState('none');
   const [provider, setProvider] = useState(() => {
-    return localStorage.getItem('selected-provider') || 'claude';
+    const saved = localStorage.getItem('selected-provider');
+    // Use saved value only if provider is still enabled
+    if (saved && isProviderEnabled(saved)) {
+      return saved;
+    }
+    // Fallback to default and sync localStorage
+    const fallback = getDefaultProvider();
+    localStorage.setItem('selected-provider', fallback);
+    return fallback;
   });
   const [cursorModel, setCursorModel] = useState(() => {
     return localStorage.getItem('cursor-model') || CURSOR_MODELS.DEFAULT;
@@ -4959,100 +4968,106 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 
                 <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-8">
                   {/* Claude Button */}
-                  <button
-                    onClick={() => {
-                      setProvider('claude');
-                      localStorage.setItem('selected-provider', 'claude');
-                      // Focus input after selection
-                      setTimeout(() => textareaRef.current?.focus(), 100);
-                    }}
-                    className={`group relative w-64 h-32 bg-white dark:bg-gray-800 rounded-xl border-2 transition-all duration-200 hover:scale-105 hover:shadow-xl ${
-                      provider === 'claude' 
-                        ? 'border-blue-500 shadow-lg ring-2 ring-blue-500/20' 
-                        : 'border-gray-200 dark:border-gray-700 hover:border-blue-400'
-                    }`}
-                  >
-                    <div className="flex flex-col items-center justify-center h-full gap-3">
-                      <ClaudeLogo className="w-10 h-10" />
-                      <div>
-                        <p className="font-semibold text-gray-900 dark:text-white">Claude Code</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">{t('providerSelection.providerInfo.anthropic')}</p>
-                      </div>
-                    </div>
-                    {provider === 'claude' && (
-                      <div className="absolute top-2 right-2">
-                        <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
-                          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                          </svg>
+                  {isProviderEnabled('claude') && (
+                    <button
+                      onClick={() => {
+                        setProvider('claude');
+                        localStorage.setItem('selected-provider', 'claude');
+                        // Focus input after selection
+                        setTimeout(() => textareaRef.current?.focus(), 100);
+                      }}
+                      className={`group relative w-64 h-32 bg-white dark:bg-gray-800 rounded-xl border-2 transition-all duration-200 hover:scale-105 hover:shadow-xl ${
+                        provider === 'claude'
+                          ? 'border-blue-500 shadow-lg ring-2 ring-blue-500/20'
+                          : 'border-gray-200 dark:border-gray-700 hover:border-blue-400'
+                      }`}
+                    >
+                      <div className="flex flex-col items-center justify-center h-full gap-3">
+                        <ClaudeLogo className="w-10 h-10" />
+                        <div>
+                          <p className="font-semibold text-gray-900 dark:text-white">Claude Code</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{t('providerSelection.providerInfo.anthropic')}</p>
                         </div>
                       </div>
-                    )}
-                  </button>
-                  
+                      {provider === 'claude' && (
+                        <div className="absolute top-2 right-2">
+                          <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
+                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
+                        </div>
+                      )}
+                    </button>
+                  )}
+
                   {/* Cursor Button */}
-                  <button
-                    onClick={() => {
-                      setProvider('cursor');
-                      localStorage.setItem('selected-provider', 'cursor');
-                      // Focus input after selection
-                      setTimeout(() => textareaRef.current?.focus(), 100);
-                    }}
-                    className={`group relative w-64 h-32 bg-white dark:bg-gray-800 rounded-xl border-2 transition-all duration-200 hover:scale-105 hover:shadow-xl ${
-                      provider === 'cursor' 
-                        ? 'border-purple-500 shadow-lg ring-2 ring-purple-500/20' 
-                        : 'border-gray-200 dark:border-gray-700 hover:border-purple-400'
-                    }`}
-                  >
-                    <div className="flex flex-col items-center justify-center h-full gap-3">
-                      <CursorLogo className="w-10 h-10" />
-                      <div>
-                        <p className="font-semibold text-gray-900 dark:text-white">Cursor</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">{t('providerSelection.providerInfo.cursorEditor')}</p>
-                      </div>
-                    </div>
-                    {provider === 'cursor' && (
-                      <div className="absolute top-2 right-2">
-                        <div className="w-5 h-5 bg-purple-500 rounded-full flex items-center justify-center">
-                          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                          </svg>
+                  {isProviderEnabled('cursor') && (
+                    <button
+                      onClick={() => {
+                        setProvider('cursor');
+                        localStorage.setItem('selected-provider', 'cursor');
+                        // Focus input after selection
+                        setTimeout(() => textareaRef.current?.focus(), 100);
+                      }}
+                      className={`group relative w-64 h-32 bg-white dark:bg-gray-800 rounded-xl border-2 transition-all duration-200 hover:scale-105 hover:shadow-xl ${
+                        provider === 'cursor'
+                          ? 'border-purple-500 shadow-lg ring-2 ring-purple-500/20'
+                          : 'border-gray-200 dark:border-gray-700 hover:border-purple-400'
+                      }`}
+                    >
+                      <div className="flex flex-col items-center justify-center h-full gap-3">
+                        <CursorLogo className="w-10 h-10" />
+                        <div>
+                          <p className="font-semibold text-gray-900 dark:text-white">Cursor</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{t('providerSelection.providerInfo.cursorEditor')}</p>
                         </div>
                       </div>
-                    )}
-                  </button>
+                      {provider === 'cursor' && (
+                        <div className="absolute top-2 right-2">
+                          <div className="w-5 h-5 bg-purple-500 rounded-full flex items-center justify-center">
+                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
+                        </div>
+                      )}
+                    </button>
+                  )}
 
                   {/* Codex Button */}
-                  <button
-                    onClick={() => {
-                      setProvider('codex');
-                      localStorage.setItem('selected-provider', 'codex');
-                      // Focus input after selection
-                      setTimeout(() => textareaRef.current?.focus(), 100);
-                    }}
-                    className={`group relative w-64 h-32 bg-white dark:bg-gray-800 rounded-xl border-2 transition-all duration-200 hover:scale-105 hover:shadow-xl ${
-                      provider === 'codex'
-                        ? 'border-gray-800 dark:border-gray-300 shadow-lg ring-2 ring-gray-800/20 dark:ring-gray-300/20'
-                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-500 dark:hover:border-gray-400'
-                    }`}
-                  >
-                    <div className="flex flex-col items-center justify-center h-full gap-3">
-                      <CodexLogo className="w-10 h-10" />
-                      <div>
-                        <p className="font-semibold text-gray-900 dark:text-white">Codex</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">{t('providerSelection.providerInfo.openai')}</p>
-                      </div>
-                    </div>
-                    {provider === 'codex' && (
-                      <div className="absolute top-2 right-2">
-                        <div className="w-5 h-5 bg-gray-800 dark:bg-gray-300 rounded-full flex items-center justify-center">
-                          <svg className="w-3 h-3 text-white dark:text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                          </svg>
+                  {isProviderEnabled('codex') && (
+                    <button
+                      onClick={() => {
+                        setProvider('codex');
+                        localStorage.setItem('selected-provider', 'codex');
+                        // Focus input after selection
+                        setTimeout(() => textareaRef.current?.focus(), 100);
+                      }}
+                      className={`group relative w-64 h-32 bg-white dark:bg-gray-800 rounded-xl border-2 transition-all duration-200 hover:scale-105 hover:shadow-xl ${
+                        provider === 'codex'
+                          ? 'border-gray-800 dark:border-gray-300 shadow-lg ring-2 ring-gray-800/20 dark:ring-gray-300/20'
+                          : 'border-gray-200 dark:border-gray-700 hover:border-gray-500 dark:hover:border-gray-400'
+                      }`}
+                    >
+                      <div className="flex flex-col items-center justify-center h-full gap-3">
+                        <CodexLogo className="w-10 h-10" />
+                        <div>
+                          <p className="font-semibold text-gray-900 dark:text-white">Codex</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{t('providerSelection.providerInfo.openai')}</p>
                         </div>
                       </div>
-                    )}
-                  </button>
+                      {provider === 'codex' && (
+                        <div className="absolute top-2 right-2">
+                          <div className="w-5 h-5 bg-gray-800 dark:bg-gray-300 rounded-full flex items-center justify-center">
+                            <svg className="w-3 h-3 text-white dark:text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
+                        </div>
+                      )}
+                    </button>
+                  )}
                 </div>
 
                 {/* Model Selection - Always reserve space to prevent jumping */}
