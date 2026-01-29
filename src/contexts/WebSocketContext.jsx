@@ -34,7 +34,7 @@ const useWebSocketProviderState = () => {
     };
   }, []); // Keep dependency array but add proper cleanup
 
-  const connect = async () => {
+  const connect = () => {
     try {
       const isPlatform = import.meta.env.VITE_IS_PLATFORM === 'true';
 
