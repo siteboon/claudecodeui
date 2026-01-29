@@ -7,6 +7,118 @@ import { addProjectManually } from '../projects.js';
 
 const router = express.Router();
 
+/**
+ * Cache for ALLOWED_PATHS to avoid repeated parsing.
+ * @type {string[]|null}
+ * @private
+ */
+let _allowedPathsCache = null;
+
+/**
+ * Flag to track if ALLOWED_PATHS has been logged.
+ * @type {boolean}
+ * @private
+ */
+let _allowedPathsLogged = false;
+
+/**
+ * Retrieves the list of allowed paths from the ALLOWED_PATHS environment variable.
+ *
+ * This function provides path-based access restrictions for the application.
+ * When ALLOWED_PATHS is set, only directories within these paths can be accessed.
+ * The value is parsed once and cached for performance.
+ *
+ * @function getAllowedPaths
+ * @returns {string[]|null} Array of allowed path strings, or null if not configured
+ * @example
+ * // Environment: ALLOWED_PATHS=/home/user/projects,/home/user/work
+ * const paths = getAllowedPaths();
+ * // Returns: ['/home/user/projects', '/home/user/work']
+ *
+ * @example
+ * // Environment: ALLOWED_PATHS not set
+ * const paths = getAllowedPaths();
+ * // Returns: null (all paths accessible)
+ */
+export function getAllowedPaths() {
+  if (_allowedPathsCache === null && process.env.ALLOWED_PATHS) {
+    _allowedPathsCache = process.env.ALLOWED_PATHS
+      .split(',')
+      .map(p => p.trim())
+      .filter(Boolean);
+  }
+
+  // Log once on first access
+  if (!_allowedPathsLogged) {
+    _allowedPathsLogged = true;
+    if (_allowedPathsCache && _allowedPathsCache.length > 0) {
+      console.log('[INFO] ALLOWED_PATHS restriction enabled:', _allowedPathsCache);
+    } else {
+      console.log('[INFO] ALLOWED_PATHS not set - all paths accessible');
+    }
+  }
+
+  return _allowedPathsCache;
+}
+
+/**
+ * Checks if a given path is within the allowed paths using real path resolution.
+ *
+ * This function resolves both the candidate path and allowed paths to their
+ * real filesystem paths (following symlinks) before comparison. This prevents
+ * symlink-based bypass attacks.
+ *
+ * @async
+ * @function isPathAllowed
+ * @param {string} candidatePath - The path to check
+ * @returns {Promise<boolean>} True if path is allowed, false otherwise
+ * @example
+ * // With ALLOWED_PATHS=/home/user/projects
+ * await isPathAllowed('/home/user/projects/myapp'); // true
+ * await isPathAllowed('/home/user/other'); // false
+ */
+export async function isPathAllowed(candidatePath) {
+  const allowedPaths = getAllowedPaths();
+
+  // If no restrictions, allow all
+  if (!allowedPaths || allowedPaths.length === 0) {
+    return true;
+  }
+
+  try {
+    // Resolve the candidate path to its real path (following symlinks)
+    let realCandidate;
+    try {
+      realCandidate = await fs.realpath(candidatePath);
+    } catch (err) {
+      // Path doesn't exist - use resolved path
+      realCandidate = path.resolve(candidatePath);
+    }
+
+    // Check against each allowed path
+    for (const allowedPath of allowedPaths) {
+      let realAllowed;
+      try {
+        realAllowed = await fs.realpath(allowedPath);
+      } catch (err) {
+        // Allowed path doesn't exist - use resolved path
+        realAllowed = path.resolve(allowedPath);
+      }
+
+      // Check if candidate is within allowed path
+      if (realCandidate === realAllowed ||
+          realCandidate.startsWith(realAllowed + path.sep)) {
+        return true;
+      }
+    }
+
+    return false;
+  } catch (err) {
+    console.warn('[ALLOWED_PATHS] Error checking path:', err.message);
+    return false;
+  }
+}
+
 function sanitizeGitError(message, token) {
   if (!message || !token) return message;
   return message.replace(new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), '***');

@@ -65,6 +65,7 @@ import crypto from 'crypto';
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 import os from 'os';
+import { isPathAllowed } from './routes/projects.js';
 
 // Import TaskMaster detection functions
 async function detectTaskMasterFolder(projectPath) {
@@ -420,10 +421,15 @@ async function getProjects(progressCallback = null) {
         }
 
         const projectPath = path.join(claudeDir, entry.name);
-        
+
         // Extract actual project directory from JSONL sessions
         const actualProjectDir = await extractProjectDirectory(entry.name);
-        
+
+        // Check ALLOWED_PATHS restriction
+        if (actualProjectDir && !(await isPathAllowed(actualProjectDir))) {
+          continue; // Skip projects outside allowed paths
+        }
+
         // Get display name from config or generate one
         const customName = config[entry.name]?.displayName;
         const autoDisplayName = await generateDisplayName(entry.name, actualProjectDir);
@@ -524,8 +530,13 @@ async function getProjects(progressCallback = null) {
           actualProjectDir = projectName.replace(/-/g, '/');
         }
       }
-      
-              const project = {
+
+      // Check ALLOWED_PATHS restriction for manual projects
+      if (actualProjectDir && !(await isPathAllowed(actualProjectDir))) {
+        continue; // Skip projects outside allowed paths
+      }
+
+      const project = {
           name: projectName,
           path: actualProjectDir,
           displayName: projectConfig.displayName || await generateDisplayName(projectName, actualProjectDir),
