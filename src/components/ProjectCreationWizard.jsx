@@ -183,7 +183,7 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || t('projectWizard.errors.failedToCreate'));
+        throw new Error(data.details || data.error || t('projectWizard.errors.failedToCreate'));
       }
 
       if (onProjectCreated) {
