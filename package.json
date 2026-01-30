@@ -28,6 +28,7 @@
     "client": "vite --host",
     "build": "vite build",
     "preview": "vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "start": "npm run build && npm run server",
     "release": "./release.sh"
   },
@@ -96,6 +97,7 @@
     "ws": "^8.14.2"
   },
   "devDependencies": {
+    "@types/node": "^22.19.7",
     "@types/react": "^18.2.43",
     "@types/react-dom": "^18.2.17",
     "@vitejs/plugin-react": "^4.6.0",
@@ -107,6 +109,7 @@
     "release-it": "^19.0.5",
     "sharp": "^0.34.2",
     "tailwindcss": "^3.4.0",
+    "typescript": "^5.9.3",
     "vite": "^7.0.4"
   }
 }
