@@ -23,8 +23,12 @@ function validateFilePath(rootDir, filePath) {
   const resolvedRoot = path.resolve(rootDir);
   const resolvedPath = path.resolve(rootDir, filePath);
 
-  // Ensure the resolved path starts with the root directory
-  if (!resolvedPath.startsWith(resolvedRoot + path.sep) && resolvedPath !== resolvedRoot) {
+  // Use path.relative for robust containment check that handles edge cases
+  // like filesystem root as repository root
+  const relativePath = path.relative(resolvedRoot, resolvedPath);
+
+  // Path escapes root if relative path starts with '..' or is absolute
+  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
     throw new Error(`Invalid file path: path escapes repository root`);
   }
 
@@ -232,7 +236,7 @@ router.get('/diff', async (req, res) => {
     const gitRoot = await validateGitRepository(projectPath);
     
     // Check if file is untracked or deleted
-    const { stdout: statusOutput } = await execFileAsync('git', ['status', '--porcelain', file], { cwd: gitRoot });
+    const { stdout: statusOutput } = await execFileAsync('git', ['status', '--porcelain', '--', file], { cwd: gitRoot });
     const isUntracked = statusOutput.startsWith('??');
     const isDeleted = statusOutput.trim().startsWith('D ') || statusOutput.trim().startsWith(' D');
 
@@ -296,7 +300,7 @@ router.get('/file-with-diff', async (req, res) => {
     const gitRoot = await validateGitRepository(projectPath);
 
     // Check file status
-    const { stdout: statusOutput } = await execFileAsync('git', ['status', '--porcelain', file], { cwd: gitRoot });
+    const { stdout: statusOutput } = await execFileAsync('git', ['status', '--porcelain', '--', file], { cwd: gitRoot });
     const isUntracked = statusOutput.startsWith('??');
     const isDeleted = statusOutput.trim().startsWith('D ') || statusOutput.trim().startsWith(' D');
 
@@ -406,7 +410,7 @@ router.post('/commit', async (req, res) => {
     
     // Stage selected files
     for (const file of files) {
-      await execFileAsync('git', ['add', file], { cwd: gitRoot });
+      await execFileAsync('git', ['add', '--', file], { cwd: gitRoot });
     }
 
     // Commit with message
@@ -1135,7 +1139,7 @@ router.post('/discard', async (req, res) => {
     const gitRoot = await validateGitRepository(projectPath);
 
     // Check file status to determine correct discard command
-    const { stdout: statusOutput } = await execFileAsync('git', ['status', '--porcelain', file], { cwd: gitRoot });
+    const { stdout: statusOutput } = await execFileAsync('git', ['status', '--porcelain', '--', file], { cwd: gitRoot });
 
     if (!statusOutput.trim()) {
       return res.status(400).json({ error: 'No changes to discard for this file' });
@@ -1157,10 +1161,10 @@ router.post('/discard', async (req, res) => {
       }
     } else if (status.includes('M') || status.includes('D')) {
       // Modified or deleted file - restore from HEAD
-      await execFileAsync('git', ['restore', file], { cwd: gitRoot });
+      await execFileAsync('git', ['restore', '--', file], { cwd: gitRoot });
     } else if (status.includes('A')) {
       // Added file - unstage it
-      await execFileAsync('git', ['reset', 'HEAD', file], { cwd: gitRoot });
+      await execFileAsync('git', ['reset', 'HEAD', '--', file], { cwd: gitRoot });
     }
 
     res.json({ success: true, message: `Changes discarded for ${file}` });
@@ -1183,7 +1187,7 @@ router.post('/delete-untracked', async (req, res) => {
     const gitRoot = await validateGitRepository(projectPath);
 
     // Check if file is actually untracked
-    const { stdout: statusOutput } = await execFileAsync('git', ['status', '--porcelain', file], { cwd: gitRoot });
+    const { stdout: statusOutput } = await execFileAsync('git', ['status', '--porcelain', '--', file], { cwd: gitRoot });
 
     if (!statusOutput.trim()) {
       return res.status(400).json({ error: 'File is not untracked or does not exist' });
