@@ -177,7 +177,8 @@ router.get('/diff', async (req, res) => {
     let diff;
     if (isUntracked) {
       // For untracked files, show the entire file content as additions
-      const filePath = path.join(projectPath, file);
+      // Use gitRoot because file paths from git commands are relative to git root
+      const filePath = path.join(gitRoot, file);
       const stats = await fs.stat(filePath);
 
       if (stats.isDirectory()) {
@@ -246,7 +247,8 @@ router.get('/file-with-diff', async (req, res) => {
       currentContent = headContent; // Show the deleted content in editor
     } else {
       // Get current file content
-      const filePath = path.join(projectPath, file);
+      // Use gitRoot because file paths from git commands are relative to git root
+      const filePath = path.join(gitRoot, file);
       const stats = await fs.stat(filePath);
 
       if (stats.isDirectory()) {
@@ -552,9 +554,10 @@ router.post('/generate-commit-message', async (req, res) => {
     // If no diff found, might be untracked files
     if (!diffContext.trim()) {
       // Try to get content of untracked files
+      // Use gitRoot because file paths are relative to git root
       for (const file of files) {
         try {
-          const filePath = path.join(projectPath, file);
+          const filePath = path.join(gitRoot, file);
           const stats = await fs.stat(filePath);
 
           if (!stats.isDirectory()) {
@@ -1066,7 +1069,8 @@ router.post('/discard', async (req, res) => {
 
     if (status === '??') {
       // Untracked file or directory - delete it
-      const filePath = path.join(projectPath, file);
+      // Use gitRoot because file paths from git commands are relative to git root
+      const filePath = path.join(gitRoot, file);
       const stats = await fs.stat(filePath);
 
       if (stats.isDirectory()) {
@@ -1115,7 +1119,8 @@ router.post('/delete-untracked', async (req, res) => {
     }
 
     // Delete the untracked file or directory
-    const filePath = path.join(projectPath, file);
+    // Use gitRoot because file paths from git commands are relative to git root
+    const filePath = path.join(gitRoot, file);
     const stats = await fs.stat(filePath);
 
     if (stats.isDirectory()) {
