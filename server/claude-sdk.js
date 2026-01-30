@@ -152,6 +152,28 @@ function mapCliOptionsToSDK(options = {}) {
 
   const sdkOptions = {};
 
+  // Build env object for SDK with custom API configuration
+  // This allows using custom API endpoints (e.g., OpenRouter, Zhipu AI, etc.)
+  sdkOptions.env = {
+    ...process.env,
+  };
+
+  // Add custom API key if specified
+  if (process.env.ANTHROPIC_API_KEY) {
+    sdkOptions.env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+  }
+
+  // Add custom base URL if specified
+  if (process.env.ANTHROPIC_BASE_URL) {
+    sdkOptions.env.ANTHROPIC_BASE_URL = process.env.ANTHROPIC_BASE_URL;
+    console.log(`Using custom ANTHROPIC_BASE_URL: ${process.env.ANTHROPIC_BASE_URL}`);
+  }
+
+  // Add other Anthropic-related environment variables
+  if (process.env.ANTHROPIC_MODEL) {
+    sdkOptions.env.ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL;
+  }
+
   // Map working directory
   if (cwd) {
     sdkOptions.cwd = cwd;

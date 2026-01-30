@@ -178,6 +178,8 @@ cp .env.example .env
 # Development mode (with hot reload)
 npm run dev
 
+# Or with custom API endpoint (e.g., for using OpenRouter, Zhipu AI, etc.)
+cross-env ANTHROPIC_BASE_URL=https://open.bigmodel.cn/api/anthropic ANTHROPIC_API_KEY=your_api_key npm run dev
 ```
 The application will start at the port you specified in your .env
 
