@@ -4284,11 +4284,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           body: formData
         });
         
-        if (!response.ok) {
-          throw new Error('Failed to upload files');
-        }
-        
         const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error || 'Failed to upload files');
+        }
         uploadedImages = result.images;
       } catch (error) {
         console.error('Image upload failed:', error);
