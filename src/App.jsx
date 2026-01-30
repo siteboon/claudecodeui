@@ -31,7 +31,7 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { TaskMasterProvider } from './contexts/TaskMasterContext';
 import { TasksSettingsProvider } from './contexts/TasksSettingsContext';
-import { WebSocketProvider, useWebSocketContext } from './contexts/WebSocketContext';
+import { WebSocketProvider, useWebSocket } from './contexts/WebSocketContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import { useVersionCheck } from './hooks/useVersionCheck';
 import useLocalStorage from './hooks/useLocalStorage';
@@ -85,7 +85,7 @@ function AppContent() {
   // Triggers ChatInterface to reload messages without switching sessions
   const [externalMessageUpdate, setExternalMessageUpdate] = useState(0);
 
-  const { ws, sendMessage, messages } = useWebSocketContext();
+  const { ws, sendMessage, messages } = useWebSocket();
 
   // Ref to track loading progress timeout for cleanup
   const loadingProgressTimeoutRef = useRef(null);
