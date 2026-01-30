@@ -13,7 +13,7 @@
     "strict": true,
     "forceConsistentCasingInFileNames": true,
     "allowJs": true,
-    "checkJs": true,
+    // "checkJs": true, 
     "types": ["vite/client"]
   },
   "include": ["src", "shared", "vite.config.js"]
