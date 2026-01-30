@@ -1,5 +1,5 @@
 import express from 'express';
-import { exec, spawn } from 'child_process';
+import { exec, spawn, execFile } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import { promises as fs } from 'fs';
@@ -9,6 +9,27 @@ import { spawnCursor } from '../cursor-cli.js';
 
 const router = express.Router();
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
+
+/**
+ * Validates that a file path is within the allowed root directory.
+ * Prevents path traversal attacks (e.g., ../../etc/passwd).
+ * @param {string} rootDir - The root directory that paths must be within
+ * @param {string} filePath - The file path to validate (can be relative)
+ * @returns {string} The resolved absolute path if valid
+ * @throws {Error} If the path escapes the root directory
+ */
+function validateFilePath(rootDir, filePath) {
+  const resolvedRoot = path.resolve(rootDir);
+  const resolvedPath = path.resolve(rootDir, filePath);
+
+  // Ensure the resolved path starts with the root directory
+  if (!resolvedPath.startsWith(resolvedRoot + path.sep) && resolvedPath !== resolvedRoot) {
+    throw new Error(`Invalid file path: path escapes repository root`);
+  }
+
+  return resolvedPath;
+}
 
 function spawnAsync(command, args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -219,7 +240,8 @@ router.get('/diff', async (req, res) => {
     if (isUntracked) {
       // For untracked files, show the entire file content as additions
       // Use gitRoot because file paths from git commands are relative to git root
-      const filePath = path.join(gitRoot, file);
+      // Validate path to prevent traversal attacks
+      const filePath = validateFilePath(gitRoot, file);
       const stats = await fs.stat(filePath);
 
       if (stats.isDirectory()) {
@@ -289,7 +311,8 @@ router.get('/file-with-diff', async (req, res) => {
     } else {
       // Get current file content
       // Use gitRoot because file paths from git commands are relative to git root
-      const filePath = path.join(gitRoot, file);
+      // Validate path to prevent traversal attacks
+      const filePath = validateFilePath(gitRoot, file);
       const stats = await fs.stat(filePath);
 
       if (stats.isDirectory()) {
@@ -484,8 +507,10 @@ router.post('/create-branch', async (req, res) => {
 
 // Get recent commits
 router.get('/commits', async (req, res) => {
-  const { project, limit = 10 } = req.query;
-  
+  const { project, limit: limitParam = '10' } = req.query;
+  // Validate and sanitize limit parameter to prevent command injection
+  const limit = Math.min(Math.max(1, parseInt(limitParam, 10) || 10), 100);
+
   if (!project) {
     return res.status(400).json({ error: 'Project name is required' });
   }
@@ -502,7 +527,7 @@ router.get('/commits', async (req, res) => {
     const { stdout } = await spawnAsync(
       'git',
       ['log', '--pretty=format:%H|%an|%ae|%ad|%s', '--date=relative', '-n', String(safeLimit)],
-      { cwd: projectPath },
+      { cwd: gitRoot },
     );
     
     const commits = stdout
@@ -603,7 +628,8 @@ router.post('/generate-commit-message', async (req, res) => {
       // Use gitRoot because file paths are relative to git root
       for (const file of files) {
         try {
-          const filePath = path.join(gitRoot, file);
+          // Validate path to prevent traversal attacks
+          const filePath = validateFilePath(gitRoot, file);
           const stats = await fs.stat(filePath);
 
           if (!stats.isDirectory()) {
@@ -1116,7 +1142,8 @@ router.post('/discard', async (req, res) => {
     if (status === '??') {
       // Untracked file or directory - delete it
       // Use gitRoot because file paths from git commands are relative to git root
-      const filePath = path.join(gitRoot, file);
+      // Validate path to prevent traversal attacks
+      const filePath = validateFilePath(gitRoot, file);
       const stats = await fs.stat(filePath);
 
       if (stats.isDirectory()) {
@@ -1166,7 +1193,8 @@ router.post('/delete-untracked', async (req, res) => {
 
     // Delete the untracked file or directory
     // Use gitRoot because file paths from git commands are relative to git root
-    const filePath = path.join(gitRoot, file);
+    // Validate path to prevent traversal attacks
+    const filePath = validateFilePath(gitRoot, file);
     const stats = await fs.stat(filePath);
 
     if (stats.isDirectory()) {
