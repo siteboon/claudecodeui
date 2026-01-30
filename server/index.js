@@ -1453,7 +1453,7 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
             }
 
             if (!req.files || req.files.length === 0) {
-                return res.status(400).json({ error: 'No image files provided' });
+                return res.status(400).json({ error: 'No files provided' });
             }
 
             try {
@@ -1482,7 +1482,7 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
                 console.error('Error processing images:', error);
                 // Clean up any remaining files
                 await Promise.all(req.files.map(f => fs.unlink(f.path).catch(() => { })));
-                res.status(500).json({ error: 'Failed to process images' });
+                res.status(500).json({ error: 'Failed to process files' });
             }
         });
     } catch (error) {

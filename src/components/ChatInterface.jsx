@@ -4285,7 +4285,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         });
         
         if (!response.ok) {
-          throw new Error('Failed to upload images');
+          throw new Error('Failed to upload files');
         }
         
         const result = await response.json();
@@ -4294,7 +4294,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         console.error('Image upload failed:', error);
         setChatMessages(prev => [...prev, {
           type: 'error',
-          content: `Failed to upload images: ${error.message}`,
+          content: `Failed to upload files: ${error.message}`,
           timestamp: new Date()
         }]);
         return;
