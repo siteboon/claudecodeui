@@ -4200,16 +4200,14 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           return false;
         }
 
-        if (!file.type || !file.type.startsWith('image/')) {
-          return false;
-        }
+        // Allow all file types (not just images)
 
-        if (!file.size || file.size > 5 * 1024 * 1024) {
+        if (!file.size || file.size > 20 * 1024 * 1024) {
           // Safely get file name with fallback
           const fileName = file.name || 'Unknown file';
           setImageErrors(prev => {
             const newMap = new Map(prev);
-            newMap.set(fileName, 'File too large (max 5MB)');
+            newMap.set(fileName, 'File too large (max 20MB)');
             return newMap;
           });
           return false;
@@ -4231,31 +4229,29 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const handlePaste = useCallback(async (e) => {
     const items = Array.from(e.clipboardData.items);
     
+    // Handle all file types from clipboard
     for (const item of items) {
-      if (item.type.startsWith('image/')) {
+      if (item.kind === 'file') {
         const file = item.getAsFile();
         if (file) {
           handleImageFiles([file]);
         }
       }
     }
-    
+
     // Fallback for some browsers/platforms
     if (items.length === 0 && e.clipboardData.files.length > 0) {
       const files = Array.from(e.clipboardData.files);
-      const imageFiles = files.filter(f => f.type.startsWith('image/'));
-      if (imageFiles.length > 0) {
-        handleImageFiles(imageFiles);
+      if (files.length > 0) {
+        handleImageFiles(files);
       }
     }
   }, [handleImageFiles]);
 
-  // Setup dropzone
+  // Setup dropzone - accept all file types
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
-    accept: {
-      'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg']
-    },
-    maxSize: 5 * 1024 * 1024, // 5MB
+    // No accept filter - allow all file types
+    maxSize: 20 * 1024 * 1024, // 20MB
     maxFiles: 5,
     onDrop: handleImageFiles,
     noClick: true, // We'll use our own button
@@ -5301,7 +5297,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 <svg className="w-8 h-8 text-blue-500 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                 </svg>
-                <p className="text-sm font-medium">Drop images here</p>
+                <p className="text-sm font-medium">Drop files here</p>
               </div>
             </div>
           )}
@@ -5414,7 +5410,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               type="button"
               onClick={open}
               className="absolute left-2 top-1/2 transform -translate-y-1/2 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-              title={t('input.attachImages')}
+              title={t('input.attachFiles')}
             >
               <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />

@@ -1437,20 +1437,11 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
             }
         });
 
-        const fileFilter = (req, file, cb) => {
-            const allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
-            if (allowedMimes.includes(file.mimetype)) {
-                cb(null, true);
-            } else {
-                cb(new Error('Invalid file type. Only JPEG, PNG, GIF, WebP, and SVG are allowed.'));
-            }
-        };
-
+        // Allow all file types (no filter)
         const upload = multer({
             storage,
-            fileFilter,
             limits: {
-                fileSize: 5 * 1024 * 1024, // 5MB
+                fileSize: 20 * 1024 * 1024, // 20MB
                 files: 5
             },
         });
