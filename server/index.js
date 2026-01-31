@@ -1821,6 +1821,7 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
 }
 
 const PORT = process.env.PORT || 3001;
+const SSL_PORT = process.env.SSL_PORT || PORT;
 
 // Initialize database and start server
 async function startServer() {
@@ -1840,7 +1841,8 @@ async function startServer() {
             console.log(`${c.warn('[WARN]')} Note: Requests will be proxied to Vite dev server at ${c.dim('http://localhost:' + (process.env.VITE_PORT || 5173))}`);
         }
 
-        server.listen(PORT, '0.0.0.0', async () => {
+        const listenPort = useHttps ? SSL_PORT : PORT;
+        server.listen(listenPort, '0.0.0.0', async () => {
             const appInstallPath = path.join(__dirname, '..');
 
             console.log('');
@@ -1849,7 +1851,7 @@ async function startServer() {
             console.log(c.dim('═'.repeat(63)));
             console.log('');
             const protocol = useHttps ? 'https' : 'http';
-            console.log(`${c.info('[INFO]')} Server URL:  ${c.bright(protocol + '://0.0.0.0:' + PORT)}`);
+            console.log(`${c.info('[INFO]')} Server URL:  ${c.bright(protocol + '://0.0.0.0:' + listenPort)}`);
             console.log(`${c.info('[INFO]')} Installed at: ${c.dim(appInstallPath)}`);
             console.log(`${c.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
             console.log('');
