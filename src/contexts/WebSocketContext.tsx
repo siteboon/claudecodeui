@@ -17,7 +17,15 @@ export const useWebSocket = () => {
   return context;
 };
 
-const useWebSocketProviderState = () => {
+const buildWebSocketUrl = (token: string | null) => {
+  const isPlatform = import.meta.env.VITE_IS_PLATFORM === 'true';
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  if (isPlatform) return `${protocol}//${window.location.host}/ws`; // Platform mode: Use same domain as the page (goes through proxy)
+  if (!token) return null;
+  return `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}`; // OSS mode: Use same host:port that served the page
+};
+
+const useWebSocketProviderState = (): WebSocketContextType => {
   const wsRef = useRef<WebSocket | null>(null);
   const unmountedRef = useRef(false);
   const [messages, setMessages] = useState<any[]>([]);
@@ -44,22 +52,10 @@ const useWebSocketProviderState = () => {
       const isPlatform = import.meta.env.VITE_IS_PLATFORM === 'true';
 
       // Construct WebSocket URL
-      let wsUrl: string;
+      const wsUrl = buildWebSocketUrl(isPlatform ? null : localStorage.getItem('authToken'));
 
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      if (isPlatform) {
-        // Platform mode: Use same domain as the page (goes through proxy)
-        wsUrl = `${protocol}//${window.location.host}/ws`;
-      } else {
-        // OSS mode: Connect to same host:port that served the page
-        const token = localStorage.getItem('auth-token');
-        if (!token) {
-          console.warn('No authentication token found for WebSocket connection');
-          return;
-        }
-        wsUrl = `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}`;
-      }
-
+      if (!wsUrl) return console.warn('No authentication token found for WebSocket connection');
+      
       const websocket = new WebSocket(wsUrl);
 
       websocket.onopen = () => {
