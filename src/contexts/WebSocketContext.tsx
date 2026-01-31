@@ -19,6 +19,7 @@ export const useWebSocket = () => {
 
 const useWebSocketProviderState = () => {
   const wsRef = useRef<WebSocket | null>(null);
+  const unmountedRef = useRef(false);
   const [messages, setMessages] = useState<any[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -27,6 +28,7 @@ const useWebSocketProviderState = () => {
     connect();
     
     return () => {
+      unmountedRef.current = true;
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
@@ -37,6 +39,7 @@ const useWebSocketProviderState = () => {
   }, []); // Keep dependency array but add proper cleanup
 
   const connect = () => {
+    if (unmountedRef.current) return; // Prevent connection if unmounted
     try {
       const isPlatform = import.meta.env.VITE_IS_PLATFORM === 'true';
 
@@ -79,6 +82,7 @@ const useWebSocketProviderState = () => {
         
         // Attempt to reconnect after 3 seconds
         reconnectTimeoutRef.current = setTimeout(() => {
+          if (unmountedRef.current) return; // Prevent reconnection if unmounted
           connect();
         }, 3000);
       };
