@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { IS_PLATFORM } from '../constants/config';
 
@@ -48,7 +48,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     };
   }, []); // Keep dependency array but add proper cleanup
 
-  const connect = () => {
+  const connect = useCallback(() => {
     if (unmountedRef.current) return; // Prevent connection if unmounted
     try {
       // Construct WebSocket URL
@@ -90,23 +90,26 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     } catch (error) {
       console.error('Error creating WebSocket connection:', error);
     }
-  };
+  }, [token]); // everytime token changes, we reconnect
 
-  const sendMessage = (message: any) => {
+  const sendMessage = useCallback((message: any) => {
     const socket = wsRef.current;
     if (socket && isConnected) {
       socket.send(JSON.stringify(message));
     } else {
       console.warn('WebSocket not connected');
     }
-  };
+  }, [isConnected]);
 
-  return {
+  const value: WebSocketContextType = useMemo(() =>
+  ({
     ws: wsRef.current,
     sendMessage,
-    messages,
+    latestMessage,
     isConnected
-  };
+  }), [sendMessage, latestMessage, isConnected]);
+
+  return value;
 };
 
 export const WebSocketProvider = ({ children }: { children: React.ReactNode }) => {
