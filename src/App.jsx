@@ -48,7 +48,7 @@ function AppContent() {
   const { t } = useTranslation('common');
   // * This is a tracker for avoiding excessive re-renders during development 
   const renderCountRef = useRef(0);
-  console.log(`AppContent render count: ${renderCountRef.current++}`);
+  // console.log(`AppContent render count: ${renderCountRef.current++}`);
   
   const { updateAvailable, latestVersion, currentVersion, releaseInfo } = useVersionCheck('siteboon', 'claudecodeui');
   const [showVersionModal, setShowVersionModal] = useState(false);
