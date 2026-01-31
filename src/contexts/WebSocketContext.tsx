@@ -41,11 +41,11 @@ const useWebSocketProviderState = () => {
       const isPlatform = import.meta.env.VITE_IS_PLATFORM === 'true';
 
       // Construct WebSocket URL
-      let wsUrl;
+      let wsUrl: string;
 
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       if (isPlatform) {
         // Platform mode: Use same domain as the page (goes through proxy)
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         wsUrl = `${protocol}//${window.location.host}/ws`;
       } else {
         // OSS mode: Connect to same host:port that served the page
@@ -54,8 +54,6 @@ const useWebSocketProviderState = () => {
           console.warn('No authentication token found for WebSocket connection');
           return;
         }
-
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         wsUrl = `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}`;
       }
 
