@@ -1,11 +1,13 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 
-const WebSocketContext = createContext({
-  ws: null,
-  sendMessage: () => {},
-  messages: [],
-  isConnected: false
-});
+type WebSocketContextType = {
+  ws: WebSocket | null;
+  sendMessage: (message: any) => void;
+  messages: any[];
+  isConnected: boolean;
+};
+
+const WebSocketContext = createContext<WebSocketContextType | null>(null);
 
 export const useWebSocket = () => {
   const context = useContext(WebSocketContext);
@@ -16,10 +18,10 @@ export const useWebSocket = () => {
 };
 
 const useWebSocketProviderState = () => {
-  const wsRef = useRef(null);
-  const [messages, setMessages] = useState([]);
+  const wsRef = useRef<WebSocket | null>(null);
+  const [messages, setMessages] = useState<any[]>([]);
   const [isConnected, setIsConnected] = useState(false);
-  const reconnectTimeoutRef = useRef(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     connect();
@@ -92,7 +94,7 @@ const useWebSocketProviderState = () => {
     }
   };
 
-  const sendMessage = (message) => {
+  const sendMessage = (message: any) => {
     const socket = wsRef.current;
     if (socket && isConnected) {
       socket.send(JSON.stringify(message));
@@ -109,7 +111,7 @@ const useWebSocketProviderState = () => {
   };
 };
 
-export const WebSocketProvider = ({ children }) => {
+export const WebSocketProvider = ({ children }: { children: React.ReactNode }) => {
   const webSocketData = useWebSocketProviderState();
   
   return (
