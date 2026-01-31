@@ -192,16 +192,23 @@ const app = express();
 
 // Create HTTP or HTTPS server based on SSL configuration
 let server;
+let useHttps = false;
 const SSL_CERT = process.env.SSL_CERT;
 const SSL_KEY = process.env.SSL_KEY;
 
 if (SSL_CERT && SSL_KEY && fs.existsSync(SSL_CERT) && fs.existsSync(SSL_KEY)) {
-    const sslOptions = {
-        cert: fs.readFileSync(SSL_CERT),
-        key: fs.readFileSync(SSL_KEY)
-    };
-    server = https.createServer(sslOptions, app);
-    console.log('[INFO] HTTPS enabled with SSL certificates');
+    try {
+        const sslOptions = {
+            cert: fs.readFileSync(SSL_CERT),
+            key: fs.readFileSync(SSL_KEY)
+        };
+        server = https.createServer(sslOptions, app);
+        useHttps = true;
+        console.log('[INFO] HTTPS enabled with SSL certificates');
+    } catch (err) {
+        console.warn('[WARN] Failed to enable HTTPS, falling back to HTTP:', err.message);
+        server = http.createServer(app);
+    }
 } else {
     server = http.createServer(app);
 }
@@ -1841,7 +1848,7 @@ async function startServer() {
             console.log(`  ${c.bright('Claude Code UI Server - Ready')}`);
             console.log(c.dim('═'.repeat(63)));
             console.log('');
-            const protocol = (SSL_CERT && SSL_KEY) ? 'https' : 'http';
+            const protocol = useHttps ? 'https' : 'http';
             console.log(`${c.info('[INFO]')} Server URL:  ${c.bright(protocol + '://0.0.0.0:' + PORT)}`);
             console.log(`${c.info('[INFO]')} Installed at: ${c.dim(appInstallPath)}`);
             console.log(`${c.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
