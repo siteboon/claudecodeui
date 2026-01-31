@@ -16,7 +16,7 @@ export const useWebSocket = () => {
 };
 
 const useWebSocketProviderState = () => {
-  const [ws, setWs] = useState(null);
+  const wsRef = useRef(null);
   const [messages, setMessages] = useState([]);
   const [isConnected, setIsConnected] = useState(false);
   const reconnectTimeoutRef = useRef(null);
@@ -28,8 +28,8 @@ const useWebSocketProviderState = () => {
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
-      if (ws) {
-        ws.close();
+      if (wsRef.current) {
+        wsRef.current.close();
       }
     };
   }, []); // Keep dependency array but add proper cleanup
@@ -61,7 +61,7 @@ const useWebSocketProviderState = () => {
 
       websocket.onopen = () => {
         setIsConnected(true);
-        setWs(websocket);
+        wsRef.current = websocket;
       };
 
       websocket.onmessage = (event) => {
@@ -75,7 +75,7 @@ const useWebSocketProviderState = () => {
 
       websocket.onclose = () => {
         setIsConnected(false);
-        setWs(null);
+        wsRef.current = null;
         
         // Attempt to reconnect after 3 seconds
         reconnectTimeoutRef.current = setTimeout(() => {
@@ -93,15 +93,16 @@ const useWebSocketProviderState = () => {
   };
 
   const sendMessage = (message) => {
-    if (ws && isConnected) {
-      ws.send(JSON.stringify(message));
+    const socket = wsRef.current;
+    if (socket && isConnected) {
+      socket.send(JSON.stringify(message));
     } else {
       console.warn('WebSocket not connected');
     }
   };
 
   return {
-    ws,
+    ws: wsRef.current,
     sendMessage,
     messages,
     isConnected
