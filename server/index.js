@@ -50,6 +50,7 @@ import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
 import os from 'os';
 import http from 'http';
+import https from 'https';
 import cors from 'cors';
 import { promises as fsPromises } from 'fs';
 import { spawn } from 'child_process';
@@ -188,7 +189,22 @@ async function setupProjectsWatcher() {
 
 
 const app = express();
-const server = http.createServer(app);
+
+// Create HTTP or HTTPS server based on SSL configuration
+let server;
+const SSL_CERT = process.env.SSL_CERT;
+const SSL_KEY = process.env.SSL_KEY;
+
+if (SSL_CERT && SSL_KEY && fs.existsSync(SSL_CERT) && fs.existsSync(SSL_KEY)) {
+    const sslOptions = {
+        cert: fs.readFileSync(SSL_CERT),
+        key: fs.readFileSync(SSL_KEY)
+    };
+    server = https.createServer(sslOptions, app);
+    console.log('[INFO] HTTPS enabled with SSL certificates');
+} else {
+    server = http.createServer(app);
+}
 
 const ptySessionsMap = new Map();
 const PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
@@ -1825,7 +1841,8 @@ async function startServer() {
             console.log(`  ${c.bright('Claude Code UI Server - Ready')}`);
             console.log(c.dim('═'.repeat(63)));
             console.log('');
-            console.log(`${c.info('[INFO]')} Server URL:  ${c.bright('http://0.0.0.0:' + PORT)}`);
+            const protocol = (SSL_CERT && SSL_KEY) ? 'https' : 'http';
+            console.log(`${c.info('[INFO]')} Server URL:  ${c.bright(protocol + '://0.0.0.0:' + PORT)}`);
             console.log(`${c.info('[INFO]')} Installed at: ${c.dim(appInstallPath)}`);
             console.log(`${c.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
             console.log('');
