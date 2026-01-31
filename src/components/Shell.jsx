@@ -5,7 +5,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
 import { useTranslation } from 'react-i18next';
-import { IS_PLATFORM } from '../../shared/modelConstants';
+import { IS_PLATFORM } from '../constants/config';
 
 const xtermStyles = `
   .xterm .xterm-screen {

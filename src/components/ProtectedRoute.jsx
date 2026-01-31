@@ -4,7 +4,7 @@ import SetupForm from './SetupForm';
 import LoginForm from './LoginForm';
 import Onboarding from './Onboarding';
 import { MessageSquare } from 'lucide-react';
-import { IS_PLATFORM } from '../../shared/modelConstants';
+import { IS_PLATFORM } from '../constants/config';
 
 const LoadingScreen = () => (
   <div className="min-h-screen bg-background flex items-center justify-center p-4">
