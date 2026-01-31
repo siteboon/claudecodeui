@@ -85,7 +85,7 @@ function AppContent() {
   // Triggers ChatInterface to reload messages without switching sessions
   const [externalMessageUpdate, setExternalMessageUpdate] = useState(0);
 
-  const { ws, sendMessage, messages } = useWebSocket();
+  const { ws, sendMessage, latestMessage } = useWebSocket();
 
   // Ref to track loading progress timeout for cleanup
   const loadingProgressTimeoutRef = useRef(null);
@@ -179,9 +179,7 @@ function AppContent() {
 
   // Handle WebSocket messages for real-time project updates
   useEffect(() => {
-    if (messages.length > 0) {
-      const latestMessage = messages[messages.length - 1];
-
+    if (latestMessage) {
       // Handle loading progress updates
       if (latestMessage.type === 'loading_progress') {
         if (loadingProgressTimeoutRef.current) {
@@ -281,7 +279,7 @@ function AppContent() {
         loadingProgressTimeoutRef.current = null;
       }
     };
-  }, [messages, selectedProject, selectedSession, activeSessions]);
+  }, [latestMessage, selectedProject, selectedSession, activeSessions]);
 
   const fetchProjects = async () => {
     try {
@@ -920,7 +918,7 @@ function AppContent() {
           setActiveTab={setActiveTab}
           ws={ws}
           sendMessage={sendMessage}
-          messages={messages}
+          latestMessage={latestMessage}
           isMobile={isMobile}
           isPWA={isPWA}
           onMenuClick={() => setSidebarOpen(true)}

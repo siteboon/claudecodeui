@@ -36,7 +36,7 @@ function MainContent({
   setActiveTab,
   ws,
   sendMessage,
-  messages,
+  latestMessage,
   isMobile,
   isPWA, // ! Unused
   onMenuClick,
@@ -477,7 +477,7 @@ function MainContent({
               selectedSession={selectedSession}
               ws={ws}
               sendMessage={sendMessage}
-              messages={messages}
+              latestMessage={latestMessage}
               onFileOpen={handleFileOpen}
               onInputFocusChange={onInputFocusChange}
               onSessionActive={onSessionActive}

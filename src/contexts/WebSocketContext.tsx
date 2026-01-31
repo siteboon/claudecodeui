@@ -5,7 +5,7 @@ import { IS_PLATFORM } from '../constants/config';
 type WebSocketContextType = {
   ws: WebSocket | null;
   sendMessage: (message: any) => void;
-  messages: any[];
+  latestMessage: any | null;
   isConnected: boolean;
 };
 
@@ -28,8 +28,8 @@ const buildWebSocketUrl = (token: string | null) => {
 
 const useWebSocketProviderState = (): WebSocketContextType => {
   const wsRef = useRef<WebSocket | null>(null);
-  const unmountedRef = useRef(false);
-  const [messages, setMessages] = useState<any[]>([]);
+  const unmountedRef = useRef(false); // Track if component is unmounted
+  const [latestMessage, setLatestMessage] = useState<any>(null);
   const [isConnected, setIsConnected] = useState(false);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { token } = useAuth();
@@ -66,7 +66,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       websocket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          setMessages(prev => [...prev, data]);
+          setLatestMessage(data);
         } catch (error) {
           console.error('Error parsing WebSocket message:', error);
         }
