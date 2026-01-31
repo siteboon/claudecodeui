@@ -1,4 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { useAuth } from './AuthContext';
+import { IS_PLATFORM } from '../../shared/modelConstants';
 
 type WebSocketContextType = {
   ws: WebSocket | null;
@@ -18,9 +20,8 @@ export const useWebSocket = () => {
 };
 
 const buildWebSocketUrl = (token: string | null) => {
-  const isPlatform = import.meta.env.VITE_IS_PLATFORM === 'true';
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  if (isPlatform) return `${protocol}//${window.location.host}/ws`; // Platform mode: Use same domain as the page (goes through proxy)
+  if (IS_PLATFORM) return `${protocol}//${window.location.host}/ws`; // Platform mode: Use same domain as the page (goes through proxy)
   if (!token) return null;
   return `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}`; // OSS mode: Use same host:port that served the page
 };
@@ -31,6 +32,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   const [messages, setMessages] = useState<any[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const { token } = useAuth();
 
   useEffect(() => {
     connect();
@@ -49,10 +51,8 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   const connect = () => {
     if (unmountedRef.current) return; // Prevent connection if unmounted
     try {
-      const isPlatform = import.meta.env.VITE_IS_PLATFORM === 'true';
-
       // Construct WebSocket URL
-      const wsUrl = buildWebSocketUrl(isPlatform ? null : localStorage.getItem('authToken'));
+      const wsUrl = buildWebSocketUrl(token);
 
       if (!wsUrl) return console.warn('No authentication token found for WebSocket connection');
       
