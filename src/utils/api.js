@@ -1,4 +1,4 @@
-import { IS_PLATFORM } from "../../shared/modelConstants";
+import { IS_PLATFORM } from "../constants/config";
 
 // Utility function for authenticated API calls
 export const authenticatedFetch = (url, options = {}) => {
