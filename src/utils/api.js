@@ -105,6 +105,16 @@ export const api = {
       method: 'DELETE',
       body: JSON.stringify({ filePath }),
     }),
+  batchDeleteFiles: (projectName, filePaths) =>
+    authenticatedFetch(`/api/projects/${projectName}/batch-delete`, {
+      method: 'POST',
+      body: JSON.stringify({ filePaths }),
+    }),
+  batchDownloadFiles: (projectName, filePaths) =>
+    authenticatedFetch(`/api/projects/${projectName}/batch-download`, {
+      method: 'POST',
+      body: JSON.stringify({ filePaths }),
+    }),
   downloadFile: (projectName, filePath) =>
     authenticatedFetch(`/api/projects/${projectName}/files/content?path=${encodeURIComponent(filePath)}`),
   getFiles: (projectName) =>

@@ -474,10 +474,12 @@ function FileTree({ selectedProject }) {
     return items.map((item) => (
       <div key={item.path} className="select-none">
         <div
-          className="group flex items-center p-2 hover:bg-accent cursor-pointer"
+          className={`group flex items-center p-2 hover:bg-accent cursor-pointer ${selectedFiles.has(item.path) ? 'bg-accent/50' : ''}`}
           style={{ paddingLeft: `${level * 16 + 12}px` }}
           onClick={() => {
-            if (item.type === 'directory') {
+            if (selectionMode) {
+              toggleFileSelection(item.path);
+            } else if (item.type === 'directory') {
               toggleDirectory(item.path);
             } else if (isImageFile(item.name)) {
               setSelectedImage({
@@ -497,8 +499,16 @@ function FileTree({ selectedProject }) {
           }}
           onContextMenu={(e) => handleContextMenu(e, item)}
         >
-          <div className="grid grid-cols-12 gap-2 items-center flex-1 min-w-0">
-            <div className="col-span-5 flex items-center gap-2 min-w-0">
+          {selectionMode && (
+            <Checkbox
+              checked={selectedFiles.has(item.path)}
+              onCheckedChange={() => toggleFileSelection(item.path)}
+              onClick={(e) => e.stopPropagation()}
+              className="mr-2 flex-shrink-0"
+            />
+          )}
+          <div className={`grid ${selectionMode ? 'grid-cols-11' : 'grid-cols-12'} gap-2 items-center flex-1 min-w-0`}>
+            <div className={`${selectionMode ? 'col-span-4' : 'col-span-5'} flex items-center gap-2 min-w-0`}>
               {item.type === 'directory' ? (
                 expandedDirs.has(item.path) ? (
                   <FolderOpen className="w-4 h-4 text-blue-500 flex-shrink-0" />
@@ -522,7 +532,7 @@ function FileTree({ selectedProject }) {
               {item.permissionsRwx || '-'}
             </div>
           </div>
-          {renderDeleteButton(item)}
+          {!selectionMode && renderDeleteButton(item)}
         </div>
 
         {item.type === 'directory' &&
@@ -538,10 +548,12 @@ function FileTree({ selectedProject }) {
     return items.map((item) => (
       <div key={item.path} className="select-none">
         <div
-          className="group flex items-center justify-between p-2 hover:bg-accent cursor-pointer"
+          className={`group flex items-center justify-between p-2 hover:bg-accent cursor-pointer ${selectedFiles.has(item.path) ? 'bg-accent/50' : ''}`}
           style={{ paddingLeft: `${level * 16 + 12}px` }}
           onClick={() => {
-            if (item.type === 'directory') {
+            if (selectionMode) {
+              toggleFileSelection(item.path);
+            } else if (item.type === 'directory') {
               toggleDirectory(item.path);
             } else if (isImageFile(item.name)) {
               setSelectedImage({
@@ -562,6 +574,14 @@ function FileTree({ selectedProject }) {
           onContextMenu={(e) => handleContextMenu(e, item)}
         >
           <div className="flex items-center gap-2 min-w-0">
+            {selectionMode && (
+              <Checkbox
+                checked={selectedFiles.has(item.path)}
+                onCheckedChange={() => toggleFileSelection(item.path)}
+                onClick={(e) => e.stopPropagation()}
+                className="mr-2 flex-shrink-0"
+              />
+            )}
             {item.type === 'directory' ? (
               expandedDirs.has(item.path) ? (
                 <FolderOpen className="w-4 h-4 text-blue-500 flex-shrink-0" />
@@ -582,7 +602,7 @@ function FileTree({ selectedProject }) {
                 <span className="font-mono">{item.permissionsRwx}</span>
               </>
             )}
-            {renderDeleteButton(item)}
+            {!selectionMode && renderDeleteButton(item)}
           </div>
         </div>
 
@@ -611,6 +631,16 @@ function FileTree({ selectedProject }) {
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-medium text-foreground">{t('fileTree.files')}</h3>
           <div className="flex gap-1">
+            <Button
+              variant={selectionMode ? 'default' : 'ghost'}
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={toggleSelectionMode}
+              title={t('fileTree.selectionMode')}
+            >
+              <CheckSquare className="w-4 h-4" />
+            </Button>
+            <div className="w-px bg-border mx-1" />
             <Button
               variant={viewMode === 'simple' ? 'default' : 'ghost'}
               size="sm"
@@ -664,6 +694,86 @@ function FileTree({ selectedProject }) {
           )}
         </div>
       </div>
+
+      {/* Selection Mode Toolbar */}
+      {selectionMode && (
+        <div className="px-4 py-2 border-b border-border flex items-center justify-between bg-accent/30">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">
+              {t('fileTree.selectedCount', { count: selectedFiles.size })}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-xs"
+              onClick={selectAll}
+            >
+              {t('common.selectAll')}
+            </Button>
+            {selectedFiles.size > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-xs"
+                onClick={deselectAll}
+              >
+                {t('common.deselectAll')}
+              </Button>
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={handleBatchDownload}
+              disabled={selectedFiles.size === 0 || batchDownloading}
+              title={t('fileTree.batchDownload')}
+            >
+              {batchDownloading ? (
+                <Loader2 className="w-3 h-3 animate-spin mr-1" />
+              ) : (
+                <Download className="w-3 h-3 mr-1" />
+              )}
+              {t('buttons.download')}
+            </Button>
+            {batchDeleteConfirm ? (
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-destructive">{t('fileTree.confirmBatchDelete', { count: selectedFiles.size })}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={handleBatchDelete}
+                  disabled={batchDeleting}
+                >
+                  {batchDeleting ? <Loader2 className="w-3 h-3 animate-spin" /> : t('buttons.confirm')}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => setBatchDeleteConfirm(false)}
+                >
+                  {t('buttons.cancel')}
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                onClick={() => setBatchDeleteConfirm(true)}
+                disabled={selectedFiles.size === 0}
+                title={t('fileTree.batchDelete')}
+              >
+                <Trash2 className="w-3 h-3 mr-1" />
+                {t('buttons.delete')}
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Upload feedback */}
       {uploading && (

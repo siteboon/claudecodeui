@@ -101,6 +101,7 @@
     "simpleView": "简单视图",
     "compactView": "紧凑视图",
     "detailedView": "详细视图",
+    "selectionMode": "选择模式",
     "searchPlaceholder": "搜索文件和文件夹...",
     "clearSearch": "清除搜索",
     "name": "名称",
@@ -122,7 +123,13 @@
     "delete": "删除",
     "confirmDelete": "确认删除？",
     "deleting": "正在删除...",
-    "deleteFailed": "删除失败: {{error}}"
+    "deleteFailed": "删除失败: {{error}}",
+    "selectedCount": "已选择 {{count}} 项",
+    "batchDelete": "批量删除",
+    "batchDownload": "批量下载",
+    "confirmBatchDelete": "删除 {{count}} 项？",
+    "batchDeleteFailed": "批量删除失败: {{error}}",
+    "batchDownloadFailed": "批量下载失败: {{error}}"
   },
   "projectWizard": {
     "title": "创建新项目",

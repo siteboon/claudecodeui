@@ -56,6 +56,7 @@ import { spawn } from 'child_process';
 import pty from 'node-pty';
 import fetch from 'node-fetch';
 import mime from 'mime-types';
+import archiver from 'archiver';
 
 import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
 import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions, resolveToolApproval } from './claude-sdk.js';
@@ -743,6 +744,148 @@ app.delete('/api/projects/:projectName/file', authenticateToken, async (req, res
         } else if (error.code === 'EACCES') {
             res.status(403).json({ error: 'Permission denied' });
         } else {
+            res.status(500).json({ error: error.message });
+        }
+    }
+});
+
+// Batch delete files endpoint
+app.post('/api/projects/:projectName/batch-delete', authenticateToken, async (req, res) => {
+    try {
+        const { projectName } = req.params;
+        const { filePaths } = req.body;
+
+        console.log('[DEBUG] Batch delete request:', projectName, filePaths?.length);
+
+        if (!filePaths || !Array.isArray(filePaths) || filePaths.length === 0) {
+            return res.status(400).json({ error: 'Invalid file paths' });
+        }
+
+        const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+        if (!projectRoot) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+
+        const normalizedRoot = path.resolve(projectRoot) + path.sep;
+        const results = [];
+        const errors = [];
+
+        // Sort paths by length descending to delete children before parents
+        const sortedPaths = [...filePaths].sort((a, b) => b.length - a.length);
+
+        for (const filePath of sortedPaths) {
+            try {
+                const resolved = path.isAbsolute(filePath)
+                    ? path.resolve(filePath)
+                    : path.resolve(projectRoot, filePath);
+
+                if (!resolved.startsWith(normalizedRoot)) {
+                    errors.push({ path: filePath, error: 'Path must be under project root' });
+                    continue;
+                }
+
+                const stats = await fsPromises.stat(resolved);
+
+                if (stats.isDirectory()) {
+                    await fsPromises.rm(resolved, { recursive: true });
+                } else {
+                    await fsPromises.unlink(resolved);
+                }
+
+                results.push({ path: filePath, success: true });
+            } catch (error) {
+                if (error.code === 'ENOENT') {
+                    // Already deleted (might have been inside a deleted directory)
+                    results.push({ path: filePath, success: true, note: 'Already deleted' });
+                } else {
+                    errors.push({ path: filePath, error: error.message });
+                }
+            }
+        }
+
+        res.json({
+            success: errors.length === 0,
+            deleted: results.length,
+            errors: errors.length > 0 ? errors : undefined,
+            message: `Deleted ${results.length} items${errors.length > 0 ? `, ${errors.length} errors` : ''}`
+        });
+    } catch (error) {
+        console.error('Error in batch delete:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Batch download files as zip endpoint
+app.post('/api/projects/:projectName/batch-download', authenticateToken, async (req, res) => {
+    try {
+        const { projectName } = req.params;
+        const { filePaths } = req.body;
+
+        console.log('[DEBUG] Batch download request:', projectName, filePaths?.length);
+
+        if (!filePaths || !Array.isArray(filePaths) || filePaths.length === 0) {
+            return res.status(400).json({ error: 'Invalid file paths' });
+        }
+
+        const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+        if (!projectRoot) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+
+        const normalizedRoot = path.resolve(projectRoot) + path.sep;
+
+        // Set response headers for zip download
+        res.setHeader('Content-Type', 'application/zip');
+        res.setHeader('Content-Disposition', `attachment; filename="${projectName}-files.zip"`);
+
+        // Create archive
+        const archive = archiver('zip', {
+            zlib: { level: 5 } // Compression level
+        });
+
+        // Pipe archive data to response
+        archive.pipe(res);
+
+        // Handle archive errors
+        archive.on('error', (err) => {
+            console.error('Archive error:', err);
+            if (!res.headersSent) {
+                res.status(500).json({ error: err.message });
+            }
+        });
+
+        // Add files to archive
+        for (const filePath of filePaths) {
+            try {
+                const resolved = path.isAbsolute(filePath)
+                    ? path.resolve(filePath)
+                    : path.resolve(projectRoot, filePath);
+
+                if (!resolved.startsWith(normalizedRoot)) {
+                    console.warn(`Skipping ${filePath}: outside project root`);
+                    continue;
+                }
+
+                const stats = await fsPromises.stat(resolved);
+                const relativePath = path.relative(projectRoot, resolved);
+
+                if (stats.isDirectory()) {
+                    // Add directory recursively
+                    archive.directory(resolved, relativePath);
+                } else {
+                    // Add file
+                    archive.file(resolved, { name: relativePath });
+                }
+            } catch (error) {
+                console.warn(`Error adding ${filePath} to archive:`, error.message);
+            }
+        }
+
+        // Finalize the archive
+        await archive.finalize();
+    } catch (error) {
+        console.error('Error in batch download:', error);
+        if (!res.headersSent) {
             res.status(500).json({ error: error.message });
         }
     }

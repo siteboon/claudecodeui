@@ -101,6 +101,7 @@
     "simpleView": "Simple view",
     "compactView": "Compact view",
     "detailedView": "Detailed view",
+    "selectionMode": "Selection mode",
     "searchPlaceholder": "Search files and folders...",
     "clearSearch": "Clear search",
     "name": "Name",
@@ -122,7 +123,13 @@
     "delete": "Delete",
     "confirmDelete": "Delete?",
     "deleting": "Deleting...",
-    "deleteFailed": "Delete failed: {{error}}"
+    "deleteFailed": "Delete failed: {{error}}",
+    "selectedCount": "{{count}} selected",
+    "batchDelete": "Delete selected",
+    "batchDownload": "Download selected",
+    "confirmBatchDelete": "Delete {{count}} items?",
+    "batchDeleteFailed": "Batch delete failed: {{error}}",
+    "batchDownloadFailed": "Batch download failed: {{error}}"
   },
   "projectWizard": {
     "title": "Create New Project",
