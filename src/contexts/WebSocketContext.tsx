@@ -46,7 +46,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
         wsRef.current.close();
       }
     };
-  }, []); // Keep dependency array but add proper cleanup
+  }, [token]); // everytime token changes, we reconnect
 
   const connect = useCallback(() => {
     if (unmountedRef.current) return; // Prevent connection if unmounted
