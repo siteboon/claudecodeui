@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { ScrollArea } from './ui/scroll-area';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { Folder, FolderOpen, File, FileText, FileCode, List, TableProperties, Eye, Search, X, Upload, Loader2, Trash2 } from 'lucide-react';
+import { Checkbox } from './ui/checkbox';
+import { Folder, FolderOpen, File, FileText, FileCode, List, TableProperties, Eye, Search, X, Upload, Loader2, Trash2, Download, CheckSquare } from 'lucide-react';
 
 import CodeEditor from './CodeEditor';
 import ImageViewer from './ImageViewer';
@@ -24,6 +25,11 @@ function FileTree({ selectedProject }) {
   const [uploadError, setUploadError] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState(new Set());
+  const [batchDeleting, setBatchDeleting] = useState(false);
+  const [batchDownloading, setBatchDownloading] = useState(false);
+  const [batchDeleteConfirm, setBatchDeleteConfirm] = useState(false);
   const fileInputRef = useRef(null);
   const uploadTargetDir = useRef('');
 
@@ -240,6 +246,104 @@ function FileTree({ selectedProject }) {
     }
   }, [deleteConfirm, selectedProject, t]);
 
+  // Toggle selection mode
+  const toggleSelectionMode = useCallback(() => {
+    setSelectionMode(prev => {
+      if (prev) {
+        setSelectedFiles(new Set());
+      }
+      return !prev;
+    });
+  }, []);
+
+  // Toggle file selection
+  const toggleFileSelection = useCallback((path, e) => {
+    e?.stopPropagation();
+    setSelectedFiles(prev => {
+      const next = new Set(prev);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  }, []);
+
+  // Get all file paths from the tree (flattened)
+  const getAllFilePaths = useCallback((items) => {
+    const paths = [];
+    const traverse = (list) => {
+      for (const item of list) {
+        paths.push(item.path);
+        if (item.type === 'directory' && item.children) {
+          traverse(item.children);
+        }
+      }
+    };
+    traverse(items);
+    return paths;
+  }, []);
+
+  // Select all visible files
+  const selectAll = useCallback(() => {
+    const allPaths = getAllFilePaths(filteredFiles);
+    setSelectedFiles(new Set(allPaths));
+  }, [filteredFiles, getAllFilePaths]);
+
+  // Deselect all files
+  const deselectAll = useCallback(() => {
+    setSelectedFiles(new Set());
+  }, []);
+
+  // Handle batch delete
+  const handleBatchDelete = useCallback(async () => {
+    if (selectedFiles.size === 0) return;
+    setBatchDeleting(true);
+    try {
+      const response = await api.batchDeleteFiles(selectedProject.name, Array.from(selectedFiles));
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Batch delete failed');
+      }
+      await fetchFiles();
+      setSelectedFiles(new Set());
+      setBatchDeleteConfirm(false);
+    } catch (error) {
+      setUploadError(t('fileTree.batchDeleteFailed', { error: error.message }));
+    } finally {
+      setBatchDeleting(false);
+    }
+  }, [selectedFiles, selectedProject, t]);
+
+  // Handle batch download
+  const handleBatchDownload = useCallback(async () => {
+    if (selectedFiles.size === 0) return;
+    setBatchDownloading(true);
+    try {
+      const response = await api.batchDownloadFiles(selectedProject.name, Array.from(selectedFiles));
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Batch download failed');
+      }
+
+      // Download the zip file
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${selectedProject.name}-files.zip`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      setUploadError(t('fileTree.batchDownloadFailed', { error: error.message }));
+    } finally {
+      setBatchDownloading(false);
+    }
+  }, [selectedFiles, selectedProject, t]);
+
   const renderDeleteButton = (item) => (
     deleteConfirm === item.path ? (
       <div className="flex items-center gap-1 ml-auto flex-shrink-0" onClick={(e) => e.stopPropagation()}>
@@ -279,10 +383,12 @@ function FileTree({ selectedProject }) {
     return items.map((item) => (
       <div key={item.path} className="select-none">
         <div
-          className="group flex items-center hover:bg-accent cursor-pointer"
+          className={`group flex items-center hover:bg-accent cursor-pointer ${selectedFiles.has(item.path) ? 'bg-accent/50' : ''}`}
           style={{ paddingLeft: `${level * 16 + 12}px`, paddingRight: '8px' }}
           onClick={() => {
-            if (item.type === 'directory') {
+            if (selectionMode) {
+              toggleFileSelection(item.path);
+            } else if (item.type === 'directory') {
               toggleDirectory(item.path);
             } else if (isImageFile(item.name)) {
               setSelectedImage({
@@ -302,6 +408,14 @@ function FileTree({ selectedProject }) {
           }}
           onContextMenu={(e) => handleContextMenu(e, item)}
         >
+          {selectionMode && (
+            <Checkbox
+              checked={selectedFiles.has(item.path)}
+              onCheckedChange={() => toggleFileSelection(item.path)}
+              onClick={(e) => e.stopPropagation()}
+              className="mr-2 flex-shrink-0"
+            />
+          )}
           <div className="flex items-center gap-2 min-w-0 flex-1 p-2">
             {item.type === 'directory' ? (
               expandedDirs.has(item.path) ? (
@@ -316,7 +430,7 @@ function FileTree({ selectedProject }) {
               {item.name}
             </span>
           </div>
-          {renderDeleteButton(item)}
+          {!selectionMode && renderDeleteButton(item)}
         </div>
 
         {item.type === 'directory' &&
