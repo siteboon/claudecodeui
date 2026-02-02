@@ -2,6 +2,22 @@
 import { useState, useEffect } from 'react';
 import { version } from '../../package.json';
 
+/**
+ * Compare two semantic version strings
+ * @returns positive if v1 > v2, negative if v1 < v2, 0 if equal
+ */
+const compareVersions = (v1, v2) => {
+  const parts1 = v1.split('.').map(Number);
+  const parts2 = v2.split('.').map(Number);
+
+  for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+    const p1 = parts1[i] || 0;
+    const p2 = parts2[i] || 0;
+    if (p1 !== p2) return p1 - p2;
+  }
+  return 0;
+};
+
 export const useVersionCheck = (owner, repo) => {
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [latestVersion, setLatestVersion] = useState(null);
@@ -17,7 +33,8 @@ export const useVersionCheck = (owner, repo) => {
         if (data.tag_name) {
           const latest = data.tag_name.replace(/^v/, '');
           setLatestVersion(latest);
-          setUpdateAvailable(version !== latest);
+          // Only show update if latest version is actually newer
+          setUpdateAvailable(compareVersions(latest, version) > 0);
 
           // Store release information
           setReleaseInfo({
