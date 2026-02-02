@@ -380,11 +380,11 @@ async function handleImages(command, images, cwd) {
       tempImagePaths.push(filepath);
     }
 
-    // Include the full image paths in the prompt
+    // Include the full file paths in the prompt
     let modifiedCommand = command;
     if (tempImagePaths.length > 0 && command && command.trim()) {
-      const imageNote = `\n\n[Images provided at the following paths:]\n${tempImagePaths.map((p, i) => `${i + 1}. ${p}`).join('\n')}`;
-      modifiedCommand = command + imageNote;
+      const fileNote = `\n\n[Files provided at the following paths:]\n${tempImagePaths.map((p, i) => `${i + 1}. ${p}`).join('\n')}`;
+      modifiedCommand = command + fileNote;
     }
 
     console.log(`Processed ${tempImagePaths.length} images to temp directory: ${tempDir}`);

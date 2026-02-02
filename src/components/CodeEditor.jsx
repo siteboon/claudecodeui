@@ -363,16 +363,26 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
     }
   };
 
-  const handleDownload = () => {
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = file.name;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  const handleDownload = async () => {
+    try {
+      // Fetch the file as binary from the server to preserve file integrity
+      const response = await api.downloadFile(file.projectName, file.path);
+      if (!response.ok) {
+        throw new Error(`Download failed: ${response.status}`);
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = file.name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading file:', error);
+      alert(`Error downloading file: ${error.message}`);
+    }
   };
 
   const toggleFullscreen = () => {

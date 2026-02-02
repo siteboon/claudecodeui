@@ -105,6 +105,8 @@ export const api = {
       method: 'DELETE',
       body: JSON.stringify({ filePath }),
     }),
+  downloadFile: (projectName, filePath) =>
+    authenticatedFetch(`/api/projects/${projectName}/files/content?path=${encodeURIComponent(filePath)}`),
   getFiles: (projectName) =>
     authenticatedFetch(`/api/projects/${projectName}/files`),
   uploadFiles: (projectName, files, targetDir = '') => {
