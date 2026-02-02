@@ -129,7 +129,10 @@
     "batchDownload": "批量下载",
     "confirmBatchDelete": "删除 {{count}} 项？",
     "batchDeleteFailed": "批量删除失败: {{error}}",
-    "batchDownloadFailed": "批量下载失败: {{error}}"
+    "batchDownloadFailed": "批量下载失败: {{error}}",
+    "sortBy": "排序",
+    "ascending": "升序",
+    "descending": "降序"
   },
   "projectWizard": {
     "title": "创建新项目",

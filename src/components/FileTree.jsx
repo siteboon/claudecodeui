@@ -4,7 +4,7 @@ import { ScrollArea } from './ui/scroll-area';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Checkbox } from './ui/checkbox';
-import { Folder, FolderOpen, File, FileText, FileCode, List, TableProperties, Eye, Search, X, Upload, Loader2, Trash2, Download, CheckSquare } from 'lucide-react';
+import { Folder, FolderOpen, File, FileText, FileCode, List, TableProperties, Eye, Search, X, Upload, Loader2, Trash2, Download, CheckSquare, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 
 import CodeEditor from './CodeEditor';
 import ImageViewer from './ImageViewer';
@@ -30,6 +30,8 @@ function FileTree({ selectedProject }) {
   const [batchDeleting, setBatchDeleting] = useState(false);
   const [batchDownloading, setBatchDownloading] = useState(false);
   const [batchDeleteConfirm, setBatchDeleteConfirm] = useState(false);
+  const [sortBy, setSortBy] = useState('name'); // 'name' or 'modified'
+  const [sortOrder, setSortOrder] = useState('asc'); // 'asc' or 'desc'
   const fileInputRef = useRef(null);
   const uploadTargetDir = useRef('');
 
@@ -47,13 +49,25 @@ function FileTree({ selectedProject }) {
     }
   }, []);
 
-  // Filter files based on search query
+  // Load sorting preferences from localStorage
   useEffect(() => {
+    const savedSortBy = localStorage.getItem('file-tree-sort-by');
+    const savedSortOrder = localStorage.getItem('file-tree-sort-order');
+    if (savedSortBy && ['name', 'modified'].includes(savedSortBy)) {
+      setSortBy(savedSortBy);
+    }
+    if (savedSortOrder && ['asc', 'desc'].includes(savedSortOrder)) {
+      setSortOrder(savedSortOrder);
+    }
+  }, []);
+
+  // Filter and sort files based on search query
+  useEffect(() => {
+    let result;
     if (!searchQuery.trim()) {
-      setFilteredFiles(files);
+      result = files;
     } else {
-      const filtered = filterFiles(files, searchQuery.toLowerCase());
-      setFilteredFiles(filtered);
+      result = filterFiles(files, searchQuery.toLowerCase());
 
       // Auto-expand directories that contain matches
       const expandMatches = (items) => {
@@ -64,9 +78,12 @@ function FileTree({ selectedProject }) {
           }
         });
       };
-      expandMatches(filtered);
+      expandMatches(result);
     }
-  }, [files, searchQuery]);
+    // Apply sorting
+    const sorted = sortFiles(result, sortBy, sortOrder);
+    setFilteredFiles(sorted);
+  }, [files, searchQuery, sortBy, sortOrder, sortFiles]);
 
   // Recursively filter files and directories based on search query
   const filterFiles = (items, query) => {
@@ -91,6 +108,49 @@ function FileTree({ selectedProject }) {
       return filtered;
     }, []);
   };
+
+  // Recursively sort files - directories first, then by selected criteria
+  const sortFiles = useCallback((items, sortField, order) => {
+    const sorted = [...items].sort((a, b) => {
+      // Directories always come first
+      if (a.type === 'directory' && b.type !== 'directory') return -1;
+      if (a.type !== 'directory' && b.type === 'directory') return 1;
+
+      let comparison = 0;
+      if (sortField === 'name') {
+        comparison = a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+      } else if (sortField === 'modified') {
+        const aTime = a.modified ? new Date(a.modified).getTime() : 0;
+        const bTime = b.modified ? new Date(b.modified).getTime() : 0;
+        comparison = aTime - bTime;
+      }
+
+      return order === 'asc' ? comparison : -comparison;
+    });
+
+    // Recursively sort children
+    return sorted.map(item => {
+      if (item.type === 'directory' && item.children && item.children.length > 0) {
+        return {
+          ...item,
+          children: sortFiles(item.children, sortField, order)
+        };
+      }
+      return item;
+    });
+  }, []);
+
+  // Change sort settings and save preference
+  const changeSortBy = useCallback((newSortBy) => {
+    setSortBy(newSortBy);
+    localStorage.setItem('file-tree-sort-by', newSortBy);
+  }, []);
+
+  const toggleSortOrder = useCallback(() => {
+    const newOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+    setSortOrder(newOrder);
+    localStorage.setItem('file-tree-sort-order', newOrder);
+  }, [sortOrder]);
 
   const fetchFiles = async () => {
     setLoading(true);
@@ -692,6 +752,42 @@ function FileTree({ selectedProject }) {
               <X className="w-3 h-3" />
             </Button>
           )}
+        </div>
+
+        {/* Sort Controls */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">{t('fileTree.sortBy')}:</span>
+          <div className="flex gap-1">
+            <Button
+              variant={sortBy === 'name' ? 'default' : 'ghost'}
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => changeSortBy('name')}
+            >
+              {t('fileTree.name')}
+            </Button>
+            <Button
+              variant={sortBy === 'modified' ? 'default' : 'ghost'}
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => changeSortBy('modified')}
+            >
+              {t('fileTree.modified')}
+            </Button>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0"
+            onClick={toggleSortOrder}
+            title={sortOrder === 'asc' ? t('fileTree.ascending') : t('fileTree.descending')}
+          >
+            {sortOrder === 'asc' ? (
+              <ArrowUp className="w-3 h-3" />
+            ) : (
+              <ArrowDown className="w-3 h-3" />
+            )}
+          </Button>
         </div>
       </div>
 

@@ -129,7 +129,10 @@
     "batchDownload": "Download selected",
     "confirmBatchDelete": "Delete {{count}} items?",
     "batchDeleteFailed": "Batch delete failed: {{error}}",
-    "batchDownloadFailed": "Batch download failed: {{error}}"
+    "batchDownloadFailed": "Batch download failed: {{error}}",
+    "sortBy": "Sort by",
+    "ascending": "Ascending",
+    "descending": "Descending"
   },
   "projectWizard": {
     "title": "Create New Project",
