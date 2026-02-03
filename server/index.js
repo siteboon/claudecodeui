@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Load environment variables from .env file
+// Load environment variables before other imports execute
+import './load-env.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -27,22 +28,6 @@ const c = {
     bright: (text) => `${colors.bright}${text}${colors.reset}`,
     dim: (text) => `${colors.dim}${text}${colors.reset}`,
 };
-
-try {
-    const envPath = path.join(__dirname, '../.env');
-    const envFile = fs.readFileSync(envPath, 'utf8');
-    envFile.split('\n').forEach(line => {
-        const trimmedLine = line.trim();
-        if (trimmedLine && !trimmedLine.startsWith('#')) {
-            const [key, ...valueParts] = trimmedLine.split('=');
-            if (key && valueParts.length > 0 && !process.env[key]) {
-                process.env[key] = valueParts.join('=').trim();
-            }
-        }
-    });
-} catch (e) {
-    console.log('No .env file found or error reading it:', e.message);
-}
 
 console.log('PORT from env:', process.env.PORT);
 
@@ -76,6 +61,7 @@ import userRoutes from './routes/user.js';
 import codexRoutes from './routes/codex.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
+import { IS_PLATFORM } from './constants/config.js';
 
 // File system watcher for projects folder
 let projectsWatcher = null;
@@ -200,7 +186,7 @@ const wss = new WebSocketServer({
         console.log('WebSocket connection attempt to:', info.req.url);
 
         // Platform mode: always allow connection
-        if (process.env.VITE_IS_PLATFORM === 'true') {
+        if (IS_PLATFORM) {
             const user = authenticateWebSocket(null); // Will return first user
             if (!user) {
                 console.log('[WARN] Platform mode: No user found in database');

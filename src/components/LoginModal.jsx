@@ -1,5 +1,6 @@
 import { X } from 'lucide-react';
 import StandaloneShell from './StandaloneShell';
+import { IS_PLATFORM } from '../constants/config';
 
 /**
  * Reusable login modal component for Claude, Cursor, and Codex CLI authentication
@@ -27,15 +28,13 @@ function LoginModal({
   const getCommand = () => {
     if (customCommand) return customCommand;
 
-    const isPlatform = import.meta.env.VITE_IS_PLATFORM === 'true';
-
     switch (provider) {
       case 'claude':
         return isAuthenticated ? 'claude setup-token --dangerously-skip-permissions' : 'claude /exit --dangerously-skip-permissions';
       case 'cursor':
         return 'cursor-agent login';
       case 'codex':
-        return isPlatform ? 'codex login --device-auth' : 'codex login';
+        return IS_PLATFORM ? 'codex login --device-auth' : 'codex login';
       default:
         return isAuthenticated ? 'claude setup-token --dangerously-skip-permissions' : 'claude /exit --dangerously-skip-permissions';
     }

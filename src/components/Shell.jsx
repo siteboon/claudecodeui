@@ -5,6 +5,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
 import { useTranslation } from 'react-i18next';
+import { IS_PLATFORM } from '../constants/config';
 
 const xtermStyles = `
   .xterm .xterm-screen {
@@ -55,10 +56,9 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     if (isConnecting || isConnected) return;
 
     try {
-      const isPlatform = import.meta.env.VITE_IS_PLATFORM === 'true';
       let wsUrl;
 
-      if (isPlatform) {
+      if (IS_PLATFORM) {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         wsUrl = `${protocol}//${window.location.host}/shell`;
       } else {

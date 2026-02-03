@@ -16,6 +16,7 @@ import ProjectCreationWizard from './ProjectCreationWizard';
 import { api } from '../utils/api';
 import { useTaskMaster } from '../contexts/TaskMasterContext';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
+import { IS_PLATFORM } from '../constants/config';
 
 // Move formatTimeAgo outside component to avoid recreation on every render
 const formatTimeAgo = (dateString, currentTime, t) => {
@@ -622,7 +623,7 @@ function Sidebar({
       <div className="md:p-4 md:border-b md:border-border">
         {/* Desktop Header */}
         <div className="hidden md:flex items-center justify-between">
-          {import.meta.env.VITE_IS_PLATFORM === 'true' ? (
+          {IS_PLATFORM ? (
             <a
               href="https://cloudcli.ai/dashboard"
               className="flex items-center gap-3 hover:opacity-80 transition-opacity group"
@@ -673,7 +674,7 @@ function Sidebar({
           style={isPWA && isMobile ? { paddingTop: '16px' } : {}}
         >
           <div className="flex items-center justify-between">
-            {import.meta.env.VITE_IS_PLATFORM === 'true' ? (
+            {IS_PLATFORM ? (
               <a
                 href="https://cloudcli.ai/dashboard"
                 className="flex items-center gap-3 active:opacity-70 transition-opacity"

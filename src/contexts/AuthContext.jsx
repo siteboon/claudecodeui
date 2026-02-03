@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { api } from '../utils/api';
+import { IS_PLATFORM } from '../constants/config';
 
 const AuthContext = createContext({
   user: null,
@@ -31,7 +32,7 @@ export const AuthProvider = ({ children }) => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (import.meta.env.VITE_IS_PLATFORM === 'true') {
+    if (IS_PLATFORM) {
       setUser({ username: 'platform-user' });
       setNeedsSetup(false);
       checkOnboardingStatus();
