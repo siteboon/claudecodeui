@@ -1,0 +1,45 @@
+services:
+  claudecodeui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    ports:
+      - "4001:4001"
+      - "5173:5173"
+    env_file:
+      - .env.docker
+    environment: 
+      - NODE_ENV=development
+      - PORT=4001
+      - VITE_PORT=5173
+
+    volumes:
+      # Mount Claude configuration directory
+      - ${HOME}/apps/claudecodeui/.claude:/home/nodejs/.claude:rw
+      # Mount projects directory (adjust path as needed)
+      - ${HOME}/apps/claudecodeui/Projects:/app/Projects:rw
+      # Mount workspace directory for development
+      # - ${PWD}:/workspace:ro
+      # Mount uploads directory for persistence
+      - ./data/uploads:/app/uploads:rw
+      # Mount database directory
+      - ./data/db:/app/data:rw
+    networks:
+      - claudecodeui-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4001/api/config"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  claudecodeui-network:
+    driver: bridge
+
+volumes:
+  # Named volumes for data persistence
+  claudecodeui-uploads:
+  claudecodeui-db:
