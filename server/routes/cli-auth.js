@@ -14,7 +14,8 @@ router.get('/claude/status', async (req, res) => {
       return res.json({
         authenticated: true,
         email: credentialsResult.email || 'Authenticated',
-        method: 'credentials_file'
+        method: credentialsResult.isBedrock ? 'bedrock' : 'credentials_file',
+        isBedrock: credentialsResult.isBedrock || false
       });
     }
 
@@ -75,6 +76,16 @@ router.get('/codex/status', async (req, res) => {
 });
 
 async function checkClaudeCredentials() {
+  // Check if using AWS Bedrock - no OAuth needed
+  if (process.env.CLAUDE_CODE_USE_BEDROCK === '1' ||
+      process.env.CLAUDE_CODE_USE_BEDROCK === 'true') {
+    return {
+      authenticated: true,
+      email: 'AWS Bedrock',
+      isBedrock: true
+    };
+  }
+
   try {
     const credPath = path.join(os.homedir(), '.claude', '.credentials.json');
     const content = await fs.readFile(credPath, 'utf8');
