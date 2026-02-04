@@ -13,6 +13,7 @@ import GitSettings from './GitSettings';
 import TasksSettings from './TasksSettings';
 import LoginModal from './LoginModal';
 import { authenticatedFetch } from '../utils/api';
+import { isProviderEnabled, getDefaultProvider } from '../utils/providers';
 
 // New settings components
 import AgentListItem from './settings/AgentListItem';
@@ -58,7 +59,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
   const [mcpToolsLoading, setMcpToolsLoading] = useState({});
   const [activeTab, setActiveTab] = useState(initialTab);
   const [jsonValidationError, setJsonValidationError] = useState('');
-  const [selectedAgent, setSelectedAgent] = useState('claude'); // 'claude', 'cursor', or 'codex'
+  const [selectedAgent, setSelectedAgent] = useState(() => getDefaultProvider()); // Only enabled providers
   const [selectedCategory, setSelectedCategory] = useState('account'); // 'account', 'permissions', or 'mcp'
 
   // Code Editor settings
@@ -1260,51 +1261,63 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
                 {/* Mobile: Horizontal Agent Tabs */}
                 <div className="md:hidden border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
                   <div className="flex">
-                    <AgentListItem
-                      agentId="claude"
-                      authStatus={claudeAuthStatus}
-                      isSelected={selectedAgent === 'claude'}
-                      onClick={() => setSelectedAgent('claude')}
-                      isMobile={true}
-                    />
-                    <AgentListItem
-                      agentId="cursor"
-                      authStatus={cursorAuthStatus}
-                      isSelected={selectedAgent === 'cursor'}
-                      onClick={() => setSelectedAgent('cursor')}
-                      isMobile={true}
-                    />
-                    <AgentListItem
-                      agentId="codex"
-                      authStatus={codexAuthStatus}
-                      isSelected={selectedAgent === 'codex'}
-                      onClick={() => setSelectedAgent('codex')}
-                      isMobile={true}
-                    />
+                    {isProviderEnabled('claude') && (
+                      <AgentListItem
+                        agentId="claude"
+                        authStatus={claudeAuthStatus}
+                        isSelected={selectedAgent === 'claude'}
+                        onClick={() => setSelectedAgent('claude')}
+                        isMobile={true}
+                      />
+                    )}
+                    {isProviderEnabled('cursor') && (
+                      <AgentListItem
+                        agentId="cursor"
+                        authStatus={cursorAuthStatus}
+                        isSelected={selectedAgent === 'cursor'}
+                        onClick={() => setSelectedAgent('cursor')}
+                        isMobile={true}
+                      />
+                    )}
+                    {isProviderEnabled('codex') && (
+                      <AgentListItem
+                        agentId="codex"
+                        authStatus={codexAuthStatus}
+                        isSelected={selectedAgent === 'codex'}
+                        onClick={() => setSelectedAgent('codex')}
+                        isMobile={true}
+                      />
+                    )}
                   </div>
                 </div>
 
                 {/* Desktop: Sidebar - Agent List */}
                 <div className="hidden md:block w-48 border-r border-gray-200 dark:border-gray-700 flex-shrink-0">
                   <div className="p-2">
-                    <AgentListItem
-                      agentId="claude"
-                      authStatus={claudeAuthStatus}
-                      isSelected={selectedAgent === 'claude'}
-                      onClick={() => setSelectedAgent('claude')}
-                    />
-                    <AgentListItem
-                      agentId="cursor"
-                      authStatus={cursorAuthStatus}
-                      isSelected={selectedAgent === 'cursor'}
-                      onClick={() => setSelectedAgent('cursor')}
-                    />
-                    <AgentListItem
-                      agentId="codex"
-                      authStatus={codexAuthStatus}
-                      isSelected={selectedAgent === 'codex'}
-                      onClick={() => setSelectedAgent('codex')}
-                    />
+                    {isProviderEnabled('claude') && (
+                      <AgentListItem
+                        agentId="claude"
+                        authStatus={claudeAuthStatus}
+                        isSelected={selectedAgent === 'claude'}
+                        onClick={() => setSelectedAgent('claude')}
+                      />
+                    )}
+                    {isProviderEnabled('cursor') && (
+                      <AgentListItem
+                        agentId="cursor"
+                        authStatus={cursorAuthStatus}
+                        isSelected={selectedAgent === 'cursor'}
+                        onClick={() => setSelectedAgent('cursor')}
+                      />
+                    )}
+                    {isProviderEnabled('codex') && (
+                      <AgentListItem
+                        agentId="codex"
+                        authStatus={codexAuthStatus}
+                        isSelected={selectedAgent === 'codex'}
+                        onClick={() => setSelectedAgent('codex')}
+                      />
+                    )}
                   </div>
                 </div>
 
