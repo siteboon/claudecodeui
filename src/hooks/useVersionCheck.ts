@@ -8,7 +8,7 @@ import { version } from '../../package.json';
  * @param {string} v2
  * @returns positive if v1 > v2, negative if v1 < v2, 0 if equal
  */
-const compareVersions = (v1, v2) => {
+const compareVersions = (v1: string, v2: string) => {
   const parts1 = v1.split('.').map(Number);
   const parts2 = v2.split('.').map(Number);
   
@@ -20,11 +20,17 @@ const compareVersions = (v1, v2) => {
   return 0;
 };
 
+type ReleaseInfo = {
+  title: string;
+  body: string;
+  htmlUrl: string;
+  publishedAt: string;
+};
 
-export const useVersionCheck = (owner, repo) => {
+export const useVersionCheck = (owner: string, repo: string) => {
   const [updateAvailable, setUpdateAvailable] = useState(false);
-  const [latestVersion, setLatestVersion] = useState(null);
-  const [releaseInfo, setReleaseInfo] = useState(null);
+  const [latestVersion, setLatestVersion] = useState<string | null>(null);
+  const [releaseInfo, setReleaseInfo] = useState<ReleaseInfo | null>(null);
 
   useEffect(() => {
     const checkVersion = async () => {
