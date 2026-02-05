@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { version } from '../../package.json';
+import { ReleaseInfo } from '../types/sharedTypes';
 
 /**
  * Compare two semantic version strings
@@ -18,13 +19,6 @@ const compareVersions = (v1: string, v2: string) => {
     if (p1 !== p2) return p1 - p2;
   }
   return 0;
-};
-
-type ReleaseInfo = {
-  title: string;
-  body: string;
-  htmlUrl: string;
-  publishedAt: string;
 };
 
 export const useVersionCheck = (owner: string, repo: string) => {

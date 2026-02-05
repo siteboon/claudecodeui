@@ -1,21 +1,29 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { authenticatedFetch } from "../../utils/api";
-import { useVersionCheck } from "../../hooks/useVersionCheck";
+import { ReleaseInfo } from "../../types/sharedTypes";
 
 interface VersionUpgradeModalProps {
-    showVersionModal: boolean;
-    setShowVersionModal: (show: boolean) => void;
+    isOpen: boolean;
+    onClose: () => void;
+    releaseInfo: ReleaseInfo | null;
+    currentVersion: string;
+    latestVersion: string | null;
 }
 
-export default function VersionUpgradeModal({ showVersionModal, setShowVersionModal }: VersionUpgradeModalProps) {
+export default function VersionUpgradeModal({
+    isOpen,
+    onClose,
+    releaseInfo,
+    currentVersion,
+    latestVersion
+}: VersionUpgradeModalProps) {
     const { t } = useTranslation('common');
     const [isUpdating, setIsUpdating] = useState(false);
     const [updateOutput, setUpdateOutput] = useState('');
     const [updateError, setUpdateError] = useState('');
-    const { latestVersion, currentVersion, releaseInfo } = useVersionCheck('siteboon', 'claudecodeui');
 
-    if (!showVersionModal) return null;
+    if (!isOpen) return null;
 
     const handleUpdateNow = async () => {
         setIsUpdating(true);
@@ -51,7 +59,7 @@ export default function VersionUpgradeModal({ showVersionModal, setShowVersionMo
             {/* Backdrop */}
             <button
                 className="fixed inset-0 bg-black/50 backdrop-blur-sm"
-                onClick={() => setShowVersionModal(false)}
+                onClick={onClose}
                 aria-label={t('versionUpdate.ariaLabels.closeModal')}
             />
 
@@ -73,7 +81,7 @@ export default function VersionUpgradeModal({ showVersionModal, setShowVersionMo
                         </div>
                     </div>
                     <button
-                        onClick={() => setShowVersionModal(false)}
+                        onClick={onClose}
                         className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
                     >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -149,7 +157,7 @@ export default function VersionUpgradeModal({ showVersionModal, setShowVersionMo
                 {/* Actions */}
                 <div className="flex gap-2 pt-2">
                     <button
-                        onClick={() => setShowVersionModal(false)}
+                        onClick={onClose}
                         className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md transition-colors"
                     >
                         {updateOutput ? t('versionUpdate.buttons.close') : t('versionUpdate.buttons.later')}

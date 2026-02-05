@@ -782,7 +782,13 @@ function AppContent() {
       />
 
       {/* Version Upgrade Modal */}
-      <VersionUpgradeModal showVersionModal={showVersionModal} setShowVersionModal={setShowVersionModal}/>
+      <VersionUpgradeModal
+        isOpen={showVersionModal}
+        onClose={() => setShowVersionModal(false)}
+        releaseInfo={releaseInfo}
+        currentVersion={currentVersion}
+        latestVersion={latestVersion}
+      />
     </div>
   );
 }
