@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { authenticatedFetch } from "../../utils/api";
 import { ReleaseInfo } from "../../types/sharedTypes";
@@ -25,7 +25,7 @@ export default function VersionUpgradeModal({
 
     if (!isOpen) return null;
 
-    const handleUpdateNow = async () => {
+    const handleUpdateNow = useCallback(async () => {
         setIsUpdating(true);
         setUpdateOutput('Starting update...\n');
         setUpdateError('');
@@ -52,7 +52,7 @@ export default function VersionUpgradeModal({
         } finally {
             setIsUpdating(false);
         }
-    };
+    }, []);
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -130,12 +130,17 @@ export default function VersionUpgradeModal({
                 )}
 
                 {/* Update Output */}
-                {updateOutput && (
+                {(updateOutput || updateError) && (
                     <div className="space-y-2">
                         <h3 className="text-sm font-medium text-gray-900 dark:text-white">{t('versionUpdate.updateProgress')}</h3>
                         <div className="bg-gray-900 dark:bg-gray-950 rounded-lg p-4 border border-gray-700 max-h-48 overflow-y-auto">
                             <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap">{updateOutput}</pre>
                         </div>
+                        {updateError && (
+                            <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-200">
+                                {updateError}
+                            </div>
+                        )}
                     </div>
                 )}
 
