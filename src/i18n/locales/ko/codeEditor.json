@@ -1,0 +1,30 @@
+{
+  "toolbar": {
+    "changes": "변경사항",
+    "previousChange": "이전 변경",
+    "nextChange": "다음 변경",
+    "hideDiff": "Diff 하이라이트 숨기기",
+    "showDiff": "Diff 하이라이트 표시",
+    "settings": "에디터 설정",
+    "collapse": "에디터 접기",
+    "expand": "에디터 전체 너비로 펼치기"
+  },
+  "loading": "{{fileName}} 로딩 중...",
+  "header": {
+    "showingChanges": "변경사항 표시"
+  },
+  "actions": {
+    "download": "파일 다운로드",
+    "save": "저장",
+    "saving": "저장 중...",
+    "saved": "저장됨!",
+    "exitFullscreen": "전체화면 종료",
+    "fullscreen": "전체화면",
+    "close": "닫기"
+  },
+  "footer": {
+    "lines": "줄:",
+    "characters": "문자:",
+    "shortcuts": "Ctrl+S로 저장 • Esc로 닫기"
+  }
+}

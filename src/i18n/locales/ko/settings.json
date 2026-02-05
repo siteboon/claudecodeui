@@ -1,0 +1,418 @@
+{
+  "title": "설정",
+  "tabs": {
+    "account": "계정",
+    "permissions": "권한",
+    "mcpServers": "MCP 서버",
+    "appearance": "외관"
+  },
+  "account": {
+    "title": "계정",
+    "language": "언어",
+    "languageLabel": "표시 언어",
+    "languageDescription": "인터페이스에 사용할 언어를 선택하세요",
+    "username": "사용자명",
+    "email": "이메일",
+    "profile": "프로필",
+    "changePassword": "비밀번호 변경"
+  },
+  "mcp": {
+    "title": "MCP 서버",
+    "addServer": "서버 추가",
+    "editServer": "서버 편집",
+    "deleteServer": "서버 삭제",
+    "serverName": "서버 이름",
+    "serverType": "서버 유형",
+    "config": "설정",
+    "testConnection": "연결 테스트",
+    "status": "상태",
+    "connected": "연결됨",
+    "disconnected": "연결 끊김",
+    "scope": {
+      "label": "범위",
+      "user": "사용자",
+      "project": "프로젝트"
+    }
+  },
+  "appearance": {
+    "title": "외관",
+    "theme": "테마",
+    "codeEditor": "코드 에디터",
+    "editorTheme": "에디터 테마",
+    "wordWrap": "자동 줄바꿈",
+    "showMinimap": "미니맵 표시",
+    "lineNumbers": "줄 번호",
+    "fontSize": "글꼴 크기"
+  },
+  "actions": {
+    "saveChanges": "변경사항 저장",
+    "resetToDefaults": "기본값으로 초기화",
+    "cancelChanges": "변경 취소"
+  },
+  "quickSettings": {
+    "title": "빠른 설정",
+    "sections": {
+      "appearance": "외관",
+      "toolDisplay": "도구 표시",
+      "viewOptions": "보기 옵션",
+      "inputSettings": "입력 설정",
+      "whisperDictation": "Whisper 음성 인식"
+    },
+    "darkMode": "다크 모드",
+    "autoExpandTools": "도구 자동 펼치기",
+    "showRawParameters": "Raw 파라미터 표시",
+    "showThinking": "생각 과정 표시",
+    "autoScrollToBottom": "자동 스크롤",
+    "sendByCtrlEnter": "Ctrl+Enter로 전송",
+    "sendByCtrlEnterDescription": "활성화하면 Enter 대신 Ctrl+Enter로 메시지를 전송합니다. IME 사용자가 실수로 전송하는 것을 방지하는 데 유용합니다.",
+    "dragHandle": {
+      "dragging": "드래그 핸들",
+      "closePanel": "설정 패널 닫기",
+      "openPanel": "설정 패널 열기",
+      "draggingStatus": "드래그 중...",
+      "toggleAndMove": "클릭하여 토글, 드래그하여 이동"
+    },
+    "whisper": {
+      "modes": {
+        "default": "기본 모드",
+        "defaultDescription": "음성을 그대로 텍스트로 변환",
+        "prompt": "프롬프트 향상",
+        "promptDescription": "거친 아이디어를 명확하고 상세한 AI 프롬프트로 변환",
+        "vibe": "Vibe 모드",
+        "vibeDescription": "아이디어를 상세한 에이전트 지침 형식으로 변환"
+      }
+    }
+  },
+  "mainTabs": {
+    "agents": "에이전트",
+    "appearance": "외관",
+    "git": "Git",
+    "apiTokens": "API & 토큰",
+    "tasks": "작업"
+  },
+  "appearanceSettings": {
+    "darkMode": {
+      "label": "다크 모드",
+      "description": "라이트/다크 테마 전환"
+    },
+    "projectSorting": {
+      "label": "프로젝트 정렬",
+      "description": "사이드바에서 프로젝트 정렬 방식",
+      "alphabetical": "알파벳순",
+      "recentActivity": "최근 활동순"
+    },
+    "codeEditor": {
+      "title": "코드 에디터",
+      "theme": {
+        "label": "에디터 테마",
+        "description": "코드 에디터의 기본 테마"
+      },
+      "wordWrap": {
+        "label": "자동 줄바꿈",
+        "description": "에디터에서 기본적으로 자동 줄바꿈 활성화"
+      },
+      "showMinimap": {
+        "label": "미니맵 표시",
+        "description": "Diff 보기에서 쉬운 탐색을 위한 미니맵 표시"
+      },
+      "lineNumbers": {
+        "label": "줄 번호 표시",
+        "description": "에디터에 줄 번호 표시"
+      },
+      "fontSize": {
+        "label": "글꼴 크기",
+        "description": "에디터 글꼴 크기 (픽셀)"
+      }
+    }
+  },
+  "mcpForm": {
+    "title": {
+      "add": "MCP 서버 추가",
+      "edit": "MCP 서버 편집"
+    },
+    "importMode": {
+      "form": "폼 입력",
+      "json": "JSON 가져오기"
+    },
+    "scope": {
+      "label": "범위",
+      "userGlobal": "사용자 (전역)",
+      "projectLocal": "프로젝트 (로컬)",
+      "userDescription": "사용자 범위: 모든 프로젝트에서 사용 가능",
+      "projectDescription": "로컬 범위: 선택한 프로젝트에서만 사용 가능",
+      "cannotChange": "기존 서버를 편집할 때는 범위를 변경할 수 없습니다"
+    },
+    "fields": {
+      "serverName": "서버 이름",
+      "transportType": "전송 유형",
+      "command": "명령어",
+      "arguments": "인수 (한 줄에 하나씩)",
+      "jsonConfig": "JSON 설정",
+      "url": "URL",
+      "envVars": "환경 변수 (KEY=value, 한 줄에 하나씩)",
+      "headers": "헤더 (KEY=value, 한 줄에 하나씩)",
+      "selectProject": "프로젝트 선택..."
+    },
+    "placeholders": {
+      "serverName": "my-server"
+    },
+    "validation": {
+      "missingType": "필수 항목 누락: type",
+      "stdioRequiresCommand": "stdio 유형은 command 필드가 필요합니다",
+      "httpRequiresUrl": "{{type}} 유형은 url 필드가 필요합니다",
+      "invalidJson": "잘못된 JSON 형식",
+      "jsonHelp": "MCP 서버 설정을 JSON 형식으로 붙여넣으세요. 예시:",
+      "jsonExampleStdio": "• stdio: {\"type\":\"stdio\",\"command\":\"npx\",\"args\":[\"@upstash/context7-mcp\"]}",
+      "jsonExampleHttp": "• http/sse: {\"type\":\"http\",\"url\":\"https://api.example.com/mcp\"}"
+    },
+    "configDetails": "설정 상세 ({{configFile}}에서)",
+    "projectPath": "경로: {{path}}",
+    "actions": {
+      "cancel": "취소",
+      "saving": "저장 중...",
+      "addServer": "서버 추가",
+      "updateServer": "서버 업데이트"
+    }
+  },
+  "saveStatus": {
+    "success": "설정이 저장되었습니다!",
+    "error": "설정 저장 실패",
+    "saving": "저장 중..."
+  },
+  "footerActions": {
+    "save": "설정 저장",
+    "cancel": "취소"
+  },
+  "git": {
+    "title": "Git 설정",
+    "description": "커밋을 위한 Git 정보를 설정합니다. 이 설정은 git config --global로 전역 적용됩니다",
+    "name": {
+      "label": "Git 이름",
+      "help": "Git 커밋에 사용될 이름"
+    },
+    "email": {
+      "label": "Git 이메일",
+      "help": "Git 커밋에 사용될 이메일"
+    },
+    "actions": {
+      "save": "설정 저장",
+      "saving": "저장 중..."
+    },
+    "status": {
+      "success": "저장 완료"
+    }
+  },
+  "apiKeys": {
+    "title": "API 키",
+    "description": "다른 애플리케이션에서 외부 API에 접근하기 위한 API 키를 생성합니다.",
+    "newKey": {
+      "alertTitle": "⚠️ API 키를 저장하세요",
+      "alertMessage": "이 키는 지금만 볼 수 있습니다. 안전하게 보관하세요.",
+      "iveSavedIt": "저장했습니다"
+    },
+    "form": {
+      "placeholder": "API 키 이름 (예: Production Server)",
+      "createButton": "생성",
+      "cancelButton": "취소"
+    },
+    "newButton": "새 API 키",
+    "empty": "생성된 API 키가 없습니다.",
+    "list": {
+      "created": "생성일:",
+      "lastUsed": "마지막 사용:"
+    },
+    "confirmDelete": "이 API 키를 삭제하시겠습니까?",
+    "status": {
+      "active": "활성",
+      "inactive": "비활성"
+    },
+    "github": {
+      "title": "GitHub 토큰",
+      "description": "외부 API를 통해 비공개 저장소를 clone하기 위한 GitHub Personal Access Token을 추가합니다.",
+      "descriptionAlt": "비공개 저장소를 clone하기 위한 GitHub Personal Access Token을 추가합니다. 저장하지 않고 API 요청에 직접 토큰을 전달할 수도 있습니다.",
+      "addButton": "토큰 추가",
+      "form": {
+        "namePlaceholder": "토큰 이름 (예: Personal Repos)",
+        "tokenPlaceholder": "GitHub Personal Access Token (ghp_...)",
+        "descriptionPlaceholder": "설명 (선택사항)",
+        "addButton": "토큰 추가",
+        "cancelButton": "취소",
+        "howToCreate": "GitHub Personal Access Token 생성 방법 →"
+      },
+      "empty": "추가된 GitHub 토큰이 없습니다.",
+      "added": "추가일:",
+      "confirmDelete": "이 GitHub 토큰을 삭제하시겠습니까?"
+    },
+    "apiDocsLink": "API 문서",
+    "documentation": {
+      "title": "외부 API 문서",
+      "description": "외부 API를 사용하여 애플리케이션에서 Claude/Cursor 세션을 트리거하는 방법을 알아보세요.",
+      "viewLink": "API 문서 보기 →"
+    },
+    "loading": "로딩 중...",
+    "version": {
+      "updateAvailable": "업데이트 가능: v{{version}}"
+    }
+  },
+  "tasks": {
+    "checking": "TaskMaster 설치 확인 중...",
+    "notInstalled": {
+      "title": "TaskMaster AI CLI가 설치되지 않았습니다",
+      "description": "작업 관리 기능을 사용하려면 TaskMaster CLI가 필요합니다. 시작하려면 설치하세요:",
+      "installCommand": "npm install -g task-master-ai",
+      "viewOnGitHub": "GitHub에서 보기",
+      "afterInstallation": "설치 후:",
+      "steps": {
+        "restart": "이 애플리케이션을 재시작하세요",
+        "autoAvailable": "TaskMaster 기능이 자동으로 활성화됩니다",
+        "initCommand": "프로젝트 디렉토리에서 task-master init을 사용하세요"
+      }
+    },
+    "settings": {
+      "enableLabel": "TaskMaster 통합 활성화",
+      "enableDescription": "인터페이스 전체에 TaskMaster 작업, 배너 및 사이드바 표시"
+    }
+  },
+  "agents": {
+    "authStatus": {
+      "checking": "확인 중...",
+      "connected": "연결됨",
+      "notConnected": "연결되지 않음",
+      "disconnected": "연결 끊김",
+      "checkingAuth": "인증 상태 확인 중...",
+      "loggedInAs": "{{email}}(으)로 로그인됨",
+      "authenticatedUser": "인증된 사용자"
+    },
+    "account": {
+      "claude": {
+        "description": "Anthropic Claude AI 어시스턴트"
+      },
+      "cursor": {
+        "description": "Cursor AI 기반 코드 에디터"
+      },
+      "codex": {
+        "description": "OpenAI Codex AI 어시스턴트"
+      }
+    },
+    "connectionStatus": "연결 상태",
+    "login": {
+      "title": "로그인",
+      "reAuthenticate": "재인증",
+      "description": "AI 기능을 활성화하려면 {{agent}} 계정에 로그인하세요",
+      "reAuthDescription": "다른 계정으로 로그인하거나 자격 증명을 새로고침하세요",
+      "button": "로그인",
+      "reLoginButton": "재로그인"
+    },
+    "error": "오류: {{error}}"
+  },
+  "permissions": {
+    "title": "권한 설정",
+    "skipPermissions": {
+      "label": "권한 확인 건너뛰기 (주의해서 사용)",
+      "claudeDescription": "--dangerously-skip-permissions 플래그와 동일",
+      "cursorDescription": "Cursor CLI의 -f 플래그와 동일"
+    },
+    "allowedTools": {
+      "title": "허용된 도구",
+      "description": "권한 확인 없이 자동으로 허용되는 도구",
+      "placeholder": "예: \"Bash(git log:*)\" 또는 \"Write\"",
+      "quickAdd": "자주 쓰는 도구 빠른 추가:",
+      "empty": "설정된 허용 도구 없음"
+    },
+    "blockedTools": {
+      "title": "차단된 도구",
+      "description": "권한 확인 없이 자동으로 차단되는 도구",
+      "placeholder": "예: \"Bash(rm:*)\"",
+      "empty": "설정된 차단 도구 없음"
+    },
+    "allowedCommands": {
+      "title": "허용된 Shell 명령어",
+      "description": "권한 확인 없이 자동으로 허용되는 Shell 명령어",
+      "placeholder": "예: \"Shell(ls)\" 또는 \"Shell(git status)\"",
+      "quickAdd": "자주 쓰는 명령어 빠른 추가:",
+      "empty": "설정된 허용 명령어 없음"
+    },
+    "blockedCommands": {
+      "title": "차단된 Shell 명령어",
+      "description": "자동으로 차단되는 Shell 명령어",
+      "placeholder": "예: \"Shell(rm -rf)\" 또는 \"Shell(sudo)\"",
+      "empty": "설정된 차단 명령어 없음"
+    },
+    "toolExamples": {
+      "title": "도구 패턴 예시:",
+      "bashGitLog": "- 모든 git log 명령어 허용",
+      "bashGitDiff": "- 모든 git diff 명령어 허용",
+      "write": "- 모든 Write 도구 사용 허용",
+      "bashRm": "- 모든 rm 명령어 차단 (위험)"
+    },
+    "shellExamples": {
+      "title": "Shell 명령어 예시:",
+      "ls": "- ls 명령어 허용",
+      "gitStatus": "- git status 허용",
+      "npmInstall": "- npm install 허용",
+      "rmRf": "- 재귀 삭제 차단"
+    },
+    "codex": {
+      "permissionMode": "권한 모드",
+      "description": "Codex가 파일 수정 및 명령어 실행을 처리하는 방식을 제어합니다",
+      "modes": {
+        "default": {
+          "title": "기본",
+          "description": "신뢰할 수 있는 명령어(ls, cat, grep, git status 등)만 자동 실행됩니다. 다른 명령어는 건너뜁니다. 워크스페이스에 쓰기 가능."
+        },
+        "acceptEdits": {
+          "title": "편집 허용",
+          "description": "워크스페이스 내에서 모든 명령어가 자동 실행됩니다. 샌드박스 내 완전 자동 모드."
+        },
+        "bypassPermissions": {
+          "title": "권한 우회",
+          "description": "제한 없는 전체 시스템 접근. 모든 명령어가 전체 디스크 및 네트워크 접근 권한으로 자동 실행됩니다. 주의해서 사용하세요."
+        }
+      },
+      "technicalDetails": "기술 상세",
+      "technicalInfo": {
+        "default": "sandboxMode=workspace-write, approvalPolicy=untrusted. 신뢰할 수 있는 명령어: cat, cd, grep, head, ls, pwd, tail, git status/log/diff/show, find(-exec 제외) 등.",
+        "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never. 프로젝트 디렉토리 내에서 모든 명령어 자동 실행.",
+        "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never. 전체 시스템 접근, 신뢰할 수 있는 환경에서만 사용하세요.",
+        "overrideNote": "채팅 인터페이스의 모드 버튼을 사용하여 세션별로 재정의할 수 있습니다."
+      }
+    },
+    "actions": {
+      "add": "추가"
+    }
+  },
+  "mcpServers": {
+    "title": "MCP 서버",
+    "description": {
+      "claude": "Model Context Protocol 서버는 Claude에 추가 도구와 데이터 소스를 제공합니다",
+      "cursor": "Model Context Protocol 서버는 Cursor에 추가 도구와 데이터 소스를 제공합니다",
+      "codex": "Model Context Protocol 서버는 Codex에 추가 도구와 데이터 소스를 제공합니다"
+    },
+    "addButton": "MCP 서버 추가",
+    "empty": "설정된 MCP 서버 없음",
+    "serverType": "유형",
+    "scope": {
+      "local": "로컬",
+      "user": "사용자"
+    },
+    "config": {
+      "command": "명령어",
+      "url": "URL",
+      "args": "인수",
+      "environment": "환경"
+    },
+    "tools": {
+      "title": "도구",
+      "count": "({{count}}):",
+      "more": "+{{count}}개 더"
+    },
+    "actions": {
+      "edit": "서버 편집",
+      "delete": "서버 삭제"
+    },
+    "help": {
+      "title": "Codex MCP 정보",
+      "description": "Codex는 stdio 기반 MCP 서버를 지원합니다. 추가 도구와 리소스로 Codex의 기능을 확장하는 서버를 추가할 수 있습니다."
+    }
+  }
+}
