@@ -40,7 +40,6 @@ function MainContent({
   sendMessage,
   latestMessage,
   isMobile,
-  isPWA, // ! Unused
   onMenuClick,
   isLoading,
   onInputFocusChange,
