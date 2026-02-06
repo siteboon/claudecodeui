@@ -55,7 +55,7 @@ function Sidebar({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [editingSession, setEditingSession] = useState(null);
   const [editingSessionName, setEditingSessionName] = useState('');
-  const [generatingSummary, setGeneratingSummary] = useState({});
+
   const [searchFilter, setSearchFilter] = useState('');
   const [deletingProjects, setDeletingProjects] = useState(new Set());
   const [deleteConfirmation, setDeleteConfirmation] = useState(null); // { project, sessionCount }
