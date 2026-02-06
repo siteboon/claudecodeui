@@ -18,7 +18,7 @@
  * Handles both existing sessions (with real IDs) and new sessions (with temporary IDs).
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import MainContent from './components/MainContent';
@@ -571,6 +571,54 @@ function AppContent() {
     }
   }, []);
 
+  const handleShowSettings = useCallback(() => {
+    setShowSettings(true);
+  }, []);
+
+  const handleCollapseSidebar = useCallback(() => {
+    setPreference('sidebarVisible', false);
+  }, [setPreference]);
+
+  const handleExpandSidebar = useCallback(() => {
+    setPreference('sidebarVisible', true);
+  }, [setPreference]);
+
+  const sidebarSharedProps = useMemo(() => ({
+    projects,
+    selectedProject,
+    selectedSession,
+    onProjectSelect: handleProjectSelect,
+    onSessionSelect: handleSessionSelect,
+    onNewSession: handleNewSession,
+    onSessionDelete: handleSessionDelete,
+    onProjectDelete: handleProjectDelete,
+    isLoading: isLoadingProjects,
+    loadingProgress,
+    onRefresh: handleSidebarRefresh,
+    onShowSettings: handleShowSettings,
+    isPWA,
+    isMobile,
+    onToggleSidebar: handleCollapseSidebar,
+    onExpandSidebar: handleExpandSidebar
+  }), [
+    projects,
+    selectedProject,
+    selectedSession,
+    handleProjectSelect,
+    handleSessionSelect,
+    handleNewSession,
+    handleSessionDelete,
+    handleProjectDelete,
+    isLoadingProjects,
+    loadingProgress,
+    handleSidebarRefresh,
+    handleShowSettings,
+    isPWA,
+    isMobile,
+    handleCollapseSidebar,
+    handleExpandSidebar
+  ]);
+
 
   return (
     <div className="fixed inset-0 flex bg-background">
@@ -582,23 +630,8 @@ function AppContent() {
           }`}
         >
           <Sidebar
-            projects={projects}
-            selectedProject={selectedProject}
-            selectedSession={selectedSession}
-            onProjectSelect={handleProjectSelect}
-            onSessionSelect={handleSessionSelect}
-            onNewSession={handleNewSession}
-            onSessionDelete={handleSessionDelete}
-            onProjectDelete={handleProjectDelete}
-            isLoading={isLoadingProjects}
-            loadingProgress={loadingProgress}
-            onRefresh={handleSidebarRefresh}
-            onShowSettings={() => setShowSettings(true)}
-            isPWA={isPWA}
-            isMobile={isMobile}
-            onToggleSidebar={() => setPreference('sidebarVisible', false)}
+            {...sidebarSharedProps}
             isCollapsed={!sidebarVisible}
-            onExpandSidebar={() => setPreference('sidebarVisible', true)}
           />
         </div>
       )}
@@ -629,21 +662,7 @@ function AppContent() {
             onTouchStart={(e) => e.stopPropagation()}
           >
             <Sidebar
-              projects={projects}
-              selectedProject={selectedProject}
-              selectedSession={selectedSession}
-              onProjectSelect={handleProjectSelect}
-              onSessionSelect={handleSessionSelect}
-              onNewSession={handleNewSession}
-              onSessionDelete={handleSessionDelete}
-              onProjectDelete={handleProjectDelete}
-              isLoading={isLoadingProjects}
-              loadingProgress={loadingProgress}
-              onRefresh={handleSidebarRefresh}
-              onShowSettings={() => setShowSettings(true)}
-              isPWA={isPWA}
-              isMobile={isMobile}
-              onToggleSidebar={() => setPreference('sidebarVisible', false)}
+              {...sidebarSharedProps}
               isCollapsed={false}
             />
           </div>
