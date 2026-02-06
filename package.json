@@ -3,7 +3,7 @@
   "version": "1.16.3",
   "description": "A web-based UI for Claude Code CLI",
   "type": "module",
-  "main": "server/index.js",
+  "main": "electron/main.js",
   "bin": {
     "claude-code-ui": "server/cli.js",
     "cloudcli": "server/cli.js"
@@ -30,7 +30,13 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "start": "npm run build && npm run server",
-    "release": "./release.sh"
+    "release": "./release.sh",
+    "electron:dev": "concurrently \"npm run dev\" \"nodemon --watch electron --exec electron .\"",
+    "electron:rebuild": "electron-rebuild",
+    "electron:dmg-bg": "node scripts/generate-dmg-background.js",
+    "electron:build": "npm run electron:dmg-bg && npm run build && npm run electron:rebuild && electron-builder",
+    "electron:build:mac": "npm run electron:dmg-bg && npm run build && npm run electron:rebuild && electron-builder --mac",
+    "electron:build:win": "npm run build && npm run electron:rebuild && electron-builder --win"
   },
   "keywords": [
     "claude code",
@@ -110,6 +116,10 @@
     "sharp": "^0.34.2",
     "tailwindcss": "^3.4.0",
     "typescript": "^5.9.3",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8",
+    "electron-rebuild": "^3.2.9",
+    "nodemon": "^3.1.0"
   }
 }

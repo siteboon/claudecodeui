@@ -1,0 +1,53 @@
+appId: com.claudecodeui.app
+productName: Claude Code UI
+
+directories:
+  output: release
+
+files:
+  - dist/**/*
+  - server/**/*
+  - shared/**/*
+  - electron/**/*
+  - package.json
+
+asar: true
+npmRebuild: true
+buildDependenciesFromSource: true
+asarUnpack:
+  - "**/*.node"
+  - "**/node_modules/node-pty/**"
+  - "**/node_modules/better-sqlite3/**"
+  - "**/node_modules/bcrypt/**"
+
+mac:
+  target: dmg
+  icon: public/icons/icon-512x512.png
+  category: public.app-category.developer-tools
+  hardenedRuntime: true
+  entitlements: electron/entitlements.mac.plist
+  entitlementsInherit: electron/entitlements.mac.inherit.plist
+
+dmg:
+  background: build/dmg-background.png
+  iconSize: 80
+  window:
+    width: 660
+    height: 400
+  contents:
+    - x: 180
+      y: 170
+      type: file
+    - x: 480
+      y: 170
+      type: link
+      path: /Applications
+
+win:
+  target: nsis
+  icon: public/icons/icon-512x512.png
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: public/icons/icon-512x512.png
