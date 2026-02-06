@@ -32,7 +32,6 @@ import { TaskMasterProvider } from './contexts/TaskMasterContext';
 import { TasksSettingsProvider } from './contexts/TasksSettingsContext';
 import { WebSocketProvider, useWebSocket } from './contexts/WebSocketContext';
 import ProtectedRoute from './components/ProtectedRoute';
-import { useUiPreferences } from './hooks/useUiPreferences';
 import { api, authenticatedFetch } from './utils/api';
 import { I18nextProvider, useTranslation } from 'react-i18next';
 import i18n from './i18n/config.js';
@@ -59,9 +58,6 @@ function AppContent() {
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState('agents');
-  
-  const { preferences, setPreference } = useUiPreferences();
-  const { sidebarVisible } = preferences;
   // Session Protection System: Track sessions with active conversations to prevent
   // automatic project updates from interrupting ongoing chats. When a user sends
   // a message, the session is marked as "active" and project updates are paused
@@ -575,14 +571,6 @@ function AppContent() {
     setShowSettings(true);
   }, []);
 
-  const handleCollapseSidebar = useCallback(() => {
-    setPreference('sidebarVisible', false);
-  }, [setPreference]);
-
-  const handleExpandSidebar = useCallback(() => {
-    setPreference('sidebarVisible', true);
-  }, [setPreference]);
-
   const sidebarSharedProps = useMemo(() => ({
     projects,
     selectedProject,
@@ -597,9 +585,7 @@ function AppContent() {
     onRefresh: handleSidebarRefresh,
     onShowSettings: handleShowSettings,
     isPWA,
-    isMobile,
-    onToggleSidebar: handleCollapseSidebar,
-    onExpandSidebar: handleExpandSidebar
+    isMobile
   }), [
     projects,
     selectedProject,
@@ -614,9 +600,7 @@ function AppContent() {
     handleSidebarRefresh,
     handleShowSettings,
     isPWA,
-    isMobile,
-    handleCollapseSidebar,
-    handleExpandSidebar
+    isMobile
   ]);
 
 
@@ -624,14 +608,9 @@ function AppContent() {
     <div className="fixed inset-0 flex bg-background">
       {/* Fixed Desktop Sidebar */}
       {!isMobile && (
-        <div
-          className={`h-full flex-shrink-0 border-r border-border bg-card transition-all duration-300 ${
-            sidebarVisible ? 'w-80' : 'w-14'
-          }`}
-        >
+        <div className="h-full flex-shrink-0 border-r border-border bg-card">
           <Sidebar
             {...sidebarSharedProps}
-            isCollapsed={!sidebarVisible}
           />
         </div>
       )}
@@ -663,7 +642,6 @@ function AppContent() {
           >
             <Sidebar
               {...sidebarSharedProps}
-              isCollapsed={false}
             />
           </div>
         </div>

@@ -15,6 +15,7 @@ import TaskIndicator from './TaskIndicator';
 import ProjectCreationWizard from './ProjectCreationWizard';
 import VersionUpgradeModal from './modals/VersionUpgradeModal';
 import { useVersionCheck } from '../hooks/useVersionCheck';
+import { useUiPreferences } from '../hooks/useUiPreferences';
 import { api } from '../utils/api';
 import { useTaskMaster } from '../contexts/TaskMasterContext';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
@@ -36,13 +37,13 @@ function Sidebar({
   onRefresh,
   onShowSettings,
   isPWA,
-  isMobile,
-  onToggleSidebar,
-  isCollapsed = false,
-  onExpandSidebar
+  isMobile
 }) {
   const { t } = useTranslation(['sidebar', 'common']);
   const { updateAvailable, latestVersion, currentVersion, releaseInfo } = useVersionCheck('siteboon', 'claudecodeui');
+  const { preferences, setPreference } = useUiPreferences();
+  const { sidebarVisible } = preferences;
+  const isSidebarCollapsed = !isMobile && !sidebarVisible;
   const [expandedProjects, setExpandedProjects] = useState(new Set());
   const [editingProject, setEditingProject] = useState(null);
   const [showNewProject, setShowNewProject] = useState(false);
@@ -470,10 +471,18 @@ function Sidebar({
     setCurrentProject(project);
   };
 
+  const handleCollapseSidebar = () => {
+    setPreference('sidebarVisible', false);
+  };
+
+  const handleExpandSidebar = () => {
+    setPreference('sidebarVisible', true);
+  };
+
   const collapsedSidebar = (
     <div className="h-full flex flex-col items-center py-4 gap-4 bg-card">
       <button
-        onClick={onExpandSidebar}
+        onClick={handleExpandSidebar}
         className="p-2 hover:bg-accent rounded-md transition-colors duration-200 group"
         aria-label={t('common:versionUpdate.ariaLabels.showSidebar')}
         title={t('common:versionUpdate.ariaLabels.showSidebar')}
@@ -513,7 +522,7 @@ function Sidebar({
 
   return (
     <>
-      {isCollapsed ? (
+      {isSidebarCollapsed ? (
         collapsedSidebar
       ) : (
         <>
@@ -638,7 +647,7 @@ function Sidebar({
       )}
 
       <div
-        className="h-full flex flex-col bg-card md:select-none"
+        className="h-full flex flex-col bg-card md:select-none md:w-80"
         style={isPWA && isMobile ? { paddingTop: '44px' } : {}}
       >
       {/* Header */}
@@ -670,24 +679,22 @@ function Sidebar({
               </div>
             </div>
           )}
-          {onToggleSidebar && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 px-0 hover:bg-accent transition-colors duration-200"
-              onClick={onToggleSidebar}
-              title={t('tooltips.hideSidebar')}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 px-0 hover:bg-accent transition-colors duration-200"
+            onClick={handleCollapseSidebar}
+            title={t('tooltips.hideSidebar')}
+          >
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
             >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </Button>
-          )}
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </Button>
         </div>
         
         {/* Mobile Header */}
