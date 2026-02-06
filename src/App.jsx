@@ -59,7 +59,7 @@ function AppContent() {
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState('agents');
-  const [showQuickSettings, setShowQuickSettings] = useState(false);
+  
   const { preferences, setPreference } = useUiPreferences();
   const { autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter, sidebarVisible } = preferences;
   // Session Protection System: Track sessions with active conversations to prevent
@@ -712,8 +712,6 @@ function AppContent() {
       {/* Quick Settings Panel - Only show on chat tab */}
       {activeTab === 'chat' && (
         <QuickSettingsPanel
-          isOpen={showQuickSettings}
-          onToggle={setShowQuickSettings}
           autoExpandTools={autoExpandTools}
           onAutoExpandChange={(value) => setPreference('autoExpandTools', value)}
           showRawParameters={showRawParameters}

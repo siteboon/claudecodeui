@@ -21,8 +21,6 @@ import { useTheme } from '../contexts/ThemeContext';
 import LanguageSelector from './LanguageSelector';
 
 const QuickSettingsPanel = ({
-  isOpen,
-  onToggle,
   autoExpandTools,
   onAutoExpandChange,
   showRawParameters,
@@ -36,7 +34,8 @@ const QuickSettingsPanel = ({
   isMobile
 }) => {
   const { t } = useTranslation('settings');
-  const [localIsOpen, setLocalIsOpen] = useState(isOpen);
+  const [ isOpen, setIsOpen ] = useState(false); 
+  const [localIsOpen, setLocalIsOpen] = useState(false); // ! Is this necessary? Can we just use isOpen?
   const [whisperMode, setWhisperMode] = useState(() => {
     return localStorage.getItem('whisperMode') || 'default';
   });
@@ -208,7 +207,7 @@ const QuickSettingsPanel = ({
 
     const newState = !localIsOpen;
     setLocalIsOpen(newState);
-    onToggle(newState);
+    setIsOpen(newState);
   };
 
   return (
