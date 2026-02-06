@@ -17,22 +17,13 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import DarkModeToggle from './DarkModeToggle';
+
+import { useUiPreferences } from '../hooks/useUiPreferences';
 import { useTheme } from '../contexts/ThemeContext';
 import LanguageSelector from './LanguageSelector';
 
-const QuickSettingsPanel = ({
-  autoExpandTools,
-  onAutoExpandChange,
-  showRawParameters,
-  onShowRawParametersChange,
-  showThinking,
-  onShowThinkingChange,
-  autoScrollToBottom,
-  onAutoScrollChange,
-  sendByCtrlEnter,
-  onSendByCtrlEnterChange,
-  isMobile
-}) => {
+
+const QuickSettingsPanel = ({ isMobile }) => {
   const { t } = useTranslation('settings');
   const [ isOpen, setIsOpen ] = useState(false); 
   const [localIsOpen, setLocalIsOpen] = useState(false); // ! Is this necessary? Can we just use isOpen?
@@ -40,6 +31,9 @@ const QuickSettingsPanel = ({
     return localStorage.getItem('whisperMode') || 'default';
   });
   const { isDarkMode } = useTheme();
+
+  const { preferences, setPreference } = useUiPreferences();
+  const { autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter } = preferences;
 
   // Draggable handle state
   const [handlePosition, setHandlePosition] = useState(() => {
@@ -291,7 +285,7 @@ const QuickSettingsPanel = ({
                 <input
                   type="checkbox"
                   checked={autoExpandTools}
-                  onChange={(e) => onAutoExpandChange(e.target.checked)}
+                  onChange={(e) => setPreference('autoExpandTools', e.target.checked)}
                   className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 focus:ring-2 dark:focus:ring-blue-400 bg-gray-100 dark:bg-gray-800 checked:bg-blue-600 dark:checked:bg-blue-600"
                 />
               </label>
@@ -304,7 +298,7 @@ const QuickSettingsPanel = ({
                 <input
                   type="checkbox"
                   checked={showRawParameters}
-                  onChange={(e) => onShowRawParametersChange(e.target.checked)}
+                  onChange={(e) => setPreference('showRawParameters', e.target.checked)}
                   className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 focus:ring-2 dark:focus:ring-blue-400 bg-gray-100 dark:bg-gray-800 checked:bg-blue-600 dark:checked:bg-blue-600"
                 />
               </label>
@@ -317,7 +311,7 @@ const QuickSettingsPanel = ({
                 <input
                   type="checkbox"
                   checked={showThinking}
-                  onChange={(e) => onShowThinkingChange(e.target.checked)}
+                  onChange={(e) => setPreference('showThinking', e.target.checked)}
                   className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 focus:ring-2 dark:focus:ring-blue-400 bg-gray-100 dark:bg-gray-800 checked:bg-blue-600 dark:checked:bg-blue-600"
                 />
               </label>
@@ -334,7 +328,7 @@ const QuickSettingsPanel = ({
                 <input
                   type="checkbox"
                   checked={autoScrollToBottom}
-                  onChange={(e) => onAutoScrollChange(e.target.checked)}
+                  onChange={(e) => setPreference('autoScrollToBottom', e.target.checked)}
                   className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 focus:ring-2 dark:focus:ring-blue-400 bg-gray-100 dark:bg-gray-800 checked:bg-blue-600 dark:checked:bg-blue-600"
                 />
               </label>
@@ -352,7 +346,7 @@ const QuickSettingsPanel = ({
                 <input
                   type="checkbox"
                   checked={sendByCtrlEnter}
-                  onChange={(e) => onSendByCtrlEnterChange(e.target.checked)}
+                  onChange={(e) => setPreference('sendByCtrlEnter', e.target.checked)}
                   className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 focus:ring-2 dark:focus:ring-blue-400 bg-gray-100 dark:bg-gray-800 checked:bg-blue-600 dark:checked:bg-blue-600"
                 />
               </label>

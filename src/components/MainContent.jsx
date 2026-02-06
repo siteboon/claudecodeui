@@ -29,6 +29,8 @@ import { useTaskMaster } from '../contexts/TaskMasterContext';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
 import { api } from '../utils/api';
 
+import { useUiPreferences } from '../hooks/useUiPreferences';
+
 function MainContent({
   selectedProject,
   selectedSession,
@@ -52,11 +54,6 @@ function MainContent({
   onReplaceTemporarySession, // Replace temporary session ID with real session ID from WebSocket
   onNavigateToSession,    // Navigate to a specific session (for Claude CLI session duplication workaround)
   onShowSettings,         // Show tools settings panel
-  autoExpandTools,        // Auto-expand tool accordions
-  showRawParameters,      // Show raw parameters in tool accordions
-  showThinking,           // Show thinking/reasoning sections
-  autoScrollToBottom,     // Auto-scroll to bottom when new messages arrive
-  sendByCtrlEnter,        // Send by Ctrl+Enter mode for East Asian language input
   externalMessageUpdate   // Trigger for external CLI updates to current session
 }) {
   const { t } = useTranslation();
@@ -67,7 +64,10 @@ function MainContent({
   const [isResizing, setIsResizing] = useState(false);
   const [editorExpanded, setEditorExpanded] = useState(false);
   const resizeRef = useRef(null);
-  
+
+  const { preferences } = useUiPreferences();
+  const { autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter } = preferences;
+
   // PRD Editor state
   const [showPRDEditor, setShowPRDEditor] = useState(false);
   const [selectedPRD, setSelectedPRD] = useState(null);

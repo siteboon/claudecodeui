@@ -61,7 +61,7 @@ function AppContent() {
   const [settingsInitialTab, setSettingsInitialTab] = useState('agents');
   
   const { preferences, setPreference } = useUiPreferences();
-  const { autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter, sidebarVisible } = preferences;
+  const { sidebarVisible } = preferences;
   // Session Protection System: Track sessions with active conversations to prevent
   // automatic project updates from interrupting ongoing chats. When a user sends
   // a message, the session is marked as "active" and project updates are paused
@@ -692,11 +692,7 @@ function AppContent() {
           onReplaceTemporarySession={replaceTemporarySession}
           onNavigateToSession={(sessionId) => navigate(`/session/${sessionId}`)}
           onShowSettings={() => setShowSettings(true)}
-          autoExpandTools={autoExpandTools}
-          showRawParameters={showRawParameters}
-          showThinking={showThinking}
-          autoScrollToBottom={autoScrollToBottom}
-          sendByCtrlEnter={sendByCtrlEnter}
+
           externalMessageUpdate={externalMessageUpdate}
         />
       </div>
@@ -711,19 +707,7 @@ function AppContent() {
       )}
       {/* Quick Settings Panel - Only show on chat tab */}
       {activeTab === 'chat' && (
-        <QuickSettingsPanel
-          autoExpandTools={autoExpandTools}
-          onAutoExpandChange={(value) => setPreference('autoExpandTools', value)}
-          showRawParameters={showRawParameters}
-          onShowRawParametersChange={(value) => setPreference('showRawParameters', value)}
-          showThinking={showThinking}
-          onShowThinkingChange={(value) => setPreference('showThinking', value)}
-          autoScrollToBottom={autoScrollToBottom}
-          onAutoScrollChange={(value) => setPreference('autoScrollToBottom', value)}
-          sendByCtrlEnter={sendByCtrlEnter}
-          onSendByCtrlEnterChange={(value) => setPreference('sendByCtrlEnter', value)}
-          isMobile={isMobile}
-        />
+        <QuickSettingsPanel isMobile={isMobile} />
       )}
 
       {/* Settings Modal */}
