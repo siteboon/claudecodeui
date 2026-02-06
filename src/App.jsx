@@ -680,7 +680,6 @@ function AppContent() {
           sendMessage={sendMessage}
           latestMessage={latestMessage}
           isMobile={isMobile}
-          isPWA={isPWA}
           onMenuClick={() => setSidebarOpen(true)}
           isLoading={isLoadingProjects}
           onInputFocusChange={setIsInputFocused}
