@@ -32,7 +32,7 @@ import { TaskMasterProvider } from './contexts/TaskMasterContext';
 import { TasksSettingsProvider } from './contexts/TasksSettingsContext';
 import { WebSocketProvider, useWebSocket } from './contexts/WebSocketContext';
 import ProtectedRoute from './components/ProtectedRoute';
-import useLocalStorage from './hooks/useLocalStorage';
+import { useUiPreferences } from './hooks/useUiPreferences';
 import { api, authenticatedFetch } from './utils/api';
 import { I18nextProvider, useTranslation } from 'react-i18next';
 import i18n from './i18n/config.js';
@@ -60,12 +60,8 @@ function AppContent() {
   const [showSettings, setShowSettings] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState('agents');
   const [showQuickSettings, setShowQuickSettings] = useState(false);
-  const [autoExpandTools, setAutoExpandTools] = useLocalStorage('autoExpandTools', false);
-  const [showRawParameters, setShowRawParameters] = useLocalStorage('showRawParameters', false);
-  const [showThinking, setShowThinking] = useLocalStorage('showThinking', true);
-  const [autoScrollToBottom, setAutoScrollToBottom] = useLocalStorage('autoScrollToBottom', true);
-  const [sendByCtrlEnter, setSendByCtrlEnter] = useLocalStorage('sendByCtrlEnter', false);
-  const [sidebarVisible, setSidebarVisible] = useLocalStorage('sidebarVisible', true);
+  const { preferences, setPreference } = useUiPreferences();
+  const { autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter, sidebarVisible } = preferences;
   // Session Protection System: Track sessions with active conversations to prevent
   // automatic project updates from interrupting ongoing chats. When a user sends
   // a message, the session is marked as "active" and project updates are paused
@@ -600,9 +596,9 @@ function AppContent() {
             onShowSettings={() => setShowSettings(true)}
             isPWA={isPWA}
             isMobile={isMobile}
-            onToggleSidebar={() => setSidebarVisible(false)}
+            onToggleSidebar={() => setPreference('sidebarVisible', false)}
             isCollapsed={!sidebarVisible}
-            onExpandSidebar={() => setSidebarVisible(true)}
+            onExpandSidebar={() => setPreference('sidebarVisible', true)}
           />
         </div>
       )}
@@ -647,7 +643,7 @@ function AppContent() {
               onShowSettings={() => setShowSettings(true)}
               isPWA={isPWA}
               isMobile={isMobile}
-              onToggleSidebar={() => setSidebarVisible(false)}
+              onToggleSidebar={() => setPreference('sidebarVisible', false)}
               isCollapsed={false}
             />
           </div>
@@ -700,15 +696,15 @@ function AppContent() {
           isOpen={showQuickSettings}
           onToggle={setShowQuickSettings}
           autoExpandTools={autoExpandTools}
-          onAutoExpandChange={setAutoExpandTools}
+          onAutoExpandChange={(value) => setPreference('autoExpandTools', value)}
           showRawParameters={showRawParameters}
-          onShowRawParametersChange={setShowRawParameters}
+          onShowRawParametersChange={(value) => setPreference('showRawParameters', value)}
           showThinking={showThinking}
-          onShowThinkingChange={setShowThinking}
+          onShowThinkingChange={(value) => setPreference('showThinking', value)}
           autoScrollToBottom={autoScrollToBottom}
-          onAutoScrollChange={setAutoScrollToBottom}
+          onAutoScrollChange={(value) => setPreference('autoScrollToBottom', value)}
           sendByCtrlEnter={sendByCtrlEnter}
-          onSendByCtrlEnterChange={setSendByCtrlEnter}
+          onSendByCtrlEnterChange={(value) => setPreference('sendByCtrlEnter', value)}
           isMobile={isMobile}
         />
       )}
