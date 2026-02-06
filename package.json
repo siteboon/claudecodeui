@@ -32,7 +32,7 @@
     "start": "npm run build && npm run server",
     "release": "./release.sh",
     "electron:dev": "concurrently \"npm run dev\" \"nodemon --watch electron --exec electron .\"",
-    "electron:rebuild": "electron-rebuild",
+    "electron:rebuild": "node node_modules/@electron/rebuild/lib/cli.js --force",
     "electron:dmg-bg": "node scripts/generate-dmg-background.js",
     "electron:build": "npm run electron:dmg-bg && npm run build && npm run electron:rebuild && electron-builder",
     "electron:build:mac": "npm run electron:dmg-bg && npm run build && npm run electron:rebuild && electron-builder --mac",
@@ -119,7 +119,7 @@
     "vite": "^7.0.4",
     "electron": "^33.0.0",
     "electron-builder": "^25.1.8",
-    "electron-rebuild": "^3.2.9",
+    "@electron/rebuild": "^3.6.1",
     "nodemon": "^3.1.0"
   }
 }

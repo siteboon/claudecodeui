@@ -616,7 +616,7 @@ function Sidebar({
       )}
 
       <div
-        className="h-full flex flex-col bg-card md:select-none"
+        className="h-full flex flex-col bg-card md:select-none electron-sidebar"
         style={isPWA && isMobile ? { paddingTop: '44px' } : {}}
       >
       {/* Header */}
