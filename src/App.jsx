@@ -20,7 +20,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useParams } from 'react-router-dom';
-import { Settings as SettingsIcon, Sparkles } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import MainContent from './components/MainContent';
 import MobileNav from './components/MobileNav';
