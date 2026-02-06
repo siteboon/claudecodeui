@@ -1904,6 +1904,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, late
   const scrollContainerRef = useRef(null);
   const isLoadingSessionRef = useRef(false); // Track session loading to prevent multiple scrolls
   const isLoadingMoreRef = useRef(false);
+  const allMessagesLoadedRef = useRef(false);
+  const [isLoadingAllMessages, setIsLoadingAllMessages] = useState(false);
+  const [loadAllJustFinished, setLoadAllJustFinished] = useState(false);
+  const loadAllFinishedTimerRef = useRef(null);
   const topLoadLockRef = useRef(false);
   const pendingScrollRestoreRef = useRef(null);
   // Streaming throttle buffers
@@ -1933,6 +1937,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, late
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(-1);
   const [slashPosition, setSlashPosition] = useState(-1);
   const [visibleMessageCount, setVisibleMessageCount] = useState(100);
+  const [allMessagesLoaded, setAllMessagesLoaded] = useState(false);
+  const [showLoadAllOverlay, setShowLoadAllOverlay] = useState(false);
+  const loadAllOverlayTimerRef = useRef(null);
   const [claudeStatus, setClaudeStatus] = useState(null);
   const [thinkingMode, setThinkingMode] = useState('none');
   const [provider, setProvider] = useState(() => {
@@ -2945,6 +2952,16 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, late
     }
   }, []);
 
+  // Explicit scroll-to-bottom with performance reset (only for user button click)
+  const scrollToBottomAndReset = useCallback(() => {
+    scrollToBottom();
+    if (allMessagesLoaded) {
+      setVisibleMessageCount(100);
+      setAllMessagesLoaded(false);
+      allMessagesLoadedRef.current = false;
+    }
+  }, [allMessagesLoaded, scrollToBottom]);
+
   // Check if user is near the bottom of the scroll container
   const isNearBottom = useCallback(() => {
     if (!scrollContainerRef.current) return false;
@@ -2955,6 +2972,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, late
 
   const loadOlderMessages = useCallback(async (container) => {
     if (!container || isLoadingMoreRef.current || isLoadingMoreMessages) return false;
+    if (allMessagesLoadedRef.current) return false;
     if (!hasMoreMessages || !selectedSession || !selectedProject) return false;
 
     const sessionProvider = selectedSession.__provider || 'claude';
@@ -2994,13 +3012,16 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, late
       setIsUserScrolledUp(!nearBottom);
       
       // Check if we should load more messages (scrolled near top)
-      const scrolledNearTop = container.scrollTop < 100;
-      if (!scrolledNearTop) {
-        topLoadLockRef.current = false;
-      } else if (!topLoadLockRef.current) {
-        const didLoad = await loadOlderMessages(container);
-        if (didLoad) {
-          topLoadLockRef.current = true;
+      // Skip entirely if all messages were already loaded
+      if (!allMessagesLoadedRef.current) {
+        const scrolledNearTop = container.scrollTop < 100;
+        if (!scrolledNearTop) {
+          topLoadLockRef.current = false;
+        } else if (!topLoadLockRef.current) {
+          const didLoad = await loadOlderMessages(container);
+          if (didLoad) {
+            topLoadLockRef.current = true;
+          }
         }
       }
     }
@@ -3045,6 +3066,14 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, late
           setMessagesOffset(0);
           setHasMoreMessages(false);
           setTotalMessages(0);
+          setVisibleMessageCount(100);
+          setAllMessagesLoaded(false);
+          allMessagesLoadedRef.current = false;
+          setIsLoadingAllMessages(false);
+          setLoadAllJustFinished(false);
+          setShowLoadAllOverlay(false);
+          clearTimeout(loadAllOverlayTimerRef.current);
+          clearTimeout(loadAllFinishedTimerRef.current);
           // Reset token budget when switching sessions
           // It will update when user sends a message and receives new budget from WebSocket
           setTokenBudget(null);
@@ -4186,6 +4215,29 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, late
     return () => clearTimeout(timer);
   }, [input]);
 
+  // Show "Load all" overlay after a batch finishes loading (loading spinner gone),
+  // persist for 2s so the user has time to click it, then hide
+  const prevLoadingRef = useRef(false);
+  useEffect(() => {
+    const wasLoading = prevLoadingRef.current;
+    prevLoadingRef.current = isLoadingMoreMessages;
+
+    // Batch just finished loading and there are still more messages
+    if (wasLoading && !isLoadingMoreMessages && hasMoreMessages) {
+      clearTimeout(loadAllOverlayTimerRef.current);
+      setShowLoadAllOverlay(true);
+      loadAllOverlayTimerRef.current = setTimeout(() => {
+        setShowLoadAllOverlay(false);
+      }, 2000);
+    }
+    // All messages loaded (via loadAllMessages) — hide immediately
+    if (!hasMoreMessages && !isLoadingMoreMessages) {
+      clearTimeout(loadAllOverlayTimerRef.current);
+      setShowLoadAllOverlay(false);
+    }
+    return () => clearTimeout(loadAllOverlayTimerRef.current);
+  }, [isLoadingMoreMessages, hasMoreMessages]);
+
   // Show only recent messages for better performance
   const visibleMessages = useMemo(() => {
     if (chatMessages.length <= visibleMessageCount) {
@@ -4334,6 +4386,94 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, late
   const loadEarlierMessages = useCallback(() => {
     setVisibleMessageCount(prevCount => prevCount + 100);
   }, []);
+
+  // Load ALL messages at once (both from backend and visible cap)
+  const loadAllMessages = useCallback(async () => {
+    if (!selectedSession || !selectedProject) return;
+    if (isLoadingAllMessages) return;
+    const sessionProvider = selectedSession.__provider || 'claude';
+    if (sessionProvider === 'cursor') {
+      setVisibleMessageCount(Infinity);
+      setAllMessagesLoaded(true);
+      allMessagesLoadedRef.current = true;
+      setLoadAllJustFinished(true);
+      clearTimeout(loadAllFinishedTimerRef.current);
+      loadAllFinishedTimerRef.current = setTimeout(() => {
+        setLoadAllJustFinished(false);
+        setShowLoadAllOverlay(false);
+      }, 1000);
+      return;
+    }
+
+    // Capture session ID before async work to detect stale responses
+    const requestSessionId = selectedSession.id;
+
+    // Block scroll-triggered loads IMMEDIATELY (before any await)
+    allMessagesLoadedRef.current = true;
+    isLoadingMoreRef.current = true;
+    setIsLoadingAllMessages(true);
+    setShowLoadAllOverlay(true); // Keep overlay visible while loading
+
+    // Save scroll position so we can restore it after DOM expands
+    const container = scrollContainerRef.current;
+    const previousScrollHeight = container ? container.scrollHeight : 0;
+    const previousScrollTop = container ? container.scrollTop : 0;
+
+    try {
+      const response = await api.sessionMessages(
+        selectedProject.name,
+        requestSessionId,
+        null, // null = no limit, returns everything
+        0,
+        sessionProvider
+      );
+
+      // Session changed while loading — discard stale response
+      if (currentSessionId !== requestSessionId) return;
+
+      if (response.ok) {
+        const data = await response.json();
+        const allMessages = data.messages || data;
+
+        // Schedule scroll restore before setting state (fires after next paint)
+        if (container) {
+          pendingScrollRestoreRef.current = {
+            height: previousScrollHeight,
+            top: previousScrollTop
+          };
+        }
+
+        setSessionMessages(Array.isArray(allMessages) ? allMessages : []);
+        setHasMoreMessages(false);
+        setTotalMessages(Array.isArray(allMessages) ? allMessages.length : 0);
+        setMessagesOffset(Array.isArray(allMessages) ? allMessages.length : 0);
+
+        // Remove the visible cap so all loaded messages are shown
+        setVisibleMessageCount(Infinity);
+        setAllMessagesLoaded(true);
+
+        // Show "All messages loaded" for 1 second, then hide overlay
+        setLoadAllJustFinished(true);
+        clearTimeout(loadAllFinishedTimerRef.current);
+        loadAllFinishedTimerRef.current = setTimeout(() => {
+          setLoadAllJustFinished(false);
+          setShowLoadAllOverlay(false);
+        }, 1000);
+      } else {
+        // Non-OK response — unblock
+        allMessagesLoadedRef.current = false;
+        setShowLoadAllOverlay(false);
+      }
+    } catch (error) {
+      console.error('Error loading all messages:', error);
+      // Unblock on failure
+      allMessagesLoadedRef.current = false;
+      setShowLoadAllOverlay(false);
+    } finally {
+      isLoadingMoreRef.current = false;
+      setIsLoadingAllMessages(false);
+    }
+  }, [selectedSession, selectedProject, isLoadingAllMessages, currentSessionId]);
 
   // Handle image files from drag & drop or file picker
   const handleImageFiles = useCallback((files) => {
@@ -5150,8 +5290,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, late
           </div>
         ) : (
           <>
-            {/* Loading indicator for older messages */}
-            {isLoadingMoreMessages && (
+            {/* Loading indicator for older messages (hide when load-all is active) */}
+            {isLoadingMoreMessages && !isLoadingAllMessages && !allMessagesLoaded && (
               <div className="text-center text-gray-500 dark:text-gray-400 py-3">
                 <div className="flex items-center justify-center space-x-2">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400"></div>
@@ -5159,19 +5299,56 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, late
                 </div>
               </div>
             )}
-            
-            {/* Indicator showing there are more messages to load */}
-            {hasMoreMessages && !isLoadingMoreMessages && (
+
+            {/* Indicator showing there are more messages to load (hide when all loaded) */}
+            {hasMoreMessages && !isLoadingMoreMessages && !allMessagesLoaded && (
               <div className="text-center text-gray-500 dark:text-gray-400 text-sm py-2 border-b border-gray-200 dark:border-gray-700">
                 {totalMessages > 0 && (
                   <span>
-                    {t('session.messages.showingOf', { shown: sessionMessages.length, total: totalMessages })} •
+                    {t('session.messages.showingOf', { shown: sessionMessages.length, total: totalMessages })} •{' '}
                     <span className="text-xs">{t('session.messages.scrollToLoad')}</span>
                   </span>
                 )}
               </div>
             )}
-            
+
+            {/* Floating "Load all messages" overlay — independent, persists 2s after batch loads */}
+            {(showLoadAllOverlay || isLoadingAllMessages || loadAllJustFinished) && (
+              <div className="sticky top-2 z-20 flex justify-center pointer-events-none">
+                {loadAllJustFinished ? (
+                  <div className="px-4 py-1.5 text-xs font-medium text-white bg-green-600 dark:bg-green-500 rounded-full shadow-lg flex items-center space-x-2">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span>{t('session.messages.allLoaded')}</span>
+                  </div>
+                ) : (
+                  <button
+                    className="pointer-events-auto px-4 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 rounded-full shadow-lg transition-all duration-200 hover:scale-105 disabled:opacity-75 disabled:cursor-wait flex items-center space-x-2"
+                    onClick={loadAllMessages}
+                    disabled={isLoadingAllMessages}
+                  >
+                    {isLoadingAllMessages && (
+                      <div className="animate-spin rounded-full h-3 w-3 border-2 border-white/30 border-t-white"></div>
+                    )}
+                    <span>
+                      {isLoadingAllMessages
+                        ? t('session.messages.loadingAll')
+                        : <>{t('session.messages.loadAll')} {totalMessages > 0 && `(${totalMessages})`}</>
+                      }
+                    </span>
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Performance warning when all messages are loaded */}
+            {allMessagesLoaded && (
+              <div className="text-center text-amber-600 dark:text-amber-400 text-xs py-1.5 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800">
+                {t('session.messages.perfWarning')}
+              </div>
+            )}
+
             {/* Legacy message count indicator (for non-paginated view) */}
             {!hasMoreMessages && chatMessages.length > visibleMessageCount && (
               <div className="text-center text-gray-500 dark:text-gray-400 text-sm py-2 border-b border-gray-200 dark:border-gray-700">
@@ -5181,6 +5358,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, late
                   onClick={loadEarlierMessages}
                 >
                   {t('session.messages.loadEarlier')}
+                </button>
+                {' • '}
+                <button
+                  className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 underline"
+                  onClick={loadAllMessages}
+                >
+                  {t('session.messages.loadAll')}
                 </button>
               </div>
             )}
@@ -5483,7 +5667,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, late
             {/* Scroll to bottom button - positioned next to mode indicator */}
             {isUserScrolledUp && chatMessages.length > 0 && (
               <button
-                onClick={scrollToBottom}
+                onClick={scrollToBottomAndReset}
                 className="w-8 h-8 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center transition-all duration-200 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:ring-offset-gray-800"
                 title="Scroll to bottom"
               >
