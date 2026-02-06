@@ -1487,7 +1487,8 @@ function Sidebar({
           )}
         </div>
       </ScrollArea>
-      
+
+      {/* // ! TODO: Move this to a new VersionUpdateNotification component */}
       {/* Version Update Notification */}
       {updateAvailable && (
         <div className="md:p-2 border-t border-border/50 flex-shrink-0">
@@ -1561,7 +1562,6 @@ function Sidebar({
           <span className="text-xs">{t('actions.settings')}</span>
         </Button>
       </div>
-
     </div>
         </>
       )}
