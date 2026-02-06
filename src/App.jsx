@@ -26,7 +26,6 @@ import MainContent from './components/MainContent';
 import MobileNav from './components/MobileNav';
 import Settings from './components/Settings';
 import QuickSettingsPanel from './components/QuickSettingsPanel';
-import VersionUpgradeModal from './components/modals/VersionUpgradeModal';
 
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
@@ -34,7 +33,6 @@ import { TaskMasterProvider } from './contexts/TaskMasterContext';
 import { TasksSettingsProvider } from './contexts/TasksSettingsContext';
 import { WebSocketProvider, useWebSocket } from './contexts/WebSocketContext';
 import ProtectedRoute from './components/ProtectedRoute';
-import { useVersionCheck } from './hooks/useVersionCheck';
 import useLocalStorage from './hooks/useLocalStorage';
 import { api, authenticatedFetch } from './utils/api';
 import { I18nextProvider, useTranslation } from 'react-i18next';
@@ -50,9 +48,6 @@ function AppContent() {
   // * This is a tracker for avoiding excessive re-renders during development 
   const renderCountRef = useRef(0);
   // console.log(`AppContent render count: ${renderCountRef.current++}`);
-  
-  const { updateAvailable, latestVersion, currentVersion, releaseInfo } = useVersionCheck('siteboon', 'claudecodeui');
-  const [showVersionModal, setShowVersionModal] = useState(false);
   
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
@@ -591,75 +586,25 @@ function AppContent() {
             sidebarVisible ? 'w-80' : 'w-14'
           }`}
         >
-          <div className="h-full overflow-hidden">
-            {sidebarVisible ? (
-              <Sidebar
-                projects={projects}
-                selectedProject={selectedProject}
-                selectedSession={selectedSession}
-                onProjectSelect={handleProjectSelect}
-                onSessionSelect={handleSessionSelect}
-                onNewSession={handleNewSession}
-                onSessionDelete={handleSessionDelete}
-                onProjectDelete={handleProjectDelete}
-                isLoading={isLoadingProjects}
-                loadingProgress={loadingProgress}
-                onRefresh={handleSidebarRefresh}
-                onShowSettings={() => setShowSettings(true)}
-                updateAvailable={updateAvailable}
-                latestVersion={latestVersion}
-                currentVersion={currentVersion}
-                releaseInfo={releaseInfo}
-                onShowVersionModal={() => setShowVersionModal(true)}
-                isPWA={isPWA}
-                isMobile={isMobile}
-                onToggleSidebar={() => setSidebarVisible(false)}
-              />
-            ) : (
-              /* Collapsed Sidebar */
-              <div className="h-full flex flex-col items-center py-4 gap-4">
-                {/* Expand Button */}
-                <button
-                  onClick={() => setSidebarVisible(true)}
-                  className="p-2 hover:bg-accent rounded-md transition-colors duration-200 group"
-                  aria-label={t('versionUpdate.ariaLabels.showSidebar')}
-                  title={t('versionUpdate.ariaLabels.showSidebar')}
-                >
-                  <svg
-                    className="w-5 h-5 text-foreground group-hover:scale-110 transition-transform"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-                  </svg>
-                </button>
-
-                {/* Settings Icon */}
-                <button
-                  onClick={() => setShowSettings(true)}
-                  className="p-2 hover:bg-accent rounded-md transition-colors duration-200"
-                  aria-label={t('versionUpdate.ariaLabels.settings')}
-                  title={t('versionUpdate.ariaLabels.settings')}
-                >
-                  <SettingsIcon className="w-5 h-5 text-muted-foreground hover:text-foreground transition-colors" />
-                </button>
-
-                {/* Update Indicator */}
-                {updateAvailable && (
-                  <button
-                    onClick={() => setShowVersionModal(true)}
-                    className="relative p-2 hover:bg-accent rounded-md transition-colors duration-200"
-                    aria-label={t('versionUpdate.ariaLabels.updateAvailable')}
-                    title={t('versionUpdate.ariaLabels.updateAvailable')}
-                  >
-                    <Sparkles className="w-5 h-5 text-blue-500" />
-                    <span className="absolute top-1 right-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+          <Sidebar
+            projects={projects}
+            selectedProject={selectedProject}
+            selectedSession={selectedSession}
+            onProjectSelect={handleProjectSelect}
+            onSessionSelect={handleSessionSelect}
+            onNewSession={handleNewSession}
+            onSessionDelete={handleSessionDelete}
+            onProjectDelete={handleProjectDelete}
+            isLoading={isLoadingProjects}
+            loadingProgress={loadingProgress}
+            onRefresh={handleSidebarRefresh}
+            onShowSettings={() => setShowSettings(true)}
+            isPWA={isPWA}
+            isMobile={isMobile}
+            onToggleSidebar={() => setSidebarVisible(false)}
+            isCollapsed={!sidebarVisible}
+            onExpandSidebar={() => setSidebarVisible(true)}
+          />
         </div>
       )}
 
@@ -701,14 +646,10 @@ function AppContent() {
               loadingProgress={loadingProgress}
               onRefresh={handleSidebarRefresh}
               onShowSettings={() => setShowSettings(true)}
-              updateAvailable={updateAvailable}
-              latestVersion={latestVersion}
-              currentVersion={currentVersion}
-              releaseInfo={releaseInfo}
-              onShowVersionModal={() => setShowVersionModal(true)}
               isPWA={isPWA}
               isMobile={isMobile}
               onToggleSidebar={() => setSidebarVisible(false)}
+              isCollapsed={false}
             />
           </div>
         </div>
@@ -779,15 +720,6 @@ function AppContent() {
         onClose={() => setShowSettings(false)}
         projects={projects}
         initialTab={settingsInitialTab}
-      />
-
-      {/* Version Upgrade Modal */}
-      <VersionUpgradeModal
-        isOpen={showVersionModal}
-        onClose={() => setShowVersionModal(false)}
-        releaseInfo={releaseInfo}
-        currentVersion={currentVersion}
-        latestVersion={latestVersion}
       />
     </div>
   );

@@ -13,6 +13,8 @@ import CursorLogo from './CursorLogo.jsx';
 import CodexLogo from './CodexLogo.jsx';
 import TaskIndicator from './TaskIndicator';
 import ProjectCreationWizard from './ProjectCreationWizard';
+import VersionUpgradeModal from './modals/VersionUpgradeModal';
+import { useVersionCheck } from '../hooks/useVersionCheck';
 import { api } from '../utils/api';
 import { useTaskMaster } from '../contexts/TaskMasterContext';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
@@ -57,16 +59,14 @@ function Sidebar({
   loadingProgress,
   onRefresh,
   onShowSettings,
-  updateAvailable,
-  latestVersion,
-  currentVersion,
-  releaseInfo,
-  onShowVersionModal,
   isPWA,
   isMobile,
-  onToggleSidebar
+  onToggleSidebar,
+  isCollapsed = false,
+  onExpandSidebar
 }) {
-  const { t } = useTranslation('sidebar');
+  const { t } = useTranslation(['sidebar', 'common']);
+  const { updateAvailable, latestVersion, currentVersion, releaseInfo } = useVersionCheck('siteboon', 'claudecodeui');
   const [expandedProjects, setExpandedProjects] = useState(new Set());
   const [editingProject, setEditingProject] = useState(null);
   const [showNewProject, setShowNewProject] = useState(false);
@@ -84,6 +84,7 @@ function Sidebar({
   const [deletingProjects, setDeletingProjects] = useState(new Set());
   const [deleteConfirmation, setDeleteConfirmation] = useState(null); // { project, sessionCount }
   const [sessionDeleteConfirmation, setSessionDeleteConfirmation] = useState(null); // { projectName, sessionId, sessionTitle, provider }
+  const [showVersionModal, setShowVersionModal] = useState(false);
 
   // TaskMaster context
   const { setCurrentProject, mcpServerStatus } = useTaskMaster();
@@ -493,8 +494,53 @@ function Sidebar({
     setCurrentProject(project);
   };
 
+  const collapsedSidebar = (
+    <div className="h-full flex flex-col items-center py-4 gap-4 bg-card">
+      <button
+        onClick={onExpandSidebar}
+        className="p-2 hover:bg-accent rounded-md transition-colors duration-200 group"
+        aria-label={t('common:versionUpdate.ariaLabels.showSidebar')}
+        title={t('common:versionUpdate.ariaLabels.showSidebar')}
+      >
+        <svg
+          className="w-5 h-5 text-foreground group-hover:scale-110 transition-transform"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+        </svg>
+      </button>
+
+      <button
+        onClick={onShowSettings}
+        className="p-2 hover:bg-accent rounded-md transition-colors duration-200"
+        aria-label={t('actions.settings')}
+        title={t('actions.settings')}
+      >
+        <Settings className="w-5 h-5 text-muted-foreground hover:text-foreground transition-colors" />
+      </button>
+
+      {updateAvailable && (
+        <button
+          onClick={() => setShowVersionModal(true)}
+          className="relative p-2 hover:bg-accent rounded-md transition-colors duration-200"
+          aria-label={t('common:versionUpdate.ariaLabels.updateAvailable')}
+          title={t('common:versionUpdate.ariaLabels.updateAvailable')}
+        >
+          <Sparkles className="w-5 h-5 text-blue-500" />
+          <span className="absolute top-1 right-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+        </button>
+      )}
+    </div>
+  );
+
   return (
     <>
+      {isCollapsed ? (
+        collapsedSidebar
+      ) : (
+        <>
       {/* Project Creation Wizard Modal - Rendered via Portal at document root for full-screen on mobile */}
       {showNewProject && ReactDOM.createPortal(
         <ProjectCreationWizard
@@ -1474,7 +1520,7 @@ function Sidebar({
             <Button
               variant="ghost"
               className="w-full justify-start gap-3 p-3 h-auto font-normal text-left hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors duration-200 border border-blue-200 dark:border-blue-700 rounded-lg mb-2"
-              onClick={onShowVersionModal}
+              onClick={() => setShowVersionModal(true)}
             >
               <div className="relative">
                 <svg className="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1495,7 +1541,7 @@ function Sidebar({
           <div className="md:hidden p-3 pb-2">
             <button
               className="w-full h-12 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-xl flex items-center justify-start gap-3 px-4 active:scale-[0.98] transition-all duration-150"
-              onClick={onShowVersionModal}
+              onClick={() => setShowVersionModal(true)}
             >
               <div className="relative">
                 <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1539,7 +1585,18 @@ function Sidebar({
           <span className="text-xs">{t('actions.settings')}</span>
         </Button>
       </div>
+
     </div>
+        </>
+      )}
+
+      <VersionUpgradeModal
+        isOpen={showVersionModal}
+        onClose={() => setShowVersionModal(false)}
+        releaseInfo={releaseInfo}
+        currentVersion={currentVersion}
+        latestVersion={latestVersion}
+      />
     </>
   );
 }
