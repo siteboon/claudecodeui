@@ -14,6 +14,7 @@ import CodexLogo from './CodexLogo.jsx';
 import TaskIndicator from './TaskIndicator';
 import ProjectCreationWizard from './ProjectCreationWizard';
 import VersionUpgradeModal from './modals/VersionUpgradeModal';
+import { useDeviceSettings } from '../hooks/useDeviceSettings';
 import { useVersionCheck } from '../hooks/useVersionCheck';
 import { useUiPreferences } from '../hooks/useUiPreferences';
 import { api } from '../utils/api';
@@ -36,10 +37,10 @@ function Sidebar({
   loadingProgress,
   onRefresh,
   onShowSettings,
-  isPWA,
   isMobile
 }) {
   const { t } = useTranslation(['sidebar', 'common']);
+  const { isPWA } = useDeviceSettings({ trackMobile: false });
   const { updateAvailable, latestVersion, currentVersion, releaseInfo } = useVersionCheck('siteboon', 'claudecodeui');
   const { preferences, setPreference } = useUiPreferences();
   const { sidebarVisible } = preferences;
@@ -91,6 +92,15 @@ function Sidebar({
       callback();
     };
   };
+
+  useEffect(() => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    document.documentElement.classList.toggle('pwa-mode', isPWA);
+    document.body.classList.toggle('pwa-mode', isPWA);
+  }, [isPWA]);
 
   // Auto-update timestamps every minute
   useEffect(() => {

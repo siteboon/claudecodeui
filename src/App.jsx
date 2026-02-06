@@ -32,6 +32,7 @@ import { TaskMasterProvider } from './contexts/TaskMasterContext';
 import { TasksSettingsProvider } from './contexts/TasksSettingsContext';
 import { WebSocketProvider, useWebSocket } from './contexts/WebSocketContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import { useDeviceSettings } from './hooks/useDeviceSettings';
 import { api, authenticatedFetch } from './utils/api';
 import { I18nextProvider, useTranslation } from 'react-i18next';
 import i18n from './i18n/config.js';
@@ -51,7 +52,7 @@ function AppContent() {
   const [selectedProject, setSelectedProject] = useState(null);
   const [selectedSession, setSelectedSession] = useState(null);
   const [activeTab, setActiveTab] = useState('chat'); // 'chat' or 'files'
-  const [isMobile, setIsMobile] = useState(false);
+  const { isMobile } = useDeviceSettings({ trackPWA: false });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [loadingProgress, setLoadingProgress] = useState(null); // { phase, current, total, currentProject }
@@ -76,49 +77,6 @@ function AppContent() {
 
   // Ref to track loading progress timeout for cleanup
   const loadingProgressTimeoutRef = useRef(null);
-
-  // Detect if running as PWA
-  const [isPWA, setIsPWA] = useState(false);
-  
-  useEffect(() => {
-    // Check if running in standalone mode (PWA)
-    const checkPWA = () => {
-      const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
-                          window.navigator.standalone ||
-                          document.referrer.includes('android-app://');
-      setIsPWA(isStandalone);
-        document.addEventListener('touchstart', {});
-
-      // Add class to html and body for CSS targeting
-      if (isStandalone) {
-        document.documentElement.classList.add('pwa-mode');
-        document.body.classList.add('pwa-mode');
-      } else {
-        document.documentElement.classList.remove('pwa-mode');
-        document.body.classList.remove('pwa-mode');
-      }
-    };
-    
-    checkPWA();
-    
-    // Listen for changes
-    window.matchMedia('(display-mode: standalone)').addEventListener('change', checkPWA);
-    
-    return () => {
-      window.matchMedia('(display-mode: standalone)').removeEventListener('change', checkPWA);
-    };
-  }, []);
-
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-    
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
 
   useEffect(() => {
     // Fetch projects on component mount
@@ -584,7 +542,6 @@ function AppContent() {
     loadingProgress,
     onRefresh: handleSidebarRefresh,
     onShowSettings: handleShowSettings,
-    isPWA,
     isMobile
   }), [
     projects,
@@ -599,7 +556,6 @@ function AppContent() {
     loadingProgress,
     handleSidebarRefresh,
     handleShowSettings,
-    isPWA,
     isMobile
   ]);
 
