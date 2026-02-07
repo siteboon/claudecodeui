@@ -3,9 +3,15 @@ import { AlertTriangle, Trash2 } from 'lucide-react';
 import type { TFunction } from 'i18next';
 import { Button } from '../ui/button';
 import ProjectCreationWizard from '../ProjectCreationWizard';
+import Settings from '../Settings';
+import type { Project } from '../../types/app';
 import type { DeleteProjectConfirmation, SessionDeleteConfirmation } from './types';
 
 type SidebarModalsProps = {
+  projects: Project[];
+  showSettings: boolean;
+  settingsInitialTab: string;
+  onCloseSettings: () => void;
   showNewProject: boolean;
   onCloseNewProject: () => void;
   onProjectCreated: () => void;
@@ -19,6 +25,10 @@ type SidebarModalsProps = {
 };
 
 export default function SidebarModals({
+  projects,
+  showSettings,
+  settingsInitialTab,
+  onCloseSettings,
   showNewProject,
   onCloseNewProject,
   onProjectCreated,
@@ -40,6 +50,13 @@ export default function SidebarModals({
           />,
           document.body,
         )}
+
+      <Settings
+        isOpen={showSettings}
+        onClose={onCloseSettings}
+        projects={projects as any}
+        initialTab={settingsInitialTab}
+      />
 
       {deleteConfirmation &&
         ReactDOM.createPortal(

@@ -480,6 +480,9 @@ export function useProjectsState({
       loadingProgress,
       onRefresh: handleSidebarRefresh,
       onShowSettings: () => setShowSettings(true),
+      showSettings,
+      settingsInitialTab,
+      onCloseSettings: () => setShowSettings(false),
       isMobile,
     }),
     [
@@ -493,8 +496,10 @@ export function useProjectsState({
       isMobile,
       loadingProgress,
       projects,
+      settingsInitialTab,
       selectedProject,
       selectedSession,
+      showSettings,
     ],
   );
 

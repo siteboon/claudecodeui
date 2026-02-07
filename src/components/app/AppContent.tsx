@@ -5,7 +5,6 @@ import { useTranslation } from 'react-i18next';
 import Sidebar from '../Sidebar';
 import MainContent from '../MainContent';
 import MobileNav from '../MobileNav';
-import Settings from '../Settings';
 
 import { useWebSocket } from '../../contexts/WebSocketContext';
 import { useDeviceSettings } from '../../hooks/useDeviceSettings';
@@ -30,15 +29,12 @@ export default function AppContent() {
   } = useSessionProtection();
 
   const {
-    projects,
     selectedProject,
     selectedSession,
     activeTab,
     sidebarOpen,
     isLoadingProjects,
     isInputFocused,
-    showSettings,
-    settingsInitialTab,
     externalMessageUpdate,
     setActiveTab,
     setSidebarOpen,
@@ -143,12 +139,6 @@ export default function AppContent() {
         />
       )}
 
-      <Settings
-        isOpen={showSettings}
-        onClose={() => setShowSettings(false)}
-        projects={projects as any}
-        initialTab={settingsInitialTab}
-      />
     </div>
   );
 }
