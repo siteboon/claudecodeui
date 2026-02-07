@@ -378,49 +378,6 @@ function Sidebar({
     }
   };
 
-  const createNewProject = async () => {
-    if (!newProjectPath.trim()) {
-      alert(t('messages.enterProjectPath'));
-      return;
-    }
-
-    setCreatingProject(true);
-
-    try {
-      const response = await api.createProject(newProjectPath.trim());
-
-      if (response.ok) {
-        const result = await response.json();
-
-        // Save the path to recent paths before clearing
-        saveToRecentPaths(newProjectPath.trim());
-
-        setShowNewProject(false);
-        setNewProjectPath('');
-
-        // Refresh projects to show the new one
-        if (window.refreshProjects) {
-          window.refreshProjects();
-        } else {
-          window.location.reload();
-        }
-      } else {
-        const error = await response.json();
-        alert(error.error || t('messages.createProjectFailed'));
-      }
-    } catch (error) {
-      console.error('Error creating project:', error);
-      alert(t('messages.createProjectError'));
-    } finally {
-      setCreatingProject(false);
-    }
-  };
-
-  const cancelNewProject = () => {
-    setShowNewProject(false);
-    setNewProjectPath('');
-  };
-
   const loadMoreSessions = async (project) => {
     // Check if we can load more sessions
     const canLoadMore = project.sessionMeta?.hasMore !== false;
