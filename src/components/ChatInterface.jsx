@@ -29,6 +29,8 @@ import ClaudeLogo from './ClaudeLogo.jsx';
 import CursorLogo from './CursorLogo.jsx';
 import CodexLogo from './CodexLogo.jsx';
 import NextTaskBanner from './NextTaskBanner.jsx';
+import QuickSettingsPanel from './QuickSettingsPanel';
+
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
 import { useTranslation } from 'react-i18next';
 
@@ -5685,6 +5687,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, late
         </form>
       </div>
     </div>
+
+    <QuickSettingsPanel />
     </>
   );
 }

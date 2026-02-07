@@ -22,8 +22,10 @@ import { useUiPreferences } from '../hooks/useUiPreferences';
 import { useTheme } from '../contexts/ThemeContext';
 import LanguageSelector from './LanguageSelector';
 
+import { useDeviceSettings } from '../hooks/useDeviceSettings';
 
-const QuickSettingsPanel = ({ isMobile }) => {
+
+const QuickSettingsPanel = () => {
   const { t } = useTranslation('settings');
   const [ isOpen, setIsOpen ] = useState(false); 
   const [localIsOpen, setLocalIsOpen] = useState(false); // ! Is this necessary? Can we just use isOpen?
@@ -31,6 +33,8 @@ const QuickSettingsPanel = ({ isMobile }) => {
     return localStorage.getItem('whisperMode') || 'default';
   });
   const { isDarkMode } = useTheme();
+
+  const { isMobile } = useDeviceSettings({ trackPWA: false });
 
   const { preferences, setPreference } = useUiPreferences();
   const { autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter } = preferences;
