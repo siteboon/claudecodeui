@@ -37,20 +37,24 @@ import { api, authenticatedFetch } from './utils/api';
 import { I18nextProvider, useTranslation } from 'react-i18next';
 import i18n from './i18n/config.js';
 
-
-// ! Move to a separate file called AppContent.ts
+// TODO: Move to a separate file called AppContent.ts
 // Main App component with routing
 function AppContent() {
-  const navigate = useNavigate();
+  const navigate = useNavigate(); // used for navigation on project select 
   const { sessionId } = useParams();
   const { t } = useTranslation('common');
   // * This is a tracker for avoiding excessive re-renders during development 
   const renderCountRef = useRef(0);
   // console.log(`AppContent render count: ${renderCountRef.current++}`);
   
+  // ! ESSENTIAL STATES
   const [projects, setProjects] = useState([]);
+  // debugger;
+  // console.log('Projects state updated:', projects); // Debug log to track projects state changes
   const [selectedProject, setSelectedProject] = useState(null);
   const [selectedSession, setSelectedSession] = useState(null);
+
+
   const [activeTab, setActiveTab] = useState('chat'); // 'chat' or 'files'
   const { isMobile } = useDeviceSettings({ trackPWA: false });
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -74,7 +78,7 @@ function AppContent() {
   const [externalMessageUpdate, setExternalMessageUpdate] = useState(0);
 
   const { ws, sendMessage, latestMessage } = useWebSocket();
-
+  console.log('WebSocket latest message:', latestMessage); // Debug log to track WebSocket messages
   // Ref to track loading progress timeout for cleanup
   const loadingProgressTimeoutRef = useRef(null);
 
@@ -191,6 +195,7 @@ function AppContent() {
         
         // Update projects state with the new data from WebSocket
         const updatedProjects = latestMessage.projects;
+        console.log("====> latest message is: ", latestMessage);
         setProjects(updatedProjects);
 
         // Update selected project if it exists in the updated projects
@@ -259,6 +264,8 @@ function AppContent() {
         if (prevProjects.length === 0) {
           return data;
         }
+
+        console.log("===> Prev projects: ", prevProjects);
         
         // Check if the projects data has actually changed
         const hasChanges = data.some((newProject, index) => {
@@ -289,13 +296,13 @@ function AppContent() {
   };
 
   // Expose fetchProjects globally for component access
-  window.refreshProjects = fetchProjects;
+  window.refreshProjects = fetchProjects; // ! Exposing it globally is bad so we should use props for stuff like this.
 
   // Expose openSettings function globally for component access
   window.openSettings = useCallback((tab = 'tools') => {
     setSettingsInitialTab(tab);
     setShowSettings(true);
-  }, []);
+  }, []); // ! Exposing it globally is bad so we should use props for stuff like this.
 
   // Handle URL-based session loading
   useEffect(() => {
@@ -332,6 +339,8 @@ function AppContent() {
     }
   }, [sessionId, projects, navigate]);
 
+
+  // TODO: All this functions should be in separate components
   const handleProjectSelect = (project) => {
     setSelectedProject(project);
     setSelectedSession(null);
@@ -643,6 +652,8 @@ function AppContent() {
         <QuickSettingsPanel isMobile={isMobile} />
       )}
 
+      {/* // TODO: This should be in its own file. In modals/Settings.tsx */}
+      {/* // TODO: This should be in sidebar as well. */}
       {/* Settings Modal */}
       <Settings
         isOpen={showSettings}
@@ -666,6 +677,7 @@ function App() {
                 <ProtectedRoute>
                   <Router basename={window.__ROUTER_BASENAME__ || ''}>                                                                                                      
                     <Routes>
+                      {/* // TODO: Can this be refactored to just have one route? */}
                       <Route path="/" element={<AppContent />} />
                       <Route path="/session/:sessionId" element={<AppContent />} />
                     </Routes>
