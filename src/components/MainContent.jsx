@@ -63,6 +63,7 @@ function MainContent({
   const [isResizing, setIsResizing] = useState(false);
   const [editorExpanded, setEditorExpanded] = useState(false);
   const resizeRef = useRef(null);
+  const suppressNextMenuClickRef = useRef(false);
 
   const { preferences } = useUiPreferences();
   const { autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter } = preferences;
@@ -164,6 +165,34 @@ function MainContent({
     refreshTasks?.();
   };
 
+  const openMobileMenu = (event) => {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
+    onMenuClick();
+  };
+
+  const handleMobileMenuTouchEnd = (event) => {
+    suppressNextMenuClickRef.current = true;
+    openMobileMenu(event);
+
+    window.setTimeout(() => {
+      suppressNextMenuClickRef.current = false;
+    }, 350);
+  };
+
+  const handleMobileMenuClick = (event) => {
+    if (suppressNextMenuClickRef.current) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    openMobileMenu(event);
+  };
+
   // Handle resize functionality
   const handleMouseDown = (e) => {
     if (isMobile) return; // Disable resize on mobile
@@ -218,7 +247,8 @@ function MainContent({
             className="bg-background border-b border-border p-2 sm:p-3 pwa-header-safe flex-shrink-0"
           >
             <button
-              onClick={onMenuClick}
+              onClick={handleMobileMenuClick}
+              onTouchEnd={handleMobileMenuTouchEnd}
               className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 pwa-menu-button"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -256,7 +286,8 @@ function MainContent({
             className="bg-background border-b border-border p-2 sm:p-3 pwa-header-safe flex-shrink-0"
           >
             <button
-              onClick={onMenuClick}
+              onClick={handleMobileMenuClick}
+              onTouchEnd={handleMobileMenuTouchEnd}
               className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 pwa-menu-button"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -297,11 +328,8 @@ function MainContent({
           <div className="flex items-center space-x-2 min-w-0 flex-1">
             {isMobile && (
               <button
-                onClick={onMenuClick}
-                onTouchStart={(e) => {
-                  e.preventDefault();
-                  onMenuClick();
-                }}
+                onClick={handleMobileMenuClick}
+                onTouchEnd={handleMobileMenuTouchEnd}
                 className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 touch-manipulation active:scale-95 pwa-menu-button flex-shrink-0"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
