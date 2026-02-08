@@ -384,6 +384,7 @@ async function getProjects(progressCallback = null) {
   const config = await loadProjectConfig();
   const projects = [];
   const existingProjects = new Set();
+  const codexSessionsIndexRef = { sessionsByProject: null };
   let totalProjects = 0;
   let processedProjects = 0;
   let directories = [];
@@ -419,8 +420,6 @@ async function getProjects(progressCallback = null) {
           });
         }
 
-        const projectPath = path.join(claudeDir, entry.name);
-        
         // Extract actual project directory from JSONL sessions
         const actualProjectDir = await extractProjectDirectory(entry.name);
         
@@ -460,7 +459,9 @@ async function getProjects(progressCallback = null) {
 
         // Also fetch Codex sessions for this project
         try {
-          project.codexSessions = await getCodexSessions(actualProjectDir);
+          project.codexSessions = await getCodexSessions(actualProjectDir, {
+            indexRef: codexSessionsIndexRef,
+          });
         } catch (e) {
           console.warn(`Could not load Codex sessions for project ${entry.name}:`, e.message);
           project.codexSessions = [];
@@ -546,7 +547,9 @@ async function getProjects(progressCallback = null) {
 
       // Try to fetch Codex sessions for manual projects too
       try {
-        project.codexSessions = await getCodexSessions(actualProjectDir);
+        project.codexSessions = await getCodexSessions(actualProjectDir, {
+          indexRef: codexSessionsIndexRef,
+        });
       } catch (e) {
         console.warn(`Could not load Codex sessions for manual project ${projectName}:`, e.message);
       }
@@ -1244,75 +1247,114 @@ async function getCursorSessions(projectPath) {
 }
 
 
+function normalizeComparablePath(inputPath) {
+  if (!inputPath || typeof inputPath !== 'string') {
+    return '';
+  }
+
+  const withoutLongPathPrefix = inputPath.startsWith('\\\\?\\')
+    ? inputPath.slice(4)
+    : inputPath;
+  const normalized = path.normalize(withoutLongPathPrefix.trim());
+
+  if (!normalized) {
+    return '';
+  }
+
+  const resolved = path.resolve(normalized);
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+
+async function findCodexJsonlFiles(dir) {
+  const files = [];
+
+  try {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        files.push(...await findCodexJsonlFiles(fullPath));
+      } else if (entry.name.endsWith('.jsonl')) {
+        files.push(fullPath);
+      }
+    }
+  } catch (error) {
+    // Skip directories we can't read
+  }
+
+  return files;
+}
+
+async function buildCodexSessionsIndex() {
+  const codexSessionsDir = path.join(os.homedir(), '.codex', 'sessions');
+  const sessionsByProject = new Map();
+
+  try {
+    await fs.access(codexSessionsDir);
+  } catch (error) {
+    return sessionsByProject;
+  }
+
+  const jsonlFiles = await findCodexJsonlFiles(codexSessionsDir);
+
+  for (const filePath of jsonlFiles) {
+    try {
+      const sessionData = await parseCodexSessionFile(filePath);
+      if (!sessionData || !sessionData.id) {
+        continue;
+      }
+
+      const normalizedProjectPath = normalizeComparablePath(sessionData.cwd);
+      if (!normalizedProjectPath) {
+        continue;
+      }
+
+      const session = {
+        id: sessionData.id,
+        summary: sessionData.summary || 'Codex Session',
+        messageCount: sessionData.messageCount || 0,
+        lastActivity: sessionData.timestamp ? new Date(sessionData.timestamp) : new Date(),
+        cwd: sessionData.cwd,
+        model: sessionData.model,
+        filePath,
+        provider: 'codex',
+      };
+
+      if (!sessionsByProject.has(normalizedProjectPath)) {
+        sessionsByProject.set(normalizedProjectPath, []);
+      }
+
+      sessionsByProject.get(normalizedProjectPath).push(session);
+    } catch (error) {
+      console.warn(`Could not parse Codex session file ${filePath}:`, error.message);
+    }
+  }
+
+  for (const sessions of sessionsByProject.values()) {
+    sessions.sort((a, b) => new Date(b.lastActivity) - new Date(a.lastActivity));
+  }
+
+  return sessionsByProject;
+}
+
 // Fetch Codex sessions for a given project path
 async function getCodexSessions(projectPath, options = {}) {
-  const { limit = 5 } = options;
+  const { limit = 5, indexRef = null } = options;
   try {
-    const codexSessionsDir = path.join(os.homedir(), '.codex', 'sessions');
-    const sessions = [];
-
-    // Check if the directory exists
-    try {
-      await fs.access(codexSessionsDir);
-    } catch (error) {
-      // No Codex sessions directory
+    const normalizedProjectPath = normalizeComparablePath(projectPath);
+    if (!normalizedProjectPath) {
       return [];
     }
 
-    // Recursively find all .jsonl files in the sessions directory
-    const findJsonlFiles = async (dir) => {
-      const files = [];
-      try {
-        const entries = await fs.readdir(dir, { withFileTypes: true });
-        for (const entry of entries) {
-          const fullPath = path.join(dir, entry.name);
-          if (entry.isDirectory()) {
-            files.push(...await findJsonlFiles(fullPath));
-          } else if (entry.name.endsWith('.jsonl')) {
-            files.push(fullPath);
-          }
-        }
-      } catch (error) {
-        // Skip directories we can't read
-      }
-      return files;
-    };
-
-    const jsonlFiles = await findJsonlFiles(codexSessionsDir);
-
-    // Process each file to find sessions matching the project path
-    for (const filePath of jsonlFiles) {
-      try {
-        const sessionData = await parseCodexSessionFile(filePath);
-
-        // Check if this session matches the project path
-        // Handle Windows long paths with \\?\ prefix
-        const sessionCwd = sessionData?.cwd || '';
-        const cleanSessionCwd = sessionCwd.startsWith('\\\\?\\') ? sessionCwd.slice(4) : sessionCwd;
-        const cleanProjectPath = projectPath.startsWith('\\\\?\\') ? projectPath.slice(4) : projectPath;
-
-        if (sessionData && (sessionData.cwd === projectPath || cleanSessionCwd === cleanProjectPath || path.relative(cleanSessionCwd, cleanProjectPath) === '')) {
-          sessions.push({
-            id: sessionData.id,
-            summary: sessionData.summary || 'Codex Session',
-            messageCount: sessionData.messageCount || 0,
-            lastActivity: sessionData.timestamp ? new Date(sessionData.timestamp) : new Date(),
-            cwd: sessionData.cwd,
-            model: sessionData.model,
-            filePath: filePath,
-            provider: 'codex'
-          });
-        }
-      } catch (error) {
-        console.warn(`Could not parse Codex session file ${filePath}:`, error.message);
-      }
+    if (indexRef && !indexRef.sessionsByProject) {
+      indexRef.sessionsByProject = await buildCodexSessionsIndex();
     }
 
-    // Sort sessions by last activity (newest first)
-    sessions.sort((a, b) => new Date(b.lastActivity) - new Date(a.lastActivity));
+    const sessionsByProject = indexRef?.sessionsByProject || await buildCodexSessionsIndex();
+    const sessions = sessionsByProject.get(normalizedProjectPath) || [];
 
     // Return limited sessions for performance (0 = unlimited for deletion)
-    return limit > 0 ? sessions.slice(0, limit) : sessions;
+    return limit > 0 ? sessions.slice(0, limit) : [...sessions];
 
   } catch (error) {
     console.error('Error fetching Codex sessions:', error);

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
-import { api, authenticatedFetch } from '../utils/api';
+import { api } from '../utils/api';
 import type {
   AppSocketMessage,
   AppTab,
@@ -23,7 +23,7 @@ const serialize = (value: unknown) => JSON.stringify(value ?? null);
 const projectsHaveChanges = (
   prevProjects: Project[],
   nextProjects: Project[],
-  includeCursorSessions: boolean,
+  includeExternalSessions: boolean,
 ): boolean => {
   if (prevProjects.length !== nextProjects.length) {
     return true;
@@ -46,11 +46,14 @@ const projectsHaveChanges = (
       return true;
     }
 
-    if (!includeCursorSessions) {
+    if (!includeExternalSessions) {
       return false;
     }
 
-    return serialize(nextProject.cursorSessions) !== serialize(prevProject.cursorSessions);
+    return (
+      serialize(nextProject.cursorSessions) !== serialize(prevProject.cursorSessions) ||
+      serialize(nextProject.codexSessions) !== serialize(prevProject.codexSessions)
+    );
   });
 };
 
@@ -98,31 +101,6 @@ const isUpdateAdditive = (
   );
 };
 
-const loadCursorSessionsForProjects = async (projects: Project[]): Promise<Project[]> => {
-  const projectsWithCursor = [...projects];
-
-  for (const project of projectsWithCursor) {
-    try {
-      const projectPath = project.fullPath || project.path;
-      const url = `/api/cursor/sessions?projectPath=${encodeURIComponent(projectPath ?? '')}`;
-      const response = await authenticatedFetch(url);
-
-      if (!response.ok) {
-        project.cursorSessions = [];
-        continue;
-      }
-
-      const data = await response.json();
-      project.cursorSessions = data.success && Array.isArray(data.sessions) ? data.sessions : [];
-    } catch (error) {
-      console.error(`Error fetching Cursor sessions for project ${project.name}:`, error);
-      project.cursorSessions = [];
-    }
-  }
-
-  return projectsWithCursor;
-};
-
 export function useProjectsState({
   sessionId,
   navigate,
@@ -149,15 +127,14 @@ export function useProjectsState({
       setIsLoadingProjects(true);
       const response = await api.projects();
       const projectData = (await response.json()) as Project[];
-      const projectsWithCursor = await loadCursorSessionsForProjects(projectData);
 
       setProjects((prevProjects) => {
         if (prevProjects.length === 0) {
-          return projectsWithCursor;
+          return projectData;
         }
 
-        return projectsHaveChanges(prevProjects, projectsWithCursor, true)
-          ? projectsWithCursor
+        return projectsHaveChanges(prevProjects, projectData, true)
+          ? projectData
           : prevProjects;
       });
     } catch (error) {
@@ -421,7 +398,7 @@ export function useProjectsState({
       const freshProjects = (await response.json()) as Project[];
 
       setProjects((prevProjects) =>
-        projectsHaveChanges(prevProjects, freshProjects, false) ? freshProjects : prevProjects,
+        projectsHaveChanges(prevProjects, freshProjects, true) ? freshProjects : prevProjects,
       );
 
       if (!selectedProject) {
