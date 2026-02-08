@@ -18,7 +18,6 @@ import { useUiPreferences } from '../hooks/useUiPreferences';
 import { useEditorSidebar } from '../hooks/main-content/useEditorSidebar';
 import type { Project } from '../types/app';
 
-const AnyChatInterface = ChatInterface as any;
 const AnyStandaloneShell = StandaloneShell as any;
 const AnyGitPanel = GitPanel as any;
 
@@ -113,7 +112,7 @@ function MainContent({
         <div className={`flex-1 flex flex-col min-h-0 overflow-hidden ${editorExpanded ? 'hidden' : ''}`}>
           <div className={`h-full ${activeTab === 'chat' ? 'block' : 'hidden'}`}>
             <ErrorBoundary showDetails>
-              <AnyChatInterface
+              <ChatInterface
                 selectedProject={selectedProject}
                 selectedSession={selectedSession}
                 ws={ws}
