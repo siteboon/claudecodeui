@@ -77,6 +77,9 @@ const createFakeSubmitEvent = () => {
   return { preventDefault: () => undefined } as unknown as FormEvent<HTMLFormElement>;
 };
 
+const isTemporarySessionId = (sessionId: string | null | undefined) =>
+  Boolean(sessionId && sessionId.startsWith('new-session-'));
+
 export function useChatComposerState({
   selectedProject,
   selectedSession,
@@ -520,6 +523,10 @@ export function useChatComposerState({
       const sessionToActivate = effectiveSessionId || `new-session-${Date.now()}`;
 
       if (!effectiveSessionId && !selectedSession?.id) {
+        if (typeof window !== 'undefined') {
+          // Reset stale pending IDs from previous interrupted runs before creating a new one.
+          sessionStorage.removeItem('pendingSessionId');
+        }
         pendingViewSessionRef.current = { sessionId: null, startedAt: Date.now() };
       }
       onSessionActive?.(sessionToActivate);
@@ -770,15 +777,37 @@ export function useChatComposerState({
   }, [resetCommandMenuState]);
 
   const handleAbortSession = useCallback(() => {
-    if (!currentSessionId || !canAbortSession) {
+    if (!canAbortSession) {
       return;
     }
+
+    const pendingSessionId =
+      typeof window !== 'undefined' ? sessionStorage.getItem('pendingSessionId') : null;
+    const cursorSessionId =
+      typeof window !== 'undefined' ? sessionStorage.getItem('cursorSessionId') : null;
+
+    const candidateSessionIds = [
+      currentSessionId,
+      pendingViewSessionRef.current?.sessionId || null,
+      pendingSessionId,
+      provider === 'cursor' ? cursorSessionId : null,
+      selectedSession?.id || null,
+    ];
+
+    const targetSessionId =
+      candidateSessionIds.find((sessionId) => Boolean(sessionId) && !isTemporarySessionId(sessionId)) || null;
+
+    if (!targetSessionId) {
+      console.warn('Abort requested but no concrete session ID is available yet.');
+      return;
+    }
+
     sendMessage({
       type: 'abort-session',
-      sessionId: currentSessionId,
+      sessionId: targetSessionId,
       provider,
     });
-  }, [canAbortSession, currentSessionId, provider, sendMessage]);
+  }, [canAbortSession, currentSessionId, pendingViewSessionRef, provider, selectedSession?.id, sendMessage]);
 
   const handleTranscript = useCallback((text: string) => {
     if (!text.trim()) {

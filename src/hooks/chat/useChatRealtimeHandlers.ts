@@ -808,27 +808,45 @@ export function useChatRealtimeHandlers({
 
       case 'session-aborted': {
         const abortedSessionId = latestMessage.sessionId || currentSessionId;
+        const abortSucceeded = latestMessage.success !== false;
 
-        if (abortedSessionId === currentSessionId) {
+        if (abortSucceeded && abortedSessionId === currentSessionId) {
           setIsLoading(false);
           setCanAbortSession(false);
           setClaudeStatus(null);
         }
 
-        if (abortedSessionId) {
+        if (abortSucceeded && abortedSessionId) {
           onSessionInactive?.(abortedSessionId);
           onSessionNotProcessing?.(abortedSessionId);
         }
 
-        setPendingPermissionRequests([]);
-        setChatMessages((previous) => [
-          ...previous,
-          {
-            type: 'assistant',
-            content: 'Session interrupted by user.',
-            timestamp: new Date(),
-          },
-        ]);
+        if (abortSucceeded) {
+          const pendingSessionId =
+            typeof window !== 'undefined' ? sessionStorage.getItem('pendingSessionId') : null;
+          if (pendingSessionId && (!abortedSessionId || pendingSessionId === abortedSessionId)) {
+            sessionStorage.removeItem('pendingSessionId');
+          }
+
+          setPendingPermissionRequests([]);
+          setChatMessages((previous) => [
+            ...previous,
+            {
+              type: 'assistant',
+              content: 'Session interrupted by user.',
+              timestamp: new Date(),
+            },
+          ]);
+        } else {
+          setChatMessages((previous) => [
+            ...previous,
+            {
+              type: 'error',
+              content: 'Stop request failed. The session is still running.',
+              timestamp: new Date(),
+            },
+          ]);
+        }
         break;
       }
 

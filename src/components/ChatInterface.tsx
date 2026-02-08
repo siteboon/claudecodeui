@@ -212,6 +212,26 @@ function ChatInterface({
   });
 
   useEffect(() => {
+    if (!isLoading || !canAbortSession) {
+      return;
+    }
+
+    const handleGlobalEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.repeat || event.defaultPrevented) {
+        return;
+      }
+
+      event.preventDefault();
+      handleAbortSession();
+    };
+
+    document.addEventListener('keydown', handleGlobalEscape, { capture: true });
+    return () => {
+      document.removeEventListener('keydown', handleGlobalEscape, { capture: true });
+    };
+  }, [canAbortSession, handleAbortSession, isLoading]);
+
+  useEffect(() => {
     if (currentSessionId && isLoading && onSessionProcessing) {
       onSessionProcessing(currentSessionId);
     }
