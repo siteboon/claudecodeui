@@ -21,6 +21,13 @@ import enSidebar from './locales/en/sidebar.json';
 import enChat from './locales/en/chat.json';
 import enCodeEditor from './locales/en/codeEditor.json';
 
+import koCommon from './locales/ko/common.json';
+import koSettings from './locales/ko/settings.json';
+import koAuth from './locales/ko/auth.json';
+import koSidebar from './locales/ko/sidebar.json';
+import koChat from './locales/ko/chat.json';
+import koCodeEditor from './locales/ko/codeEditor.json';
+
 import zhCommon from './locales/zh-CN/common.json';
 import zhSettings from './locales/zh-CN/settings.json';
 import zhAuth from './locales/zh-CN/auth.json';
@@ -59,6 +66,14 @@ i18n
         sidebar: enSidebar,
         chat: enChat,
         codeEditor: enCodeEditor,
+      },
+      ko: {
+        common: koCommon,
+        settings: koSettings,
+        auth: koAuth,
+        sidebar: koSidebar,
+        chat: koChat,
+        codeEditor: koCodeEditor,
       },
       'zh-CN': {
         common: zhCommon,
