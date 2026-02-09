@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 
 type DiffLine = {
   type: string;
@@ -32,6 +32,11 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
     ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
     : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400';
 
+  const diffLines = useMemo(
+    () => createDiff(oldContent, newContent),
+    [createDiff, oldContent, newContent]
+  );
+
   return (
     <div className="border border-gray-200/60 dark:border-gray-700/50 rounded overflow-hidden">
       {/* Header */}
@@ -55,7 +60,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
 
       {/* Diff lines */}
       <div className="text-[11px] font-mono leading-[18px]">
-        {createDiff(oldContent, newContent).map((diffLine, i) => (
+        {diffLines.map((diffLine, i) => (
           <div key={i} className="flex">
             <span
               className={`w-6 text-center select-none flex-shrink-0 ${

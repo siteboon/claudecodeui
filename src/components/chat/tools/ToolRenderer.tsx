@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { memo, useMemo, useCallback } from 'react';
 import { getToolConfig } from './configs/toolConfigs';
-import { OneLineDisplay, CollapsibleDisplay, FilePathButton, DiffViewer, MarkdownContent, FileListContent, TodoListContent, TaskListContent, TextContent } from './components';
+import { OneLineDisplay, CollapsibleDisplay, DiffViewer, MarkdownContent, FileListContent, TodoListContent, TaskListContent, TextContent } from './components';
 import type { Project } from '../../../types/app';
 
 type DiffLine = {
@@ -18,7 +18,6 @@ interface ToolRendererProps {
   onFileOpen?: (filePath: string, diffInfo?: any) => void;
   createDiff?: (oldStr: string, newStr: string) => DiffLine[];
   selectedProject?: Project | null;
-  onShowSettings?: () => void;
   autoExpandTools?: boolean;
   showRawParameters?: boolean;
   rawToolInput?: string;
@@ -38,7 +37,7 @@ function getToolCategory(toolName: string): string {
  * Main tool renderer router
  * Routes to OneLineDisplay or CollapsibleDisplay based on tool config
  */
-export const ToolRenderer: React.FC<ToolRendererProps> = ({
+export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
   toolName,
   toolInput,
   toolResult,
@@ -47,7 +46,6 @@ export const ToolRenderer: React.FC<ToolRendererProps> = ({
   onFileOpen,
   createDiff,
   selectedProject,
-  onShowSettings,
   autoExpandTools = false,
   showRawParameters = false,
   rawToolInput
@@ -57,23 +55,25 @@ export const ToolRenderer: React.FC<ToolRendererProps> = ({
 
   if (!displayConfig) return null;
 
-  let parsedData: any;
-  try {
-    const rawData = mode === 'input' ? toolInput : toolResult;
-    parsedData = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
-  } catch (e) {
-    parsedData = mode === 'input' ? toolInput : toolResult;
-  }
+  const parsedData = useMemo(() => {
+    try {
+      const rawData = mode === 'input' ? toolInput : toolResult;
+      return typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+    } catch {
+      return mode === 'input' ? toolInput : toolResult;
+    }
+  }, [mode, toolInput, toolResult]);
+
+  const handleAction = useCallback(() => {
+    if (displayConfig.action === 'open-file' && onFileOpen) {
+      const value = displayConfig.getValue?.(parsedData) || '';
+      onFileOpen(value);
+    }
+  }, [displayConfig, parsedData, onFileOpen]);
 
   if (displayConfig.type === 'one-line') {
     const value = displayConfig.getValue?.(parsedData) || '';
     const secondary = displayConfig.getSecondary?.(parsedData);
-
-    const handleAction = () => {
-      if (displayConfig.action === 'open-file' && onFileOpen) {
-        onFileOpen(value);
-      }
-    };
 
     return (
       <OneLineDisplay
@@ -109,21 +109,20 @@ export const ToolRenderer: React.FC<ToolRendererProps> = ({
       onFileOpen
     }) || {};
 
-    let contentComponent = null;
+    // Build the content component based on contentType
+    let contentComponent: React.ReactNode = null;
 
     switch (displayConfig.contentType) {
       case 'diff':
-        if (!createDiff) {
-          console.error('createDiff function required for diff content type');
-          break;
+        if (createDiff) {
+          contentComponent = (
+            <DiffViewer
+              {...contentProps}
+              createDiff={createDiff}
+              onFileClick={() => onFileOpen?.(contentProps.filePath)}
+            />
+          );
         }
-        contentComponent = (
-          <DiffViewer
-            {...contentProps}
-            createDiff={createDiff}
-            onFileClick={() => onFileOpen?.(contentProps.filePath)}
-          />
-        );
         break;
 
       case 'markdown':
@@ -141,24 +140,18 @@ export const ToolRenderer: React.FC<ToolRendererProps> = ({
         break;
 
       case 'todo-list':
-        if (!contentProps.todos || contentProps.todos.length === 0) {
-          contentComponent = null;
-          break;
+        if (contentProps.todos?.length > 0) {
+          contentComponent = (
+            <TodoListContent
+              todos={contentProps.todos}
+              isResult={contentProps.isResult}
+            />
+          );
         }
-        contentComponent = (
-          <TodoListContent
-            todos={contentProps.todos}
-            isResult={contentProps.isResult}
-          />
-        );
         break;
 
       case 'task':
-        contentComponent = (
-          <TaskListContent
-            content={contentProps.content || ''}
-          />
-        );
+        contentComponent = <TaskListContent content={contentProps.content || ''} />;
         break;
 
       case 'text':
@@ -170,83 +163,18 @@ export const ToolRenderer: React.FC<ToolRendererProps> = ({
         );
         break;
 
-      case 'success-message':
-        const message = displayConfig.getMessage?.(parsedData) || 'Success';
+      case 'success-message': {
+        const msg = displayConfig.getMessage?.(parsedData) || 'Success';
         contentComponent = (
           <div className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400">
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
-            {message}
+            {msg}
           </div>
         );
         break;
-
-      default:
-        contentComponent = (
-          <div className="text-gray-500 text-xs">Unknown content type: {displayConfig.contentType}</div>
-        );
-    }
-
-    let actionButton = null;
-    if (displayConfig.actionButton === 'file-button' && contentProps.filePath) {
-      const handleFileClick = async (e: React.MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (!onFileOpen) return;
-
-        if (toolName === 'Edit' || toolName === 'ApplyPatch') {
-          try {
-            const { api } = await import('../../../utils/api');
-            const response = await api.readFile(selectedProject?.name, contentProps.filePath);
-            const data = await response.json();
-
-            if (!response.ok || data.error) {
-              console.error('Failed to fetch file:', data.error);
-              onFileOpen(contentProps.filePath);
-              return;
-            }
-
-            const currentContent = data.content || '';
-            const oldContent = currentContent.replace(contentProps.newContent, contentProps.oldContent);
-
-            onFileOpen(contentProps.filePath, {
-              old_string: oldContent,
-              new_string: currentContent
-            });
-          } catch (error) {
-            console.error('Error preparing diff:', error);
-            onFileOpen(contentProps.filePath);
-          }
-        }
-        else if (toolName === 'Write') {
-          try {
-            const { api } = await import('../../../utils/api');
-            const response = await api.readFile(selectedProject?.name, contentProps.filePath);
-            const data = await response.json();
-
-            const newContent = (response.ok && !data.error) ? data.content || '' : contentProps.newContent || '';
-
-            onFileOpen(contentProps.filePath, {
-              old_string: '',
-              new_string: newContent
-            });
-          } catch (error) {
-            console.error('Error preparing diff:', error);
-            onFileOpen(contentProps.filePath, {
-              old_string: '',
-              new_string: contentProps.newContent || ''
-            });
-          }
-        }
-      };
-
-      actionButton = (
-        <FilePathButton
-          filePath={contentProps.filePath}
-          onClick={(e?: any) => handleFileClick(e)}
-        />
-      );
+      }
     }
 
     // For edit tools, make the title (filename) clickable to open the file
@@ -260,24 +188,17 @@ export const ToolRenderer: React.FC<ToolRendererProps> = ({
         toolId={toolId}
         title={title}
         defaultOpen={defaultOpen}
-        action={actionButton}
         onTitleClick={handleTitleClick}
-        contentType={displayConfig.contentType || 'text'}
-        contentProps={{
-          DiffViewer: contentComponent,
-          MarkdownComponent: contentComponent,
-          FileListComponent: contentComponent,
-          TodoListComponent: contentComponent,
-          TaskComponent: contentComponent,
-          TextComponent: contentComponent
-        }}
         showRawParameters={mode === 'input' && showRawParameters}
         rawContent={rawToolInput}
-        onShowSettings={onShowSettings}
         toolCategory={getToolCategory(toolName)}
-      />
+      >
+        {contentComponent}
+      </CollapsibleDisplay>
     );
   }
 
   return null;
-};
+});
+
+ToolRenderer.displayName = 'ToolRenderer';

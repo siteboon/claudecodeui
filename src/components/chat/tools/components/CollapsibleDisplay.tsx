@@ -1,8 +1,6 @@
 import React from 'react';
 import { CollapsibleSection } from './CollapsibleSection';
 
-type ContentType = 'diff' | 'markdown' | 'file-list' | 'todo-list' | 'text' | 'task' | 'success-message';
-
 interface CollapsibleDisplayProps {
   toolName: string;
   toolId?: string;
@@ -10,12 +8,10 @@ interface CollapsibleDisplayProps {
   defaultOpen?: boolean;
   action?: React.ReactNode;
   onTitleClick?: () => void;
-  contentType: ContentType;
-  contentProps: any;
+  children: React.ReactNode;
   showRawParameters?: boolean;
   rawContent?: string;
   className?: string;
-  onShowSettings?: () => void;
   toolCategory?: string;
 }
 
@@ -35,32 +31,12 @@ export const CollapsibleDisplay: React.FC<CollapsibleDisplayProps> = ({
   defaultOpen = false,
   action,
   onTitleClick,
-  contentType,
-  contentProps,
+  children,
   showRawParameters = false,
   rawContent,
   className = '',
   toolCategory
 }) => {
-  const renderContent = () => {
-    switch (contentType) {
-      case 'diff':
-        return contentProps.DiffViewer;
-      case 'markdown':
-        return contentProps.MarkdownComponent;
-      case 'file-list':
-        return contentProps.FileListComponent;
-      case 'todo-list':
-        return contentProps.TodoListComponent;
-      case 'task':
-        return contentProps.TaskComponent;
-      case 'text':
-        return contentProps.TextComponent;
-      default:
-        return <div className="text-xs text-gray-500">Unknown content type: {contentType}</div>;
-    }
-  };
-
   const borderColor = borderColorMap[toolCategory || 'default'];
 
   return (
@@ -72,7 +48,7 @@ export const CollapsibleDisplay: React.FC<CollapsibleDisplayProps> = ({
         action={action}
         onTitleClick={onTitleClick}
       >
-        {renderContent()}
+        {children}
 
         {showRawParameters && rawContent && (
           <details className="relative mt-2 group/raw">

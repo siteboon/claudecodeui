@@ -1,17 +1,15 @@
 // @ts-nocheck
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import TodoList from '../../TodoList';
 import ClaudeLogo from '../../ClaudeLogo.jsx';
 import CursorLogo from '../../CursorLogo.jsx';
 import CodexLogo from '../../CodexLogo.jsx';
-import { api, authenticatedFetch } from '../../../utils/api';
 import type { ChatMessage, Provider } from '../types';
 import { Markdown } from '../markdown/Markdown';
 import { formatUsageLimitText } from '../utils/chatFormatting';
 import { getClaudePermissionSuggestion } from '../utils/chatPermissions';
 import type { Project } from '../../../types/app';
-import { ToolRenderer, shouldHideToolResult, FileListContent, TaskListContent } from '../tools';
+import { ToolRenderer, shouldHideToolResult } from '../tools';
 
 type DiffLine = {
   type: string;
@@ -52,15 +50,15 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
   }, [permissionSuggestion?.entry, message.toolId]);
 
   React.useEffect(() => {
-    if (!autoExpandTools || !messageRef.current || !message.isToolUse) return;
-    
+    const node = messageRef.current;
+    if (!autoExpandTools || !node || !message.isToolUse) return;
+
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting && !isExpanded) {
             setIsExpanded(true);
-            // Find all details elements and open them
-            const details = messageRef.current.querySelectorAll('details');
+            const details = node.querySelectorAll('details');
             details.forEach(detail => {
               detail.open = true;
             });
@@ -69,15 +67,16 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
       },
       { threshold: 0.1 }
     );
-    
-    observer.observe(messageRef.current);
-    
+
+    observer.observe(node);
+
     return () => {
-      if (messageRef.current) {
-        observer.unobserve(messageRef.current);
-      }
+      observer.unobserve(node);
     };
   }, [autoExpandTools, isExpanded, message.isToolUse]);
+
+  const selectedProvider = useMemo(() => localStorage.getItem('selected-provider') || 'claude', []);
+  const formattedTime = useMemo(() => new Date(message.timestamp).toLocaleTimeString(), [message.timestamp]);
 
   return (
     <div
@@ -95,7 +94,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
               <div className="mt-2 grid grid-cols-2 gap-2">
                 {message.images.map((img, idx) => (
                   <img
-                    key={idx}
+                    key={img.name || idx}
                     src={img.data}
                     alt={img.name}
                     className="rounded-lg max-w-full h-auto cursor-pointer hover:opacity-90 transition-opacity"
@@ -105,7 +104,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
               </div>
             )}
             <div className="text-xs text-blue-100 mt-1 text-right">
-              {new Date(message.timestamp).toLocaleTimeString()}
+              {formattedTime}
             </div>
           </div>
           {!isGrouped && (
@@ -129,9 +128,9 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 </div>
               ) : (
                 <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0 p-1">
-                  {(localStorage.getItem('selected-provider') || 'claude') === 'cursor' ? (
+                  {selectedProvider === 'cursor' ? (
                     <CursorLogo className="w-full h-full" />
-                  ) : (localStorage.getItem('selected-provider') || 'claude') === 'codex' ? (
+                  ) : selectedProvider === 'codex' ? (
                     <CodexLogo className="w-full h-full" />
                   ) : (
                     <ClaudeLogo className="w-full h-full" />
@@ -139,7 +138,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 </div>
               )}
               <div className="text-sm font-medium text-gray-900 dark:text-white">
-                {message.type === 'error' ? t('messageTypes.error') : message.type === 'tool' ? t('messageTypes.tool') : ((localStorage.getItem('selected-provider') || 'claude') === 'cursor' ? t('messageTypes.cursor') : (localStorage.getItem('selected-provider') || 'claude') === 'codex' ? t('messageTypes.codex') : t('messageTypes.claude'))}
+                {message.type === 'error' ? t('messageTypes.error') : message.type === 'tool' ? t('messageTypes.tool') : (selectedProvider === 'cursor' ? t('messageTypes.cursor') : selectedProvider === 'codex' ? t('messageTypes.codex') : t('messageTypes.claude'))}
               </div>
             </div>
           )}
@@ -172,427 +171,92 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 )}
                 
                 {/* Tool Result Section */}
-                {message.toolResult && (() => {
-                  // Use config to determine if result should be hidden
-                  if (shouldHideToolResult(message.toolName, message.toolResult)) {
-                    return null;
-                  }
-
-                  return (
-                  <div
-                    id={`tool-result-${message.toolId}`}
-                    className={`relative mt-2 p-3 rounded border scroll-mt-4 ${
-                    message.toolResult.isError
-                      ? 'bg-red-50/50 dark:bg-red-950/10 border-red-200/60 dark:border-red-800/40'
-                      : 'bg-green-50/50 dark:bg-green-950/10 border-green-200/60 dark:border-green-800/40'
-                  }`}>
-                    <div className="relative flex items-center gap-1.5 mb-2">
-                      <svg className={`w-4 h-4 ${
-                        message.toolResult.isError
-                          ? 'text-red-500 dark:text-red-400'
-                          : 'text-green-500 dark:text-green-400'
-                      }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        {message.toolResult.isError ? (
+                {message.toolResult && !shouldHideToolResult(message.toolName, message.toolResult) && (
+                  message.toolResult.isError ? (
+                    // Error results - red error box with content
+                    <div
+                      id={`tool-result-${message.toolId}`}
+                      className="relative mt-2 p-3 rounded border scroll-mt-4 bg-red-50/50 dark:bg-red-950/10 border-red-200/60 dark:border-red-800/40"
+                    >
+                      <div className="relative flex items-center gap-1.5 mb-2">
+                        <svg className="w-4 h-4 text-red-500 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        ) : (
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        )}
-                      </svg>
-                      <span className={`text-xs font-medium ${
-                        message.toolResult.isError
-                          ? 'text-red-700 dark:text-red-300'
-                          : 'text-green-700 dark:text-green-300'
-                      }`}>
-                        {message.toolResult.isError ? 'Error' : 'Result'}
-                      </span>
-                    </div>
-
-                    <div className={`relative text-sm ${
-                      message.toolResult.isError
-                        ? 'text-red-900 dark:text-red-100'
-                        : 'text-green-900 dark:text-green-100'
-                    }`}>
-                      {(() => {
-                        const content = String(message.toolResult.content || '');
-                        
-                        // Special handling for TodoWrite/TodoRead results
-                        if ((message.toolName === 'TodoWrite' || message.toolName === 'TodoRead') &&
-                            (content.includes('Todos have been modified successfully') || 
-                             content.includes('Todo list') || 
-                             (content.startsWith('[') && content.includes('"content"') && content.includes('"status"')))) {
-                          try {
-                            // Try to parse if it looks like todo JSON data
-                            let todos = null;
-                            if (content.startsWith('[')) {
-                              todos = JSON.parse(content);
-                            } else if (content.includes('Todos have been modified successfully')) {
-                              // For TodoWrite success messages, we don't have the data in the result
-                              return (
-                                <div>
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <span className="font-medium">Todo list has been updated successfully</span>
-                                  </div>
-                                </div>
-                              );
-                            }
-                            
-                            if (todos && Array.isArray(todos)) {
-                              return (
-                                <div>
-                                  <div className="flex items-center gap-2 mb-3">
-                                    <span className="font-medium">Current Todo List</span>
-                                  </div>
-                                  <TodoList todos={todos} isResult={true} />
-                                </div>
-                              );
-                            }
-                          } catch (e) {
-                            // Fall through to regular handling
-                          }
-                        }
-
-                        // Special handling for exit_plan_mode tool results
-                        if (message.toolName === 'exit_plan_mode') {
-                          try {
-                            // Content might already be an object or a JSON string
-                            let parsed;
-                            if (typeof message.toolResult.content === 'object' && message.toolResult.content !== null) {
-                              parsed = message.toolResult.content;
-                            } else {
-                              parsed = JSON.parse(content);
-                            }
-
-                            if (parsed && parsed.plan) {
-                              // Replace escaped newlines with actual newlines
-                              const planContent = parsed.plan.replace(/\\n/g, '\n');
-                              return (
-                                <div>
-                                  <div className="flex items-center gap-2 mb-3">
-                                    <span className="font-medium">Implementation Plan</span>
-                                  </div>
-                                  <Markdown className="prose prose-sm max-w-none dark:prose-invert">
-                                    {planContent}
-                                  </Markdown>
-                                </div>
-                              );
-                            }
-                          } catch (e) {
-                            console.error('Failed to parse exit_plan_mode result:', e);
-                            // Fall through to regular handling
-                          }
-                        }
-
-                        // Grep/Glob results - compact comma-separated file list
-                        if ((message.toolName === 'Grep' || message.toolName === 'Glob') && message.toolResult?.toolUseResult) {
-                          const toolData = message.toolResult.toolUseResult;
-                          if (toolData.filenames && Array.isArray(toolData.filenames) && toolData.filenames.length > 0) {
-                            const count = toolData.numFiles || toolData.filenames.length;
-                            return (
-                              <FileListContent
-                                files={toolData.filenames}
-                                onFileClick={onFileOpen}
-                                title={`Found ${count} ${count === 1 ? 'file' : 'files'}`}
-                              />
-                            );
-                          }
-                        }
-
-                        // Task tool results - proper task list rendering
-                        if (message.toolName === 'TaskList' || message.toolName === 'TaskGet') {
-                          return <TaskListContent content={content} />;
-                        }
-
-                        // Special handling for interactive prompts
-                        if (content.includes('Do you want to proceed?') && message.toolName === 'Bash') {
-                          const lines = content.split('\n');
-                          const promptIndex = lines.findIndex(line => line.includes('Do you want to proceed?'));
-                          const beforePrompt = lines.slice(0, promptIndex).join('\n');
-                          const promptLines = lines.slice(promptIndex);
-                          
-                          // Extract the question and options
-                          const questionLine = promptLines.find(line => line.includes('Do you want to proceed?')) || '';
-                          const options = [];
-                          
-                          // Parse numbered options (1. Yes, 2. No, etc.)
-                          promptLines.forEach(line => {
-                            const optionMatch = line.match(/^\s*(\d+)\.\s+(.+)$/);
-                            if (optionMatch) {
-                              options.push({
-                                number: optionMatch[1],
-                                text: optionMatch[2].trim()
-                              });
-                            }
-                          });
-                          
-                          // Find which option was selected (usually indicated by "> 1" or similar)
-                          const selectedMatch = content.match(/>\s*(\d+)/);
-                          const selectedOption = selectedMatch ? selectedMatch[1] : null;
-                          
-                          return (
-                            <div className="space-y-3">
-                              {beforePrompt && (
-                                <div className="bg-gray-900 dark:bg-gray-950 text-gray-100 rounded-lg p-3 font-mono text-xs overflow-x-auto">
-                                  <pre className="whitespace-pre-wrap break-words">{beforePrompt}</pre>
-                                </div>
-                              )}
-                              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
-                                <div className="flex items-start gap-3">
-                                  <div className="w-8 h-8 bg-amber-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                  </div>
-                                  <div className="flex-1">
-                                    <h4 className="font-semibold text-amber-900 dark:text-amber-100 text-base mb-2">
-                                      Interactive Prompt
-                                    </h4>
-                                    <p className="text-sm text-amber-800 dark:text-amber-200 mb-4">
-                                      {questionLine}
-                                    </p>
-                                    
-                                    {/* Option buttons */}
-                                    <div className="space-y-2 mb-4">
-                                      {options.map((option) => (
-                                        <button
-                                          key={option.number}
-                                          className={`w-full text-left px-4 py-3 rounded-lg border-2 transition-all ${
-                                            selectedOption === option.number
-                                              ? 'bg-amber-600 dark:bg-amber-700 text-white border-amber-600 dark:border-amber-700 shadow-md'
-                                              : 'bg-white dark:bg-gray-800 text-amber-900 dark:text-amber-100 border-amber-300 dark:border-amber-700 hover:border-amber-400 dark:hover:border-amber-600 hover:shadow-sm'
-                                          } ${
-                                            selectedOption ? 'cursor-default' : 'cursor-not-allowed opacity-75'
-                                          }`}
-                                          disabled
-                                        >
-                                          <div className="flex items-center gap-3">
-                                            <span className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                                              selectedOption === option.number
-                                                ? 'bg-white/20'
-                                                : 'bg-amber-100 dark:bg-amber-800/50'
-                                            }`}>
-                                              {option.number}
-                                            </span>
-                                            <span className="text-sm sm:text-base font-medium flex-1">
-                                              {option.text}
-                                            </span>
-                                            {selectedOption === option.number && (
-                                              <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                              </svg>
-                                            )}
-                                          </div>
-                                        </button>
-                                      ))}
-                                    </div>
-                                    
-                                    {selectedOption && (
-                                      <div className="bg-amber-100 dark:bg-amber-800/30 rounded-lg p-3">
-                                        <p className="text-amber-900 dark:text-amber-100 text-sm font-medium mb-1">
-                                          ✓ Claude selected option {selectedOption}
-                                        </p>
-                                        <p className="text-amber-800 dark:text-amber-200 text-xs">
-                                          In the CLI, you would select this option interactively using arrow keys or by typing the number.
-                                        </p>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        }
-                        
-                        const fileEditMatch = content.match(/The file (.+?) has been updated\./);
-                        if (fileEditMatch) {
-                          return (
-                            <div>
-                              <div className="flex items-center gap-2 mb-2">
-                                <span className="font-medium">File updated successfully</span>
-                              </div>
-                              <button
-                                onClick={async () => {
-                                  if (!onFileOpen) return;
-
-                                  // Fetch FULL file content with diff from git
-                                  try {
-                                    const response = await authenticatedFetch(`/api/git/file-with-diff?project=${encodeURIComponent(selectedProject?.name)}&file=${encodeURIComponent(fileEditMatch[1])}`);
-                                    const data = await response.json();
-
-                                    if (!data.error && data.oldContent !== undefined && data.currentContent !== undefined) {
-                                      onFileOpen(fileEditMatch[1], {
-                                        old_string: data.oldContent || '',
-                                        new_string: data.currentContent || ''
-                                      });
-                                    } else {
-                                      onFileOpen(fileEditMatch[1]);
-                                    }
-                                  } catch (error) {
-                                    console.error('Error fetching file diff:', error);
-                                    onFileOpen(fileEditMatch[1]);
-                                  }
-                                }}
-                                className="text-xs font-mono bg-green-100 dark:bg-green-800/30 px-2 py-1 rounded text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline cursor-pointer"
-                              >
-                                {fileEditMatch[1]}
-                              </button>
-                            </div>
-                          );
-                        }
-                        
-                        // Handle Write tool output for file creation
-                        const fileCreateMatch = content.match(/(?:The file|File) (.+?) has been (?:created|written)(?: successfully)?\.?/);
-                        if (fileCreateMatch) {
-                          return (
-                            <div>
-                              <div className="flex items-center gap-2 mb-2">
-                                <span className="font-medium">File created successfully</span>
-                              </div>
-                              <button
-                                onClick={async () => {
-                                  if (!onFileOpen) return;
-
-                                  // Fetch FULL file content with diff from git
-                                  try {
-                                    const response = await authenticatedFetch(`/api/git/file-with-diff?project=${encodeURIComponent(selectedProject?.name)}&file=${encodeURIComponent(fileCreateMatch[1])}`);
-                                    const data = await response.json();
-
-                                    if (!data.error && data.oldContent !== undefined && data.currentContent !== undefined) {
-                                      onFileOpen(fileCreateMatch[1], {
-                                        old_string: data.oldContent || '',
-                                        new_string: data.currentContent || ''
-                                      });
-                                    } else {
-                                      onFileOpen(fileCreateMatch[1]);
-                                    }
-                                  } catch (error) {
-                                    console.error('Error fetching file diff:', error);
-                                    onFileOpen(fileCreateMatch[1]);
-                                  }
-                                }}
-                                className="text-xs font-mono bg-green-100 dark:bg-green-800/30 px-2 py-1 rounded text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline cursor-pointer"
-                              >
-                                {fileCreateMatch[1]}
-                              </button>
-                            </div>
-                          );
-                        }
-                        
-                        // Special handling for Write tool - hide content if it's just the file content
-                        if (message.toolName === 'Write' && !message.toolResult.isError) {
-                          // For Write tool, the diff is already shown in the tool input section
-                          // So we just show a success message here
-                          return (
-                            <div className="text-green-700 dark:text-green-300">
-                              <div className="flex items-center gap-2">
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                                <span className="font-medium">File written successfully</span>
-                              </div>
-                              <p className="text-xs mt-1 text-green-600 dark:text-green-400">
-                                The file content is displayed in the diff view above
-                              </p>
-                            </div>
-                          );
-                        }
-                        
-                        if (content.includes('cat -n') && content.includes('→')) {
-                          return (
-                            <details open={autoExpandTools}>
-                              <summary className="text-sm text-green-700 dark:text-green-300 cursor-pointer hover:text-green-800 dark:hover:text-green-200 mb-2 flex items-center gap-2">
-                                <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                </svg>
-                                View file content
-                              </summary>
-                              <div className="mt-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-                                <div className="text-xs font-mono p-3 whitespace-pre-wrap break-words overflow-hidden">
-                                  {content}
-                                </div>
-                              </div>
-                            </details>
-                          );
-                        }
-                        
-                        if (content.length > 300) {
-                          return (
-                            <details open={autoExpandTools}>
-                              <summary className="text-sm text-green-700 dark:text-green-300 cursor-pointer hover:text-green-800 dark:hover:text-green-200 mb-2 flex items-center gap-2">
-                                <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                </svg>
-                                View full output ({content.length} chars)
-                              </summary>
-                              <Markdown className="mt-2 prose prose-sm max-w-none prose-green dark:prose-invert">
-                                {content}
-                              </Markdown>
-                            </details>
-                          );
-                        }
-                        
-                        return (
-                          <Markdown className="prose prose-sm max-w-none prose-green dark:prose-invert">
-                            {content}
-                          </Markdown>
-                        );
-                      })()}
-                      {permissionSuggestion && (
-                        <div className="mt-4 border-t border-red-200/60 dark:border-red-800/60 pt-3">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (!onGrantToolPermission) return;
-                                const result = onGrantToolPermission(permissionSuggestion);
-                                if (result?.success) {
-                                  setPermissionGrantState('granted');
-                                } else {
-                                  setPermissionGrantState('error');
-                                }
-                              }}
-                              disabled={permissionSuggestion.isAllowed || permissionGrantState === 'granted'}
-                              className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${
-                                permissionSuggestion.isAllowed || permissionGrantState === 'granted'
-                                  ? 'bg-green-100 dark:bg-green-900/30 border-green-300/70 dark:border-green-800/60 text-green-800 dark:text-green-200 cursor-default'
-                                  : 'bg-white/80 dark:bg-gray-900/40 border-red-300/70 dark:border-red-800/60 text-red-700 dark:text-red-200 hover:bg-white dark:hover:bg-gray-900/70'
-                              }`}
-                            >
-                              {permissionSuggestion.isAllowed || permissionGrantState === 'granted'
-                                ? 'Permission added'
-                                : `Grant permission for ${permissionSuggestion.toolName}`}
-                            </button>
-                            {onShowSettings && (
+                        </svg>
+                        <span className="text-xs font-medium text-red-700 dark:text-red-300">Error</span>
+                      </div>
+                      <div className="relative text-sm text-red-900 dark:text-red-100">
+                        <Markdown className="prose prose-sm max-w-none prose-red dark:prose-invert">
+                          {String(message.toolResult.content || '')}
+                        </Markdown>
+                        {permissionSuggestion && (
+                          <div className="mt-4 border-t border-red-200/60 dark:border-red-800/60 pt-3">
+                            <div className="flex flex-wrap items-center gap-2">
                               <button
                                 type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onShowSettings();
+                                onClick={() => {
+                                  if (!onGrantToolPermission) return;
+                                  const result = onGrantToolPermission(permissionSuggestion);
+                                  if (result?.success) {
+                                    setPermissionGrantState('granted');
+                                  } else {
+                                    setPermissionGrantState('error');
+                                  }
                                 }}
-                                className="text-xs text-red-700 dark:text-red-200 underline hover:text-red-800 dark:hover:text-red-100"
+                                disabled={permissionSuggestion.isAllowed || permissionGrantState === 'granted'}
+                                className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${
+                                  permissionSuggestion.isAllowed || permissionGrantState === 'granted'
+                                    ? 'bg-green-100 dark:bg-green-900/30 border-green-300/70 dark:border-green-800/60 text-green-800 dark:text-green-200 cursor-default'
+                                    : 'bg-white/80 dark:bg-gray-900/40 border-red-300/70 dark:border-red-800/60 text-red-700 dark:text-red-200 hover:bg-white dark:hover:bg-gray-900/70'
+                                }`}
                               >
-                                Open settings
+                                {permissionSuggestion.isAllowed || permissionGrantState === 'granted'
+                                  ? 'Permission added'
+                                  : `Grant permission for ${permissionSuggestion.toolName}`}
                               </button>
+                              {onShowSettings && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); onShowSettings(); }}
+                                  className="text-xs text-red-700 dark:text-red-200 underline hover:text-red-800 dark:hover:text-red-100"
+                                >
+                                  Open settings
+                                </button>
+                              )}
+                            </div>
+                            <div className="mt-2 text-xs text-red-700/90 dark:text-red-200/80">
+                              Adds <span className="font-mono">{permissionSuggestion.entry}</span> to Allowed Tools.
+                            </div>
+                            {permissionGrantState === 'error' && (
+                              <div className="mt-2 text-xs text-red-700 dark:text-red-200">
+                                Unable to update permissions. Please try again.
+                              </div>
+                            )}
+                            {(permissionSuggestion.isAllowed || permissionGrantState === 'granted') && (
+                              <div className="mt-2 text-xs text-green-700 dark:text-green-200">
+                                Permission saved. Retry the request to use the tool.
+                              </div>
                             )}
                           </div>
-                          <div className="mt-2 text-xs text-red-700/90 dark:text-red-200/80">
-                            Adds <span className="font-mono">{permissionSuggestion.entry}</span> to Allowed Tools.
-                          </div>
-                          {permissionGrantState === 'error' && (
-                            <div className="mt-2 text-xs text-red-700 dark:text-red-200">
-                              Unable to update permissions. Please try again.
-                            </div>
-                          )}
-                          {(permissionSuggestion.isAllowed || permissionGrantState === 'granted') && (
-                            <div className="mt-2 text-xs text-green-700 dark:text-green-200">
-                              Permission saved. Retry the request to use the tool.
-                            </div>
-                          )}
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  );
-                })()}
+                  ) : (
+                    // Non-error results - route through ToolRenderer (single source of truth)
+                    <div id={`tool-result-${message.toolId}`} className="scroll-mt-4">
+                      <ToolRenderer
+                        toolName={message.toolName}
+                        toolInput={message.toolInput}
+                        toolResult={message.toolResult}
+                        toolId={message.toolId}
+                        mode="result"
+                        onFileOpen={onFileOpen}
+                        createDiff={createDiff}
+                        selectedProject={selectedProject}
+                        autoExpandTools={autoExpandTools}
+                      />
+                    </div>
+                  )
+                )}
               </>
             ) : message.isInteractivePrompt ? (
               // Special handling for interactive prompts
@@ -759,7 +423,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
             
             {!isGrouped && (
               <div className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
-                {new Date(message.timestamp).toLocaleTimeString()}
+                {formattedTime}
               </div>
             )}
           </div>
