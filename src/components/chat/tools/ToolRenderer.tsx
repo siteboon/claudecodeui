@@ -76,6 +76,8 @@ export const ToolRenderer: React.FC<ToolRendererProps> = ({
         secondary={secondary}
         action={displayConfig.action}
         onAction={handleAction}
+        style={displayConfig.style}
+        wrapText={displayConfig.wrapText}
         colorScheme={displayConfig.colorScheme}
         resultId={mode === 'input' ? `tool-result-${toolId}` : undefined}
       />

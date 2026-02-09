@@ -10,12 +10,17 @@ interface OneLineDisplayProps {
   secondary?: string;
   action?: ActionType;
   onAction?: () => void;
+  style?: string;
+  wrapText?: boolean;
   colorScheme?: {
     primary?: string;
     secondary?: string;
+    background?: string;
+    border?: string;
+    icon?: string;
   };
-  resultId?: string; // For jump-to-results
-  toolResult?: any; // For showing result link
+  resultId?: string;
+  toolResult?: any;
   toolId?: string;
 }
 
@@ -31,9 +36,14 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
   secondary,
   action = 'none',
   onAction,
+  style,
+  wrapText = false,
   colorScheme = {
     primary: 'text-gray-700 dark:text-gray-300',
-    secondary: 'text-gray-500 dark:text-gray-400'
+    secondary: 'text-gray-500 dark:text-gray-400',
+    background: 'bg-gray-50/50 dark:bg-gray-800/30',
+    border: 'border-blue-400 dark:border-blue-500',
+    icon: 'text-blue-500 dark:text-blue-400'
   },
   resultId,
   toolResult,
@@ -102,18 +112,18 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
 
     return null;
   };
-  const isTerminal = toolName === 'Bash' || icon === 'terminal';
+  const isTerminal = style === 'terminal';
 
   return (
-    <div className={`group relative ${isTerminal ? 'bg-gray-900/5 dark:bg-gray-900/30' : 'bg-gray-50/50 dark:bg-gray-800/30'} border-l-2 ${isTerminal ? 'border-green-500 dark:border-green-400' : 'border-blue-400 dark:border-blue-500'} pl-3 py-1 my-0.5`}>
+    <div className={`group relative ${colorScheme.background} border-l-2 ${colorScheme.border} pl-3 py-1 my-0.5`}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 flex-1 min-w-0">
           {icon === 'terminal' ? (
-            <svg className="w-3.5 h-3.5 text-green-500 dark:text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className={`w-3.5 h-3.5 ${colorScheme.icon} flex-shrink-0`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
           ) : icon ? (
-            <span className="text-blue-500 dark:text-blue-400 flex-shrink-0">
+            <span className={`${colorScheme.icon} flex-shrink-0`}>
               {icon}
             </span>
           ) : label ? (
@@ -127,7 +137,7 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
           {action === 'open-file' ? (
             renderActionButton()
           ) : (
-            <span className={`font-mono truncate flex-1 min-w-0 ${colorScheme.primary}`}>
+            <span className={`font-mono ${wrapText ? 'whitespace-pre-wrap break-all' : 'truncate'} flex-1 min-w-0 ${colorScheme.primary}`}>
               {isTerminal && <span className="text-green-500 dark:text-green-400 mr-1">$</span>}
               {value}
             </span>

@@ -46,9 +46,14 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
       getValue: (input) => input.command,
       getSecondary: (input) => input.description,
       action: 'copy',
+      style: 'terminal',
+      wrapText: true,
       colorScheme: {
-        primary: 'text-green-600 dark:text-green-400 font-mono',
-        secondary: 'text-gray-500 dark:text-gray-400'
+        primary: 'text-green-400 font-mono',
+        secondary: 'text-gray-400',
+        background: 'bg-gray-900 dark:bg-black',
+        border: 'border-green-500 dark:border-green-400',
+        icon: 'text-green-500 dark:text-green-400'
       }
     },
     result: {
