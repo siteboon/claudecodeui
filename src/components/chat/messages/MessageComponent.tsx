@@ -145,112 +145,31 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
           )}
           
           <div className="w-full">
-            
-            {message.isToolUse && !['Read', 'TodoWrite', 'TodoRead'].includes(message.toolName) ? (
-              (() => {
-                // Minimize Grep and Glob tools since they happen frequently
-                const isSearchTool = ['Grep', 'Glob'].includes(message.toolName);
 
-                if (isSearchTool) {
-                  return (
-                    <>
-                      <div className="group relative bg-gray-50/50 dark:bg-gray-800/30 border-l-2 border-blue-400 dark:border-blue-500 pl-3 py-2 my-2">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 flex-1 min-w-0">
-                            <svg className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                            </svg>
-                            <span className="font-medium flex-shrink-0">{message.toolName}</span>
-                            <span className="text-gray-400 dark:text-gray-500 flex-shrink-0">•</span>
-                            {message.toolInput && (() => {
-                              try {
-                                const input = JSON.parse(message.toolInput);
-                                return (
-                                  <span className="font-mono truncate flex-1 min-w-0">
-                                    {input.pattern && <span>{t('search.pattern')} <span className="text-blue-600 dark:text-blue-400">{input.pattern}</span></span>}
-                                    {input.path && <span className="ml-2">{t('search.in')} {input.path}</span>}
-                                  </span>
-                                );
-                              } catch (e) {
-                                return null;
-                              }
-                            })()}
-                          </div>
-                          {message.toolResult && (
-                            <a
-                              href={`#tool-result-${message.toolId}`}
-                              className="flex-shrink-0 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium transition-colors flex items-center gap-1"
-                            >
-                              <span>{t('tools.searchResults')}</span>
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                              </svg>
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                    </>
-                  );
-                }
-
-                // Full display for other tools
-                return (
-              <div className="group relative bg-gradient-to-br from-blue-50/50 to-indigo-50/50 dark:from-blue-950/20 dark:to-indigo-950/20 border border-blue-100/30 dark:border-blue-800/30 rounded-lg p-3 mb-2">
-                {/* Decorative gradient overlay */}
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/3 to-indigo-500/3 dark:from-blue-400/3 dark:to-indigo-400/3 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-
-                <div className="relative flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="relative w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 dark:from-blue-400 dark:to-indigo-500 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20 dark:shadow-blue-400/20">
-                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                      {/* Subtle pulse animation */}
-                      <div className="absolute inset-0 rounded-lg bg-blue-500 dark:bg-blue-400 animate-pulse opacity-20"></div>
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="font-semibold text-gray-900 dark:text-white text-sm">
-                        {message.toolName}
-                      </span>
-                      <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">
-                        {message.toolId}
-                      </span>
-                    </div>
+            {message.isToolUse ? (
+              <>
+                <div className="flex flex-col">
+                  <div className="flex flex-col">
+                    <Markdown className="prose prose-sm max-w-none dark:prose-invert">{message.displayText}</Markdown>
                   </div>
-                  {onShowSettings && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onShowSettings();
-                      }}
-                      className="p-2 rounded-lg hover:bg-white/60 dark:hover:bg-gray-800/60 transition-all duration-200 group/btn backdrop-blur-sm"
-                      title={t('tools.settings')}
-                    >
-                      <svg className="w-4 h-4 text-gray-600 dark:text-gray-400 group-hover/btn:text-blue-600 dark:group-hover/btn:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                    </button>
-                  )}
                 </div>
-                {/* All tool input rendering now handled by ToolRenderer */}
-                {message.toolInput && (() => {
-                  // Use new ToolRenderer for all tools (config-driven)
-                  return (
-                    <ToolRenderer
-                      toolName={message.toolName}
-                      toolInput={message.toolInput}
-                      mode="input"
-                      onFileOpen={onFileOpen}
-                      createDiff={createDiff}
-                      selectedProject={selectedProject}
-                      autoExpandTools={autoExpandTools}
-                      showRawParameters={showRawParameters}
-                      rawToolInput={message.toolInput}
-                    />
-                  );
-                })()}
+
+                {message.toolInput && (
+                  <ToolRenderer
+                    toolName={message.toolName}
+                    toolInput={message.toolInput}
+                    toolResult={message.toolResult}
+                    toolId={message.toolId}
+                    mode="input"
+                    onFileOpen={onFileOpen}
+                    createDiff={createDiff}
+                    selectedProject={selectedProject}
+                    autoExpandTools={autoExpandTools}
+                    showRawParameters={showRawParameters}
+                    onShowSettings={onShowSettings}
+                    rawToolInput={message.toolInput}
+                  />
+                )}
                 
                 {/* Tool Result Section */}
                 {message.toolResult && (() => {
@@ -714,9 +633,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                   </div>
                   );
                 })()}
-              </div>
-                );
-              })()
+              </>
             ) : message.isInteractivePrompt ? (
               // Special handling for interactive prompts
               <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
@@ -798,84 +715,6 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                       );
                     })()}
                   </div>
-                </div>
-              </div>
-            ) : message.isToolUse && message.toolName === 'Read' ? (
-              // Simple Read tool indicator
-              (() => {
-                try {
-                  const input = JSON.parse(message.toolInput);
-                  if (input.file_path) {
-                    const filename = input.file_path.split('/').pop();
-                    return (
-                      <div className="bg-gray-50/50 dark:bg-gray-800/30 border-l-2 border-gray-400 dark:border-gray-500 pl-3 py-2 my-2">
-                        <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
-                          <svg className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                          </svg>
-                          <span className="font-medium">Read</span>
-                          <button
-                            onClick={() => onFileOpen && onFileOpen(input.file_path)}
-                            className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-mono transition-colors"
-                          >
-                            {filename}
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  }
-                } catch (e) {
-                  return (
-                    <div className="bg-gray-50/50 dark:bg-gray-800/30 border-l-2 border-gray-400 dark:border-gray-500 pl-3 py-2 my-2">
-                      <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
-                        <svg className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                        </svg>
-                        <span className="font-medium">Read file</span>
-                      </div>
-                    </div>
-                  );
-                }
-              })()
-            ) : message.isToolUse && message.toolName === 'TodoWrite' ? (
-              // Simple TodoWrite tool indicator with tasks
-              (() => {
-                try {
-                  const input = JSON.parse(message.toolInput);
-                  if (input.todos && Array.isArray(input.todos)) {
-                    return (
-                      <div className="bg-gray-50/50 dark:bg-gray-800/30 border-l-2 border-gray-400 dark:border-gray-500 pl-3 py-2 my-2">
-                        <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 mb-2">
-                          <svg className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                          </svg>
-                          <span className="font-medium">Update todo list</span>
-                        </div>
-                        <TodoList todos={input.todos} />
-                      </div>
-                    );
-                  }
-                } catch (e) {
-                  return (
-                    <div className="bg-gray-50/50 dark:bg-gray-800/30 border-l-2 border-gray-400 dark:border-gray-500 pl-3 py-2 my-2">
-                      <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
-                        <svg className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                        </svg>
-                        <span className="font-medium">Update todo list</span>
-                      </div>
-                    </div>
-                  );
-                }
-              })()
-            ) : message.isToolUse && message.toolName === 'TodoRead' ? (
-              // Simple TodoRead tool indicator
-              <div className="bg-gray-50/50 dark:bg-gray-800/30 border-l-2 border-gray-400 dark:border-gray-500 pl-3 py-2 my-2">
-                <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
-                  <svg className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                  </svg>
-                  <span className="font-medium">Read todo list</span>
                 </div>
               </div>
             ) : message.isThinking ? (

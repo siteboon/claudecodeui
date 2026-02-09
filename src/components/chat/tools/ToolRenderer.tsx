@@ -13,12 +13,12 @@ interface ToolRendererProps {
   toolName: string;
   toolInput: any;
   toolResult?: any;
+  toolId?: string;
   mode: 'input' | 'result';
-  // Callbacks and helpers
   onFileOpen?: (filePath: string, diffInfo?: any) => void;
   createDiff?: (oldStr: string, newStr: string) => DiffLine[];
   selectedProject?: Project | null;
-  // Display options
+  onShowSettings?: () => void;
   autoExpandTools?: boolean;
   showRawParameters?: boolean;
   rawToolInput?: string;
@@ -32,10 +32,12 @@ export const ToolRenderer: React.FC<ToolRendererProps> = ({
   toolName,
   toolInput,
   toolResult,
+  toolId,
   mode,
   onFileOpen,
   createDiff,
   selectedProject,
+  onShowSettings,
   autoExpandTools = false,
   showRawParameters = false,
   rawToolInput
@@ -45,7 +47,6 @@ export const ToolRenderer: React.FC<ToolRendererProps> = ({
 
   if (!displayConfig) return null;
 
-  // Parse tool input/result
   let parsedData: any;
   try {
     const rawData = mode === 'input' ? toolInput : toolResult;
@@ -54,9 +55,6 @@ export const ToolRenderer: React.FC<ToolRendererProps> = ({
     parsedData = mode === 'input' ? toolInput : toolResult;
   }
 
-  // ============================================================================
-  // ONE-LINE DISPLAY
-  // ============================================================================
   if (displayConfig.type === 'one-line') {
     const value = displayConfig.getValue?.(parsedData) || '';
     const secondary = displayConfig.getSecondary?.(parsedData);
@@ -69,6 +67,9 @@ export const ToolRenderer: React.FC<ToolRendererProps> = ({
 
     return (
       <OneLineDisplay
+        toolName={toolName}
+        toolResult={toolResult}
+        toolId={toolId}
         icon={displayConfig.icon}
         label={displayConfig.label}
         value={value}
@@ -76,14 +77,11 @@ export const ToolRenderer: React.FC<ToolRendererProps> = ({
         action={displayConfig.action}
         onAction={handleAction}
         colorScheme={displayConfig.colorScheme}
-        resultId={mode === 'input' ? `tool-result-${toolName}` : undefined}
+        resultId={mode === 'input' ? `tool-result-${toolId}` : undefined}
       />
     );
   }
 
-  // ============================================================================
-  // COLLAPSIBLE DISPLAY
-  // ============================================================================
   if (displayConfig.type === 'collapsible') {
     const title = typeof displayConfig.title === 'function'
       ? displayConfig.title(parsedData)
@@ -93,14 +91,12 @@ export const ToolRenderer: React.FC<ToolRendererProps> = ({
       ? displayConfig.defaultOpen
       : autoExpandTools;
 
-    // Get content props from config
     const contentProps = displayConfig.getContentProps?.(parsedData, {
       selectedProject,
       createDiff,
       onFileOpen
     }) || {};
 
-    // Render content based on contentType
     let contentComponent = null;
 
     switch (displayConfig.contentType) {
@@ -169,7 +165,6 @@ export const ToolRenderer: React.FC<ToolRendererProps> = ({
         );
     }
 
-    // Action button for file operations
     let actionButton = null;
     if (displayConfig.actionButton === 'file-button' && contentProps.filePath) {
       const handleFileClick = async (e: React.MouseEvent) => {
@@ -177,7 +172,6 @@ export const ToolRenderer: React.FC<ToolRendererProps> = ({
         e.stopPropagation();
         if (!onFileOpen) return;
 
-        // For Edit/ApplyPatch tools, fetch current file and reverse-apply the edit
         if (toolName === 'Edit' || toolName === 'ApplyPatch') {
           try {
             const { api } = await import('../../../utils/api');
@@ -202,7 +196,6 @@ export const ToolRenderer: React.FC<ToolRendererProps> = ({
             onFileOpen(contentProps.filePath);
           }
         }
-        // For Write tool, fetch written file
         else if (toolName === 'Write') {
           try {
             const { api } = await import('../../../utils/api');
@@ -235,6 +228,8 @@ export const ToolRenderer: React.FC<ToolRendererProps> = ({
 
     return (
       <CollapsibleDisplay
+        toolName={toolName}
+        toolId={toolId}
         title={title}
         defaultOpen={defaultOpen}
         action={actionButton}
@@ -248,12 +243,10 @@ export const ToolRenderer: React.FC<ToolRendererProps> = ({
         }}
         showRawParameters={mode === 'input' && showRawParameters}
         rawContent={rawToolInput}
+        onShowSettings={onShowSettings}
       />
     );
   }
 
-  // ============================================================================
-  // SPECIAL / HIDDEN
-  // ============================================================================
   return null;
 };

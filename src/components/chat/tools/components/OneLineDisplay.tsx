@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 type ActionType = 'copy' | 'open-file' | 'jump-to-results' | 'none';
 
 interface OneLineDisplayProps {
+  toolName: string;
   icon?: string;
   label?: string;
   value: string;
@@ -14,6 +15,8 @@ interface OneLineDisplayProps {
     secondary?: string;
   };
   resultId?: string; // For jump-to-results
+  toolResult?: any; // For showing result link
+  toolId?: string;
 }
 
 /**
@@ -21,6 +24,7 @@ interface OneLineDisplayProps {
  * Used by: Bash, Read, Grep/Glob (minimized), TodoRead, etc.
  */
 export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
+  toolName,
   icon,
   label,
   value,
@@ -31,7 +35,9 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
     primary: 'text-gray-700 dark:text-gray-300',
     secondary: 'text-gray-500 dark:text-gray-400'
   },
-  resultId
+  resultId,
+  toolResult,
+  toolId
 }) => {
   const [copied, setCopied] = useState(false);
 
@@ -96,39 +102,51 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
 
     return null;
   };
-
   return (
-    <div className="mt-2 text-sm flex items-center gap-2">
-      {/* Icon */}
-      {icon && (
-        <span className={`${colorScheme.primary} text-xs flex-shrink-0`}>
-          {icon}
-        </span>
-      )}
+    <div className="group relative bg-gray-50/50 dark:bg-gray-800/30 border-l-2 border-blue-400 dark:border-blue-500 pl-3 py-2 my-2">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 flex-1 min-w-0">
+          {icon ? (
+            <span className="text-blue-500 dark:text-blue-400 flex-shrink-0">
+              {icon}
+            </span>
+          ) : label ? (
+            <span className="font-medium flex-shrink-0">{label}</span>
+          ) : (
+            <span className="font-medium flex-shrink-0">{toolName}</span>
+          )}
 
-      {/* Label */}
-      {label && (
-        <span className={colorScheme.primary}>{label}</span>
-      )}
+          <span className="text-gray-400 dark:text-gray-500 flex-shrink-0">•</span>
 
-      {/* Value - different rendering based on action type */}
-      {action === 'open-file' ? (
-        renderActionButton()
-      ) : (
-        <span className={`${colorScheme.primary} ${action === 'none' ? '' : 'font-mono'}`}>
-          {value}
-        </span>
-      )}
+          {action === 'open-file' ? (
+            renderActionButton()
+          ) : (
+            <span className={`font-mono truncate flex-1 min-w-0 ${colorScheme.primary}`}>
+              {value}
+            </span>
+          )}
 
-      {/* Secondary text (e.g., description) */}
-      {secondary && (
-        <span className={`text-xs ${colorScheme.secondary} italic`}>
-          ({secondary})
-        </span>
-      )}
+          {secondary && (
+            <span className={`text-xs ${colorScheme.secondary} italic ml-2`}>
+              ({secondary})
+            </span>
+          )}
 
-      {/* Action button (copy, jump) */}
-      {action !== 'open-file' && renderActionButton()}
+          {action === 'copy' && renderActionButton()}
+        </div>
+
+        {action === 'jump-to-results' && toolResult && (
+          <a
+            href={`#tool-result-${toolId}`}
+            className="flex-shrink-0 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium transition-colors flex items-center gap-1"
+          >
+            <span>Search results</span>
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </a>
+        )}
+      </div>
     </div>
   );
 };
