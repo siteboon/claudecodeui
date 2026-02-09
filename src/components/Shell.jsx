@@ -26,6 +26,31 @@ if (typeof document !== 'undefined') {
   document.head.appendChild(styleSheet);
 }
 
+function fallbackCopyToClipboard(text) {
+  if (!text || typeof document === 'undefined') return false;
+
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  textarea.style.pointerEvents = 'none';
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+
+  let copied = false;
+  try {
+    copied = document.execCommand('copy');
+  } catch {
+    copied = false;
+  } finally {
+    document.body.removeChild(textarea);
+  }
+
+  return copied;
+}
+
 function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell = false, onProcessComplete, minimal = false, autoConnect = false }) {
   const { t } = useTranslation('chat');
   const terminalRef = useRef(null);
@@ -43,6 +68,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
   const initialCommandRef = useRef(initialCommand);
   const isPlainShellRef = useRef(isPlainShell);
   const onProcessCompleteRef = useRef(onProcessComplete);
+  const authUrlRef = useRef('');
 
   useEffect(() => {
     selectedProjectRef.current = selectedProject;
@@ -51,6 +77,42 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     isPlainShellRef.current = isPlainShell;
     onProcessCompleteRef.current = onProcessComplete;
   });
+
+  const openAuthUrlInBrowser = useCallback((url = authUrlRef.current) => {
+    if (!url) return false;
+
+    const popup = window.open(url, '_blank', 'noopener,noreferrer');
+    if (popup) {
+      try {
+        popup.opener = null;
+      } catch {
+        // Ignore cross-origin restrictions when trying to null opener
+      }
+      return true;
+    }
+
+    return false;
+  }, []);
+
+  const copyAuthUrlToClipboard = useCallback(async (url = authUrlRef.current) => {
+    if (!url) return false;
+
+    let copied = false;
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+        copied = true;
+      }
+    } catch {
+      copied = false;
+    }
+
+    if (!copied) {
+      copied = fallbackCopyToClipboard(url);
+    }
+
+    return copied;
+  }, []);
 
   const connectWebSocket = useCallback(async () => {
     if (isConnecting || isConnected) return;
@@ -77,6 +139,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
       ws.current.onopen = () => {
         setIsConnected(true);
         setIsConnecting(false);
+        authUrlRef.current = '';
 
         setTimeout(() => {
           if (fitAddon.current && terminal.current) {
@@ -119,8 +182,12 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
             if (terminal.current) {
               terminal.current.write(output);
             }
+          } else if (data.type === 'auth_url' && data.url) {
+            authUrlRef.current = data.url;
           } else if (data.type === 'url_open') {
-            window.open(data.url, '_blank');
+            if (data.url) {
+              authUrlRef.current = data.url;
+            }
           }
         } catch (error) {
           console.error('[Shell] Error handling WebSocket message:', error, event.data);
@@ -145,7 +212,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
       setIsConnected(false);
       setIsConnecting(false);
     }
-  }, [isConnecting, isConnected]);
+  }, [isConnecting, isConnected, openAuthUrlInBrowser]);
 
   const connectToShell = useCallback(() => {
     if (!isInitialized || isConnected || isConnecting) return;
@@ -166,6 +233,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
 
     setIsConnected(false);
     setIsConnecting(false);
+    authUrlRef.current = '';
   }, []);
 
   const sessionDisplayName = useMemo(() => {
@@ -201,6 +269,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
 
     setIsConnected(false);
     setIsInitialized(false);
+    authUrlRef.current = '';
 
     setTimeout(() => {
       setIsRestarting(false);
@@ -272,7 +341,10 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     const webLinksAddon = new WebLinksAddon();
 
     terminal.current.loadAddon(fitAddon.current);
-    terminal.current.loadAddon(webLinksAddon);
+    // Disable xterm link auto-detection in minimal (login) mode to avoid partial wrapped URL links.
+    if (!minimal) {
+      terminal.current.loadAddon(webLinksAddon);
+    }
     // Note: ClipboardAddon removed - we handle clipboard operations manually in attachCustomKeyEventHandler
 
     try {
@@ -284,6 +356,19 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     terminal.current.open(terminalRef.current);
 
     terminal.current.attachCustomKeyEventHandler((event) => {
+      if (
+        event.type === 'keydown' &&
+        minimal &&
+        isPlainShellRef.current &&
+        authUrlRef.current &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        event.key?.toLowerCase() === 'c'
+      ) {
+        copyAuthUrlToClipboard(authUrlRef.current).catch(() => {});
+      }
+
       if ((event.ctrlKey || event.metaKey) && event.key === 'c' && terminal.current.hasSelection()) {
         document.execCommand('copy');
         return false;
@@ -359,7 +444,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
         terminal.current = null;
       }
     };
-  }, [selectedProject?.path || selectedProject?.fullPath, isRestarting]);
+  }, [selectedProject?.path || selectedProject?.fullPath, isRestarting, minimal, copyAuthUrlToClipboard]);
 
   useEffect(() => {
     if (!autoConnect || !isInitialized || isConnecting || isConnected) return;
