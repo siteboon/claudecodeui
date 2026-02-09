@@ -2,40 +2,58 @@ import React from 'react';
 
 interface CollapsibleSectionProps {
   title: string;
+  toolName?: string;
   open?: boolean;
   action?: React.ReactNode;
+  onTitleClick?: () => void;
   children: React.ReactNode;
   className?: string;
 }
 
 /**
  * Reusable collapsible section with consistent styling
- * Replaces repeated details/summary patterns throughout MessageComponent
  */
 export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
   title,
+  toolName,
   open = false,
   action,
+  onTitleClick,
   children,
   className = ''
 }) => {
   return (
-    <details className={`relative mt-3 group/details ${className}`} open={open}>
-      <summary className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 p-2.5 rounded-lg hover:bg-white/50 dark:hover:bg-gray-800/50">
+    <details className={`relative group/details ${className}`} open={open}>
+      <summary className="flex items-center gap-1.5 text-xs cursor-pointer py-0.5 select-none">
         <svg
-          className="w-4 h-4 transition-transform duration-200 group-open/details:rotate-180"
+          className="w-3 h-3 text-gray-400 dark:text-gray-500 transition-transform duration-150 group-open/details:rotate-90 flex-shrink-0"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
         >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
         </svg>
-        <span className="flex items-center gap-2 flex-1">
-          {title}
-        </span>
-        {action}
+        {toolName && (
+          <span className="font-medium text-gray-500 dark:text-gray-400 flex-shrink-0">{toolName}</span>
+        )}
+        {toolName && (
+          <span className="text-gray-300 dark:text-gray-600 text-[10px] flex-shrink-0">/</span>
+        )}
+        {onTitleClick ? (
+          <button
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onTitleClick(); }}
+            className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-mono hover:underline truncate flex-1 text-left transition-colors"
+          >
+            {title}
+          </button>
+        ) : (
+          <span className="text-gray-600 dark:text-gray-400 truncate flex-1">
+            {title}
+          </span>
+        )}
+        {action && <span className="flex-shrink-0 ml-1">{action}</span>}
       </summary>
-      <div className="mt-3 pl-6">
+      <div className="mt-1.5 pl-[18px]">
         {children}
       </div>
     </details>

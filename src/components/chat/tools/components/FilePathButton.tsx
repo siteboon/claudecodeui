@@ -9,8 +9,7 @@ interface FilePathButtonProps {
 }
 
 /**
- * Reusable clickable file path component with consistent styling
- * Used across Edit, Write, and Read tool displays
+ * Clickable file path — inline link style
  */
 export const FilePathButton: React.FC<FilePathButtonProps> = ({
   filePath,
@@ -26,7 +25,7 @@ export const FilePathButton: React.FC<FilePathButtonProps> = ({
     return (
       <button
         onClick={onClick}
-        className={`text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline font-mono transition-colors ${className}`}
+        className={`text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-mono text-xs hover:underline transition-colors ${className}`}
       >
         {displayText}
       </button>
@@ -36,7 +35,8 @@ export const FilePathButton: React.FC<FilePathButtonProps> = ({
   return (
     <button
       onClick={onClick}
-      className={`px-2.5 py-1 rounded-md bg-white/60 dark:bg-gray-800/60 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 font-mono text-xs font-medium transition-all duration-200 shadow-sm ${className}`}
+      className={`text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-mono text-xs hover:underline transition-colors ${className}`}
+      title={filePath}
     >
       {displayText}
     </button>

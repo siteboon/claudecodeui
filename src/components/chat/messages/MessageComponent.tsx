@@ -11,7 +11,7 @@ import { Markdown } from '../markdown/Markdown';
 import { formatUsageLimitText } from '../utils/chatFormatting';
 import { getClaudePermissionSuggestion } from '../utils/chatPermissions';
 import type { Project } from '../../../types/app';
-import { ToolRenderer, shouldHideToolResult } from '../tools';
+import { ToolRenderer, shouldHideToolResult, FileListContent, TaskListContent } from '../tools';
 
 type DiffLine = {
   type: string;
@@ -181,38 +181,29 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                   return (
                   <div
                     id={`tool-result-${message.toolId}`}
-                    className={`relative mt-4 p-4 rounded-lg border backdrop-blur-sm scroll-mt-4 ${
+                    className={`relative mt-2 p-3 rounded border scroll-mt-4 ${
                     message.toolResult.isError
-                      ? 'bg-gradient-to-br from-red-50 to-rose-50 dark:from-red-950/20 dark:to-rose-950/20 border-red-200/60 dark:border-red-800/60'
-                      : 'bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 border-green-200/60 dark:border-green-800/60'
+                      ? 'bg-red-50/50 dark:bg-red-950/10 border-red-200/60 dark:border-red-800/40'
+                      : 'bg-green-50/50 dark:bg-green-950/10 border-green-200/60 dark:border-green-800/40'
                   }`}>
-                    {/* Decorative gradient overlay */}
-                    <div className={`absolute inset-0 rounded-lg opacity-50 ${
-                      message.toolResult.isError
-                        ? 'bg-gradient-to-br from-red-500/5 to-rose-500/5 dark:from-red-400/5 dark:to-rose-400/5'
-                        : 'bg-gradient-to-br from-green-500/5 to-emerald-500/5 dark:from-green-400/5 dark:to-emerald-400/5'
-                    }`}></div>
-
-                    <div className="relative flex items-center gap-2.5 mb-3">
-                      <div className={`w-6 h-6 rounded-lg flex items-center justify-center shadow-md ${
+                    <div className="relative flex items-center gap-1.5 mb-2">
+                      <svg className={`w-4 h-4 ${
                         message.toolResult.isError
-                          ? 'bg-gradient-to-br from-red-500 to-rose-600 dark:from-red-400 dark:to-rose-500 shadow-red-500/20'
-                          : 'bg-gradient-to-br from-green-500 to-emerald-600 dark:from-green-400 dark:to-emerald-500 shadow-green-500/20'
-                      }`}>
-                        <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          {message.toolResult.isError ? (
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                          ) : (
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                          )}
-                        </svg>
-                      </div>
-                      <span className={`text-sm font-semibold ${
+                          ? 'text-red-500 dark:text-red-400'
+                          : 'text-green-500 dark:text-green-400'
+                      }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        {message.toolResult.isError ? (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        ) : (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        )}
+                      </svg>
+                      <span className={`text-xs font-medium ${
                         message.toolResult.isError
-                          ? 'text-red-800 dark:text-red-200'
-                          : 'text-green-800 dark:text-green-200'
+                          ? 'text-red-700 dark:text-red-300'
+                          : 'text-green-700 dark:text-green-300'
                       }`}>
-                        {message.toolResult.isError ? 'Tool Error' : 'Tool Result'}
+                        {message.toolResult.isError ? 'Error' : 'Result'}
                       </span>
                     </div>
 
@@ -291,55 +282,24 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                           }
                         }
 
-                        // Special handling for Grep/Glob results with structured data
+                        // Grep/Glob results - compact comma-separated file list
                         if ((message.toolName === 'Grep' || message.toolName === 'Glob') && message.toolResult?.toolUseResult) {
                           const toolData = message.toolResult.toolUseResult;
-
-                          // Handle files_with_matches mode or any tool result with filenames array
                           if (toolData.filenames && Array.isArray(toolData.filenames) && toolData.filenames.length > 0) {
+                            const count = toolData.numFiles || toolData.filenames.length;
                             return (
-                              <div>
-                                <div className="flex items-center gap-2 mb-3">
-                                  <span className="font-medium">
-                                    Found {toolData.numFiles || toolData.filenames.length} {(toolData.numFiles === 1 || toolData.filenames.length === 1) ? 'file' : 'files'}
-                                  </span>
-                                </div>
-                                <div className="space-y-1 max-h-96 overflow-y-auto">
-                                  {toolData.filenames.map((filePath, index) => {
-                                    const fileName = filePath.split('/').pop();
-                                    const dirPath = filePath.substring(0, filePath.lastIndexOf('/'));
-
-                                    return (
-                                      <div
-                                        key={index}
-                                        onClick={() => {
-                                          if (onFileOpen) {
-                                            onFileOpen(filePath);
-                                          }
-                                        }}
-                                        className="group flex items-center gap-2 px-2 py-1.5 rounded hover:bg-green-100/50 dark:hover:bg-green-800/20 cursor-pointer transition-colors"
-                                      >
-                                        <svg className="w-4 h-4 text-green-600 dark:text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                        </svg>
-                                        <div className="flex-1 min-w-0">
-                                          <div className="font-mono text-sm font-medium text-green-800 dark:text-green-200 truncate group-hover:text-green-900 dark:group-hover:text-green-100">
-                                            {fileName}
-                                          </div>
-                                          <div className="font-mono text-xs text-green-600/70 dark:text-green-400/70 truncate">
-                                            {dirPath}
-                                          </div>
-                                        </div>
-                                        <svg className="w-4 h-4 text-green-600 dark:text-green-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                        </svg>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
+                              <FileListContent
+                                files={toolData.filenames}
+                                onFileClick={onFileOpen}
+                                title={`Found ${count} ${count === 1 ? 'file' : 'files'}`}
+                              />
                             );
                           }
+                        }
+
+                        // Task tool results - proper task list rendering
+                        if (message.toolName === 'TaskList' || message.toolName === 'TaskGet') {
+                          return <TaskListContent content={content} />;
                         }
 
                         // Special handling for interactive prompts
@@ -797,9 +757,11 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
               </div>
             )}
             
-            <div className={`text-xs text-gray-500 dark:text-gray-400 mt-1 ${isGrouped ? 'opacity-0 group-hover:opacity-100' : ''}`}>
-              {new Date(message.timestamp).toLocaleTimeString()}
-            </div>
+            {!isGrouped && (
+              <div className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+                {new Date(message.timestamp).toLocaleTimeString()}
+              </div>
+            )}
           </div>
         </div>
       )}

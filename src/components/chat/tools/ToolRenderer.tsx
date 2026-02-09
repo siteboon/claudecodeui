@@ -1,6 +1,6 @@
 import React from 'react';
 import { getToolConfig } from './configs/toolConfigs';
-import { OneLineDisplay, CollapsibleDisplay, FilePathButton, DiffViewer, MarkdownContent, FileListContent, TodoListContent, TextContent } from './components';
+import { OneLineDisplay, CollapsibleDisplay, FilePathButton, DiffViewer, MarkdownContent, FileListContent, TodoListContent, TaskListContent, TextContent } from './components';
 import type { Project } from '../../../types/app';
 
 type DiffLine = {
@@ -24,6 +24,16 @@ interface ToolRendererProps {
   rawToolInput?: string;
 }
 
+function getToolCategory(toolName: string): string {
+  if (['Edit', 'Write', 'ApplyPatch'].includes(toolName)) return 'edit';
+  if (['Grep', 'Glob'].includes(toolName)) return 'search';
+  if (toolName === 'Bash') return 'bash';
+  if (['TodoWrite', 'TodoRead'].includes(toolName)) return 'todo';
+  if (['TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet'].includes(toolName)) return 'task';
+  if (toolName === 'exit_plan_mode' || toolName === 'ExitPlanMode') return 'plan';
+  return 'default';
+}
+
 /**
  * Main tool renderer router
  * Routes to OneLineDisplay or CollapsibleDisplay based on tool config
@@ -43,7 +53,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = ({
   rawToolInput
 }) => {
   const config = getToolConfig(toolName);
-  const displayConfig = mode === 'input' ? config.input : config.result;
+  const displayConfig: any = mode === 'input' ? config.input : config.result;
 
   if (!displayConfig) return null;
 
@@ -87,7 +97,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = ({
   if (displayConfig.type === 'collapsible') {
     const title = typeof displayConfig.title === 'function'
       ? displayConfig.title(parsedData)
-      : displayConfig.title || 'View details';
+      : displayConfig.title || 'Details';
 
     const defaultOpen = displayConfig.defaultOpen !== undefined
       ? displayConfig.defaultOpen
@@ -143,6 +153,14 @@ export const ToolRenderer: React.FC<ToolRendererProps> = ({
         );
         break;
 
+      case 'task':
+        contentComponent = (
+          <TaskListContent
+            content={contentProps.content || ''}
+          />
+        );
+        break;
+
       case 'text':
         contentComponent = (
           <TextContent
@@ -155,15 +173,18 @@ export const ToolRenderer: React.FC<ToolRendererProps> = ({
       case 'success-message':
         const message = displayConfig.getMessage?.(parsedData) || 'Success';
         contentComponent = (
-          <div className="flex items-center gap-2 mb-2">
-            <span className="font-medium">{message}</span>
+          <div className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400">
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            {message}
           </div>
         );
         break;
 
       default:
         contentComponent = (
-          <div className="text-gray-500">Unknown content type: {displayConfig.contentType}</div>
+          <div className="text-gray-500 text-xs">Unknown content type: {displayConfig.contentType}</div>
         );
     }
 
@@ -223,10 +244,15 @@ export const ToolRenderer: React.FC<ToolRendererProps> = ({
       actionButton = (
         <FilePathButton
           filePath={contentProps.filePath}
-          onClick={handleFileClick}
+          onClick={(e?: any) => handleFileClick(e)}
         />
       );
     }
+
+    // For edit tools, make the title (filename) clickable to open the file
+    const handleTitleClick = (toolName === 'Edit' || toolName === 'Write' || toolName === 'ApplyPatch') && contentProps.filePath && onFileOpen
+      ? () => onFileOpen(contentProps.filePath)
+      : undefined;
 
     return (
       <CollapsibleDisplay
@@ -235,17 +261,20 @@ export const ToolRenderer: React.FC<ToolRendererProps> = ({
         title={title}
         defaultOpen={defaultOpen}
         action={actionButton}
+        onTitleClick={handleTitleClick}
         contentType={displayConfig.contentType || 'text'}
         contentProps={{
           DiffViewer: contentComponent,
           MarkdownComponent: contentComponent,
           FileListComponent: contentComponent,
           TodoListComponent: contentComponent,
+          TaskComponent: contentComponent,
           TextComponent: contentComponent
         }}
         showRawParameters={mode === 'input' && showRawParameters}
         rawContent={rawToolInput}
         onShowSettings={onShowSettings}
+        toolCategory={getToolCategory(toolName)}
       />
     );
   }
