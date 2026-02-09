@@ -11,6 +11,7 @@ import { spawnCursor } from '../cursor-cli.js';
 import { queryCodex } from '../openai-codex.js';
 import { Octokit } from '@octokit/rest';
 import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '../../shared/modelConstants.js';
+import { IS_PLATFORM } from '../constants/config.js';
 
 const router = express.Router();
 
@@ -18,7 +19,7 @@ const router = express.Router();
  * Middleware to authenticate agent API requests.
  *
  * Supports two authentication modes:
- * 1. Platform mode (VITE_IS_PLATFORM=true): For managed/hosted deployments where
+ * 1. Platform mode (IS_PLATFORM=true): For managed/hosted deployments where
  *    authentication is handled by an external proxy. Requests are trusted and
  *    the default user context is used.
  *
@@ -28,7 +29,7 @@ const router = express.Router();
 const validateExternalApiKey = (req, res, next) => {
   // Platform mode: Authentication is handled externally (e.g., by a proxy layer).
   // Trust the request and use the default user context.
-  if (process.env.VITE_IS_PLATFORM === 'true') {
+  if (IS_PLATFORM) {
     try {
       const user = userDb.getFirstUser();
       if (!user) {

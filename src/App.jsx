@@ -31,7 +31,7 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { TaskMasterProvider } from './contexts/TaskMasterContext';
 import { TasksSettingsProvider } from './contexts/TasksSettingsContext';
-import { WebSocketProvider, useWebSocketContext } from './contexts/WebSocketContext';
+import { WebSocketProvider, useWebSocket } from './contexts/WebSocketContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import { useVersionCheck } from './hooks/useVersionCheck';
 import useLocalStorage from './hooks/useLocalStorage';
@@ -40,11 +40,15 @@ import { I18nextProvider, useTranslation } from 'react-i18next';
 import i18n from './i18n/config.js';
 
 
+// ! Move to a separate file called AppContent.ts
 // Main App component with routing
 function AppContent() {
   const navigate = useNavigate();
   const { sessionId } = useParams();
   const { t } = useTranslation('common');
+  // * This is a tracker for avoiding excessive re-renders during development 
+  const renderCountRef = useRef(0);
+  // console.log(`AppContent render count: ${renderCountRef.current++}`);
   
   const { updateAvailable, latestVersion, currentVersion, releaseInfo } = useVersionCheck('siteboon', 'claudecodeui');
   const [showVersionModal, setShowVersionModal] = useState(false);
@@ -81,7 +85,7 @@ function AppContent() {
   // Triggers ChatInterface to reload messages without switching sessions
   const [externalMessageUpdate, setExternalMessageUpdate] = useState(0);
 
-  const { ws, sendMessage, messages } = useWebSocketContext();
+  const { ws, sendMessage, latestMessage } = useWebSocket();
 
   // Ref to track loading progress timeout for cleanup
   const loadingProgressTimeoutRef = useRef(null);
@@ -175,9 +179,7 @@ function AppContent() {
 
   // Handle WebSocket messages for real-time project updates
   useEffect(() => {
-    if (messages.length > 0) {
-      const latestMessage = messages[messages.length - 1];
-
+    if (latestMessage) {
       // Handle loading progress updates
       if (latestMessage.type === 'loading_progress') {
         if (loadingProgressTimeoutRef.current) {
@@ -277,7 +279,7 @@ function AppContent() {
         loadingProgressTimeoutRef.current = null;
       }
     };
-  }, [messages, selectedProject, selectedSession, activeSessions]);
+  }, [latestMessage, selectedProject, selectedSession, activeSessions]);
 
   const fetchProjects = async () => {
     try {
@@ -916,7 +918,7 @@ function AppContent() {
           setActiveTab={setActiveTab}
           ws={ws}
           sendMessage={sendMessage}
-          messages={messages}
+          latestMessage={latestMessage}
           isMobile={isMobile}
           isPWA={isPWA}
           onMenuClick={() => setSidebarOpen(true)}
