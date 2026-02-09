@@ -42,12 +42,12 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
   Bash: {
     input: {
       type: 'one-line',
-      icon: '$',
+      icon: 'terminal',
       getValue: (input) => input.command,
       getSecondary: (input) => input.description,
       action: 'copy',
       colorScheme: {
-        primary: 'text-green-600 dark:text-green-400',
+        primary: 'text-green-600 dark:text-green-400 font-mono',
         secondary: 'text-gray-500 dark:text-gray-400'
       }
     },
