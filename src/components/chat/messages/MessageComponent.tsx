@@ -11,6 +11,7 @@ import { Markdown } from '../markdown/Markdown';
 import { formatUsageLimitText } from '../utils/chatFormatting';
 import { getClaudePermissionSuggestion } from '../utils/chatPermissions';
 import type { Project } from '../../../types/app';
+import { ToolRenderer, shouldHideToolResult } from '../tools';
 
 type DiffLine = {
   type: string;
@@ -44,6 +45,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
   const [isExpanded, setIsExpanded] = React.useState(false);
   const permissionSuggestion = getClaudePermissionSuggestion(message, provider);
   const [permissionGrantState, setPermissionGrantState] = React.useState('idle');
+
 
   React.useEffect(() => {
     setPermissionGrantState('idle');
@@ -232,423 +234,28 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     </button>
                   )}
                 </div>
-                {message.toolInput && message.toolName === 'Edit' && (() => {
-                  try {
-                    const input = JSON.parse(message.toolInput);
-                    if (input.file_path && input.old_string && input.new_string) {
-                      return (
-                        <details className="relative mt-3 group/details" open={autoExpandTools}>
-                          <summary className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 p-2.5 rounded-lg hover:bg-white/50 dark:hover:bg-gray-800/50">
-                            <svg className="w-4 h-4 transition-transform duration-200 group-open/details:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
-                            <span className="flex items-center gap-2">
-                              <span>View edit diff for</span>
-                            </span> 
-                            <button
-                              onClick={async (e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                if (!onFileOpen) return;
-
-                                try {
-                                  // Fetch the current file (after the edit)
-                                  const response = await api.readFile(selectedProject?.name, input.file_path);
-                                  const data = await response.json();
-
-                                  if (!response.ok || data.error) {
-                                    console.error('Failed to fetch file:', data.error);
-                                    onFileOpen(input.file_path);
-                                    return;
-                                  }
-
-                                  const currentContent = data.content || '';
-
-                                  // Reverse apply the edit: replace new_string back to old_string to get the file BEFORE the edit
-                                  const oldContent = currentContent.replace(input.new_string, input.old_string);
-
-                                  // Pass the full file before and after the edit
-                                  onFileOpen(input.file_path, {
-                                    old_string: oldContent,
-                                    new_string: currentContent
-                                  });
-                                } catch (error) {
-                                  console.error('Error preparing diff:', error);
-                                  onFileOpen(input.file_path);
-                                }
-                              }}
-                              className="px-2.5 py-1 rounded-md bg-white/60 dark:bg-gray-800/60 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 font-mono text-xs font-medium transition-all duration-200 shadow-sm"
-                            >
-                              {input.file_path.split('/').pop()}
-                            </button>
-                          </summary>
-                          <div className="mt-3 pl-6">
-                            <div className="bg-white dark:bg-gray-900/50 border border-gray-200/60 dark:border-gray-700/60 rounded-lg overflow-hidden shadow-sm">
-                              <div className="flex items-center justify-between px-4 py-2.5 bg-gradient-to-r from-gray-50 to-gray-100/50 dark:from-gray-800/80 dark:to-gray-800/40 border-b border-gray-200/60 dark:border-gray-700/60 backdrop-blur-sm">
-                                <button
-                                  onClick={async () => {
-                                    if (!onFileOpen) return;
-
-                                    try {
-                                      // Fetch the current file (after the edit)
-                                      const response = await api.readFile(selectedProject?.name, input.file_path);
-                                      const data = await response.json();
-
-                                      if (!response.ok || data.error) {
-                                        console.error('Failed to fetch file:', data.error);
-                                        onFileOpen(input.file_path);
-                                        return;
-                                      }
-
-                                      const currentContent = data.content || '';
-                                      // Reverse apply the edit: replace new_string back to old_string
-                                      const oldContent = currentContent.replace(input.new_string, input.old_string);
-
-                                      // Pass the full file before and after the edit
-                                      onFileOpen(input.file_path, {
-                                        old_string: oldContent,
-                                        new_string: currentContent
-                                      });
-                                    } catch (error) {
-                                      console.error('Error preparing diff:', error);
-                                      onFileOpen(input.file_path);
-                                    }
-                                  }}
-                                  className="text-xs font-mono text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 truncate cursor-pointer font-medium transition-colors"
-                                >
-                                  {input.file_path}
-                                </button>
-                                <span className="text-xs text-gray-500 dark:text-gray-400 font-medium px-2 py-0.5 bg-gray-100 dark:bg-gray-700/50 rounded">
-                                  Diff
-                                </span>
-                              </div>
-                              <div className="text-xs font-mono">
-                                {createDiff(input.old_string, input.new_string).map((diffLine, i) => (
-                                  <div key={i} className="flex">
-                                    <span className={`w-8 text-center border-r ${
-                                      diffLine.type === 'removed' 
-                                        ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800'
-                                        : 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800'
-                                    }`}>
-                                      {diffLine.type === 'removed' ? '-' : '+'}
-                                    </span>
-                                    <span className={`px-2 py-0.5 flex-1 whitespace-pre-wrap ${
-                                      diffLine.type === 'removed'
-                                        ? 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200'
-                                        : 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200'
-                                    }`}>
-                                      {diffLine.content}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                            {showRawParameters && (
-                              <details className="relative mt-3 pl-6 group/raw" open={autoExpandTools}>
-                                <summary className="flex items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-400 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 p-2 rounded-lg hover:bg-white/50 dark:hover:bg-gray-800/50">
-                                  <svg className="w-3 h-3 transition-transform duration-200 group-open/raw:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                  </svg>
-                                  View raw parameters
-                                </summary>
-                                <pre className="mt-2 text-xs bg-gray-50 dark:bg-gray-800/50 border border-gray-200/60 dark:border-gray-700/60 p-3 rounded-lg whitespace-pre-wrap break-words overflow-hidden text-gray-700 dark:text-gray-300 font-mono">
-                                  {message.toolInput}
-                                </pre>
-                              </details>
-                            )}
-                          </div>
-                        </details>
-                      );
-                    }
-                  } catch (e) {
-                    // Fall back to raw display if parsing fails
-                  }
+                {/* All tool input rendering now handled by ToolRenderer */}
+                {message.toolInput && (() => {
+                  // Use new ToolRenderer for all tools (config-driven)
                   return (
-                    <details className="relative mt-3 group/params" open={autoExpandTools}>
-                      <summary className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 p-2.5 rounded-lg hover:bg-white/50 dark:hover:bg-gray-800/50">
-                        <svg className="w-4 h-4 transition-transform duration-200 group-open/params:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                        View input parameters
-                      </summary>
-                      <pre className="mt-3 text-xs bg-gray-50 dark:bg-gray-800/50 border border-gray-200/60 dark:border-gray-700/60 p-3 rounded-lg whitespace-pre-wrap break-words overflow-hidden text-gray-700 dark:text-gray-300 font-mono">
-                        {message.toolInput}
-                      </pre>
-                    </details>
-                  );
-                })()}
-                {message.toolInput && message.toolName !== 'Edit' && (() => {
-                  // Debug log to see what we're dealing with
-                  
-                  // Special handling for Write tool
-                  if (message.toolName === 'Write') {
-                    try {
-                      let input;
-                      // Handle both JSON string and already parsed object
-                      if (typeof message.toolInput === 'string') {
-                        input = JSON.parse(message.toolInput);
-                      } else {
-                        input = message.toolInput;
-                      }
-                      
-                      
-                      if (input.file_path && input.content !== undefined) {
-                        return (
-                          <details className="relative mt-3 group/details" open={autoExpandTools}>
-                            <summary className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 p-2.5 rounded-lg hover:bg-white/50 dark:hover:bg-gray-800/50">
-                              <svg className="w-4 h-4 transition-transform duration-200 group-open/details:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                              </svg>
-                              <span className="flex items-center gap-2">
-                                <span className="text-lg leading-none">📄</span>
-                                <span>Creating new file:</span>
-                              </span>
-                              <button
-                                onClick={async (e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  if (!onFileOpen) return;
-
-                                  try {
-                                    // Fetch the written file from disk
-                                    const response = await api.readFile(selectedProject?.name, input.file_path);
-                                    const data = await response.json();
-
-                                    const newContent = (response.ok && !data.error) ? data.content || '' : input.content || '';
-
-                                    // New file: old_string is empty, new_string is the full file
-                                    onFileOpen(input.file_path, {
-                                      old_string: '',
-                                      new_string: newContent
-                                    });
-                                  } catch (error) {
-                                    console.error('Error preparing diff:', error);
-                                    // Fallback to tool input content
-                                    onFileOpen(input.file_path, {
-                                      old_string: '',
-                                      new_string: input.content || ''
-                                    });
-                                  }
-                                }}
-                                className="px-2.5 py-1 rounded-md bg-white/60 dark:bg-gray-800/60 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 font-mono text-xs font-medium transition-all duration-200 shadow-sm"
-                              >
-                                {input.file_path.split('/').pop()}
-                              </button>
-                            </summary>
-                            <div className="mt-3 pl-6">
-                              <div className="bg-white dark:bg-gray-900/50 border border-gray-200/60 dark:border-gray-700/60 rounded-lg overflow-hidden shadow-sm">
-                                <div className="flex items-center justify-between px-4 py-2.5 bg-gradient-to-r from-gray-50 to-gray-100/50 dark:from-gray-800/80 dark:to-gray-800/40 border-b border-gray-200/60 dark:border-gray-700/60 backdrop-blur-sm">
-                                  <button
-                                    onClick={async () => {
-                                      if (!onFileOpen) return;
-
-                                      try {
-                                        // Fetch the written file from disk
-                                        const response = await api.readFile(selectedProject?.name, input.file_path);
-                                        const data = await response.json();
-
-                                        const newContent = (response.ok && !data.error) ? data.content || '' : input.content || '';
-
-                                        // New file: old_string is empty, new_string is the full file
-                                        onFileOpen(input.file_path, {
-                                          old_string: '',
-                                          new_string: newContent
-                                        });
-                                      } catch (error) {
-                                        console.error('Error preparing diff:', error);
-                                        // Fallback to tool input content
-                                        onFileOpen(input.file_path, {
-                                          old_string: '',
-                                          new_string: input.content || ''
-                                        });
-                                      }
-                                    }}
-                                    className="text-xs font-mono text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 truncate cursor-pointer font-medium transition-colors"
-                                  >
-                                    {input.file_path}
-                                  </button>
-                                  <span className="text-xs text-gray-500 dark:text-gray-400 font-medium px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded">
-                                    New File
-                                  </span>
-                                </div>
-                                <div className="text-xs font-mono">
-                                  {createDiff('', input.content).map((diffLine, i) => (
-                                    <div key={i} className="flex">
-                                      <span className={`w-8 text-center border-r ${
-                                        diffLine.type === 'removed' 
-                                          ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800'
-                                          : 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800'
-                                      }`}>
-                                        {diffLine.type === 'removed' ? '-' : '+'}
-                                      </span>
-                                      <span className={`px-2 py-0.5 flex-1 whitespace-pre-wrap ${
-                                        diffLine.type === 'removed'
-                                          ? 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200'
-                                          : 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200'
-                                      }`}>
-                                        {diffLine.content}
-                                      </span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                              {showRawParameters && (
-                                <details className="relative mt-3 pl-6 group/raw" open={autoExpandTools}>
-                                  <summary className="flex items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-400 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 p-2 rounded-lg hover:bg-white/50 dark:hover:bg-gray-800/50">
-                                    <svg className="w-3 h-3 transition-transform duration-200 group-open/raw:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                    View raw parameters
-                                  </summary>
-                                  <pre className="mt-2 text-xs bg-gray-50 dark:bg-gray-800/50 border border-gray-200/60 dark:border-gray-700/60 p-3 rounded-lg whitespace-pre-wrap break-words overflow-hidden text-gray-700 dark:text-gray-300 font-mono">
-                                    {message.toolInput}
-                                  </pre>
-                                </details>
-                              )}
-                            </div>
-                          </details>
-                        );
-                      }
-                    } catch (e) {
-                      // Fall back to regular display
-                    }
-                  }
-                  
-                  // Special handling for TodoWrite tool
-                  if (message.toolName === 'TodoWrite') {
-                    try {
-                      const input = JSON.parse(message.toolInput);
-                      if (input.todos && Array.isArray(input.todos)) {
-                        return (
-                          <details className="relative mt-3 group/todo" open={autoExpandTools}>
-                            <summary className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 p-2.5 rounded-lg hover:bg-white/50 dark:hover:bg-gray-800/50">
-                              <svg className="w-4 h-4 transition-transform duration-200 group-open/todo:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                              </svg>
-                              <span className="flex items-center gap-2">
-                                <span className="text-lg leading-none">✓</span>
-                                <span>Updating Todo List</span>
-                              </span>
-                            </summary>
-                            <div className="mt-3">
-                              <TodoList todos={input.todos} />
-                              {showRawParameters && (
-                                <details className="relative mt-3 group/raw" open={autoExpandTools}>
-                                  <summary className="flex items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-400 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 p-2 rounded-lg hover:bg-white/50 dark:hover:bg-gray-800/50">
-                                    <svg className="w-3 h-3 transition-transform duration-200 group-open/raw:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                    View raw parameters
-                                  </summary>
-                                  <pre className="mt-2 text-xs bg-gray-50 dark:bg-gray-800/50 border border-gray-200/60 dark:border-gray-700/60 p-3 rounded-lg overflow-x-auto text-gray-700 dark:text-gray-300 font-mono">
-                                    {message.toolInput}
-                                  </pre>
-                                </details>
-                              )}
-                            </div>
-                          </details>
-                        );
-                      }
-                    } catch (e) {
-                      // Fall back to regular display
-                    }
-                  }
-                  
-                  // Special handling for Bash tool
-                  if (message.toolName === 'Bash') {
-                    try {
-                      const input = JSON.parse(message.toolInput);
-                      return (
-                        <div className="my-2">
-                          <div className="bg-gray-900 dark:bg-gray-950 rounded-md px-3 py-2 font-mono text-sm">
-                            <span className="text-green-400">$</span>
-                            <span className="text-gray-100 ml-2">{input.command}</span>
-                          </div>
-                          {input.description && (
-                            <div className="mt-1 text-xs text-gray-500 dark:text-gray-400 italic ml-1">
-                              {input.description}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    } catch (e) {
-                      // Fall back to regular display
-                    }
-                  }
-                  
-                  // Special handling for Read tool
-                  if (message.toolName === 'Read') {
-                    try {
-                      const input = JSON.parse(message.toolInput);
-                      if (input.file_path) {
-                        const filename = input.file_path.split('/').pop();
-                        
-                        return (
-                          <div className="mt-2 text-sm text-blue-700 dark:text-blue-300">
-                            Read{' '}
-                            <button
-                              onClick={() => onFileOpen && onFileOpen(input.file_path)}
-                              className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline font-mono"
-                            >
-                              {filename}
-                            </button>
-                          </div>
-                        );
-                      }
-                    } catch (e) {
-                      // Fall back to regular display
-                    }
-                  }
-                  
-                  // Special handling for exit_plan_mode tool
-                  if (message.toolName === 'exit_plan_mode') {
-                    try {
-                      const input = JSON.parse(message.toolInput);
-                      if (input.plan) {
-                        // Replace escaped newlines with actual newlines
-                        const planContent = input.plan.replace(/\\n/g, '\n');
-                        return (
-                          <details className="mt-2" open={autoExpandTools}>
-                            <summary className="text-sm text-blue-700 dark:text-blue-300 cursor-pointer hover:text-blue-800 dark:hover:text-blue-200 flex items-center gap-2">
-                              <svg className="w-4 h-4 transition-transform details-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                              </svg>
-                              📋 View implementation plan
-                            </summary>
-                            <Markdown className="mt-3 prose prose-sm max-w-none dark:prose-invert">
-                              {planContent}
-                            </Markdown>
-                          </details>
-                        );
-                      }
-                    } catch (e) {
-                      // Fall back to regular display
-                    }
-                  }
-                  
-                  // Regular tool input display for other tools
-                  return (
-                    <details className="relative mt-3 group/params" open={autoExpandTools}>
-                      <summary className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 p-2.5 rounded-lg hover:bg-white/50 dark:hover:bg-gray-800/50">
-                        <svg className="w-4 h-4 transition-transform duration-200 group-open/params:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                        View input parameters
-                      </summary>
-                      <pre className="mt-3 text-xs bg-gray-50 dark:bg-gray-800/50 border border-gray-200/60 dark:border-gray-700/60 p-3 rounded-lg whitespace-pre-wrap break-words overflow-hidden text-gray-700 dark:text-gray-300 font-mono">
-                        {message.toolInput}
-                      </pre>
-                    </details>
+                    <ToolRenderer
+                      toolName={message.toolName}
+                      toolInput={message.toolInput}
+                      mode="input"
+                      onFileOpen={onFileOpen}
+                      createDiff={createDiff}
+                      selectedProject={selectedProject}
+                      autoExpandTools={autoExpandTools}
+                      showRawParameters={showRawParameters}
+                      rawToolInput={message.toolInput}
+                    />
                   );
                 })()}
                 
                 {/* Tool Result Section */}
                 {message.toolResult && (() => {
-                  // Hide tool results for Edit/Write/Bash unless there's an error
-                  const shouldHideResult = !message.toolResult.isError &&
-                    (message.toolName === 'Edit' || message.toolName === 'Write' || message.toolName === 'ApplyPatch' || message.toolName === 'Bash');
-
-                  if (shouldHideResult) {
+                  // Use config to determine if result should be hidden
+                  if (shouldHideToolResult(message.toolName, message.toolResult)) {
                     return null;
                   }
 
@@ -737,9 +344,15 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                         // Special handling for exit_plan_mode tool results
                         if (message.toolName === 'exit_plan_mode') {
                           try {
-                            // The content should be JSON with a "plan" field
-                            const parsed = JSON.parse(content);
-                            if (parsed.plan) {
+                            // Content might already be an object or a JSON string
+                            let parsed;
+                            if (typeof message.toolResult.content === 'object' && message.toolResult.content !== null) {
+                              parsed = message.toolResult.content;
+                            } else {
+                              parsed = JSON.parse(content);
+                            }
+
+                            if (parsed && parsed.plan) {
                               // Replace escaped newlines with actual newlines
                               const planContent = parsed.plan.replace(/\\n/g, '\n');
                               return (
@@ -754,6 +367,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                               );
                             }
                           } catch (e) {
+                            console.error('Failed to parse exit_plan_mode result:', e);
                             // Fall through to regular handling
                           }
                         }

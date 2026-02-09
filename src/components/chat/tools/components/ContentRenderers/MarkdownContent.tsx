@@ -1,0 +1,22 @@
+import React from 'react';
+import { Markdown } from '../../../markdown/Markdown';
+
+interface MarkdownContentProps {
+  content: string;
+  className?: string;
+}
+
+/**
+ * Renders markdown content with proper styling
+ * Used by: exit_plan_mode, long text results, etc.
+ */
+export const MarkdownContent: React.FC<MarkdownContentProps> = ({
+  content,
+  className = 'mt-3 prose prose-sm max-w-none dark:prose-invert'
+}) => {
+  return (
+    <Markdown className={className}>
+      {content}
+    </Markdown>
+  );
+};
