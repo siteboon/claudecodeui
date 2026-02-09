@@ -2,7 +2,9 @@
 
 ## Overview
 
-This folder contains a **config-driven architecture** for rendering tool executions in the chat interface. Instead of scattered conditional logic, all tool rendering is centralized through configurations and reusable display components.
+Config-driven architecture for rendering tool executions in chat. All tool display behavior is defined in `toolConfigs.ts` — no scattered conditionals. Two base display patterns: **OneLineDisplay** for compact tools, **CollapsibleDisplay** for tools with expandable content.
+
+Non-error tool results route through `ToolRenderer` with `mode="result"` (single source of truth). Error results are handled inline in `MessageComponent` with a red error box.
 
 ---
 
@@ -10,407 +12,213 @@ This folder contains a **config-driven architecture** for rendering tool executi
 
 ```
 tools/
-├── components/          # Reusable display components
-│   ├── OneLineDisplay.tsx          # Simple one-line tool displays
-│   ├── CollapsibleDisplay.tsx      # Expandable tool displays
-│   ├── ContentRenderers/           # Content-specific renderers
-│   │   ├── DiffViewer.tsx         # File diff viewer
-│   │   ├── MarkdownContent.tsx    # Markdown renderer
-│   │   ├── FileListContent.tsx    # File list for search results
-│   │   ├── TodoListContent.tsx    # Todo list renderer
-│   │   └── TextContent.tsx        # Plain text/JSON/code
-│   ├── FilePathButton.tsx         # Clickable file paths
-│   └── CollapsibleSection.tsx     # Collapsible wrapper
-├── configs/            # Tool configurations
-│   ├── types.ts                   # TypeScript interfaces
-│   └── toolConfigs.ts             # All tool configs (10 tools)
-├── ToolRenderer.tsx    # Main router component
-└── README.md           # This file
+├── components/
+│   ├── OneLineDisplay.tsx          # Compact one-line tool display
+│   ├── CollapsibleDisplay.tsx      # Expandable tool display (uses children pattern)
+│   ├── CollapsibleSection.tsx      # <details>/<summary> wrapper
+│   ├── ContentRenderers/
+│   │   ├── DiffViewer.tsx          # File diff viewer (memoized)
+│   │   ├── MarkdownContent.tsx     # Markdown renderer
+│   │   ├── FileListContent.tsx     # Comma-separated clickable file list
+│   │   ├── TodoListContent.tsx     # Todo items with status badges
+│   │   ├── TaskListContent.tsx     # Task tracker with progress bar
+│   │   └── TextContent.tsx         # Plain text / JSON / code
+├── configs/
+│   └── toolConfigs.ts              # All tool configs + ToolDisplayConfig type
+├── ToolRenderer.tsx                # Main router (React.memo wrapped)
+└── README.md
 ```
 
 ---
 
-## Core Concepts
+## Display Patterns
 
-### 1. Display Components
+### OneLineDisplay
 
-All tools use one of two base display patterns:
+Used by: Bash, Read, Grep, Glob, TodoRead, TaskCreate, TaskUpdate, TaskGet
 
-#### **OneLineDisplay** - For simple tools
-Used by: Bash, Read, Grep, Glob, TodoRead
+Renders as a single line with `border-l-2` accent. Supports multiple rendering modes based on `action`:
+
+- **terminal** (`style: 'terminal'`) — Dark pill around command text, green `$` prompt
+- **open-file** — Shows filename only (truncated from full path), clickable to open
+- **jump-to-results** — Shows pattern with anchor link to result section
+- **copy** — Shows value with hover copy button
+- **none** — Plain display
 
 ```tsx
 <OneLineDisplay
-  icon="$"              // Optional icon
-  label="Read"          // Optional label
-  value="command text"  // Main value to display
-  secondary="(desc)"    // Optional secondary text
-  action="copy"         // Action type: copy | open-file | jump-to-results | none
-  onAction={() => ...}  // Action callback
-  colorScheme={{        // Optional color customization
-    primary: "text-...",
-    secondary: "text-..."
+  toolName="Read"
+  icon="terminal"           // Optional icon or style keyword
+  label="Read"              // Tool label
+  value="/path/to/file.ts"  // Main display value
+  secondary="description"   // Optional secondary text (italic)
+  action="open-file"        // Action type
+  onAction={() => ...}      // Click handler
+  colorScheme={{             // Per-tool colors
+    primary: 'text-...',
+    border: 'border-...',
+    icon: 'text-...'
   }}
+  resultId="tool-result-x"  // For jump-to-results anchor
+  toolResult={...}          // For conditional jump arrow
+  toolId="x"                // Tool use ID
 />
 ```
 
-#### **CollapsibleDisplay** - For complex tools
-Used by: Edit, Write, Plan, TodoWrite, Grep/Glob results
+### CollapsibleDisplay
+
+Used by: Edit, Write, ApplyPatch, Grep/Glob results, TodoWrite, TaskList/TaskGet results, ExitPlanMode, Default
+
+Wraps `CollapsibleSection` (`<details>`/`<summary>`) with a `border-l-2` accent colored by tool category. Accepts **children** directly (not contentProps).
 
 ```tsx
 <CollapsibleDisplay
-  title="View edit diff"     // Section title
-  defaultOpen={false}         // Expand by default?
-  action={<FilePathButton />} // Optional action button
-  contentType="diff"          // Type of content to render
-  contentProps={{...}}        // Props for content renderer
-  showRawParameters={true}    // Show raw JSON?
-  rawContent="..."            // Raw JSON content
-/>
+  toolName="Edit"
+  toolId="123"
+  title="filename.ts"           // Section title (can be clickable)
+  defaultOpen={false}
+  onTitleClick={() => ...}      // Makes title a clickable link (for edit tools)
+  showRawParameters={true}      // Show raw JSON toggle
+  rawContent="..."              // Raw JSON string
+  toolCategory="edit"           // Drives border color
+>
+  <DiffViewer {...} />          // Content as children
+</CollapsibleDisplay>
 ```
 
-### 2. Content Renderers
-
-Different content types are handled by specialized renderers:
-
-- **diff** → `DiffViewer` - Shows before/after file changes
-- **markdown** → `MarkdownContent` - Renders markdown with styling
-- **file-list** → `FileListContent` - Clickable file list
-- **todo-list** → `TodoListContent` - Todo items with status
-- **text** → `TextContent` - Plain text, JSON, or code
-
-### 3. Configuration-Driven
-
-Every tool is defined by a config object. No code changes needed to add/modify tools!
+**Tool category colors** (via `border-l-2`):
+| Category | Tools | Color |
+|----------|-------|-------|
+| `edit` | Edit, Write, ApplyPatch | amber |
+| `bash` | Bash | green |
+| `search` | Grep, Glob | gray |
+| `todo` | TodoWrite, TodoRead | violet |
+| `task` | TaskCreate/Update/List/Get | violet |
+| `plan` | ExitPlanMode | indigo |
+| `default` | everything else | neutral gray |
 
 ---
 
-## How to Add a New Tool
+## Content Renderers
 
-### Example: Adding a "Format" tool
+Specialized components for different content types, rendered as children of `CollapsibleDisplay`:
+
+| contentType | Component | Used by |
+|---|---|---|
+| `diff` | `DiffViewer` | Edit, Write, ApplyPatch |
+| `markdown` | `MarkdownContent` | ExitPlanMode |
+| `file-list` | `FileListContent` | Grep/Glob results |
+| `todo-list` | `TodoListContent` | TodoWrite, TodoRead |
+| `task` | `TaskListContent` | TaskList, TaskGet results |
+| `text` | `TextContent` | Default fallback |
+| `success-message` | inline SVG | TodoWrite result |
+
+---
+
+## Adding a New Tool
 
 **Step 1:** Add config to `configs/toolConfigs.ts`
 
 ```typescript
-Format: {
+MyTool: {
   input: {
     type: 'one-line',              // or 'collapsible'
-    label: 'Format',
-    getValue: (input) => input.file_path,
+    label: 'MyTool',
+    getValue: (input) => input.some_field,
     action: 'open-file',
     colorScheme: {
-      primary: 'text-purple-600 dark:text-purple-400'
+      primary: 'text-purple-600 dark:text-purple-400',
+      border: 'border-purple-400 dark:border-purple-500'
     }
   },
   result: {
-    hideOnSuccess: true            // Hide successful results
+    hideOnSuccess: true            // Only show errors
   }
 }
 ```
 
-**Step 2:** That's it! No other files to touch.
+**Step 2:** If the tool needs a category color, add it to `getToolCategory()` in `ToolRenderer.tsx`.
 
-The ToolRenderer automatically:
-- Parses the tool input
-- Selects the right display component
-- Passes the correct props
-- Handles callbacks (file opening, copy, etc.)
+**That's it.** The ToolRenderer auto-routes based on config.
 
 ---
 
 ## Configuration Reference
 
-### Input Configuration
+### ToolDisplayConfig
 
 ```typescript
-input: {
-  // Display type (required)
-  type: 'one-line' | 'collapsible' | 'hidden'
-
-  // One-line specific
-  icon?: string                    // Icon to display (e.g., "$", "✓")
-  label?: string                   // Text label (e.g., "Read", "Grep")
-  getValue?: (input) => string     // Extract main value from input
-  getSecondary?: (input) => string // Extract secondary text (description)
-  action?: 'copy' | 'open-file' | 'jump-to-results' | 'none'
-  colorScheme?: {
-    primary?: string               // Tailwind classes for main text
-    secondary?: string             // Tailwind classes for secondary text
-  }
-
-  // Collapsible specific
-  title?: string | ((input) => string)  // Section title
-  defaultOpen?: boolean                 // Auto-expand?
-  contentType?: 'diff' | 'markdown' | 'file-list' | 'todo-list' | 'text'
-  getContentProps?: (input, helpers) => any  // Extract props for content renderer
-  actionButton?: 'file-button' | 'none'      // Show file path button?
-}
-```
-
-### Result Configuration
-
-```typescript
-result?: {
-  hidden?: boolean                 // Never show results
-  hideOnSuccess?: boolean          // Only show errors
-  type?: 'one-line' | 'collapsible' | 'special'
-  contentType?: 'markdown' | 'file-list' | 'todo-list' | 'text' | 'success-message'
-  getMessage?: (result) => string  // For success messages
-  getContentProps?: (result) => any  // Extract content props
-}
-```
-
----
-
-## Real-World Examples
-
-### Simple One-Line Tool (Bash)
-
-```typescript
-Bash: {
+interface ToolDisplayConfig {
   input: {
-    type: 'one-line',
-    icon: '$',
-    getValue: (input) => input.command,
-    getSecondary: (input) => input.description,
-    action: 'copy'
-  },
-  result: {
-    hideOnSuccess: true
-  }
-}
-```
+    type: 'one-line' | 'collapsible' | 'hidden';
 
-**Renders:**
-```
-$ npm install (Install dependencies) [Copy Button]
-```
+    // One-line
+    icon?: string;
+    label?: string;
+    getValue?: (input) => string;
+    getSecondary?: (input) => string | undefined;
+    action?: 'copy' | 'open-file' | 'jump-to-results' | 'none';
+    style?: string;                              // 'terminal' for Bash
+    wrapText?: boolean;
+    colorScheme?: {
+      primary?: string;
+      secondary?: string;
+      background?: string;
+      border?: string;
+      icon?: string;
+    };
 
-### Collapsible Diff Tool (Edit)
+    // Collapsible
+    title?: string | ((input) => string);
+    defaultOpen?: boolean;
+    contentType?: 'diff' | 'markdown' | 'file-list' | 'todo-list' | 'text' | 'task';
+    getContentProps?: (input, helpers?) => any;
+    actionButton?: 'none';
+  };
 
-```typescript
-Edit: {
-  input: {
-    type: 'collapsible',
-    title: 'View edit diff for',
-    contentType: 'diff',
-    actionButton: 'file-button',
-    getContentProps: (input) => ({
-      oldContent: input.old_string,
-      newContent: input.new_string,
-      filePath: input.file_path
-    })
-  },
-  result: {
-    hideOnSuccess: true
-  }
-}
-```
-
-**Renders:**
-```
-▶ View edit diff for [file.ts]
-  ┌─────────────────────────┐
-  │ - old line             │
-  │ + new line             │
-  └─────────────────────────┘
-```
-
-### Search Results (Grep)
-
-```typescript
-Grep: {
-  input: {
-    type: 'one-line',
-    label: 'Grep',
-    getValue: (input) => input.pattern,
-    getSecondary: (input) => input.path ? `in ${input.path}` : undefined,
-    action: 'jump-to-results'
-  },
-  result: {
-    type: 'collapsible',
-    contentType: 'file-list',
-    getContentProps: (result) => ({
-      files: result.toolUseResult?.filenames || [],
-      title: `Found ${count} files`
-    })
-  }
-}
-```
-
-**Renders:**
-```
-Input:  Grep "TODO" in src/  [Search results ↓]
-
-Result: Found 5 files
-        📄 app.ts (src/)
-        📄 utils.ts (src/utils/)
-        ...
-```
-
----
-
-## Advanced Features
-
-### Dynamic Content Props with Helpers
-
-For tools that need API calls or complex logic:
-
-```typescript
-getContentProps: (input, helpers) => {
-  const { selectedProject, createDiff, onFileOpen } = helpers;
-
-  // Use helpers for complex operations
-  return {
-    filePath: input.file_path,
-    onFileClick: () => onFileOpen(input.file_path)
+  result?: {
+    hidden?: boolean;                            // Never show
+    hideOnSuccess?: boolean;                     // Only show errors
+    type?: 'one-line' | 'collapsible' | 'special';
+    title?: string | ((result) => string);
+    defaultOpen?: boolean;
+    contentType?: 'markdown' | 'file-list' | 'todo-list' | 'text' | 'success-message' | 'task';
+    getMessage?: (result) => string;
+    getContentProps?: (result) => any;
   };
 }
 ```
 
-### File Opening Logic
+---
 
-The ToolRenderer handles file opening automatically for Edit/Write tools:
+## All Configured Tools
 
-1. Fetches current file via API
-2. Reverse-applies edits (for Edit)
-3. Opens file in diff view
-4. Falls back gracefully on errors
-
-No config needed - handled by `actionButton: 'file-button'`.
-
-### Custom Color Schemes
-
-Override default colors per tool:
-
-```typescript
-colorScheme: {
-  primary: 'text-purple-600 dark:text-purple-400',
-  secondary: 'text-purple-400 dark:text-purple-500'
-}
-```
+| Tool | Input | Result | Notes |
+|------|-------|--------|-------|
+| Bash | terminal one-line | hide success | Dark command pill, green accent |
+| Read | one-line (open-file) | hidden | Shows filename, clicks to open |
+| Edit | collapsible (diff) | hide success | Amber border, clickable filename |
+| Write | collapsible (diff) | hide success | "New" badge on diff |
+| ApplyPatch | collapsible (diff) | hide success | "Patch" badge on diff |
+| Grep | one-line (jump) | collapsible file-list | Collapsed by default |
+| Glob | one-line (jump) | collapsible file-list | Collapsed by default |
+| TodoWrite | collapsible (todo-list) | success message | |
+| TodoRead | one-line | collapsible todo-list | |
+| TaskCreate | one-line | hide success | Shows task subject |
+| TaskUpdate | one-line | hide success | Shows `#id → status` |
+| TaskList | one-line | collapsible task | Progress bar, status icons |
+| TaskGet | one-line | collapsible task | Task details with status |
+| ExitPlanMode | collapsible (markdown) | collapsible markdown | Also registered as `exit_plan_mode` |
+| Default | collapsible (code) | collapsible text | Fallback for unknown tools |
 
 ---
 
-## Component Props Reference
+## Performance
 
-### ToolRenderer (Main Entry Point)
-
-```typescript
-<ToolRenderer
-  toolName="Bash"           // Tool identifier
-  toolInput={...}           // Tool input (string or object)
-  toolResult={...}          // Tool result (for mode='result')
-  mode="input" | "result"   // Rendering mode
-  // Callbacks
-  onFileOpen={(path, diff) => ...}
-  createDiff={(old, new) => [...]}
-  // Context
-  selectedProject={...}
-  // Display options
-  autoExpandTools={false}
-  showRawParameters={false}
-  rawToolInput="..."
-/>
-```
-
-### OneLineDisplay
-
-```typescript
-interface OneLineDisplayProps {
-  icon?: string;
-  label?: string;
-  value: string;                      // Required
-  secondary?: string;
-  action?: ActionType;
-  onAction?: () => void;
-  colorScheme?: { primary, secondary };
-  resultId?: string;                  // For jump-to-results
-}
-```
-
-### CollapsibleDisplay
-
-```typescript
-interface CollapsibleDisplayProps {
-  title: string;                      // Required
-  defaultOpen?: boolean;
-  action?: React.ReactNode;
-  contentType: ContentType;           // Required
-  contentProps: any;                  // Required
-  showRawParameters?: boolean;
-  rawContent?: string;
-  className?: string;
-}
-```
-
----
-
-## Testing Your Tool
-
-### 1. Add Config
-Add your tool to `toolConfigs.ts`
-
-### 2. Test Input Rendering
-Trigger the tool and verify:
-- ✅ Correct display component used (one-line vs collapsible)
-- ✅ Values extracted correctly from input
-- ✅ Actions work (copy, file open, jump)
-- ✅ Colors and styling correct
-
-### 3. Test Result Rendering
-Check tool results:
-- ✅ Results hidden when appropriate
-- ✅ Error results always shown
-- ✅ Content rendered correctly
-- ✅ Interactive elements work
-
-### 4. Test Edge Cases
-- Empty inputs
-- Missing fields
-- Parse errors
-- API failures
-
----
-
-
-
-## Performance Notes
-
-### Config Loading
-- Configs are loaded once at module import
-- No runtime overhead for config lookups
-- Tree-shaking removes unused configs in production
-
-### Component Rendering
-- Display components are memoized where appropriate
-- Content renderers only render when props change
-- Collapsible sections lazy-load content
-
-### API Calls
-- File opening uses async/await with error handling
-- Failures gracefully fall back to simple file open
-- API module dynamically imported to reduce bundle size
-
----
-
-
-
-## Quick Reference
-
-### All Configured Tools
-
-| Tool | Type | Display | Action | Result |
-|------|------|---------|--------|--------|
-| Bash | one-line | $ command | copy | hide success |
-| Read | one-line | Read file.ts | open-file | hidden |
-| Edit | collapsible | diff viewer | file-button | hide success |
-| Write | collapsible | diff viewer | file-button | hide success |
-| ApplyPatch | collapsible | diff viewer | file-button | hide success |
-| Grep | one-line | pattern | jump | file-list |
-| Glob | one-line | pattern | jump | file-list |
-| TodoWrite | collapsible | todo-list | none | success msg |
-| TodoRead | one-line | Read todo | none | todo-list |
-| exit_plan_mode | collapsible | markdown | none | markdown |
-| Default | collapsible | text/code | none | text |
-
+- **ToolRenderer** is wrapped with `React.memo` — skips re-render when props haven't changed
+- **parsedData** is memoized with `useMemo` — JSON parsing only runs when input changes
+- **DiffViewer** memoizes `createDiff()` — expensive diff computation cached
+- **MessageComponent** caches `localStorage` reads and timestamp formatting via `useMemo`
+- Tool results route through `ToolRenderer` (no duplicate rendering paths)
+- `CollapsibleDisplay` uses children pattern (no wasteful contentProps indirection)
+- Configs are static module-level objects — zero runtime overhead for lookups
