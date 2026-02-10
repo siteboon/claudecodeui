@@ -793,10 +793,6 @@ function Sidebar({
                 <div className="w-6 h-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
               </div>
               <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">{t('projects.loadingProjects')}</h3>
-              <p className="text-sm text-muted-foreground">
-                {t('projects.fetchingProjects')}
-              </p>
-              <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">{t('projects.loadingProjects')}</h3>
               {loadingProgress && loadingProgress.total > 0 ? (
                 <div className="space-y-2">
                   <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
