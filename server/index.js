@@ -1229,14 +1229,6 @@ function handleShellConnection(ws) {
                                         url: normalizedUrl,
                                         autoOpen
                                     }));
-
-                                    // Emit a clickable OSC 8 hyperlink line so the full URL is clickable in xterm.
-                                    const safeUrl = normalizedUrl.replace(/\x07/g, '').replace(/\x1b/g, '');
-                                    const terminalHyperlink = `\x1b]8;;${safeUrl}\x07Open authentication URL\x1b]8;;\x07`;
-                                    session.ws.send(JSON.stringify({
-                                        type: 'output',
-                                        data: `\r\n\x1b[36mAuthentication URL:\x1b[0m ${terminalHyperlink}\r\n`
-                                    }));
                                 }
 
                             };
