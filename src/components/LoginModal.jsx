@@ -30,13 +30,13 @@ function LoginModal({
 
     switch (provider) {
       case 'claude':
-        return isAuthenticated ? 'claude setup-token --dangerously-skip-permissions' : 'claude --dangerously-skip-permissions';
+        return isAuthenticated ? 'claude setup-token --dangerously-skip-permissions' : 'claude /exit --dangerously-skip-permissions';
       case 'cursor':
         return 'cursor-agent login';
       case 'codex':
         return IS_PLATFORM ? 'codex login --device-auth' : 'codex login';
       default:
-        return isAuthenticated ? 'claude setup-token --dangerously-skip-permissions' : 'claude --dangerously-skip-permissions';
+        return isAuthenticated ? 'claude setup-token --dangerously-skip-permissions' : 'claude /exit --dangerously-skip-permissions';
     }
   };
 
