@@ -369,12 +369,28 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
         copyAuthUrlToClipboard(authUrlRef.current).catch(() => {});
       }
 
-      if ((event.ctrlKey || event.metaKey) && event.key === 'c' && terminal.current.hasSelection()) {
+      if (
+        event.type === 'keydown' &&
+        (event.ctrlKey || event.metaKey) &&
+        event.key?.toLowerCase() === 'c' &&
+        terminal.current.hasSelection()
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
         document.execCommand('copy');
         return false;
       }
 
-      if ((event.ctrlKey || event.metaKey) && event.key === 'v') {
+      if (
+        event.type === 'keydown' &&
+        (event.ctrlKey || event.metaKey) &&
+        event.key?.toLowerCase() === 'v'
+      ) {
+        // Block native browser/xterm paste so clipboard data is only sent after
+        // the explicit clipboard-read flow resolves (avoids duplicate pastes).
+        event.preventDefault();
+        event.stopPropagation();
+
         navigator.clipboard.readText().then(text => {
           if (ws.current && ws.current.readyState === WebSocket.OPEN) {
             ws.current.send(JSON.stringify({
