@@ -62,6 +62,8 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
   const [isRestarting, setIsRestarting] = useState(false);
   const [lastSessionId, setLastSessionId] = useState(null);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [authUrl, setAuthUrl] = useState('');
+  const [authUrlCopyStatus, setAuthUrlCopyStatus] = useState('idle');
 
   const selectedProjectRef = useRef(selectedProject);
   const selectedSessionRef = useRef(selectedSession);
@@ -140,6 +142,8 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
         setIsConnected(true);
         setIsConnecting(false);
         authUrlRef.current = '';
+        setAuthUrl('');
+        setAuthUrlCopyStatus('idle');
 
         setTimeout(() => {
           if (fitAddon.current && terminal.current) {
@@ -184,9 +188,13 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
             }
           } else if (data.type === 'auth_url' && data.url) {
             authUrlRef.current = data.url;
+            setAuthUrl(data.url);
+            setAuthUrlCopyStatus('idle');
           } else if (data.type === 'url_open') {
             if (data.url) {
               authUrlRef.current = data.url;
+              setAuthUrl(data.url);
+              setAuthUrlCopyStatus('idle');
             }
           }
         } catch (error) {
@@ -197,6 +205,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
       ws.current.onclose = (event) => {
         setIsConnected(false);
         setIsConnecting(false);
+        setAuthUrlCopyStatus('idle');
 
         if (terminal.current) {
           terminal.current.clear();
@@ -234,6 +243,8 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     setIsConnected(false);
     setIsConnecting(false);
     authUrlRef.current = '';
+    setAuthUrl('');
+    setAuthUrlCopyStatus('idle');
   }, []);
 
   const sessionDisplayName = useMemo(() => {
@@ -270,6 +281,8 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     setIsConnected(false);
     setIsInitialized(false);
     authUrlRef.current = '';
+    setAuthUrl('');
+    setAuthUrlCopyStatus('idle');
 
     setTimeout(() => {
       setIsRestarting(false);
@@ -484,9 +497,47 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
   }
 
   if (minimal) {
+    const hasAuthUrl = Boolean(authUrl);
+
     return (
-      <div className="h-full w-full bg-gray-900">
+      <div className="h-full w-full bg-gray-900 relative">
         <div ref={terminalRef} className="h-full w-full focus:outline-none" style={{ outline: 'none' }} />
+        {hasAuthUrl && (
+          <div className="absolute inset-x-0 bottom-14 z-20 border-t border-gray-700/80 bg-gray-900/95 p-3 backdrop-blur-sm">
+            <div className="flex flex-col gap-2">
+              <p className="text-xs text-gray-300">Open or copy the login URL:</p>
+              <input
+                type="text"
+                value={authUrl}
+                readOnly
+                onClick={(event) => event.currentTarget.select()}
+                className="w-full rounded border border-gray-600 bg-gray-800 px-2 py-1 text-xs text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                aria-label="Authentication URL"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    openAuthUrlInBrowser(authUrl);
+                  }}
+                  className="flex-1 rounded bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700"
+                >
+                  Open URL
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const copied = await copyAuthUrlToClipboard(authUrl);
+                    setAuthUrlCopyStatus(copied ? 'copied' : 'failed');
+                  }}
+                  className="flex-1 rounded bg-gray-700 px-3 py-2 text-xs font-medium text-white hover:bg-gray-600"
+                >
+                  {authUrlCopyStatus === 'copied' ? 'Copied' : 'Copy URL'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
