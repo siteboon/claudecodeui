@@ -26,6 +26,31 @@ if (typeof document !== 'undefined') {
   document.head.appendChild(styleSheet);
 }
 
+function fallbackCopyToClipboard(text) {
+  if (!text || typeof document === 'undefined') return false;
+
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  textarea.style.pointerEvents = 'none';
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+
+  let copied = false;
+  try {
+    copied = document.execCommand('copy');
+  } catch {
+    copied = false;
+  } finally {
+    document.body.removeChild(textarea);
+  }
+
+  return copied;
+}
+
 function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell = false, onProcessComplete, minimal = false, autoConnect = false }) {
   const { t } = useTranslation('chat');
   const terminalRef = useRef(null);
@@ -37,12 +62,15 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
   const [isRestarting, setIsRestarting] = useState(false);
   const [lastSessionId, setLastSessionId] = useState(null);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [authUrl, setAuthUrl] = useState('');
+  const [authUrlCopyStatus, setAuthUrlCopyStatus] = useState('idle');
 
   const selectedProjectRef = useRef(selectedProject);
   const selectedSessionRef = useRef(selectedSession);
   const initialCommandRef = useRef(initialCommand);
   const isPlainShellRef = useRef(isPlainShell);
   const onProcessCompleteRef = useRef(onProcessComplete);
+  const authUrlRef = useRef('');
 
   useEffect(() => {
     selectedProjectRef.current = selectedProject;
@@ -51,6 +79,42 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     isPlainShellRef.current = isPlainShell;
     onProcessCompleteRef.current = onProcessComplete;
   });
+
+  const openAuthUrlInBrowser = useCallback((url = authUrlRef.current) => {
+    if (!url) return false;
+
+    const popup = window.open(url, '_blank', 'noopener,noreferrer');
+    if (popup) {
+      try {
+        popup.opener = null;
+      } catch {
+        // Ignore cross-origin restrictions when trying to null opener
+      }
+      return true;
+    }
+
+    return false;
+  }, []);
+
+  const copyAuthUrlToClipboard = useCallback(async (url = authUrlRef.current) => {
+    if (!url) return false;
+
+    let copied = false;
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+        copied = true;
+      }
+    } catch {
+      copied = false;
+    }
+
+    if (!copied) {
+      copied = fallbackCopyToClipboard(url);
+    }
+
+    return copied;
+  }, []);
 
   const connectWebSocket = useCallback(async () => {
     if (isConnecting || isConnected) return;
@@ -77,6 +141,9 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
       ws.current.onopen = () => {
         setIsConnected(true);
         setIsConnecting(false);
+        authUrlRef.current = '';
+        setAuthUrl('');
+        setAuthUrlCopyStatus('idle');
 
         setTimeout(() => {
           if (fitAddon.current && terminal.current) {
@@ -119,8 +186,16 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
             if (terminal.current) {
               terminal.current.write(output);
             }
+          } else if (data.type === 'auth_url' && data.url) {
+            authUrlRef.current = data.url;
+            setAuthUrl(data.url);
+            setAuthUrlCopyStatus('idle');
           } else if (data.type === 'url_open') {
-            window.open(data.url, '_blank');
+            if (data.url) {
+              authUrlRef.current = data.url;
+              setAuthUrl(data.url);
+              setAuthUrlCopyStatus('idle');
+            }
           }
         } catch (error) {
           console.error('[Shell] Error handling WebSocket message:', error, event.data);
@@ -130,6 +205,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
       ws.current.onclose = (event) => {
         setIsConnected(false);
         setIsConnecting(false);
+        setAuthUrlCopyStatus('idle');
 
         if (terminal.current) {
           terminal.current.clear();
@@ -145,7 +221,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
       setIsConnected(false);
       setIsConnecting(false);
     }
-  }, [isConnecting, isConnected]);
+  }, [isConnecting, isConnected, openAuthUrlInBrowser]);
 
   const connectToShell = useCallback(() => {
     if (!isInitialized || isConnected || isConnecting) return;
@@ -166,6 +242,9 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
 
     setIsConnected(false);
     setIsConnecting(false);
+    authUrlRef.current = '';
+    setAuthUrl('');
+    setAuthUrlCopyStatus('idle');
   }, []);
 
   const sessionDisplayName = useMemo(() => {
@@ -201,6 +280,9 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
 
     setIsConnected(false);
     setIsInitialized(false);
+    authUrlRef.current = '';
+    setAuthUrl('');
+    setAuthUrlCopyStatus('idle');
 
     setTimeout(() => {
       setIsRestarting(false);
@@ -272,7 +354,10 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     const webLinksAddon = new WebLinksAddon();
 
     terminal.current.loadAddon(fitAddon.current);
-    terminal.current.loadAddon(webLinksAddon);
+    // Disable xterm link auto-detection in minimal (login) mode to avoid partial wrapped URL links.
+    if (!minimal) {
+      terminal.current.loadAddon(webLinksAddon);
+    }
     // Note: ClipboardAddon removed - we handle clipboard operations manually in attachCustomKeyEventHandler
 
     try {
@@ -284,12 +369,41 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     terminal.current.open(terminalRef.current);
 
     terminal.current.attachCustomKeyEventHandler((event) => {
-      if ((event.ctrlKey || event.metaKey) && event.key === 'c' && terminal.current.hasSelection()) {
+      if (
+        event.type === 'keydown' &&
+        minimal &&
+        isPlainShellRef.current &&
+        authUrlRef.current &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        event.key?.toLowerCase() === 'c'
+      ) {
+        copyAuthUrlToClipboard(authUrlRef.current).catch(() => {});
+      }
+
+      if (
+        event.type === 'keydown' &&
+        (event.ctrlKey || event.metaKey) &&
+        event.key?.toLowerCase() === 'c' &&
+        terminal.current.hasSelection()
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
         document.execCommand('copy');
         return false;
       }
 
-      if ((event.ctrlKey || event.metaKey) && event.key === 'v') {
+      if (
+        event.type === 'keydown' &&
+        (event.ctrlKey || event.metaKey) &&
+        event.key?.toLowerCase() === 'v'
+      ) {
+        // Block native browser/xterm paste so clipboard data is only sent after
+        // the explicit clipboard-read flow resolves (avoids duplicate pastes).
+        event.preventDefault();
+        event.stopPropagation();
+
         navigator.clipboard.readText().then(text => {
           if (ws.current && ws.current.readyState === WebSocket.OPEN) {
             ws.current.send(JSON.stringify({
@@ -359,7 +473,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
         terminal.current = null;
       }
     };
-  }, [selectedProject?.path || selectedProject?.fullPath, isRestarting]);
+  }, [selectedProject?.path || selectedProject?.fullPath, isRestarting, minimal, copyAuthUrlToClipboard]);
 
   useEffect(() => {
     if (!autoConnect || !isInitialized || isConnecting || isConnected) return;
@@ -383,9 +497,47 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
   }
 
   if (minimal) {
+    const hasAuthUrl = Boolean(authUrl);
+
     return (
-      <div className="h-full w-full bg-gray-900">
+      <div className="h-full w-full bg-gray-900 relative">
         <div ref={terminalRef} className="h-full w-full focus:outline-none" style={{ outline: 'none' }} />
+        {hasAuthUrl && (
+          <div className="absolute inset-x-0 bottom-14 z-20 border-t border-gray-700/80 bg-gray-900/95 p-3 backdrop-blur-sm">
+            <div className="flex flex-col gap-2">
+              <p className="text-xs text-gray-300">Open or copy the login URL:</p>
+              <input
+                type="text"
+                value={authUrl}
+                readOnly
+                onClick={(event) => event.currentTarget.select()}
+                className="w-full rounded border border-gray-600 bg-gray-800 px-2 py-1 text-xs text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                aria-label="Authentication URL"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    openAuthUrlInBrowser(authUrl);
+                  }}
+                  className="flex-1 rounded bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700"
+                >
+                  Open URL
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const copied = await copyAuthUrlToClipboard(authUrl);
+                    setAuthUrlCopyStatus(copied ? 'copied' : 'failed');
+                  }}
+                  className="flex-1 rounded bg-gray-700 px-3 py-2 text-xs font-medium text-white hover:bg-gray-600"
+                >
+                  {authUrlCopyStatus === 'copied' ? 'Copied' : 'Copy URL'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }

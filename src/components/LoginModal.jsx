@@ -57,9 +57,7 @@ function LoginModal({
     if (onComplete) {
       onComplete(exitCode);
     }
-    if (exitCode === 0) {
-      onClose();
-    }
+    // Keep modal open so users can read login output and close explicitly.
   };
 
   return (
