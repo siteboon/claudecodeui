@@ -78,7 +78,7 @@ export default function SidebarProjectSessions({
   }
 
   const hasSessions = sessions.length > 0;
-  const hasMoreSessions = project.sessionMeta?.hasMore !== false;
+  const hasMoreSessions = project.sessionMeta?.hasMore === true;
 
   return (
     <div className="ml-3 space-y-1 border-l border-border pl-3">

@@ -324,7 +324,7 @@ export function useSidebarController({
 
   const loadMoreSessions = useCallback(
     async (project: Project) => {
-      const canLoadMore = project.sessionMeta?.hasMore !== false;
+      const canLoadMore = project.sessionMeta?.hasMore === true;
       if (!canLoadMore || loadingSessions[project.name]) {
         return;
       }

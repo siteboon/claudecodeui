@@ -97,7 +97,7 @@ export default function SidebarProjectItem({
 }: SidebarProjectItemProps) {
   const isSelected = selectedProject?.name === project.name;
   const isEditing = editingProject === project.name;
-  const hasMoreSessions = project.sessionMeta?.hasMore !== false;
+  const hasMoreSessions = project.sessionMeta?.hasMore === true;
   const sessionCountDisplay = getSessionCountDisplay(sessions, hasMoreSessions);
   const sessionCountLabel = `${sessionCountDisplay} session${sessions.length === 1 ? '' : 's'}`;
   const taskStatus = getTaskIndicatorStatus(project, mcpServerStatus);

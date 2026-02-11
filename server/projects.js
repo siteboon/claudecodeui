@@ -434,7 +434,11 @@ async function getProjects(progressCallback = null) {
           displayName: customName || autoDisplayName,
           fullPath: fullPath,
           isCustomName: !!customName,
-          sessions: []
+          sessions: [],
+          sessionMeta: {
+            hasMore: false,
+            total: 0
+          }
         };
         
         // Try to get sessions for this project (just first 5 for performance)
@@ -447,6 +451,10 @@ async function getProjects(progressCallback = null) {
           };
         } catch (e) {
           console.warn(`Could not load sessions for project ${entry.name}:`, e.message);
+          project.sessionMeta = {
+            hasMore: false,
+            total: 0
+          };
         }
         
         // Also fetch Cursor sessions for this project
@@ -526,7 +534,7 @@ async function getProjects(progressCallback = null) {
         }
       }
       
-              const project = {
+      const project = {
           name: projectName,
           path: actualProjectDir,
           displayName: projectConfig.displayName || await generateDisplayName(projectName, actualProjectDir),
@@ -534,9 +542,13 @@ async function getProjects(progressCallback = null) {
           isCustomName: !!projectConfig.displayName,
           isManuallyAdded: true,
           sessions: [],
+          sessionMeta: {
+            hasMore: false,
+            total: 0
+          },
           cursorSessions: [],
           codexSessions: []
-        };
+      };
 
       // Try to fetch Cursor sessions for manual projects too
       try {
