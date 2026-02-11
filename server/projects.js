@@ -197,9 +197,343 @@ async function detectTaskMasterFolder(projectPath) {
 // Cache for extracted project directories
 const projectDirectoryCache = new Map();
 
+const PROJECT_PREVIEW_TAIL_BYTES = 256 * 1024;
+const PROJECT_PREVIEW_MAX_LINES_PER_FILE = 4000;
+const PROJECT_PREVIEW_MAX_FILES = 12;
+
 // Clear cache when needed (called when project files change)
 function clearProjectDirectoryCache() {
   projectDirectoryCache.clear();
+}
+
+function normalizeCodexPath(projectPath = '') {
+  if (!projectPath || typeof projectPath !== 'string') {
+    return '';
+  }
+
+  const cleanedPath = projectPath.startsWith('\\\\?\\') ? projectPath.slice(4) : projectPath;
+  return path.normalize(cleanedPath);
+}
+
+function getMessageText(content) {
+  if (Array.isArray(content)) {
+    const textParts = content
+      .filter((part) => part?.type === 'text' && typeof part.text === 'string')
+      .map((part) => part.text.trim())
+      .filter(Boolean);
+    return textParts.join('\n');
+  }
+
+  if (typeof content === 'string') {
+    return content.trim();
+  }
+
+  return '';
+}
+
+function isSystemUserMessage(text) {
+  return (
+    text.startsWith('<command-name>') ||
+    text.startsWith('<command-message>') ||
+    text.startsWith('<command-args>') ||
+    text.startsWith('<local-command-stdout>') ||
+    text.startsWith('<system-reminder>') ||
+    text.startsWith('Caveat:') ||
+    text.startsWith('This session is being continued from a previous') ||
+    text.startsWith('Invalid API key') ||
+    text.includes('{"subtasks":') ||
+    text.includes('CRITICAL: You MUST respond with ONLY a JSON') ||
+    text === 'Warmup'
+  );
+}
+
+function isSystemAssistantMessage(text) {
+  return (
+    text.startsWith('Invalid API key') ||
+    text.includes('{"subtasks":') ||
+    text.includes('CRITICAL: You MUST respond with ONLY a JSON')
+  );
+}
+
+function toSessionSummary(text) {
+  if (!text) return 'New Session';
+  return text.length > 50 ? `${text.substring(0, 50)}...` : text;
+}
+
+async function readJsonlTailLines(filePath, maxBytes = PROJECT_PREVIEW_TAIL_BYTES, maxLines = PROJECT_PREVIEW_MAX_LINES_PER_FILE) {
+  const stats = await fs.stat(filePath);
+  const readSize = Math.min(maxBytes, stats.size);
+  if (readSize === 0) {
+    return { lines: [], fullyRead: true };
+  }
+
+  const fh = await fs.open(filePath, 'r');
+  try {
+    const buffer = Buffer.alloc(readSize);
+    await fh.read(buffer, 0, readSize, stats.size - readSize);
+
+    let content = buffer.toString('utf8');
+    const fullyRead = readSize === stats.size;
+
+    if (!fullyRead) {
+      const firstNewlineIdx = content.indexOf('\n');
+      content = firstNewlineIdx >= 0 ? content.slice(firstNewlineIdx + 1) : '';
+    }
+
+    const rawLines = content.split('\n').filter(line => line.trim());
+    const lines = rawLines.length > maxLines ? rawLines.slice(rawLines.length - maxLines) : rawLines;
+    return { lines, fullyRead };
+  } finally {
+    await fh.close();
+  }
+}
+
+async function getSessionsPreview(projectName, limit = 5, offset = 0) {
+  const projectDir = path.join(os.homedir(), '.claude', 'projects', projectName);
+
+  try {
+    const files = await fs.readdir(projectDir);
+    const jsonlFiles = files.filter(file => file.endsWith('.jsonl') && !file.startsWith('agent-'));
+
+    if (jsonlFiles.length === 0) {
+      return { sessions: [], hasMore: false, total: 0, projectPathHint: null };
+    }
+
+    const filesWithStats = await Promise.all(
+      jsonlFiles.map(async (file) => {
+        const filePath = path.join(projectDir, file);
+        const stats = await fs.stat(filePath);
+        return { filePath, mtime: stats.mtimeMs };
+      })
+    );
+    filesWithStats.sort((a, b) => b.mtime - a.mtime);
+
+    const targetSessionCount = offset + limit + 1;
+    const sessions = new Map();
+    const cwdCounts = new Map();
+
+    let scannedFiles = 0;
+    let truncatedReadDetected = false;
+
+    for (const fileInfo of filesWithStats) {
+      if (scannedFiles >= PROJECT_PREVIEW_MAX_FILES) {
+        break;
+      }
+
+      scannedFiles++;
+      const { lines, fullyRead } = await readJsonlTailLines(fileInfo.filePath);
+      if (!fullyRead) {
+        truncatedReadDetected = true;
+      }
+
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const line = lines[i];
+        let entry;
+        try {
+          entry = JSON.parse(line);
+        } catch {
+          continue;
+        }
+
+        if (!entry.sessionId) {
+          continue;
+        }
+
+        if (!sessions.has(entry.sessionId)) {
+          sessions.set(entry.sessionId, {
+            id: entry.sessionId,
+            summary: 'New Session',
+            messageCount: 0,
+            lastActivity: null,
+            cwd: '',
+            lastUserMessage: null,
+            lastAssistantMessage: null
+          });
+        }
+
+        const session = sessions.get(entry.sessionId);
+
+        if (entry.timestamp) {
+          const timestamp = new Date(entry.timestamp);
+          if (!Number.isNaN(timestamp.getTime())) {
+            const currentTime = timestamp.toISOString();
+            if (!session.lastActivity || new Date(currentTime) > new Date(session.lastActivity)) {
+              session.lastActivity = currentTime;
+            }
+          }
+        }
+
+        if (!session.cwd && typeof entry.cwd === 'string' && entry.cwd.trim()) {
+          session.cwd = entry.cwd;
+          cwdCounts.set(entry.cwd, (cwdCounts.get(entry.cwd) || 0) + 1);
+        }
+
+        if (session.summary === 'New Session' && entry.type === 'summary' && typeof entry.summary === 'string' && entry.summary.trim()) {
+          session.summary = entry.summary.trim();
+        }
+
+        const role = entry.message?.role;
+        if (role === 'user') {
+          session.messageCount += 1;
+          if (!session.lastUserMessage) {
+            const text = getMessageText(entry.message?.content);
+            if (text && !isSystemUserMessage(text)) {
+              session.lastUserMessage = text;
+            }
+          }
+        } else if (role === 'assistant') {
+          session.messageCount += 1;
+          if (!session.lastAssistantMessage && entry.isApiErrorMessage !== true) {
+            const text = getMessageText(entry.message?.content);
+            if (text && !isSystemAssistantMessage(text)) {
+              session.lastAssistantMessage = text;
+            }
+          }
+        }
+      }
+
+      if (sessions.size >= targetSessionCount && !truncatedReadDetected) {
+        break;
+      }
+    }
+
+    const nowIso = new Date().toISOString();
+    const visibleSessions = Array.from(sessions.values())
+      .map((session) => {
+        let summary = session.summary;
+        if (summary === 'New Session') {
+          summary = toSessionSummary(session.lastUserMessage || session.lastAssistantMessage || 'New Session');
+        }
+
+        return {
+          id: session.id,
+          summary,
+          messageCount: session.messageCount,
+          lastActivity: session.lastActivity || nowIso,
+          cwd: session.cwd || ''
+        };
+      })
+      .filter(session => !session.summary.startsWith('{ "'))
+      .sort((a, b) => new Date(b.lastActivity) - new Date(a.lastActivity));
+
+    const total = visibleSessions.length;
+    const paginatedSessions = visibleSessions.slice(offset, offset + limit);
+    const scannedAllFiles = scannedFiles >= filesWithStats.length && !truncatedReadDetected;
+    const hasMore = scannedAllFiles ? (offset + limit < total) : true;
+
+    let projectPathHint = null;
+    if (visibleSessions.length > 0) {
+      projectPathHint = visibleSessions.find(session => session.cwd)?.cwd || null;
+    }
+    if (!projectPathHint && cwdCounts.size > 0) {
+      projectPathHint = Array.from(cwdCounts.entries()).sort((a, b) => b[1] - a[1])[0][0];
+    }
+
+    return {
+      sessions: paginatedSessions,
+      hasMore,
+      total,
+      projectPathHint
+    };
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      console.warn(`Could not build sessions preview for project ${projectName}:`, error.message);
+    }
+    return { sessions: [], hasMore: false, total: 0, projectPathHint: null };
+  }
+}
+
+async function findJsonlFilesRecursive(dir) {
+  const files = [];
+  try {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        files.push(...await findJsonlFilesRecursive(fullPath));
+      } else if (entry.name.endsWith('.jsonl')) {
+        files.push(fullPath);
+      }
+    }
+  } catch (_) {
+    // Skip directories we cannot read
+  }
+  return files;
+}
+
+async function buildCodexSessionsIndex(limitPerProject = 5) {
+  const codexSessionsDir = path.join(os.homedir(), '.codex', 'sessions');
+  const sessionsByCwd = new Map();
+
+  try {
+    await fs.access(codexSessionsDir);
+  } catch {
+    return sessionsByCwd;
+  }
+
+  const jsonlFiles = await findJsonlFilesRecursive(codexSessionsDir);
+
+  for (const filePath of jsonlFiles) {
+    try {
+      const sessionData = await parseCodexSessionFile(filePath);
+      if (!sessionData?.cwd) {
+        continue;
+      }
+
+      const normalizedCwd = normalizeCodexPath(sessionData.cwd);
+      if (!normalizedCwd) {
+        continue;
+      }
+
+      const session = {
+        id: sessionData.id,
+        summary: sessionData.summary || 'Codex Session',
+        messageCount: sessionData.messageCount || 0,
+        lastActivity: sessionData.timestamp ? new Date(sessionData.timestamp) : new Date(),
+        cwd: sessionData.cwd,
+        model: sessionData.model,
+        filePath,
+        provider: 'codex'
+      };
+
+      if (!sessionsByCwd.has(normalizedCwd)) {
+        sessionsByCwd.set(normalizedCwd, []);
+      }
+      sessionsByCwd.get(normalizedCwd).push(session);
+    } catch (error) {
+      console.warn(`Could not parse Codex session file ${filePath}:`, error.message);
+    }
+  }
+
+  for (const [cwd, sessions] of sessionsByCwd.entries()) {
+    const sortedSessions = sessions
+      .sort((a, b) => new Date(b.lastActivity) - new Date(a.lastActivity))
+      .slice(0, limitPerProject);
+    sessionsByCwd.set(cwd, sortedSessions);
+  }
+
+  return sessionsByCwd;
+}
+
+function getCodexSessionsForProjectFromIndex(codexSessionsIndex, projectPath, limit = 5) {
+  const normalizedProjectPath = normalizeCodexPath(projectPath);
+  if (!normalizedProjectPath || codexSessionsIndex.size === 0) {
+    return [];
+  }
+
+  const matchedSessions = [];
+  for (const [sessionCwd, sessions] of codexSessionsIndex.entries()) {
+    try {
+      if (sessionCwd === normalizedProjectPath || path.relative(sessionCwd, normalizedProjectPath) === '') {
+        matchedSessions.push(...sessions);
+      }
+    } catch (_) {
+      // Ignore cross-device / invalid relative path comparisons
+    }
+  }
+
+  matchedSessions.sort((a, b) => new Date(b.lastActivity) - new Date(a.lastActivity));
+  return limit > 0 ? matchedSessions.slice(0, limit) : matchedSessions;
 }
 
 // Load project configuration file
@@ -399,186 +733,132 @@ async function getProjects(progressCallback = null) {
     // Build set of existing project names for later
     directories.forEach(e => existingProjects.add(e.name));
 
-    // Count manual projects not already in directories
-    const manualProjectsCount = Object.entries(config)
-      .filter(([name, cfg]) => cfg.manuallyAdded && !existingProjects.has(name))
-      .length;
-
-    totalProjects = directories.length + manualProjectsCount;
-
-    for (const entry of directories) {
-        processedProjects++;
-
-        // Emit progress
-        if (progressCallback) {
-          progressCallback({
-            phase: 'loading',
-            current: processedProjects,
-            total: totalProjects,
-            currentProject: entry.name
-          });
-        }
-
-        const projectPath = path.join(claudeDir, entry.name);
-        
-        // Extract actual project directory from JSONL sessions
-        const actualProjectDir = await extractProjectDirectory(entry.name);
-        
-        // Get display name from config or generate one
-        const customName = config[entry.name]?.displayName;
-        const autoDisplayName = await generateDisplayName(entry.name, actualProjectDir);
-        const fullPath = actualProjectDir;
-        
-        const project = {
-          name: entry.name,
-          path: actualProjectDir,
-          displayName: customName || autoDisplayName,
-          fullPath: fullPath,
-          isCustomName: !!customName,
-          sessions: []
-        };
-        
-        // Try to get sessions for this project (just first 5 for performance)
-        try {
-          const sessionResult = await getSessions(entry.name, 5, 0);
-          project.sessions = sessionResult.sessions || [];
-          project.sessionMeta = {
-            hasMore: sessionResult.hasMore,
-            total: sessionResult.total
-          };
-        } catch (e) {
-          console.warn(`Could not load sessions for project ${entry.name}:`, e.message);
-        }
-        
-        // Also fetch Cursor sessions for this project
-        try {
-          project.cursorSessions = await getCursorSessions(actualProjectDir);
-        } catch (e) {
-          console.warn(`Could not load Cursor sessions for project ${entry.name}:`, e.message);
-          project.cursorSessions = [];
-        }
-
-        // Also fetch Codex sessions for this project
-        try {
-          project.codexSessions = await getCodexSessions(actualProjectDir);
-        } catch (e) {
-          console.warn(`Could not load Codex sessions for project ${entry.name}:`, e.message);
-          project.codexSessions = [];
-        }
-
-        // Add TaskMaster detection
-        try {
-          const taskMasterResult = await detectTaskMasterFolder(actualProjectDir);
-          project.taskmaster = {
-            hasTaskmaster: taskMasterResult.hasTaskmaster,
-            hasEssentialFiles: taskMasterResult.hasEssentialFiles,
-            metadata: taskMasterResult.metadata,
-            status: taskMasterResult.hasTaskmaster && taskMasterResult.hasEssentialFiles ? 'configured' : 'not-configured'
-          };
-        } catch (e) {
-          console.warn(`Could not detect TaskMaster for project ${entry.name}:`, e.message);
-          project.taskmaster = {
-            hasTaskmaster: false,
-            hasEssentialFiles: false,
-            metadata: null,
-            status: 'error'
-          };
-        }
-
-      projects.push(project);
-    }
   } catch (error) {
     // If the directory doesn't exist (ENOENT), that's okay - just continue with empty projects
     if (error.code !== 'ENOENT') {
       console.error('Error reading projects directory:', error);
     }
-    // Calculate total for manual projects only (no directories exist)
-    totalProjects = Object.entries(config)
-      .filter(([name, cfg]) => cfg.manuallyAdded)
-      .length;
   }
-  
-  // Add manually configured projects that don't exist as folders yet
-  for (const [projectName, projectConfig] of Object.entries(config)) {
-    if (!existingProjects.has(projectName) && projectConfig.manuallyAdded) {
-      processedProjects++;
 
-      // Emit progress for manual projects
-      if (progressCallback) {
-        progressCallback({
-          phase: 'loading',
-          current: processedProjects,
-          total: totalProjects,
-          currentProject: projectName
-        });
-      }
+  const manualProjects = Object.entries(config).filter(([name, cfg]) => cfg.manuallyAdded && !existingProjects.has(name));
+  totalProjects = directories.length + manualProjects.length;
 
-      // Use the original path if available, otherwise extract from potential sessions
-      let actualProjectDir = projectConfig.originalPath;
-      
-      if (!actualProjectDir) {
-        try {
-          actualProjectDir = await extractProjectDirectory(projectName);
-        } catch (error) {
-          // Fall back to decoded project name
-          actualProjectDir = projectName.replace(/-/g, '/');
-        }
-      }
-      
-              const project = {
-          name: projectName,
-          path: actualProjectDir,
-          displayName: projectConfig.displayName || await generateDisplayName(projectName, actualProjectDir),
-          fullPath: actualProjectDir,
-          isCustomName: !!projectConfig.displayName,
-          isManuallyAdded: true,
-          sessions: [],
-          cursorSessions: [],
-          codexSessions: []
-        };
-
-      // Try to fetch Cursor sessions for manual projects too
-      try {
-        project.cursorSessions = await getCursorSessions(actualProjectDir);
-      } catch (e) {
-        console.warn(`Could not load Cursor sessions for manual project ${projectName}:`, e.message);
-      }
-
-      // Try to fetch Codex sessions for manual projects too
-      try {
-        project.codexSessions = await getCodexSessions(actualProjectDir);
-      } catch (e) {
-        console.warn(`Could not load Codex sessions for manual project ${projectName}:`, e.message);
-      }
-
-      // Add TaskMaster detection for manual projects
-      try {
-        const taskMasterResult = await detectTaskMasterFolder(actualProjectDir);
-        
-        // Determine TaskMaster status
-        let taskMasterStatus = 'not-configured';
-        if (taskMasterResult.hasTaskmaster && taskMasterResult.hasEssentialFiles) {
-          taskMasterStatus = 'taskmaster-only'; // We don't check MCP for manual projects in bulk
-        }
-        
-        project.taskmaster = {
-          status: taskMasterStatus,
-          hasTaskmaster: taskMasterResult.hasTaskmaster,
-          hasEssentialFiles: taskMasterResult.hasEssentialFiles,
-          metadata: taskMasterResult.metadata
-        };
-      } catch (error) {
-        console.warn(`TaskMaster detection failed for manual project ${projectName}:`, error.message);
-        project.taskmaster = {
-          status: 'error',
-          hasTaskmaster: false,
-          hasEssentialFiles: false,
-          error: error.message
-        };
-      }
-      
-      projects.push(project);
+  const emitProjectProgress = (projectName) => {
+    processedProjects++;
+    if (progressCallback) {
+      progressCallback({
+        phase: 'loading',
+        current: processedProjects,
+        total: totalProjects,
+        currentProject: projectName
+      });
     }
+  };
+
+  const codexSessionsIndexPromise = buildCodexSessionsIndex(5);
+
+  for (const entry of directories) {
+    emitProjectProgress(entry.name);
+
+    const previewResult = await getSessionsPreview(entry.name, 5, 0);
+    const decodedProjectPath = entry.name.replace(/-/g, '/');
+    const configuredProjectPath = config[entry.name]?.originalPath;
+    const actualProjectDir = configuredProjectPath || previewResult.projectPathHint || decodedProjectPath;
+    const customName = config[entry.name]?.displayName;
+    const autoDisplayName = await generateDisplayName(entry.name, actualProjectDir);
+
+    const project = {
+      name: entry.name,
+      path: actualProjectDir,
+      displayName: customName || autoDisplayName,
+      fullPath: actualProjectDir,
+      isCustomName: !!customName,
+      sessions: previewResult.sessions || [],
+      sessionMeta: {
+        hasMore: previewResult.hasMore,
+        total: previewResult.total
+      },
+      codexSessions: getCodexSessionsForProjectFromIndex(await codexSessionsIndexPromise, actualProjectDir, 5)
+    };
+
+    const [cursorSessionsResult, taskMasterResult] = await Promise.all([
+      getCursorSessions(actualProjectDir).catch((e) => {
+        console.warn(`Could not load Cursor sessions for project ${entry.name}:`, e.message);
+        return [];
+      }),
+      detectTaskMasterFolder(actualProjectDir).catch((e) => {
+        console.warn(`Could not detect TaskMaster for project ${entry.name}:`, e.message);
+        return null;
+      })
+    ]);
+
+    project.cursorSessions = cursorSessionsResult;
+    if (taskMasterResult) {
+      project.taskmaster = {
+        hasTaskmaster: taskMasterResult.hasTaskmaster,
+        hasEssentialFiles: taskMasterResult.hasEssentialFiles,
+        metadata: taskMasterResult.metadata,
+        status: taskMasterResult.hasTaskmaster && taskMasterResult.hasEssentialFiles ? 'configured' : 'not-configured'
+      };
+    } else {
+      project.taskmaster = {
+        hasTaskmaster: false,
+        hasEssentialFiles: false,
+        metadata: null,
+        status: 'error'
+      };
+    }
+
+    projects.push(project);
+  }
+
+  // Add manually configured projects that do not exist as folders
+  for (const [projectName, projectConfig] of manualProjects) {
+    emitProjectProgress(projectName);
+
+    const actualProjectDir = projectConfig.originalPath || projectName.replace(/-/g, '/');
+    const project = {
+      name: projectName,
+      path: actualProjectDir,
+      displayName: projectConfig.displayName || await generateDisplayName(projectName, actualProjectDir),
+      fullPath: actualProjectDir,
+      isCustomName: !!projectConfig.displayName,
+      isManuallyAdded: true,
+      sessions: [],
+      cursorSessions: [],
+      codexSessions: getCodexSessionsForProjectFromIndex(await codexSessionsIndexPromise, actualProjectDir, 5)
+    };
+
+    const [cursorSessionsResult, taskMasterResult] = await Promise.all([
+      getCursorSessions(actualProjectDir).catch((e) => {
+        console.warn(`Could not load Cursor sessions for manual project ${projectName}:`, e.message);
+        return [];
+      }),
+      detectTaskMasterFolder(actualProjectDir).catch((e) => {
+        console.warn(`TaskMaster detection failed for manual project ${projectName}:`, e.message);
+        return null;
+      })
+    ]);
+
+    project.cursorSessions = cursorSessionsResult;
+    if (taskMasterResult) {
+      const taskMasterStatus = taskMasterResult.hasTaskmaster && taskMasterResult.hasEssentialFiles ? 'taskmaster-only' : 'not-configured';
+      project.taskmaster = {
+        status: taskMasterStatus,
+        hasTaskmaster: taskMasterResult.hasTaskmaster,
+        hasEssentialFiles: taskMasterResult.hasEssentialFiles,
+        metadata: taskMasterResult.metadata
+      };
+    } else {
+      project.taskmaster = {
+        status: 'error',
+        hasTaskmaster: false,
+        hasEssentialFiles: false,
+        metadata: null
+      };
+    }
+
+    projects.push(project);
   }
 
   // Emit completion after all projects (including manual) are processed
