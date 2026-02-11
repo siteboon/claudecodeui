@@ -17,7 +17,9 @@
     "projects": "项目",
     "noMatchingProjects": "未找到匹配的项目",
     "tryDifferentSearch": "尝试调整您的搜索词",
-    "runClaudeCli": "在项目目录中运行 Claude CLI 以开始使用"
+    "runClaudeCli": "在项目目录中运行 Claude CLI 以开始使用",
+    "sessionCountLabel_one": "{{label}} 个对话",
+    "sessionCountLabel_other": "{{label}} 个对话"
   },
   "app": {
     "title": "Claude Code UI",

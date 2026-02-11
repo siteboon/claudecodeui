@@ -71,6 +71,7 @@ function AppContent() {
   const [autoScrollToBottom, setAutoScrollToBottom] = useLocalStorage('autoScrollToBottom', true);
   const [sendByCtrlEnter, setSendByCtrlEnter] = useLocalStorage('sendByCtrlEnter', false);
   const [sidebarVisible, setSidebarVisible] = useLocalStorage('sidebarVisible', true);
+  const projectsRef = useRef([]);
   // Session Protection System: Track sessions with active conversations to prevent
   // automatic project updates from interrupting ongoing chats. When a user sends
   // a message, the session is marked as "active" and project updates are paused
@@ -138,6 +139,10 @@ function AppContent() {
     // Fetch projects on component mount
     fetchProjects();
   }, []);
+
+  useEffect(() => {
+    projectsRef.current = projects;
+  }, [projects]);
 
   const mergeHydratedProjectData = useCallback((currentProjects, incomingProjects) => {
     if (!Array.isArray(incomingProjects)) return [];
@@ -261,8 +266,8 @@ function AppContent() {
         
         if (hasActiveSession) {
           // Allow updates but be selective: permit additions, prevent changes to existing items
-          const updatedProjects = mergeHydratedProjectData(projects, latestMessage.projects);
-          const currentProjects = projects;
+          const currentProjects = projectsRef.current;
+          const updatedProjects = mergeHydratedProjectData(currentProjects, latestMessage.projects);
           
           // Check if this is purely additive (new sessions/projects) vs modification of existing ones
           const isAdditiveUpdate = isUpdateAdditive(currentProjects, updatedProjects, selectedProject, selectedSession);
@@ -275,7 +280,8 @@ function AppContent() {
         }
         
         // Update projects state with the new data from WebSocket
-        const updatedProjects = mergeHydratedProjectData(projects, latestMessage.projects);
+        const updatedProjects = mergeHydratedProjectData(projectsRef.current, latestMessage.projects);
+        projectsRef.current = updatedProjects;
         setProjects(updatedProjects);
 
         // Update selected project if it exists in the updated projects
@@ -319,7 +325,7 @@ function AppContent() {
         loadingProgressTimeoutRef.current = null;
       }
     };
-  }, [latestMessage, selectedProject, selectedSession, activeSessions, projects, mergeHydratedProjectData]);
+  }, [latestMessage, selectedProject, selectedSession, activeSessions, mergeHydratedProjectData]);
 
   const fetchProjects = async () => {
     try {
@@ -528,10 +534,12 @@ function AppContent() {
     try {
       const response = await api.projects();
       const freshProjects = await response.json();
-      const mergedFreshProjects = mergeHydratedProjectData(projects, freshProjects);
+      let mergedFreshProjects = [];
       
       // Optimize to preserve object references and minimize re-renders
       setProjects(prevProjects => {
+        mergedFreshProjects = mergeHydratedProjectData(prevProjects, freshProjects);
+
         // Check if projects data has actually changed
         const hasChanges = mergedFreshProjects.some((newProject, index) => {
           const prevProject = prevProjects[index];

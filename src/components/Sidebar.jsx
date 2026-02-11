@@ -1063,7 +1063,10 @@ function Sidebar({
                                   <p className="text-xs text-muted-foreground">
                                     {(() => {
                                       const countInfo = getProjectSessionCountInfo(project);
-                                      return `${countInfo.label} session${countInfo.numeric === 1 ? '' : 's'}`;
+                                      return t('projects.sessionCountLabel', {
+                                        count: countInfo.numeric,
+                                        label: countInfo.label
+                                      });
                                     })()}
                                   </p>
                                 </>

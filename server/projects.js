@@ -205,15 +205,6 @@ function clearProjectDirectoryCache() {
   projectDirectoryCache.clear();
 }
 
-function normalizeCodexPath(projectPath = '') {
-  if (!projectPath || typeof projectPath !== 'string') {
-    return '';
-  }
-
-  const cleanedPath = projectPath.startsWith('\\\\?\\') ? projectPath.slice(4) : projectPath;
-  return path.normalize(cleanedPath);
-}
-
 function getMessageText(content) {
   if (Array.isArray(content)) {
     const textParts = content
@@ -442,99 +433,6 @@ async function getSessionsPreview(projectName, limit = 5, offset = 0) {
   }
 }
 
-async function findJsonlFilesRecursive(dir) {
-  const files = [];
-  try {
-    const entries = await fs.readdir(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        files.push(...await findJsonlFilesRecursive(fullPath));
-      } else if (entry.name.endsWith('.jsonl')) {
-        files.push(fullPath);
-      }
-    }
-  } catch (_) {
-    // Skip directories we cannot read
-  }
-  return files;
-}
-
-async function buildCodexSessionsIndex(limitPerProject = 5) {
-  const codexSessionsDir = path.join(os.homedir(), '.codex', 'sessions');
-  const sessionsByCwd = new Map();
-
-  try {
-    await fs.access(codexSessionsDir);
-  } catch {
-    return sessionsByCwd;
-  }
-
-  const jsonlFiles = await findJsonlFilesRecursive(codexSessionsDir);
-
-  for (const filePath of jsonlFiles) {
-    try {
-      const sessionData = await parseCodexSessionFile(filePath);
-      if (!sessionData?.cwd) {
-        continue;
-      }
-
-      const normalizedCwd = normalizeCodexPath(sessionData.cwd);
-      if (!normalizedCwd) {
-        continue;
-      }
-
-      const session = {
-        id: sessionData.id,
-        summary: sessionData.summary || 'Codex Session',
-        messageCount: sessionData.messageCount || 0,
-        lastActivity: sessionData.timestamp ? new Date(sessionData.timestamp) : new Date(),
-        cwd: sessionData.cwd,
-        model: sessionData.model,
-        filePath,
-        provider: 'codex'
-      };
-
-      if (!sessionsByCwd.has(normalizedCwd)) {
-        sessionsByCwd.set(normalizedCwd, []);
-      }
-      sessionsByCwd.get(normalizedCwd).push(session);
-    } catch (error) {
-      console.warn(`Could not parse Codex session file ${filePath}:`, error.message);
-    }
-  }
-
-  for (const [cwd, sessions] of sessionsByCwd.entries()) {
-    const sortedSessions = sessions
-      .sort((a, b) => new Date(b.lastActivity) - new Date(a.lastActivity))
-      .slice(0, limitPerProject);
-    sessionsByCwd.set(cwd, sortedSessions);
-  }
-
-  return sessionsByCwd;
-}
-
-function getCodexSessionsForProjectFromIndex(codexSessionsIndex, projectPath, limit = 5) {
-  const normalizedProjectPath = normalizeCodexPath(projectPath);
-  if (!normalizedProjectPath || codexSessionsIndex.size === 0) {
-    return [];
-  }
-
-  const matchedSessions = [];
-  for (const [sessionCwd, sessions] of codexSessionsIndex.entries()) {
-    try {
-      if (sessionCwd === normalizedProjectPath || path.relative(sessionCwd, normalizedProjectPath) === '') {
-        matchedSessions.push(...sessions);
-      }
-    } catch (_) {
-      // Ignore cross-device / invalid relative path comparisons
-    }
-  }
-
-  matchedSessions.sort((a, b) => new Date(b.lastActivity) - new Date(a.lastActivity));
-  return limit > 0 ? matchedSessions.slice(0, limit) : matchedSessions;
-}
-
 // Load project configuration file
 async function loadProjectConfig() {
   const configPath = path.join(os.homedir(), '.claude', 'project-config.json');
@@ -757,10 +655,7 @@ async function getProjects(progressCallback = null) {
   for (const entry of directories) {
     emitProjectProgress(entry.name);
 
-    const [previewResult, sessionMetaResult] = await Promise.all([
-      getSessionsPreview(entry.name, 5, 0),
-      getSessions(entry.name, 5, 0).catch(() => ({ hasMore: false, total: 0 }))
-    ]);
+    const previewResult = await getSessionsPreview(entry.name, 5, 0);
     const decodedProjectPath = entry.name.replace(/-/g, '/');
     const configuredProjectPath = config[entry.name]?.originalPath;
     const actualProjectDir = configuredProjectPath || previewResult.projectPathHint || decodedProjectPath;
@@ -775,8 +670,8 @@ async function getProjects(progressCallback = null) {
       isCustomName: !!customName,
       sessions: previewResult.sessions || [],
       sessionMeta: {
-        hasMore: sessionMetaResult.hasMore,
-        total: sessionMetaResult.total,
+        hasMore: previewResult.hasMore,
+        total: previewResult.total,
         lazy: true
       },
       sessionsHydrated: false,
@@ -811,7 +706,7 @@ async function getProjects(progressCallback = null) {
       cursorSessions: [],
       codexSessions: [],
       sessionMeta: {
-        hasMore: true,
+        hasMore: false,
         total: 0,
         lazy: true
       },
@@ -1377,7 +1272,7 @@ async function addProjectManually(projectPath, displayName = null) {
     cursorSessions: [],
     codexSessions: [],
     sessionMeta: {
-      hasMore: true,
+      hasMore: false,
       total: 0,
       lazy: true
     },
@@ -1529,7 +1424,7 @@ async function getCodexSessions(projectPath, options = {}) {
         const entries = await fs.readdir(dir, { withFileTypes: true });
         for (const entry of entries) {
           const fullPath = path.join(dir, entry.name);
-          if (entry.isDirectory()) {
+          if (entry.isDirectory() && !entry.isSymbolicLink()) {
             files.push(...await findJsonlFiles(fullPath));
           } else if (entry.name.endsWith('.jsonl')) {
             files.push(fullPath);
@@ -1900,7 +1795,7 @@ async function deleteCodexSession(sessionId) {
         const entries = await fs.readdir(dir, { withFileTypes: true });
         for (const entry of entries) {
           const fullPath = path.join(dir, entry.name);
-          if (entry.isDirectory()) {
+          if (entry.isDirectory() && !entry.isSymbolicLink()) {
             files.push(...await findJsonlFiles(fullPath));
           } else if (entry.name.endsWith('.jsonl')) {
             files.push(fullPath);
