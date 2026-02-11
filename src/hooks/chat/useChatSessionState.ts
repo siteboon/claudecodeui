@@ -59,7 +59,6 @@ export function useChatSessionState({
   const [sessionMessages, setSessionMessages] = useState<any[]>([]);
   const [isLoadingSessionMessages, setIsLoadingSessionMessages] = useState(false);
   const [isLoadingMoreMessages, setIsLoadingMoreMessages] = useState(false);
-  const [messagesOffset, setMessagesOffset] = useState(0);
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
   const [totalMessages, setTotalMessages] = useState(0);
   const [isSystemSessionChange, setIsSystemSessionChange] = useState(false);
@@ -74,6 +73,8 @@ export function useChatSessionState({
   const isLoadingMoreRef = useRef(false);
   const topLoadLockRef = useRef(false);
   const pendingScrollRestoreRef = useRef<ScrollRestoreState | null>(null);
+  const pendingInitialScrollRef = useRef(true);
+  const messagesOffsetRef = useRef(0);
   const scrollPositionRef = useRef({ height: 0, top: 0 });
 
   const createDiff = useMemo<DiffCalculator>(() => createCachedDiffCalculator(), []);
@@ -92,7 +93,7 @@ export function useChatSessionState({
       }
 
       try {
-        const currentOffset = loadMore ? messagesOffset : 0;
+        const currentOffset = loadMore ? messagesOffsetRef.current : 0;
         const response = await (api.sessionMessages as any)(
           projectName,
           sessionId,
@@ -110,15 +111,17 @@ export function useChatSessionState({
         }
 
         if (data.hasMore !== undefined) {
+          const loadedCount = data.messages?.length || 0;
           setHasMoreMessages(Boolean(data.hasMore));
           setTotalMessages(Number(data.total || 0));
-          setMessagesOffset(currentOffset + (data.messages?.length || 0));
+          messagesOffsetRef.current = currentOffset + loadedCount;
           return data.messages || [];
         }
 
         const messages = data.messages || [];
         setHasMoreMessages(false);
         setTotalMessages(messages.length);
+        messagesOffsetRef.current = messages.length;
         return messages;
       } catch (error) {
         console.error('Error loading session messages:', error);
@@ -131,7 +134,7 @@ export function useChatSessionState({
         }
       }
     },
-    [messagesOffset],
+    [],
   );
 
   const loadCursorSessionMessages = useCallback(async (projectPath: string, sessionId: string) => {
@@ -259,6 +262,27 @@ export function useChatSessionState({
   }, [chatMessages.length]);
 
   useEffect(() => {
+    pendingInitialScrollRef.current = true;
+    setIsUserScrolledUp(false);
+  }, [selectedProject?.name, selectedSession?.id]);
+
+  useEffect(() => {
+    if (!pendingInitialScrollRef.current || !scrollContainerRef.current || isLoadingSessionMessages) {
+      return;
+    }
+
+    if (chatMessages.length === 0) {
+      pendingInitialScrollRef.current = false;
+      return;
+    }
+
+    pendingInitialScrollRef.current = false;
+    setTimeout(() => {
+      scrollToBottom();
+    }, 200);
+  }, [chatMessages.length, isLoadingSessionMessages, scrollToBottom]);
+
+  useEffect(() => {
     const loadMessages = async () => {
       if (selectedSession && selectedProject) {
         const provider = (localStorage.getItem('selected-provider') as Provider) || 'claude';
@@ -275,7 +299,7 @@ export function useChatSessionState({
             setCanAbortSession(false);
           }
 
-          setMessagesOffset(0);
+          messagesOffsetRef.current = 0;
           setHasMoreMessages(false);
           setTotalMessages(0);
           setTokenBudget(null);
@@ -289,7 +313,7 @@ export function useChatSessionState({
             });
           }
         } else if (currentSessionId === null) {
-          setMessagesOffset(0);
+          messagesOffsetRef.current = 0;
           setHasMoreMessages(false);
           setTotalMessages(0);
 
@@ -342,7 +366,7 @@ export function useChatSessionState({
 
         setCurrentSessionId(null);
         sessionStorage.removeItem('cursorSessionId');
-        setMessagesOffset(0);
+        messagesOffsetRef.current = 0;
         setHasMoreMessages(false);
         setTotalMessages(0);
         setTokenBudget(null);
@@ -482,6 +506,10 @@ export function useChatSessionState({
       return;
     }
 
+    if (isLoadingMoreRef.current || isLoadingMoreMessages || pendingScrollRestoreRef.current) {
+      return;
+    }
+
     if (autoScrollToBottom) {
       if (!isUserScrolledUp) {
         setTimeout(() => scrollToBottom(), 50);
@@ -498,18 +526,7 @@ export function useChatSessionState({
     if (heightDiff > 0 && prevTop > 0) {
       container.scrollTop = prevTop + heightDiff;
     }
-  }, [autoScrollToBottom, chatMessages.length, isUserScrolledUp, scrollToBottom]);
-
-  useEffect(() => {
-    if (!scrollContainerRef.current || chatMessages.length === 0 || isLoadingSessionRef.current) {
-      return;
-    }
-
-    setIsUserScrolledUp(false);
-    setTimeout(() => {
-      scrollToBottom();
-    }, 200);
-  }, [chatMessages.length, scrollToBottom, selectedProject?.name, selectedSession?.id]);
+  }, [autoScrollToBottom, chatMessages.length, isLoadingMoreMessages, isUserScrolledUp, scrollToBottom]);
 
   useEffect(() => {
     const container = scrollContainerRef.current;
