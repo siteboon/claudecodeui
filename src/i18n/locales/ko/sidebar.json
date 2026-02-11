@@ -17,7 +17,9 @@
     "projects": "프로젝트",
     "noMatchingProjects": "일치하는 프로젝트 없음",
     "tryDifferentSearch": "검색어를 변경해보세요",
-    "runClaudeCli": "프로젝트 디렉토리에서 Claude CLI를 실행하여 시작하세요"
+    "runClaudeCli": "프로젝트 디렉토리에서 Claude CLI를 실행하여 시작하세요",
+    "sessionCountLabel_one": "{{label}}개 대화",
+    "sessionCountLabel_other": "{{label}}개 대화"
   },
   "app": {
     "title": "Claude Code UI",
