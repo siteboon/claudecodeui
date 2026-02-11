@@ -280,7 +280,7 @@ export function useChatComposerState({
           projectName: selectedProject.name,
           sessionId: currentSessionId,
           provider,
-          model: provider === 'cursor' ? cursorModel : claudeModel,
+          model: provider === 'cursor' ? cursorModel : provider === 'codex' ? codexModel : claudeModel,
           tokenUsage: tokenBudget,
         };
 
@@ -298,7 +298,14 @@ export function useChatComposerState({
         });
 
         if (!response.ok) {
-          throw new Error('Failed to execute command');
+          let errorMessage = `Failed to execute command (${response.status})`;
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData?.message || errorData?.error || errorMessage;
+          } catch {
+            // Ignore JSON parse failures and use fallback message.
+          }
+          throw new Error(errorMessage);
         }
 
         const result = (await response.json()) as CommandExecutionResult;
@@ -324,6 +331,7 @@ export function useChatComposerState({
     },
     [
       claudeModel,
+      codexModel,
       currentSessionId,
       cursorModel,
       handleBuiltInCommand,
