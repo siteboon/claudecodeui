@@ -1,55 +1,21 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Brain, Zap, Sparkles, Atom, X } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Brain, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-const thinkingModes = [
-  {
-    id: 'none',
-    name: 'Standard',
-    description: 'Regular Claude response',
-    icon: null,
-    prefix: '',
-    color: 'text-gray-600'
-  },
-  {
-    id: 'think',
-    name: 'Think',
-    description: 'Basic extended thinking',
-    icon: Brain,
-    prefix: 'think',
-    color: 'text-blue-600'
-  },
-  {
-    id: 'think-hard',
-    name: 'Think Hard',
-    description: 'More thorough evaluation',
-    icon: Zap,
-    prefix: 'think hard',
-    color: 'text-purple-600'
-  },
-  {
-    id: 'think-harder',
-    name: 'Think Harder',
-    description: 'Deep analysis with alternatives',
-    icon: Sparkles,
-    prefix: 'think harder',
-    color: 'text-indigo-600'
-  },
-  {
-    id: 'ultrathink',
-    name: 'Ultrathink',
-    description: 'Maximum thinking budget',
-    icon: Atom,
-    prefix: 'ultrathink',
-    color: 'text-red-600'
-  }
-];
+import { thinkingModes } from '../../constants/thinkingModes';
 
-function ThinkingModeSelector({ selectedMode, onModeChange, onClose, className = '' }) {
+type ThinkingModeSelectorProps = {
+  selectedMode: string;
+  onModeChange: (modeId: string) => void;
+  onClose?: () => void;
+  className?: string;
+};
+
+function ThinkingModeSelector({ selectedMode, onModeChange, onClose, className = '' }: ThinkingModeSelectorProps) {
   const { t } = useTranslation('chat');
 
   // Mapping from mode ID to translation key
-  const modeKeyMap = {
+  const modeKeyMap: Record<string, string> = {
     'think-hard': 'thinkHard',
     'think-harder': 'thinkHarder'
   };
@@ -65,11 +31,11 @@ function ThinkingModeSelector({ selectedMode, onModeChange, onClose, className =
   });
 
   const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsOpen(false);
         if (onClose) onClose();
       }
@@ -87,11 +53,10 @@ function ThinkingModeSelector({ selectedMode, onModeChange, onClose, className =
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`w-10 h-10 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all duration-200 ${
-          selectedMode === 'none'
+        className={`w-10 h-10 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all duration-200 ${selectedMode === 'none'
             ? 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600'
             : 'bg-blue-100 hover:bg-blue-200 dark:bg-blue-900 dark:hover:bg-blue-800'
-        }`}
+          }`}
         title={t('thinkingMode.buttonTitle', { mode: currentMode.name })}
       >
         <IconComponent className={`w-5 h-5 ${currentMode.color}`} />
@@ -123,7 +88,7 @@ function ThinkingModeSelector({ selectedMode, onModeChange, onClose, className =
             {translatedModes.map((mode) => {
               const ModeIcon = mode.icon;
               const isSelected = mode.id === selectedMode;
-              
+
               return (
                 <button
                   key={mode.id}
@@ -132,9 +97,8 @@ function ThinkingModeSelector({ selectedMode, onModeChange, onClose, className =
                     setIsOpen(false);
                     if (onClose) onClose();
                   }}
-                  className={`w-full px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
-                    isSelected ? 'bg-gray-50 dark:bg-gray-700' : ''
-                  }`}
+                  className={`w-full px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${isSelected ? 'bg-gray-50 dark:bg-gray-700' : ''
+                    }`}
                 >
                   <div className="flex items-start gap-3">
                     <div className={`mt-0.5 ${mode.icon ? mode.color : 'text-gray-400'}`}>
@@ -142,9 +106,8 @@ function ThinkingModeSelector({ selectedMode, onModeChange, onClose, className =
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className={`font-medium text-sm ${
-                          isSelected ? 'text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-300'
-                        }`}>
+                        <span className={`font-medium text-sm ${isSelected ? 'text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-300'
+                          }`}>
                           {mode.name}
                         </span>
                         {isSelected && (
@@ -180,4 +143,3 @@ function ThinkingModeSelector({ selectedMode, onModeChange, onClose, className =
 }
 
 export default ThinkingModeSelector;
-export { thinkingModes };

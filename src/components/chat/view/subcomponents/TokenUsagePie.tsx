@@ -1,9 +1,12 @@
-import React from 'react';
+type TokenUsagePieProps = {
+  used: number;
+  total: number;
+};
 
-function TokenUsagePie({ used, total }) {
+export default function TokenUsagePie({ used, total }: TokenUsagePieProps) {
   // Token usage visualization component
   // Only bail out on missing values or non‐positive totals; allow used===0 to render 0%
- if (used == null || total == null || total <= 0) return null;
+  if (used == null || total == null || total <= 0) return null;
 
   const percentage = Math.min(100, (used / total) * 100);
   const radius = 10;
@@ -49,5 +52,3 @@ function TokenUsagePie({ used, total }) {
     </div>
   );
 }
-
-export default TokenUsagePie;

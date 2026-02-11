@@ -1,8 +1,8 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import ThinkingModeSelector from '../../ThinkingModeSelector.jsx';
-import TokenUsagePie from '../../TokenUsagePie';
-import type { PermissionMode, Provider } from '../types';
+import ThinkingModeSelector from './ThinkingModeSelector.jsx';
+import TokenUsagePie from './TokenUsagePie';
+import type { PermissionMode, Provider } from '../../types/types';
 
 interface ChatInputControlsProps {
   permissionMode: PermissionMode | string;

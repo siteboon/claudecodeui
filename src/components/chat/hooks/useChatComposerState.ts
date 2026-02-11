@@ -11,7 +11,9 @@ import type {
 } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { authenticatedFetch } from '../../../utils/api';
-import { thinkingModes } from '../../ThinkingModeSelector.jsx';
+
+import { thinkingModes } from '../constants/thinkingModes';
+
 import { grantClaudeToolPermission } from '../utils/chatPermissions';
 import { safeLocalStorage } from '../utils/chatStorage';
 import type {
