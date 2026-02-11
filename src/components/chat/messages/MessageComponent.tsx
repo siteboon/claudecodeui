@@ -1,9 +1,7 @@
 // @ts-nocheck
 import React, { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import ClaudeLogo from '../../ClaudeLogo.jsx';
-import CursorLogo from '../../CursorLogo.jsx';
-import CodexLogo from '../../CodexLogo.jsx';
+import SessionProviderLogo from '../../SessionProviderLogo';
 import type { ChatMessage, Provider } from '../types';
 import { Markdown } from '../markdown/Markdown';
 import { formatUsageLimitText } from '../utils/chatFormatting';
@@ -128,13 +126,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 </div>
               ) : (
                 <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0 p-1">
-                  {selectedProvider === 'cursor' ? (
-                    <CursorLogo className="w-full h-full" />
-                  ) : selectedProvider === 'codex' ? (
-                    <CodexLogo className="w-full h-full" />
-                  ) : (
-                    <ClaudeLogo className="w-full h-full" />
-                  )}
+                  <SessionProviderLogo provider={selectedProvider} className="w-full h-full" />
                 </div>
               )}
               <div className="text-sm font-medium text-gray-900 dark:text-white">

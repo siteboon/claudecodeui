@@ -1,6 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import ClaudeLogo from '../ClaudeLogo';
-import CursorLogo from '../CursorLogo';
+import SessionProviderLogo from '../SessionProviderLogo';
 import type { AppTab, Project, ProjectSession } from '../../types/app';
 
 type MainContentTitleProps = {
@@ -49,11 +48,7 @@ export default function MainContentTitle({
     <div className="min-w-0 flex items-center gap-2 flex-1 overflow-x-auto scrollbar-hide">
       {showSessionIcon && (
         <div className="w-5 h-5 flex-shrink-0 flex items-center justify-center">
-          {selectedSession?.__provider === 'cursor' ? (
-            <CursorLogo className="w-4 h-4" />
-          ) : (
-            <ClaudeLogo className="w-4 h-4" />
-          )}
+          <SessionProviderLogo provider={selectedSession?.__provider} className="w-4 h-4" />
         </div>
       )}
 

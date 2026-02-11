@@ -1,16 +1,13 @@
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { LogIn } from 'lucide-react';
-import ClaudeLogo from '../ClaudeLogo';
-import CursorLogo from '../CursorLogo';
-import CodexLogo from '../CodexLogo';
+import SessionProviderLogo from '../SessionProviderLogo';
 import { useTranslation } from 'react-i18next';
 
 const agentConfig = {
   claude: {
     name: 'Claude',
     description: 'Anthropic Claude AI assistant',
-    Logo: ClaudeLogo,
     bgClass: 'bg-blue-50 dark:bg-blue-900/20',
     borderClass: 'border-blue-200 dark:border-blue-800',
     textClass: 'text-blue-900 dark:text-blue-100',
@@ -20,7 +17,6 @@ const agentConfig = {
   cursor: {
     name: 'Cursor',
     description: 'Cursor AI-powered code editor',
-    Logo: CursorLogo,
     bgClass: 'bg-purple-50 dark:bg-purple-900/20',
     borderClass: 'border-purple-200 dark:border-purple-800',
     textClass: 'text-purple-900 dark:text-purple-100',
@@ -30,7 +26,6 @@ const agentConfig = {
   codex: {
     name: 'Codex',
     description: 'OpenAI Codex AI assistant',
-    Logo: CodexLogo,
     bgClass: 'bg-gray-100 dark:bg-gray-800/50',
     borderClass: 'border-gray-300 dark:border-gray-600',
     textClass: 'text-gray-900 dark:text-gray-100',
@@ -42,12 +37,11 @@ const agentConfig = {
 export default function AccountContent({ agent, authStatus, onLogin }) {
   const { t } = useTranslation('settings');
   const config = agentConfig[agent];
-  const { Logo } = config;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3 mb-4">
-        <Logo className="w-6 h-6" />
+        <SessionProviderLogo provider={agent} className="w-6 h-6" />
         <div>
           <h3 className="text-lg font-medium text-foreground">{config.name}</h3>
           <p className="text-sm text-muted-foreground">{t(`agents.account.${agent}.description`)}</p>

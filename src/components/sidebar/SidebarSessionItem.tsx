@@ -7,7 +7,7 @@ import { formatTimeAgo } from '../../utils/dateUtils';
 import type { Project, ProjectSession, SessionProvider } from '../../types/app';
 import type { SessionWithProvider, TouchHandlerFactory } from './types';
 import { createSessionViewModel } from './utils';
-import SessionProviderIcon from './SessionProviderIcon';
+import SessionProviderLogo from '../SessionProviderLogo';
 
 type SidebarSessionItemProps = {
   project: Project;
@@ -92,7 +92,7 @@ export default function SidebarSessionItem({
                 isSelected ? 'bg-primary/10' : 'bg-muted/50',
               )}
             >
-              <SessionProviderIcon provider={session.__provider} className="w-3 h-3" />
+              <SessionProviderLogo provider={session.__provider} className="w-3 h-3" />
             </div>
 
             <div className="min-w-0 flex-1">
@@ -108,7 +108,7 @@ export default function SidebarSessionItem({
                   </Badge>
                 )}
                 <span className="ml-1 opacity-70">
-                  <SessionProviderIcon provider={session.__provider} className="w-3 h-3" />
+                  <SessionProviderLogo provider={session.__provider} className="w-3 h-3" />
                 </span>
               </div>
             </div>
@@ -140,7 +140,7 @@ export default function SidebarSessionItem({
           onTouchEnd={touchHandlerFactory(() => onSessionSelect(session, project.name))}
         >
           <div className="flex items-start gap-2 min-w-0 w-full">
-            <SessionProviderIcon provider={session.__provider} className="w-3 h-3 mt-0.5 flex-shrink-0" />
+            <SessionProviderLogo provider={session.__provider} className="w-3 h-3 mt-0.5 flex-shrink-0" />
             <div className="min-w-0 flex-1">
               <div className="text-xs font-medium truncate text-foreground">{sessionView.sessionName}</div>
               <div className="flex items-center gap-1 mt-0.5">
@@ -157,7 +157,7 @@ export default function SidebarSessionItem({
                   </Badge>
                 )}
                 <span className="ml-1 opacity-70 group-hover:opacity-0 transition-opacity">
-                  <SessionProviderIcon provider={session.__provider} className="w-3 h-3" />
+                  <SessionProviderLogo provider={session.__provider} className="w-3 h-3" />
                 </span>
               </div>
             </div>

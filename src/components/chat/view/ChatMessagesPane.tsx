@@ -1,8 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
-import ClaudeLogo from '../../ClaudeLogo.jsx';
-import CursorLogo from '../../CursorLogo.jsx';
-import CodexLogo from '../../CodexLogo.jsx';
+import SessionProviderLogo from '../../SessionProviderLogo';
 import MessageComponent from '../messages/MessageComponent';
 import ProviderSelectionEmptyState from './ProviderSelectionEmptyState';
 import type { ChatMessage, Provider } from '../types';
@@ -55,13 +53,7 @@ function AssistantThinkingIndicator() {
       <div className="w-full">
         <div className="flex items-center space-x-3 mb-2">
           <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0 p-1 bg-transparent">
-            {selectedProvider === 'cursor' ? (
-              <CursorLogo className="w-full h-full" />
-            ) : selectedProvider === 'codex' ? (
-              <CodexLogo className="w-full h-full" />
-            ) : (
-              <ClaudeLogo className="w-full h-full" />
-            )}
+            <SessionProviderLogo provider={selectedProvider} className="w-full h-full" />
           </div>
           <div className="text-sm font-medium text-gray-900 dark:text-white">
             {selectedProvider === 'cursor' ? 'Cursor' : selectedProvider === 'codex' ? 'Codex' : 'Claude'}

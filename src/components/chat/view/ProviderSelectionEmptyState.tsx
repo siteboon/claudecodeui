@@ -1,8 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import ClaudeLogo from '../../ClaudeLogo.jsx';
-import CursorLogo from '../../CursorLogo.jsx';
-import CodexLogo from '../../CodexLogo.jsx';
+import SessionProviderLogo from '../../SessionProviderLogo';
 import NextTaskBanner from '../../NextTaskBanner.jsx';
 import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '../../../../shared/modelConstants';
 import type { Provider } from '../types';
@@ -68,7 +66,7 @@ export default function ProviderSelectionEmptyState({
               }`}
             >
               <div className="flex flex-col items-center justify-center h-full gap-3">
-                <ClaudeLogo className="w-10 h-10" />
+                <SessionProviderLogo provider="claude" className="w-10 h-10" />
                 <div>
                   <p className="font-semibold text-gray-900 dark:text-white">Claude Code</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">{t('providerSelection.providerInfo.anthropic')}</p>
@@ -94,7 +92,7 @@ export default function ProviderSelectionEmptyState({
               }`}
             >
               <div className="flex flex-col items-center justify-center h-full gap-3">
-                <CursorLogo className="w-10 h-10" />
+                <SessionProviderLogo provider="cursor" className="w-10 h-10" />
                 <div>
                   <p className="font-semibold text-gray-900 dark:text-white">Cursor</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">{t('providerSelection.providerInfo.cursorEditor')}</p>
@@ -120,7 +118,7 @@ export default function ProviderSelectionEmptyState({
               }`}
             >
               <div className="flex flex-col items-center justify-center h-full gap-3">
-                <CodexLogo className="w-10 h-10" />
+                <SessionProviderLogo provider="codex" className="w-10 h-10" />
                 <div>
                   <p className="font-semibold text-gray-900 dark:text-white">Codex</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">{t('providerSelection.providerInfo.openai')}</p>
