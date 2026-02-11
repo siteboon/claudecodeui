@@ -178,6 +178,69 @@ const server = http.createServer(app);
 
 const ptySessionsMap = new Map();
 const PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
+const SHELL_URL_PARSE_BUFFER_LIMIT = 32768;
+const ANSI_ESCAPE_SEQUENCE_REGEX = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1B\\))/g;
+const TRAILING_URL_PUNCTUATION_REGEX = /[)\]}>.,;:!?]+$/;
+
+function stripAnsiSequences(value = '') {
+    return value.replace(ANSI_ESCAPE_SEQUENCE_REGEX, '');
+}
+
+function normalizeDetectedUrl(url) {
+    if (!url || typeof url !== 'string') return null;
+
+    const cleaned = url.trim().replace(TRAILING_URL_PUNCTUATION_REGEX, '');
+    if (!cleaned) return null;
+
+    try {
+        const parsed = new URL(cleaned);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+            return null;
+        }
+        return parsed.toString();
+    } catch {
+        return null;
+    }
+}
+
+function extractUrlsFromText(value = '') {
+    const directMatches = value.match(/https?:\/\/[^\s<>"'`\\\x1b\x07]+/gi) || [];
+
+    // Handle wrapped terminal URLs split across lines by terminal width.
+    const wrappedMatches = [];
+    const continuationRegex = /^[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]+$/;
+    const lines = value.split(/\r?\n/);
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        const startMatch = line.match(/https?:\/\/[^\s<>"'`\\\x1b\x07]+/i);
+        if (!startMatch) continue;
+
+        let combined = startMatch[0];
+        let j = i + 1;
+        while (j < lines.length) {
+            const continuation = lines[j].trim();
+            if (!continuation) break;
+            if (!continuationRegex.test(continuation)) break;
+            combined += continuation;
+            j++;
+        }
+
+        wrappedMatches.push(combined.replace(/\r?\n\s*/g, ''));
+    }
+
+    return Array.from(new Set([...directMatches, ...wrappedMatches]));
+}
+
+function shouldAutoOpenUrlFromOutput(value = '') {
+    const normalized = value.toLowerCase();
+    return (
+        normalized.includes('browser didn\'t open') ||
+        normalized.includes('open this url') ||
+        normalized.includes('continue in your browser') ||
+        normalized.includes('press enter to open') ||
+        normalized.includes('open_url:')
+    );
+}
 
 // Single WebSocket server that handles both paths
 const wss = new WebSocketServer({
@@ -960,7 +1023,8 @@ function handleShellConnection(ws) {
     console.log('🐚 Shell client connected');
     let shellProcess = null;
     let ptySessionKey = null;
-    let outputBuffer = [];
+    let urlDetectionBuffer = '';
+    const announcedAuthUrls = new Set();
 
     ws.on('message', async (message) => {
         try {
@@ -974,6 +1038,8 @@ function handleShellConnection(ws) {
                 const provider = data.provider || 'claude';
                 const initialCommand = data.initialCommand;
                 const isPlainShell = data.isPlainShell || (!!initialCommand && !hasSession) || provider === 'plain-shell';
+                urlDetectionBuffer = '';
+                announcedAuthUrls.clear();
 
                 // Login commands (Claude/Cursor auth) should never reuse cached sessions
                 const isLoginCommand = initialCommand && (
@@ -1113,9 +1179,7 @@ function handleShellConnection(ws) {
                             ...process.env,
                             TERM: 'xterm-256color',
                             COLORTERM: 'truecolor',
-                            FORCE_COLOR: '3',
-                            // Override browser opening commands to echo URL for detection
-                            BROWSER: os.platform() === 'win32' ? 'echo "OPEN_URL:"' : 'echo "OPEN_URL:"'
+                            FORCE_COLOR: '3'
                         }
                     });
 
@@ -1145,38 +1209,47 @@ function handleShellConnection(ws) {
                         if (session.ws && session.ws.readyState === WebSocket.OPEN) {
                             let outputData = data;
 
-                            // Check for various URL opening patterns
-                            const patterns = [
-                                // Direct browser opening commands
-                                /(?:xdg-open|open|start)\s+(https?:\/\/[^\s\x1b\x07]+)/g,
-                                // BROWSER environment variable override
+                            const cleanChunk = stripAnsiSequences(data);
+                            urlDetectionBuffer = `${urlDetectionBuffer}${cleanChunk}`.slice(-SHELL_URL_PARSE_BUFFER_LIMIT);
+
+                            outputData = outputData.replace(
                                 /OPEN_URL:\s*(https?:\/\/[^\s\x1b\x07]+)/g,
-                                // Git and other tools opening URLs
-                                /Opening\s+(https?:\/\/[^\s\x1b\x07]+)/gi,
-                                // General URL patterns that might be opened
-                                /Visit:\s*(https?:\/\/[^\s\x1b\x07]+)/gi,
-                                /View at:\s*(https?:\/\/[^\s\x1b\x07]+)/gi,
-                                /Browse to:\s*(https?:\/\/[^\s\x1b\x07]+)/gi
-                            ];
+                                '[INFO] Opening in browser: $1'
+                            );
 
-                            patterns.forEach(pattern => {
-                                let match;
-                                while ((match = pattern.exec(data)) !== null) {
-                                    const url = match[1];
-                                    console.log('[DEBUG] Detected URL for opening:', url);
+                            const emitAuthUrl = (detectedUrl, autoOpen = false) => {
+                                const normalizedUrl = normalizeDetectedUrl(detectedUrl);
+                                if (!normalizedUrl) return;
 
-                                    // Send URL opening message to client
+                                const isNewUrl = !announcedAuthUrls.has(normalizedUrl);
+                                if (isNewUrl) {
+                                    announcedAuthUrls.add(normalizedUrl);
                                     session.ws.send(JSON.stringify({
-                                        type: 'url_open',
-                                        url: url
+                                        type: 'auth_url',
+                                        url: normalizedUrl,
+                                        autoOpen
                                     }));
-
-                                    // Replace the OPEN_URL pattern with a user-friendly message
-                                    if (pattern.source.includes('OPEN_URL')) {
-                                        outputData = outputData.replace(match[0], `[INFO] Opening in browser: ${url}`);
-                                    }
                                 }
-                            });
+
+                            };
+
+                            const normalizedDetectedUrls = extractUrlsFromText(urlDetectionBuffer)
+                                .map((url) => normalizeDetectedUrl(url))
+                                .filter(Boolean);
+
+                            // Prefer the most complete URL if shorter prefix variants are also present.
+                            const dedupedDetectedUrls = Array.from(new Set(normalizedDetectedUrls)).filter((url, _, urls) =>
+                                !urls.some((otherUrl) => otherUrl !== url && otherUrl.startsWith(url))
+                            );
+
+                            dedupedDetectedUrls.forEach((url) => emitAuthUrl(url, false));
+
+                            if (shouldAutoOpenUrlFromOutput(cleanChunk) && dedupedDetectedUrls.length > 0) {
+                                const bestUrl = dedupedDetectedUrls.reduce((longest, current) =>
+                                    current.length > longest.length ? current : longest
+                                );
+                                emitAuthUrl(bestUrl, true);
+                            }
 
                             // Send regular output
                             session.ws.send(JSON.stringify({
