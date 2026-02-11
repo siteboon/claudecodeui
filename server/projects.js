@@ -347,12 +347,13 @@ async function getSessionsPreview(projectName, limit = 5, offset = 0) {
         }
 
         const session = sessions.get(entry.sessionId);
+        session.messageCount += 1;
 
         if (entry.timestamp) {
           const timestamp = new Date(entry.timestamp);
           if (!Number.isNaN(timestamp.getTime())) {
             const currentTime = timestamp.toISOString();
-            if (!session.lastActivity || new Date(currentTime) > new Date(session.lastActivity)) {
+            if (!session.lastActivity || currentTime > session.lastActivity) {
               session.lastActivity = currentTime;
             }
           }
@@ -369,7 +370,6 @@ async function getSessionsPreview(projectName, limit = 5, offset = 0) {
 
         const role = entry.message?.role;
         if (role === 'user') {
-          session.messageCount += 1;
           if (!session.lastUserMessage) {
             const text = getMessageText(entry.message?.content);
             if (text && !isSystemUserMessage(text)) {
@@ -377,7 +377,6 @@ async function getSessionsPreview(projectName, limit = 5, offset = 0) {
             }
           }
         } else if (role === 'assistant') {
-          session.messageCount += 1;
           if (!session.lastAssistantMessage && entry.isApiErrorMessage !== true) {
             const text = getMessageText(entry.message?.content);
             if (text && !isSystemAssistantMessage(text)) {
@@ -1101,15 +1100,7 @@ async function parseJsonlSessions(filePath) {
 
     // Filter out sessions that contain JSON responses (Task Master errors)
     const allSessions = Array.from(sessions.values());
-    const filteredSessions = allSessions.filter(session => {
-      const shouldFilter = session.summary.startsWith('{ "');
-      if (shouldFilter) {
-      }
-      // Log a sample of summaries to debug
-      if (Math.random() < 0.01) { // Log 1% of sessions
-      }
-      return !shouldFilter;
-    });
+    const filteredSessions = allSessions.filter(session => !session.summary.startsWith('{ "'));
 
 
     return {
@@ -1200,10 +1191,16 @@ async function renameProject(projectName, newDisplayName) {
   
   if (!newDisplayName || newDisplayName.trim() === '') {
     // Remove custom name if empty, will fall back to auto-generated
-    delete config[projectName];
+    if (config[projectName]) {
+      delete config[projectName].displayName;
+      if (Object.keys(config[projectName]).length === 0) {
+        delete config[projectName];
+      }
+    }
   } else {
-    // Set custom display name
+    // Set custom display name while preserving existing project settings
     config[projectName] = {
+      ...config[projectName],
       displayName: newDisplayName.trim()
     };
   }
@@ -1377,7 +1374,22 @@ async function addProjectManually(projectPath, displayName = null) {
     displayName: displayName || await generateDisplayName(projectName, absolutePath),
     isManuallyAdded: true,
     sessions: [],
-    cursorSessions: []
+    cursorSessions: [],
+    codexSessions: [],
+    sessionMeta: {
+      hasMore: true,
+      total: 0,
+      lazy: true
+    },
+    sessionsHydrated: false,
+    cursorSessionsHydrated: false,
+    codexSessionsHydrated: false,
+    taskmaster: {
+      hasTaskmaster: false,
+      hasEssentialFiles: false,
+      metadata: null,
+      status: 'unknown'
+    }
   };
 }
 
@@ -1421,59 +1433,61 @@ async function getCursorSessions(projectPath) {
           driver: sqlite3.Database,
           mode: sqlite3.OPEN_READONLY
         });
-        
-        // Get metadata from meta table
-        const metaRows = await db.all(`
-          SELECT key, value FROM meta
-        `);
-        
-        // Parse metadata
-        let metadata = {};
-        for (const row of metaRows) {
-          if (row.value) {
-            try {
-              // Try to decode as hex-encoded JSON
-              const hexMatch = row.value.toString().match(/^[0-9a-fA-F]+$/);
-              if (hexMatch) {
-                const jsonStr = Buffer.from(row.value, 'hex').toString('utf8');
-                metadata[row.key] = JSON.parse(jsonStr);
-              } else {
+
+        try {
+          // Get metadata from meta table
+          const metaRows = await db.all(`
+            SELECT key, value FROM meta
+          `);
+          
+          // Parse metadata
+          let metadata = {};
+          for (const row of metaRows) {
+            if (row.value) {
+              try {
+                // Try to decode as hex-encoded JSON
+                const hexMatch = row.value.toString().match(/^[0-9a-fA-F]+$/);
+                if (hexMatch) {
+                  const jsonStr = Buffer.from(row.value, 'hex').toString('utf8');
+                  metadata[row.key] = JSON.parse(jsonStr);
+                } else {
+                  metadata[row.key] = row.value.toString();
+                }
+              } catch (e) {
                 metadata[row.key] = row.value.toString();
               }
-            } catch (e) {
-              metadata[row.key] = row.value.toString();
             }
           }
+          
+          // Get message count
+          const messageCountResult = await db.get(`
+            SELECT COUNT(*) as count FROM blobs
+          `);
+          
+          // Extract session info
+          const sessionName = metadata.title || metadata.sessionTitle || 'Untitled Session';
+          
+          // Determine timestamp - prefer createdAt from metadata, fall back to db file mtime
+          let createdAt = null;
+          if (metadata.createdAt) {
+            createdAt = new Date(metadata.createdAt).toISOString();
+          } else if (dbStatMtimeMs) {
+            createdAt = new Date(dbStatMtimeMs).toISOString();
+          } else {
+            createdAt = new Date().toISOString();
+          }
+          
+          sessions.push({
+            id: sessionId,
+            name: sessionName,
+            createdAt: createdAt,
+            lastActivity: createdAt, // For compatibility with Claude sessions
+            messageCount: messageCountResult.count || 0,
+            projectPath: projectPath
+          });
+        } finally {
+          await db.close();
         }
-        
-        // Get message count
-        const messageCountResult = await db.get(`
-          SELECT COUNT(*) as count FROM blobs
-        `);
-        
-        await db.close();
-        
-        // Extract session info
-        const sessionName = metadata.title || metadata.sessionTitle || 'Untitled Session';
-        
-        // Determine timestamp - prefer createdAt from metadata, fall back to db file mtime
-        let createdAt = null;
-        if (metadata.createdAt) {
-          createdAt = new Date(metadata.createdAt).toISOString();
-        } else if (dbStatMtimeMs) {
-          createdAt = new Date(dbStatMtimeMs).toISOString();
-        } else {
-          createdAt = new Date().toISOString();
-        }
-        
-        sessions.push({
-          id: sessionId,
-          name: sessionName,
-          createdAt: createdAt,
-          lastActivity: createdAt, // For compatibility with Claude sessions
-          messageCount: messageCountResult.count || 0,
-          projectPath: projectPath
-        });
         
       } catch (error) {
         console.warn(`Could not read Cursor session ${sessionId}:`, error.message);
