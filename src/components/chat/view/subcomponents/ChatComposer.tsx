@@ -1,7 +1,7 @@
-import CommandMenu from '../../CommandMenu';
-import ClaudeStatus from '../../ClaudeStatus';
-import { MicButton } from '../../MicButton.jsx';
-import ImageAttachment from '../input/ImageAttachment';
+import CommandMenu from '../../../CommandMenu';
+import ClaudeStatus from '../../../ClaudeStatus';
+import { MicButton } from '../../../MicButton.jsx';
+import ImageAttachment from './ImageAttachment';
 import PermissionRequestsBanner from './PermissionRequestsBanner';
 import ChatInputControls from './ChatInputControls';
 import { useTranslation } from 'react-i18next';
@@ -17,7 +17,7 @@ import type {
   SetStateAction,
   TouchEvent,
 } from 'react';
-import type { PendingPermissionRequest, PermissionMode, Provider } from '../types';
+import type { PendingPermissionRequest, PermissionMode, Provider } from '../../types/types';
 
 interface MentionableFile {
   name: string;

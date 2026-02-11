@@ -1,4 +1,4 @@
-import type { ClaudeSettings } from '../types';
+import type { ClaudeSettings } from '../types/types';
 
 export const CLAUDE_SETTINGS_KEY = 'claude-settings';
 

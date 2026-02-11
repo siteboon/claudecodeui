@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { MutableRefObject } from 'react';
 import { api, authenticatedFetch } from '../../../utils/api';
-import type { ChatMessage, Provider } from '../types';
+import type { ChatMessage, Provider } from '../types/types';
 import type { Project, ProjectSession } from '../../../types/app';
 import { safeLocalStorage } from '../utils/chatStorage';
 import {

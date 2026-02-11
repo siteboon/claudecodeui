@@ -1,4 +1,4 @@
-import type { ChatMessage } from '../types';
+import type { ChatMessage } from '../types/types';
 import { decodeHtmlEntities, unescapeWithMathProtection } from './chatFormatting';
 
 export interface DiffLine {

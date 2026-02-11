@@ -1,10 +1,10 @@
 import { useTranslation } from 'react-i18next';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
-import SessionProviderLogo from '../../SessionProviderLogo';
-import MessageComponent from '../messages/MessageComponent';
+import SessionProviderLogo from '../../../SessionProviderLogo';
+import MessageComponent from './MessageComponent';
 import ProviderSelectionEmptyState from './ProviderSelectionEmptyState';
-import type { ChatMessage, Provider } from '../types';
-import type { Project, ProjectSession } from '../../../types/app';
+import type { ChatMessage, Provider } from '../../types/types';
+import type { Project, ProjectSession } from '../../../../types/app';
 
 interface ChatMessagesPaneProps {
   scrollContainerRef: RefObject<HTMLDivElement>;

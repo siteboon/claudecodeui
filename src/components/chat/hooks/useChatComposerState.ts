@@ -19,7 +19,7 @@ import type {
   PendingPermissionRequest,
   PermissionMode,
   Provider,
-} from '../types';
+} from '../types/types';
 import { useFileMentions } from './useFileMentions';
 import { type SlashCommand, useSlashCommands } from './useSlashCommands';
 import type { Project, ProjectSession } from '../../../types/app';

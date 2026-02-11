@@ -1,7 +1,7 @@
 import React from 'react';
-import type { PendingPermissionRequest } from '../types';
-import { buildClaudeToolPermissionEntry, formatToolInputForDisplay } from '../utils/chatPermissions';
-import { getClaudeSettings } from '../utils/chatStorage';
+import type { PendingPermissionRequest } from '../../types/types';
+import { buildClaudeToolPermissionEntry, formatToolInputForDisplay } from '../../utils/chatPermissions';
+import { getClaudeSettings } from '../../utils/chatStorage';
 
 interface PermissionRequestsBannerProps {
   pendingPermissionRequests: PendingPermissionRequest[];

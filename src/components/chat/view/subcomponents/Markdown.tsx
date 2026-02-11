@@ -6,7 +6,7 @@ import rehypeKatex from 'rehype-katex';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useTranslation } from 'react-i18next';
-import { normalizeInlineCodeFences } from '../utils/chatFormatting';
+import { normalizeInlineCodeFences } from '../../utils/chatFormatting';
 
 type MarkdownProps = {
   children: React.ReactNode;

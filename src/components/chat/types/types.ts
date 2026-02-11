@@ -1,4 +1,4 @@
-import type { Project, ProjectSession, SessionProvider } from '../../types/app';
+import type { Project, ProjectSession, SessionProvider } from '../../../types/app';
 
 export type Provider = SessionProvider;
 

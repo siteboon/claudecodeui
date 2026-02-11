@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { authenticatedFetch } from '../../../utils/api';
 import { CLAUDE_MODELS, CODEX_MODELS, CURSOR_MODELS } from '../../../../shared/modelConstants';
-import type { PendingPermissionRequest, PermissionMode, Provider } from '../types';
+import type { PendingPermissionRequest, PermissionMode, Provider } from '../types/types';
 import type { ProjectSession } from '../../../types/app';
 
 interface UseChatProviderStateArgs {

@@ -1,10 +1,10 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import SessionProviderLogo from '../../SessionProviderLogo';
-import NextTaskBanner from '../../NextTaskBanner.jsx';
-import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '../../../../shared/modelConstants';
-import type { Provider } from '../types';
-import type { ProjectSession } from '../../../types/app';
+import SessionProviderLogo from '../../../SessionProviderLogo';
+import NextTaskBanner from '../../../NextTaskBanner.jsx';
+import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '../../../../../shared/modelConstants';
+import type { Provider } from '../../types/types';
+import type { ProjectSession } from '../../../../types/app';
 
 interface ProviderSelectionEmptyStateProps {
   selectedSession: ProjectSession | null;

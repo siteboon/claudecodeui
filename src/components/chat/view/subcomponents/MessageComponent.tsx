@@ -1,13 +1,13 @@
 // @ts-nocheck
 import React, { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import SessionProviderLogo from '../../SessionProviderLogo';
-import type { ChatMessage, Provider } from '../types';
-import { Markdown } from '../markdown/Markdown';
-import { formatUsageLimitText } from '../utils/chatFormatting';
-import { getClaudePermissionSuggestion } from '../utils/chatPermissions';
-import type { Project } from '../../../types/app';
-import { ToolRenderer, shouldHideToolResult } from '../tools';
+import SessionProviderLogo from '../../../SessionProviderLogo';
+import type { ChatMessage, Provider } from '../../types/types';
+import { Markdown } from './Markdown';
+import { formatUsageLimitText } from '../../utils/chatFormatting';
+import { getClaudePermissionSuggestion } from '../../utils/chatPermissions';
+import type { Project } from '../../../../types/app';
+import { ToolRenderer, shouldHideToolResult } from '../../tools';
 
 type DiffLine = {
   type: string;

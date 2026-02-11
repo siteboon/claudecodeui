@@ -2,14 +2,14 @@ import React, { useCallback, useEffect, useRef } from 'react';
 import QuickSettingsPanel from '../../QuickSettingsPanel';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import { useTranslation } from 'react-i18next';
-import ChatMessagesPane from './ChatMessagesPane';
-import ChatComposer from './ChatComposer';
-import type { ChatInterfaceProps } from '../types';
+import ChatMessagesPane from './subcomponents/ChatMessagesPane';
+import ChatComposer from './subcomponents/ChatComposer';
+import type { ChatInterfaceProps } from '../types/types';
 import { useChatProviderState } from '../hooks/useChatProviderState';
 import { useChatSessionState } from '../hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '../hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '../hooks/useChatComposerState';
-import type { Provider } from '../types';
+import type { Provider } from '../types/types';
 
 type PendingViewSession = {
   sessionId: string | null;

@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import { decodeHtmlEntities, formatUsageLimitText } from '../utils/chatFormatting';
 import { safeLocalStorage } from '../utils/chatStorage';
-import type { ChatMessage, PendingPermissionRequest, Provider } from '../types';
+import type { ChatMessage, PendingPermissionRequest, Provider } from '../types/types';
 import type { Project, ProjectSession } from '../../../types/app';
 
 type PendingViewSession = {
