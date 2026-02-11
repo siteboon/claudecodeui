@@ -2,8 +2,8 @@ import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
-import Sidebar from '../Sidebar';
-import MainContent from '../MainContent';
+import Sidebar from '../sidebar/view/Sidebar';
+import MainContent from '../main-content/view/MainContent';
 import MobileNav from '../MobileNav';
 
 import { useWebSocket } from '../../contexts/WebSocketContext';
