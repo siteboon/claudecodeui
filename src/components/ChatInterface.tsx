@@ -232,10 +232,11 @@ function ChatInterface({
   }, [canAbortSession, handleAbortSession, isLoading]);
 
   useEffect(() => {
-    if (currentSessionId && isLoading && onSessionProcessing) {
-      onSessionProcessing(currentSessionId);
+    const processingSessionId = selectedSession?.id || currentSessionId;
+    if (processingSessionId && isLoading && onSessionProcessing) {
+      onSessionProcessing(processingSessionId);
     }
-  }, [currentSessionId, isLoading, onSessionProcessing]);
+  }, [currentSessionId, isLoading, onSessionProcessing, selectedSession?.id]);
 
   useEffect(() => {
     return () => {

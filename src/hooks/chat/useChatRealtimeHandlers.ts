@@ -167,6 +167,27 @@ export function useChatRealtimeHandlers({
       onSessionNotProcessing?.(sessionId);
     };
 
+    const collectSessionIds = (...sessionIds: Array<string | null | undefined>) =>
+      Array.from(
+        new Set(
+          sessionIds.filter((sessionId): sessionId is string => typeof sessionId === 'string' && sessionId.length > 0),
+        ),
+      );
+
+    const clearLoadingIndicators = () => {
+      setIsLoading(false);
+      setCanAbortSession(false);
+      setClaudeStatus(null);
+    };
+
+    const markSessionsAsCompleted = (...sessionIds: Array<string | null | undefined>) => {
+      const normalizedSessionIds = collectSessionIds(...sessionIds);
+      normalizedSessionIds.forEach((sessionId) => {
+        onSessionInactive?.(sessionId);
+        onSessionNotProcessing?.(sessionId);
+      });
+    };
+
     if (!shouldBypassSessionFilter) {
       if (!activeViewSessionId) {
         if (latestMessage.sessionId && lifecycleMessageTypes.has(String(latestMessage.type))) {
@@ -516,56 +537,51 @@ export function useChatRealtimeHandlers({
 
       case 'cursor-result': {
         const cursorCompletedSessionId = latestMessage.sessionId || currentSessionId;
-
-        if (cursorCompletedSessionId === currentSessionId) {
-          setIsLoading(false);
-          setCanAbortSession(false);
-          setClaudeStatus(null);
-        }
-
-        if (cursorCompletedSessionId) {
-          onSessionInactive?.(cursorCompletedSessionId);
-          onSessionNotProcessing?.(cursorCompletedSessionId);
-        }
-
-        if (cursorCompletedSessionId === currentSessionId) {
-          try {
-            const resultData = latestMessage.data || {};
-            const textResult = typeof resultData.result === 'string' ? resultData.result : '';
-
-            if (streamTimerRef.current) {
-              clearTimeout(streamTimerRef.current);
-              streamTimerRef.current = null;
-            }
-            const pendingChunk = streamBufferRef.current;
-            streamBufferRef.current = '';
-
-            setChatMessages((previous) => {
-              const updated = [...previous];
-              const last = updated[updated.length - 1];
-              if (last && last.type === 'assistant' && !last.isToolUse && last.isStreaming) {
-                const finalContent =
-                  textResult && textResult.trim()
-                    ? textResult
-                    : `${last.content || ''}${pendingChunk || ''}`;
-                last.content = finalContent;
-                last.isStreaming = false;
-              } else if (textResult && textResult.trim()) {
-                updated.push({
-                  type: resultData.is_error ? 'error' : 'assistant',
-                  content: textResult,
-                  timestamp: new Date(),
-                  isStreaming: false,
-                });
-              }
-              return updated;
-            });
-          } catch (error) {
-            console.warn('Error handling cursor-result message:', error);
-          }
-        }
-
         const pendingCursorSessionId = sessionStorage.getItem('pendingSessionId');
+
+        clearLoadingIndicators();
+        markSessionsAsCompleted(
+          cursorCompletedSessionId,
+          currentSessionId,
+          selectedSession?.id,
+          pendingCursorSessionId,
+        );
+
+        try {
+          const resultData = latestMessage.data || {};
+          const textResult = typeof resultData.result === 'string' ? resultData.result : '';
+
+          if (streamTimerRef.current) {
+            clearTimeout(streamTimerRef.current);
+            streamTimerRef.current = null;
+          }
+          const pendingChunk = streamBufferRef.current;
+          streamBufferRef.current = '';
+
+          setChatMessages((previous) => {
+            const updated = [...previous];
+            const last = updated[updated.length - 1];
+            if (last && last.type === 'assistant' && !last.isToolUse && last.isStreaming) {
+              const finalContent =
+                textResult && textResult.trim()
+                  ? textResult
+                  : `${last.content || ''}${pendingChunk || ''}`;
+              last.content = finalContent;
+              last.isStreaming = false;
+            } else if (textResult && textResult.trim()) {
+              updated.push({
+                type: resultData.is_error ? 'error' : 'assistant',
+                content: textResult,
+                timestamp: new Date(),
+                isStreaming: false,
+              });
+            }
+            return updated;
+          });
+        } catch (error) {
+          console.warn('Error handling cursor-result message:', error);
+        }
+
         if (cursorCompletedSessionId && !currentSessionId && cursorCompletedSessionId === pendingCursorSessionId) {
           setCurrentSessionId(cursorCompletedSessionId);
           sessionStorage.removeItem('pendingSessionId');
@@ -601,21 +617,18 @@ export function useChatRealtimeHandlers({
         break;
 
       case 'claude-complete': {
-        const completedSessionId =
-          latestMessage.sessionId || currentSessionId || sessionStorage.getItem('pendingSessionId');
-
-        if (completedSessionId === currentSessionId || !currentSessionId) {
-          setIsLoading(false);
-          setCanAbortSession(false);
-          setClaudeStatus(null);
-        }
-
-        if (completedSessionId) {
-          onSessionInactive?.(completedSessionId);
-          onSessionNotProcessing?.(completedSessionId);
-        }
-
         const pendingSessionId = sessionStorage.getItem('pendingSessionId');
+        const completedSessionId =
+          latestMessage.sessionId || currentSessionId || pendingSessionId;
+
+        clearLoadingIndicators();
+        markSessionsAsCompleted(
+          completedSessionId,
+          currentSessionId,
+          selectedSession?.id,
+          pendingSessionId,
+        );
+
         if (pendingSessionId && !currentSessionId && latestMessage.exitCode === 0) {
           setCurrentSessionId(pendingSessionId);
           sessionStorage.removeItem('pendingSessionId');
@@ -743,11 +756,13 @@ export function useChatRealtimeHandlers({
         }
 
         if (codexData.type === 'turn_complete') {
-          setIsLoading(false);
+          clearLoadingIndicators();
+          markSessionsAsCompleted(latestMessage.sessionId, currentSessionId, selectedSession?.id);
         }
 
         if (codexData.type === 'turn_failed') {
-          setIsLoading(false);
+          clearLoadingIndicators();
+          markSessionsAsCompleted(latestMessage.sessionId, currentSessionId, selectedSession?.id);
           setChatMessages((previous) => [
             ...previous,
             {
@@ -761,22 +776,20 @@ export function useChatRealtimeHandlers({
       }
 
       case 'codex-complete': {
-        const codexCompletedSessionId =
-          latestMessage.sessionId || currentSessionId || sessionStorage.getItem('pendingSessionId');
-
-        if (codexCompletedSessionId === currentSessionId || !currentSessionId) {
-          setIsLoading(false);
-          setCanAbortSession(false);
-          setClaudeStatus(null);
-        }
-
-        if (codexCompletedSessionId) {
-          onSessionInactive?.(codexCompletedSessionId);
-          onSessionNotProcessing?.(codexCompletedSessionId);
-        }
-
         const codexPendingSessionId = sessionStorage.getItem('pendingSessionId');
         const codexActualSessionId = latestMessage.actualSessionId || codexPendingSessionId;
+        const codexCompletedSessionId =
+          latestMessage.sessionId || currentSessionId || codexPendingSessionId;
+
+        clearLoadingIndicators();
+        markSessionsAsCompleted(
+          codexCompletedSessionId,
+          codexActualSessionId,
+          currentSessionId,
+          selectedSession?.id,
+          codexPendingSessionId,
+        );
+
         if (codexPendingSessionId && !currentSessionId) {
           setCurrentSessionId(codexActualSessionId);
           setIsSystemSessionChange(true);
@@ -807,23 +820,14 @@ export function useChatRealtimeHandlers({
         break;
 
       case 'session-aborted': {
+        const pendingSessionId =
+          typeof window !== 'undefined' ? sessionStorage.getItem('pendingSessionId') : null;
         const abortedSessionId = latestMessage.sessionId || currentSessionId;
         const abortSucceeded = latestMessage.success !== false;
 
-        if (abortSucceeded && abortedSessionId === currentSessionId) {
-          setIsLoading(false);
-          setCanAbortSession(false);
-          setClaudeStatus(null);
-        }
-
-        if (abortSucceeded && abortedSessionId) {
-          onSessionInactive?.(abortedSessionId);
-          onSessionNotProcessing?.(abortedSessionId);
-        }
-
         if (abortSucceeded) {
-          const pendingSessionId =
-            typeof window !== 'undefined' ? sessionStorage.getItem('pendingSessionId') : null;
+          clearLoadingIndicators();
+          markSessionsAsCompleted(abortedSessionId, currentSessionId, selectedSession?.id, pendingSessionId);
           if (pendingSessionId && (!abortedSessionId || pendingSessionId === abortedSessionId)) {
             sessionStorage.removeItem('pendingSessionId');
           }

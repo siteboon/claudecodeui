@@ -539,16 +539,17 @@ export function useChatSessionState({
   }, [handleScroll]);
 
   useEffect(() => {
-    if (!currentSessionId || !processingSessions) {
+    const activeViewSessionId = selectedSession?.id || currentSessionId;
+    if (!activeViewSessionId || !processingSessions) {
       return;
     }
 
-    const shouldBeProcessing = processingSessions.has(currentSessionId);
+    const shouldBeProcessing = processingSessions.has(activeViewSessionId);
     if (shouldBeProcessing && !isLoading) {
       setIsLoading(true);
       setCanAbortSession(true);
     }
-  }, [currentSessionId, isLoading, processingSessions]);
+  }, [currentSessionId, isLoading, processingSessions, selectedSession?.id]);
 
   const loadEarlierMessages = useCallback(() => {
     setVisibleMessageCount((previousCount) => previousCount + 100);
