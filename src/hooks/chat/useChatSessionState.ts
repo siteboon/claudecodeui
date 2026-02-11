@@ -208,13 +208,17 @@ export function useChatSessionState({
           sessionProvider,
         );
 
-        if (moreMessages.length > 0) {
-          pendingScrollRestoreRef.current = {
-            height: previousScrollHeight,
-            top: previousScrollTop,
-          };
-          setSessionMessages((previous) => [...moreMessages, ...previous]);
+        if (moreMessages.length === 0) {
+          return false;
         }
+
+        pendingScrollRestoreRef.current = {
+          height: previousScrollHeight,
+          top: previousScrollTop,
+        };
+        setSessionMessages((previous) => [...moreMessages, ...previous]);
+        // Keep the rendered window in sync with top-pagination so newly loaded history becomes visible.
+        setVisibleMessageCount((previousCount) => previousCount + moreMessages.length);
         return true;
       } finally {
         isLoadingMoreRef.current = false;
@@ -239,6 +243,10 @@ export function useChatSessionState({
     }
 
     if (topLoadLockRef.current) {
+      // After a top-load restore, release the lock once user has moved away from absolute top.
+      if (container.scrollTop > 20) {
+        topLoadLockRef.current = false;
+      }
       return;
     }
 
@@ -263,6 +271,9 @@ export function useChatSessionState({
 
   useEffect(() => {
     pendingInitialScrollRef.current = true;
+    topLoadLockRef.current = false;
+    pendingScrollRestoreRef.current = null;
+    setVisibleMessageCount(INITIAL_VISIBLE_MESSAGES);
     setIsUserScrolledUp(false);
   }, [selectedProject?.name, selectedSession?.id]);
 
