@@ -4,7 +4,9 @@ import type { TFunction } from 'i18next';
 import { Button } from '../ui/button';
 import ProjectCreationWizard from '../ProjectCreationWizard';
 import Settings from '../Settings';
+import VersionUpgradeModal from '../modals/VersionUpgradeModal';
 import type { Project } from '../../types/app';
+import type { ReleaseInfo } from '../../types/sharedTypes';
 import type { DeleteProjectConfirmation, SessionDeleteConfirmation } from './types';
 
 type SidebarModalsProps = {
@@ -21,6 +23,11 @@ type SidebarModalsProps = {
   sessionDeleteConfirmation: SessionDeleteConfirmation | null;
   onCancelDeleteSession: () => void;
   onConfirmDeleteSession: () => void;
+  showVersionModal: boolean;
+  onCloseVersionModal: () => void;
+  releaseInfo: ReleaseInfo | null;
+  currentVersion: string;
+  latestVersion: string | null;
   t: TFunction;
 };
 
@@ -38,6 +45,11 @@ export default function SidebarModals({
   sessionDeleteConfirmation,
   onCancelDeleteSession,
   onConfirmDeleteSession,
+  showVersionModal,
+  onCloseVersionModal,
+  releaseInfo,
+  currentVersion,
+  latestVersion,
   t,
 }: SidebarModalsProps) {
   return (
@@ -155,6 +167,14 @@ export default function SidebarModals({
           </div>,
           document.body,
         )}
+
+      <VersionUpgradeModal
+        isOpen={showVersionModal}
+        onClose={onCloseVersionModal}
+        releaseInfo={releaseInfo}
+        currentVersion={currentVersion}
+        latestVersion={latestVersion}
+      />
     </>
   );
 }

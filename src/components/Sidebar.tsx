@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import VersionUpgradeModal from './modals/VersionUpgradeModal';
 import { useDeviceSettings } from '../hooks/useDeviceSettings';
 import { useVersionCheck } from '../hooks/useVersionCheck';
 import { useUiPreferences } from '../hooks/useUiPreferences';
@@ -196,6 +195,11 @@ function Sidebar({
         sessionDeleteConfirmation={sessionDeleteConfirmation}
         onCancelDeleteSession={() => setSessionDeleteConfirmation(null)}
         onConfirmDeleteSession={confirmDeleteSession}
+        showVersionModal={showVersionModal}
+        onCloseVersionModal={() => setShowVersionModal(false)}
+        releaseInfo={releaseInfo}
+        currentVersion={currentVersion}
+        latestVersion={latestVersion}
         t={t}
       />
 
@@ -234,13 +238,6 @@ function Sidebar({
         </>
       )}
 
-      <VersionUpgradeModal
-        isOpen={showVersionModal}
-        onClose={() => setShowVersionModal(false)}
-        releaseInfo={releaseInfo}
-        currentVersion={currentVersion}
-        latestVersion={latestVersion}
-      />
     </>
   );
 }
