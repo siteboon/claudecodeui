@@ -89,6 +89,7 @@ function AppContent() {
 
   // Ref to track loading progress timeout for cleanup
   const loadingProgressTimeoutRef = useRef(null);
+  const attemptedUrlSessionResolutionsRef = useRef(new Set());
 
   // Detect if running as PWA
   const [isPWA, setIsPWA] = useState(false);
@@ -136,6 +137,35 @@ function AppContent() {
   useEffect(() => {
     // Fetch projects on component mount
     fetchProjects();
+  }, []);
+
+  const mergeHydratedProjectData = useCallback((currentProjects, incomingProjects) => {
+    if (!Array.isArray(incomingProjects)) return [];
+    if (!Array.isArray(currentProjects) || currentProjects.length === 0) return incomingProjects;
+
+    const currentByName = new Map(currentProjects.map((project) => [project.name, project]));
+
+    return incomingProjects.map((incomingProject) => {
+      const currentProject = currentByName.get(incomingProject.name);
+      if (!currentProject) {
+        return incomingProject;
+      }
+
+      const sessionsHydrated = Boolean(incomingProject.sessionsHydrated || currentProject.sessionsHydrated);
+      const cursorSessionsHydrated = Boolean(incomingProject.cursorSessionsHydrated || currentProject.cursorSessionsHydrated);
+      const codexSessionsHydrated = Boolean(incomingProject.codexSessionsHydrated || currentProject.codexSessionsHydrated);
+
+      return {
+        ...incomingProject,
+        sessions: sessionsHydrated ? (currentProject.sessionsHydrated ? currentProject.sessions : (incomingProject.sessions || [])) : (incomingProject.sessions || []),
+        sessionMeta: sessionsHydrated ? (currentProject.sessionsHydrated ? currentProject.sessionMeta : incomingProject.sessionMeta) : incomingProject.sessionMeta,
+        sessionsHydrated,
+        cursorSessions: cursorSessionsHydrated ? (currentProject.cursorSessionsHydrated ? currentProject.cursorSessions : (incomingProject.cursorSessions || [])) : (incomingProject.cursorSessions || []),
+        cursorSessionsHydrated,
+        codexSessions: codexSessionsHydrated ? (currentProject.codexSessionsHydrated ? currentProject.codexSessions : (incomingProject.codexSessions || [])) : (incomingProject.codexSessions || []),
+        codexSessionsHydrated
+      };
+    });
   }, []);
 
   // Helper function to determine if an update is purely additive (new sessions/projects)
@@ -231,7 +261,7 @@ function AppContent() {
         
         if (hasActiveSession) {
           // Allow updates but be selective: permit additions, prevent changes to existing items
-          const updatedProjects = latestMessage.projects;
+          const updatedProjects = mergeHydratedProjectData(projects, latestMessage.projects);
           const currentProjects = projects;
           
           // Check if this is purely additive (new sessions/projects) vs modification of existing ones
@@ -245,7 +275,7 @@ function AppContent() {
         }
         
         // Update projects state with the new data from WebSocket
-        const updatedProjects = latestMessage.projects;
+        const updatedProjects = mergeHydratedProjectData(projects, latestMessage.projects);
         setProjects(updatedProjects);
 
         // Update selected project if it exists in the updated projects
@@ -258,14 +288,24 @@ function AppContent() {
             }
 
             if (selectedSession) {
-              const allSessions = [
-                ...(updatedSelectedProject.sessions || []),
-                ...(updatedSelectedProject.codexSessions || []),
-                ...(updatedSelectedProject.cursorSessions || [])
-              ];
-              const updatedSelectedSession = allSessions.find(s => s.id === selectedSession.id);
-              if (!updatedSelectedSession) {
-                setSelectedSession(null);
+              const provider = selectedSession.__provider || 'claude';
+              const providerHydrated = provider === 'cursor'
+                ? Boolean(updatedSelectedProject.cursorSessionsHydrated)
+                : provider === 'codex'
+                  ? Boolean(updatedSelectedProject.codexSessionsHydrated)
+                  : Boolean(updatedSelectedProject.sessionsHydrated);
+
+              if (providerHydrated) {
+                const providerSessions = provider === 'cursor'
+                  ? (updatedSelectedProject.cursorSessions || [])
+                  : provider === 'codex'
+                    ? (updatedSelectedProject.codexSessions || [])
+                    : (updatedSelectedProject.sessions || []);
+
+                const updatedSelectedSession = providerSessions.find(s => s.id === selectedSession.id);
+                if (!updatedSelectedSession) {
+                  setSelectedSession(null);
+                }
               }
             }
           }
@@ -279,7 +319,7 @@ function AppContent() {
         loadingProgressTimeoutRef.current = null;
       }
     };
-  }, [latestMessage, selectedProject, selectedSession, activeSessions]);
+  }, [latestMessage, selectedProject, selectedSession, activeSessions, projects, mergeHydratedProjectData]);
 
   const fetchProjects = async () => {
     try {
@@ -289,13 +329,15 @@ function AppContent() {
       
       // Optimize to preserve object references when data hasn't changed
       setProjects(prevProjects => {
+        const mergedProjects = mergeHydratedProjectData(prevProjects, data);
+
         // If no previous projects, just set the new data
         if (prevProjects.length === 0) {
-          return data;
+          return mergedProjects;
         }
         
         // Check if the projects data has actually changed
-        const hasChanges = data.some((newProject, index) => {
+        const hasChanges = mergedProjects.some((newProject, index) => {
           const prevProject = prevProjects[index];
           if (!prevProject) return true;
           
@@ -308,10 +350,10 @@ function AppContent() {
             JSON.stringify(newProject.sessions) !== JSON.stringify(prevProject.sessions) ||
             JSON.stringify(newProject.cursorSessions) !== JSON.stringify(prevProject.cursorSessions)
           );
-        }) || data.length !== prevProjects.length;
+        }) || mergedProjects.length !== prevProjects.length;
         
         // Only update if there are actual changes
-        return hasChanges ? data : prevProjects;
+        return hasChanges ? mergedProjects : prevProjects;
       });
       
       // Don't auto-select any project - user should choose manually
@@ -333,6 +375,8 @@ function AppContent() {
 
   // Handle URL-based session loading
   useEffect(() => {
+    let cancelled = false;
+
     if (sessionId && projects.length > 0) {
       // Only switch tabs on initial load, not on every project update
       const shouldSwitchTab = !selectedSession || selectedSession.id !== sessionId;
@@ -359,12 +403,54 @@ function AppContent() {
           return;
         }
       }
-      
-      // If session not found, it might be a newly created session
-      // Just navigate to it and it will be found when the sidebar refreshes
-      // Don't redirect to home, let the session load naturally
+
+      // Lazy session hydration can leave cursor sessions unloaded on deep links.
+      // Try one targeted lookup per sessionId to recover the selected session.
+      if (!attemptedUrlSessionResolutionsRef.current.has(sessionId)) {
+        attemptedUrlSessionResolutionsRef.current.add(sessionId);
+
+        (async () => {
+          for (const project of projects) {
+            try {
+              const response = await api.cursorSessions(project.fullPath || project.path);
+              if (!response.ok) continue;
+
+              const data = await response.json();
+              const cursorSessions = data.success && Array.isArray(data.sessions) ? data.sessions : [];
+              const cSession = cursorSessions.find((session) => session.id === sessionId);
+              if (!cSession || cancelled) continue;
+
+              const hydratedProject = {
+                ...project,
+                cursorSessions,
+                cursorSessionsHydrated: true
+              };
+
+              setProjects((prevProjects) =>
+                prevProjects.map((prevProject) =>
+                  prevProject.name === project.name
+                    ? { ...prevProject, cursorSessions, cursorSessionsHydrated: true }
+                    : prevProject
+                )
+              );
+              setSelectedProject(hydratedProject);
+              setSelectedSession({ ...cSession, __provider: 'cursor' });
+              if (shouldSwitchTab) {
+                setActiveTab('chat');
+              }
+              return;
+            } catch (_) {
+              // Ignore per-project lookup errors and keep searching.
+            }
+          }
+        })();
+      }
     }
-  }, [sessionId, projects, navigate]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, projects, navigate, selectedSession]);
 
   const handleProjectSelect = (project) => {
     setSelectedProject(project);
@@ -442,11 +528,12 @@ function AppContent() {
     try {
       const response = await api.projects();
       const freshProjects = await response.json();
+      const mergedFreshProjects = mergeHydratedProjectData(projects, freshProjects);
       
       // Optimize to preserve object references and minimize re-renders
       setProjects(prevProjects => {
         // Check if projects data has actually changed
-        const hasChanges = freshProjects.some((newProject, index) => {
+        const hasChanges = mergedFreshProjects.some((newProject, index) => {
           const prevProject = prevProjects[index];
           if (!prevProject) return true;
           
@@ -457,14 +544,14 @@ function AppContent() {
             JSON.stringify(newProject.sessionMeta) !== JSON.stringify(prevProject.sessionMeta) ||
             JSON.stringify(newProject.sessions) !== JSON.stringify(prevProject.sessions)
           );
-        }) || freshProjects.length !== prevProjects.length;
+        }) || mergedFreshProjects.length !== prevProjects.length;
         
-        return hasChanges ? freshProjects : prevProjects;
+        return hasChanges ? mergedFreshProjects : prevProjects;
       });
       
       // If we have a selected project, make sure it's still selected after refresh
       if (selectedProject) {
-        const refreshedProject = freshProjects.find(p => p.name === selectedProject.name);
+        const refreshedProject = mergedFreshProjects.find(p => p.name === selectedProject.name);
         if (refreshedProject) {
           // Only update selected project if it actually changed
           if (JSON.stringify(refreshedProject) !== JSON.stringify(selectedProject)) {
@@ -484,6 +571,44 @@ function AppContent() {
       console.error('Error refreshing sidebar:', error);
     }
   };
+
+  const handleProjectHydrate = useCallback((projectName, hydratedData) => {
+    if (!projectName || !hydratedData) return;
+
+    setProjects(prevProjects =>
+      prevProjects.map(project => {
+        if (project.name !== projectName) {
+          return project;
+        }
+
+        const mergedSessionMeta = hydratedData.sessionMeta
+          ? { ...(project.sessionMeta || {}), ...hydratedData.sessionMeta, lazy: false }
+          : project.sessionMeta;
+
+        return {
+          ...project,
+          ...hydratedData,
+          sessionMeta: mergedSessionMeta
+        };
+      })
+    );
+
+    setSelectedProject(prevSelectedProject => {
+      if (!prevSelectedProject || prevSelectedProject.name !== projectName) {
+        return prevSelectedProject;
+      }
+
+      const mergedSessionMeta = hydratedData.sessionMeta
+        ? { ...(prevSelectedProject.sessionMeta || {}), ...hydratedData.sessionMeta, lazy: false }
+        : prevSelectedProject.sessionMeta;
+
+      return {
+        ...prevSelectedProject,
+        ...hydratedData,
+        sessionMeta: mergedSessionMeta
+      };
+    });
+  }, []);
 
   const handleProjectDelete = (projectName) => {
     // If the deleted project was currently selected, clear it
@@ -776,6 +901,7 @@ function AppContent() {
                 onNewSession={handleNewSession}
                 onSessionDelete={handleSessionDelete}
                 onProjectDelete={handleProjectDelete}
+                onProjectHydrate={handleProjectHydrate}
                 isLoading={isLoadingProjects}
                 loadingProgress={loadingProgress}
                 onRefresh={handleSidebarRefresh}
@@ -871,6 +997,7 @@ function AppContent() {
               onNewSession={handleNewSession}
               onSessionDelete={handleSessionDelete}
               onProjectDelete={handleProjectDelete}
+              onProjectHydrate={handleProjectHydrate}
               isLoading={isLoadingProjects}
               loadingProgress={loadingProgress}
               onRefresh={handleSidebarRefresh}

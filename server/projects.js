@@ -199,7 +199,6 @@ const projectDirectoryCache = new Map();
 
 const PROJECT_PREVIEW_TAIL_BYTES = 256 * 1024;
 const PROJECT_PREVIEW_MAX_LINES_PER_FILE = 4000;
-const PROJECT_PREVIEW_MAX_FILES = 12;
 
 // Clear cache when needed (called when project files change)
 function clearProjectDirectoryCache() {
@@ -316,10 +315,6 @@ async function getSessionsPreview(projectName, limit = 5, offset = 0) {
     let truncatedReadDetected = false;
 
     for (const fileInfo of filesWithStats) {
-      if (scannedFiles >= PROJECT_PREVIEW_MAX_FILES) {
-        break;
-      }
-
       scannedFiles++;
       const { lines, fullyRead } = await readJsonlTailLines(fileInfo.filePath);
       if (!fullyRead) {
@@ -417,9 +412,14 @@ async function getSessionsPreview(projectName, limit = 5, offset = 0) {
       .sort((a, b) => new Date(b.lastActivity) - new Date(a.lastActivity));
 
     const total = visibleSessions.length;
+    // Keep metadata behavior aligned with existing getSessions(limit=5) path used by project list.
+    const legacyTotalCap = Math.max(limit + offset, (limit + offset) * 2);
+    let effectiveTotal = Math.min(total, legacyTotalCap);
+    if (truncatedReadDetected && total > limit && effectiveTotal < legacyTotalCap) {
+      effectiveTotal = legacyTotalCap;
+    }
     const paginatedSessions = visibleSessions.slice(offset, offset + limit);
-    const scannedAllFiles = scannedFiles >= filesWithStats.length && !truncatedReadDetected;
-    const hasMore = scannedAllFiles ? (offset + limit < total) : true;
+    const hasMore = offset + limit < effectiveTotal;
 
     let projectPathHint = null;
     if (visibleSessions.length > 0) {
@@ -432,7 +432,7 @@ async function getSessionsPreview(projectName, limit = 5, offset = 0) {
     return {
       sessions: paginatedSessions,
       hasMore,
-      total,
+      total: effectiveTotal,
       projectPathHint
     };
   } catch (error) {
@@ -755,12 +755,13 @@ async function getProjects(progressCallback = null) {
     }
   };
 
-  const codexSessionsIndexPromise = buildCodexSessionsIndex(5);
-
   for (const entry of directories) {
     emitProjectProgress(entry.name);
 
-    const previewResult = await getSessionsPreview(entry.name, 5, 0);
+    const [previewResult, sessionMetaResult] = await Promise.all([
+      getSessionsPreview(entry.name, 5, 0),
+      getSessions(entry.name, 5, 0).catch(() => ({ hasMore: false, total: 0 }))
+    ]);
     const decodedProjectPath = entry.name.replace(/-/g, '/');
     const configuredProjectPath = config[entry.name]?.originalPath;
     const actualProjectDir = configuredProjectPath || previewResult.projectPathHint || decodedProjectPath;
@@ -775,39 +776,22 @@ async function getProjects(progressCallback = null) {
       isCustomName: !!customName,
       sessions: previewResult.sessions || [],
       sessionMeta: {
-        hasMore: previewResult.hasMore,
-        total: previewResult.total
+        hasMore: sessionMetaResult.hasMore,
+        total: sessionMetaResult.total,
+        lazy: true
       },
-      codexSessions: getCodexSessionsForProjectFromIndex(await codexSessionsIndexPromise, actualProjectDir, 5)
-    };
-
-    const [cursorSessionsResult, taskMasterResult] = await Promise.all([
-      getCursorSessions(actualProjectDir).catch((e) => {
-        console.warn(`Could not load Cursor sessions for project ${entry.name}:`, e.message);
-        return [];
-      }),
-      detectTaskMasterFolder(actualProjectDir).catch((e) => {
-        console.warn(`Could not detect TaskMaster for project ${entry.name}:`, e.message);
-        return null;
-      })
-    ]);
-
-    project.cursorSessions = cursorSessionsResult;
-    if (taskMasterResult) {
-      project.taskmaster = {
-        hasTaskmaster: taskMasterResult.hasTaskmaster,
-        hasEssentialFiles: taskMasterResult.hasEssentialFiles,
-        metadata: taskMasterResult.metadata,
-        status: taskMasterResult.hasTaskmaster && taskMasterResult.hasEssentialFiles ? 'configured' : 'not-configured'
-      };
-    } else {
-      project.taskmaster = {
+      sessionsHydrated: false,
+      cursorSessions: [],
+      cursorSessionsHydrated: false,
+      codexSessions: [],
+      codexSessionsHydrated: false,
+      taskmaster: {
         hasTaskmaster: false,
         hasEssentialFiles: false,
         metadata: null,
-        status: 'error'
-      };
-    }
+        status: 'unknown'
+      }
+    };
 
     projects.push(project);
   }
@@ -826,37 +810,22 @@ async function getProjects(progressCallback = null) {
       isManuallyAdded: true,
       sessions: [],
       cursorSessions: [],
-      codexSessions: getCodexSessionsForProjectFromIndex(await codexSessionsIndexPromise, actualProjectDir, 5)
-    };
-
-    const [cursorSessionsResult, taskMasterResult] = await Promise.all([
-      getCursorSessions(actualProjectDir).catch((e) => {
-        console.warn(`Could not load Cursor sessions for manual project ${projectName}:`, e.message);
-        return [];
-      }),
-      detectTaskMasterFolder(actualProjectDir).catch((e) => {
-        console.warn(`TaskMaster detection failed for manual project ${projectName}:`, e.message);
-        return null;
-      })
-    ]);
-
-    project.cursorSessions = cursorSessionsResult;
-    if (taskMasterResult) {
-      const taskMasterStatus = taskMasterResult.hasTaskmaster && taskMasterResult.hasEssentialFiles ? 'taskmaster-only' : 'not-configured';
-      project.taskmaster = {
-        status: taskMasterStatus,
-        hasTaskmaster: taskMasterResult.hasTaskmaster,
-        hasEssentialFiles: taskMasterResult.hasEssentialFiles,
-        metadata: taskMasterResult.metadata
-      };
-    } else {
-      project.taskmaster = {
-        status: 'error',
+      codexSessions: [],
+      sessionMeta: {
+        hasMore: true,
+        total: 0,
+        lazy: true
+      },
+      sessionsHydrated: false,
+      cursorSessionsHydrated: false,
+      codexSessionsHydrated: false,
+      taskmaster: {
         hasTaskmaster: false,
         hasEssentialFiles: false,
-        metadata: null
-      };
-    }
+        metadata: null,
+        status: 'unknown'
+      }
+    };
 
     projects.push(project);
   }

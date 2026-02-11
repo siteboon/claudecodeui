@@ -48,6 +48,10 @@ export const api = {
   projects: () => authenticatedFetch('/api/projects'),
   sessions: (projectName, limit = 5, offset = 0) => 
     authenticatedFetch(`/api/projects/${projectName}/sessions?limit=${limit}&offset=${offset}`),
+  cursorSessions: (projectPath) =>
+    authenticatedFetch(`/api/cursor/sessions?projectPath=${encodeURIComponent(projectPath)}`),
+  codexSessions: (projectPath) =>
+    authenticatedFetch(`/api/codex/sessions?projectPath=${encodeURIComponent(projectPath)}`),
   sessionMessages: (projectName, sessionId, limit = null, offset = 0, provider = 'claude') => {
     const params = new URLSearchParams();
     if (limit !== null) {

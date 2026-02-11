@@ -53,6 +53,7 @@ function Sidebar({
   onNewSession,
   onSessionDelete,
   onProjectDelete,
+  onProjectHydrate,
   isLoading,
   loadingProgress,
   onRefresh,
@@ -123,29 +124,54 @@ function Sidebar({
     return () => clearInterval(timer);
   }, []);
 
-  // Clear additional sessions when projects list changes (e.g., after refresh)
+  // Keep additional sessions for existing projects when project list refreshes
   useEffect(() => {
-    setAdditionalSessions({});
-    setInitialSessionsLoaded(new Set());
+    const projectNames = new Set(projects.map(project => project.name));
+
+    setAdditionalSessions(prev => {
+      const next = {};
+      for (const [projectName, sessions] of Object.entries(prev)) {
+        if (projectNames.has(projectName)) {
+          next[projectName] = sessions;
+        }
+      }
+      return next;
+    });
   }, [projects]);
 
   // Auto-expand project folder when a session is selected
   useEffect(() => {
     if (selectedSession && selectedProject) {
       setExpandedProjects(prev => new Set([...prev, selectedProject.name]));
+      if (!initialSessionsLoaded.has(selectedProject.name)) {
+        hydrateProjectSessions(selectedProject);
+      }
     }
-  }, [selectedSession, selectedProject]);
+  }, [selectedSession, selectedProject, initialSessionsLoaded]);
 
   // Mark sessions as loaded when projects come in
   useEffect(() => {
     if (projects.length > 0 && !isLoading) {
-      const newLoaded = new Set();
-      projects.forEach(project => {
-        if (project.sessions && project.sessions.length >= 0) {
-          newLoaded.add(project.name);
+      const existingProjectNames = new Set(projects.map(project => project.name));
+      setInitialSessionsLoaded(prev => {
+        const next = new Set();
+
+        // Keep already-loaded projects that still exist
+        for (const projectName of prev) {
+          if (existingProjectNames.has(projectName)) {
+            next.add(projectName);
+          }
         }
+
+        // Also include projects explicitly marked hydrated by parent
+        projects.forEach(project => {
+          if (project.sessionsHydrated) {
+            next.add(project.name);
+          }
+        });
+
+        return next;
       });
-      setInitialSessionsLoaded(newLoaded);
     }
   }, [projects, isLoading]);
 
@@ -188,15 +214,101 @@ function Sidebar({
     };
   }, []);
 
+  const hydrateProjectSessions = async (project) => {
+    if (!project || loadingSessions[project.name]) {
+      return;
+    }
+
+    setLoadingSessions(prev => ({ ...prev, [project.name]: true }));
+
+    const projectPath = project.fullPath || project.path;
+    const fallbackTotal = typeof project.sessionMeta?.total === 'number' ? project.sessionMeta.total : 0;
+
+    const cursorSessionsPromise = api.cursorSessions(projectPath)
+      .then(async (response) => {
+        if (!response.ok) return [];
+        const result = await response.json();
+        return result.success && Array.isArray(result.sessions) ? result.sessions : [];
+      })
+      .catch(() => []);
+
+    const codexSessionsPromise = api.codexSessions(projectPath)
+      .then(async (response) => {
+        if (!response.ok) return [];
+        const result = await response.json();
+        return result.success && Array.isArray(result.sessions) ? result.sessions : [];
+      })
+      .catch(() => []);
+
+    try {
+      let sessions = Array.isArray(project.sessions) ? project.sessions : [];
+      let sessionMeta = {
+        hasMore: project.sessionMeta?.hasMore !== false,
+        total: fallbackTotal
+      };
+      let claudeHydrated = false;
+
+      try {
+        const claudeResponse = await api.sessions(project.name, 5, 0);
+        if (claudeResponse.ok) {
+          const sessionResult = await claudeResponse.json();
+          sessions = Array.isArray(sessionResult.sessions) ? sessionResult.sessions : [];
+          sessionMeta = {
+            hasMore: sessionResult.hasMore !== false,
+            total: typeof sessionResult.total === 'number' ? sessionResult.total : Math.max(fallbackTotal, sessions.length)
+          };
+          claudeHydrated = true;
+        }
+      } catch (_) {
+        // Keep fallback session meta on request failure
+      }
+
+      if (claudeHydrated && onProjectHydrate) {
+        onProjectHydrate(project.name, {
+          sessions,
+          sessionMeta,
+          sessionsHydrated: true
+        });
+
+        setInitialSessionsLoaded(prev => new Set([...prev, project.name]));
+      }
+    } catch (error) {
+      console.error(`Error loading sessions for project ${project.name}:`, error);
+    } finally {
+      setLoadingSessions(prev => ({ ...prev, [project.name]: false }));
+    }
+
+    Promise.allSettled([cursorSessionsPromise, codexSessionsPromise]).then((results) => {
+      const cursorSessions = results[0].status === 'fulfilled' ? results[0].value : [];
+      const codexSessions = results[1].status === 'fulfilled' ? results[1].value : [];
+
+      if (onProjectHydrate) {
+        onProjectHydrate(project.name, {
+          cursorSessions,
+          cursorSessionsHydrated: true,
+          codexSessions,
+          codexSessionsHydrated: true
+        });
+      }
+    });
+  };
 
   const toggleProject = (projectName) => {
+    const isExpanding = !expandedProjects.has(projectName);
     const newExpanded = new Set();
     // If clicking the already-expanded project, collapse it (newExpanded stays empty)
     // If clicking a different project, expand only that one
-    if (!expandedProjects.has(projectName)) {
+    if (isExpanding) {
       newExpanded.add(projectName);
     }
     setExpandedProjects(newExpanded);
+
+    if (isExpanding && !initialSessionsLoaded.has(projectName)) {
+      const project = projects.find(item => item.name === projectName);
+      if (project) {
+        hydrateProjectSessions(project);
+      }
+    }
   };
 
   // Wrapper to attach project context when session is clicked
@@ -239,6 +351,25 @@ function Sidebar({
       return new Date(s.lastActivity);
     };
     return [...claudeSessions, ...cursorSessions, ...codexSessions].sort((a, b) => normalizeDate(b) - normalizeDate(a));
+  };
+
+  const getProjectSessionCountInfo = (project) => {
+    const hydrated = initialSessionsLoaded.has(project.name) || project.sessionsHydrated;
+    const hasMore = project.sessionMeta?.hasMore !== false;
+
+    if (hydrated) {
+      const sessionCount = getAllSessions(project).length;
+      return {
+        numeric: sessionCount,
+        label: hasMore && sessionCount >= 5 ? `${sessionCount}+` : `${sessionCount}`
+      };
+    }
+
+    const total = typeof project.sessionMeta?.total === 'number' ? project.sessionMeta.total : 0;
+    return {
+      numeric: total,
+      label: hasMore && total >= 5 ? '5+' : `${total}`
+    };
   };
 
   // Helper function to get the last activity date for a project
@@ -434,6 +565,11 @@ function Sidebar({
   };
 
   const loadMoreSessions = async (project) => {
+    if (!initialSessionsLoaded.has(project.name)) {
+      await hydrateProjectSessions(project);
+      return;
+    }
+
     // Check if we can load more sessions
     const canLoadMore = project.sessionMeta?.hasMore !== false;
     
@@ -460,9 +596,14 @@ function Sidebar({
         }));
         
         // Update project metadata if needed
-        if (result.hasMore === false) {
-          // Mark that there are no more sessions to load
-          project.sessionMeta = { ...project.sessionMeta, hasMore: false };
+        if (result.hasMore === false && onProjectHydrate) {
+          onProjectHydrate(project.name, {
+            sessionMeta: {
+              ...project.sessionMeta,
+              hasMore: false
+            },
+            sessionsHydrated: true
+          });
         }
       }
     } catch (error) {
@@ -921,10 +1062,8 @@ function Sidebar({
                                   </div>
                                   <p className="text-xs text-muted-foreground">
                                     {(() => {
-                                      const sessionCount = getAllSessions(project).length;
-                                      const hasMore = project.sessionMeta?.hasMore !== false;
-                                      const count = hasMore && sessionCount >= 5 ? `${sessionCount}+` : sessionCount;
-                                      return `${count} session${count === 1 ? '' : 's'}`;
+                                      const countInfo = getProjectSessionCountInfo(project);
+                                      return `${countInfo.label} session${countInfo.numeric === 1 ? '' : 's'}`;
                                     })()}
                                   </p>
                                 </>
@@ -1065,9 +1204,7 @@ function Sidebar({
                               </div>
                               <div className="text-xs text-muted-foreground">
                                 {(() => {
-                                  const sessionCount = getAllSessions(project).length;
-                                  const hasMore = project.sessionMeta?.hasMore !== false;
-                                  return hasMore && sessionCount >= 5 ? `${sessionCount}+` : sessionCount;
+                                  return getProjectSessionCountInfo(project).label;
                                 })()}
                                 {project.fullPath !== project.displayName && (
                                   <span className="ml-1 opacity-60" title={project.fullPath}>
