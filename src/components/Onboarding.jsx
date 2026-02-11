@@ -6,6 +6,7 @@ import CodexLogo from './CodexLogo';
 import LoginModal from './LoginModal';
 import { authenticatedFetch } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
+import { IS_PLATFORM } from '../constants/config';
 
 const Onboarding = ({ onComplete }) => {
   const [currentStep, setCurrentStep] = useState(0);
@@ -15,8 +16,7 @@ const Onboarding = ({ onComplete }) => {
   const [error, setError] = useState('');
 
   const [activeLoginProvider, setActiveLoginProvider] = useState(null);
-  const isPlatform = import.meta.env.VITE_IS_PLATFORM === 'true';
-  const [selectedProject] = useState({ name: 'default', fullPath: isPlatform ? '/workspace' : '' });
+  const [selectedProject] = useState({ name: 'default', fullPath: IS_PLATFORM ? '/workspace' : '' });
 
   const [claudeAuthStatus, setClaudeAuthStatus] = useState({
     authenticated: false,

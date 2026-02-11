@@ -1,6 +1,7 @@
+import { IS_PLATFORM } from "../constants/config";
+
 // Utility function for authenticated API calls
 export const authenticatedFetch = (url, options = {}) => {
-  const isPlatform = import.meta.env.VITE_IS_PLATFORM === 'true';
   const token = localStorage.getItem('auth-token');
 
   const defaultHeaders = {};
@@ -10,7 +11,7 @@ export const authenticatedFetch = (url, options = {}) => {
     defaultHeaders['Content-Type'] = 'application/json';
   }
 
-  if (!isPlatform && token) {
+  if (!IS_PLATFORM && token) {
     defaultHeaders['Authorization'] = `Bearer ${token}`;
   }
 

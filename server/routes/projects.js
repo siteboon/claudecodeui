@@ -13,7 +13,7 @@ function sanitizeGitError(message, token) {
 }
 
 // Configure allowed workspace root (defaults to user's home directory)
-const WORKSPACES_ROOT = process.env.WORKSPACES_ROOT || os.homedir();
+export const WORKSPACES_ROOT = process.env.WORKSPACES_ROOT || os.homedir();
 
 // System-critical paths that should never be used as workspace directories
 export const FORBIDDEN_PATHS = [
@@ -48,7 +48,7 @@ export const FORBIDDEN_PATHS = [
  * @param {string} requestedPath - The path to validate
  * @returns {Promise<{valid: boolean, resolvedPath?: string, error?: string}>}
  */
-async function validateWorkspacePath(requestedPath) {
+export async function validateWorkspacePath(requestedPath) {
   try {
     // Resolve to absolute path
     let absolutePath = path.resolve(requestedPath);

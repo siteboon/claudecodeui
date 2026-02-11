@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { userDb } from '../database/db.js';
+import { IS_PLATFORM } from '../constants/config.js';
 
 // Get JWT secret from environment or use default (for development)
 const JWT_SECRET = process.env.JWT_SECRET || 'claude-ui-dev-secret-change-in-production';
@@ -21,7 +22,7 @@ const validateApiKey = (req, res, next) => {
 // JWT authentication middleware
 const authenticateToken = async (req, res, next) => {
   // Platform mode:  use single database user
-  if (process.env.VITE_IS_PLATFORM === 'true') {
+  if (IS_PLATFORM) {
     try {
       const user = userDb.getFirstUser();
       if (!user) {
@@ -80,7 +81,7 @@ const generateToken = (user) => {
 // WebSocket authentication function
 const authenticateWebSocket = (token) => {
   // Platform mode: bypass token validation, return first user
-  if (process.env.VITE_IS_PLATFORM === 'true') {
+  if (IS_PLATFORM) {
     try {
       const user = userDb.getFirstUser();
       if (user) {
