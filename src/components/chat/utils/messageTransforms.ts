@@ -87,7 +87,7 @@ export const createCachedDiffCalculator = (): DiffCalculator => {
   const cache = new Map<string, DiffLine[]>();
 
   return (oldStr: string, newStr: string) => {
-    const key = `${oldStr.length}-${newStr.length}-${oldStr.slice(0, 50)}`;
+    const key = JSON.stringify([oldStr, newStr]);
     const cached = cache.get(key);
     if (cached) {
       return cached;
