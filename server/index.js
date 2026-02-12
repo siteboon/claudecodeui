@@ -163,6 +163,10 @@ async function setupProjectsWatcher() {
 
     for (const { provider, rootPath } of PROVIDER_WATCH_PATHS) {
         try {
+            // chokidar v4 emits ENOENT via the "error" event for missing roots and will not auto-recover.
+            // Ensure provider folders exist before creating the watcher so watching stays active.
+            await fsPromises.mkdir(rootPath, { recursive: true });
+
             // Initialize chokidar watcher with optimized settings
             const watcher = chokidar.watch(rootPath, {
                 ignored: WATCHER_IGNORED_PATTERNS,
