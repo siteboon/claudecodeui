@@ -25,6 +25,7 @@ import type {
 import { useFileMentions } from './useFileMentions';
 import { type SlashCommand, useSlashCommands } from './useSlashCommands';
 import type { Project, ProjectSession } from '../../../types/app';
+import { escapeRegExp } from '../utils/chatFormatting';
 
 type PendingViewSession = {
   sessionId: string | null;
@@ -273,7 +274,7 @@ export function useChatComposerState({
       }
 
       try {
-        const commandMatch = input.match(new RegExp(`${command.name}\\s*(.*)`));
+        const commandMatch = input.match(new RegExp(`${escapeRegExp(command.name)}\\s*(.*)`));
         const args =
           commandMatch && commandMatch[1] ? commandMatch[1].trim().split(/\s+/) : [];
 
