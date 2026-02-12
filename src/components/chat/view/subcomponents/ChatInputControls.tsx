@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import ThinkingModeSelector from './ThinkingModeSelector.jsx';
+import ThinkingModeSelector from './ThinkingModeSelector';
 import TokenUsagePie from './TokenUsagePie';
 import type { PermissionMode, Provider } from '../../types/types';
 
