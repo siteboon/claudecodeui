@@ -418,12 +418,20 @@ export function useProjectsState({
         return;
       }
 
-      const refreshedSession = refreshedProject.sessions?.find(
+      const refreshedSession = getProjectSessions(refreshedProject).find(
         (session) => session.id === selectedSession.id,
       );
 
-      if (refreshedSession && serialize(refreshedSession) !== serialize(selectedSession)) {
-        setSelectedSession(refreshedSession);
+      if (refreshedSession) {
+        // Keep provider metadata stable when refreshed payload doesn't include __provider.
+        const normalizedRefreshedSession =
+          refreshedSession.__provider || !selectedSession.__provider
+            ? refreshedSession
+            : { ...refreshedSession, __provider: selectedSession.__provider };
+
+        if (serialize(normalizedRefreshedSession) !== serialize(selectedSession)) {
+          setSelectedSession(normalizedRefreshedSession);
+        }
       }
     } catch (error) {
       console.error('Error refreshing sidebar:', error);
