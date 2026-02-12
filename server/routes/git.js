@@ -1,5 +1,5 @@
 import express from 'express';
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import { promises as fs } from 'fs';
@@ -9,6 +9,43 @@ import { spawnCursor } from '../cursor-cli.js';
 
 const router = express.Router();
 const execAsync = promisify(exec);
+
+function spawnAsync(command, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      ...options,
+      shell: false,
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    child.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    child.on('error', (error) => {
+      reject(error);
+    });
+
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve({ stdout, stderr });
+        return;
+      }
+
+      const error = new Error(`Command failed: ${command} ${args.join(' ')}`);
+      error.code = code;
+      error.stdout = stdout;
+      error.stderr = stderr;
+      reject(error);
+    });
+  });
+}
 
 // Helper function to get the actual project path from the encoded project name
 async function getActualProjectPath(projectName) {
@@ -442,11 +479,17 @@ router.get('/commits', async (req, res) => {
 
   try {
     const projectPath = await getActualProjectPath(project);
+    await validateGitRepository(projectPath);
+    const parsedLimit = Number.parseInt(String(limit), 10);
+    const safeLimit = Number.isFinite(parsedLimit) && parsedLimit > 0
+      ? Math.min(parsedLimit, 100)
+      : 10;
     
     // Get commit log with stats
-    const { stdout } = await execAsync(
-      `git log --pretty=format:'%H|%an|%ae|%ad|%s' --date=relative -n ${limit}`,
-      { cwd: projectPath }
+    const { stdout } = await spawnAsync(
+      'git',
+      ['log', '--pretty=format:%H|%an|%ae|%ad|%s', '--date=relative', '-n', String(safeLimit)],
+      { cwd: projectPath },
     );
     
     const commits = stdout
