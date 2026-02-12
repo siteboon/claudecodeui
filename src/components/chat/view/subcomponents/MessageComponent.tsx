@@ -1,8 +1,12 @@
-// @ts-nocheck
 import React, { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import SessionProviderLogo from '../../../SessionProviderLogo';
-import type { ChatMessage, Provider } from '../../types/types';
+import type {
+  ChatMessage,
+  ClaudePermissionSuggestion,
+  PermissionGrantResult,
+  Provider,
+} from '../../types/types';
 import { Markdown } from './Markdown';
 import { formatUsageLimitText } from '../../utils/chatFormatting';
 import { getClaudePermissionSuggestion } from '../../utils/chatPermissions';
@@ -20,15 +24,23 @@ interface MessageComponentProps {
   index: number;
   prevMessage: ChatMessage | null;
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
-  onFileOpen?: (filePath: string, diffInfo?: any) => void;
+  onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onShowSettings?: () => void;
-  onGrantToolPermission?: (suggestion: any) => any;
+  onGrantToolPermission?: (suggestion: ClaudePermissionSuggestion) => PermissionGrantResult | null | undefined;
   autoExpandTools?: boolean;
   showRawParameters?: boolean;
   showThinking?: boolean;
   selectedProject?: Project | null;
   provider: Provider | string;
 }
+
+type InteractiveOption = {
+  number: string;
+  text: string;
+  isSelected: boolean;
+};
+
+type PermissionGrantState = 'idle' | 'granted' | 'error';
 
 const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFileOpen, onShowSettings, onGrantToolPermission, autoExpandTools, showRawParameters, showThinking, selectedProject, provider }: MessageComponentProps) => {
   const { t } = useTranslation('chat');
@@ -37,10 +49,10 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     (prevMessage.type === 'user') ||
                     (prevMessage.type === 'tool') ||
                     (prevMessage.type === 'error'));
-  const messageRef = React.useRef(null);
+  const messageRef = React.useRef<HTMLDivElement | null>(null);
   const [isExpanded, setIsExpanded] = React.useState(false);
   const permissionSuggestion = getClaudePermissionSuggestion(message, provider);
-  const [permissionGrantState, setPermissionGrantState] = React.useState('idle');
+  const [permissionGrantState, setPermissionGrantState] = React.useState<PermissionGrantState>('idle');
 
 
   React.useEffect(() => {
@@ -56,8 +68,8 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
         entries.forEach((entry) => {
           if (entry.isIntersecting && !isExpanded) {
             setIsExpanded(true);
-            const details = node.querySelectorAll('details');
-            details.forEach(detail => {
+            const details = node.querySelectorAll<HTMLDetailsElement>('details');
+            details.forEach((detail) => {
               detail.open = true;
             });
           }
@@ -140,13 +152,15 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
               <>
                 <div className="flex flex-col">
                   <div className="flex flex-col">
-                    <Markdown className="prose prose-sm max-w-none dark:prose-invert">{message.displayText}</Markdown>
+                    <Markdown className="prose prose-sm max-w-none dark:prose-invert">
+                      {String(message.displayText || '')}
+                    </Markdown>
                   </div>
                 </div>
 
                 {message.toolInput && (
                   <ToolRenderer
-                    toolName={message.toolName}
+                    toolName={message.toolName || 'UnknownTool'}
                     toolInput={message.toolInput}
                     toolResult={message.toolResult}
                     toolId={message.toolId}
@@ -156,13 +170,12 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     selectedProject={selectedProject}
                     autoExpandTools={autoExpandTools}
                     showRawParameters={showRawParameters}
-                    onShowSettings={onShowSettings}
-                    rawToolInput={message.toolInput}
+                    rawToolInput={typeof message.toolInput === 'string' ? message.toolInput : undefined}
                   />
                 )}
                 
                 {/* Tool Result Section */}
-                {message.toolResult && !shouldHideToolResult(message.toolName, message.toolResult) && (
+                {message.toolResult && !shouldHideToolResult(message.toolName || 'UnknownTool', message.toolResult) && (
                   message.toolResult.isError ? (
                     // Error results - red error box with content
                     <div
@@ -235,7 +248,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     // Non-error results - route through ToolRenderer (single source of truth)
                     <div id={`tool-result-${message.toolId}`} className="scroll-mt-4">
                       <ToolRenderer
-                        toolName={message.toolName}
+                        toolName={message.toolName || 'UnknownTool'}
                         toolInput={message.toolInput}
                         toolResult={message.toolResult}
                         toolId={message.toolId}
@@ -263,12 +276,12 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                       Interactive Prompt
                     </h4>
                     {(() => {
-                      const lines = (message.content || '').split('\n').filter(line => line.trim());
-                      const questionLine = lines.find(line => line.includes('?')) || lines[0] || '';
-                      const options = [];
+                      const lines = (message.content || '').split('\n').filter((line) => line.trim());
+                      const questionLine = lines.find((line) => line.includes('?')) || lines[0] || '';
+                      const options: InteractiveOption[] = [];
                       
                       // Parse the menu options
-                      lines.forEach(line => {
+                      lines.forEach((line) => {
                         // Match lines like "❯ 1. Yes" or "  2. No"
                         const optionMatch = line.match(/[❯\s]*(\d+)\.\s+(.+)/);
                         if (optionMatch) {
@@ -393,7 +406,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                           </div>
                         </div>
                       );
-                    } catch (e) {
+                    } catch {
                       // Not valid JSON, fall through to normal rendering
                     }
                   }
@@ -425,5 +438,3 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
 });
 
 export default MessageComponent;
-
-
