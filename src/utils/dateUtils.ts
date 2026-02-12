@@ -1,4 +1,6 @@
-export const formatTimeAgo = (dateString: string, currentTime: Date, t:any) => {
+import { TFunction } from 'i18next';
+
+export const formatTimeAgo = (dateString: string, currentTime: Date, t: TFunction) => {
   const date = new Date(dateString);
   const now = currentTime;
 
