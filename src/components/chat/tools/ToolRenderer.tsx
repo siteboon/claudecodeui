@@ -181,7 +181,10 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
 
     // For edit tools, make the title (filename) clickable to open the file
     const handleTitleClick = (toolName === 'Edit' || toolName === 'Write' || toolName === 'ApplyPatch') && contentProps.filePath && onFileOpen
-      ? () => onFileOpen(contentProps.filePath)
+      ? () => onFileOpen(contentProps.filePath, {
+          old_string: contentProps.oldContent,
+          new_string: contentProps.newContent
+        })
       : undefined;
 
     return (
