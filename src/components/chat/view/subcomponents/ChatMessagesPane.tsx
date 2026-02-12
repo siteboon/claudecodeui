@@ -1,11 +1,12 @@
 import { useTranslation } from 'react-i18next';
 import { useCallback, useRef } from 'react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
-import SessionProviderLogo from '../../../SessionProviderLogo';
+
 import MessageComponent from './MessageComponent';
 import ProviderSelectionEmptyState from './ProviderSelectionEmptyState';
 import type { ChatMessage, Provider } from '../../types/types';
 import type { Project, ProjectSession } from '../../../../types/app';
+import AssistantThinkingIndicator from './AssistantThinkingIndicator';
 
 interface ChatMessagesPaneProps {
   scrollContainerRef: RefObject<HTMLDivElement>;
@@ -82,36 +83,7 @@ const getIntrinsicMessageKey = (message: ChatMessage): string | null => {
   return `message-${message.type}-${timestamp}-${toolName}-${contentPreview}`;
 };
 
-function AssistantThinkingIndicator() {
-  const selectedProvider = (localStorage.getItem('selected-provider') || 'claude') as Provider;
 
-  return (
-    <div className="chat-message assistant">
-      <div className="w-full">
-        <div className="flex items-center space-x-3 mb-2">
-          <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0 p-1 bg-transparent">
-            <SessionProviderLogo provider={selectedProvider} className="w-full h-full" />
-          </div>
-          <div className="text-sm font-medium text-gray-900 dark:text-white">
-            {selectedProvider === 'cursor' ? 'Cursor' : selectedProvider === 'codex' ? 'Codex' : 'Claude'}
-          </div>
-        </div>
-        <div className="w-full text-sm text-gray-500 dark:text-gray-400 pl-3 sm:pl-0">
-          <div className="flex items-center space-x-1">
-            <div className="animate-pulse">.</div>
-            <div className="animate-pulse" style={{ animationDelay: '0.2s' }}>
-              .
-            </div>
-            <div className="animate-pulse" style={{ animationDelay: '0.4s' }}>
-              .
-            </div>
-            <span className="ml-2">Thinking...</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default function ChatMessagesPane({
   scrollContainerRef,
