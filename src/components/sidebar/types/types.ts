@@ -1,5 +1,5 @@
 import type React from 'react';
-import type { LoadingProgress, Project, ProjectSession, SessionProvider } from '../../types/app';
+import type { LoadingProgress, Project, ProjectSession, SessionProvider } from '../../../types/app';
 
 export type ProjectSortOrder = 'name' | 'date';
 

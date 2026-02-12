@@ -439,8 +439,8 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
           // If content is an array (typical for agent responses with multiple text blocks)
           if (Array.isArray(result.content)) {
             const textContent = result.content
-              .filter(item => item.type === 'text')
-              .map(item => item.text)
+              .filter((item: any) => item.type === 'text')
+              .map((item: any) => item.text)
               .join('\n\n');
             return { content: textContent || 'No response text' };
           }
