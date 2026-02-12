@@ -1,6 +1,6 @@
 /**
  * Centralized tool configuration registry
- * Defines display behavior for all tool types using config-driven architecture
+ * Defines display behavior for all tool types 
  */
 
 export interface ToolDisplayConfig {
@@ -367,6 +367,64 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
       contentType: 'task',
       getContentProps: (result) => ({
         content: String(result.content || '')
+      })
+    }
+  },
+
+  // ============================================================================
+  // SUBAGENT TASK TOOL
+  // ============================================================================
+
+  Task: {
+    input: {
+      type: 'collapsible',
+      title: (input) => {
+        const subagentType = input.subagent_type || 'Agent';
+        const description = input.description || 'Running task';
+        return `${subagentType}: ${description}`;
+      },
+      defaultOpen: true,
+      contentType: 'markdown',
+      getContentProps: (input) => {
+        // Format the subagent task details in a readable way
+        const parts = [];
+
+        if (input.subagent_type) {
+          parts.push(`**Agent Type:** ${input.subagent_type}`);
+        }
+
+        if (input.description) {
+          parts.push(`**Description:** ${input.description}`);
+        }
+
+        if (input.model) {
+          parts.push(`**Model:** ${input.model}`);
+        }
+
+        if (input.prompt) {
+          parts.push(`**Prompt:**\n\`\`\`\n${input.prompt}\n\`\`\``);
+        }
+
+        if (input.resume) {
+          parts.push(`**Resuming from:** ${input.resume}`);
+        }
+
+        return {
+          content: parts.join('\n\n')
+        };
+      },
+      colorScheme: {
+        border: 'border-purple-500 dark:border-purple-400',
+        icon: 'text-purple-500 dark:text-purple-400'
+      }
+    },
+    result: {
+      type: 'collapsible',
+      title: 'Agent Response',
+      defaultOpen: true,
+      contentType: 'markdown',
+      getContentProps: (result) => ({
+        content: String(result.content || result || '')
       })
     }
   },

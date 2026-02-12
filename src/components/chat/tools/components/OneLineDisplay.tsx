@@ -85,24 +85,28 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
   // Terminal style: dark pill only around the command
   if (isTerminal) {
     return (
-      <div className="group flex items-start gap-2 my-1">
-        <div className="flex items-center gap-1.5 flex-shrink-0 pt-0.5">
-          <svg className="w-3 h-3 text-green-500 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-        </div>
-        <div className="flex-1 min-w-0 flex items-start gap-2">
-          <div className="bg-gray-900 dark:bg-black rounded px-2.5 py-1 flex-1 min-w-0">
-            <code className={`text-xs text-green-400 font-mono ${wrapText ? 'whitespace-pre-wrap break-all' : 'block truncate'}`}>
-              <span className="text-green-600 dark:text-green-500 select-none">$ </span>{value}
-            </code>
+      <div className="group my-1">
+        <div className="flex items-start gap-2">
+          <div className="flex items-center gap-1.5 flex-shrink-0 pt-0.5">
+            <svg className="w-3 h-3 text-green-500 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
           </div>
-          {action === 'copy' && renderCopyButton()}
+          <div className="flex-1 min-w-0 flex items-start gap-2">
+            <div className="bg-gray-900 dark:bg-black rounded px-2.5 py-1 flex-1 min-w-0">
+              <code className={`text-xs text-green-400 font-mono ${wrapText ? 'whitespace-pre-wrap break-all' : 'block truncate'}`}>
+                <span className="text-green-600 dark:text-green-500 select-none">$ </span>{value}
+              </code>
+            </div>
+            {action === 'copy' && renderCopyButton()}
+          </div>
         </div>
         {secondary && (
-          <span className="text-[11px] text-gray-400 dark:text-gray-500 italic flex-shrink-0 pt-1">
-            {secondary}
-          </span>
+          <div className="ml-7 mt-1">
+            <span className="text-[11px] text-gray-400 dark:text-gray-500 italic">
+              {secondary}
+            </span>
+          </div>
         )}
       </div>
     );

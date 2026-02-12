@@ -29,6 +29,7 @@ function getToolCategory(toolName: string): string {
   if (toolName === 'Bash') return 'bash';
   if (['TodoWrite', 'TodoRead'].includes(toolName)) return 'todo';
   if (['TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet'].includes(toolName)) return 'task';
+  if (toolName === 'Task') return 'agent';  // Subagent task
   if (toolName === 'exit_plan_mode' || toolName === 'ExitPlanMode') return 'plan';
   return 'default';
 }
