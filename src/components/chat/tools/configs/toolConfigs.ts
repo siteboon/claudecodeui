@@ -343,7 +343,7 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
       title: 'Task list',
       contentType: 'task',
       getContentProps: (result) => ({
-        content: String(result.content || '')
+        content: String(result?.content || '')
       })
     }
   },
@@ -366,7 +366,7 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
       title: 'Task details',
       contentType: 'task',
       getContentProps: (result) => ({
-        content: String(result.content || '')
+        content: String(result?.content || '')
       })
     }
   },
@@ -535,7 +535,7 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
       type: 'collapsible',
       contentType: 'text',
       getContentProps: (result) => ({
-        content: String(result.content || ''),
+        content: String(result?.content || ''),
         format: 'plain'
       })
     }
