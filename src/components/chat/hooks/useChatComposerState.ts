@@ -129,6 +129,7 @@ export function useChatComposerState({
   const handleSubmitRef = useRef<
     ((event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>) => Promise<void>) | null
   >(null);
+  const inputValueRef = useRef(input);
 
   const handleBuiltInCommand = useCallback(
     (result: CommandExecutionResult) => {
@@ -258,13 +259,16 @@ export function useChatComposerState({
       }
     }
 
-    setInput(content || '');
+    const commandContent = content || '';
+    setInput(commandContent);
+    inputValueRef.current = commandContent;
 
+    // Defer submit to next tick so the command text is reflected in UI before dispatching.
     setTimeout(() => {
       if (handleSubmitRef.current) {
         handleSubmitRef.current(createFakeSubmitEvent());
       }
-    }, 50);
+    }, 0);
   }, [setChatMessages]);
 
   const executeCommand = useCallback(
@@ -279,7 +283,7 @@ export function useChatComposerState({
           commandMatch && commandMatch[1] ? commandMatch[1].trim().split(/\s+/) : [];
 
         const context = {
-          projectPath: selectedProject.path,
+          projectPath: selectedProject.fullPath || selectedProject.path,
           projectName: selectedProject.name,
           sessionId: currentSessionId,
           provider,
@@ -314,11 +318,11 @@ export function useChatComposerState({
         const result = (await response.json()) as CommandExecutionResult;
         if (result.type === 'builtin') {
           handleBuiltInCommand(result);
+          setInput('');
+          inputValueRef.current = '';
         } else if (result.type === 'custom') {
           await handleCustomCommand(result);
         }
-
-        setInput('');
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
         console.error('Error executing command:', error);
@@ -465,14 +469,15 @@ export function useChatComposerState({
       event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,
     ) => {
       event.preventDefault();
-      if (!input.trim() || isLoading || !selectedProject) {
+      const currentInput = inputValueRef.current;
+      if (!currentInput.trim() || isLoading || !selectedProject) {
         return;
       }
 
-      let messageContent = input;
+      let messageContent = currentInput;
       const selectedThinkingMode = thinkingModes.find((mode: { id: string; prefix?: string }) => mode.id === thinkingMode);
       if (selectedThinkingMode && selectedThinkingMode.prefix) {
-        messageContent = `${selectedThinkingMode.prefix}: ${input}`;
+        messageContent = `${selectedThinkingMode.prefix}: ${currentInput}`;
       }
 
       let uploadedImages: unknown[] = [];
@@ -512,7 +517,7 @@ export function useChatComposerState({
 
       const userMessage: ChatMessage = {
         type: 'user',
-        content: input,
+        content: currentInput,
         images: uploadedImages as any,
         timestamp: new Date(),
       };
@@ -566,6 +571,7 @@ export function useChatComposerState({
       };
 
       const toolsSettings = getToolsSettings();
+      const resolvedProjectPath = selectedProject.fullPath || selectedProject.path || '';
 
       if (provider === 'cursor') {
         sendMessage({
@@ -573,8 +579,8 @@ export function useChatComposerState({
           command: messageContent,
           sessionId: effectiveSessionId,
           options: {
-            cwd: selectedProject.fullPath || selectedProject.path,
-            projectPath: selectedProject.fullPath || selectedProject.path,
+            cwd: resolvedProjectPath,
+            projectPath: resolvedProjectPath,
             sessionId: effectiveSessionId,
             resume: Boolean(effectiveSessionId),
             model: cursorModel,
@@ -588,8 +594,8 @@ export function useChatComposerState({
           command: messageContent,
           sessionId: effectiveSessionId,
           options: {
-            cwd: selectedProject.fullPath || selectedProject.path,
-            projectPath: selectedProject.fullPath || selectedProject.path,
+            cwd: resolvedProjectPath,
+            projectPath: resolvedProjectPath,
             sessionId: effectiveSessionId,
             resume: Boolean(effectiveSessionId),
             model: codexModel,
@@ -601,10 +607,10 @@ export function useChatComposerState({
           type: 'claude-command',
           command: messageContent,
           options: {
-            projectPath: selectedProject.path,
-            cwd: selectedProject.fullPath,
-            sessionId: currentSessionId,
-            resume: Boolean(currentSessionId),
+            projectPath: resolvedProjectPath,
+            cwd: resolvedProjectPath,
+            sessionId: effectiveSessionId,
+            resume: Boolean(effectiveSessionId),
             toolsSettings,
             permissionMode,
             model: claudeModel,
@@ -614,6 +620,7 @@ export function useChatComposerState({
       }
 
       setInput('');
+      inputValueRef.current = '';
       resetCommandMenuState();
       setAttachedImages([]);
       setUploadingImages(new Map());
@@ -633,7 +640,6 @@ export function useChatComposerState({
       codexModel,
       currentSessionId,
       cursorModel,
-      input,
       isLoading,
       onSessionActive,
       pendingViewSessionRef,
@@ -658,11 +664,19 @@ export function useChatComposerState({
   }, [handleSubmit]);
 
   useEffect(() => {
+    inputValueRef.current = input;
+  }, [input]);
+
+  useEffect(() => {
     if (!selectedProject) {
       return;
     }
     const savedInput = safeLocalStorage.getItem(`draft_input_${selectedProject.name}`) || '';
-    setInput((previous) => (previous === savedInput ? previous : savedInput));
+    setInput((previous) => {
+      const next = previous === savedInput ? previous : savedInput;
+      inputValueRef.current = next;
+      return next;
+    });
   }, [selectedProject?.name]);
 
   useEffect(() => {
@@ -680,12 +694,13 @@ export function useChatComposerState({
     if (!textareaRef.current) {
       return;
     }
+    // Re-run when input changes so restored drafts get the same autosize behavior as typed text.
     textareaRef.current.style.height = 'auto';
     textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
     const lineHeight = parseInt(window.getComputedStyle(textareaRef.current).lineHeight);
     const expanded = textareaRef.current.scrollHeight > lineHeight * 2;
     setIsTextareaExpanded(expanded);
-  }, []);
+  }, [input]);
 
   useEffect(() => {
     if (!textareaRef.current || input.trim()) {
@@ -701,6 +716,7 @@ export function useChatComposerState({
       const cursorPos = event.target.selectionStart;
 
       setInput(newValue);
+      inputValueRef.current = newValue;
       setCursorPosition(cursorPos);
 
       if (!newValue.trim()) {
@@ -779,6 +795,7 @@ export function useChatComposerState({
 
   const handleClearInput = useCallback(() => {
     setInput('');
+    inputValueRef.current = '';
     resetCommandMenuState();
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -827,6 +844,7 @@ export function useChatComposerState({
 
     setInput((previousInput) => {
       const newInput = previousInput.trim() ? `${previousInput} ${text}` : text;
+      inputValueRef.current = newInput;
 
       setTimeout(() => {
         if (!textareaRef.current) {
