@@ -86,6 +86,11 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
   }, [autoExpandTools, isExpanded, message.isToolUse]);
 
   const formattedTime = useMemo(() => new Date(message.timestamp).toLocaleTimeString(), [message.timestamp]);
+  const shouldHideThinkingMessage = Boolean(message.isThinking && !showThinking);
+
+  if (shouldHideThinkingMessage) {
+    return null;
+  }
 
   return (
     <div

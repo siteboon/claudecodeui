@@ -1,4 +1,4 @@
-import { useEffect, useReducer } from 'react';
+import { useEffect, useReducer, useRef } from 'react';
 
 type UiPreferences = {
   autoExpandTools: boolean;
@@ -43,6 +43,13 @@ const DEFAULTS: UiPreferences = {
 
 const PREFERENCE_KEYS = Object.keys(DEFAULTS) as UiPreferenceKey[];
 const VALID_KEYS = new Set<UiPreferenceKey>(PREFERENCE_KEYS); // prevents unknown keys from being written
+const SYNC_EVENT = 'ui-preferences:sync';
+
+type SyncEventDetail = {
+  storageKey: string;
+  sourceId: string;
+  value: Partial<Record<UiPreferenceKey, unknown>>;
+};
 
 const parseBoolean = (value: unknown, fallback: boolean): boolean => {
   if (typeof value === 'boolean') {
@@ -140,6 +147,7 @@ function reducer(state: UiPreferences, action: UiPreferencesAction): UiPreferenc
 }
 
 export function useUiPreferences(storageKey = 'uiPreferences') {
+  const instanceIdRef = useRef(`ui-preferences-${Math.random().toString(36).slice(2)}`);
   const [state, dispatch] = useReducer(
     reducer,
     storageKey,
@@ -152,7 +160,61 @@ export function useUiPreferences(storageKey = 'uiPreferences') {
     }
 
     localStorage.setItem(storageKey, JSON.stringify(state));
+
+    window.dispatchEvent(
+      new CustomEvent<SyncEventDetail>(SYNC_EVENT, {
+        detail: {
+          storageKey,
+          sourceId: instanceIdRef.current,
+          value: state,
+        },
+      })
+    );
   }, [state, storageKey]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const applyExternalUpdate = (value: unknown) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return;
+      }
+      dispatch({ type: 'set_many', value: value as Partial<Record<UiPreferenceKey, unknown>> });
+    };
+
+    const handleStorageChange = (event: StorageEvent) => {
+      if (event.key !== storageKey || event.newValue === null) {
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(event.newValue);
+        applyExternalUpdate(parsed);
+      } catch {
+        // Ignore malformed storage updates.
+      }
+    };
+
+    const handleSyncEvent = (event: Event) => {
+      const syncEvent = event as CustomEvent<SyncEventDetail>;
+      const detail = syncEvent.detail;
+      if (!detail || detail.storageKey !== storageKey || detail.sourceId === instanceIdRef.current) {
+        return;
+      }
+
+      applyExternalUpdate(detail.value);
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener(SYNC_EVENT, handleSyncEvent as EventListener);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener(SYNC_EVENT, handleSyncEvent as EventListener);
+    };
+  }, [storageKey]);
 
   const setPreference = (key: UiPreferenceKey, value: unknown) => {
     dispatch({ type: 'set', key, value });
