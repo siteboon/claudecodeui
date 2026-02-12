@@ -381,28 +381,32 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
       title: (input) => {
         const subagentType = input.subagent_type || 'Agent';
         const description = input.description || 'Running task';
-        return `${subagentType}: ${description}`;
+        return `Subagent / ${subagentType}: ${description}`;
       },
       defaultOpen: true,
       contentType: 'markdown',
       getContentProps: (input) => {
-        // Format the subagent task details in a readable way
+        // If only prompt exists (and required fields), show just the prompt
+        // Otherwise show all available fields
+        const hasOnlyPrompt = input.prompt &&
+          !input.model &&
+          !input.resume;
+
+        if (hasOnlyPrompt) {
+          return {
+            content: input.prompt || ''
+          };
+        }
+
+        // Format multiple fields
         const parts = [];
-
-        if (input.subagent_type) {
-          parts.push(`**Agent Type:** ${input.subagent_type}`);
-        }
-
-        if (input.description) {
-          parts.push(`**Description:** ${input.description}`);
-        }
 
         if (input.model) {
           parts.push(`**Model:** ${input.model}`);
         }
 
         if (input.prompt) {
-          parts.push(`**Prompt:**\n\`\`\`\n${input.prompt}\n\`\`\``);
+          parts.push(`**Prompt:**\n${input.prompt}`);
         }
 
         if (input.resume) {
@@ -420,12 +424,32 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     },
     result: {
       type: 'collapsible',
-      title: 'Agent Response',
+      title: (result) => {
+        // Check if result has content with type array (agent results often have this structure)
+        if (result && result.content && Array.isArray(result.content)) {
+          return 'Subagent Response';
+        }
+        return 'Subagent Result';
+      },
       defaultOpen: true,
       contentType: 'markdown',
-      getContentProps: (result) => ({
-        content: String(result.content || result || '')
-      })
+      getContentProps: (result) => {
+        // Handle agent results which may have complex structure
+        if (result && result.content) {
+          // If content is an array (typical for agent responses with multiple text blocks)
+          if (Array.isArray(result.content)) {
+            const textContent = result.content
+              .filter(item => item.type === 'text')
+              .map(item => item.text)
+              .join('\n\n');
+            return { content: textContent || 'No response text' };
+          }
+          // If content is already a string
+          return { content: String(result.content) };
+        }
+        // Fallback to string representation
+        return { content: String(result || 'No response') };
+      }
     }
   },
 
