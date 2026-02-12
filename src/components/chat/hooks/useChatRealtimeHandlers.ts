@@ -416,15 +416,23 @@ export function useChatRealtimeHandlers({
       }
 
       case 'claude-interactive-prompt':
-        setChatMessages((previous) => [
-          ...previous,
-          {
-            type: 'assistant',
-            content: latestMessage.data,
-            timestamp: new Date(),
-            isInteractivePrompt: true,
-          },
-        ]);
+        // Interactive prompts are parsed/rendered as text in the UI.
+        // Normalize to string to keep ChatMessage.content shape consistent.
+        {
+          const interactiveContent =
+            typeof latestMessage.data === 'string'
+              ? latestMessage.data
+              : JSON.stringify(latestMessage.data ?? '', null, 2);
+          setChatMessages((previous) => [
+            ...previous,
+            {
+              type: 'assistant',
+              content: interactiveContent,
+              timestamp: new Date(),
+              isInteractivePrompt: true,
+            },
+          ]);
+        }
         break;
 
       case 'claude-permission-request':
