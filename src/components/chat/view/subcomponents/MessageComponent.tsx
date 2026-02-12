@@ -73,7 +73,6 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
     };
   }, [autoExpandTools, isExpanded, message.isToolUse]);
 
-  const selectedProvider = useMemo(() => localStorage.getItem('selected-provider') || 'claude', []);
   const formattedTime = useMemo(() => new Date(message.timestamp).toLocaleTimeString(), [message.timestamp]);
 
   return (
@@ -126,11 +125,11 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 </div>
               ) : (
                 <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0 p-1">
-                  <SessionProviderLogo provider={selectedProvider} className="w-full h-full" />
+                  <SessionProviderLogo provider={provider} className="w-full h-full" />
                 </div>
               )}
               <div className="text-sm font-medium text-gray-900 dark:text-white">
-                {message.type === 'error' ? t('messageTypes.error') : message.type === 'tool' ? t('messageTypes.tool') : (selectedProvider === 'cursor' ? t('messageTypes.cursor') : selectedProvider === 'codex' ? t('messageTypes.codex') : t('messageTypes.claude'))}
+                {message.type === 'error' ? t('messageTypes.error') : message.type === 'tool' ? t('messageTypes.tool') : (provider === 'cursor' ? t('messageTypes.cursor') : provider === 'codex' ? t('messageTypes.codex') : t('messageTypes.claude'))}
               </div>
             </div>
           )}
