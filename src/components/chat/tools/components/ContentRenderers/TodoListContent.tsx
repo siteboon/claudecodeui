@@ -3,9 +3,10 @@ import TodoList from '../../../../TodoList';
 
 interface TodoListContentProps {
   todos: Array<{
+    id?: string;
     content: string;
     status: string;
-    activeForm?: string;
+    priority?: string;
   }>;
   isResult?: boolean;
 }
