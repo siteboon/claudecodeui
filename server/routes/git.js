@@ -60,19 +60,16 @@ async function validateGitRepository(projectPath) {
   }
 
   try {
-    // Use --show-toplevel to get the root of the git repository
-    const { stdout: gitRoot } = await execAsync('git rev-parse --show-toplevel', { cwd: projectPath });
-    const normalizedGitRoot = path.resolve(gitRoot.trim());
-    const normalizedProjectPath = path.resolve(projectPath);
-    
-    // Ensure the git root matches our project path (prevent using parent git repos)
-    if (normalizedGitRoot !== normalizedProjectPath) {
-      throw new Error(`Project directory is not a git repository. This directory is inside a git repository at ${normalizedGitRoot}, but git operations should be run from the repository root.`);
+    // Allow any directory that is inside a work tree (repo root or nested folder).
+    const { stdout: insideWorkTreeOutput } = await execAsync('git rev-parse --is-inside-work-tree', { cwd: projectPath });
+    const isInsideWorkTree = insideWorkTreeOutput.trim() === 'true';
+    if (!isInsideWorkTree) {
+      throw new Error('Not inside a git work tree');
     }
-  } catch (error) {
-    if (error.message.includes('Project directory is not a git repository')) {
-      throw error;
-    }
+
+    // Ensure git can resolve the repository root for this directory.
+    await execAsync('git rev-parse --show-toplevel', { cwd: projectPath });
+  } catch {
     throw new Error('Not a git repository. This directory does not contain a .git folder. Initialize a git repository with "git init" to use source control features.');
   }
 }
