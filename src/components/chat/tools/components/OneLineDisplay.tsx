@@ -25,6 +25,52 @@ interface OneLineDisplayProps {
   toolId?: string;
 }
 
+// Fallback for environments where the async Clipboard API is unavailable or blocked.
+const copyWithLegacyExecCommand = (text: string): boolean => {
+  if (typeof document === 'undefined' || !document.body) {
+    return false;
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  textarea.style.left = '-9999px';
+  document.body.appendChild(textarea);
+  textarea.select();
+  textarea.setSelectionRange(0, text.length);
+
+  let copied = false;
+  try {
+    copied = document.execCommand('copy');
+  } catch {
+    copied = false;
+  } finally {
+    document.body.removeChild(textarea);
+  }
+
+  return copied;
+};
+
+const copyTextToClipboard = async (text: string): Promise<boolean> => {
+  if (
+    typeof navigator !== 'undefined' &&
+    typeof window !== 'undefined' &&
+    window.isSecureContext &&
+    navigator.clipboard?.writeText
+  ) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // Fall back below when writeText is rejected (permissions/insecure contexts/browser limits).
+    }
+  }
+
+  return copyWithLegacyExecCommand(text);
+};
+
 /**
  * Unified one-line display for simple tool inputs and results
  * Used by: Bash, Read, Grep/Glob (minimized), TodoRead, etc.
@@ -53,9 +99,12 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
   const [copied, setCopied] = useState(false);
   const isTerminal = style === 'terminal';
 
-  const handleAction = () => {
+  const handleAction = async () => {
     if (action === 'copy' && value) {
-      navigator.clipboard.writeText(value);
+      const didCopy = await copyTextToClipboard(value);
+      if (!didCopy) {
+        return;
+      }
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } else if (onAction) {
