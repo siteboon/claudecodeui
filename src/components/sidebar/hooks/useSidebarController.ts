@@ -63,6 +63,7 @@ export function useSidebarController({
   const [currentTime, setCurrentTime] = useState(new Date());
   const [projectSortOrder, setProjectSortOrder] = useState<ProjectSortOrder>('name');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [projectHasMoreOverrides, setProjectHasMoreOverrides] = useState<Record<string, boolean>>({});
   const [editingSession, setEditingSession] = useState<string | null>(null);
   const [editingSessionName, setEditingSessionName] = useState('');
   const [searchFilter, setSearchFilter] = useState('');
@@ -85,6 +86,7 @@ export function useSidebarController({
   useEffect(() => {
     setAdditionalSessions({});
     setInitialSessionsLoaded(new Set());
+    setProjectHasMoreOverrides({});
   }, [projects]);
 
   useEffect(() => {
@@ -195,9 +197,25 @@ export function useSidebarController({
     [additionalSessions],
   );
 
+  const projectsWithSessionMeta = useMemo(
+    () =>
+      projects.map((project) => {
+        const hasMoreOverride = projectHasMoreOverrides[project.name];
+        if (hasMoreOverride === undefined) {
+          return project;
+        }
+
+        return {
+          ...project,
+          sessionMeta: { ...project.sessionMeta, hasMore: hasMoreOverride },
+        };
+      }),
+    [projectHasMoreOverrides, projects],
+  );
+
   const sortedProjects = useMemo(
-    () => sortProjects(projects, projectSortOrder, starredProjects, additionalSessions),
-    [additionalSessions, projectSortOrder, projects, starredProjects],
+    () => sortProjects(projectsWithSessionMeta, projectSortOrder, starredProjects, additionalSessions),
+    [additionalSessions, projectSortOrder, projectsWithSessionMeta, starredProjects],
   );
 
   const filteredProjects = useMemo(
@@ -324,7 +342,9 @@ export function useSidebarController({
 
   const loadMoreSessions = useCallback(
     async (project: Project) => {
-      const canLoadMore = project.sessionMeta?.hasMore === true;
+      const hasMoreOverride = projectHasMoreOverrides[project.name];
+      const canLoadMore =
+        hasMoreOverride !== undefined ? hasMoreOverride : project.sessionMeta?.hasMore === true;
       if (!canLoadMore || loadingSessions[project.name]) {
         return;
       }
@@ -351,7 +371,8 @@ export function useSidebarController({
         }));
 
         if (result.hasMore === false) {
-          project.sessionMeta = { ...project.sessionMeta, hasMore: false };
+          // Keep hasMore state in local hook state instead of mutating the project prop object.
+          setProjectHasMoreOverrides((prev) => ({ ...prev, [project.name]: false }));
         }
       } catch (error) {
         console.error('Error loading more sessions:', error);
@@ -359,7 +380,7 @@ export function useSidebarController({
         setLoadingSessions((prev) => ({ ...prev, [project.name]: false }));
       }
     },
-    [additionalSessions, loadingSessions],
+    [additionalSessions, loadingSessions, projectHasMoreOverrides],
   );
 
   const handleProjectSelect = useCallback(
