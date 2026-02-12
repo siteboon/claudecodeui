@@ -3,14 +3,13 @@ import { useTranslation } from 'react-i18next';
 import SessionProviderLogo from '../../../SessionProviderLogo';
 import NextTaskBanner from '../../../NextTaskBanner.jsx';
 import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '../../../../../shared/modelConstants';
-import type { Provider } from '../../types/types';
-import type { ProjectSession } from '../../../../types/app';
+import type { ProjectSession, SessionProvider } from '../../../../types/app';
 
 interface ProviderSelectionEmptyStateProps {
   selectedSession: ProjectSession | null;
   currentSessionId: string | null;
-  provider: Provider | string;
-  setProvider: (next: Provider | string) => void;
+  provider: SessionProvider;
+  setProvider: (next: SessionProvider) => void;
   textareaRef: React.RefObject<HTMLTextAreaElement>;
   claudeModel: string;
   setClaudeModel: (model: string) => void;
@@ -42,8 +41,10 @@ export default function ProviderSelectionEmptyState({
   setInput,
 }: ProviderSelectionEmptyStateProps) {
   const { t } = useTranslation('chat');
+  // Reuse one translated prompt so task-start behavior stays consistent across empty and session states.
+  const nextTaskPrompt = t('tasks.nextTaskPrompt', { defaultValue: 'Start the next task' });
 
-  const selectProvider = (nextProvider: Provider) => {
+  const selectProvider = (nextProvider: SessionProvider) => {
     setProvider(nextProvider);
     localStorage.setItem('selected-provider', nextProvider);
     setTimeout(() => textareaRef.current?.focus(), 100);
@@ -202,7 +203,7 @@ export default function ProviderSelectionEmptyState({
 
           {provider && tasksEnabled && isTaskMasterInstalled && (
             <div className="mt-4 px-4 sm:px-0">
-              <NextTaskBanner onStartTask={() => setInput('Start the next task')} onShowAllTasks={onShowAllTasks} />
+              <NextTaskBanner onStartTask={() => setInput(nextTaskPrompt)} onShowAllTasks={onShowAllTasks} />
             </div>
           )}
         </div>
@@ -214,7 +215,7 @@ export default function ProviderSelectionEmptyState({
 
           {tasksEnabled && isTaskMasterInstalled && (
             <div className="mt-4 px-4 sm:px-0">
-              <NextTaskBanner onStartTask={() => setInput('Start the next task')} onShowAllTasks={onShowAllTasks} />
+              <NextTaskBanner onStartTask={() => setInput(nextTaskPrompt)} onShowAllTasks={onShowAllTasks} />
             </div>
           )}
         </div>

@@ -4,8 +4,8 @@ import type { Dispatch, RefObject, SetStateAction } from 'react';
 
 import MessageComponent from './MessageComponent';
 import ProviderSelectionEmptyState from './ProviderSelectionEmptyState';
-import type { ChatMessage, Provider } from '../../types/types';
-import type { Project, ProjectSession } from '../../../../types/app';
+import type { ChatMessage } from '../../types/types';
+import type { Project, ProjectSession, SessionProvider } from '../../../../types/app';
 import AssistantThinkingIndicator from './AssistantThinkingIndicator';
 import { getIntrinsicMessageKey } from '../../utils/messageKeys';
 
@@ -17,8 +17,8 @@ interface ChatMessagesPaneProps {
   chatMessages: ChatMessage[];
   selectedSession: ProjectSession | null;
   currentSessionId: string | null;
-  provider: Provider | string;
-  setProvider: (provider: Provider | string) => void;
+  provider: SessionProvider;
+  setProvider: (provider: SessionProvider) => void;
   textareaRef: RefObject<HTMLTextAreaElement>;
   claudeModel: string;
   setClaudeModel: (model: string) => void;
@@ -201,7 +201,7 @@ export default function ChatMessagesPane({
         </>
       )}
 
-      {isLoading && <AssistantThinkingIndicator />}
+      {isLoading && <AssistantThinkingIndicator selectedProvider={provider} />}
     </div>
   );
 }

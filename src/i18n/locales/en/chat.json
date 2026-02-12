@@ -106,7 +106,9 @@
       "enter": "Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands"
     },
     "clickToChangeMode": "Click to change permission mode (or press Tab in input)",
-    "showAllCommands": "Show all commands"
+    "showAllCommands": "Show all commands",
+    "clearInput": "Clear input",
+    "scrollToBottom": "Scroll to bottom"
   },
   "thinkingMode": {
     "selector": {
@@ -201,5 +203,11 @@
     "runCommand": "Run {{command}} in {{projectName}}",
     "startCli": "Starting Claude CLI in {{projectName}}",
     "defaultCommand": "command"
+  },
+  "projectSelection": {
+    "startChatWithProvider": "Select a project to start chatting with {{provider}}"
+  },
+  "tasks": {
+    "nextTaskPrompt": "Start the next task"
   }
 }

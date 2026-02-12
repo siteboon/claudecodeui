@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { authenticatedFetch } from '../../../utils/api';
 import { CLAUDE_MODELS, CODEX_MODELS, CURSOR_MODELS } from '../../../../shared/modelConstants';
 import type { PendingPermissionRequest, PermissionMode, Provider } from '../types/types';
-import type { ProjectSession } from '../../../types/app';
+import type { ProjectSession, SessionProvider } from '../../../types/app';
 
 interface UseChatProviderStateArgs {
   selectedSession: ProjectSession | null;
@@ -11,8 +11,8 @@ interface UseChatProviderStateArgs {
 export function useChatProviderState({ selectedSession }: UseChatProviderStateArgs) {
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('default');
   const [pendingPermissionRequests, setPendingPermissionRequests] = useState<PendingPermissionRequest[]>([]);
-  const [provider, setProvider] = useState<Provider>(() => {
-    return (localStorage.getItem('selected-provider') as Provider) || 'claude';
+  const [provider, setProvider] = useState<SessionProvider>(() => {
+    return (localStorage.getItem('selected-provider') as SessionProvider) || 'claude';
   });
   const [cursorModel, setCursorModel] = useState<string>(() => {
     return localStorage.getItem('cursor-model') || CURSOR_MODELS.DEFAULT;

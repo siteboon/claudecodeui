@@ -109,7 +109,7 @@ export default function ChatInputControls({
           type="button"
           onClick={onClearInput}
           className="w-8 h-8 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-full flex items-center justify-center transition-all duration-200 group shadow-sm"
-          title="Clear input"
+          title={t('input.clearInput', { defaultValue: 'Clear input' })}
         >
           <svg
             className="w-4 h-4 text-gray-600 dark:text-gray-300 group-hover:text-gray-800 dark:group-hover:text-gray-100 transition-colors"
@@ -126,7 +126,7 @@ export default function ChatInputControls({
         <button
           onClick={onScrollToBottom}
           className="w-8 h-8 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center transition-all duration-200 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:ring-offset-gray-800"
-          title="Scroll to bottom"
+          title={t('input.scrollToBottom', { defaultValue: 'Scroll to bottom' })}
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />

@@ -245,10 +245,22 @@ function ChatInterface({
   }, [resetStreamingState]);
 
   if (!selectedProject) {
+    const selectedProviderLabel =
+      provider === 'cursor'
+        ? t('messageTypes.cursor')
+        : provider === 'codex'
+          ? t('messageTypes.codex')
+          : t('messageTypes.claude');
+
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center text-gray-500 dark:text-gray-400">
-          <p>Select a project to start chatting with Claude</p>
+          <p>
+            {t('projectSelection.startChatWithProvider', {
+              provider: selectedProviderLabel,
+              defaultValue: 'Select a project to start chatting with {{provider}}',
+            })}
+          </p>
         </div>
       </div>
     );

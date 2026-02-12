@@ -106,7 +106,9 @@
       "enter": "Enter로 전송 • Shift+Enter로 줄바꿈 • Tab으로 모드 변경 • /로 슬래시 명령어"
     },
     "clickToChangeMode": "클릭하여 권한 모드 변경 (또는 입력창에서 Tab)",
-    "showAllCommands": "모든 명령어 보기"
+    "showAllCommands": "모든 명령어 보기",
+    "clearInput": "입력 지우기",
+    "scrollToBottom": "맨 아래로 스크롤"
   },
   "thinkingMode": {
     "selector": {
@@ -201,5 +203,11 @@
     "runCommand": "{{projectName}}에서 {{command}} 실행",
     "startCli": "{{projectName}}에서 Claude CLI 시작",
     "defaultCommand": "명령어"
+  },
+  "projectSelection": {
+    "startChatWithProvider": "{{provider}}와 채팅을 시작하려면 프로젝트를 선택하세요"
+  },
+  "tasks": {
+    "nextTaskPrompt": "다음 작업 시작"
   }
 }

@@ -38,7 +38,8 @@ export const CollapsibleDisplay: React.FC<CollapsibleDisplayProps> = ({
   className = '',
   toolCategory
 }) => {
-  const borderColor = borderColorMap[toolCategory || 'default'];
+  // Fall back to default styling for unknown/new categories so className never includes "undefined".
+  const borderColor = borderColorMap[toolCategory || 'default'] || borderColorMap.default;
 
   return (
     <div className={`border-l-2 ${borderColor} pl-3 py-0.5 my-1 ${className}`}>

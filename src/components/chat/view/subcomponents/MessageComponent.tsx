@@ -186,7 +186,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                         <svg className="w-4 h-4 text-red-500 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                         </svg>
-                        <span className="text-xs font-medium text-red-700 dark:text-red-300">Error</span>
+                        <span className="text-xs font-medium text-red-700 dark:text-red-300">{t('messageTypes.error')}</span>
                       </div>
                       <div className="relative text-sm text-red-900 dark:text-red-100">
                         <Markdown className="prose prose-sm max-w-none prose-red dark:prose-invert">
@@ -214,8 +214,8 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                                 }`}
                               >
                                 {permissionSuggestion.isAllowed || permissionGrantState === 'granted'
-                                  ? 'Permission added'
-                                  : `Grant permission for ${permissionSuggestion.toolName}`}
+                                  ? t('permissions.added')
+                                  : t('permissions.grant', { tool: permissionSuggestion.toolName })}
                               </button>
                               {onShowSettings && (
                                 <button
@@ -223,21 +223,21 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                                   onClick={(e) => { e.stopPropagation(); onShowSettings(); }}
                                   className="text-xs text-red-700 dark:text-red-200 underline hover:text-red-800 dark:hover:text-red-100"
                                 >
-                                  Open settings
+                                  {t('permissions.openSettings')}
                                 </button>
                               )}
                             </div>
                             <div className="mt-2 text-xs text-red-700/90 dark:text-red-200/80">
-                              Adds <span className="font-mono">{permissionSuggestion.entry}</span> to Allowed Tools.
+                              {t('permissions.addTo', { entry: permissionSuggestion.entry })}
                             </div>
                             {permissionGrantState === 'error' && (
                               <div className="mt-2 text-xs text-red-700 dark:text-red-200">
-                                Unable to update permissions. Please try again.
+                                {t('permissions.error')}
                               </div>
                             )}
                             {(permissionSuggestion.isAllowed || permissionGrantState === 'granted') && (
                               <div className="mt-2 text-xs text-green-700 dark:text-green-200">
-                                Permission saved. Retry the request to use the tool.
+                                {t('permissions.retry')}
                               </div>
                             )}
                           </div>
@@ -273,7 +273,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                   </div>
                   <div className="flex-1">
                     <h4 className="font-semibold text-amber-900 dark:text-amber-100 text-base mb-3">
-                      Interactive Prompt
+                      {t('interactive.title')}
                     </h4>
                     {(() => {
                       const lines = (message.content || '').split('\n').filter((line) => line.trim());
@@ -333,10 +333,10 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                           
                           <div className="bg-amber-100 dark:bg-amber-800/30 rounded-lg p-3">
                             <p className="text-amber-900 dark:text-amber-100 text-sm font-medium mb-1">
-                              ⏳ Waiting for your response in the CLI
+                              {t('interactive.waiting')}
                             </p>
                             <p className="text-amber-800 dark:text-amber-200 text-xs">
-                              Please select an option in your terminal where Claude is running.
+                              {t('interactive.instruction')}
                             </p>
                           </div>
                         </>
@@ -353,7 +353,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     <svg className="w-3 h-3 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                     </svg>
-                    <span>💭 Thinking...</span>
+                    <span>{t('thinking.emoji')}</span>
                   </summary>
                   <div className="mt-2 pl-4 border-l-2 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 text-sm">
                     <Markdown className="prose prose-sm max-w-none dark:prose-invert prose-gray">
@@ -368,7 +368,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 {showThinking && message.reasoning && (
                   <details className="mb-3">
                     <summary className="cursor-pointer text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 font-medium">
-                      💭 Thinking...
+                      {t('thinking.emoji')}
                     </summary>
                     <div className="mt-2 pl-4 border-l-2 border-gray-300 dark:border-gray-600 italic text-gray-600 dark:text-gray-400 text-sm">
                       <div className="whitespace-pre-wrap">
@@ -395,7 +395,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                             </svg>
-                            <span className="font-medium">JSON Response</span>
+                            <span className="font-medium">{t('json.response')}</span>
                           </div>
                           <div className="bg-gray-800 dark:bg-gray-900 border border-gray-600/30 dark:border-gray-700 rounded-lg overflow-hidden">
                             <pre className="p-4 overflow-x-auto">
@@ -438,3 +438,4 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
 });
 
 export default MessageComponent;
+

@@ -1,9 +1,9 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import { decodeHtmlEntities, formatUsageLimitText } from '../utils/chatFormatting';
 import { safeLocalStorage } from '../utils/chatStorage';
-import type { ChatMessage, PendingPermissionRequest, Provider } from '../types/types';
-import type { Project, ProjectSession } from '../../../types/app';
+import type { ChatMessage, PendingPermissionRequest } from '../types/types';
+import type { Project, ProjectSession, SessionProvider } from '../../../types/app';
 
 type PendingViewSession = {
   sessionId: string | null;
@@ -28,7 +28,7 @@ type LatestChatMessage = {
 
 interface UseChatRealtimeHandlersArgs {
   latestMessage: LatestChatMessage | null;
-  provider: Provider | string;
+  provider: SessionProvider;
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
   currentSessionId: string | null;
@@ -114,10 +114,18 @@ export function useChatRealtimeHandlers({
   onReplaceTemporarySession,
   onNavigateToSession,
 }: UseChatRealtimeHandlersArgs) {
+  const lastProcessedMessageRef = useRef<LatestChatMessage | null>(null);
+
   useEffect(() => {
     if (!latestMessage) {
       return;
     }
+
+    // Guard against duplicate processing when dependency updates occur without a new message object.
+    if (lastProcessedMessageRef.current === latestMessage) {
+      return;
+    }
+    lastProcessedMessageRef.current = latestMessage;
 
     const messageData = latestMessage.data?.message || latestMessage.data;
     const structuredMessageData =
@@ -925,5 +933,24 @@ export function useChatRealtimeHandlers({
       default:
         break;
     }
-  }, [latestMessage]);
+  }, [
+    latestMessage,
+    provider,
+    selectedProject,
+    selectedSession,
+    currentSessionId,
+    setCurrentSessionId,
+    setChatMessages,
+    setIsLoading,
+    setCanAbortSession,
+    setClaudeStatus,
+    setTokenBudget,
+    setIsSystemSessionChange,
+    setPendingPermissionRequests,
+    onSessionInactive,
+    onSessionProcessing,
+    onSessionNotProcessing,
+    onReplaceTemporarySession,
+    onNavigateToSession,
+  ]);
 }
