@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import ReactDOM from 'react-dom';
 import { AlertTriangle, Trash2 } from 'lucide-react';
 import type { TFunction } from 'i18next';
@@ -7,7 +8,8 @@ import Settings from '../../../Settings';
 import VersionUpgradeModal from '../../../modals/VersionUpgradeModal';
 import type { Project } from '../../../../types/app';
 import type { ReleaseInfo } from '../../../../types/sharedTypes';
-import type { DeleteProjectConfirmation, SessionDeleteConfirmation } from '../../types/types';
+import { normalizeProjectForSettings } from '../../utils/utils';
+import type { DeleteProjectConfirmation, SessionDeleteConfirmation, SettingsProject } from '../../types/types';
 
 type SidebarModalsProps = {
   projects: Project[];
@@ -31,6 +33,19 @@ type SidebarModalsProps = {
   t: TFunction;
 };
 
+type TypedSettingsProps = {
+  isOpen: boolean;
+  onClose: () => void;
+  projects: SettingsProject[];
+  initialTab: string;
+};
+
+const SettingsComponent = Settings as (props: TypedSettingsProps) => JSX.Element;
+
+function TypedSettings(props: TypedSettingsProps) {
+  return <SettingsComponent {...props} />;
+}
+
 export default function SidebarModals({
   projects,
   showSettings,
@@ -52,6 +67,12 @@ export default function SidebarModals({
   latestVersion,
   t,
 }: SidebarModalsProps) {
+  // Settings expects project identity/path fields to be present for dropdown labels and local-scope MCP config.
+  const settingsProjects = useMemo(
+    () => projects.map(normalizeProjectForSettings),
+    [projects],
+  );
+
   return (
     <>
       {showNewProject &&
@@ -63,10 +84,10 @@ export default function SidebarModals({
           document.body,
         )}
 
-      <Settings
+      <TypedSettings
         isOpen={showSettings}
         onClose={onCloseSettings}
-        projects={projects as any}
+        projects={settingsProjects}
         initialTab={settingsInitialTab}
       />
 

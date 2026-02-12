@@ -58,3 +58,5 @@ export type MCPServerStatus = {
 export type TouchHandlerFactory = (
   callback: () => void,
 ) => (event: React.TouchEvent<HTMLElement>) => void;
+
+export type SettingsProject = Pick<Project, 'name' | 'displayName' | 'fullPath' | 'path'>;
