@@ -399,7 +399,7 @@ export function useChatSessionState({
 
     loadMessages();
   }, [
-    currentSessionId,
+    // Intentionally exclude currentSessionId: this effect sets it and should not retrigger another full load.
     isSystemSessionChange,
     loadCursorSessionMessages,
     loadSessionMessages,
