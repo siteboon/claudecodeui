@@ -61,13 +61,16 @@ const appendStreamingChunk = (
 
   setChatMessages((previous) => {
     const updated = [...previous];
-    const last = updated[updated.length - 1];
+    const lastIndex = updated.length - 1;
+    const last = updated[lastIndex];
     if (last && last.type === 'assistant' && !last.isToolUse && last.isStreaming) {
-      if (newline) {
-        last.content = last.content ? `${last.content}\n${chunk}` : chunk;
-      } else {
-        last.content = `${last.content || ''}${chunk}`;
-      }
+      const nextContent = newline
+        ? last.content
+          ? `${last.content}\n${chunk}`
+          : chunk
+        : `${last.content || ''}${chunk}`;
+      // Clone the message instead of mutating in place so React can reliably detect state updates.
+      updated[lastIndex] = { ...last, content: nextContent };
     } else {
       updated.push({ type: 'assistant', content: chunk, timestamp: new Date(), isStreaming: true });
     }
@@ -78,9 +81,11 @@ const appendStreamingChunk = (
 const finalizeStreamingMessage = (setChatMessages: Dispatch<SetStateAction<ChatMessage[]>>) => {
   setChatMessages((previous) => {
     const updated = [...previous];
-    const last = updated[updated.length - 1];
+    const lastIndex = updated.length - 1;
+    const last = updated[lastIndex];
     if (last && last.type === 'assistant' && last.isStreaming) {
-      last.isStreaming = false;
+      // Clone the message instead of mutating in place so React can reliably detect state updates.
+      updated[lastIndex] = { ...last, isStreaming: false };
     }
     return updated;
   });
@@ -115,6 +120,12 @@ export function useChatRealtimeHandlers({
     }
 
     const messageData = latestMessage.data?.message || latestMessage.data;
+    const structuredMessageData =
+      messageData && typeof messageData === 'object' ? (messageData as Record<string, any>) : null;
+    const rawStructuredData =
+      latestMessage.data && typeof latestMessage.data === 'object'
+        ? (latestMessage.data as Record<string, any>)
+        : null;
 
     const globalMessageTypes = ['projects_updated', 'taskmaster-project-updated', 'session-created'];
     const isGlobalMessage = globalMessageTypes.includes(String(latestMessage.type));
@@ -130,20 +141,20 @@ export function useChatRealtimeHandlers({
 
     const isClaudeSystemInit =
       latestMessage.type === 'claude-response' &&
-      messageData &&
-      messageData.type === 'system' &&
-      messageData.subtype === 'init';
+      structuredMessageData &&
+      structuredMessageData.type === 'system' &&
+      structuredMessageData.subtype === 'init';
 
     const isCursorSystemInit =
       latestMessage.type === 'cursor-system' &&
-      latestMessage.data &&
-      latestMessage.data.type === 'system' &&
-      latestMessage.data.subtype === 'init';
+      rawStructuredData &&
+      rawStructuredData.type === 'system' &&
+      rawStructuredData.subtype === 'init';
 
     const systemInitSessionId = isClaudeSystemInit
-      ? messageData?.session_id
+      ? structuredMessageData?.session_id
       : isCursorSystemInit
-      ? latestMessage.data?.session_id
+      ? rawStructuredData?.session_id
       : null;
 
     const activeViewSessionId =
@@ -271,53 +282,53 @@ export function useChatRealtimeHandlers({
         }
 
         if (
-          latestMessage.data.type === 'system' &&
-          latestMessage.data.subtype === 'init' &&
-          latestMessage.data.session_id &&
+          structuredMessageData?.type === 'system' &&
+          structuredMessageData.subtype === 'init' &&
+          structuredMessageData.session_id &&
           currentSessionId &&
-          latestMessage.data.session_id !== currentSessionId &&
+          structuredMessageData.session_id !== currentSessionId &&
           isSystemInitForView
         ) {
           console.log('Claude CLI session duplication detected:', {
             originalSession: currentSessionId,
-            newSession: latestMessage.data.session_id,
+            newSession: structuredMessageData.session_id,
           });
 
           setIsSystemSessionChange(true);
-          onNavigateToSession?.(latestMessage.data.session_id);
+          onNavigateToSession?.(structuredMessageData.session_id);
           return;
         }
 
         if (
-          latestMessage.data.type === 'system' &&
-          latestMessage.data.subtype === 'init' &&
-          latestMessage.data.session_id &&
+          structuredMessageData?.type === 'system' &&
+          structuredMessageData.subtype === 'init' &&
+          structuredMessageData.session_id &&
           !currentSessionId &&
           isSystemInitForView
         ) {
           console.log('New session init detected:', {
-            newSession: latestMessage.data.session_id,
+            newSession: structuredMessageData.session_id,
           });
 
           setIsSystemSessionChange(true);
-          onNavigateToSession?.(latestMessage.data.session_id);
+          onNavigateToSession?.(structuredMessageData.session_id);
           return;
         }
 
         if (
-          latestMessage.data.type === 'system' &&
-          latestMessage.data.subtype === 'init' &&
-          latestMessage.data.session_id &&
+          structuredMessageData?.type === 'system' &&
+          structuredMessageData.subtype === 'init' &&
+          structuredMessageData.session_id &&
           currentSessionId &&
-          latestMessage.data.session_id === currentSessionId &&
+          structuredMessageData.session_id === currentSessionId &&
           isSystemInitForView
         ) {
           console.log('System init message for current session, ignoring');
           return;
         }
 
-        if (Array.isArray(messageData.content)) {
-          messageData.content.forEach((part: any) => {
+        if (structuredMessageData && Array.isArray(structuredMessageData.content)) {
+          structuredMessageData.content.forEach((part: any) => {
             if (part.type === 'tool_use') {
               const toolInput = part.input ? JSON.stringify(part.input, null, 2) : '';
               setChatMessages((previous) => [
@@ -349,8 +360,8 @@ export function useChatRealtimeHandlers({
               ]);
             }
           });
-        } else if (typeof messageData.content === 'string' && messageData.content.trim()) {
-          let content = decodeHtmlEntities(messageData.content);
+        } else if (structuredMessageData && typeof structuredMessageData.content === 'string' && structuredMessageData.content.trim()) {
+          let content = decodeHtmlEntities(structuredMessageData.content);
           content = formatUsageLimitText(content);
           setChatMessages((previous) => [
             ...previous,
@@ -362,8 +373,8 @@ export function useChatRealtimeHandlers({
           ]);
         }
 
-        if (messageData.role === 'user' && Array.isArray(messageData.content)) {
-          messageData.content.forEach((part: any) => {
+        if (structuredMessageData?.role === 'user' && Array.isArray(structuredMessageData.content)) {
+          structuredMessageData.content.forEach((part: any) => {
             if (part.type !== 'tool_result') {
               return;
             }
@@ -560,14 +571,15 @@ export function useChatRealtimeHandlers({
 
           setChatMessages((previous) => {
             const updated = [...previous];
-            const last = updated[updated.length - 1];
+            const lastIndex = updated.length - 1;
+            const last = updated[lastIndex];
             if (last && last.type === 'assistant' && !last.isToolUse && last.isStreaming) {
               const finalContent =
                 textResult && textResult.trim()
                   ? textResult
                   : `${last.content || ''}${pendingChunk || ''}`;
-              last.content = finalContent;
-              last.isStreaming = false;
+              // Clone the message instead of mutating in place so React can reliably detect state updates.
+              updated[lastIndex] = { ...last, content: finalContent, isStreaming: false };
             } else if (textResult && textResult.trim()) {
               updated.push({
                 type: resultData.is_error ? 'error' : 'assistant',
