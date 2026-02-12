@@ -54,8 +54,6 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
   const config = getToolConfig(toolName);
   const displayConfig: any = mode === 'input' ? config.input : config.result;
 
-  if (!displayConfig) return null;
-
   const parsedData = useMemo(() => {
     try {
       const rawData = mode === 'input' ? toolInput : toolResult;
@@ -66,11 +64,14 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
   }, [mode, toolInput, toolResult]);
 
   const handleAction = useCallback(() => {
-    if (displayConfig.action === 'open-file' && onFileOpen) {
+    if (displayConfig?.action === 'open-file' && onFileOpen) {
       const value = displayConfig.getValue?.(parsedData) || '';
       onFileOpen(value);
     }
   }, [displayConfig, parsedData, onFileOpen]);
+
+  // Keep hooks above this guard so hook call order stays stable across renders.
+  if (!displayConfig) return null;
 
   if (displayConfig.type === 'one-line') {
     const value = displayConfig.getValue?.(parsedData) || '';
