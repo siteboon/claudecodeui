@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { useCallback, useRef } from 'react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import SessionProviderLogo from '../../../SessionProviderLogo';
 import MessageComponent from './MessageComponent';
@@ -44,6 +45,42 @@ interface ChatMessagesPaneProps {
   selectedProject: Project;
   isLoading: boolean;
 }
+
+const toMessageKeyPart = (value: unknown): string | null => {
+  if (typeof value !== 'string' && typeof value !== 'number') {
+    return null;
+  }
+  const normalized = String(value).trim();
+  return normalized.length > 0 ? normalized : null;
+};
+
+const getIntrinsicMessageKey = (message: ChatMessage): string | null => {
+  const candidates = [
+    message.id,
+    message.messageId,
+    message.toolId,
+    message.toolCallId,
+    message.blobId,
+    message.rowid,
+    message.sequence,
+  ];
+
+  for (const candidate of candidates) {
+    const keyPart = toMessageKeyPart(candidate);
+    if (keyPart) {
+      return `message-${message.type}-${keyPart}`;
+    }
+  }
+
+  const timestamp = new Date(message.timestamp).getTime();
+  if (!Number.isFinite(timestamp)) {
+    return null;
+  }
+
+  const contentPreview = typeof message.content === 'string' ? message.content.slice(0, 48) : '';
+  const toolName = typeof message.toolName === 'string' ? message.toolName : '';
+  return `message-${message.type}-${timestamp}-${toolName}-${contentPreview}`;
+};
 
 function AssistantThinkingIndicator() {
   const selectedProvider = (localStorage.getItem('selected-provider') || 'claude') as Provider;
@@ -115,6 +152,33 @@ export default function ChatMessagesPane({
   isLoading,
 }: ChatMessagesPaneProps) {
   const { t } = useTranslation('chat');
+  const messageKeyMapRef = useRef<WeakMap<ChatMessage, string>>(new WeakMap());
+  const allocatedKeysRef = useRef<Set<string>>(new Set());
+  const generatedMessageKeyCounterRef = useRef(0);
+
+  // Keep keys stable across prepends so existing MessageComponent instances retain local state.
+  const getMessageKey = useCallback((message: ChatMessage) => {
+    const existingKey = messageKeyMapRef.current.get(message);
+    if (existingKey) {
+      return existingKey;
+    }
+
+    const intrinsicKey = getIntrinsicMessageKey(message);
+    let candidateKey = intrinsicKey;
+
+    if (!candidateKey || allocatedKeysRef.current.has(candidateKey)) {
+      do {
+        generatedMessageKeyCounterRef.current += 1;
+        candidateKey = intrinsicKey
+          ? `${intrinsicKey}-${generatedMessageKeyCounterRef.current}`
+          : `message-generated-${generatedMessageKeyCounterRef.current}`;
+      } while (allocatedKeysRef.current.has(candidateKey));
+    }
+
+    allocatedKeysRef.current.add(candidateKey);
+    messageKeyMapRef.current.set(message, candidateKey);
+    return candidateKey;
+  }, []);
 
   return (
     <div
@@ -183,7 +247,7 @@ export default function ChatMessagesPane({
             const prevMessage = index > 0 ? visibleMessages[index - 1] : null;
             return (
               <MessageComponent
-                key={index}
+                key={getMessageKey(message)}
                 message={message}
                 index={index}
                 prevMessage={prevMessage}
