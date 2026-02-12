@@ -50,7 +50,16 @@ export function useChatSessionState({
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => {
     if (typeof window !== 'undefined' && selectedProject) {
       const saved = safeLocalStorage.getItem(`chat_messages_${selectedProject.name}`);
-      return saved ? (JSON.parse(saved) as ChatMessage[]) : [];
+      if (saved) {
+        try {
+          return JSON.parse(saved) as ChatMessage[];
+        } catch {
+          console.error('Failed to parse saved chat messages, resetting');
+          safeLocalStorage.removeItem(`chat_messages_${selectedProject.name}`);
+          return [];
+        }
+      }
+      return [];
     }
     return [];
   });
