@@ -56,15 +56,19 @@ export function useFileMentions({ selectedProject, input, setInput, textareaRef 
   const [atSymbolPosition, setAtSymbolPosition] = useState(-1);
 
   useEffect(() => {
+    const abortController = new AbortController();
+
     const fetchProjectFiles = async () => {
-      if (!selectedProject) {
-        setFileList([]);
-        setFilteredFiles([]);
+      const projectName = selectedProject?.name;
+      setFileList([]);
+      setFilteredFiles([]);
+      if (!projectName) {
         return;
       }
 
+
       try {
-        const response = await api.getFiles(selectedProject.name);
+        const response = await api.getFiles(projectName, { signal: abortController.signal });
         if (!response.ok) {
           return;
         }
@@ -72,12 +76,19 @@ export function useFileMentions({ selectedProject, input, setInput, textareaRef 
         const files = (await response.json()) as ProjectFileNode[];
         setFileList(flattenFileTree(files));
       } catch (error) {
+        // Ignore aborts from rapid project switches; we only care about the latest request.
+        if ((error as { name?: string })?.name === 'AbortError') {
+          return;
+        }
         console.error('Error fetching files:', error);
       }
     };
 
     fetchProjectFiles();
-  }, [selectedProject]);
+    return () => {
+      abortController.abort();
+    };
+  }, [selectedProject?.name]);
 
   useEffect(() => {
     const textBeforeCursor = input.slice(0, cursorPosition);
