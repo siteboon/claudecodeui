@@ -263,7 +263,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                       Interactive Prompt
                     </h4>
                     {(() => {
-                      const lines = message.content.split('\n').filter(line => line.trim());
+                      const lines = (message.content || '').split('\n').filter(line => line.trim());
                       const questionLine = lines.find(line => line.includes('?')) || lines[0] || '';
                       const options = [];
                       
