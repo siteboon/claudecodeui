@@ -65,6 +65,7 @@ import crypto from 'crypto';
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 import os from 'os';
+import { pathsEqual } from './utils/pathUtils.js';
 
 // Import TaskMaster detection functions
 async function detectTaskMasterFolder(projectPath) {
@@ -1291,7 +1292,7 @@ async function getCodexSessions(projectPath, options = {}) {
         const cleanSessionCwd = sessionCwd.startsWith('\\\\?\\') ? sessionCwd.slice(4) : sessionCwd;
         const cleanProjectPath = projectPath.startsWith('\\\\?\\') ? projectPath.slice(4) : projectPath;
 
-        if (sessionData && (sessionData.cwd === projectPath || cleanSessionCwd === cleanProjectPath || path.relative(cleanSessionCwd, cleanProjectPath) === '')) {
+        if (sessionData && (pathsEqual(sessionData.cwd, projectPath) || pathsEqual(cleanSessionCwd, cleanProjectPath) || path.relative(cleanSessionCwd, cleanProjectPath) === '')) {
           sessions.push({
             id: sessionData.id,
             summary: sessionData.summary || 'Codex Session',

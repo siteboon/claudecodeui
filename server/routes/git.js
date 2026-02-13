@@ -4,6 +4,7 @@ import { promisify } from 'util';
 import path from 'path';
 import { promises as fs } from 'fs';
 import { extractProjectDirectory } from '../projects.js';
+import { pathsEqual } from '../utils/pathUtils.js';
 import { queryClaudeSDK } from '../claude-sdk.js';
 import { spawnCursor } from '../cursor-cli.js';
 
@@ -66,7 +67,7 @@ async function validateGitRepository(projectPath) {
     const normalizedProjectPath = path.resolve(projectPath);
     
     // Ensure the git root matches our project path (prevent using parent git repos)
-    if (normalizedGitRoot !== normalizedProjectPath) {
+    if (!pathsEqual(normalizedGitRoot, normalizedProjectPath)) {
       throw new Error(`Project directory is not a git repository. This directory is inside a git repository at ${normalizedGitRoot}, but git operations should be run from the repository root.`);
     }
   } catch (error) {

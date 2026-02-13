@@ -3,6 +3,7 @@
 import './load-env.js';
 import fs from 'fs';
 import path from 'path';
+import { pathsEqual, pathStartsWith } from './utils/pathUtils.js';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
@@ -604,7 +605,7 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
         } catch (error) {
             // Use default root as-is if realpath fails
         }
-        if (resolvedPath === resolvedWorkspaceRoot) {
+        if (pathsEqual(resolvedPath, resolvedWorkspaceRoot)) {
             const commonDirs = ['Desktop', 'Documents', 'Projects', 'Development', 'Dev', 'Code', 'workspace'];
             const existingCommon = directories.filter(dir => commonDirs.includes(dir.name));
             const otherDirs = directories.filter(dir => !commonDirs.includes(dir.name));
@@ -688,7 +689,7 @@ app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) =
             ? path.resolve(filePath)
             : path.resolve(projectRoot, filePath);
         const normalizedRoot = path.resolve(projectRoot) + path.sep;
-        if (!resolved.startsWith(normalizedRoot)) {
+        if (!pathStartsWith(resolved, normalizedRoot)) {
             return res.status(403).json({ error: 'Path must be under project root' });
         }
 
@@ -726,7 +727,7 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
 
         const resolved = path.resolve(filePath);
         const normalizedRoot = path.resolve(projectRoot) + path.sep;
-        if (!resolved.startsWith(normalizedRoot)) {
+        if (!pathStartsWith(resolved, normalizedRoot)) {
             return res.status(403).json({ error: 'Path must be under project root' });
         }
 
@@ -787,7 +788,7 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
             ? path.resolve(filePath)
             : path.resolve(projectRoot, filePath);
         const normalizedRoot = path.resolve(projectRoot) + path.sep;
-        if (!resolved.startsWith(normalizedRoot)) {
+        if (!pathStartsWith(resolved, normalizedRoot)) {
             return res.status(403).json({ error: 'Path must be under project root' });
         }
 

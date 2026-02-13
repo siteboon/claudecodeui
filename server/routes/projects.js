@@ -4,6 +4,7 @@ import path from 'path';
 import { spawn } from 'child_process';
 import os from 'os';
 import { addProjectManually } from '../projects.js';
+import { pathsEqual, pathStartsWith } from '../utils/pathUtils.js';
 
 const router = express.Router();
 
@@ -55,7 +56,7 @@ export async function validateWorkspacePath(requestedPath) {
 
     // Check if path is a forbidden system directory
     const normalizedPath = path.normalize(absolutePath);
-    if (FORBIDDEN_PATHS.includes(normalizedPath) || normalizedPath === '/') {
+    if (FORBIDDEN_PATHS.some(fp => pathsEqual(fp, normalizedPath)) || normalizedPath === '/') {
       return {
         valid: false,
         error: 'Cannot use system-critical directories as workspace locations'
@@ -64,8 +65,8 @@ export async function validateWorkspacePath(requestedPath) {
 
     // Additional check for paths starting with forbidden directories
     for (const forbidden of FORBIDDEN_PATHS) {
-      if (normalizedPath === forbidden ||
-          normalizedPath.startsWith(forbidden + path.sep)) {
+      if (pathsEqual(normalizedPath, forbidden) ||
+          pathStartsWith(normalizedPath, forbidden + path.sep)) {
         // Exception: /var/tmp and similar user-accessible paths might be allowed
         // but /var itself and most /var subdirectories should be blocked
         if (forbidden === '/var' &&
@@ -114,8 +115,8 @@ export async function validateWorkspacePath(requestedPath) {
     const resolvedWorkspaceRoot = await fs.realpath(WORKSPACES_ROOT);
 
     // Ensure the resolved path is contained within the allowed workspace root
-    if (!realPath.startsWith(resolvedWorkspaceRoot + path.sep) &&
-        realPath !== resolvedWorkspaceRoot) {
+    if (!pathStartsWith(realPath, resolvedWorkspaceRoot + path.sep) &&
+        !pathsEqual(realPath, resolvedWorkspaceRoot)) {
       return {
         valid: false,
         error: `Workspace path must be within the allowed workspace root: ${WORKSPACES_ROOT}`
@@ -133,8 +134,8 @@ export async function validateWorkspacePath(requestedPath) {
         const resolvedTarget = path.resolve(path.dirname(absolutePath), linkTarget);
         const realTarget = await fs.realpath(resolvedTarget);
 
-        if (!realTarget.startsWith(resolvedWorkspaceRoot + path.sep) &&
-            realTarget !== resolvedWorkspaceRoot) {
+        if (!pathStartsWith(realTarget, resolvedWorkspaceRoot + path.sep) &&
+            !pathsEqual(realTarget, resolvedWorkspaceRoot)) {
           return {
             valid: false,
             error: 'Symlink target is outside the allowed workspace root'
