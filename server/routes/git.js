@@ -1,5 +1,5 @@
 import express from 'express';
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import { promises as fs } from 'fs';
@@ -10,6 +10,7 @@ import { spawnCursor } from '../cursor-cli.js';
 
 const router = express.Router();
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 // Helper function to get the actual project path from the encoded project name
 async function getActualProjectPath(projectName) {
@@ -448,8 +449,9 @@ router.get('/commits', async (req, res) => {
     const projectPath = await getActualProjectPath(project);
     
     // Get commit log with stats
-    const { stdout } = await execAsync(
-      `git log --pretty=format:'%H|%an|%ae|%ad|%s' --date=relative -n ${limit}`,
+    const { stdout } = await execFileAsync(
+      'git',
+      ['log', '--pretty=format:%H|%an|%ae|%ad|%s', '--date=relative', '-n', `${limit}`],
       { cwd: projectPath }
     );
     
