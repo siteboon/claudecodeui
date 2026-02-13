@@ -1,23 +1,18 @@
-import ClaudeLogo from '../ClaudeLogo';
-import CursorLogo from '../CursorLogo';
-import CodexLogo from '../CodexLogo';
+import SessionProviderLogo from '../SessionProviderLogo';
 import { useTranslation } from 'react-i18next';
 
 const agentConfig = {
   claude: {
     name: 'Claude',
     color: 'blue',
-    Logo: ClaudeLogo,
   },
   cursor: {
     name: 'Cursor',
     color: 'purple',
-    Logo: CursorLogo,
   },
   codex: {
     name: 'Codex',
     color: 'gray',
-    Logo: CodexLogo,
   },
 };
 
@@ -46,7 +41,6 @@ export default function AgentListItem({ agentId, authStatus, isSelected, onClick
   const { t } = useTranslation('settings');
   const config = agentConfig[agentId];
   const colors = colorClasses[config.color];
-  const { Logo } = config;
 
   // Mobile: horizontal layout with bottom border
   if (isMobile) {
@@ -60,7 +54,7 @@ export default function AgentListItem({ agentId, authStatus, isSelected, onClick
         }`}
       >
         <div className="flex flex-col items-center gap-1">
-          <Logo className="w-5 h-5" />
+          <SessionProviderLogo provider={agentId} className="w-5 h-5" />
           <span className="text-xs font-medium text-foreground">{config.name}</span>
           {authStatus?.authenticated && (
             <span className={`w-1.5 h-1.5 rounded-full ${colors.dot}`} />
@@ -81,7 +75,7 @@ export default function AgentListItem({ agentId, authStatus, isSelected, onClick
       }`}
     >
       <div className="flex items-center gap-2 mb-1">
-        <Logo className="w-4 h-4" />
+        <SessionProviderLogo provider={agentId} className="w-4 h-4" />
         <span className="font-medium text-foreground">{config.name}</span>
       </div>
       <div className="text-xs text-muted-foreground pl-6">

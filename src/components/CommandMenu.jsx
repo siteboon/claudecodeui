@@ -4,53 +4,61 @@ import React, { useEffect, useRef } from 'react';
  * CommandMenu - Autocomplete dropdown for slash commands
  *
  * @param {Array} commands - Array of command objects to display
- * @param {number} selectedIndex - Currently selected command index
+ * @param {number} selectedIndex - Currently selected command index (index in `commands`)
  * @param {Function} onSelect - Callback when a command is selected
  * @param {Function} onClose - Callback when menu should close
  * @param {Object} position - Position object { top, left } for absolute positioning
  * @param {boolean} isOpen - Whether the menu is open
  * @param {Array} frequentCommands - Array of frequently used command objects
  */
-const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, position = { top: 0, left: 0 }, isOpen = false, frequentCommands = [] }) => {
+const CommandMenu = ({
+  commands = [],
+  selectedIndex = -1,
+  onSelect,
+  onClose,
+  position = { top: 0, left: 0 },
+  isOpen = false,
+  frequentCommands = [],
+}) => {
   const menuRef = useRef(null);
   const selectedItemRef = useRef(null);
 
-  // Calculate responsive positioning
+  // Calculate responsive menu positioning.
+  // Mobile: dock above chat input. Desktop: clamp to viewport.
   const getMenuPosition = () => {
     const isMobile = window.innerWidth < 640;
     const viewportHeight = window.innerHeight;
-    const menuHeight = 300; // Max height of menu
 
     if (isMobile) {
-      // On mobile, calculate bottom position dynamically to appear above the input
-      // Use the bottom value which is calculated as: window.innerHeight - textarea.top + spacing
-      const inputBottom = position.bottom || 90; // Use provided bottom or default
+      // On mobile, calculate bottom position dynamically to appear above the input.
+      // Use the bottom value calculated as: window.innerHeight - textarea.top + spacing.
+      const inputBottom = position.bottom || 90;
 
       return {
         position: 'fixed',
-        bottom: `${inputBottom}px`, // Position above the input with spacing already included
+        bottom: `${inputBottom}px`, // Position above the input with spacing already included.
         left: '16px',
         right: '16px',
         width: 'auto',
         maxWidth: 'calc(100vw - 32px)',
-        maxHeight: 'min(50vh, 300px)' // Limit to smaller of 50vh or 300px
+        maxHeight: 'min(50vh, 300px)', // Limit to smaller of 50vh or 300px.
       };
     }
 
-    // On desktop, use provided position but ensure it stays on screen
+    // On desktop, use provided position but ensure it stays on screen.
     return {
       position: 'fixed',
       top: `${Math.max(16, Math.min(position.top, viewportHeight - 316))}px`,
       left: `${position.left}px`,
       width: 'min(400px, calc(100vw - 32px))',
       maxWidth: 'calc(100vw - 32px)',
-      maxHeight: '300px'
+      maxHeight: '300px',
     };
   };
 
   const menuPosition = getMenuPosition();
 
-  // Close menu when clicking outside
+  // Close menu when clicking outside.
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (menuRef.current && !menuRef.current.contains(event.target) && isOpen) {
@@ -64,9 +72,11 @@ const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, pos
         document.removeEventListener('mousedown', handleClickOutside);
       };
     }
+
+    return undefined;
   }, [isOpen, onClose]);
 
-  // Scroll selected item into view
+  // Keep selected keyboard item visible while navigating.
   useEffect(() => {
     if (selectedItemRef.current && menuRef.current) {
       const menuRect = menuRef.current.getBoundingClientRect();
@@ -84,7 +94,7 @@ const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, pos
     return null;
   }
 
-  // Show a message if no commands are available
+  // Show a message if no commands are available.
   if (commands.length === 0) {
     return (
       <div
@@ -100,7 +110,7 @@ const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, pos
           opacity: 1,
           transform: 'translateY(0)',
           transition: 'opacity 150ms ease-in-out, transform 150ms ease-in-out',
-          textAlign: 'center'
+          textAlign: 'center',
         }}
       >
         No commands available
@@ -108,11 +118,20 @@ const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, pos
     );
   }
 
-  // Add frequent commands as a special group if provided
+  // Add frequent commands as a special group if provided.
   const hasFrequentCommands = frequentCommands.length > 0;
 
-  // Group commands by namespace
+  const getCommandKey = (command) =>
+    `${command.name}::${command.namespace || command.type || 'other'}::${command.path || ''}`;
+  const frequentCommandKeys = new Set(frequentCommands.map(getCommandKey));
+
+  // Group commands by namespace for section rendering.
+  // When frequent commands are shown, avoid duplicate rows in other sections.
   const groupedCommands = commands.reduce((groups, command) => {
+    if (hasFrequentCommands && frequentCommandKeys.has(getCommandKey(command))) {
+      return groups;
+    }
+
     const namespace = command.namespace || command.type || 'other';
     if (!groups[namespace]) {
       groups[namespace] = [];
@@ -121,36 +140,33 @@ const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, pos
     return groups;
   }, {});
 
-  // Add frequent commands as a separate group
+  // Add frequent commands as a separate group.
   if (hasFrequentCommands) {
-    groupedCommands['frequent'] = frequentCommands;
+    groupedCommands.frequent = frequentCommands;
   }
 
-  // Order: frequent, builtin, project, user, other
+  // Order: frequent, builtin, project, user, other.
   const namespaceOrder = hasFrequentCommands
     ? ['frequent', 'builtin', 'project', 'user', 'other']
     : ['builtin', 'project', 'user', 'other'];
-  const orderedNamespaces = namespaceOrder.filter(ns => groupedCommands[ns]);
+  const orderedNamespaces = namespaceOrder.filter((ns) => groupedCommands[ns]);
 
   const namespaceLabels = {
-    frequent: '⭐ Frequently Used',
+    frequent: '\u2B50 Frequently Used',
     builtin: 'Built-in Commands',
     project: 'Project Commands',
     user: 'User Commands',
-    other: 'Other Commands'
+    other: 'Other Commands',
   };
 
-  // Calculate global index for each command
-  let globalIndex = 0;
-  const commandsWithIndex = [];
-  orderedNamespaces.forEach(namespace => {
-    groupedCommands[namespace].forEach(command => {
-      commandsWithIndex.push({
-        ...command,
-        globalIndex: globalIndex++,
-        namespace
-      });
-    });
+  // Keep all selection indices aligned to `commands` (filteredCommands from the hook).
+  // This prevents mismatches between mouse selection (rendered list) and keyboard selection.
+  const commandIndexByKey = new Map();
+  commands.forEach((command, index) => {
+    const key = getCommandKey(command);
+    if (!commandIndexByKey.has(key)) {
+      commandIndexByKey.set(key, index);
+    }
   });
 
   return (
@@ -169,7 +185,7 @@ const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, pos
         padding: '8px',
         opacity: isOpen ? 1 : 0,
         transform: isOpen ? 'translateY(0)' : 'translateY(-10px)',
-        transition: 'opacity 150ms ease-in-out, transform 150ms ease-in-out'
+        transition: 'opacity 150ms ease-in-out, transform 150ms ease-in-out',
       }}
     >
       {orderedNamespaces.map((namespace) => (
@@ -182,25 +198,35 @@ const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, pos
                 textTransform: 'uppercase',
                 color: '#6b7280',
                 padding: '8px 12px 4px',
-                letterSpacing: '0.05em'
+                letterSpacing: '0.05em',
               }}
             >
               {namespaceLabels[namespace] || namespace}
             </div>
           )}
+
           {groupedCommands[namespace].map((command) => {
-            const cmdWithIndex = commandsWithIndex.find(c => c.name === command.name && c.namespace === namespace);
-            const isSelected = cmdWithIndex && cmdWithIndex.globalIndex === selectedIndex;
+            const commandKey = getCommandKey(command);
+            const commandIndex = commandIndexByKey.get(commandKey) ?? -1;
+            const isSelected = commandIndex === selectedIndex;
 
             return (
               <div
-                key={`${namespace}-${command.name}`}
+                key={`${namespace}-${command.name}-${command.path || ''}`}
                 ref={isSelected ? selectedItemRef : null}
                 role="option"
                 aria-selected={isSelected}
                 className="command-item"
-                onMouseEnter={() => onSelect && onSelect(command, cmdWithIndex.globalIndex, true)}
-                onClick={() => onSelect && onSelect(command, cmdWithIndex.globalIndex, false)}
+                onMouseEnter={() => {
+                  if (onSelect && commandIndex >= 0) {
+                    onSelect(command, commandIndex, true);
+                  }
+                }}
+                onClick={() => {
+                  if (onSelect) {
+                    onSelect(command, commandIndex, false);
+                  }
+                }}
                 style={{
                   display: 'flex',
                   alignItems: 'flex-start',
@@ -209,9 +235,10 @@ const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, pos
                   cursor: 'pointer',
                   backgroundColor: isSelected ? '#eff6ff' : 'transparent',
                   transition: 'background-color 100ms ease-in-out',
-                  marginBottom: '2px'
+                  marginBottom: '2px',
                 }}
-                onMouseDown={(e) => e.preventDefault()} // Prevent textarea blur
+                // Prevent textarea blur when clicking a menu item.
+                onMouseDown={(e) => e.preventDefault()}
               >
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div
@@ -219,20 +246,16 @@ const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, pos
                       display: 'flex',
                       alignItems: 'center',
                       gap: '8px',
-                      marginBottom: command.description ? '4px' : 0
+                      marginBottom: command.description ? '4px' : 0,
                     }}
                   >
                     {/* Command icon based on namespace */}
-                    <span
-                      style={{
-                        fontSize: '16px',
-                        flexShrink: 0
-                      }}
-                    >
-                      {namespace === 'builtin' && '⚡'}
-                      {namespace === 'project' && '📁'}
-                      {namespace === 'user' && '👤'}
-                      {namespace === 'other' && '📝'}
+                    <span style={{ fontSize: '16px', flexShrink: 0 }}>
+                      {namespace === 'builtin' && '\u26A1'}
+                      {namespace === 'project' && '\uD83D\uDCC1'}
+                      {namespace === 'user' && '\uD83D\uDC64'}
+                      {namespace === 'other' && '\uD83D\uDCDD'}
+                      {namespace === 'frequent' && '\u2B50'}
                     </span>
 
                     {/* Command name */}
@@ -241,7 +264,7 @@ const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, pos
                         fontWeight: 600,
                         fontSize: '14px',
                         color: '#111827',
-                        fontFamily: 'monospace'
+                        fontFamily: 'monospace',
                       }}
                     >
                       {command.name}
@@ -257,7 +280,7 @@ const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, pos
                           borderRadius: '4px',
                           backgroundColor: '#f3f4f6',
                           color: '#6b7280',
-                          fontWeight: 500
+                          fontWeight: 500,
                         }}
                       >
                         {command.metadata.type}
@@ -274,7 +297,7 @@ const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, pos
                         marginLeft: '24px',
                         whiteSpace: 'nowrap',
                         overflow: 'hidden',
-                        textOverflow: 'ellipsis'
+                        textOverflow: 'ellipsis',
                       }}
                     >
                       {command.description}
@@ -289,10 +312,10 @@ const CommandMenu = ({ commands = [], selectedIndex = -1, onSelect, onClose, pos
                       marginLeft: '8px',
                       color: '#3b82f6',
                       fontSize: '12px',
-                      fontWeight: 600
+                      fontWeight: 600,
                     }}
                   >
-                    ↵
+                    {'\u21B5'}
                   </span>
                 )}
               </div>

@@ -57,7 +57,7 @@
 
 ### 前置要求
 
-- [Node.js](https://nodejs.org/) v20 或更高版本
+- [Node.js](https://nodejs.org/) v22 或更高版本
 - 已安装并配置 [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code),和/或
 - 已安装并配置 [Cursor CLI](https://docs.cursor.com/en/cli/overview),和/或
 - 已安装并配置 [Codex](https://developers.openai.com/codex)

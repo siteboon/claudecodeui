@@ -53,14 +53,28 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
   }, []);
 
   useEffect(() => {
-    if (selectedProject) {
-      fetchGitStatus();
-      fetchBranches();
-      fetchRemoteStatus();
-      if (activeView === 'history') {
-        fetchRecentCommits();
-      }
+    // Clear stale repo-scoped state when project changes.
+    setCurrentBranch('');
+    setBranches([]);
+    setGitStatus(null);
+    setRemoteStatus(null);
+    setSelectedFiles(new Set());
+
+    if (!selectedProject) {
+      return;
     }
+
+    fetchGitStatus();
+    fetchBranches();
+    fetchRemoteStatus();
+  }, [selectedProject]);
+
+  useEffect(() => {
+    if (!selectedProject || activeView !== 'history') {
+      return;
+    }
+
+    fetchRecentCommits();
   }, [selectedProject, activeView]);
 
   // Handle click outside dropdown
@@ -88,6 +102,8 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
       if (data.error) {
         console.error('Git status error:', data.error);
         setGitStatus({ error: data.error, details: data.details });
+        setCurrentBranch('');
+        setSelectedFiles(new Set());
       } else {
         setGitStatus(data);
         setCurrentBranch(data.branch || 'main');
@@ -117,6 +133,9 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
       }
     } catch (error) {
       console.error('Error fetching git status:', error);
+      setGitStatus({ error: 'Git operation failed', details: String(error) });
+      setCurrentBranch('');
+      setSelectedFiles(new Set());
     } finally {
       setIsLoading(false);
     }
@@ -129,9 +148,12 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
       
       if (!data.error && data.branches) {
         setBranches(data.branches);
+      } else {
+        setBranches([]);
       }
     } catch (error) {
       console.error('Error fetching branches:', error);
+      setBranches([]);
     }
   };
 

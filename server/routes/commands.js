@@ -209,6 +209,86 @@ Custom commands can be created in:
     };
   },
 
+  '/cost': async (args, context) => {
+    const tokenUsage = context?.tokenUsage || {};
+    const provider = context?.provider || 'claude';
+    const model =
+      context?.model ||
+      (provider === 'cursor'
+        ? CURSOR_MODELS.DEFAULT
+        : provider === 'codex'
+          ? CODEX_MODELS.DEFAULT
+          : CLAUDE_MODELS.DEFAULT);
+
+    const used = Number(tokenUsage.used ?? tokenUsage.totalUsed ?? tokenUsage.total_tokens ?? 0) || 0;
+    const total =
+      Number(
+        tokenUsage.total ??
+          tokenUsage.contextWindow ??
+          parseInt(process.env.CONTEXT_WINDOW || '160000', 10),
+      ) || 160000;
+    const percentage = total > 0 ? Number(((used / total) * 100).toFixed(1)) : 0;
+
+    const inputTokensRaw =
+      Number(
+        tokenUsage.inputTokens ??
+          tokenUsage.input ??
+          tokenUsage.cumulativeInputTokens ??
+          tokenUsage.promptTokens ??
+          0,
+      ) || 0;
+    const outputTokens =
+      Number(
+        tokenUsage.outputTokens ??
+          tokenUsage.output ??
+          tokenUsage.cumulativeOutputTokens ??
+          tokenUsage.completionTokens ??
+          0,
+      ) || 0;
+    const cacheTokens =
+      Number(
+        tokenUsage.cacheReadTokens ??
+          tokenUsage.cacheCreationTokens ??
+          tokenUsage.cacheTokens ??
+          tokenUsage.cachedTokens ??
+          0,
+      ) || 0;
+
+    // If we only have total used tokens, treat them as input for display/estimation.
+    const inputTokens =
+      inputTokensRaw > 0 || outputTokens > 0 || cacheTokens > 0 ? inputTokensRaw + cacheTokens : used;
+
+    // Rough default rates by provider (USD / 1M tokens).
+    const pricingByProvider = {
+      claude: { input: 3, output: 15 },
+      cursor: { input: 3, output: 15 },
+      codex: { input: 1.5, output: 6 },
+    };
+    const rates = pricingByProvider[provider] || pricingByProvider.claude;
+
+    const inputCost = (inputTokens / 1_000_000) * rates.input;
+    const outputCost = (outputTokens / 1_000_000) * rates.output;
+    const totalCost = inputCost + outputCost;
+
+    return {
+      type: 'builtin',
+      action: 'cost',
+      data: {
+        tokenUsage: {
+          used,
+          total,
+          percentage,
+        },
+        cost: {
+          input: inputCost.toFixed(4),
+          output: outputCost.toFixed(4),
+          total: totalCost.toFixed(4),
+        },
+        model,
+      },
+    };
+  },
+
   '/status': async (args, context) => {
     // Read version from package.json
     const packageJsonPath = path.join(path.dirname(__dirname), '..', 'package.json');

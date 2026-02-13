@@ -51,6 +51,12 @@ function fallbackCopyToClipboard(text) {
   return copied;
 }
 
+const CODEX_DEVICE_AUTH_URL = 'https://auth.openai.com/codex/device';
+
+function isCodexLoginCommand(command) {
+  return typeof command === 'string' && /\bcodex\s+login\b/i.test(command);
+}
+
 function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell = false, onProcessComplete, minimal = false, autoConnect = false }) {
   const { t } = useTranslation('chat');
   const terminalRef = useRef(null);
@@ -64,6 +70,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
   const [isConnecting, setIsConnecting] = useState(false);
   const [authUrl, setAuthUrl] = useState('');
   const [authUrlCopyStatus, setAuthUrlCopyStatus] = useState('idle');
+  const [isAuthPanelHidden, setIsAuthPanelHidden] = useState(false);
 
   const selectedProjectRef = useRef(selectedProject);
   const selectedSessionRef = useRef(selectedSession);
@@ -144,6 +151,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
         authUrlRef.current = '';
         setAuthUrl('');
         setAuthUrlCopyStatus('idle');
+        setIsAuthPanelHidden(false);
 
         setTimeout(() => {
           if (fitAddon.current && terminal.current) {
@@ -190,11 +198,13 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
             authUrlRef.current = data.url;
             setAuthUrl(data.url);
             setAuthUrlCopyStatus('idle');
+            setIsAuthPanelHidden(false);
           } else if (data.type === 'url_open') {
             if (data.url) {
               authUrlRef.current = data.url;
               setAuthUrl(data.url);
               setAuthUrlCopyStatus('idle');
+              setIsAuthPanelHidden(false);
             }
           }
         } catch (error) {
@@ -206,6 +216,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
         setIsConnected(false);
         setIsConnecting(false);
         setAuthUrlCopyStatus('idle');
+        setIsAuthPanelHidden(false);
 
         if (terminal.current) {
           terminal.current.clear();
@@ -245,6 +256,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     authUrlRef.current = '';
     setAuthUrl('');
     setAuthUrlCopyStatus('idle');
+    setIsAuthPanelHidden(false);
   }, []);
 
   const sessionDisplayName = useMemo(() => {
@@ -283,6 +295,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     authUrlRef.current = '';
     setAuthUrl('');
     setAuthUrlCopyStatus('idle');
+    setIsAuthPanelHidden(false);
 
     setTimeout(() => {
       setIsRestarting(false);
@@ -369,17 +382,21 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     terminal.current.open(terminalRef.current);
 
     terminal.current.attachCustomKeyEventHandler((event) => {
+      const activeAuthUrl = isCodexLoginCommand(initialCommandRef.current)
+        ? CODEX_DEVICE_AUTH_URL
+        : authUrlRef.current;
+
       if (
         event.type === 'keydown' &&
         minimal &&
         isPlainShellRef.current &&
-        authUrlRef.current &&
+        activeAuthUrl &&
         !event.ctrlKey &&
         !event.metaKey &&
         !event.altKey &&
         event.key?.toLowerCase() === 'c'
       ) {
-        copyAuthUrlToClipboard(authUrlRef.current).catch(() => {});
+        copyAuthUrlToClipboard(activeAuthUrl).catch(() => {});
       }
 
       if (
@@ -497,18 +514,32 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
   }
 
   if (minimal) {
-    const hasAuthUrl = Boolean(authUrl);
+    const displayAuthUrl = isCodexLoginCommand(initialCommand)
+      ? CODEX_DEVICE_AUTH_URL
+      : authUrl;
+    const hasAuthUrl = Boolean(displayAuthUrl);
+    const showMobileAuthPanel = hasAuthUrl && !isAuthPanelHidden;
+    const showMobileAuthPanelToggle = hasAuthUrl && isAuthPanelHidden;
 
     return (
       <div className="h-full w-full bg-gray-900 relative">
         <div ref={terminalRef} className="h-full w-full focus:outline-none" style={{ outline: 'none' }} />
-        {hasAuthUrl && (
-          <div className="absolute inset-x-0 bottom-14 z-20 border-t border-gray-700/80 bg-gray-900/95 p-3 backdrop-blur-sm">
+        {showMobileAuthPanel && (
+          <div className="absolute inset-x-0 bottom-14 z-20 border-t border-gray-700/80 bg-gray-900/95 p-3 backdrop-blur-sm md:hidden">
             <div className="flex flex-col gap-2">
-              <p className="text-xs text-gray-300">Open or copy the login URL:</p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-gray-300">Open or copy the login URL:</p>
+                <button
+                  type="button"
+                  onClick={() => setIsAuthPanelHidden(true)}
+                  className="rounded bg-gray-700 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-gray-100 hover:bg-gray-600"
+                >
+                  Hide
+                </button>
+              </div>
               <input
                 type="text"
-                value={authUrl}
+                value={displayAuthUrl}
                 readOnly
                 onClick={(event) => event.currentTarget.select()}
                 className="w-full rounded border border-gray-600 bg-gray-800 px-2 py-1 text-xs text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -518,7 +549,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
                 <button
                   type="button"
                   onClick={() => {
-                    openAuthUrlInBrowser(authUrl);
+                    openAuthUrlInBrowser(displayAuthUrl);
                   }}
                   className="flex-1 rounded bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700"
                 >
@@ -527,7 +558,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
                 <button
                   type="button"
                   onClick={async () => {
-                    const copied = await copyAuthUrlToClipboard(authUrl);
+                    const copied = await copyAuthUrlToClipboard(displayAuthUrl);
                     setAuthUrlCopyStatus(copied ? 'copied' : 'failed');
                   }}
                   className="flex-1 rounded bg-gray-700 px-3 py-2 text-xs font-medium text-white hover:bg-gray-600"
@@ -536,6 +567,17 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
                 </button>
               </div>
             </div>
+          </div>
+        )}
+        {showMobileAuthPanelToggle && (
+          <div className="absolute bottom-14 right-3 z-20 md:hidden">
+            <button
+              type="button"
+              onClick={() => setIsAuthPanelHidden(false)}
+              className="rounded bg-gray-800/95 px-3 py-2 text-xs font-medium text-gray-100 shadow-lg backdrop-blur-sm hover:bg-gray-700"
+            >
+              Show login URL
+            </button>
           </div>
         )}
       </div>
