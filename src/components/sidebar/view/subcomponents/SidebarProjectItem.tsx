@@ -130,7 +130,6 @@ export default function SidebarProjectItem({
                 'bg-yellow-50/50 dark:bg-yellow-900/5 border-yellow-200/30 dark:border-yellow-800/30',
             )}
             onClick={toggleProject}
-            onTouchEnd={touchHandlerFactory(toggleProject)}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -226,7 +225,6 @@ export default function SidebarProjectItem({
                         event.stopPropagation();
                         toggleStarProject();
                       }}
-                      onTouchEnd={touchHandlerFactory(toggleStarProject)}
                       title={isStarred ? t('tooltips.removeFromFavorites') : t('tooltips.addToFavorites')}
                     >
                       <Star
@@ -245,7 +243,6 @@ export default function SidebarProjectItem({
                         event.stopPropagation();
                         onDeleteProject(project);
                       }}
-                      onTouchEnd={touchHandlerFactory(() => onDeleteProject(project))}
                     >
                       <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400" />
                     </button>
@@ -256,7 +253,6 @@ export default function SidebarProjectItem({
                         event.stopPropagation();
                         onStartEditingProject(project);
                       }}
-                      onTouchEnd={touchHandlerFactory(() => onStartEditingProject(project))}
                     >
                       <Edit3 className="w-4 h-4 text-primary" />
                     </button>
@@ -285,7 +281,6 @@ export default function SidebarProjectItem({
               'bg-yellow-50/50 dark:bg-yellow-900/10 hover:bg-yellow-100/50 dark:hover:bg-yellow-900/20',
           )}
           onClick={selectAndToggleProject}
-          onTouchEnd={touchHandlerFactory(selectAndToggleProject)}
         >
           <div className="flex items-center gap-3 min-w-0 flex-1">
             {isExpanded ? (

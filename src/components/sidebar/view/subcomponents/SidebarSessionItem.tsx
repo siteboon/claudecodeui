@@ -83,7 +83,6 @@ export default function SidebarSessionItem({
               : 'border-border/30',
           )}
           onClick={selectMobileSession}
-          onTouchEnd={touchHandlerFactory(selectMobileSession)}
         >
           <div className="flex items-center gap-2">
             <div
@@ -120,7 +119,6 @@ export default function SidebarSessionItem({
                   event.stopPropagation();
                   requestDeleteSession();
                 }}
-                onTouchEnd={touchHandlerFactory(requestDeleteSession)}
               >
                 <Trash2 className="w-2.5 h-2.5 text-red-600 dark:text-red-400" />
               </button>
@@ -137,7 +135,6 @@ export default function SidebarSessionItem({
             isSelected && 'bg-accent text-accent-foreground',
           )}
           onClick={() => onSessionSelect(session, project.name)}
-          onTouchEnd={touchHandlerFactory(() => onSessionSelect(session, project.name))}
         >
           <div className="flex items-start gap-2 min-w-0 w-full">
             <SessionProviderLogo provider={session.__provider} className="w-3 h-3 mt-0.5 flex-shrink-0" />
