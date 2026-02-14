@@ -6,6 +6,7 @@ import CreateTaskModal from './CreateTaskModal';
 import { useTaskMaster } from '../contexts/TaskMasterContext';
 import Shell from './Shell';
 import { api } from '../utils/api';
+import { useTranslation } from 'react-i18next';
 
 const TaskList = ({ 
   tasks = [], 
@@ -31,8 +32,9 @@ const TaskList = ({
   const [showHelpGuide, setShowHelpGuide] = useState(false);
   const [isTaskMasterComplete, setIsTaskMasterComplete] = useState(false);
   const [showPRDDropdown, setShowPRDDropdown] = useState(false);
-  
+
   const { projectTaskMaster, refreshProjects, refreshTasks, setCurrentProject } = useTaskMaster();
+  const { t } = useTranslation('tasks');
 
   // Close PRD dropdown when clicking outside
   useEffect(() => {
@@ -236,26 +238,26 @@ const TaskList = ({
               <Settings className="w-12 h-12 mx-auto mb-4" />
             </div>
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-              TaskMaster AI is not configured
+              {t('notConfigured.title')}
             </h3>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
-              TaskMaster helps break down complex projects into manageable tasks with AI-powered assistance
+              {t('notConfigured.description')}
             </p>
-            
+
             {/* What is TaskMaster section */}
             <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-950 rounded-lg text-left">
               <h4 className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-3">
-                🎯 What is TaskMaster?
+                {t('notConfigured.whatIsTitle')}
               </h4>
               <div className="text-xs text-blue-800 dark:text-blue-200 space-y-1">
-                <p>• <strong>AI-Powered Task Management:</strong> Break complex projects into manageable subtasks</p>
-                <p>• <strong>PRD Templates:</strong> Generate tasks from Product Requirements Documents</p>
-                <p>• <strong>Dependency Tracking:</strong> Understand task relationships and execution order</p>
-                <p>• <strong>Progress Visualization:</strong> Kanban boards and detailed task analytics</p>
-                <p>• <strong>CLI Integration:</strong> Use taskmaster commands for advanced workflows</p>
+                <p>• {t('notConfigured.features.aiPowered')}</p>
+                <p>• {t('notConfigured.features.prdTemplates')}</p>
+                <p>• {t('notConfigured.features.dependencyTracking')}</p>
+                <p>• {t('notConfigured.features.progressVisualization')}</p>
+                <p>• {t('notConfigured.features.cliIntegration')}</p>
               </div>
             </div>
-            
+
             <button
               onClick={() => {
                 setIsTaskMasterComplete(false); // Reset completion state
@@ -264,7 +266,7 @@ const TaskList = ({
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2 mx-auto"
             >
               <Terminal className="w-4 h-4" />
-              Initialize TaskMaster AI
+              {t('notConfigured.initializeButton')}
             </button>
           </div>
         ) : (
@@ -276,8 +278,8 @@ const TaskList = ({
                   <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Getting Started with TaskMaster</h2>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">TaskMaster is initialized! Here's what to do next:</p>
+                  <h2 className="text-xl font-semibold text-gray-900 dark:text-white">{t('gettingStarted.title')}</h2>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">{t('gettingStarted.subtitle')}</p>
                 </div>
               </div>
               
@@ -287,8 +289,8 @@ const TaskList = ({
                   <div className="flex gap-3 p-3 bg-white dark:bg-gray-800/50 rounded-lg border border-blue-100 dark:border-blue-800/50">
                     <div className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white text-xs font-semibold rounded-full flex items-center justify-center">1</div>
                     <div>
-                      <h4 className="font-medium text-gray-900 dark:text-white mb-1">Create a Product Requirements Document (PRD)</h4>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Discuss your project idea and create a PRD that describes what you want to build.</p>
+                      <h4 className="font-medium text-gray-900 dark:text-white mb-1">{t('gettingStarted.steps.createPRD.title')}</h4>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{t('gettingStarted.steps.createPRD.description')}</p>
                       <button
                         onClick={() => {
                           onShowPRDEditor?.();
@@ -296,13 +298,13 @@ const TaskList = ({
                         className="inline-flex items-center gap-1 text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-2 py-1 rounded hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors"
                       >
                         <FileText className="w-3 h-3" />
-                        Add PRD
+                        {t('gettingStarted.steps.createPRD.addButton')}
                       </button>
-                      
+
                       {/* Show existing PRDs if any */}
                       {existingPRDs.length > 0 && (
                         <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Existing PRDs:</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{t('gettingStarted.steps.createPRD.existingPRDs')}</p>
                           <div className="flex flex-wrap gap-2">
                             {existingPRDs.map((prd) => (
                               <button
@@ -341,8 +343,8 @@ const TaskList = ({
                   <div className="flex gap-3 p-3 bg-white dark:bg-gray-800/50 rounded-lg border border-blue-100 dark:border-blue-800/50">
                     <div className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white text-xs font-semibold rounded-full flex items-center justify-center">2</div>
                     <div>
-                      <h4 className="font-medium text-gray-900 dark:text-white mb-1">Generate Tasks from PRD</h4>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Once you have a PRD, ask your AI assistant to parse it and TaskMaster will automatically break it down into manageable tasks with implementation details.</p>
+                      <h4 className="font-medium text-gray-900 dark:text-white mb-1">{t('gettingStarted.steps.generateTasks.title')}</h4>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">{t('gettingStarted.steps.generateTasks.description')}</p>
                     </div>
                   </div>
 
@@ -350,8 +352,8 @@ const TaskList = ({
                   <div className="flex gap-3 p-3 bg-white dark:bg-gray-800/50 rounded-lg border border-blue-100 dark:border-blue-800/50">
                     <div className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white text-xs font-semibold rounded-full flex items-center justify-center">3</div>
                     <div>
-                      <h4 className="font-medium text-gray-900 dark:text-white mb-1">Analyze & Expand Tasks</h4>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Ask your AI assistant to analyze task complexity and expand them into detailed subtasks for easier implementation.</p>
+                      <h4 className="font-medium text-gray-900 dark:text-white mb-1">{t('gettingStarted.steps.analyzeTasks.title')}</h4>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">{t('gettingStarted.steps.analyzeTasks.description')}</p>
                     </div>
                   </div>
 
@@ -359,8 +361,8 @@ const TaskList = ({
                   <div className="flex gap-3 p-3 bg-white dark:bg-gray-800/50 rounded-lg border border-blue-100 dark:border-blue-800/50">
                     <div className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white text-xs font-semibold rounded-full flex items-center justify-center">4</div>
                     <div>
-                      <h4 className="font-medium text-gray-900 dark:text-white mb-1">Start Building</h4>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Ask your AI assistant to begin working on tasks, update their status, and add new tasks as your project evolves.</p>
+                      <h4 className="font-medium text-gray-900 dark:text-white mb-1">{t('gettingStarted.steps.startBuilding.title')}</h4>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">{t('gettingStarted.steps.startBuilding.description')}</p>
                     </div>
                   </div>
                 </div>
@@ -384,7 +386,7 @@ const TaskList = ({
 
             <div className="text-center">
               <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">
-                💡 <strong>Tip:</strong> Start with a PRD to get the most out of TaskMaster's AI-powered task generation
+                {t('gettingStarted.tip')}
               </div>
             </div>
           </div>
@@ -401,8 +403,8 @@ const TaskList = ({
                     <Terminal className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                   </div>
                   <div>
-                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white">TaskMaster Setup</h2>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Interactive CLI for {currentProject?.displayName}</p>
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{t('setupModal.title')}</h2>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">{t('setupModal.subtitle', { projectName: currentProject?.displayName })}</p>
                   </div>
                 </div>
                 <button
@@ -464,10 +466,10 @@ const TaskList = ({
                     {isTaskMasterComplete ? (
                       <span className="flex items-center gap-2 text-green-600 dark:text-green-400">
                         <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                        TaskMaster setup completed! You can now close this window.
+                        {t('setupModal.completed')}
                       </span>
                     ) : (
-                      "TaskMaster initialization will start automatically"
+                      t('setupModal.willStart')
                     )}
                   </div>
                   <button
@@ -485,12 +487,12 @@ const TaskList = ({
                     }}
                     className={cn(
                       "px-4 py-2 text-sm font-medium rounded-md transition-colors",
-                      isTaskMasterComplete 
-                        ? "bg-green-600 hover:bg-green-700 text-white" 
+                      isTaskMasterComplete
+                        ? "bg-green-600 hover:bg-green-700 text-white"
                         : "text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
                     )}
                   >
-                    {isTaskMasterComplete ? "Close & Continue" : "Close"}
+                    {isTaskMasterComplete ? t('setupModal.closeContinueButton') : t('setupModal.closeButton')}
                   </button>
                 </div>
               </div>

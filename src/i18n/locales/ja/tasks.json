@@ -1,0 +1,123 @@
+{
+  "notConfigured": {
+    "title": "TaskMaster AIが設定されていません",
+    "description": "TaskMasterは、AIを活用した支援により、複雑なプロジェクトを管理しやすいタスクに分解するのに役立ちます",
+    "whatIsTitle": "🎯 TaskMasterとは？",
+    "features": {
+      "aiPowered": "AIを活用したタスク管理：複雑なプロジェクトを管理しやすいサブタスクに分解",
+      "prdTemplates": "PRDテンプレート：Product Requirements Documentからタスクを生成",
+      "dependencyTracking": "依存関係の追跡：タスクの関係性と実行順序を理解",
+      "progressVisualization": "進捗の可視化：カンバンボードと詳細なタスク分析",
+      "cliIntegration": "CLI統合：高度なワークフローのためにtaskmasterコマンドを使用"
+    },
+    "initializeButton": "TaskMaster AIを初期化"
+  },
+  "gettingStarted": {
+    "title": "TaskMasterを始める",
+    "subtitle": "TaskMasterが初期化されました！次にすることは:",
+    "steps": {
+      "createPRD": {
+        "title": "Product Requirements Document (PRD) を作成",
+        "description": "プロジェクトのアイデアについて話し合い、構築したい内容を説明するPRDを作成します。",
+        "addButton": "PRDを追加",
+        "existingPRDs": "既存のPRD:"
+      },
+      "generateTasks": {
+        "title": "PRDからタスクを生成",
+        "description": "PRDができたら、AIアシスタントに解析を依頼してください。TaskMasterが自動的に実装の詳細を含む管理しやすいタスクに分解します。"
+      },
+      "analyzeTasks": {
+        "title": "タスクの分析と展開",
+        "description": "AIアシスタントにタスクの複雑さを分析してもらい、より簡単に実装できる詳細なサブタスクに展開します。"
+      },
+      "startBuilding": {
+        "title": "開発を始める",
+        "description": "AIアシスタントにタスクの作業を開始してもらい、ステータスを更新し、プロジェクトの進行に応じて新しいタスクを追加します。"
+      }
+    },
+    "tip": "💡 ヒント：TaskMasterのAIを活用したタスク生成を最大限に活用するには、PRDから始めましょう"
+  },
+  "setupModal": {
+    "title": "TaskMasterのセットアップ",
+    "subtitle": "{{projectName}}のインタラクティブCLI",
+    "willStart": "TaskMasterの初期化が自動的に開始されます",
+    "completed": "TaskMasterのセットアップが完了しました！このウィンドウを閉じることができます。",
+    "closeButton": "閉じる",
+    "closeContinueButton": "閉じて続ける"
+  },
+  "helpGuide": {
+    "title": "TaskMasterを始める",
+    "subtitle": "生産的なタスク管理のガイド",
+    "examples": {
+      "parsePRD": "💬 例：\n「Claude Task Masterで新しいプロジェクトを初期化しました。.taskmaster/docs/prd.txtにPRDがあります。解析して初期タスクを設定するのを手伝ってもらえますか？」",
+      "expandTask": "💬 例：\n「タスク5は複雑そうです。サブタスクに分解してもらえますか？」",
+      "addTask": "💬 例：\n「Cloudinaryを使用してユーザープロフィール画像のアップロードを実装する新しいタスクを追加してください。最適なアプローチを調査してください。」"
+    },
+    "moreExamples": "さらなる例と使用パターンを見る →",
+    "proTips": {
+      "title": "💡 プロのヒント",
+      "search": "検索バーを使用して特定のタスクをすばやく見つける",
+      "views": "ビュー切替を使用してカンバン、リスト、グリッドビューを切り替える",
+      "filters": "フィルターを使用して特定のタスクステータスや優先度に焦点を当てる",
+      "details": "任意のタスクをクリックして詳細情報を表示し、サブタスクを管理する"
+    },
+    "learnMore": {
+      "title": "📚 詳細を見る",
+      "description": "TaskMaster AIは開発者向けに構築された高度なタスク管理システムです。ドキュメント、例を入手し、プロジェクトに貢献できます。",
+      "githubButton": "GitHubで見る"
+    }
+  },
+  "searchPlaceholder": "タスクを検索...",
+  "filters": {
+    "button": "フィルター",
+    "status": "ステータス",
+    "priority": "優先度",
+    "sortBy": "並び替え",
+    "allStatuses": "すべてのステータス",
+    "allPriorities": "すべての優先度",
+    "showing": "{{filtered}}件のタスクを表示中（全{{total}}件）",
+    "clearFilters": "フィルターをクリア"
+  },
+  "sort": {
+    "id": "ID",
+    "status": "ステータス",
+    "priority": "優先度",
+    "idAsc": "ID（昇順）",
+    "idDesc": "ID（降順）",
+    "titleAsc": "タイトル（A-Z）",
+    "titleDesc": "タイトル（Z-A）",
+    "statusAsc": "ステータス（保留中が先）",
+    "statusDesc": "ステータス（完了が先）",
+    "priorityAsc": "優先度（高が先）",
+    "priorityDesc": "優先度（低が先）"
+  },
+  "views": {
+    "kanban": "カンバンビュー",
+    "list": "リストビュー",
+    "grid": "グリッドビュー"
+  },
+  "kanban": {
+    "pending": "📋 やること",
+    "inProgress": "🚀 進行中",
+    "done": "✅ 完了",
+    "blocked": "🚫 ブロック中",
+    "deferred": "⏳ 延期",
+    "cancelled": "❌ キャンセル",
+    "noTasksYet": "まだタスクはありません",
+    "tasksWillAppear": "タスクはここに表示されます",
+    "moveTasksHere": "開始したらタスクをここに移動",
+    "completedTasksHere": "完了したタスクはここに表示されます",
+    "statusTasksHere": "このステータスのタスクはここに表示されます"
+  },
+  "buttons": {
+    "help": "TaskMaster入門ガイド",
+    "prds": "PRD",
+    "addPRD": "PRDを追加",
+    "addTask": "タスクを追加",
+    "createNewPRD": "新しいPRDを作成"
+  },
+  "noMatchingTasks": {
+    "title": "フィルターに一致するタスクがありません",
+    "description": "検索条件またはフィルター基準を調整してみてください。"
+  }
+}
