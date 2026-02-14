@@ -53,7 +53,7 @@
     /* Mobile navigation dimensions - Single source of truth */
     --mobile-nav-height: 60px;
     --mobile-nav-padding: 12px;
-    --mobile-nav-total: calc(var(--mobile-nav-height) + max(env(safe-area-inset-bottom, 0px), var(--mobile-nav-padding)));
+    --mobile-nav-total: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom, 0px));
 
     /* Header safe area dimensions */
     --header-safe-area-top: env(safe-area-inset-top, 0px);
@@ -642,7 +642,7 @@
   
   /* Safe area support for iOS devices */
   .ios-bottom-safe {
-    padding-bottom: max(env(safe-area-inset-bottom), 12px);
+    padding-bottom: env(safe-area-inset-bottom);
   }
   
   /* PWA specific header adjustments - uses CSS variables for consistency */
@@ -665,7 +665,7 @@
   
   @media screen and (max-width: 768px) {
     .chat-input-mobile {
-      padding-bottom: calc(60px + max(env(safe-area-inset-bottom), 12px));
+      padding-bottom: calc(60px + env(safe-area-inset-bottom));
     }
   }
 

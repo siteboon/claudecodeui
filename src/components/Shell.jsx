@@ -5,6 +5,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
 import { useTranslation } from 'react-i18next';
+import { IS_PLATFORM } from '../constants/config';
 
 const xtermStyles = `
   .xterm .xterm-screen {
@@ -25,6 +26,37 @@ if (typeof document !== 'undefined') {
   document.head.appendChild(styleSheet);
 }
 
+function fallbackCopyToClipboard(text) {
+  if (!text || typeof document === 'undefined') return false;
+
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  textarea.style.pointerEvents = 'none';
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+
+  let copied = false;
+  try {
+    copied = document.execCommand('copy');
+  } catch {
+    copied = false;
+  } finally {
+    document.body.removeChild(textarea);
+  }
+
+  return copied;
+}
+
+const CODEX_DEVICE_AUTH_URL = 'https://auth.openai.com/codex/device';
+
+function isCodexLoginCommand(command) {
+  return typeof command === 'string' && /\bcodex\s+login\b/i.test(command);
+}
+
 function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell = false, onProcessComplete, minimal = false, autoConnect = false }) {
   const { t } = useTranslation('chat');
   const terminalRef = useRef(null);
@@ -36,12 +68,16 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
   const [isRestarting, setIsRestarting] = useState(false);
   const [lastSessionId, setLastSessionId] = useState(null);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [authUrl, setAuthUrl] = useState('');
+  const [authUrlCopyStatus, setAuthUrlCopyStatus] = useState('idle');
+  const [isAuthPanelHidden, setIsAuthPanelHidden] = useState(false);
 
   const selectedProjectRef = useRef(selectedProject);
   const selectedSessionRef = useRef(selectedSession);
   const initialCommandRef = useRef(initialCommand);
   const isPlainShellRef = useRef(isPlainShell);
   const onProcessCompleteRef = useRef(onProcessComplete);
+  const authUrlRef = useRef('');
 
   useEffect(() => {
     selectedProjectRef.current = selectedProject;
@@ -51,14 +87,49 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     onProcessCompleteRef.current = onProcessComplete;
   });
 
+  const openAuthUrlInBrowser = useCallback((url = authUrlRef.current) => {
+    if (!url) return false;
+
+    const popup = window.open(url, '_blank', 'noopener,noreferrer');
+    if (popup) {
+      try {
+        popup.opener = null;
+      } catch {
+        // Ignore cross-origin restrictions when trying to null opener
+      }
+      return true;
+    }
+
+    return false;
+  }, []);
+
+  const copyAuthUrlToClipboard = useCallback(async (url = authUrlRef.current) => {
+    if (!url) return false;
+
+    let copied = false;
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+        copied = true;
+      }
+    } catch {
+      copied = false;
+    }
+
+    if (!copied) {
+      copied = fallbackCopyToClipboard(url);
+    }
+
+    return copied;
+  }, []);
+
   const connectWebSocket = useCallback(async () => {
     if (isConnecting || isConnected) return;
 
     try {
-      const isPlatform = import.meta.env.VITE_IS_PLATFORM === 'true';
       let wsUrl;
 
-      if (isPlatform) {
+      if (IS_PLATFORM) {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         wsUrl = `${protocol}//${window.location.host}/shell`;
       } else {
@@ -77,6 +148,10 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
       ws.current.onopen = () => {
         setIsConnected(true);
         setIsConnecting(false);
+        authUrlRef.current = '';
+        setAuthUrl('');
+        setAuthUrlCopyStatus('idle');
+        setIsAuthPanelHidden(false);
 
         setTimeout(() => {
           if (fitAddon.current && terminal.current) {
@@ -119,8 +194,18 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
             if (terminal.current) {
               terminal.current.write(output);
             }
+          } else if (data.type === 'auth_url' && data.url) {
+            authUrlRef.current = data.url;
+            setAuthUrl(data.url);
+            setAuthUrlCopyStatus('idle');
+            setIsAuthPanelHidden(false);
           } else if (data.type === 'url_open') {
-            window.open(data.url, '_blank');
+            if (data.url) {
+              authUrlRef.current = data.url;
+              setAuthUrl(data.url);
+              setAuthUrlCopyStatus('idle');
+              setIsAuthPanelHidden(false);
+            }
           }
         } catch (error) {
           console.error('[Shell] Error handling WebSocket message:', error, event.data);
@@ -130,6 +215,8 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
       ws.current.onclose = (event) => {
         setIsConnected(false);
         setIsConnecting(false);
+        setAuthUrlCopyStatus('idle');
+        setIsAuthPanelHidden(false);
 
         if (terminal.current) {
           terminal.current.clear();
@@ -145,7 +232,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
       setIsConnected(false);
       setIsConnecting(false);
     }
-  }, [isConnecting, isConnected]);
+  }, [isConnecting, isConnected, openAuthUrlInBrowser]);
 
   const connectToShell = useCallback(() => {
     if (!isInitialized || isConnected || isConnecting) return;
@@ -166,6 +253,10 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
 
     setIsConnected(false);
     setIsConnecting(false);
+    authUrlRef.current = '';
+    setAuthUrl('');
+    setAuthUrlCopyStatus('idle');
+    setIsAuthPanelHidden(false);
   }, []);
 
   const sessionDisplayName = useMemo(() => {
@@ -201,6 +292,10 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
 
     setIsConnected(false);
     setIsInitialized(false);
+    authUrlRef.current = '';
+    setAuthUrl('');
+    setAuthUrlCopyStatus('idle');
+    setIsAuthPanelHidden(false);
 
     setTimeout(() => {
       setIsRestarting(false);
@@ -272,7 +367,10 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     const webLinksAddon = new WebLinksAddon();
 
     terminal.current.loadAddon(fitAddon.current);
-    terminal.current.loadAddon(webLinksAddon);
+    // Disable xterm link auto-detection in minimal (login) mode to avoid partial wrapped URL links.
+    if (!minimal) {
+      terminal.current.loadAddon(webLinksAddon);
+    }
     // Note: ClipboardAddon removed - we handle clipboard operations manually in attachCustomKeyEventHandler
 
     try {
@@ -284,12 +382,45 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     terminal.current.open(terminalRef.current);
 
     terminal.current.attachCustomKeyEventHandler((event) => {
-      if ((event.ctrlKey || event.metaKey) && event.key === 'c' && terminal.current.hasSelection()) {
+      const activeAuthUrl = isCodexLoginCommand(initialCommandRef.current)
+        ? CODEX_DEVICE_AUTH_URL
+        : authUrlRef.current;
+
+      if (
+        event.type === 'keydown' &&
+        minimal &&
+        isPlainShellRef.current &&
+        activeAuthUrl &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        event.key?.toLowerCase() === 'c'
+      ) {
+        copyAuthUrlToClipboard(activeAuthUrl).catch(() => {});
+      }
+
+      if (
+        event.type === 'keydown' &&
+        (event.ctrlKey || event.metaKey) &&
+        event.key?.toLowerCase() === 'c' &&
+        terminal.current.hasSelection()
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
         document.execCommand('copy');
         return false;
       }
 
-      if ((event.ctrlKey || event.metaKey) && event.key === 'v') {
+      if (
+        event.type === 'keydown' &&
+        (event.ctrlKey || event.metaKey) &&
+        event.key?.toLowerCase() === 'v'
+      ) {
+        // Block native browser/xterm paste so clipboard data is only sent after
+        // the explicit clipboard-read flow resolves (avoids duplicate pastes).
+        event.preventDefault();
+        event.stopPropagation();
+
         navigator.clipboard.readText().then(text => {
           if (ws.current && ws.current.readyState === WebSocket.OPEN) {
             ws.current.send(JSON.stringify({
@@ -359,7 +490,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
         terminal.current = null;
       }
     };
-  }, [selectedProject?.path || selectedProject?.fullPath, isRestarting]);
+  }, [selectedProject?.path || selectedProject?.fullPath, isRestarting, minimal, copyAuthUrlToClipboard]);
 
   useEffect(() => {
     if (!autoConnect || !isInitialized || isConnecting || isConnected) return;
@@ -383,9 +514,72 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
   }
 
   if (minimal) {
+    const displayAuthUrl = isCodexLoginCommand(initialCommand)
+      ? CODEX_DEVICE_AUTH_URL
+      : authUrl;
+    const hasAuthUrl = Boolean(displayAuthUrl);
+    const showMobileAuthPanel = hasAuthUrl && !isAuthPanelHidden;
+    const showMobileAuthPanelToggle = hasAuthUrl && isAuthPanelHidden;
+
     return (
-      <div className="h-full w-full bg-gray-900">
+      <div className="h-full w-full bg-gray-900 relative">
         <div ref={terminalRef} className="h-full w-full focus:outline-none" style={{ outline: 'none' }} />
+        {showMobileAuthPanel && (
+          <div className="absolute inset-x-0 bottom-14 z-20 border-t border-gray-700/80 bg-gray-900/95 p-3 backdrop-blur-sm md:hidden">
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-gray-300">Open or copy the login URL:</p>
+                <button
+                  type="button"
+                  onClick={() => setIsAuthPanelHidden(true)}
+                  className="rounded bg-gray-700 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-gray-100 hover:bg-gray-600"
+                >
+                  Hide
+                </button>
+              </div>
+              <input
+                type="text"
+                value={displayAuthUrl}
+                readOnly
+                onClick={(event) => event.currentTarget.select()}
+                className="w-full rounded border border-gray-600 bg-gray-800 px-2 py-1 text-xs text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                aria-label="Authentication URL"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    openAuthUrlInBrowser(displayAuthUrl);
+                  }}
+                  className="flex-1 rounded bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700"
+                >
+                  Open URL
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const copied = await copyAuthUrlToClipboard(displayAuthUrl);
+                    setAuthUrlCopyStatus(copied ? 'copied' : 'failed');
+                  }}
+                  className="flex-1 rounded bg-gray-700 px-3 py-2 text-xs font-medium text-white hover:bg-gray-600"
+                >
+                  {authUrlCopyStatus === 'copied' ? 'Copied' : 'Copy URL'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {showMobileAuthPanelToggle && (
+          <div className="absolute bottom-14 right-3 z-20 md:hidden">
+            <button
+              type="button"
+              onClick={() => setIsAuthPanelHidden(false)}
+              className="rounded bg-gray-800/95 px-3 py-2 text-xs font-medium text-gray-100 shadow-lg backdrop-blur-sm hover:bg-gray-700"
+            >
+              Show login URL
+            </button>
+          </div>
+        )}
       </div>
     );
   }

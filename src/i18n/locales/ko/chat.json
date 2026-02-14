@@ -1,0 +1,213 @@
+{
+  "codeBlock": {
+    "copy": "복사",
+    "copied": "복사됨",
+    "copyCode": "코드 복사"
+  },
+  "messageTypes": {
+    "user": "U",
+    "error": "오류",
+    "tool": "도구",
+    "claude": "Claude",
+    "cursor": "Cursor",
+    "codex": "Codex"
+  },
+  "tools": {
+    "settings": "도구 설정",
+    "error": "도구 오류",
+    "result": "도구 결과",
+    "viewParams": "입력 파라미터 보기",
+    "viewRawParams": "Raw 파라미터 보기",
+    "viewDiff": "편집 Diff 보기:",
+    "creatingFile": "새 파일 생성:",
+    "updatingTodo": "Todo 리스트 업데이트",
+    "read": "읽기",
+    "readFile": "파일 읽기",
+    "updateTodo": "Todo 리스트 업데이트",
+    "readTodo": "Todo 리스트 읽기",
+    "searchResults": "결과"
+  },
+  "search": {
+    "found": "{{count}}개의 {{type}} 발견",
+    "file": "파일",
+    "files": "파일",
+    "pattern": "패턴:",
+    "in": "위치:"
+  },
+  "fileOperations": {
+    "updated": "파일이 업데이트되었습니다",
+    "created": "파일이 생성되었습니다",
+    "written": "파일이 작성되었습니다",
+    "diff": "Diff",
+    "newFile": "새 파일",
+    "viewContent": "파일 내용 보기",
+    "viewFullOutput": "전체 출력 보기 ({{count}}자)",
+    "contentDisplayed": "파일 내용이 위의 Diff 보기에 표시됩니다"
+  },
+  "interactive": {
+    "title": "대화형 프롬프트",
+    "waiting": "CLI에서 응답을 기다리는 중",
+    "instruction": "Claude가 실행 중인 터미널에서 옵션을 선택해주세요.",
+    "selectedOption": "✓ Claude가 옵션 {{number}}을(를) 선택했습니다",
+    "instructionDetail": "CLI에서 화살표 키 또는 숫자를 입력하여 이 옵션을 대화형으로 선택합니다."
+  },
+  "thinking": {
+    "title": "생각 중...",
+    "emoji": "💭 생각 중..."
+  },
+  "json": {
+    "response": "JSON 응답"
+  },
+  "permissions": {
+    "grant": "{{tool}}에 대한 권한 부여",
+    "added": "권한이 추가되었습니다",
+    "addTo": "{{entry}}을(를) 허용된 도구에 추가합니다.",
+    "retry": "권한이 저장되었습니다. 도구를 사용하려면 요청을 재시도하세요.",
+    "error": "권한을 업데이트할 수 없습니다. 다시 시도해주세요.",
+    "openSettings": "설정 열기"
+  },
+  "todo": {
+    "updated": "Todo 리스트가 업데이트되었습니다",
+    "current": "현재 Todo 리스트"
+  },
+  "plan": {
+    "viewPlan": "📋 구현 계획 보기",
+    "title": "구현 계획"
+  },
+  "usageLimit": {
+    "resetAt": "Claude 사용량 한도에 도달했습니다. 한도는 **{{time}} {{timezone}}** - {{date}}에 초기화됩니다"
+  },
+  "codex": {
+    "permissionMode": "권한 모드",
+    "modes": {
+      "default": "기본 모드",
+      "acceptEdits": "편집 허용",
+      "bypassPermissions": "권한 우회",
+      "plan": "Plan 모드"
+    },
+    "descriptions": {
+      "default": "신뢰할 수 있는 명령어(ls, cat, grep, git status 등)만 자동 실행됩니다. 다른 명령어는 건너뜁니다. 워크스페이스에 쓰기 가능.",
+      "acceptEdits": "워크스페이스 내에서 모든 명령어가 자동 실행됩니다. 샌드박스 내 완전 자동 모드.",
+      "bypassPermissions": "제한 없는 전체 시스템 접근. 모든 명령어가 전체 디스크 및 네트워크 접근 권한으로 자동 실행됩니다. 주의해서 사용하세요.",
+      "plan": "계획 모드 - 명령어가 실행되지 않습니다"
+    },
+    "technicalDetails": "기술 상세"
+  },
+  "input": {
+    "placeholder": "/를 입력하여 명령어, @를 입력하여 파일, 또는 {{provider}}에게 무엇이든 물어보세요...",
+    "placeholderDefault": "메시지를 입력하세요...",
+    "disabled": "입력 비활성화",
+    "attachFiles": "파일 첨부",
+    "attachImages": "이미지 첨부",
+    "send": "전송",
+    "stop": "중지",
+    "hintText": {
+      "ctrlEnter": "Ctrl+Enter로 전송 • Shift+Enter로 줄바꿈 • Tab으로 모드 변경 • /로 슬래시 명령어",
+      "enter": "Enter로 전송 • Shift+Enter로 줄바꿈 • Tab으로 모드 변경 • /로 슬래시 명령어"
+    },
+    "clickToChangeMode": "클릭하여 권한 모드 변경 (또는 입력창에서 Tab)",
+    "showAllCommands": "모든 명령어 보기",
+    "clearInput": "입력 지우기",
+    "scrollToBottom": "맨 아래로 스크롤"
+  },
+  "thinkingMode": {
+    "selector": {
+      "title": "Thinking 모드",
+      "description": "확장된 thinking은 Claude에게 대안을 평가할 시간을 더 줍니다",
+      "active": "활성",
+      "tip": "높은 thinking 모드는 시간이 더 걸리지만 더 철저한 분석을 제공합니다"
+    },
+    "modes": {
+      "none": {
+        "name": "Standard",
+        "description": "일반 Claude 응답",
+        "prefix": ""
+      },
+      "think": {
+        "name": "Think",
+        "description": "기본 확장 thinking",
+        "prefix": "think"
+      },
+      "thinkHard": {
+        "name": "Think Hard",
+        "description": "더 철저한 평가",
+        "prefix": "think hard"
+      },
+      "thinkHarder": {
+        "name": "Think Harder",
+        "description": "대안을 포함한 심층 분석",
+        "prefix": "think harder"
+      },
+      "ultrathink": {
+        "name": "Ultrathink",
+        "description": "최대 thinking 예산",
+        "prefix": "ultrathink"
+      }
+    },
+    "buttonTitle": "Thinking 모드: {{mode}}"
+  },
+  "providerSelection": {
+    "title": "AI 어시스턴트 선택",
+    "description": "새 대화를 시작할 프로바이더를 선택하세요",
+    "selectModel": "모델 선택",
+    "providerInfo": {
+      "anthropic": "by Anthropic",
+      "openai": "by OpenAI",
+      "cursorEditor": "AI 코드 에디터"
+    },
+    "readyPrompt": {
+      "claude": "{{model}}로 Claude를 사용할 준비가 되었습니다. 아래에 메시지를 입력하세요.",
+      "cursor": "{{model}}로 Cursor를 사용할 준비가 되었습니다. 아래에 메시지를 입력하세요.",
+      "codex": "{{model}}로 Codex를 사용할 준비가 되었습니다. 아래에 메시지를 입력하세요.",
+      "default": "시작하려면 위에서 프로바이더를 선택하세요"
+    }
+  },
+  "session": {
+    "continue": {
+      "title": "대화 계속하기",
+      "description": "코드에 대해 질문하거나, 변경을 요청하거나, 개발 작업에 도움을 받으세요"
+    },
+    "loading": {
+      "olderMessages": "이전 메시지 로딩 중...",
+      "sessionMessages": "세션 메시지 로딩 중..."
+    },
+    "messages": {
+      "showingOf": "{{total}}개 중 {{shown}}개 표시",
+      "scrollToLoad": "위로 스크롤하여 더 로드",
+      "showingLast": "마지막 {{count}}개 메시지 표시 (총 {{total}}개)",
+      "loadEarlier": "이전 메시지 로드"
+    }
+  },
+  "shell": {
+    "selectProject": {
+      "title": "프로젝트 선택",
+      "description": "해당 디렉토리에서 대화형 Shell을 열 프로젝트를 선택하세요"
+    },
+    "status": {
+      "newSession": "새 세션",
+      "initializing": "초기화 중...",
+      "restarting": "재시작 중..."
+    },
+    "actions": {
+      "disconnect": "연결 끊기",
+      "disconnectTitle": "Shell 연결 끊기",
+      "restart": "재시작",
+      "restartTitle": "Shell 재시작 (먼저 연결 끊기)",
+      "connect": "Shell에서 계속",
+      "connectTitle": "Shell에 연결"
+    },
+    "loading": "터미널 로딩 중...",
+    "connecting": "Shell에 연결 중...",
+    "startSession": "새 Claude 세션 시작",
+    "resumeSession": "세션 재개: {{displayName}}...",
+    "runCommand": "{{projectName}}에서 {{command}} 실행",
+    "startCli": "{{projectName}}에서 Claude CLI 시작",
+    "defaultCommand": "명령어"
+  },
+  "projectSelection": {
+    "startChatWithProvider": "{{provider}}와 채팅을 시작하려면 프로젝트를 선택하세요"
+  },
+  "tasks": {
+    "nextTaskPrompt": "다음 작업 시작"
+  }
+}

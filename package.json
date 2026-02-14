@@ -1,6 +1,6 @@
 {
   "name": "@siteboon/claude-code-ui",
-  "version": "1.16.3",
+  "version": "1.17.1",
   "description": "A web-based UI for Claude Code CLI",
   "type": "module",
   "main": "server/index.js",
@@ -33,14 +33,14 @@
     "release": "./release.sh"
   },
   "keywords": [
-    "claude coode",
+    "claude code",
     "ai",
     "anthropic",
     "ui",
     "mobile"
   ],
   "author": "Claude Code UI Contributors",
-  "license": "MIT",
+  "license": "GPL-3.0",
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.1.29",
     "@codemirror/lang-css": "^6.3.1",

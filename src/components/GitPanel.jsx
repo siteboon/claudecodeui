@@ -53,14 +53,28 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
   }, []);
 
   useEffect(() => {
-    if (selectedProject) {
-      fetchGitStatus();
-      fetchBranches();
-      fetchRemoteStatus();
-      if (activeView === 'history') {
-        fetchRecentCommits();
-      }
+    // Clear stale repo-scoped state when project changes.
+    setCurrentBranch('');
+    setBranches([]);
+    setGitStatus(null);
+    setRemoteStatus(null);
+    setSelectedFiles(new Set());
+
+    if (!selectedProject) {
+      return;
     }
+
+    fetchGitStatus();
+    fetchBranches();
+    fetchRemoteStatus();
+  }, [selectedProject]);
+
+  useEffect(() => {
+    if (!selectedProject || activeView !== 'history') {
+      return;
+    }
+
+    fetchRecentCommits();
   }, [selectedProject, activeView]);
 
   // Handle click outside dropdown
@@ -88,6 +102,8 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
       if (data.error) {
         console.error('Git status error:', data.error);
         setGitStatus({ error: data.error, details: data.details });
+        setCurrentBranch('');
+        setSelectedFiles(new Set());
       } else {
         setGitStatus(data);
         setCurrentBranch(data.branch || 'main');
@@ -117,6 +133,9 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
       }
     } catch (error) {
       console.error('Error fetching git status:', error);
+      setGitStatus({ error: 'Git operation failed', details: String(error) });
+      setCurrentBranch('');
+      setSelectedFiles(new Set());
     } finally {
       setIsLoading(false);
     }
@@ -129,9 +148,12 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
       
       if (!data.error && data.branches) {
         setBranches(data.branches);
+      } else {
+        setBranches([]);
       }
     } catch (error) {
       console.error('Error fetching branches:', error);
+      setBranches([]);
     }
   };
 
@@ -960,6 +982,7 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
           {gitStatus.details && (
             <p className="text-sm text-center leading-relaxed mb-6 max-w-md">{gitStatus.details}</p>
           )}
+          {/* // ! This can be a custom component that can be reused for " Tip: Create a new project..." as well */}
           <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 max-w-md">
             <p className="text-sm text-blue-700 dark:text-blue-300 text-center">
               <strong>Tip:</strong> Run <code className="bg-blue-100 dark:bg-blue-900 px-2 py-1 rounded font-mono text-xs">git init</code> in your project directory to initialize git source control.
