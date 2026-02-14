@@ -104,8 +104,7 @@
     "deleteProject": "プロジェクトを削除",
     "deleteSession": "セッションを削除",
     "confirmDelete": "本当に削除しますか？",
-    "sessionCount_one": "このプロジェクトには{{count}}件の会話があります。",
-    "sessionCount_other": "このプロジェクトには{{count}}件の会話があります。",
+    "sessionCount": "このプロジェクトには{{count}}件の会話があります。",
     "allConversationsDeleted": "すべての会話が完全に削除されます。",
     "cannotUndo": "この操作は取り消せません。"
   }

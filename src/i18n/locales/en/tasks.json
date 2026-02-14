@@ -67,7 +67,9 @@
       "githubButton": "View on GitHub"
     }
   },
-  "searchPlaceholder": "Search tasks...",
+  "search": {
+    "placeholder": "Search tasks..."
+  },
   "filters": {
     "button": "Filters",
     "status": "Status",

@@ -67,7 +67,9 @@
       "githubButton": "GitHubで見る"
     }
   },
-  "searchPlaceholder": "タスクを検索...",
+  "search": {
+    "placeholder": "タスクを検索..."
+  },
   "filters": {
     "button": "フィルター",
     "status": "ステータス",
