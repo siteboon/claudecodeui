@@ -116,7 +116,24 @@
     "prds": "PRD",
     "addPRD": "PRDを追加",
     "addTask": "タスクを追加",
-    "createNewPRD": "新しいPRDを作成"
+    "createNewPRD": "新しいPRDを作成",
+    "prdsAvailable": "{{count}}件のPRDがあります"
+  },
+  "prd": {
+    "modified": "更新日: {{date}}"
+  },
+  "statuses": {
+    "pending": "保留中",
+    "in-progress": "進行中",
+    "done": "完了",
+    "blocked": "ブロック中",
+    "deferred": "延期",
+    "cancelled": "キャンセル"
+  },
+  "priorities": {
+    "high": "高",
+    "medium": "中",
+    "low": "低"
   },
   "noMatchingTasks": {
     "title": "フィルターに一致するタスクがありません",

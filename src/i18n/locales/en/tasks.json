@@ -116,7 +116,24 @@
     "prds": "PRDs",
     "addPRD": "Add PRD",
     "addTask": "Add Task",
-    "createNewPRD": "Create New PRD"
+    "createNewPRD": "Create New PRD",
+    "prdsAvailable": "{{count}} PRD(s) available"
+  },
+  "prd": {
+    "modified": "Modified: {{date}}"
+  },
+  "statuses": {
+    "pending": "Pending",
+    "in-progress": "In Progress",
+    "done": "Done",
+    "blocked": "Blocked",
+    "deferred": "Deferred",
+    "cancelled": "Cancelled"
+  },
+  "priorities": {
+    "high": "High",
+    "medium": "Medium",
+    "low": "Low"
   },
   "noMatchingTasks": {
     "title": "No tasks match your filters",

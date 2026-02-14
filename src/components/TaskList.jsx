@@ -596,7 +596,7 @@ const TaskList = ({
                     <button
                       onClick={() => setShowPRDDropdown(!showPRDDropdown)}
                       className="flex items-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors font-medium"
-                      title={`${existingPRDs.length} PRD${existingPRDs.length > 1 ? 's' : ''} available`}
+                      title={t('buttons.prdsAvailable', { count: existingPRDs.length })}
                     >
                       <FileText className="w-4 h-4" />
                       <span className="hidden sm:inline">{t('buttons.prds')}</span>
@@ -641,7 +641,7 @@ const TaskList = ({
                                 }
                               }}
                               className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center gap-2"
-                              title={`Modified: ${new Date(prd.modified).toLocaleDateString()}`}
+                              title={t('prd.modified', { date: new Date(prd.modified).toLocaleDateString() })}
                             >
                               <FileText className="w-4 h-4" />
                               <span className="truncate">{prd.name}</span>
@@ -699,7 +699,7 @@ const TaskList = ({
                 <option value="all">{t('filters.allStatuses')}</option>
                 {statuses.map(status => (
                   <option key={status} value={status}>
-                    {status.charAt(0).toUpperCase() + status.slice(1).replace('-', ' ')}
+                    {t(`statuses.${status}`, status.charAt(0).toUpperCase() + status.slice(1).replace('-', ' '))}
                   </option>
                 ))}
               </select>
@@ -718,7 +718,7 @@ const TaskList = ({
                 <option value="all">{t('filters.allPriorities')}</option>
                 {priorities.map(priority => (
                   <option key={priority} value={priority}>
-                    {priority.charAt(0).toUpperCase() + priority.slice(1)}
+                    {t(`priorities.${priority}`, priority.charAt(0).toUpperCase() + priority.slice(1))}
                   </option>
                 ))}
               </select>
