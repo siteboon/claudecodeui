@@ -351,6 +351,7 @@ export function useChatComposerState({
   );
 
   const {
+    slashCommands,
     slashCommandsCount,
     filteredCommands,
     frequentCommands,
@@ -471,6 +472,18 @@ export function useChatComposerState({
       const currentInput = inputValueRef.current;
       if (!currentInput.trim() || isLoading || !selectedProject) {
         return;
+      }
+
+      // Intercept slash commands: if input starts with /commandName, execute as command with args
+      const trimmedInput = currentInput.trim();
+      if (trimmedInput.startsWith('/')) {
+        const firstSpace = trimmedInput.indexOf(' ');
+        const commandName = firstSpace > 0 ? trimmedInput.slice(0, firstSpace) : trimmedInput;
+        const matchedCommand = slashCommands.find((cmd: SlashCommand) => cmd.name === commandName);
+        if (matchedCommand) {
+          executeCommand(matchedCommand);
+          return;
+        }
       }
 
       let messageContent = currentInput;
@@ -639,6 +652,7 @@ export function useChatComposerState({
       codexModel,
       currentSessionId,
       cursorModel,
+      executeCommand,
       isLoading,
       onSessionActive,
       pendingViewSessionRef,
@@ -654,6 +668,7 @@ export function useChatComposerState({
       setClaudeStatus,
       setIsLoading,
       setIsUserScrolledUp,
+      slashCommands,
       thinkingMode,
     ],
   );
