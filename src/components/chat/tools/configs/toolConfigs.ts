@@ -436,16 +436,28 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
       getContentProps: (result) => {
         // Handle agent results which may have complex structure
         if (result && result.content) {
+          let content = result.content;
+          // If content is a JSON string, try to parse it (agent results may arrive serialized)
+          if (typeof content === 'string') {
+            try {
+              const parsed = JSON.parse(content);
+              if (Array.isArray(parsed)) {
+                content = parsed;
+              }
+            } catch {
+              // Not JSON — use as-is
+              return { content };
+            }
+          }
           // If content is an array (typical for agent responses with multiple text blocks)
-          if (Array.isArray(result.content)) {
-            const textContent = result.content
+          if (Array.isArray(content)) {
+            const textContent = content
               .filter((item: any) => item.type === 'text')
               .map((item: any) => item.text)
               .join('\n\n');
             return { content: textContent || 'No response text' };
           }
-          // If content is already a string
-          return { content: String(result.content) };
+          return { content: String(content) };
         }
         // Fallback to string representation
         return { content: String(result || 'No response') };
