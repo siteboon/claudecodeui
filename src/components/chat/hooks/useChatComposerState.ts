@@ -271,13 +271,14 @@ export function useChatComposerState({
   }, [setChatMessages]);
 
   const executeCommand = useCallback(
-    async (command: SlashCommand) => {
+    async (command: SlashCommand, rawInput?: string) => {
       if (!command || !selectedProject) {
         return;
       }
 
       try {
-        const commandMatch = input.match(new RegExp(`${escapeRegExp(command.name)}\\s*(.*)`));
+        const effectiveInput = rawInput ?? input;
+        const commandMatch = effectiveInput.match(new RegExp(`${escapeRegExp(command.name)}\\s*(.*)`));
         const args =
           commandMatch && commandMatch[1] ? commandMatch[1].trim().split(/\s+/) : [];
 
@@ -481,7 +482,17 @@ export function useChatComposerState({
         const commandName = firstSpace > 0 ? trimmedInput.slice(0, firstSpace) : trimmedInput;
         const matchedCommand = slashCommands.find((cmd: SlashCommand) => cmd.name === commandName);
         if (matchedCommand) {
-          executeCommand(matchedCommand);
+          executeCommand(matchedCommand, trimmedInput);
+          setInput('');
+          inputValueRef.current = '';
+          setAttachedImages([]);
+          setUploadingImages(new Map());
+          setImageErrors(new Map());
+          resetCommandMenuState();
+          setIsTextareaExpanded(false);
+          if (textareaRef.current) {
+            textareaRef.current.style.height = 'auto';
+          }
           return;
         }
       }
