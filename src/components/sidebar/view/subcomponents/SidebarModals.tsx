@@ -84,12 +84,16 @@ export default function SidebarModals({
           document.body,
         )}
 
-      <TypedSettings
-        isOpen={showSettings}
-        onClose={onCloseSettings}
-        projects={settingsProjects}
-        initialTab={settingsInitialTab}
-      />
+      {showSettings &&
+        ReactDOM.createPortal(
+          <TypedSettings
+            isOpen={showSettings}
+            onClose={onCloseSettings}
+            projects={settingsProjects}
+            initialTab={settingsInitialTab}
+          />,
+          document.body,
+        )}
 
       {deleteConfirmation &&
         ReactDOM.createPortal(

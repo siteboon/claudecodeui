@@ -96,11 +96,17 @@ function ChatInterface({
     visibleMessageCount,
     visibleMessages,
     loadEarlierMessages,
+    loadAllMessages,
+    allMessagesLoaded,
+    isLoadingAllMessages,
+    loadAllJustFinished,
+    showLoadAllOverlay,
     claudeStatus,
     setClaudeStatus,
     createDiff,
     scrollContainerRef,
     scrollToBottom,
+    scrollToBottomAndReset,
     handleScroll,
   } = useChatSessionState({
     selectedProject,
@@ -254,8 +260,8 @@ function ChatInterface({
 
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-center text-gray-500 dark:text-gray-400">
-          <p>
+        <div className="text-center text-muted-foreground">
+          <p className="text-sm">
             {t('projectSelection.startChatWithProvider', {
               provider: selectedProviderLabel,
               defaultValue: 'Select a project to start chatting with {{provider}}',
@@ -297,6 +303,11 @@ function ChatInterface({
           visibleMessageCount={visibleMessageCount}
           visibleMessages={visibleMessages}
           loadEarlierMessages={loadEarlierMessages}
+          loadAllMessages={loadAllMessages}
+          allMessagesLoaded={allMessagesLoaded}
+          isLoadingAllMessages={isLoadingAllMessages}
+          loadAllJustFinished={loadAllJustFinished}
+          showLoadAllOverlay={showLoadAllOverlay}
           createDiff={createDiff}
           onFileOpen={onFileOpen}
           onShowSettings={onShowSettings}
@@ -327,7 +338,7 @@ function ChatInterface({
           onClearInput={handleClearInput}
           isUserScrolledUp={isUserScrolledUp}
           hasMessages={chatMessages.length > 0}
-          onScrollToBottom={scrollToBottom}
+          onScrollToBottom={scrollToBottomAndReset}
           onSubmit={handleSubmit}
           isDragActive={isDragActive}
           attachedImages={attachedImages}

@@ -1,6 +1,6 @@
 {
   "name": "@siteboon/claude-code-ui",
-  "version": "1.17.1",
+  "version": "1.18.0",
   "description": "A web-based UI for Claude Code CLI",
   "type": "module",
   "main": "server/index.js",
@@ -39,10 +39,10 @@
     "ui",
     "mobile"
   ],
-  "author": "Claude Code UI Contributors",
+  "author": "CloudCLI UI Contributors",
   "license": "GPL-3.0",
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.1.29",
+    "@anthropic-ai/claude-agent-sdk": "^0.1.71",
     "@codemirror/lang-css": "^6.3.1",
     "@codemirror/lang-html": "^6.4.9",
     "@codemirror/lang-javascript": "^6.2.4",
@@ -53,7 +53,7 @@
     "@codemirror/theme-one-dark": "^6.1.2",
     "@iarna/toml": "^2.2.5",
     "@octokit/rest": "^22.0.0",
-    "@openai/codex-sdk": "^0.75.0",
+    "@openai/codex-sdk": "^0.101.0",
     "@replit/codemirror-minimap": "^0.5.2",
     "@tailwindcss/typography": "^0.5.16",
     "@uiw/react-codemirror": "^4.23.13",
@@ -89,6 +89,7 @@
     "react-router-dom": "^6.8.1",
     "react-syntax-highlighter": "^15.6.1",
     "rehype-katex": "^7.0.1",
+    "rehype-raw": "^7.0.0",
     "remark-gfm": "^4.0.0",
     "remark-math": "^6.0.0",
     "sqlite": "^5.1.1",

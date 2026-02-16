@@ -577,6 +577,7 @@ const Onboarding = ({ onComplete }) => {
           provider={activeLoginProvider}
           project={selectedProject}
           onComplete={handleLoginComplete}
+          isOnboarding={true}
         />
       )}
     </>

@@ -90,7 +90,7 @@ export function useSidebarController({
   }, [projects]);
 
   useEffect(() => {
-    if (selectedSession && selectedProject) {
+    if (selectedProject) {
       setExpandedProjects((prev) => {
         if (prev.has(selectedProject.name)) {
           return prev;

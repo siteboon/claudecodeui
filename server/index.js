@@ -703,7 +703,6 @@ app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) =
         const { projectName } = req.params;
         const { filePath } = req.query;
 
-        console.log('[DEBUG] File read request:', projectName, filePath);
 
         // Security: ensure the requested path is inside the project root
         if (!filePath) {
@@ -744,7 +743,6 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
         const { projectName } = req.params;
         const { path: filePath } = req.query;
 
-        console.log('[DEBUG] Binary file serve request:', projectName, filePath);
 
         // Security: ensure the requested path is inside the project root
         if (!filePath) {
@@ -798,7 +796,6 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
         const { projectName } = req.params;
         const { filePath, content } = req.body;
 
-        console.log('[DEBUG] File save request:', projectName, filePath);
 
         // Security: ensure the requested path is inside the project root
         if (!filePath) {

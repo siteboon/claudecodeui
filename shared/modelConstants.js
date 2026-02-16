@@ -55,6 +55,8 @@ export const CURSOR_MODELS = {
  */
 export const CODEX_MODELS = {
   OPTIONS: [
+    { value: 'gpt-5.3-codex', label: 'GPT-5.3 Codex' },
+    { value: 'gpt-5.2-codex', label: 'GPT-5.2 Codex' },
     { value: 'gpt-5.2', label: 'GPT-5.2' },
     { value: 'gpt-5.1-codex-max', label: 'GPT-5.1 Codex Max' },
     { value: 'o3', label: 'O3' },

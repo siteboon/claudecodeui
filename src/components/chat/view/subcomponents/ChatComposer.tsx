@@ -157,16 +157,23 @@ export default function ChatComposer({
     bottom: textareaRect ? window.innerHeight - textareaRect.top + 8 : 90,
   };
 
+  // Detect if the AskUserQuestion interactive panel is active
+  const hasQuestionPanel = pendingPermissionRequests.some(
+    (r) => r.toolName === 'AskUserQuestion'
+  );
+
   return (
     <div className="p-2 sm:p-4 md:p-4 flex-shrink-0 pb-2 sm:pb-4 md:pb-6">
-      <div className="flex-1">
-        <ClaudeStatus
-          status={claudeStatus}
-          isLoading={isLoading}
-          onAbort={onAbortSession}
-          provider={provider}
-        />
-      </div>
+      {!hasQuestionPanel && (
+        <div className="flex-1">
+          <ClaudeStatus
+            status={claudeStatus}
+            isLoading={isLoading}
+            onAbort={onAbortSession}
+            provider={provider}
+          />
+        </div>
+      )}
 
       <div className="max-w-4xl mx-auto mb-3">
         <PermissionRequestsBanner
@@ -175,7 +182,7 @@ export default function ChatComposer({
           handleGrantToolPermission={handleGrantToolPermission}
         />
 
-        <ChatInputControls
+        {!hasQuestionPanel && <ChatInputControls
           permissionMode={permissionMode}
           onModeSwitch={onModeSwitch}
           provider={provider}
@@ -189,14 +196,14 @@ export default function ChatComposer({
           isUserScrolledUp={isUserScrolledUp}
           hasMessages={hasMessages}
           onScrollToBottom={onScrollToBottom}
-        />
+        />}
       </div>
 
-      <form onSubmit={onSubmit as (event: FormEvent<HTMLFormElement>) => void} className="relative max-w-4xl mx-auto">
+      {!hasQuestionPanel && <form onSubmit={onSubmit as (event: FormEvent<HTMLFormElement>) => void} className="relative max-w-4xl mx-auto">
         {isDragActive && (
-          <div className="absolute inset-0 bg-blue-500/20 border-2 border-dashed border-blue-500 rounded-lg flex items-center justify-center z-50">
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-lg">
-              <svg className="w-8 h-8 text-blue-500 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="absolute inset-0 bg-primary/15 border-2 border-dashed border-primary/50 rounded-2xl flex items-center justify-center z-50">
+            <div className="bg-card rounded-xl p-4 shadow-lg border border-border/30">
+              <svg className="w-8 h-8 text-primary mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -210,7 +217,7 @@ export default function ChatComposer({
         )}
 
         {attachedImages.length > 0 && (
-          <div className="mb-2 p-2 bg-gray-50 dark:bg-gray-800 rounded-lg">
+          <div className="mb-2 p-2 bg-muted/40 rounded-xl">
             <div className="flex flex-wrap gap-2">
               {attachedImages.map((file, index) => (
                 <ImageAttachment
@@ -226,14 +233,14 @@ export default function ChatComposer({
         )}
 
         {showFileDropdown && filteredFiles.length > 0 && (
-          <div className="absolute bottom-full left-0 right-0 mb-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg max-h-48 overflow-y-auto z-50 backdrop-blur-sm">
+          <div className="absolute bottom-full left-0 right-0 mb-2 bg-card/95 backdrop-blur-md border border-border/50 rounded-xl shadow-lg max-h-48 overflow-y-auto z-50">
             {filteredFiles.map((file, index) => (
               <div
                 key={file.path}
-                className={`px-4 py-3 cursor-pointer border-b border-gray-100 dark:border-gray-700 last:border-b-0 touch-manipulation ${
+                className={`px-4 py-3 cursor-pointer border-b border-border/30 last:border-b-0 touch-manipulation ${
                   index === selectedFileIndex
-                    ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
-                    : 'hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'
+                    ? 'bg-primary/8 text-primary'
+                    : 'hover:bg-accent/50 text-foreground'
                 }`}
                 onMouseDown={(event) => {
                   event.preventDefault();
@@ -246,7 +253,7 @@ export default function ChatComposer({
                 }}
               >
                 <div className="font-medium text-sm">{file.name}</div>
-                <div className="text-xs text-gray-500 dark:text-gray-400 font-mono">{file.path}</div>
+                <div className="text-xs text-muted-foreground font-mono">{file.path}</div>
               </div>
             ))}
           </div>
@@ -264,7 +271,7 @@ export default function ChatComposer({
 
         <div
           {...getRootProps()}
-          className={`relative bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-600 focus-within:ring-2 focus-within:ring-blue-500 dark:focus-within:ring-blue-500 focus-within:border-blue-500 transition-all duration-200 overflow-hidden ${
+          className={`relative bg-card/80 backdrop-blur-sm rounded-2xl shadow-sm border border-border/50 focus-within:shadow-md focus-within:border-primary/30 focus-within:ring-1 focus-within:ring-primary/15 transition-all duration-200 overflow-hidden ${
             isTextareaExpanded ? 'chat-input-expanded' : ''
           }`}
         >
@@ -289,17 +296,17 @@ export default function ChatComposer({
               onInput={onTextareaInput}
               placeholder={placeholder}
               disabled={isLoading}
-              className="chat-input-placeholder block w-full pl-12 pr-20 sm:pr-40 py-1.5 sm:py-4 bg-transparent rounded-2xl focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 resize-none min-h-[50px] sm:min-h-[80px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-base leading-6 transition-all duration-200"
+              className="chat-input-placeholder block w-full pl-12 pr-20 sm:pr-40 py-1.5 sm:py-4 bg-transparent rounded-2xl focus:outline-none text-foreground placeholder-muted-foreground/50 disabled:opacity-50 resize-none min-h-[50px] sm:min-h-[80px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-base leading-6 transition-all duration-200"
               style={{ height: '50px' }}
             />
 
             <button
               type="button"
               onClick={openImagePicker}
-              className="absolute left-2 top-1/2 transform -translate-y-1/2 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              className="absolute left-2 top-1/2 transform -translate-y-1/2 p-2 hover:bg-accent/60 rounded-xl transition-colors"
               title={t('input.attachImages')}
             >
-              <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -324,15 +331,15 @@ export default function ChatComposer({
                 event.preventDefault();
                 onSubmit(event);
               }}
-              className="absolute right-2 top-1/2 transform -translate-y-1/2 w-12 h-12 sm:w-12 sm:h-12 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed rounded-full flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:ring-offset-gray-800"
+              className="absolute right-2 top-1/2 transform -translate-y-1/2 w-10 h-10 sm:w-11 sm:h-11 bg-primary hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed rounded-xl flex items-center justify-center transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-1 focus:ring-offset-background"
             >
-              <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white transform rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              <svg className="w-4 h-4 sm:w-[18px] sm:h-[18px] text-primary-foreground transform rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
               </svg>
             </button>
 
             <div
-              className={`absolute bottom-1 left-12 right-14 sm:right-40 text-xs text-gray-400 dark:text-gray-500 pointer-events-none hidden sm:block transition-opacity duration-200 ${
+              className={`absolute bottom-1 left-12 right-14 sm:right-40 text-xs text-muted-foreground/50 pointer-events-none hidden sm:block transition-opacity duration-200 ${
                 input.trim() ? 'opacity-0' : 'opacity-100'
               }`}
             >
@@ -340,7 +347,7 @@ export default function ChatComposer({
             </div>
           </div>
         </div>
-      </form>
+      </form>}
     </div>
   );
 }
