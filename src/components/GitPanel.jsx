@@ -656,11 +656,11 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
                 <p className="text-sm font-medium text-foreground truncate">
                   {commit.message}
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="text-sm text-muted-foreground mt-1">
                   {commit.author} • {commit.date}
                 </p>
               </div>
-              <span className="text-xs font-mono text-muted-foreground/60 flex-shrink-0">
+              <span className="text-sm font-mono text-muted-foreground/60 flex-shrink-0">
                 {commit.hash.substring(0, 7)}
               </span>
             </div>
@@ -669,7 +669,7 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
         {isExpanded && diff && (
           <div className="bg-muted/50">
             <div className="max-h-96 overflow-y-auto p-2">
-              <div className="text-xs font-mono text-muted-foreground mb-2">
+              <div className="text-sm font-mono text-muted-foreground mb-2">
                 {commit.stats}
               </div>
               <DiffViewer diff={diff} fileName="commit" isMobile={isMobile} wrapText={wrapText} />
@@ -792,7 +792,7 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
                     e.stopPropagation();
                     setWrapText(!wrapText);
                   }}
-                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                   title={wrapText ? "Switch to horizontal scroll" : "Switch to text wrap"}
                 >
                   {wrapText ? '↔️ Scroll' : '↩️ Wrap'}
@@ -898,7 +898,7 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
                     message: `Publish branch "${currentBranch}" to ${remoteStatus.remoteName}?`
                   })}
                   disabled={isPublishing}
-                  className="px-2.5 py-1 text-xs bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1 transition-colors"
+                  className="px-2.5 py-1 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1 transition-colors"
                   title={`Publish branch "${currentBranch}" to ${remoteStatus.remoteName}`}
                 >
                   <Upload className={`w-3 h-3 ${isPublishing ? 'animate-pulse' : ''}`} />
@@ -917,7 +917,7 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
                         message: `Pull ${remoteStatus.behind} commit${remoteStatus.behind !== 1 ? 's' : ''} from ${remoteStatus.remoteName}?`
                       })}
                       disabled={isPulling}
-                      className="px-2.5 py-1 text-xs bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-1 transition-colors"
+                      className="px-2.5 py-1 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-1 transition-colors"
                       title={`Pull ${remoteStatus.behind} commit${remoteStatus.behind !== 1 ? 's' : ''} from ${remoteStatus.remoteName}`}
                     >
                       <Download className={`w-3 h-3 ${isPulling ? 'animate-pulse' : ''}`} />
@@ -933,7 +933,7 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
                         message: `Push ${remoteStatus.ahead} commit${remoteStatus.ahead !== 1 ? 's' : ''} to ${remoteStatus.remoteName}?`
                       })}
                       disabled={isPushing}
-                      className="px-2.5 py-1 text-xs bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 flex items-center gap-1 transition-colors"
+                      className="px-2.5 py-1 text-sm bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 flex items-center gap-1 transition-colors"
                       title={`Push ${remoteStatus.ahead} commit${remoteStatus.ahead !== 1 ? 's' : ''} to ${remoteStatus.remoteName}`}
                     >
                       <Upload className={`w-3 h-3 ${isPushing ? 'animate-pulse' : ''}`} />
@@ -946,7 +946,7 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
                     <button
                       onClick={handleFetch}
                       disabled={isFetching}
-                      className="px-2.5 py-1 text-xs bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1 transition-colors"
+                      className="px-2.5 py-1 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1 transition-colors"
                       title={`Fetch from ${remoteStatus.remoteName}`}
                     >
                       <RefreshCw className={`w-3 h-3 ${isFetching ? 'animate-spin' : ''}`} />
@@ -1098,7 +1098,7 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
                       </div>
                     </div>
                     <div className="flex items-center justify-between mt-2">
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-sm text-muted-foreground">
                         {selectedFiles.size} file{selectedFiles.size !== 1 ? 's' : ''} selected
                       </span>
                       <button
@@ -1127,7 +1127,7 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
                 ? 'max-h-16 opacity-100 translate-y-0'
                 : 'max-h-0 opacity-0 -translate-y-2 overflow-hidden'
             }`}>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-sm text-muted-foreground">
                 {selectedFiles.size} of {(gitStatus?.modified?.length || 0) + (gitStatus?.added?.length || 0) + (gitStatus?.deleted?.length || 0) + (gitStatus?.untracked?.length || 0)} {isMobile ? '' : 'files'} selected
               </span>
               <div className={`flex ${isMobile ? 'gap-1' : 'gap-2'}`}>
@@ -1141,14 +1141,14 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
                     ]);
                     setSelectedFiles(allFiles);
                   }}
-                  className="text-xs text-primary hover:text-primary/80 transition-colors"
+                  className="text-sm text-primary hover:text-primary/80 transition-colors"
                 >
                   {isMobile ? 'All' : 'Select All'}
                 </button>
                 <span className="text-border">|</span>
                 <button
                   onClick={() => setSelectedFiles(new Set())}
-                  className="text-xs text-primary hover:text-primary/80 transition-colors"
+                  className="text-sm text-primary hover:text-primary/80 transition-colors"
                 >
                   {isMobile ? 'None' : 'Deselect All'}
                 </button>
@@ -1161,7 +1161,7 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
             <div className="border-b border-border/60">
               <button
                 onClick={() => setShowLegend(!showLegend)}
-                className="w-full px-4 py-2 bg-muted/30 hover:bg-muted/50 text-xs text-muted-foreground flex items-center justify-center gap-1 transition-colors"
+                className="w-full px-4 py-2 bg-muted/30 hover:bg-muted/50 text-sm text-muted-foreground flex items-center justify-center gap-1 transition-colors"
               >
                 <Info className="w-3 h-3" />
                 <span>File Status Guide</span>
@@ -1169,7 +1169,7 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
               </button>
 
               {showLegend && (
-                <div className="px-4 py-3 bg-muted/30 text-xs">
+                <div className="px-4 py-3 bg-muted/30 text-sm">
                   <div className={`${isMobile ? 'grid grid-cols-2 gap-3 justify-items-center' : 'flex justify-center gap-6'}`}>
                     <div className="flex items-center gap-2">
                       <span className="inline-flex items-center justify-center w-5 h-5 bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300 rounded border border-yellow-200 dark:border-yellow-800/50 font-bold text-[10px]">
@@ -1298,7 +1298,7 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
                   autoFocus
                 />
               </div>
-              <div className="text-xs text-muted-foreground mb-4">
+              <div className="text-sm text-muted-foreground mb-4">
                 This will create a new branch from the current branch ({currentBranch})
               </div>
               <div className="flex justify-end space-x-3">

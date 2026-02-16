@@ -162,13 +162,13 @@ export default function ProviderSelectionEmptyState({
           {/* Model picker — appears after provider is chosen */}
           <div className={`transition-all duration-200 ${provider ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1 pointer-events-none'}`}>
             <div className="flex items-center justify-center gap-2 mb-5">
-              <span className="text-xs text-muted-foreground">{t('providerSelection.selectModel')}</span>
+              <span className="text-sm text-muted-foreground">{t('providerSelection.selectModel')}</span>
               <div className="relative">
                 <select
                   value={currentModel}
                   onChange={(e) => handleModelChange(e.target.value)}
                   tabIndex={-1}
-                  className="appearance-none pl-3 pr-7 py-1.5 text-xs font-medium bg-muted/50 border border-border/60 rounded-lg text-foreground cursor-pointer hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className="appearance-none pl-3 pr-7 py-1.5 text-sm font-medium bg-muted/50 border border-border/60 rounded-lg text-foreground cursor-pointer hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20"
                 >
                   {modelConfig.OPTIONS.map(({ value, label }: { value: string; label: string }) => (
                     <option key={value} value={value}>{label}</option>
@@ -178,7 +178,7 @@ export default function ProviderSelectionEmptyState({
               </div>
             </div>
 
-            <p className="text-center text-xs text-muted-foreground/70">
+            <p className="text-center text-sm text-muted-foreground/70">
               {provider === 'claude'
                 ? t('providerSelection.readyPrompt.claude', { model: claudeModel })
                 : provider === 'cursor'

@@ -36,7 +36,7 @@ export default function SidebarFooter({
                 <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
               </div>
               <div className="min-w-0 flex-1">
-                <span className="text-xs font-medium text-blue-600 dark:text-blue-300 truncate block">
+                <span className="text-sm font-medium text-blue-600 dark:text-blue-300 truncate block">
                   {releaseInfo?.title || `v${latestVersion}`}
                 </span>
                 <span className="text-[10px] text-blue-500/70 dark:text-blue-400/60">
@@ -79,7 +79,7 @@ export default function SidebarFooter({
           onClick={onShowSettings}
         >
           <Settings className="w-3.5 h-3.5" />
-          <span className="text-xs">{t('actions.settings')}</span>
+          <span className="text-sm">{t('actions.settings')}</span>
         </button>
       </div>
 

@@ -48,7 +48,7 @@ export default function MainContentTabSwitcher({
           <Tooltip key={tab.id} content={t(tab.labelKey)} position="bottom">
             <button
               onClick={() => setActiveTab(tab.id)}
-              className={`relative flex items-center gap-1.5 px-2.5 py-[5px] text-xs font-medium rounded-md transition-all duration-150 ${
+              className={`relative flex items-center gap-1.5 px-2.5 py-[5px] text-sm font-medium rounded-md transition-all duration-150 ${
                 isActive
                   ? 'bg-background text-foreground shadow-sm'
                   : 'text-muted-foreground hover:text-foreground'

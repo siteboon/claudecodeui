@@ -109,7 +109,7 @@ export default function SidebarHeader({
               placeholder={t('projects.searchPlaceholder')}
               value={searchFilter}
               onChange={(event) => onSearchFilterChange(event.target.value)}
-              className="nav-search-input pl-9 pr-8 h-9 text-xs rounded-xl border-0 placeholder:text-muted-foreground/40 focus-visible:ring-0 focus-visible:ring-offset-0 transition-all duration-200"
+              className="nav-search-input pl-9 pr-8 h-9 text-sm rounded-xl border-0 placeholder:text-muted-foreground/40 focus-visible:ring-0 focus-visible:ring-offset-0 transition-all duration-200"
             />
             {searchFilter && (
               <button

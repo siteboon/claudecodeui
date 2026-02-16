@@ -520,13 +520,13 @@ function FileTree({ selectedProject, onFileOpen }) {
                 {item.name}
               </span>
             </div>
-            <div className="col-span-2 text-xs text-muted-foreground tabular-nums">
+            <div className="col-span-2 text-sm text-muted-foreground tabular-nums">
               {item.type === 'file' ? formatFileSize(item.size) : ''}
             </div>
-            <div className="col-span-3 text-xs text-muted-foreground">
+            <div className="col-span-3 text-sm text-muted-foreground">
               {formatRelativeTime(item.modified)}
             </div>
-            <div className="col-span-2 text-xs text-muted-foreground font-mono">
+            <div className="col-span-2 text-sm text-muted-foreground font-mono">
               {item.permissionsRwx || ''}
             </div>
           </div>
@@ -573,7 +573,7 @@ function FileTree({ selectedProject, onFileOpen }) {
                 {item.name}
               </span>
             </div>
-            <div className="flex items-center gap-3 text-xs text-muted-foreground flex-shrink-0 ml-2">
+            <div className="flex items-center gap-3 text-sm text-muted-foreground flex-shrink-0 ml-2">
               {item.type === 'file' && (
                 <>
                   <span className="tabular-nums">{formatFileSize(item.size)}</span>
@@ -615,7 +615,7 @@ function FileTree({ selectedProject, onFileOpen }) {
       {/* Header */}
       <div className="px-3 pt-3 pb-2 border-b border-border space-y-2">
         <div className="flex items-center justify-between">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <h3 className="text-sm font-medium text-foreground">
             {t('fileTree.files')}
           </h3>
           <div className="flex gap-0.5">
@@ -657,7 +657,7 @@ function FileTree({ selectedProject, onFileOpen }) {
             placeholder={t('fileTree.searchPlaceholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-7 pr-7 h-7 text-xs"
+            className="pl-8 pr-8 h-8 text-sm"
           />
           {searchQuery && (
             <Button
