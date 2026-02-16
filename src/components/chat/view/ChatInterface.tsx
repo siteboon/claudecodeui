@@ -254,8 +254,8 @@ function ChatInterface({
 
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-center text-gray-500 dark:text-gray-400">
-          <p>
+        <div className="text-center text-muted-foreground">
+          <p className="text-sm">
             {t('projectSelection.startChatWithProvider', {
               provider: selectedProviderLabel,
               defaultValue: 'Select a project to start chatting with {{provider}}',
