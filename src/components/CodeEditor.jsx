@@ -143,7 +143,7 @@ function MarkdownPreview({ content }) {
   );
 }
 
-function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded = false, onToggleExpand = null }) {
+function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded = false, onToggleExpand = null, onPopOut = null }) {
   const { t } = useTranslation('codeEditor');
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
@@ -165,7 +165,7 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
     return localStorage.getItem('codeEditorLineNumbers') !== 'false';
   });
   const [fontSize, setFontSize] = useState(() => {
-    return localStorage.getItem('codeEditorFontSize') || '14';
+    return localStorage.getItem('codeEditorFontSize') || '12';
   });
   const [markdownPreview, setMarkdownPreview] = useState(false);
   const editorRef = useRef(null);
@@ -304,6 +304,16 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
           </button>
         `;
 
+        if (isSidebar && onPopOut) {
+          toolbarHTML += `
+            <button class="cm-toolbar-btn cm-popout-btn" title="Open in modal">
+              <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
+              </svg>
+            </button>
+          `;
+        }
+
         // Expand button (only in sidebar mode)
         if (isSidebar && onToggleExpand) {
           toolbarHTML += `
@@ -323,7 +333,6 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
 
         dom.innerHTML = toolbarHTML;
 
-        // Attach event listeners for diff navigation
         if (hasDiff) {
           const prevBtn = dom.querySelector('.cm-diff-nav-prev');
           const nextBtn = dom.querySelector('.cm-diff-nav-next');
@@ -355,7 +364,6 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
           });
         }
 
-        // Attach event listener for toggle diff button
         if (file.diffInfo) {
           const toggleDiffBtn = dom.querySelector('.cm-toggle-diff-btn');
           toggleDiffBtn?.addEventListener('click', () => {
@@ -363,7 +371,6 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
           });
         }
 
-        // Attach event listener for settings button
         const settingsBtn = dom.querySelector('.cm-settings-btn');
         settingsBtn?.addEventListener('click', () => {
           if (window.openSettings) {
@@ -371,7 +378,13 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
           }
         });
 
-        // Attach event listener for expand button
+        if (isSidebar && onPopOut) {
+          const popoutBtn = dom.querySelector('.cm-popout-btn');
+          popoutBtn?.addEventListener('click', () => {
+            onPopOut();
+          });
+        }
+
         if (isSidebar && onToggleExpand) {
           const expandBtn = dom.querySelector('.cm-expand-btn');
           expandBtn?.addEventListener('click', () => {
@@ -390,7 +403,7 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
     };
 
     return [showPanel.of(createPanel)];
-  }, [file.diffInfo, showDiff, isSidebar, isExpanded, onToggleExpand]);
+  }, [file.diffInfo, showDiff, isSidebar, isExpanded, onToggleExpand, onPopOut]);
 
   // Get language extension based on file extension
   const getLanguageExtension = (filename) => {
@@ -666,16 +679,16 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
 
           /* Editor toolbar panel styling */
           .cm-editor-toolbar-panel {
-            padding: 8px 12px;
+            padding: 4px 10px;
             background-color: ${isDarkMode ? '#1f2937' : '#ffffff'};
             border-bottom: 1px solid ${isDarkMode ? '#374151' : '#e5e7eb'};
             color: ${isDarkMode ? '#d1d5db' : '#374151'};
-            font-size: 14px;
+            font-size: 12px;
           }
 
           .cm-diff-nav-btn,
           .cm-toolbar-btn {
-            padding: 4px;
+            padding: 3px;
             background: transparent;
             border: none;
             cursor: pointer;
@@ -712,72 +725,67 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
           (isFullscreen ? ' md:w-full md:h-full md:rounded-none' : ' md:w-full md:max-w-6xl md:h-[80vh] md:max-h-[80vh]')
         }`}>
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0 min-w-0">
-          <div className="flex items-center gap-3 min-w-0 flex-1">
+        <div className="flex items-center justify-between px-3 py-1.5 border-b border-border flex-shrink-0 min-w-0">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 min-w-0">
-                <h3 className="font-medium text-gray-900 dark:text-white truncate">{file.name}</h3>
+                <h3 className="text-sm font-medium text-gray-900 dark:text-white truncate">{file.name}</h3>
                 {file.diffInfo && (
-                  <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 px-2 py-1 rounded whitespace-nowrap">
+                  <span className="text-[10px] bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 px-1.5 py-0.5 rounded whitespace-nowrap">
                     {t('header.showingChanges')}
                   </span>
                 )}
               </div>
-              <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{file.path}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{file.path}</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
+          <div className="flex items-center gap-0.5 md:gap-1 flex-shrink-0">
             {isMarkdownFile && (
               <button
                 onClick={() => setMarkdownPreview(!markdownPreview)}
-                className={`p-2 md:p-2 rounded-md min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center transition-colors ${
+                className={`p-1.5 rounded-md min-w-[36px] min-h-[36px] md:min-w-0 md:min-h-0 flex items-center justify-center transition-colors ${
                   markdownPreview
                     ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30'
                     : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800'
                 }`}
                 title={markdownPreview ? t('actions.editMarkdown') : t('actions.previewMarkdown')}
               >
-                {markdownPreview ? <Code2 className="w-5 h-5 md:w-4 md:h-4" /> : <Eye className="w-5 h-5 md:w-4 md:h-4" />}
+                {markdownPreview ? <Code2 className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             )}
 
             <button
               onClick={handleDownload}
-              className="p-2 md:p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
+              className="p-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 min-w-[36px] min-h-[36px] md:min-w-0 md:min-h-0 flex items-center justify-center"
               title={t('actions.download')}
             >
-              <Download className="w-5 h-5 md:w-4 md:h-4" />
+              <Download className="w-4 h-4" />
             </button>
 
             <button
               onClick={handleSave}
               disabled={saving}
-              className={`px-3 py-2 text-white rounded-md disabled:opacity-50 flex items-center gap-2 transition-colors min-h-[44px] md:min-h-0 ${
+              className={`p-1.5 rounded-md disabled:opacity-50 flex items-center justify-center transition-colors min-w-[36px] min-h-[36px] md:min-w-0 md:min-h-0 ${
                 saveSuccess
-                  ? 'bg-green-600 hover:bg-green-700'
-                  : 'bg-blue-600 hover:bg-blue-700'
+                  ? 'text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800'
               }`}
+              title={saveSuccess ? t('actions.saved') : saving ? t('actions.saving') : t('actions.save')}
             >
               {saveSuccess ? (
-                <>
-                  <svg className="w-5 h-5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  <span className="hidden sm:inline">{t('actions.saved')}</span>
-                </>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
               ) : (
-                <>
-                  <Save className="w-5 h-5 md:w-4 md:h-4" />
-                  <span className="hidden sm:inline">{saving ? t('actions.saving') : t('actions.save')}</span>
-                </>
+                <Save className="w-4 h-4" />
               )}
             </button>
 
             {!isSidebar && (
               <button
                 onClick={toggleFullscreen}
-                className="hidden md:flex p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 items-center justify-center"
+                className="hidden md:flex p-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 items-center justify-center"
                 title={isFullscreen ? t('actions.exitFullscreen') : t('actions.fullscreen')}
               >
                 {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
@@ -786,10 +794,10 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
 
             <button
               onClick={onClose}
-              className="p-2 md:p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
+              className="p-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 min-w-[36px] min-h-[36px] md:min-w-0 md:min-h-0 flex items-center justify-center"
               title={t('actions.close')}
             >
-              <X className="w-6 h-6 md:w-4 md:h-4" />
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -851,13 +859,13 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between p-3 border-t border-border bg-muted flex-shrink-0">
-          <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
+        <div className="flex items-center justify-between px-3 py-1.5 border-t border-border bg-muted flex-shrink-0">
+          <div className="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-400">
             <span>{t('footer.lines')} {content.split('\n').length}</span>
             <span>{t('footer.characters')} {content.length}</span>
           </div>
 
-          <div className="text-sm text-gray-500 dark:text-gray-400">
+          <div className="text-xs text-gray-500 dark:text-gray-400">
             {t('footer.shortcuts')}
           </div>
         </div>

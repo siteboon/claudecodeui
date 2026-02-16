@@ -13,7 +13,6 @@ import {
   Scroll, FlaskConical, NotebookPen, FileCheck, Workflow, Blocks
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import CodeEditor from './CodeEditor';
 import ImageViewer from './ImageViewer';
 import { api } from '../utils/api';
 
@@ -260,12 +259,11 @@ function getFileIconData(filename) {
 
 // ─── Component ───────────────────────────────────────────────────────
 
-function FileTree({ selectedProject }) {
+function FileTree({ selectedProject, onFileOpen }) {
   const { t } = useTranslation();
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [expandedDirs, setExpandedDirs] = useState(new Set());
-  const [selectedFile, setSelectedFile] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
   const [viewMode, setViewMode] = useState('detailed');
   const [searchQuery, setSearchQuery] = useState('');
@@ -403,13 +401,8 @@ function FileTree({ selectedProject }) {
         projectPath: selectedProject.path,
         projectName: selectedProject.name
       });
-    } else {
-      setSelectedFile({
-        name: item.name,
-        path: item.path,
-        projectPath: selectedProject.path,
-        projectName: selectedProject.name
-      });
+    } else if (onFileOpen) {
+      onFileOpen(item.path);
     }
   };
 
@@ -721,15 +714,6 @@ function FileTree({ selectedProject }) {
           </div>
         )}
       </ScrollArea>
-
-      {/* Code Editor Modal */}
-      {selectedFile && (
-        <CodeEditor
-          file={selectedFile}
-          onClose={() => setSelectedFile(null)}
-          projectPath={selectedFile.projectPath}
-        />
-      )}
 
       {/* Image Viewer Modal */}
       {selectedImage && (
