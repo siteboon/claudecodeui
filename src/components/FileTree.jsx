@@ -618,7 +618,7 @@ function FileTree({ selectedProject }) {
 
   // ─── Main render ───────────────────────────────────────────────────
   return (
-    <div className="h-full flex flex-col bg-card">
+    <div className="h-full flex flex-col bg-background">
       {/* Header */}
       <div className="px-3 pt-3 pb-2 border-b border-border space-y-2">
         <div className="flex items-center justify-between">

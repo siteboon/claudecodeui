@@ -7,12 +7,141 @@ import { css } from '@codemirror/lang-css';
 import { json } from '@codemirror/lang-json';
 import { markdown } from '@codemirror/lang-markdown';
 import { oneDark } from '@codemirror/theme-one-dark';
+import { StreamLanguage } from '@codemirror/language';
 import { EditorView, showPanel, ViewPlugin } from '@codemirror/view';
 import { unifiedMergeView, getChunks } from '@codemirror/merge';
 import { showMinimap } from '@replit/codemirror-minimap';
 import { X, Save, Download, Maximize2, Minimize2 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import rehypeRaw from 'rehype-raw';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneDark as prismOneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { api } from '../utils/api';
 import { useTranslation } from 'react-i18next';
+import { Eye, Code2 } from 'lucide-react';
+
+// Custom .env file syntax highlighting
+const envLanguage = StreamLanguage.define({
+  token(stream) {
+    // Comments
+    if (stream.match(/^#.*/)) return 'comment';
+    // Key (before =)
+    if (stream.sol() && stream.match(/^[A-Za-z_][A-Za-z0-9_.]*(?==)/)) return 'variableName.definition';
+    // Equals sign
+    if (stream.match(/^=/)) return 'operator';
+    // Double-quoted string
+    if (stream.match(/^"(?:[^"\\]|\\.)*"?/)) return 'string';
+    // Single-quoted string
+    if (stream.match(/^'(?:[^'\\]|\\.)*'?/)) return 'string';
+    // Variable interpolation ${...}
+    if (stream.match(/^\$\{[^}]*\}?/)) return 'variableName.special';
+    // Variable reference $VAR
+    if (stream.match(/^\$[A-Za-z_][A-Za-z0-9_]*/)) return 'variableName.special';
+    // Numbers
+    if (stream.match(/^\d+/)) return 'number';
+    // Skip other characters
+    stream.next();
+    return null;
+  },
+});
+
+// Markdown preview code block component
+function MarkdownCodeBlock({ inline, className, children, ...props }) {
+  const [copied, setCopied] = useState(false);
+  const raw = Array.isArray(children) ? children.join('') : String(children ?? '');
+  const looksMultiline = /[\r\n]/.test(raw);
+  const shouldInline = inline || !looksMultiline;
+
+  if (shouldInline) {
+    return (
+      <code
+        className={`font-mono text-[0.9em] px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-900 border border-gray-200 dark:bg-gray-800/60 dark:text-gray-100 dark:border-gray-700 whitespace-pre-wrap break-words ${className || ''}`}
+        {...props}
+      >
+        {children}
+      </code>
+    );
+  }
+
+  const match = /language-(\w+)/.exec(className || '');
+  const language = match ? match[1] : 'text';
+
+  return (
+    <div className="relative group my-2">
+      {language && language !== 'text' && (
+        <div className="absolute top-2 left-3 z-10 text-xs text-gray-400 font-medium uppercase">{language}</div>
+      )}
+      <button
+        type="button"
+        onClick={() => {
+          navigator.clipboard?.writeText(raw).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          });
+        }}
+        className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity text-xs px-2 py-1 rounded-md bg-gray-700/80 hover:bg-gray-700 text-white border border-gray-600"
+      >
+        {copied ? 'Copied!' : 'Copy'}
+      </button>
+      <SyntaxHighlighter
+        language={language}
+        style={prismOneDark}
+        customStyle={{
+          margin: 0,
+          borderRadius: '0.5rem',
+          fontSize: '0.875rem',
+          padding: language && language !== 'text' ? '2rem 1rem 1rem 1rem' : '1rem',
+        }}
+      >
+        {raw}
+      </SyntaxHighlighter>
+    </div>
+  );
+}
+
+const markdownPreviewComponents = {
+  code: MarkdownCodeBlock,
+  blockquote: ({ children }) => (
+    <blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-4 italic text-gray-600 dark:text-gray-400 my-2">
+      {children}
+    </blockquote>
+  ),
+  a: ({ href, children }) => (
+    <a href={href} className="text-blue-600 dark:text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">
+      {children}
+    </a>
+  ),
+  table: ({ children }) => (
+    <div className="overflow-x-auto my-2">
+      <table className="min-w-full border-collapse border border-gray-200 dark:border-gray-700">{children}</table>
+    </div>
+  ),
+  thead: ({ children }) => <thead className="bg-gray-50 dark:bg-gray-800">{children}</thead>,
+  th: ({ children }) => (
+    <th className="px-3 py-2 text-left text-sm font-semibold border border-gray-200 dark:border-gray-700">{children}</th>
+  ),
+  td: ({ children }) => (
+    <td className="px-3 py-2 align-top text-sm border border-gray-200 dark:border-gray-700">{children}</td>
+  ),
+};
+
+function MarkdownPreview({ content }) {
+  const remarkPlugins = useMemo(() => [remarkGfm, remarkMath], []);
+  const rehypePlugins = useMemo(() => [rehypeRaw, rehypeKatex], []);
+
+  return (
+    <ReactMarkdown
+      remarkPlugins={remarkPlugins}
+      rehypePlugins={rehypePlugins}
+      components={markdownPreviewComponents}
+    >
+      {content}
+    </ReactMarkdown>
+  );
+}
 
 function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded = false, onToggleExpand = null }) {
   const { t } = useTranslation('codeEditor');
@@ -38,7 +167,14 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
   const [fontSize, setFontSize] = useState(() => {
     return localStorage.getItem('codeEditorFontSize') || '14';
   });
+  const [markdownPreview, setMarkdownPreview] = useState(false);
   const editorRef = useRef(null);
+
+  // Check if file is markdown
+  const isMarkdownFile = useMemo(() => {
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    return ext === 'md' || ext === 'markdown';
+  }, [file.name]);
 
   // Create minimap extension with chunk-based gutters
   const minimapExtension = useMemo(() => {
@@ -258,6 +394,11 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
 
   // Get language extension based on file extension
   const getLanguageExtension = (filename) => {
+    const lowerName = filename.toLowerCase();
+    // Handle dotfiles like .env, .env.local, .env.production, etc.
+    if (lowerName === '.env' || lowerName.startsWith('.env.')) {
+      return [envLanguage];
+    }
     const ext = filename.split('.').pop()?.toLowerCase();
     switch (ext) {
       case 'js':
@@ -279,6 +420,8 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
       case 'md':
       case 'markdown':
         return [markdown()];
+      case 'env':
+        return [envLanguage];
       default:
         return [];
     }
@@ -585,6 +728,20 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
           </div>
 
           <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
+            {isMarkdownFile && (
+              <button
+                onClick={() => setMarkdownPreview(!markdownPreview)}
+                className={`p-2 md:p-2 rounded-md min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center transition-colors ${
+                  markdownPreview
+                    ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800'
+                }`}
+                title={markdownPreview ? t('actions.editMarkdown') : t('actions.previewMarkdown')}
+              >
+                {markdownPreview ? <Code2 className="w-5 h-5 md:w-4 md:h-4" /> : <Eye className="w-5 h-5 md:w-4 md:h-4" />}
+              </button>
+            )}
+
             <button
               onClick={handleDownload}
               className="p-2 md:p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
@@ -637,52 +794,60 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
           </div>
         </div>
 
-        {/* Editor */}
+        {/* Editor / Markdown Preview */}
         <div className="flex-1 overflow-hidden">
-          <CodeMirror
-            ref={editorRef}
-            value={content}
-            onChange={setContent}
-            extensions={[
-              ...getLanguageExtension(file.name),
-              // Always show the toolbar
-              ...editorToolbarPanel,
-              // Only show diff-related extensions when diff is enabled
-              ...(file.diffInfo && showDiff && file.diffInfo.old_string !== undefined
-                ? [
-                    unifiedMergeView({
-                      original: file.diffInfo.old_string,
-                      mergeControls: false,
-                      highlightChanges: true,
-                      syntaxHighlightDeletions: false,
-                      gutter: true
-                      // NOTE: NO collapseUnchanged - this shows the full file!
-                    }),
-                    ...minimapExtension,
-                    ...scrollToFirstChunkExtension
-                  ]
-                : []),
-              ...(wordWrap ? [EditorView.lineWrapping] : [])
-            ]}
-            theme={isDarkMode ? oneDark : undefined}
-            height="100%"
-            style={{
-              fontSize: `${fontSize}px`,
-              height: '100%',
-            }}
-            basicSetup={{
-              lineNumbers: showLineNumbers,
-              foldGutter: true,
-              dropCursor: false,
-              allowMultipleSelections: false,
-              indentOnInput: true,
-              bracketMatching: true,
-              closeBrackets: true,
-              autocompletion: true,
-              highlightSelectionMatches: true,
-              searchKeymap: true,
-            }}
-          />
+          {markdownPreview && isMarkdownFile ? (
+            <div className="h-full overflow-y-auto bg-white dark:bg-gray-900">
+              <div className="max-w-4xl mx-auto px-8 py-6 prose prose-sm dark:prose-invert prose-headings:font-semibold prose-a:text-blue-600 dark:prose-a:text-blue-400 prose-code:text-sm prose-pre:bg-gray-900 prose-img:rounded-lg max-w-none">
+                <MarkdownPreview content={content} />
+              </div>
+            </div>
+          ) : (
+            <CodeMirror
+              ref={editorRef}
+              value={content}
+              onChange={setContent}
+              extensions={[
+                ...getLanguageExtension(file.name),
+                // Always show the toolbar
+                ...editorToolbarPanel,
+                // Only show diff-related extensions when diff is enabled
+                ...(file.diffInfo && showDiff && file.diffInfo.old_string !== undefined
+                  ? [
+                      unifiedMergeView({
+                        original: file.diffInfo.old_string,
+                        mergeControls: false,
+                        highlightChanges: true,
+                        syntaxHighlightDeletions: false,
+                        gutter: true
+                        // NOTE: NO collapseUnchanged - this shows the full file!
+                      }),
+                      ...minimapExtension,
+                      ...scrollToFirstChunkExtension
+                    ]
+                  : []),
+                ...(wordWrap ? [EditorView.lineWrapping] : [])
+              ]}
+              theme={isDarkMode ? oneDark : undefined}
+              height="100%"
+              style={{
+                fontSize: `${fontSize}px`,
+                height: '100%',
+              }}
+              basicSetup={{
+                lineNumbers: showLineNumbers,
+                foldGutter: true,
+                dropCursor: false,
+                allowMultipleSelections: false,
+                indentOnInput: true,
+                bracketMatching: true,
+                closeBrackets: true,
+                autocompletion: true,
+                highlightSelectionMatches: true,
+                searchKeymap: true,
+              }}
+            />
+          )}
         </div>
 
         {/* Footer */}

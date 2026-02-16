@@ -153,6 +153,13 @@ export function useProjectsState({
     void fetchProjects();
   }, [fetchProjects]);
 
+  // Auto-select the project when there is only one, so the user lands on the new session page
+  useEffect(() => {
+    if (!isLoadingProjects && projects.length === 1 && !selectedProject && !sessionId) {
+      setSelectedProject(projects[0]);
+    }
+  }, [isLoadingProjects, projects, selectedProject, sessionId]);
+
   useEffect(() => {
     if (!latestMessage) {
       return;
