@@ -11,7 +11,7 @@ import { StreamLanguage } from '@codemirror/language';
 import { EditorView, showPanel, ViewPlugin } from '@codemirror/view';
 import { unifiedMergeView, getChunks } from '@codemirror/merge';
 import { showMinimap } from '@replit/codemirror-minimap';
-import { X, Save, Download, Maximize2, Minimize2 } from 'lucide-react';
+import { X, Save, Download, Maximize2, Minimize2, Settings as SettingsIcon } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -48,7 +48,6 @@ const envLanguage = StreamLanguage.define({
   },
 });
 
-// Markdown preview code block component
 function MarkdownCodeBlock({ inline, className, children, ...props }) {
   const [copied, setCopied] = useState(false);
   const raw = Array.isArray(children) ? children.join('') : String(children ?? '');
@@ -241,8 +240,13 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
     ];
   }, [file.diffInfo, showDiff]);
 
-  // Create editor toolbar panel - always visible
+  // Whether toolbar has any buttons worth showing
+  const hasToolbarButtons = !!(file.diffInfo || (isSidebar && onPopOut) || (isSidebar && onToggleExpand));
+
+  // Create editor toolbar panel - only when there are buttons to show
   const editorToolbarPanel = useMemo(() => {
+    if (!hasToolbarButtons) return [];
+
     const createPanel = (view) => {
       const dom = document.createElement('div');
       dom.className = 'cm-editor-toolbar-panel';
@@ -295,15 +299,7 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
           `;
         }
 
-        // Settings button
-        toolbarHTML += `
-          <button class="cm-toolbar-btn cm-settings-btn" title="${t('toolbar.settings')}">
-            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </button>
-        `;
-
+        // Pop out button (only in sidebar mode with onPopOut)
         if (isSidebar && onPopOut) {
           toolbarHTML += `
             <button class="cm-toolbar-btn cm-popout-btn" title="Open in modal">
@@ -370,13 +366,6 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
             setShowDiff(!showDiff);
           });
         }
-
-        const settingsBtn = dom.querySelector('.cm-settings-btn');
-        settingsBtn?.addEventListener('click', () => {
-          if (window.openSettings) {
-            window.openSettings('appearance');
-          }
-        });
 
         if (isSidebar && onPopOut) {
           const popoutBtn = dom.querySelector('.cm-popout-btn');
@@ -625,7 +614,7 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
             </div>
           </div>
         ) : (
-          <div className="fixed inset-0 z-40 md:bg-black/50 md:flex md:items-center md:justify-center">
+          <div className="fixed inset-0 z-[9999] md:bg-black/50 md:flex md:items-center md:justify-center">
             <div className="code-editor-loading w-full h-full md:rounded-lg md:w-auto md:h-auto p-8 flex items-center justify-center">
               <div className="flex items-center gap-3">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
@@ -713,7 +702,7 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
       </style>
       <div className={isSidebar ?
         'w-full h-full flex flex-col' :
-        `fixed inset-0 z-40 ${
+        `fixed inset-0 z-[9999] ${
           // Mobile: native fullscreen, Desktop: modal with backdrop
           'md:bg-black/50 md:flex md:items-center md:justify-center md:p-4'
         } ${isFullscreen ? 'md:p-0' : ''}`}>
@@ -754,6 +743,14 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
                 {markdownPreview ? <Code2 className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             )}
+
+            <button
+              onClick={() => window.openSettings?.('appearance')}
+              className="p-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 min-w-[36px] min-h-[36px] md:min-w-0 md:min-h-0 flex items-center justify-center"
+              title={t('toolbar.settings')}
+            >
+              <SettingsIcon className="w-4 h-4" />
+            </button>
 
             <button
               onClick={handleDownload}
