@@ -71,10 +71,11 @@ function waitForToolApproval(requestId, options = {}) {
 
     // Timeout is local to this process; it does not override SDK timing.
     // It exists to prevent the UI prompt from lingering indefinitely.
-    const timeout = setTimeout(() => {
+    // When timeoutMs is 0 or falsy, skip the timeout entirely (wait forever).
+    const timeout = timeoutMs ? setTimeout(() => {
       onCancel?.('timeout');
       finalize(null);
-    }, timeoutMs);
+    }, timeoutMs) : null;
 
     const abortHandler = () => {
       // If the SDK cancels the control request, stop waiting to avoid
@@ -495,7 +496,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
     // via WebSocket and waits for the response, introduced so tool calls pause
     // instead of auto-running when the allowlist is empty.
     sdkOptions.canUseTool = async (toolName, input, context) => {
-      if (sdkOptions.permissionMode === 'bypassPermissions') {
+      if (sdkOptions.permissionMode === 'bypassPermissions' && toolName !== 'AskUserQuestion') {
         return { behavior: 'allow', updatedInput: input };
       }
 
@@ -509,7 +510,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
       const isAllowed = (sdkOptions.allowedTools || []).some(entry =>
         matchesToolPermission(entry, toolName, input)
       );
-      if (isAllowed) {
+      if (isAllowed && toolName !== 'AskUserQuestion') {
         return { behavior: 'allow', updatedInput: input };
       }
 
@@ -524,7 +525,10 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
       // Wait for the UI; if the SDK cancels, notify the UI so it can dismiss the banner.
       // This does not retry or resurface the prompt; it just reflects the cancellation.
+      // AskUserQuestion needs no timeout — the user must have time to read and answer.
+      const timeoutMs = toolName === 'AskUserQuestion' ? 0 : undefined;
       const decision = await waitForToolApproval(requestId, {
+        timeoutMs,
         signal: context?.signal,
         onCancel: (reason) => {
           ws.send({
