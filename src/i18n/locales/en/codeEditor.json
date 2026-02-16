@@ -20,7 +20,9 @@
     "saved": "Saved!",
     "exitFullscreen": "Exit fullscreen",
     "fullscreen": "Fullscreen",
-    "close": "Close"
+    "close": "Close",
+    "previewMarkdown": "Preview markdown",
+    "editMarkdown": "Edit markdown"
   },
   "footer": {
     "lines": "Lines:",

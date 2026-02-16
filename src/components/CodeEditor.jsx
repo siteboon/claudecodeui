@@ -7,14 +7,142 @@ import { css } from '@codemirror/lang-css';
 import { json } from '@codemirror/lang-json';
 import { markdown } from '@codemirror/lang-markdown';
 import { oneDark } from '@codemirror/theme-one-dark';
+import { StreamLanguage } from '@codemirror/language';
 import { EditorView, showPanel, ViewPlugin } from '@codemirror/view';
 import { unifiedMergeView, getChunks } from '@codemirror/merge';
 import { showMinimap } from '@replit/codemirror-minimap';
-import { X, Save, Download, Maximize2, Minimize2 } from 'lucide-react';
+import { X, Save, Download, Maximize2, Minimize2, Settings as SettingsIcon } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import rehypeRaw from 'rehype-raw';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneDark as prismOneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { api } from '../utils/api';
 import { useTranslation } from 'react-i18next';
+import { Eye, Code2 } from 'lucide-react';
 
-function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded = false, onToggleExpand = null }) {
+// Custom .env file syntax highlighting
+const envLanguage = StreamLanguage.define({
+  token(stream) {
+    // Comments
+    if (stream.match(/^#.*/)) return 'comment';
+    // Key (before =)
+    if (stream.sol() && stream.match(/^[A-Za-z_][A-Za-z0-9_.]*(?==)/)) return 'variableName.definition';
+    // Equals sign
+    if (stream.match(/^=/)) return 'operator';
+    // Double-quoted string
+    if (stream.match(/^"(?:[^"\\]|\\.)*"?/)) return 'string';
+    // Single-quoted string
+    if (stream.match(/^'(?:[^'\\]|\\.)*'?/)) return 'string';
+    // Variable interpolation ${...}
+    if (stream.match(/^\$\{[^}]*\}?/)) return 'variableName.special';
+    // Variable reference $VAR
+    if (stream.match(/^\$[A-Za-z_][A-Za-z0-9_]*/)) return 'variableName.special';
+    // Numbers
+    if (stream.match(/^\d+/)) return 'number';
+    // Skip other characters
+    stream.next();
+    return null;
+  },
+});
+
+function MarkdownCodeBlock({ inline, className, children, ...props }) {
+  const [copied, setCopied] = useState(false);
+  const raw = Array.isArray(children) ? children.join('') : String(children ?? '');
+  const looksMultiline = /[\r\n]/.test(raw);
+  const shouldInline = inline || !looksMultiline;
+
+  if (shouldInline) {
+    return (
+      <code
+        className={`font-mono text-[0.9em] px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-900 border border-gray-200 dark:bg-gray-800/60 dark:text-gray-100 dark:border-gray-700 whitespace-pre-wrap break-words ${className || ''}`}
+        {...props}
+      >
+        {children}
+      </code>
+    );
+  }
+
+  const match = /language-(\w+)/.exec(className || '');
+  const language = match ? match[1] : 'text';
+
+  return (
+    <div className="relative group my-2">
+      {language && language !== 'text' && (
+        <div className="absolute top-2 left-3 z-10 text-xs text-gray-400 font-medium uppercase">{language}</div>
+      )}
+      <button
+        type="button"
+        onClick={() => {
+          navigator.clipboard?.writeText(raw).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          });
+        }}
+        className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity text-xs px-2 py-1 rounded-md bg-gray-700/80 hover:bg-gray-700 text-white border border-gray-600"
+      >
+        {copied ? 'Copied!' : 'Copy'}
+      </button>
+      <SyntaxHighlighter
+        language={language}
+        style={prismOneDark}
+        customStyle={{
+          margin: 0,
+          borderRadius: '0.5rem',
+          fontSize: '0.875rem',
+          padding: language && language !== 'text' ? '2rem 1rem 1rem 1rem' : '1rem',
+        }}
+      >
+        {raw}
+      </SyntaxHighlighter>
+    </div>
+  );
+}
+
+const markdownPreviewComponents = {
+  code: MarkdownCodeBlock,
+  blockquote: ({ children }) => (
+    <blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-4 italic text-gray-600 dark:text-gray-400 my-2">
+      {children}
+    </blockquote>
+  ),
+  a: ({ href, children }) => (
+    <a href={href} className="text-blue-600 dark:text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">
+      {children}
+    </a>
+  ),
+  table: ({ children }) => (
+    <div className="overflow-x-auto my-2">
+      <table className="min-w-full border-collapse border border-gray-200 dark:border-gray-700">{children}</table>
+    </div>
+  ),
+  thead: ({ children }) => <thead className="bg-gray-50 dark:bg-gray-800">{children}</thead>,
+  th: ({ children }) => (
+    <th className="px-3 py-2 text-left text-sm font-semibold border border-gray-200 dark:border-gray-700">{children}</th>
+  ),
+  td: ({ children }) => (
+    <td className="px-3 py-2 align-top text-sm border border-gray-200 dark:border-gray-700">{children}</td>
+  ),
+};
+
+function MarkdownPreview({ content }) {
+  const remarkPlugins = useMemo(() => [remarkGfm, remarkMath], []);
+  const rehypePlugins = useMemo(() => [rehypeRaw, rehypeKatex], []);
+
+  return (
+    <ReactMarkdown
+      remarkPlugins={remarkPlugins}
+      rehypePlugins={rehypePlugins}
+      components={markdownPreviewComponents}
+    >
+      {content}
+    </ReactMarkdown>
+  );
+}
+
+function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded = false, onToggleExpand = null, onPopOut = null }) {
   const { t } = useTranslation('codeEditor');
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
@@ -36,9 +164,16 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
     return localStorage.getItem('codeEditorLineNumbers') !== 'false';
   });
   const [fontSize, setFontSize] = useState(() => {
-    return localStorage.getItem('codeEditorFontSize') || '14';
+    return localStorage.getItem('codeEditorFontSize') || '12';
   });
+  const [markdownPreview, setMarkdownPreview] = useState(false);
   const editorRef = useRef(null);
+
+  // Check if file is markdown
+  const isMarkdownFile = useMemo(() => {
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    return ext === 'md' || ext === 'markdown';
+  }, [file.name]);
 
   // Create minimap extension with chunk-based gutters
   const minimapExtension = useMemo(() => {
@@ -105,8 +240,13 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
     ];
   }, [file.diffInfo, showDiff]);
 
-  // Create editor toolbar panel - always visible
+  // Whether toolbar has any buttons worth showing
+  const hasToolbarButtons = !!(file.diffInfo || (isSidebar && onPopOut) || (isSidebar && onToggleExpand));
+
+  // Create editor toolbar panel - only when there are buttons to show
   const editorToolbarPanel = useMemo(() => {
+    if (!hasToolbarButtons) return [];
+
     const createPanel = (view) => {
       const dom = document.createElement('div');
       dom.className = 'cm-editor-toolbar-panel';
@@ -159,14 +299,16 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
           `;
         }
 
-        // Settings button
-        toolbarHTML += `
-          <button class="cm-toolbar-btn cm-settings-btn" title="${t('toolbar.settings')}">
-            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </button>
-        `;
+        // Pop out button (only in sidebar mode with onPopOut)
+        if (isSidebar && onPopOut) {
+          toolbarHTML += `
+            <button class="cm-toolbar-btn cm-popout-btn" title="Open in modal">
+              <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
+              </svg>
+            </button>
+          `;
+        }
 
         // Expand button (only in sidebar mode)
         if (isSidebar && onToggleExpand) {
@@ -187,7 +329,6 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
 
         dom.innerHTML = toolbarHTML;
 
-        // Attach event listeners for diff navigation
         if (hasDiff) {
           const prevBtn = dom.querySelector('.cm-diff-nav-prev');
           const nextBtn = dom.querySelector('.cm-diff-nav-next');
@@ -219,7 +360,6 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
           });
         }
 
-        // Attach event listener for toggle diff button
         if (file.diffInfo) {
           const toggleDiffBtn = dom.querySelector('.cm-toggle-diff-btn');
           toggleDiffBtn?.addEventListener('click', () => {
@@ -227,15 +367,13 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
           });
         }
 
-        // Attach event listener for settings button
-        const settingsBtn = dom.querySelector('.cm-settings-btn');
-        settingsBtn?.addEventListener('click', () => {
-          if (window.openSettings) {
-            window.openSettings('appearance');
-          }
-        });
+        if (isSidebar && onPopOut) {
+          const popoutBtn = dom.querySelector('.cm-popout-btn');
+          popoutBtn?.addEventListener('click', () => {
+            onPopOut();
+          });
+        }
 
-        // Attach event listener for expand button
         if (isSidebar && onToggleExpand) {
           const expandBtn = dom.querySelector('.cm-expand-btn');
           expandBtn?.addEventListener('click', () => {
@@ -254,10 +392,15 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
     };
 
     return [showPanel.of(createPanel)];
-  }, [file.diffInfo, showDiff, isSidebar, isExpanded, onToggleExpand]);
+  }, [file.diffInfo, showDiff, isSidebar, isExpanded, onToggleExpand, onPopOut]);
 
   // Get language extension based on file extension
   const getLanguageExtension = (filename) => {
+    const lowerName = filename.toLowerCase();
+    // Handle dotfiles like .env, .env.local, .env.production, etc.
+    if (lowerName === '.env' || lowerName.startsWith('.env.')) {
+      return [envLanguage];
+    }
     const ext = filename.split('.').pop()?.toLowerCase();
     switch (ext) {
       case 'js':
@@ -279,6 +422,8 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
       case 'md':
       case 'markdown':
         return [markdown()];
+      case 'env':
+        return [envLanguage];
       default:
         return [];
     }
@@ -469,7 +614,7 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
             </div>
           </div>
         ) : (
-          <div className="fixed inset-0 z-40 md:bg-black/50 md:flex md:items-center md:justify-center">
+          <div className="fixed inset-0 z-[9999] md:bg-black/50 md:flex md:items-center md:justify-center">
             <div className="code-editor-loading w-full h-full md:rounded-lg md:w-auto md:h-auto p-8 flex items-center justify-center">
               <div className="flex items-center gap-3">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
@@ -523,16 +668,16 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
 
           /* Editor toolbar panel styling */
           .cm-editor-toolbar-panel {
-            padding: 8px 12px;
+            padding: 4px 10px;
             background-color: ${isDarkMode ? '#1f2937' : '#ffffff'};
             border-bottom: 1px solid ${isDarkMode ? '#374151' : '#e5e7eb'};
             color: ${isDarkMode ? '#d1d5db' : '#374151'};
-            font-size: 14px;
+            font-size: 12px;
           }
 
           .cm-diff-nav-btn,
           .cm-toolbar-btn {
-            padding: 4px;
+            padding: 3px;
             background: transparent;
             border: none;
             cursor: pointer;
@@ -557,7 +702,7 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
       </style>
       <div className={isSidebar ?
         'w-full h-full flex flex-col' :
-        `fixed inset-0 z-40 ${
+        `fixed inset-0 z-[9999] ${
           // Mobile: native fullscreen, Desktop: modal with backdrop
           'md:bg-black/50 md:flex md:items-center md:justify-center md:p-4'
         } ${isFullscreen ? 'md:p-0' : ''}`}>
@@ -569,58 +714,75 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
           (isFullscreen ? ' md:w-full md:h-full md:rounded-none' : ' md:w-full md:max-w-6xl md:h-[80vh] md:max-h-[80vh]')
         }`}>
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0 min-w-0">
-          <div className="flex items-center gap-3 min-w-0 flex-1">
+        <div className="flex items-center justify-between px-3 py-1.5 border-b border-border flex-shrink-0 min-w-0">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 min-w-0">
-                <h3 className="font-medium text-gray-900 dark:text-white truncate">{file.name}</h3>
+                <h3 className="text-sm font-medium text-gray-900 dark:text-white truncate">{file.name}</h3>
                 {file.diffInfo && (
-                  <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 px-2 py-1 rounded whitespace-nowrap">
+                  <span className="text-[10px] bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 px-1.5 py-0.5 rounded whitespace-nowrap">
                     {t('header.showingChanges')}
                   </span>
                 )}
               </div>
-              <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{file.path}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{file.path}</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
+          <div className="flex items-center gap-0.5 md:gap-1 flex-shrink-0">
+            {isMarkdownFile && (
+              <button
+                onClick={() => setMarkdownPreview(!markdownPreview)}
+                className={`p-1.5 rounded-md min-w-[36px] min-h-[36px] md:min-w-0 md:min-h-0 flex items-center justify-center transition-colors ${
+                  markdownPreview
+                    ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800'
+                }`}
+                title={markdownPreview ? t('actions.editMarkdown') : t('actions.previewMarkdown')}
+              >
+                {markdownPreview ? <Code2 className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            )}
+
+            <button
+              onClick={() => window.openSettings?.('appearance')}
+              className="p-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 min-w-[36px] min-h-[36px] md:min-w-0 md:min-h-0 flex items-center justify-center"
+              title={t('toolbar.settings')}
+            >
+              <SettingsIcon className="w-4 h-4" />
+            </button>
+
             <button
               onClick={handleDownload}
-              className="p-2 md:p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
+              className="p-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 min-w-[36px] min-h-[36px] md:min-w-0 md:min-h-0 flex items-center justify-center"
               title={t('actions.download')}
             >
-              <Download className="w-5 h-5 md:w-4 md:h-4" />
+              <Download className="w-4 h-4" />
             </button>
 
             <button
               onClick={handleSave}
               disabled={saving}
-              className={`px-3 py-2 text-white rounded-md disabled:opacity-50 flex items-center gap-2 transition-colors min-h-[44px] md:min-h-0 ${
+              className={`p-1.5 rounded-md disabled:opacity-50 flex items-center justify-center transition-colors min-w-[36px] min-h-[36px] md:min-w-0 md:min-h-0 ${
                 saveSuccess
-                  ? 'bg-green-600 hover:bg-green-700'
-                  : 'bg-blue-600 hover:bg-blue-700'
+                  ? 'text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800'
               }`}
+              title={saveSuccess ? t('actions.saved') : saving ? t('actions.saving') : t('actions.save')}
             >
               {saveSuccess ? (
-                <>
-                  <svg className="w-5 h-5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  <span className="hidden sm:inline">{t('actions.saved')}</span>
-                </>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
               ) : (
-                <>
-                  <Save className="w-5 h-5 md:w-4 md:h-4" />
-                  <span className="hidden sm:inline">{saving ? t('actions.saving') : t('actions.save')}</span>
-                </>
+                <Save className="w-4 h-4" />
               )}
             </button>
 
             {!isSidebar && (
               <button
                 onClick={toggleFullscreen}
-                className="hidden md:flex p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 items-center justify-center"
+                className="hidden md:flex p-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 items-center justify-center"
                 title={isFullscreen ? t('actions.exitFullscreen') : t('actions.fullscreen')}
               >
                 {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
@@ -629,70 +791,78 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
 
             <button
               onClick={onClose}
-              className="p-2 md:p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
+              className="p-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 min-w-[36px] min-h-[36px] md:min-w-0 md:min-h-0 flex items-center justify-center"
               title={t('actions.close')}
             >
-              <X className="w-6 h-6 md:w-4 md:h-4" />
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        {/* Editor */}
+        {/* Editor / Markdown Preview */}
         <div className="flex-1 overflow-hidden">
-          <CodeMirror
-            ref={editorRef}
-            value={content}
-            onChange={setContent}
-            extensions={[
-              ...getLanguageExtension(file.name),
-              // Always show the toolbar
-              ...editorToolbarPanel,
-              // Only show diff-related extensions when diff is enabled
-              ...(file.diffInfo && showDiff && file.diffInfo.old_string !== undefined
-                ? [
-                    unifiedMergeView({
-                      original: file.diffInfo.old_string,
-                      mergeControls: false,
-                      highlightChanges: true,
-                      syntaxHighlightDeletions: false,
-                      gutter: true
-                      // NOTE: NO collapseUnchanged - this shows the full file!
-                    }),
-                    ...minimapExtension,
-                    ...scrollToFirstChunkExtension
-                  ]
-                : []),
-              ...(wordWrap ? [EditorView.lineWrapping] : [])
-            ]}
-            theme={isDarkMode ? oneDark : undefined}
-            height="100%"
-            style={{
-              fontSize: `${fontSize}px`,
-              height: '100%',
-            }}
-            basicSetup={{
-              lineNumbers: showLineNumbers,
-              foldGutter: true,
-              dropCursor: false,
-              allowMultipleSelections: false,
-              indentOnInput: true,
-              bracketMatching: true,
-              closeBrackets: true,
-              autocompletion: true,
-              highlightSelectionMatches: true,
-              searchKeymap: true,
-            }}
-          />
+          {markdownPreview && isMarkdownFile ? (
+            <div className="h-full overflow-y-auto bg-white dark:bg-gray-900">
+              <div className="max-w-4xl mx-auto px-8 py-6 prose prose-sm dark:prose-invert prose-headings:font-semibold prose-a:text-blue-600 dark:prose-a:text-blue-400 prose-code:text-sm prose-pre:bg-gray-900 prose-img:rounded-lg max-w-none">
+                <MarkdownPreview content={content} />
+              </div>
+            </div>
+          ) : (
+            <CodeMirror
+              ref={editorRef}
+              value={content}
+              onChange={setContent}
+              extensions={[
+                ...getLanguageExtension(file.name),
+                // Always show the toolbar
+                ...editorToolbarPanel,
+                // Only show diff-related extensions when diff is enabled
+                ...(file.diffInfo && showDiff && file.diffInfo.old_string !== undefined
+                  ? [
+                      unifiedMergeView({
+                        original: file.diffInfo.old_string,
+                        mergeControls: false,
+                        highlightChanges: true,
+                        syntaxHighlightDeletions: false,
+                        gutter: true
+                        // NOTE: NO collapseUnchanged - this shows the full file!
+                      }),
+                      ...minimapExtension,
+                      ...scrollToFirstChunkExtension
+                    ]
+                  : []),
+                ...(wordWrap ? [EditorView.lineWrapping] : [])
+              ]}
+              theme={isDarkMode ? oneDark : undefined}
+              height="100%"
+              style={{
+                fontSize: `${fontSize}px`,
+                height: '100%',
+              }}
+              basicSetup={{
+                lineNumbers: showLineNumbers,
+                foldGutter: true,
+                dropCursor: false,
+                allowMultipleSelections: false,
+                indentOnInput: true,
+                bracketMatching: true,
+                closeBrackets: true,
+                autocompletion: true,
+                highlightSelectionMatches: true,
+                searchKeymap: true,
+              }}
+            />
+          )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between p-3 border-t border-border bg-muted flex-shrink-0">
-          <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
+        <div className="flex items-center justify-between px-3 py-1.5 border-t border-border bg-muted flex-shrink-0">
+          <div className="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-400">
             <span>{t('footer.lines')} {content.split('\n').length}</span>
             <span>{t('footer.characters')} {content.length}</span>
           </div>
 
-          <div className="text-sm text-gray-500 dark:text-gray-400">
+          <div className="text-xs text-gray-500 dark:text-gray-400">
             {t('footer.shortcuts')}
           </div>
         </div>

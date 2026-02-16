@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { MutableRefObject } from 'react';
+
 import { api, authenticatedFetch } from '../../../utils/api';
 import type { ChatMessage, Provider } from '../types/types';
 import type { Project, ProjectSession } from '../../../types/app';
@@ -76,15 +77,22 @@ export function useChatSessionState({
   const [tokenBudget, setTokenBudget] = useState<Record<string, unknown> | null>(null);
   const [visibleMessageCount, setVisibleMessageCount] = useState(INITIAL_VISIBLE_MESSAGES);
   const [claudeStatus, setClaudeStatus] = useState<{ text: string; tokens: number; can_interrupt: boolean } | null>(null);
+  const [allMessagesLoaded, setAllMessagesLoaded] = useState(false);
+  const [isLoadingAllMessages, setIsLoadingAllMessages] = useState(false);
+  const [loadAllJustFinished, setLoadAllJustFinished] = useState(false);
+  const [showLoadAllOverlay, setShowLoadAllOverlay] = useState(false);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const isLoadingSessionRef = useRef(false);
   const isLoadingMoreRef = useRef(false);
+  const allMessagesLoadedRef = useRef(false);
   const topLoadLockRef = useRef(false);
   const pendingScrollRestoreRef = useRef<ScrollRestoreState | null>(null);
   const pendingInitialScrollRef = useRef(true);
   const messagesOffsetRef = useRef(0);
   const scrollPositionRef = useRef({ height: 0, top: 0 });
+  const loadAllFinishedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadAllOverlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const createDiff = useMemo<DiffCalculator>(() => createCachedDiffCalculator(), []);
 
@@ -182,6 +190,15 @@ export function useChatSessionState({
     container.scrollTop = container.scrollHeight;
   }, []);
 
+  const scrollToBottomAndReset = useCallback(() => {
+    scrollToBottom();
+    if (allMessagesLoaded) {
+      setVisibleMessageCount(INITIAL_VISIBLE_MESSAGES);
+      setAllMessagesLoaded(false);
+      allMessagesLoadedRef.current = false;
+    }
+  }, [allMessagesLoaded, scrollToBottom]);
+
   const isNearBottom = useCallback(() => {
     const container = scrollContainerRef.current;
     if (!container) {
@@ -196,6 +213,7 @@ export function useChatSessionState({
       if (!container || isLoadingMoreRef.current || isLoadingMoreMessages) {
         return false;
       }
+      if (allMessagesLoadedRef.current) return false;
       if (!hasMoreMessages || !selectedSession || !selectedProject) {
         return false;
       }
@@ -245,23 +263,24 @@ export function useChatSessionState({
     const nearBottom = isNearBottom();
     setIsUserScrolledUp(!nearBottom);
 
-    const scrolledNearTop = container.scrollTop < 100;
-    if (!scrolledNearTop) {
-      topLoadLockRef.current = false;
-      return;
-    }
-
-    if (topLoadLockRef.current) {
-      // After a top-load restore, release the lock once user has moved away from absolute top.
-      if (container.scrollTop > 20) {
+    if (!allMessagesLoadedRef.current) {
+      const scrolledNearTop = container.scrollTop < 100;
+      if (!scrolledNearTop) {
         topLoadLockRef.current = false;
+        return;
       }
-      return;
-    }
 
-    const didLoad = await loadOlderMessages(container);
-    if (didLoad) {
-      topLoadLockRef.current = true;
+      if (topLoadLockRef.current) {
+        if (container.scrollTop > 20) {
+          topLoadLockRef.current = false;
+        }
+        return;
+      }
+
+      const didLoad = await loadOlderMessages(container);
+      if (didLoad) {
+        topLoadLockRef.current = true;
+      }
     }
   }, [isNearBottom, loadOlderMessages]);
 
@@ -322,6 +341,14 @@ export function useChatSessionState({
           messagesOffsetRef.current = 0;
           setHasMoreMessages(false);
           setTotalMessages(0);
+          setVisibleMessageCount(INITIAL_VISIBLE_MESSAGES);
+          setAllMessagesLoaded(false);
+          allMessagesLoadedRef.current = false;
+          setIsLoadingAllMessages(false);
+          setLoadAllJustFinished(false);
+          setShowLoadAllOverlay(false);
+          if (loadAllOverlayTimerRef.current) clearTimeout(loadAllOverlayTimerRef.current);
+          if (loadAllFinishedTimerRef.current) clearTimeout(loadAllFinishedTimerRef.current);
           setTokenBudget(null);
           setIsLoading(false);
 
@@ -571,6 +598,106 @@ export function useChatSessionState({
     }
   }, [currentSessionId, isLoading, processingSessions, selectedSession?.id]);
 
+  // Show "Load all" overlay after a batch finishes loading, persist for 2s then hide
+  const prevLoadingRef = useRef(false);
+  useEffect(() => {
+    const wasLoading = prevLoadingRef.current;
+    prevLoadingRef.current = isLoadingMoreMessages;
+
+    if (wasLoading && !isLoadingMoreMessages && hasMoreMessages) {
+      if (loadAllOverlayTimerRef.current) clearTimeout(loadAllOverlayTimerRef.current);
+      setShowLoadAllOverlay(true);
+      loadAllOverlayTimerRef.current = setTimeout(() => {
+        setShowLoadAllOverlay(false);
+      }, 2000);
+    }
+    if (!hasMoreMessages && !isLoadingMoreMessages) {
+      if (loadAllOverlayTimerRef.current) clearTimeout(loadAllOverlayTimerRef.current);
+      setShowLoadAllOverlay(false);
+    }
+    return () => {
+      if (loadAllOverlayTimerRef.current) clearTimeout(loadAllOverlayTimerRef.current);
+    };
+  }, [isLoadingMoreMessages, hasMoreMessages]);
+
+  const loadAllMessages = useCallback(async () => {
+    if (!selectedSession || !selectedProject) return;
+    if (isLoadingAllMessages) return;
+    const sessionProvider = selectedSession.__provider || 'claude';
+    if (sessionProvider === 'cursor') {
+      setVisibleMessageCount(Infinity);
+      setAllMessagesLoaded(true);
+      allMessagesLoadedRef.current = true;
+      setLoadAllJustFinished(true);
+      if (loadAllFinishedTimerRef.current) clearTimeout(loadAllFinishedTimerRef.current);
+      loadAllFinishedTimerRef.current = setTimeout(() => {
+        setLoadAllJustFinished(false);
+        setShowLoadAllOverlay(false);
+      }, 1000);
+      return;
+    }
+
+    const requestSessionId = selectedSession.id;
+
+    allMessagesLoadedRef.current = true;
+    isLoadingMoreRef.current = true;
+    setIsLoadingAllMessages(true);
+    setShowLoadAllOverlay(true);
+
+    const container = scrollContainerRef.current;
+    const previousScrollHeight = container ? container.scrollHeight : 0;
+    const previousScrollTop = container ? container.scrollTop : 0;
+
+    try {
+      const response = await (api.sessionMessages as any)(
+        selectedProject.name,
+        requestSessionId,
+        null,
+        0,
+        sessionProvider,
+      );
+
+      if (currentSessionId !== requestSessionId) return;
+
+      if (response.ok) {
+        const data = await response.json();
+        const allMessages = data.messages || data;
+
+        if (container) {
+          pendingScrollRestoreRef.current = {
+            height: previousScrollHeight,
+            top: previousScrollTop,
+          };
+        }
+
+        setSessionMessages(Array.isArray(allMessages) ? allMessages : []);
+        setHasMoreMessages(false);
+        setTotalMessages(Array.isArray(allMessages) ? allMessages.length : 0);
+        messagesOffsetRef.current = Array.isArray(allMessages) ? allMessages.length : 0;
+
+        setVisibleMessageCount(Infinity);
+        setAllMessagesLoaded(true);
+
+        setLoadAllJustFinished(true);
+        if (loadAllFinishedTimerRef.current) clearTimeout(loadAllFinishedTimerRef.current);
+        loadAllFinishedTimerRef.current = setTimeout(() => {
+          setLoadAllJustFinished(false);
+          setShowLoadAllOverlay(false);
+        }, 1000);
+      } else {
+        allMessagesLoadedRef.current = false;
+        setShowLoadAllOverlay(false);
+      }
+    } catch (error) {
+      console.error('Error loading all messages:', error);
+      allMessagesLoadedRef.current = false;
+      setShowLoadAllOverlay(false);
+    } finally {
+      isLoadingMoreRef.current = false;
+      setIsLoadingAllMessages(false);
+    }
+  }, [selectedSession, selectedProject, isLoadingAllMessages, currentSessionId]);
+
   const loadEarlierMessages = useCallback(() => {
     setVisibleMessageCount((previousCount) => previousCount + 100);
   }, []);
@@ -599,11 +726,17 @@ export function useChatSessionState({
     visibleMessageCount,
     visibleMessages,
     loadEarlierMessages,
+    loadAllMessages,
+    allMessagesLoaded,
+    isLoadingAllMessages,
+    loadAllJustFinished,
+    showLoadAllOverlay,
     claudeStatus,
     setClaudeStatus,
     createDiff,
     scrollContainerRef,
     scrollToBottom,
+    scrollToBottomAndReset,
     isNearBottom,
     handleScroll,
     loadSessionMessages,
