@@ -24,7 +24,7 @@ export interface ToolDisplayConfig {
     // Collapsible config
     title?: string | ((input: any) => string);
     defaultOpen?: boolean;
-    contentType?: 'diff' | 'markdown' | 'file-list' | 'todo-list' | 'text' | 'task';
+    contentType?: 'diff' | 'markdown' | 'file-list' | 'todo-list' | 'text' | 'task' | 'question-answer';
     getContentProps?: (input: any, helpers?: any) => any;
     actionButton?: 'file-button' | 'none';
   };
@@ -35,7 +35,7 @@ export interface ToolDisplayConfig {
     title?: string | ((result: any) => string);
     defaultOpen?: boolean;
     // Special result handlers
-    contentType?: 'markdown' | 'file-list' | 'todo-list' | 'text' | 'success-message' | 'task';
+    contentType?: 'markdown' | 'file-list' | 'todo-list' | 'text' | 'success-message' | 'task' | 'question-answer';
     getMessage?: (result: any) => string;
     getContentProps?: (result: any) => any;
   };
@@ -450,6 +450,34 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
         // Fallback to string representation
         return { content: String(result || 'No response') };
       }
+    }
+  },
+
+  // ============================================================================
+  // INTERACTIVE TOOLS
+  // ============================================================================
+
+  AskUserQuestion: {
+    input: {
+      type: 'collapsible',
+      title: (input: any) => {
+        const count = input.questions?.length || 0;
+        const hasAnswers = input.answers && Object.keys(input.answers).length > 0;
+        if (count === 1) {
+          const header = input.questions[0]?.header || 'Question';
+          return hasAnswers ? `${header} — answered` : header;
+        }
+        return hasAnswers ? `${count} questions — answered` : `${count} questions`;
+      },
+      defaultOpen: true,
+      contentType: 'question-answer',
+      getContentProps: (input: any) => ({
+        questions: input.questions || [],
+        answers: input.answers || {}
+      }),
+    },
+    result: {
+      hideOnSuccess: true
     }
   },
 

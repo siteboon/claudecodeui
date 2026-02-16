@@ -157,16 +157,23 @@ export default function ChatComposer({
     bottom: textareaRect ? window.innerHeight - textareaRect.top + 8 : 90,
   };
 
+  // Detect if the AskUserQuestion interactive panel is active
+  const hasQuestionPanel = pendingPermissionRequests.some(
+    (r) => r.toolName === 'AskUserQuestion'
+  );
+
   return (
     <div className="p-2 sm:p-4 md:p-4 flex-shrink-0 pb-2 sm:pb-4 md:pb-6">
-      <div className="flex-1">
-        <ClaudeStatus
-          status={claudeStatus}
-          isLoading={isLoading}
-          onAbort={onAbortSession}
-          provider={provider}
-        />
-      </div>
+      {!hasQuestionPanel && (
+        <div className="flex-1">
+          <ClaudeStatus
+            status={claudeStatus}
+            isLoading={isLoading}
+            onAbort={onAbortSession}
+            provider={provider}
+          />
+        </div>
+      )}
 
       <div className="max-w-4xl mx-auto mb-3">
         <PermissionRequestsBanner
@@ -175,7 +182,7 @@ export default function ChatComposer({
           handleGrantToolPermission={handleGrantToolPermission}
         />
 
-        <ChatInputControls
+        {!hasQuestionPanel && <ChatInputControls
           permissionMode={permissionMode}
           onModeSwitch={onModeSwitch}
           provider={provider}
@@ -189,10 +196,10 @@ export default function ChatComposer({
           isUserScrolledUp={isUserScrolledUp}
           hasMessages={hasMessages}
           onScrollToBottom={onScrollToBottom}
-        />
+        />}
       </div>
 
-      <form onSubmit={onSubmit as (event: FormEvent<HTMLFormElement>) => void} className="relative max-w-4xl mx-auto">
+      {!hasQuestionPanel && <form onSubmit={onSubmit as (event: FormEvent<HTMLFormElement>) => void} className="relative max-w-4xl mx-auto">
         {isDragActive && (
           <div className="absolute inset-0 bg-blue-500/20 border-2 border-dashed border-blue-500 rounded-lg flex items-center justify-center z-50">
             <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-lg">
@@ -340,7 +347,7 @@ export default function ChatComposer({
             </div>
           </div>
         </div>
-      </form>
+      </form>}
     </div>
   );
 }

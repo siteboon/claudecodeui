@@ -402,11 +402,26 @@ export const convertSessionMessages = (rawMessages: any[]): ChatMessage[] => {
         content.startsWith('[Request interrupted');
 
       if (!shouldSkip) {
-        converted.push({
-          type: 'user',
-          content: unescapeWithMathProtection(content),
-          timestamp: message.timestamp || new Date().toISOString(),
-        });
+        // Parse <task-notification> blocks into compact system messages
+        const taskNotifRegex = /<task-notification>\s*<task-id>[^<]*<\/task-id>\s*<output-file>[^<]*<\/output-file>\s*<status>([^<]*)<\/status>\s*<summary>([^<]*)<\/summary>\s*<\/task-notification>/g;
+        const taskNotifMatch = taskNotifRegex.exec(content);
+        if (taskNotifMatch) {
+          const status = taskNotifMatch[1]?.trim() || 'completed';
+          const summary = taskNotifMatch[2]?.trim() || 'Background task finished';
+          converted.push({
+            type: 'assistant',
+            content: summary,
+            timestamp: message.timestamp || new Date().toISOString(),
+            isTaskNotification: true,
+            taskStatus: status,
+          });
+        } else {
+          converted.push({
+            type: 'user',
+            content: unescapeWithMathProtection(content),
+            timestamp: message.timestamp || new Date().toISOString(),
+          });
+        }
       }
       return;
     }

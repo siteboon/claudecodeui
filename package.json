@@ -42,7 +42,7 @@
   "author": "Claude Code UI Contributors",
   "license": "GPL-3.0",
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.1.29",
+    "@anthropic-ai/claude-agent-sdk": "^0.1.71",
     "@codemirror/lang-css": "^6.3.1",
     "@codemirror/lang-html": "^6.4.9",
     "@codemirror/lang-javascript": "^6.2.4",

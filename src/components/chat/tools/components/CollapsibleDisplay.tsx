@@ -23,6 +23,7 @@ const borderColorMap: Record<string, string> = {
   task: 'border-l-violet-500 dark:border-l-violet-400',
   agent: 'border-l-purple-500 dark:border-l-purple-400',
   plan: 'border-l-indigo-500 dark:border-l-indigo-400',
+  question: 'border-l-blue-500 dark:border-l-blue-400',
   default: 'border-l-gray-300 dark:border-l-gray-600',
 };
 
