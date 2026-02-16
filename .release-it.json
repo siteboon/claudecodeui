@@ -9,7 +9,7 @@
   },
   "github": {
     "release": true,
-    "releaseName": "Claude Code UI v${version}",
+    "releaseName": "CloudCLI UI v${version}",
     "releaseNotes": {
       "commit": "* ${commit.subject} (${sha}){ - thanks @${author.login}!}",
       "excludeMatches": ["viper151"]
