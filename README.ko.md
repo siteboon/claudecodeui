@@ -6,7 +6,7 @@
 
 [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor CLI](https://docs.cursor.com/en/cli/overview) 및 [Codex](https://developers.openai.com/codex)를 위한 데스크톱 및 모바일 UI입니다. 로컬 또는 원격으로 사용하여 Claude Code, Cursor 또는 Codex의 활성 프로젝트와 세션을 확인하고, 어디서든(모바일 또는 데스크톱) 변경할 수 있습니다. 어디서든 작동하는 적절한 인터페이스를 제공합니다.
 
-<div align="right"><i><a href="./README.md">English</a> · <a href="./README.zh-CN.md">中文</a></i></div>
+<div align="right"><i><a href="./README.md">English</a> · <a href="./README.zh-CN.md">中文</a> · <a href="./README.ja.md">日本語</a></i></div>
 
 ## 스크린샷
 
