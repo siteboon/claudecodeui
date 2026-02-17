@@ -6,7 +6,7 @@
 
 [Claude Code](https://docs.anthropic.com/en/docs/claude-code)、[Cursor CLI](https://docs.cursor.com/en/cli/overview) 和 [Codex](https://developers.openai.com/codex) 的桌面端和移动端界面。您可以在本地或远程使用它来查看 Claude Code、Cursor 或 Codex 中的活跃项目和会话,并从任何地方(移动端或桌面端)对它们进行修改。这为您提供了一个在任何地方都能正常使用的合适界面。
 
- [English](./README.md) | [中文](./README.zh-CN.md)
+<div align="right"><i><a href="./README.md">English</a> · <a href="./README.ko.md">한국어</a></i></div>
 
 ## 截图
 
@@ -57,7 +57,7 @@
 
 ### 前置要求
 
-- [Node.js](https://nodejs.org/) v20 或更高版本
+- [Node.js](https://nodejs.org/) v22 或更高版本
 - 已安装并配置 [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code),和/或
 - 已安装并配置 [Cursor CLI](https://docs.cursor.com/en/cli/overview),和/或
 - 已安装并配置 [Codex](https://developers.openai.com/codex)

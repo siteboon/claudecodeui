@@ -1,5 +1,6 @@
 import { X } from 'lucide-react';
 import StandaloneShell from './StandaloneShell';
+import { IS_PLATFORM } from '../constants/config';
 
 /**
  * Reusable login modal component for Claude, Cursor, and Codex CLI authentication
@@ -20,24 +21,23 @@ function LoginModal({
   project,
   onComplete,
   customCommand,
-  isAuthenticated = false
+  isAuthenticated = false,
+  isOnboarding = false
 }) {
   if (!isOpen) return null;
 
   const getCommand = () => {
     if (customCommand) return customCommand;
 
-    const isPlatform = import.meta.env.VITE_IS_PLATFORM === 'true';
-
     switch (provider) {
       case 'claude':
-        return isAuthenticated ? 'claude setup-token --dangerously-skip-permissions' : 'claude /exit --dangerously-skip-permissions --no-session-persistence';
+        return isAuthenticated ? 'claude setup-token --dangerously-skip-permissions' : isOnboarding ? 'claude /exit --dangerously-skip-permissions' : 'claude /login --dangerously-skip-permissions';
       case 'cursor':
         return 'cursor-agent login';
       case 'codex':
-        return isPlatform ? 'codex login --device-auth' : 'codex login';
+        return IS_PLATFORM ? 'codex login --device-auth' : 'codex login';
       default:
-        return isAuthenticated ? 'claude setup-token --dangerously-skip-permissions' : 'claude /exit --dangerously-skip-permissions --no-session-persistence';
+        return isAuthenticated ? 'claude setup-token --dangerously-skip-permissions' : isOnboarding ? 'claude /exit --dangerously-skip-permissions' : 'claude /login --dangerously-skip-permissions';
     }
   };
 
@@ -58,9 +58,7 @@ function LoginModal({
     if (onComplete) {
       onComplete(exitCode);
     }
-    if (exitCode === 0) {
-      onClose();
-    }
+    // Keep modal open so users can read login output and close explicitly.
   };
 
   return (

@@ -20,6 +20,14 @@ import enAuth from './locales/en/auth.json';
 import enSidebar from './locales/en/sidebar.json';
 import enChat from './locales/en/chat.json';
 import enCodeEditor from './locales/en/codeEditor.json';
+import enTasks from './locales/en/tasks.json';
+
+import koCommon from './locales/ko/common.json';
+import koSettings from './locales/ko/settings.json';
+import koAuth from './locales/ko/auth.json';
+import koSidebar from './locales/ko/sidebar.json';
+import koChat from './locales/ko/chat.json';
+import koCodeEditor from './locales/ko/codeEditor.json';
 
 import zhCommon from './locales/zh-CN/common.json';
 import zhSettings from './locales/zh-CN/settings.json';
@@ -27,6 +35,14 @@ import zhAuth from './locales/zh-CN/auth.json';
 import zhSidebar from './locales/zh-CN/sidebar.json';
 import zhChat from './locales/zh-CN/chat.json';
 import zhCodeEditor from './locales/zh-CN/codeEditor.json';
+
+import jaCommon from './locales/ja/common.json';
+import jaSettings from './locales/ja/settings.json';
+import jaAuth from './locales/ja/auth.json';
+import jaSidebar from './locales/ja/sidebar.json';
+import jaChat from './locales/ja/chat.json';
+import jaCodeEditor from './locales/ja/codeEditor.json';
+import jaTasks from './locales/ja/tasks.json';
 
 // Import supported languages configuration
 import { languages } from './languages.js';
@@ -59,6 +75,15 @@ i18n
         sidebar: enSidebar,
         chat: enChat,
         codeEditor: enCodeEditor,
+        tasks: enTasks,
+      },
+      ko: {
+        common: koCommon,
+        settings: koSettings,
+        auth: koAuth,
+        sidebar: koSidebar,
+        chat: koChat,
+        codeEditor: koCodeEditor,
       },
       'zh-CN': {
         common: zhCommon,
@@ -67,6 +92,15 @@ i18n
         sidebar: zhSidebar,
         chat: zhChat,
         codeEditor: zhCodeEditor,
+      },
+      ja: {
+        common: jaCommon,
+        settings: jaSettings,
+        auth: jaAuth,
+        sidebar: jaSidebar,
+        chat: jaChat,
+        codeEditor: jaCodeEditor,
+        tasks: jaTasks,
       },
     },
 
@@ -80,7 +114,7 @@ i18n
     debug: import.meta.env.DEV,
 
     // Namespaces - load only what's needed
-    ns: ['common', 'settings', 'auth', 'sidebar', 'chat', 'codeEditor'],
+    ns: ['common', 'settings', 'auth', 'sidebar', 'chat', 'codeEditor', 'tasks'],
     defaultNS: 'common',
 
     // Key separator for nested keys (default: '.')

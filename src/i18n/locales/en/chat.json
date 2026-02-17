@@ -106,7 +106,9 @@
       "enter": "Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands"
     },
     "clickToChangeMode": "Click to change permission mode (or press Tab in input)",
-    "showAllCommands": "Show all commands"
+    "showAllCommands": "Show all commands",
+    "clearInput": "Clear input",
+    "scrollToBottom": "Scroll to bottom"
   },
   "thinkingMode": {
     "selector": {
@@ -173,7 +175,11 @@
       "showingOf": "Showing {{shown}} of {{total}} messages",
       "scrollToLoad": "Scroll up to load more",
       "showingLast": "Showing last {{count}} messages ({{total}} total)",
-      "loadEarlier": "Load earlier messages"
+      "loadEarlier": "Load earlier messages",
+      "loadAll": "Load all messages",
+      "loadingAll": "Loading all messages...",
+      "allLoaded": "All messages loaded",
+      "perfWarning": "All messages loaded — scrolling may be slower. Click \"Scroll to bottom\" to restore performance."
     }
   },
   "shell": {
@@ -201,5 +207,11 @@
     "runCommand": "Run {{command}} in {{projectName}}",
     "startCli": "Starting Claude CLI in {{projectName}}",
     "defaultCommand": "command"
+  },
+  "projectSelection": {
+    "startChatWithProvider": "Select a project to start chatting with {{provider}}"
+  },
+  "tasks": {
+    "nextTaskPrompt": "Start the next task"
   }
 }

@@ -106,7 +106,9 @@
       "enter": "Enter 发送 • Shift+Enter 换行 • Tab 切换模式 • / 斜杠命令"
     },
     "clickToChangeMode": "点击更改权限模式（或在输入框中按 Tab）",
-    "showAllCommands": "显示所有命令"
+    "showAllCommands": "显示所有命令",
+    "clearInput": "清空输入",
+    "scrollToBottom": "滚动到底部"
   },
   "thinkingMode": {
     "selector": {
@@ -173,7 +175,11 @@
       "showingOf": "显示 {{shown}} / {{total}} 条消息",
       "scrollToLoad": "向上滚动以加载更多",
       "showingLast": "显示最近 {{count}} 条消息（共 {{total}} 条）",
-      "loadEarlier": "加载更早的消息"
+      "loadEarlier": "加载更早的消息",
+      "loadAll": "加载全部消息",
+      "loadingAll": "正在加载全部消息...",
+      "allLoaded": "全部消息已加载",
+      "perfWarning": "已加载全部消息 - 滚动可能变慢。点击「滚动到底部」恢复性能。"
     }
   },
   "shell": {
@@ -201,5 +207,11 @@
     "runCommand": "在 {{projectName}} 中运行 {{command}}",
     "startCli": "在 {{projectName}} 中启动 Claude CLI",
     "defaultCommand": "命令"
+  },
+  "projectSelection": {
+    "startChatWithProvider": "选择一个项目以开始与 {{provider}} 聊天"
+  },
+  "tasks": {
+    "nextTaskPrompt": "开始下一个任务"
   }
 }

@@ -15,9 +15,19 @@ export const languages = [
     nativeName: 'English',
   },
   {
+    value: 'ko',
+    label: 'Korean',
+    nativeName: '한국어',
+  },
+  {
     value: 'zh-CN',
     label: 'Simplified Chinese',
     nativeName: '简体中文',
+  },
+  {
+    value: 'ja',
+    label: 'Japanese',
+    nativeName: '日本語',
   },
 ];
 

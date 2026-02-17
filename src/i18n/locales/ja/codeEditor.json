@@ -1,0 +1,30 @@
+{
+  "toolbar": {
+    "changes": "件の変更",
+    "previousChange": "前の変更",
+    "nextChange": "次の変更",
+    "hideDiff": "差分ハイライトを非表示",
+    "showDiff": "差分ハイライトを表示",
+    "settings": "エディタ設定",
+    "collapse": "エディタを折りたたむ",
+    "expand": "エディタを全幅に展開"
+  },
+  "loading": "{{fileName}}を読み込んでいます...",
+  "header": {
+    "showingChanges": "変更を表示中"
+  },
+  "actions": {
+    "download": "ファイルをダウンロード",
+    "save": "保存",
+    "saving": "保存中...",
+    "saved": "保存しました！",
+    "exitFullscreen": "全画面を終了",
+    "fullscreen": "全画面",
+    "close": "閉じる"
+  },
+  "footer": {
+    "lines": "行数:",
+    "characters": "文字数:",
+    "shortcuts": "Ctrl+Sで保存 • Escで閉じる"
+  }
+}

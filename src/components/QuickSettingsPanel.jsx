@@ -17,30 +17,26 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import DarkModeToggle from './DarkModeToggle';
+
+import { useUiPreferences } from '../hooks/useUiPreferences';
 import { useTheme } from '../contexts/ThemeContext';
 import LanguageSelector from './LanguageSelector';
 
-const QuickSettingsPanel = ({
-  isOpen,
-  onToggle,
-  autoExpandTools,
-  onAutoExpandChange,
-  showRawParameters,
-  onShowRawParametersChange,
-  showThinking,
-  onShowThinkingChange,
-  autoScrollToBottom,
-  onAutoScrollChange,
-  sendByCtrlEnter,
-  onSendByCtrlEnterChange,
-  isMobile
-}) => {
+import { useDeviceSettings } from '../hooks/useDeviceSettings';
+
+
+const QuickSettingsPanel = () => {
   const { t } = useTranslation('settings');
-  const [localIsOpen, setLocalIsOpen] = useState(isOpen);
+  const [isOpen, setIsOpen] = useState(false);
   const [whisperMode, setWhisperMode] = useState(() => {
     return localStorage.getItem('whisperMode') || 'default';
   });
   const { isDarkMode } = useTheme();
+
+  const { isMobile } = useDeviceSettings({ trackPWA: false });
+
+  const { preferences, setPreference } = useUiPreferences();
+  const { autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter } = preferences;
 
   // Draggable handle state
   const [handlePosition, setHandlePosition] = useState(() => {
@@ -65,10 +61,6 @@ const QuickSettingsPanel = ({
   const handleRef = useRef(null);
   const constraintsRef = useRef({ min: 10, max: 90 }); // Percentage constraints
   const dragThreshold = 5; // Pixels to move before it's considered a drag
-
-  useEffect(() => {
-    setLocalIsOpen(isOpen);
-  }, [isOpen]);
 
   // Save handle position to localStorage when it changes
   useEffect(() => {
@@ -206,9 +198,7 @@ const QuickSettingsPanel = ({
       return;
     }
 
-    const newState = !localIsOpen;
-    setLocalIsOpen(newState);
-    onToggle(newState);
+    setIsOpen((previous) => !previous);
   };
 
   return (
@@ -226,19 +216,19 @@ const QuickSettingsPanel = ({
           handleDragStart(e);
         }}
         className={`fixed ${
-          localIsOpen ? 'right-64' : 'right-0'
+          isOpen ? 'right-64' : 'right-0'
         } z-50 ${isDragging ? '' : 'transition-all duration-150 ease-out'} bg-white dark:bg-gray-800 border ${
           isDragging ? 'border-blue-500 dark:border-blue-400' : 'border-gray-200 dark:border-gray-700'
         } rounded-l-md p-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors shadow-lg ${
           isDragging ? 'cursor-grabbing' : 'cursor-pointer'
         } touch-none`}
         style={{ ...getPositionStyle(), touchAction: 'none', WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
-        aria-label={isDragging ? t('quickSettings.dragHandle.dragging') : localIsOpen ? t('quickSettings.dragHandle.closePanel') : t('quickSettings.dragHandle.openPanel')}
+        aria-label={isDragging ? t('quickSettings.dragHandle.dragging') : isOpen ? t('quickSettings.dragHandle.closePanel') : t('quickSettings.dragHandle.openPanel')}
         title={isDragging ? t('quickSettings.dragHandle.draggingStatus') : t('quickSettings.dragHandle.toggleAndMove')}
       >
         {isDragging ? (
           <GripVertical className="h-5 w-5 text-blue-500 dark:text-blue-400" />
-        ) : localIsOpen ? (
+        ) : isOpen ? (
           <ChevronRight className="h-5 w-5 text-gray-600 dark:text-gray-400" />
         ) : (
           <ChevronLeft className="h-5 w-5 text-gray-600 dark:text-gray-400" />
@@ -248,7 +238,7 @@ const QuickSettingsPanel = ({
       {/* Panel */}
       <div
         className={`fixed top-0 right-0 h-full w-64 bg-background border-l border-border shadow-xl transform transition-transform duration-150 ease-out z-40 ${
-          localIsOpen ? 'translate-x-0' : 'translate-x-full'
+          isOpen ? 'translate-x-0' : 'translate-x-full'
         } ${isMobile ? 'h-screen' : ''}`}
       >
         <div className="h-full flex flex-col">
@@ -292,7 +282,7 @@ const QuickSettingsPanel = ({
                 <input
                   type="checkbox"
                   checked={autoExpandTools}
-                  onChange={(e) => onAutoExpandChange(e.target.checked)}
+                  onChange={(e) => setPreference('autoExpandTools', e.target.checked)}
                   className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 focus:ring-2 dark:focus:ring-blue-400 bg-gray-100 dark:bg-gray-800 checked:bg-blue-600 dark:checked:bg-blue-600"
                 />
               </label>
@@ -305,7 +295,7 @@ const QuickSettingsPanel = ({
                 <input
                   type="checkbox"
                   checked={showRawParameters}
-                  onChange={(e) => onShowRawParametersChange(e.target.checked)}
+                  onChange={(e) => setPreference('showRawParameters', e.target.checked)}
                   className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 focus:ring-2 dark:focus:ring-blue-400 bg-gray-100 dark:bg-gray-800 checked:bg-blue-600 dark:checked:bg-blue-600"
                 />
               </label>
@@ -318,7 +308,7 @@ const QuickSettingsPanel = ({
                 <input
                   type="checkbox"
                   checked={showThinking}
-                  onChange={(e) => onShowThinkingChange(e.target.checked)}
+                  onChange={(e) => setPreference('showThinking', e.target.checked)}
                   className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 focus:ring-2 dark:focus:ring-blue-400 bg-gray-100 dark:bg-gray-800 checked:bg-blue-600 dark:checked:bg-blue-600"
                 />
               </label>
@@ -335,7 +325,7 @@ const QuickSettingsPanel = ({
                 <input
                   type="checkbox"
                   checked={autoScrollToBottom}
-                  onChange={(e) => onAutoScrollChange(e.target.checked)}
+                  onChange={(e) => setPreference('autoScrollToBottom', e.target.checked)}
                   className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 focus:ring-2 dark:focus:ring-blue-400 bg-gray-100 dark:bg-gray-800 checked:bg-blue-600 dark:checked:bg-blue-600"
                 />
               </label>
@@ -353,7 +343,7 @@ const QuickSettingsPanel = ({
                 <input
                   type="checkbox"
                   checked={sendByCtrlEnter}
-                  onChange={(e) => onSendByCtrlEnterChange(e.target.checked)}
+                  onChange={(e) => setPreference('sendByCtrlEnter', e.target.checked)}
                   className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 focus:ring-2 dark:focus:ring-blue-400 bg-gray-100 dark:bg-gray-800 checked:bg-blue-600 dark:checked:bg-blue-600"
                 />
               </label>
@@ -445,7 +435,7 @@ const QuickSettingsPanel = ({
       </div>
 
       {/* Backdrop */}
-      {localIsOpen && (
+      {isOpen && (
         <div
           className="fixed inset-0 bg-background/80 backdrop-blur-sm z-30 transition-opacity duration-150 ease-out"
           onClick={handleToggle}
