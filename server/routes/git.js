@@ -366,17 +366,17 @@ router.post('/initial-commit', async (req, res) => {
 
     // Check if there are already commits
     try {
-      await execAsync('git rev-parse HEAD', { cwd: gitRoot });
+      await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: gitRoot });
       return res.status(400).json({ error: 'Repository already has commits. Use regular commit instead.' });
     } catch (error) {
       // No HEAD - this is good, we can create initial commit
     }
 
     // Add all files
-    await execAsync('git add .', { cwd: gitRoot });
+    await execFileAsync('git', ['add', '.'], { cwd: gitRoot });
 
     // Create initial commit
-    const { stdout } = await execAsync('git commit -m "Initial commit"', { cwd: gitRoot });
+    const { stdout } = await execFileAsync('git', ['commit', '-m', 'Initial commit'], { cwd: gitRoot });
 
     res.json({ success: true, output: stdout, message: 'Initial commit created successfully' });
   } catch (error) {
@@ -575,6 +575,10 @@ router.get('/commit-diff', async (req, res) => {
 
   if (!project || !commit) {
     return res.status(400).json({ error: 'Project name and commit hash are required' });
+  }
+
+  if (!/^[0-9a-fA-F]{4,40}$/.test(commit)) {
+    return res.status(400).json({ error: 'Invalid commit hash format' });
   }
 
   try {

@@ -38,14 +38,26 @@ console.log('PORT from env:', process.env.PORT);
  * @param {string} projectPath - The current project/working directory
  * @returns {string} The git root directory, or projectPath if not in a git repo
  */
-function getGitRoot(projectPath) {
+/**
+ * Rejects paths containing shell metacharacters that could escape
+ * double-quote interpolation in shell command strings.
+ */
+function sanitizePathForShell(p) {
+    if (/[`$"\\!]/.test(p)) {
+        throw new Error('Invalid characters in project path');
+    }
+    return p;
+}
+
+async function getGitRoot(projectPath) {
     if (!projectPath) return projectPath;
     try {
-        const gitRoot = execFileSync(
+        const { stdout } = await execFileAsync(
             'git',
             ['-C', projectPath, 'rev-parse', '--show-toplevel'],
             { encoding: 'utf8' }
-        ).trim();
+        );
+        const gitRoot = stdout.trim();
         if (gitRoot) {
             console.log('🔧 Git root detected:', gitRoot, 'from:', projectPath);
             return gitRoot;
@@ -65,7 +77,10 @@ import os from 'os';
 import http from 'http';
 import cors from 'cors';
 import { promises as fsPromises } from 'fs';
-import { spawn, execFileSync } from 'child_process';
+import { spawn, execFile } from 'child_process';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 import pty from 'node-pty';
 import fetch from 'node-fetch';
 import mime from 'mime-types';
@@ -965,7 +980,7 @@ function handleChatConnection(ws) {
 
                 // Use git root for cwd to prevent session loss when Claude changes directories
                 const chatProjectPath = data.options?.cwd || data.options?.projectPath || process.cwd();
-                const chatGitRoot = getGitRoot(chatProjectPath);
+                const chatGitRoot = await getGitRoot(chatProjectPath);
                 if (data.options) {
                     data.options.cwd = chatGitRoot;
                 }
@@ -1130,7 +1145,7 @@ function handleShellConnection(ws) {
                     : '';
 
                 // Use git root for session key to prevent session loss when Claude changes directories
-                const shellGitRoot = getGitRoot(projectPath);
+                const shellGitRoot = await getGitRoot(projectPath);
                 ptySessionKey = `${shellGitRoot}_${sessionId || 'default'}${commandSuffix}`;
 
                 // Kill any existing login session before starting fresh
@@ -1201,48 +1216,51 @@ function handleShellConnection(ws) {
                 }));
 
                 try {
+                    // Sanitize paths before shell interpolation to prevent injection
+                    const safeProjectPath = sanitizePathForShell(projectPath);
+
                     // Prepare the shell command adapted to the platform and provider
                     let shellCommand;
                     if (isPlainShell) {
                         // Plain shell mode - just run the initial command in the project directory
                         if (os.platform() === 'win32') {
-                            shellCommand = `Set-Location -Path "${projectPath}"; ${initialCommand}`;
+                            shellCommand = `Set-Location -Path "${safeProjectPath}"; ${initialCommand}`;
                         } else {
-                            shellCommand = `cd "${projectPath}" && ${initialCommand}`;
+                            shellCommand = `cd "${safeProjectPath}" && ${initialCommand}`;
                         }
                     } else if (provider === 'cursor') {
                         // Use cursor-agent command
                         if (os.platform() === 'win32') {
                             if (hasSession && sessionId) {
-                                shellCommand = `Set-Location -Path "${projectPath}"; cursor-agent --resume="${sessionId}"`;
+                                shellCommand = `Set-Location -Path "${safeProjectPath}"; cursor-agent --resume="${sessionId}"`;
                             } else {
-                                shellCommand = `Set-Location -Path "${projectPath}"; cursor-agent`;
+                                shellCommand = `Set-Location -Path "${safeProjectPath}"; cursor-agent`;
                             }
                         } else {
                             if (hasSession && sessionId) {
-                                shellCommand = `cd "${projectPath}" && cursor-agent --resume="${sessionId}"`;
+                                shellCommand = `cd "${safeProjectPath}" && cursor-agent --resume="${sessionId}"`;
                             } else {
-                                shellCommand = `cd "${projectPath}" && cursor-agent`;
+                                shellCommand = `cd "${safeProjectPath}" && cursor-agent`;
                             }
                         }
                     } else {
                         // Use claude command (default) or initialCommand if provided
                         const command = initialCommand || 'claude';
                         // Use git root for resume to ensure session is found even if cwd changed
-                        const resumePath = shellGitRoot || projectPath;
+                        const resumePath = sanitizePathForShell(shellGitRoot || projectPath);
                         if (os.platform() === 'win32') {
                             if (hasSession && sessionId) {
                                 // Try to resume session from git root, fallback to new session in projectPath
-                                shellCommand = `Set-Location -Path "${resumePath}"; claude --resume ${sessionId}; if ($LASTEXITCODE -ne 0) { Set-Location -Path "${projectPath}"; claude }`;
+                                shellCommand = `Set-Location -Path "${resumePath}"; claude --resume ${sessionId}; if ($LASTEXITCODE -ne 0) { Set-Location -Path "${safeProjectPath}"; claude }`;
                             } else {
-                                shellCommand = `Set-Location -Path "${projectPath}"; ${command}`;
+                                shellCommand = `Set-Location -Path "${safeProjectPath}"; ${command}`;
                             }
                         } else {
                             if (hasSession && sessionId) {
                                 // Resume from git root, fallback to new session in projectPath if resume fails
-                                shellCommand = `cd "${resumePath}" && claude --resume ${sessionId} || (cd "${projectPath}" && claude)`;
+                                shellCommand = `cd "${resumePath}" && claude --resume ${sessionId} || (cd "${safeProjectPath}" && claude)`;
                             } else {
-                                shellCommand = `cd "${projectPath}" && ${command}`;
+                                shellCommand = `cd "${safeProjectPath}" && ${command}`;
                             }
                         }
                     }
