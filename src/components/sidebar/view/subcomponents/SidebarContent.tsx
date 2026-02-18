@@ -50,7 +50,7 @@ export default function SidebarContent({
   return (
     <div
       className="h-full flex flex-col bg-background/80 backdrop-blur-sm md:select-none md:w-72"
-      style={isPWA && isMobile ? { paddingTop: '44px' } : {}}
+      style={{}}
     >
       <SidebarHeader
         isPWA={isPWA}

@@ -49,7 +49,7 @@ export default function SidebarHeader({
       {/* Desktop header */}
       <div
         className="hidden md:block px-3 pt-3 pb-2"
-        style={isPWA && isMobile ? { paddingTop: '44px' } : {}}
+        style={{}}
       >
         <div className="flex items-center justify-between gap-2">
           {IS_PLATFORM ? (
