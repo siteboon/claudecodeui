@@ -12,6 +12,7 @@
     "server/",
     "shared/",
     "dist/",
+    "scripts/",
     "README.md"
   ],
   "homepage": "https://cloudcli.ai",
@@ -30,7 +31,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "start": "npm run build && npm run server",
-    "release": "./release.sh"
+    "release": "./release.sh",
+    "postinstall": "node scripts/fix-node-pty.js"
   },
   "keywords": [
     "claude code",
