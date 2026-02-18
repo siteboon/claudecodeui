@@ -1,7 +1,21 @@
-import SessionProviderLogo from '../SessionProviderLogo';
 import { useTranslation } from 'react-i18next';
+import SessionProviderLogo from '../../../../SessionProviderLogo';
+import type { AgentProvider, AuthStatus } from '../../../types/types';
 
-const agentConfig = {
+type AgentListItemProps = {
+  agentId: AgentProvider;
+  authStatus: AuthStatus;
+  isSelected: boolean;
+  onClick: () => void;
+  isMobile?: boolean;
+};
+
+type AgentConfig = {
+  name: string;
+  color: 'blue' | 'purple' | 'gray';
+};
+
+const agentConfig: Record<AgentProvider, AgentConfig> = {
   claude: {
     name: 'Claude',
     color: 'blue',
@@ -35,14 +49,19 @@ const colorClasses = {
     bg: 'bg-gray-100 dark:bg-gray-800/50',
     dot: 'bg-gray-700 dark:bg-gray-300',
   },
-};
+} as const;
 
-export default function AgentListItem({ agentId, authStatus, isSelected, onClick, isMobile = false }) {
+export default function AgentListItem({
+  agentId,
+  authStatus,
+  isSelected,
+  onClick,
+  isMobile = false,
+}: AgentListItemProps) {
   const { t } = useTranslation('settings');
   const config = agentConfig[agentId];
   const colors = colorClasses[config.color];
 
-  // Mobile: horizontal layout with bottom border
   if (isMobile) {
     return (
       <button
@@ -56,7 +75,7 @@ export default function AgentListItem({ agentId, authStatus, isSelected, onClick
         <div className="flex flex-col items-center gap-1">
           <SessionProviderLogo provider={agentId} className="w-5 h-5" />
           <span className="text-xs font-medium text-foreground">{config.name}</span>
-          {authStatus?.authenticated && (
+          {authStatus.authenticated && (
             <span className={`w-1.5 h-1.5 rounded-full ${colors.dot}`} />
           )}
         </div>
@@ -64,7 +83,6 @@ export default function AgentListItem({ agentId, authStatus, isSelected, onClick
     );
   }
 
-  // Desktop: vertical layout with left border
   return (
     <button
       onClick={onClick}
@@ -79,12 +97,12 @@ export default function AgentListItem({ agentId, authStatus, isSelected, onClick
         <span className="font-medium text-foreground">{config.name}</span>
       </div>
       <div className="text-xs text-muted-foreground pl-6">
-        {authStatus?.loading ? (
+        {authStatus.loading ? (
           <span className="text-gray-400">{t('agents.authStatus.checking')}</span>
-        ) : authStatus?.authenticated ? (
+        ) : authStatus.authenticated ? (
           <div className="flex items-center gap-1">
             <span className={`w-1.5 h-1.5 rounded-full ${colors.dot}`} />
-            <span className="truncate max-w-[120px]" title={authStatus.email}>
+            <span className="truncate max-w-[120px]" title={authStatus.email ?? undefined}>
               {authStatus.email || t('agents.authStatus.connected')}
             </span>
           </div>

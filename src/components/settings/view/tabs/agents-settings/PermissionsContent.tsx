@@ -1,10 +1,11 @@
-import { Button } from '../ui/button';
-import { Input } from '../ui/input';
-import { Shield, AlertTriangle, Plus, X } from 'lucide-react';
+import { useState } from 'react';
+import { AlertTriangle, Plus, Shield, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { Button } from '../../../../ui/button';
+import { Input } from '../../../../ui/input';
+import type { CodexPermissionMode } from '../../../types/types';
 
-// Common tool patterns for Claude
-const commonClaudeTools = [
+const COMMON_CLAUDE_TOOLS = [
   'Bash(git log:*)',
   'Bash(git diff:*)',
   'Bash(git status:*)',
@@ -18,11 +19,10 @@ const commonClaudeTools = [
   'TodoWrite',
   'TodoRead',
   'WebFetch',
-  'WebSearch'
+  'WebSearch',
 ];
 
-// Common shell commands for Cursor
-const commonCursorCommands = [
+const COMMON_CURSOR_COMMANDS = [
   'Shell(ls)',
   'Shell(mkdir)',
   'Shell(cd)',
@@ -34,61 +34,77 @@ const commonCursorCommands = [
   'Shell(npm install)',
   'Shell(npm run)',
   'Shell(python)',
-  'Shell(node)'
+  'Shell(node)',
 ];
 
-// Claude Permissions
+const addUnique = (items: string[], value: string): string[] => {
+  const normalizedValue = value.trim();
+  if (!normalizedValue || items.includes(normalizedValue)) {
+    return items;
+  }
+
+  return [...items, normalizedValue];
+};
+
+const removeValue = (items: string[], value: string): string[] => (
+  items.filter((item) => item !== value)
+);
+
+type ClaudePermissionsProps = {
+  agent: 'claude';
+  skipPermissions: boolean;
+  onSkipPermissionsChange: (value: boolean) => void;
+  allowedTools: string[];
+  onAllowedToolsChange: (value: string[]) => void;
+  disallowedTools: string[];
+  onDisallowedToolsChange: (value: string[]) => void;
+};
+
 function ClaudePermissions({
   skipPermissions,
-  setSkipPermissions,
+  onSkipPermissionsChange,
   allowedTools,
-  setAllowedTools,
+  onAllowedToolsChange,
   disallowedTools,
-  setDisallowedTools,
-  newAllowedTool,
-  setNewAllowedTool,
-  newDisallowedTool,
-  setNewDisallowedTool,
-}) {
+  onDisallowedToolsChange,
+}: Omit<ClaudePermissionsProps, 'agent'>) {
   const { t } = useTranslation('settings');
-  const addAllowedTool = (tool) => {
-    if (tool && !allowedTools.includes(tool)) {
-      setAllowedTools([...allowedTools, tool]);
-      setNewAllowedTool('');
+  const [newAllowedTool, setNewAllowedTool] = useState('');
+  const [newDisallowedTool, setNewDisallowedTool] = useState('');
+
+  const handleAddAllowedTool = (tool: string) => {
+    const updated = addUnique(allowedTools, tool);
+    if (updated.length === allowedTools.length) {
+      return;
     }
+
+    onAllowedToolsChange(updated);
+    setNewAllowedTool('');
   };
 
-  const removeAllowedTool = (tool) => {
-    setAllowedTools(allowedTools.filter(t => t !== tool));
-  };
-
-  const addDisallowedTool = (tool) => {
-    if (tool && !disallowedTools.includes(tool)) {
-      setDisallowedTools([...disallowedTools, tool]);
-      setNewDisallowedTool('');
+  const handleAddDisallowedTool = (tool: string) => {
+    const updated = addUnique(disallowedTools, tool);
+    if (updated.length === disallowedTools.length) {
+      return;
     }
-  };
 
-  const removeDisallowedTool = (tool) => {
-    setDisallowedTools(disallowedTools.filter(t => t !== tool));
+    onDisallowedToolsChange(updated);
+    setNewDisallowedTool('');
   };
 
   return (
     <div className="space-y-6">
-      {/* Skip Permissions */}
       <div className="space-y-4">
         <div className="flex items-center gap-3">
           <AlertTriangle className="w-5 h-5 text-orange-500" />
-          <h3 className="text-lg font-medium text-foreground">
-            {t('permissions.title')}
-          </h3>
+          <h3 className="text-lg font-medium text-foreground">{t('permissions.title')}</h3>
         </div>
         <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
           <label className="flex items-center gap-3">
             <input
               type="checkbox"
               checked={skipPermissions}
-              onChange={(e) => setSkipPermissions(e.target.checked)}
+              onChange={(event) => onSkipPermissionsChange(event.target.checked)}
               className="w-4 h-4 text-blue-600 bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500 focus:ring-2"
             />
             <div>
@@ -103,34 +119,29 @@ function ClaudePermissions({
         </div>
       </div>
 
-      {/* Allowed Tools */}
       <div className="space-y-4">
         <div className="flex items-center gap-3">
           <Shield className="w-5 h-5 text-green-500" />
-          <h3 className="text-lg font-medium text-foreground">
-            {t('permissions.allowedTools.title')}
-          </h3>
+          <h3 className="text-lg font-medium text-foreground">{t('permissions.allowedTools.title')}</h3>
         </div>
-        <p className="text-sm text-muted-foreground">
-          {t('permissions.allowedTools.description')}
-        </p>
+        <p className="text-sm text-muted-foreground">{t('permissions.allowedTools.description')}</p>
 
         <div className="flex flex-col sm:flex-row gap-2">
           <Input
             value={newAllowedTool}
-            onChange={(e) => setNewAllowedTool(e.target.value)}
+            onChange={(event) => setNewAllowedTool(event.target.value)}
             placeholder={t('permissions.allowedTools.placeholder')}
-            onKeyPress={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                addAllowedTool(newAllowedTool);
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                handleAddAllowedTool(newAllowedTool);
               }
             }}
             className="flex-1 h-10"
           />
           <Button
-            onClick={() => addAllowedTool(newAllowedTool)}
-            disabled={!newAllowedTool}
+            onClick={() => handleAddAllowedTool(newAllowedTool)}
+            disabled={!newAllowedTool.trim()}
             size="sm"
             className="h-10 px-4"
           >
@@ -139,18 +150,17 @@ function ClaudePermissions({
           </Button>
         </div>
 
-        {/* Quick add buttons */}
         <div className="space-y-2">
           <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
             {t('permissions.allowedTools.quickAdd')}
           </p>
           <div className="flex flex-wrap gap-2">
-            {commonClaudeTools.map(tool => (
+            {COMMON_CLAUDE_TOOLS.map((tool) => (
               <Button
                 key={tool}
                 variant="outline"
                 size="sm"
-                onClick={() => addAllowedTool(tool)}
+                onClick={() => handleAddAllowedTool(tool)}
                 disabled={allowedTools.includes(tool)}
                 className="text-xs h-8"
               >
@@ -161,15 +171,13 @@ function ClaudePermissions({
         </div>
 
         <div className="space-y-2">
-          {allowedTools.map(tool => (
+          {allowedTools.map((tool) => (
             <div key={tool} className="flex items-center justify-between bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
-              <span className="font-mono text-sm text-green-800 dark:text-green-200">
-                {tool}
-              </span>
+              <span className="font-mono text-sm text-green-800 dark:text-green-200">{tool}</span>
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => removeAllowedTool(tool)}
+                onClick={() => onAllowedToolsChange(removeValue(allowedTools, tool))}
                 className="text-green-600 hover:text-green-700"
               >
                 <X className="w-4 h-4" />
@@ -184,34 +192,29 @@ function ClaudePermissions({
         </div>
       </div>
 
-      {/* Disallowed Tools */}
       <div className="space-y-4">
         <div className="flex items-center gap-3">
           <AlertTriangle className="w-5 h-5 text-red-500" />
-          <h3 className="text-lg font-medium text-foreground">
-            {t('permissions.blockedTools.title')}
-          </h3>
+          <h3 className="text-lg font-medium text-foreground">{t('permissions.blockedTools.title')}</h3>
         </div>
-        <p className="text-sm text-muted-foreground">
-          {t('permissions.blockedTools.description')}
-        </p>
+        <p className="text-sm text-muted-foreground">{t('permissions.blockedTools.description')}</p>
 
         <div className="flex flex-col sm:flex-row gap-2">
           <Input
             value={newDisallowedTool}
-            onChange={(e) => setNewDisallowedTool(e.target.value)}
+            onChange={(event) => setNewDisallowedTool(event.target.value)}
             placeholder={t('permissions.blockedTools.placeholder')}
-            onKeyPress={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                addDisallowedTool(newDisallowedTool);
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                handleAddDisallowedTool(newDisallowedTool);
               }
             }}
             className="flex-1 h-10"
           />
           <Button
-            onClick={() => addDisallowedTool(newDisallowedTool)}
-            disabled={!newDisallowedTool}
+            onClick={() => handleAddDisallowedTool(newDisallowedTool)}
+            disabled={!newDisallowedTool.trim()}
             size="sm"
             className="h-10 px-4"
           >
@@ -221,15 +224,13 @@ function ClaudePermissions({
         </div>
 
         <div className="space-y-2">
-          {disallowedTools.map(tool => (
+          {disallowedTools.map((tool) => (
             <div key={tool} className="flex items-center justify-between bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
-              <span className="font-mono text-sm text-red-800 dark:text-red-200">
-                {tool}
-              </span>
+              <span className="font-mono text-sm text-red-800 dark:text-red-200">{tool}</span>
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => removeDisallowedTool(tool)}
+                onClick={() => onDisallowedToolsChange(removeValue(disallowedTools, tool))}
                 className="text-red-600 hover:text-red-700"
               >
                 <X className="w-4 h-4" />
@@ -244,7 +245,6 @@ function ClaudePermissions({
         </div>
       </div>
 
-      {/* Help Section */}
       <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
         <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">
           {t('permissions.toolExamples.title')}
@@ -260,58 +260,61 @@ function ClaudePermissions({
   );
 }
 
-// Cursor Permissions
+type CursorPermissionsProps = {
+  agent: 'cursor';
+  skipPermissions: boolean;
+  onSkipPermissionsChange: (value: boolean) => void;
+  allowedCommands: string[];
+  onAllowedCommandsChange: (value: string[]) => void;
+  disallowedCommands: string[];
+  onDisallowedCommandsChange: (value: string[]) => void;
+};
+
 function CursorPermissions({
   skipPermissions,
-  setSkipPermissions,
+  onSkipPermissionsChange,
   allowedCommands,
-  setAllowedCommands,
+  onAllowedCommandsChange,
   disallowedCommands,
-  setDisallowedCommands,
-  newAllowedCommand,
-  setNewAllowedCommand,
-  newDisallowedCommand,
-  setNewDisallowedCommand,
-}) {
+  onDisallowedCommandsChange,
+}: Omit<CursorPermissionsProps, 'agent'>) {
   const { t } = useTranslation('settings');
-  const addAllowedCommand = (cmd) => {
-    if (cmd && !allowedCommands.includes(cmd)) {
-      setAllowedCommands([...allowedCommands, cmd]);
-      setNewAllowedCommand('');
+  const [newAllowedCommand, setNewAllowedCommand] = useState('');
+  const [newDisallowedCommand, setNewDisallowedCommand] = useState('');
+
+  const handleAddAllowedCommand = (command: string) => {
+    const updated = addUnique(allowedCommands, command);
+    if (updated.length === allowedCommands.length) {
+      return;
     }
+
+    onAllowedCommandsChange(updated);
+    setNewAllowedCommand('');
   };
 
-  const removeAllowedCommand = (cmd) => {
-    setAllowedCommands(allowedCommands.filter(c => c !== cmd));
-  };
-
-  const addDisallowedCommand = (cmd) => {
-    if (cmd && !disallowedCommands.includes(cmd)) {
-      setDisallowedCommands([...disallowedCommands, cmd]);
-      setNewDisallowedCommand('');
+  const handleAddDisallowedCommand = (command: string) => {
+    const updated = addUnique(disallowedCommands, command);
+    if (updated.length === disallowedCommands.length) {
+      return;
     }
-  };
 
-  const removeDisallowedCommand = (cmd) => {
-    setDisallowedCommands(disallowedCommands.filter(c => c !== cmd));
+    onDisallowedCommandsChange(updated);
+    setNewDisallowedCommand('');
   };
 
   return (
     <div className="space-y-6">
-      {/* Skip Permissions */}
       <div className="space-y-4">
         <div className="flex items-center gap-3">
           <AlertTriangle className="w-5 h-5 text-orange-500" />
-          <h3 className="text-lg font-medium text-foreground">
-            {t('permissions.title')}
-          </h3>
+          <h3 className="text-lg font-medium text-foreground">{t('permissions.title')}</h3>
         </div>
         <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
           <label className="flex items-center gap-3">
             <input
               type="checkbox"
               checked={skipPermissions}
-              onChange={(e) => setSkipPermissions(e.target.checked)}
+              onChange={(event) => onSkipPermissionsChange(event.target.checked)}
               className="w-4 h-4 text-purple-600 bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-purple-500 focus:ring-2"
             />
             <div>
@@ -326,34 +329,29 @@ function CursorPermissions({
         </div>
       </div>
 
-      {/* Allowed Commands */}
       <div className="space-y-4">
         <div className="flex items-center gap-3">
           <Shield className="w-5 h-5 text-green-500" />
-          <h3 className="text-lg font-medium text-foreground">
-            {t('permissions.allowedCommands.title')}
-          </h3>
+          <h3 className="text-lg font-medium text-foreground">{t('permissions.allowedCommands.title')}</h3>
         </div>
-        <p className="text-sm text-muted-foreground">
-          {t('permissions.allowedCommands.description')}
-        </p>
+        <p className="text-sm text-muted-foreground">{t('permissions.allowedCommands.description')}</p>
 
         <div className="flex flex-col sm:flex-row gap-2">
           <Input
             value={newAllowedCommand}
-            onChange={(e) => setNewAllowedCommand(e.target.value)}
+            onChange={(event) => setNewAllowedCommand(event.target.value)}
             placeholder={t('permissions.allowedCommands.placeholder')}
-            onKeyPress={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                addAllowedCommand(newAllowedCommand);
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                handleAddAllowedCommand(newAllowedCommand);
               }
             }}
             className="flex-1 h-10"
           />
           <Button
-            onClick={() => addAllowedCommand(newAllowedCommand)}
-            disabled={!newAllowedCommand}
+            onClick={() => handleAddAllowedCommand(newAllowedCommand)}
+            disabled={!newAllowedCommand.trim()}
             size="sm"
             className="h-10 px-4"
           >
@@ -362,37 +360,34 @@ function CursorPermissions({
           </Button>
         </div>
 
-        {/* Quick add buttons */}
         <div className="space-y-2">
           <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
             {t('permissions.allowedCommands.quickAdd')}
           </p>
           <div className="flex flex-wrap gap-2">
-            {commonCursorCommands.map(cmd => (
+            {COMMON_CURSOR_COMMANDS.map((command) => (
               <Button
-                key={cmd}
+                key={command}
                 variant="outline"
                 size="sm"
-                onClick={() => addAllowedCommand(cmd)}
-                disabled={allowedCommands.includes(cmd)}
+                onClick={() => handleAddAllowedCommand(command)}
+                disabled={allowedCommands.includes(command)}
                 className="text-xs h-8"
               >
-                {cmd}
+                {command}
               </Button>
             ))}
           </div>
         </div>
 
         <div className="space-y-2">
-          {allowedCommands.map(cmd => (
-            <div key={cmd} className="flex items-center justify-between bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
-              <span className="font-mono text-sm text-green-800 dark:text-green-200">
-                {cmd}
-              </span>
+          {allowedCommands.map((command) => (
+            <div key={command} className="flex items-center justify-between bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
+              <span className="font-mono text-sm text-green-800 dark:text-green-200">{command}</span>
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => removeAllowedCommand(cmd)}
+                onClick={() => onAllowedCommandsChange(removeValue(allowedCommands, command))}
                 className="text-green-600 hover:text-green-700"
               >
                 <X className="w-4 h-4" />
@@ -407,34 +402,29 @@ function CursorPermissions({
         </div>
       </div>
 
-      {/* Disallowed Commands */}
       <div className="space-y-4">
         <div className="flex items-center gap-3">
           <AlertTriangle className="w-5 h-5 text-red-500" />
-          <h3 className="text-lg font-medium text-foreground">
-            {t('permissions.blockedCommands.title')}
-          </h3>
+          <h3 className="text-lg font-medium text-foreground">{t('permissions.blockedCommands.title')}</h3>
         </div>
-        <p className="text-sm text-muted-foreground">
-          {t('permissions.blockedCommands.description')}
-        </p>
+        <p className="text-sm text-muted-foreground">{t('permissions.blockedCommands.description')}</p>
 
         <div className="flex flex-col sm:flex-row gap-2">
           <Input
             value={newDisallowedCommand}
-            onChange={(e) => setNewDisallowedCommand(e.target.value)}
+            onChange={(event) => setNewDisallowedCommand(event.target.value)}
             placeholder={t('permissions.blockedCommands.placeholder')}
-            onKeyPress={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                addDisallowedCommand(newDisallowedCommand);
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                handleAddDisallowedCommand(newDisallowedCommand);
               }
             }}
             className="flex-1 h-10"
           />
           <Button
-            onClick={() => addDisallowedCommand(newDisallowedCommand)}
-            disabled={!newDisallowedCommand}
+            onClick={() => handleAddDisallowedCommand(newDisallowedCommand)}
+            disabled={!newDisallowedCommand.trim()}
             size="sm"
             className="h-10 px-4"
           >
@@ -444,15 +434,13 @@ function CursorPermissions({
         </div>
 
         <div className="space-y-2">
-          {disallowedCommands.map(cmd => (
-            <div key={cmd} className="flex items-center justify-between bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
-              <span className="font-mono text-sm text-red-800 dark:text-red-200">
-                {cmd}
-              </span>
+          {disallowedCommands.map((command) => (
+            <div key={command} className="flex items-center justify-between bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+              <span className="font-mono text-sm text-red-800 dark:text-red-200">{command}</span>
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => removeDisallowedCommand(cmd)}
+                onClick={() => onDisallowedCommandsChange(removeValue(disallowedCommands, command))}
                 className="text-red-600 hover:text-red-700"
               >
                 <X className="w-4 h-4" />
@@ -467,7 +455,6 @@ function CursorPermissions({
         </div>
       </div>
 
-      {/* Help Section */}
       <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
         <h4 className="font-medium text-purple-900 dark:text-purple-100 mb-2">
           {t('permissions.shellExamples.title')}
@@ -483,37 +470,38 @@ function CursorPermissions({
   );
 }
 
-// Codex Permissions
-function CodexPermissions({ permissionMode, setPermissionMode }) {
+type CodexPermissionsProps = {
+  agent: 'codex';
+  permissionMode: CodexPermissionMode;
+  onPermissionModeChange: (value: CodexPermissionMode) => void;
+};
+
+function CodexPermissions({ permissionMode, onPermissionModeChange }: Omit<CodexPermissionsProps, 'agent'>) {
   const { t } = useTranslation('settings');
+
   return (
     <div className="space-y-6">
       <div className="space-y-4">
         <div className="flex items-center gap-3">
           <Shield className="w-5 h-5 text-green-500" />
-          <h3 className="text-lg font-medium text-foreground">
-            {t('permissions.codex.permissionMode')}
-          </h3>
+          <h3 className="text-lg font-medium text-foreground">{t('permissions.codex.permissionMode')}</h3>
         </div>
-        <p className="text-sm text-muted-foreground">
-          {t('permissions.codex.description')}
-        </p>
+        <p className="text-sm text-muted-foreground">{t('permissions.codex.description')}</p>
 
-        {/* Default Mode */}
         <div
           className={`border rounded-lg p-4 cursor-pointer transition-all ${
             permissionMode === 'default'
               ? 'bg-gray-100 dark:bg-gray-800 border-gray-400 dark:border-gray-500'
               : 'bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
           }`}
-          onClick={() => setPermissionMode('default')}
+          onClick={() => onPermissionModeChange('default')}
         >
           <label className="flex items-start gap-3 cursor-pointer">
             <input
               type="radio"
               name="codexPermissionMode"
               checked={permissionMode === 'default'}
-              onChange={() => setPermissionMode('default')}
+              onChange={() => onPermissionModeChange('default')}
               className="mt-1 w-4 h-4 text-green-600"
             />
             <div>
@@ -525,21 +513,20 @@ function CodexPermissions({ permissionMode, setPermissionMode }) {
           </label>
         </div>
 
-        {/* Accept Edits Mode */}
         <div
           className={`border rounded-lg p-4 cursor-pointer transition-all ${
             permissionMode === 'acceptEdits'
               ? 'bg-green-50 dark:bg-green-900/20 border-green-400 dark:border-green-600'
               : 'bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
           }`}
-          onClick={() => setPermissionMode('acceptEdits')}
+          onClick={() => onPermissionModeChange('acceptEdits')}
         >
           <label className="flex items-start gap-3 cursor-pointer">
             <input
               type="radio"
               name="codexPermissionMode"
               checked={permissionMode === 'acceptEdits'}
-              onChange={() => setPermissionMode('acceptEdits')}
+              onChange={() => onPermissionModeChange('acceptEdits')}
               className="mt-1 w-4 h-4 text-green-600"
             />
             <div>
@@ -551,21 +538,20 @@ function CodexPermissions({ permissionMode, setPermissionMode }) {
           </label>
         </div>
 
-        {/* Bypass Permissions Mode */}
         <div
           className={`border rounded-lg p-4 cursor-pointer transition-all ${
             permissionMode === 'bypassPermissions'
               ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-400 dark:border-orange-600'
               : 'bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
           }`}
-          onClick={() => setPermissionMode('bypassPermissions')}
+          onClick={() => onPermissionModeChange('bypassPermissions')}
         >
           <label className="flex items-start gap-3 cursor-pointer">
             <input
               type="radio"
               name="codexPermissionMode"
               checked={permissionMode === 'bypassPermissions'}
-              onChange={() => setPermissionMode('bypassPermissions')}
+              onChange={() => onPermissionModeChange('bypassPermissions')}
               className="mt-1 w-4 h-4 text-orange-600"
             />
             <div>
@@ -580,7 +566,6 @@ function CodexPermissions({ permissionMode, setPermissionMode }) {
           </label>
         </div>
 
-        {/* Technical Details */}
         <details className="text-sm">
           <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
             {t('permissions.codex.technicalDetails')}
@@ -597,16 +582,16 @@ function CodexPermissions({ permissionMode, setPermissionMode }) {
   );
 }
 
-// Main component
-export default function PermissionsContent({ agent, ...props }) {
-  if (agent === 'claude') {
+type PermissionsContentProps = ClaudePermissionsProps | CursorPermissionsProps | CodexPermissionsProps;
+
+export default function PermissionsContent(props: PermissionsContentProps) {
+  if (props.agent === 'claude') {
     return <ClaudePermissions {...props} />;
   }
-  if (agent === 'cursor') {
+
+  if (props.agent === 'cursor') {
     return <CursorPermissions {...props} />;
   }
-  if (agent === 'codex') {
-    return <CodexPermissions {...props} />;
-  }
-  return null;
+
+  return <CodexPermissions {...props} />;
 }
