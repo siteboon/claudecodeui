@@ -1,5 +1,5 @@
 import { SessionProvider } from '../../../../types/app';
-import SessionProviderLogo from '../../../SessionProviderLogo';
+import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
 import type { Provider } from '../../types/types';
 
 type AssistantThinkingIndicatorProps = {

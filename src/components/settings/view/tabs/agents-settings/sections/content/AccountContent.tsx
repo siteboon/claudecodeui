@@ -2,7 +2,7 @@ import { LogIn } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '../../../../../../ui/badge';
 import { Button } from '../../../../../../ui/button';
-import SessionProviderLogo from '../../../../../../SessionProviderLogo';
+import SessionProviderLogo from '../../../../../../llm-logo-provider/SessionProviderLogo';
 import type { AgentProvider, AuthStatus } from '../../../../../types/types';
 
 type AccountContentProps = {

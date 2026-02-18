@@ -7,7 +7,7 @@ import { formatTimeAgo } from '../../../../utils/dateUtils';
 import type { Project, ProjectSession, SessionProvider } from '../../../../types/app';
 import type { SessionWithProvider, TouchHandlerFactory } from '../../types/types';
 import { createSessionViewModel } from '../../utils/utils';
-import SessionProviderLogo from '../../../SessionProviderLogo';
+import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
 
 type SidebarSessionItemProps = {
   project: Project;
