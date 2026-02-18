@@ -95,6 +95,7 @@ export interface EditorSidebarProps {
   isMobile: boolean;
   editorExpanded: boolean;
   editorWidth: number;
+  hasManualWidth: boolean;
   resizeHandleRef: RefObject<HTMLDivElement>;
   onResizeStart: (event: MouseEvent<HTMLDivElement>) => void;
   onCloseEditor: () => void;
