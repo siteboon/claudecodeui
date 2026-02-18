@@ -1,15 +1,15 @@
 import { Settings as SettingsIcon, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import CredentialsSettings from '../CredentialsSettings';
-import GitSettings from '../GitSettings';
 import LoginModal from '../LoginModal';
-import TasksSettings from '../TasksSettings';
 import { Button } from '../ui/button';
 import ClaudeMcpFormModal from './view/modals/ClaudeMcpFormModal';
 import CodexMcpFormModal from './view/modals/CodexMcpFormModal';
 import SettingsMainTabs from './view/SettingsMainTabs';
 import AgentsSettingsTab from './view/tabs/agents-settings/AgentsSettingsTab';
 import AppearanceSettingsTab from './view/tabs/AppearanceSettingsTab';
+import CredentialsSettingsTab from './view/tabs/api-settings/CredentialsSettingsTab';
+import GitSettingsTab from './view/tabs/git-settings/GitSettingsTab';
+import TasksSettingsTab from './view/tabs/tasks-settings/TasksSettingsTab';
 import { useSettingsController } from './hooks/useSettingsController';
 import type { AgentProvider, SettingsProject, SettingsProps } from './types/types';
 
@@ -129,7 +129,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
               />
             )}
 
-            {activeTab === 'git' && <GitSettings />}
+            {activeTab === 'git' && <GitSettingsTab />}
 
             {activeTab === 'agents' && (
               <AgentsSettingsTab
@@ -162,13 +162,13 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
 
             {activeTab === 'tasks' && (
               <div className="space-y-6 md:space-y-8">
-                <TasksSettings />
+                <TasksSettingsTab />
               </div>
             )}
 
             {activeTab === 'api' && (
               <div className="space-y-6 md:space-y-8">
-                <CredentialsSettings />
+                <CredentialsSettingsTab />
               </div>
             )}
           </div>
