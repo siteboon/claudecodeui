@@ -9,6 +9,7 @@ export default function EditorSidebar({
   isMobile,
   editorExpanded,
   editorWidth,
+  hasManualWidth,
   resizeHandleRef,
   onResizeStart,
   onCloseEditor,
@@ -36,7 +37,8 @@ export default function EditorSidebar({
     );
   }
 
-  const useFlex = editorExpanded || fillSpace;
+  // Keep "fill space" as default in files tab, but allow user drag to take control.
+  const useFlex = editorExpanded || (fillSpace && !hasManualWidth);
 
   return (
     <>
