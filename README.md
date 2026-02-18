@@ -291,31 +291,7 @@ session counts
 
 ### Contributing
 
-We welcome contributions! Please follow these guidelines:
-
-#### Getting Started
-1. **Fork** the repository
-2. **Clone** your fork: `git clone <your-fork-url>`
-3. **Install** dependencies: `npm install`
-4. **Create** a feature branch: `git checkout -b feature/amazing-feature`
-
-#### Development Process
-1. **Make your changes** following the existing code style
-2. **Test thoroughly** - ensure all features work correctly
-3. **Run quality checks**: `npm run lint && npm run format`
-4. **Commit** with descriptive messages following [Conventional Commits](https://conventionalcommits.org/)
-5. **Push** to your branch: `git push origin feature/amazing-feature`
-6. **Submit** a Pull Request with:
-   - Clear description of changes
-   - Screenshots for UI changes
-   - Test results if applicable
-
-#### What to Contribute
-- **Bug fixes** - Help us improve stability
-- **New features** - Enhance functionality (discuss in issues first)
-- **Documentation** - Improve guides and API docs
-- **UI/UX improvements** - Better user experience
-- **Performance optimizations** - Make it faster
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details on commit conventions, development workflow, and release process.
 
 ## Troubleshooting
 
