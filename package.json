@@ -12,6 +12,7 @@
     "server/",
     "shared/",
     "dist/",
+    "scripts/",
     "README.md"
   ],
   "homepage": "https://cloudcli.ai",
