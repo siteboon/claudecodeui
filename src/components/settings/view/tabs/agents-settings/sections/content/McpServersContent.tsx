@@ -1,8 +1,8 @@
 import { Edit3, Globe, Plus, Server, Terminal, Trash2, Zap } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Badge } from '../../../../ui/badge';
-import { Button } from '../../../../ui/button';
-import type { McpServer, McpToolsResult, McpTestResult } from '../../../types/types';
+import { Badge } from '../../../../../../ui/badge';
+import { Button } from '../../../../../../ui/button';
+import type { McpServer, McpToolsResult, McpTestResult } from '../../../../../types/types';
 
 const getTransportIcon = (type: string | undefined) => {
   if (type === 'stdio') {

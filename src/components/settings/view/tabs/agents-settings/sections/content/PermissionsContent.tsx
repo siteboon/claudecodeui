@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { AlertTriangle, Plus, Shield, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Button } from '../../../../ui/button';
-import { Input } from '../../../../ui/input';
-import type { CodexPermissionMode } from '../../../types/types';
+import { Button } from '../../../../../../ui/button';
+import { Input } from '../../../../../../ui/input';
+import type { CodexPermissionMode } from '../../../../../types/types';
 
 const COMMON_CLAUDE_TOOLS = [
   'Bash(git log:*)',
