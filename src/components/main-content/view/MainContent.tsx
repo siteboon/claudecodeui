@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 
 import ChatInterface from '../../chat/view/ChatInterface';
-import FileTree from '../../FileTree';
+import FileTree from '../../file-tree/FileTree';
 import StandaloneShell from '../../StandaloneShell';
 import GitPanel from '../../GitPanel';
 import ErrorBoundary from '../../ErrorBoundary';
