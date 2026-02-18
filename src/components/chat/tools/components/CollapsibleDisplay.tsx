@@ -67,7 +67,13 @@ export const CollapsibleDisplay: React.FC<CollapsibleDisplayProps> = ({
               raw params
             </summary>
             <pre className="mt-1 text-[11px] bg-gray-50 dark:bg-gray-900/50 border border-gray-200/40 dark:border-gray-700/40 p-2 rounded whitespace-pre-wrap break-words overflow-hidden text-gray-600 dark:text-gray-400 font-mono">
-              {rawContent}
+              {(() => {
+                try {
+                  return JSON.stringify(JSON.parse(rawContent), null, 2).replace(/\\n/g, '\n');
+                } catch {
+                  return rawContent;
+                }
+              })()}
             </pre>
           </details>
         )}

@@ -425,9 +425,17 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     result: {
       type: 'collapsible',
       title: (result) => {
-        // Check if result has content with type array (agent results often have this structure)
-        if (result && result.content && Array.isArray(result.content)) {
-          return 'Subagent Response';
+        if (result && result.content) {
+          let content = result.content;
+          if (typeof content === 'string') {
+            try {
+              const parsed = JSON.parse(content);
+              if (Array.isArray(parsed)) content = parsed;
+            } catch { /* not JSON */ }
+          }
+          if (Array.isArray(content)) {
+            return 'Subagent Response';
+          }
         }
         return 'Subagent Result';
       },
