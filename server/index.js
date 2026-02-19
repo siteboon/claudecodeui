@@ -35,6 +35,7 @@ import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
 import os from 'os';
 import http from 'http';
+import https from 'https';
 import cors from 'cors';
 import { promises as fsPromises } from 'fs';
 import { spawn } from 'child_process';
@@ -206,7 +207,36 @@ async function setupProjectsWatcher() {
 
 
 const app = express();
-const server = http.createServer(app);
+
+function isTruthyEnv(value) {
+    return typeof value === 'string' && ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
+}
+
+function createWebServer(expressApp) {
+    const sslEnabled = isTruthyEnv(process.env.SSL_ENABLED);
+    if (!sslEnabled) {
+        return { server: http.createServer(expressApp), protocol: 'http' };
+    }
+
+    const keyPath = process.env.SSL_KEY_PATH;
+    const certPath = process.env.SSL_CERT_PATH;
+
+    if (!keyPath || !certPath) {
+        console.warn(`${c.warn('[WARN]')} SSL is enabled but SSL_KEY_PATH/SSL_CERT_PATH are missing. Falling back to HTTP.`);
+        return { server: http.createServer(expressApp), protocol: 'http' };
+    }
+
+    try {
+        const key = fs.readFileSync(path.resolve(keyPath));
+        const cert = fs.readFileSync(path.resolve(certPath));
+        return { server: https.createServer({ key, cert }, expressApp), protocol: 'https' };
+    } catch (error) {
+        console.warn(`${c.warn('[WARN]')} Failed to load SSL certificate files (${error.message}). Falling back to HTTP.`);
+        return { server: http.createServer(expressApp), protocol: 'http' };
+    }
+}
+
+const { server, protocol: serverProtocol } = createWebServer(app);
 
 const ptySessionsMap = new Map();
 const PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
@@ -1797,7 +1827,8 @@ app.get('*', (req, res) => {
     res.sendFile(indexPath);
   } else {
     // In development, redirect to Vite dev server only if dist doesn't exist
-    res.redirect(`http://localhost:${process.env.VITE_PORT || 5173}`);
+    const viteProtocol = isTruthyEnv(process.env.VITE_HTTPS) ? 'https' : 'http';
+    res.redirect(`${viteProtocol}://localhost:${process.env.VITE_PORT || 5173}`);
   }
 });
 
@@ -1902,7 +1933,8 @@ async function startServer() {
         console.log(`${c.info('[INFO]')} Running in ${c.bright(isProduction ? 'PRODUCTION' : 'DEVELOPMENT')} mode`);
 
         if (!isProduction) {
-            console.log(`${c.warn('[WARN]')} Note: Requests will be proxied to Vite dev server at ${c.dim('http://localhost:' + (process.env.VITE_PORT || 5173))}`);
+            const viteProtocol = isTruthyEnv(process.env.VITE_HTTPS) ? 'https' : 'http';
+            console.log(`${c.warn('[WARN]')} Note: Requests will be proxied to Vite dev server at ${c.dim(viteProtocol + '://localhost:' + (process.env.VITE_PORT || 5173))}`);
         }
 
         server.listen(PORT, '0.0.0.0', async () => {
@@ -1913,7 +1945,7 @@ async function startServer() {
             console.log(`  ${c.bright('Claude Code UI Server - Ready')}`);
             console.log(c.dim('═'.repeat(63)));
             console.log('');
-            console.log(`${c.info('[INFO]')} Server URL:  ${c.bright('http://0.0.0.0:' + PORT)}`);
+            console.log(`${c.info('[INFO]')} Server URL:  ${c.bright(serverProtocol + '://0.0.0.0:' + PORT)}`);
             console.log(`${c.info('[INFO]')} Installed at: ${c.dim(appInstallPath)}`);
             console.log(`${c.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
             console.log('');
