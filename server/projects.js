@@ -889,22 +889,81 @@ async function parseJsonlSessions(filePath) {
   }
 }
 
+// Parse an agent JSONL file and extract tool uses
+async function parseAgentTools(filePath) {
+  const tools = [];
+
+  try {
+    const fileStream = fsSync.createReadStream(filePath);
+    const rl = readline.createInterface({
+      input: fileStream,
+      crlfDelay: Infinity
+    });
+
+    for await (const line of rl) {
+      if (line.trim()) {
+        try {
+          const entry = JSON.parse(line);
+          // Look for assistant messages with tool_use
+          if (entry.message?.role === 'assistant' && Array.isArray(entry.message?.content)) {
+            for (const part of entry.message.content) {
+              if (part.type === 'tool_use') {
+                tools.push({
+                  toolId: part.id,
+                  toolName: part.name,
+                  toolInput: part.input,
+                  timestamp: entry.timestamp
+                });
+              }
+            }
+          }
+          // Look for tool results
+          if (entry.message?.role === 'user' && Array.isArray(entry.message?.content)) {
+            for (const part of entry.message.content) {
+              if (part.type === 'tool_result') {
+                // Find the matching tool and add result
+                const tool = tools.find(t => t.toolId === part.tool_use_id);
+                if (tool) {
+                  tool.toolResult = {
+                    content: typeof part.content === 'string' ? part.content :
+                             Array.isArray(part.content) ? part.content.map(c => c.text || '').join('\n') :
+                             JSON.stringify(part.content),
+                    isError: Boolean(part.is_error)
+                  };
+                }
+              }
+            }
+          }
+        } catch (parseError) {
+          // Skip malformed lines
+        }
+      }
+    }
+  } catch (error) {
+    console.warn(`Error parsing agent file ${filePath}:`, error.message);
+  }
+
+  return tools;
+}
+
 // Get messages for a specific session with pagination support
 async function getSessionMessages(projectName, sessionId, limit = null, offset = 0) {
   const projectDir = path.join(os.homedir(), '.claude', 'projects', projectName);
 
   try {
     const files = await fs.readdir(projectDir);
-    // agent-*.jsonl files contain session start data at this point. This needs to be revisited
-    // periodically to make sure only accurate data is there and no new functionality is added there
+    // agent-*.jsonl files contain subagent tool history - we'll process them separately
     const jsonlFiles = files.filter(file => file.endsWith('.jsonl') && !file.startsWith('agent-'));
-    
+    const agentFiles = files.filter(file => file.endsWith('.jsonl') && file.startsWith('agent-'));
+
     if (jsonlFiles.length === 0) {
       return { messages: [], total: 0, hasMore: false };
     }
-    
+
     const messages = [];
-    
+    // Map of agentId -> tools for subagent tool grouping
+    const agentToolsCache = new Map();
+
     // Process all JSONL files to find messages for this session
     for (const file of jsonlFiles) {
       const jsonlFile = path.join(projectDir, file);
@@ -913,7 +972,7 @@ async function getSessionMessages(projectName, sessionId, limit = null, offset =
         input: fileStream,
         crlfDelay: Infinity
       });
-      
+
       for await (const line of rl) {
         if (line.trim()) {
           try {
@@ -927,26 +986,55 @@ async function getSessionMessages(projectName, sessionId, limit = null, offset =
         }
       }
     }
-    
+
+    // Collect agentIds from Task tool results
+    const agentIds = new Set();
+    for (const message of messages) {
+      if (message.toolUseResult?.agentId) {
+        agentIds.add(message.toolUseResult.agentId);
+      }
+    }
+
+    // Load agent tools for each agentId found
+    for (const agentId of agentIds) {
+      const agentFileName = `agent-${agentId}.jsonl`;
+      if (agentFiles.includes(agentFileName)) {
+        const agentFilePath = path.join(projectDir, agentFileName);
+        const tools = await parseAgentTools(agentFilePath);
+        agentToolsCache.set(agentId, tools);
+      }
+    }
+
+    // Attach agent tools to their parent Task messages
+    for (const message of messages) {
+      if (message.toolUseResult?.agentId) {
+        const agentId = message.toolUseResult.agentId;
+        const agentTools = agentToolsCache.get(agentId);
+        if (agentTools && agentTools.length > 0) {
+          message.subagentTools = agentTools;
+        }
+      }
+    }
+
     // Sort messages by timestamp
-    const sortedMessages = messages.sort((a, b) => 
+    const sortedMessages = messages.sort((a, b) =>
       new Date(a.timestamp || 0) - new Date(b.timestamp || 0)
     );
-    
+
     const total = sortedMessages.length;
-    
+
     // If no limit is specified, return all messages (backward compatibility)
     if (limit === null) {
       return sortedMessages;
     }
-    
+
     // Apply pagination - for recent messages, we need to slice from the end
     // offset 0 should give us the most recent messages
     const startIndex = Math.max(0, total - offset - limit);
     const endIndex = total - offset;
     const paginatedMessages = sortedMessages.slice(startIndex, endIndex);
     const hasMore = startIndex > 0;
-    
+
     return {
       messages: paginatedMessages,
       total,

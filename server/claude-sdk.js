@@ -250,7 +250,13 @@ function getAllSessions() {
  * @returns {Object} Transformed message ready for WebSocket
  */
 function transformMessage(sdkMessage) {
-  // Pass-through; SDK messages match frontend format.
+  // Extract parent_tool_use_id for subagent tool grouping
+  if (sdkMessage.parent_tool_use_id) {
+    return {
+      ...sdkMessage,
+      parentToolUseId: sdkMessage.parent_tool_use_id
+    };
+  }
   return sdkMessage;
 }
 
