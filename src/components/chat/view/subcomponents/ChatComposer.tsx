@@ -87,6 +87,7 @@ interface ChatComposerProps {
   onTextareaScrollSync: (target: HTMLTextAreaElement) => void;
   onTextareaInput: (event: FormEvent<HTMLTextAreaElement>) => void;
   onInputFocusChange?: (focused: boolean) => void;
+  isInputFocused?: boolean;
   placeholder: string;
   isTextareaExpanded: boolean;
   sendByCtrlEnter?: boolean;
@@ -143,6 +144,7 @@ export default function ChatComposer({
   onTextareaScrollSync,
   onTextareaInput,
   onInputFocusChange,
+  isInputFocused,
   placeholder,
   isTextareaExpanded,
   sendByCtrlEnter,
@@ -162,8 +164,13 @@ export default function ChatComposer({
     (r) => r.toolName === 'AskUserQuestion'
   );
 
+  // On mobile, when input is focused, float the input box at the bottom
+  const mobileFloatingClass = isInputFocused
+    ? 'max-sm:fixed max-sm:bottom-0 max-sm:left-0 max-sm:right-0 max-sm:z-50 max-sm:bg-background max-sm:shadow-[0_-4px_20px_rgba(0,0,0,0.15)]'
+    : '';
+
   return (
-    <div className="p-2 sm:p-4 md:p-4 flex-shrink-0 pb-2 sm:pb-4 md:pb-6">
+    <div className={`p-2 sm:p-4 md:p-4 flex-shrink-0 pb-2 sm:pb-4 md:pb-6 ${mobileFloatingClass}`}>
       {!hasQuestionPanel && (
         <div className="flex-1">
           <ClaudeStatus
