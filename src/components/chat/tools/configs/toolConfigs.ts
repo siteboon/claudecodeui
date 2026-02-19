@@ -424,13 +424,7 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     },
     result: {
       type: 'collapsible',
-      title: (result) => {
-        // Check if result has content with type array (agent results often have this structure)
-        if (result && result.content && Array.isArray(result.content)) {
-          return 'Subagent Response';
-        }
-        return 'Subagent Result';
-      },
+      title: 'Subagent result',
       defaultOpen: false,
       contentType: 'markdown',
       getContentProps: (result) => {

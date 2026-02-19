@@ -54,7 +54,7 @@ export const SubagentContainer: React.FC<SubagentContainerProps> = ({
   const { childTools, currentToolIndex, isComplete } = subagentState;
   const currentTool = currentToolIndex >= 0 ? childTools[currentToolIndex] : null;
 
-  const title = `${subagentType}: ${description}`;
+  const title = `Subagent / ${subagentType}: ${description}`;
 
   return (
     <div className="border-l-2 border-l-purple-500 dark:border-l-purple-400 pl-3 py-0.5 my-1">
