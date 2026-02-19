@@ -35,6 +35,7 @@ import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
 import os from 'os';
 import http from 'http';
+import https from 'https';
 import cors from 'cors';
 import { promises as fsPromises } from 'fs';
 import { spawn } from 'child_process';
@@ -206,7 +207,29 @@ async function setupProjectsWatcher() {
 
 
 const app = express();
-const server = http.createServer(app);
+
+// Create HTTP or HTTPS server based on SSL configuration
+let server;
+let useHttps = false;
+const SSL_CERT = process.env.SSL_CERT;
+const SSL_KEY = process.env.SSL_KEY;
+
+if (SSL_CERT && SSL_KEY && fs.existsSync(SSL_CERT) && fs.existsSync(SSL_KEY)) {
+    try {
+        const sslOptions = {
+            cert: fs.readFileSync(SSL_CERT),
+            key: fs.readFileSync(SSL_KEY)
+        };
+        server = https.createServer(sslOptions, app);
+        useHttps = true;
+        console.log('[INFO] HTTPS enabled with SSL certificates');
+    } catch (err) {
+        console.warn('[WARN] Failed to enable HTTPS, falling back to HTTP:', err.message);
+        server = http.createServer(app);
+    }
+} else {
+    server = http.createServer(app);
+}
 
 const ptySessionsMap = new Map();
 const PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
@@ -1886,6 +1909,7 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
 }
 
 const PORT = process.env.PORT || 3001;
+const SSL_PORT = process.env.SSL_PORT || PORT;
 
 // Initialize database and start server
 async function startServer() {
@@ -1905,7 +1929,8 @@ async function startServer() {
             console.log(`${c.warn('[WARN]')} Note: Requests will be proxied to Vite dev server at ${c.dim('http://localhost:' + (process.env.VITE_PORT || 5173))}`);
         }
 
-        server.listen(PORT, '0.0.0.0', async () => {
+        const listenPort = useHttps ? SSL_PORT : PORT;
+        server.listen(listenPort, '0.0.0.0', async () => {
             const appInstallPath = path.join(__dirname, '..');
 
             console.log('');
@@ -1913,7 +1938,8 @@ async function startServer() {
             console.log(`  ${c.bright('Claude Code UI Server - Ready')}`);
             console.log(c.dim('═'.repeat(63)));
             console.log('');
-            console.log(`${c.info('[INFO]')} Server URL:  ${c.bright('http://0.0.0.0:' + PORT)}`);
+            const protocol = useHttps ? 'https' : 'http';
+            console.log(`${c.info('[INFO]')} Server URL:  ${c.bright(protocol + '://0.0.0.0:' + listenPort)}`);
             console.log(`${c.info('[INFO]')} Installed at: ${c.dim(appInstallPath)}`);
             console.log(`${c.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
             console.log('');
