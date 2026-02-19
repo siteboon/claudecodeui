@@ -1887,6 +1887,35 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
 
 const PORT = process.env.PORT || 3001;
 
+async function listenWithBestAvailableHost(port) {
+    return new Promise((resolve, reject) => {
+        const tryListen = (listenOptions, fallbackOptions = null) => {
+            const handleError = (error) => {
+                server.off('error', handleError);
+
+                if (fallbackOptions && (error.code === 'EAFNOSUPPORT' || error.code === 'EINVAL')) {
+                    console.warn(`${c.warn('[WARN]')} IPv6 bind unavailable, falling back to IPv4`);
+                    tryListen(fallbackOptions, null);
+                    return;
+                }
+
+                reject(error);
+            };
+
+            server.once('error', handleError);
+            server.listen(listenOptions, () => {
+                server.off('error', handleError);
+                resolve(listenOptions);
+            });
+        };
+
+        tryListen(
+            { port, host: '::', ipv6Only: false },
+            { port, host: '0.0.0.0' }
+        );
+    });
+}
+
 // Initialize database and start server
 async function startServer() {
     try {
@@ -1905,22 +1934,24 @@ async function startServer() {
             console.log(`${c.warn('[WARN]')} Note: Requests will be proxied to Vite dev server at ${c.dim('http://localhost:' + (process.env.VITE_PORT || 5173))}`);
         }
 
-        server.listen(PORT, '0.0.0.0', async () => {
-            const appInstallPath = path.join(__dirname, '..');
+        const listenOptions = await listenWithBestAvailableHost(PORT);
+        const appInstallPath = path.join(__dirname, '..');
+        const listenHostDisplay = listenOptions.host.includes(':')
+            ? `[${listenOptions.host}]`
+            : listenOptions.host;
 
-            console.log('');
-            console.log(c.dim('═'.repeat(63)));
-            console.log(`  ${c.bright('Claude Code UI Server - Ready')}`);
-            console.log(c.dim('═'.repeat(63)));
-            console.log('');
-            console.log(`${c.info('[INFO]')} Server URL:  ${c.bright('http://0.0.0.0:' + PORT)}`);
-            console.log(`${c.info('[INFO]')} Installed at: ${c.dim(appInstallPath)}`);
-            console.log(`${c.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
-            console.log('');
+        console.log('');
+        console.log(c.dim('═'.repeat(63)));
+        console.log(`  ${c.bright('Claude Code UI Server - Ready')}`);
+        console.log(c.dim('═'.repeat(63)));
+        console.log('');
+        console.log(`${c.info('[INFO]')} Server URL:  ${c.bright('http://' + listenHostDisplay + ':' + PORT)}`);
+        console.log(`${c.info('[INFO]')} Installed at: ${c.dim(appInstallPath)}`);
+        console.log(`${c.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
+        console.log('');
 
-            // Start watching the projects folder for changes
-            await setupProjectsWatcher();
-        });
+        // Start watching the projects folder for changes
+        await setupProjectsWatcher();
     } catch (error) {
         console.error('[ERROR] Failed to start server:', error);
         process.exit(1);
