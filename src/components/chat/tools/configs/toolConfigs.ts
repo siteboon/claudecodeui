@@ -383,7 +383,7 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
         const description = input.description || 'Running task';
         return `Subagent / ${subagentType}: ${description}`;
       },
-      defaultOpen: true,
+      defaultOpen: false,
       contentType: 'markdown',
       getContentProps: (input) => {
         // If only prompt exists (and required fields), show just the prompt
@@ -431,7 +431,7 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
         }
         return 'Subagent Result';
       },
-      defaultOpen: true,
+      defaultOpen: false,
       contentType: 'markdown',
       getContentProps: (result) => {
         // Handle agent results which may have complex structure

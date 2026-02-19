@@ -17,6 +17,14 @@ export interface ToolResult {
   [key: string]: unknown;
 }
 
+export interface SubagentChildTool {
+  toolId: string;
+  toolName: string;
+  toolInput: unknown;
+  toolResult?: ToolResult | null;
+  timestamp: Date;
+}
+
 export interface ChatMessage {
   type: string;
   content?: string;
@@ -32,6 +40,12 @@ export interface ChatMessage {
   toolResult?: ToolResult | null;
   toolId?: string;
   toolCallId?: string;
+  isSubagentContainer?: boolean;
+  subagentState?: {
+    childTools: SubagentChildTool[];
+    currentToolIndex: number;
+    isComplete: boolean;
+  };
   [key: string]: unknown;
 }
 

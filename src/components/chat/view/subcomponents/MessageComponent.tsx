@@ -184,6 +184,8 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     autoExpandTools={autoExpandTools}
                     showRawParameters={showRawParameters}
                     rawToolInput={typeof message.toolInput === 'string' ? message.toolInput : undefined}
+                    isSubagentContainer={message.isSubagentContainer}
+                    subagentState={message.subagentState}
                   />
                 )}
                 
