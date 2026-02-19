@@ -173,6 +173,25 @@ cp .env.example .env
 # Edit .env with your preferred settings
 ```
 
+Optional: **Enable HTTPS with a self-signed certificate** (for local SSL testing)
+```bash
+mkdir -p certs
+openssl req -x509 -newkey rsa:2048 -nodes \
+  -keyout certs/localhost.key \
+  -out certs/localhost.crt \
+  -days 365 \
+  -subj "/CN=localhost"
+```
+Then set the following in `.env`:
+```bash
+SSL_ENABLED=true
+VITE_HTTPS=true
+SSL_CERT_PATH=./certs/localhost.crt
+SSL_KEY_PATH=./certs/localhost.key
+VITE_SSL_CERT_PATH=./certs/localhost.crt
+VITE_SSL_KEY_PATH=./certs/localhost.key
+```
+
 4. **Start the application:**
 ```bash
 # Development mode (with hot reload)
