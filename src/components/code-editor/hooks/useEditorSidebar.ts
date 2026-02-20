@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import type { Project } from '../../../types/app';
-import type { DiffInfo, EditingFile } from '../types/types';
+import type { CodeEditorDiffInfo, CodeEditorFile } from '../types/types';
 
 type UseEditorSidebarOptions = {
   selectedProject: Project | null;
@@ -9,12 +9,12 @@ type UseEditorSidebarOptions = {
   initialWidth?: number;
 };
 
-export function useEditorSidebar({
+export const useEditorSidebar = ({
   selectedProject,
   isMobile,
   initialWidth = 600,
-}: UseEditorSidebarOptions) {
-  const [editingFile, setEditingFile] = useState<EditingFile | null>(null);
+}: UseEditorSidebarOptions) => {
+  const [editingFile, setEditingFile] = useState<CodeEditorFile | null>(null);
   const [editorWidth, setEditorWidth] = useState(initialWidth);
   const [editorExpanded, setEditorExpanded] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
@@ -22,7 +22,7 @@ export function useEditorSidebar({
   const resizeHandleRef = useRef<HTMLDivElement | null>(null);
 
   const handleFileOpen = useCallback(
-    (filePath: string, diffInfo: DiffInfo | null = null) => {
+    (filePath: string, diffInfo: CodeEditorDiffInfo | null = null) => {
       const normalizedPath = filePath.replace(/\\/g, '/');
       const fileName = normalizedPath.split('/').pop() || filePath;
 
@@ -42,7 +42,7 @@ export function useEditorSidebar({
   }, []);
 
   const handleToggleEditorExpand = useCallback(() => {
-    setEditorExpanded((prev) => !prev);
+    setEditorExpanded((previous) => !previous);
   }, []);
 
   const handleResizeStart = useCallback(
@@ -51,8 +51,7 @@ export function useEditorSidebar({
         return;
       }
 
-      // Once the user starts dragging, width should be controlled by drag state
-      // instead of "fill available space" layout mode.
+      // After first drag interaction, the editor width is user-controlled.
       setHasManualWidth(true);
       setIsResizing(true);
       event.preventDefault();
@@ -112,4 +111,4 @@ export function useEditorSidebar({
     handleToggleEditorExpand,
     handleResizeStart,
   };
-}
+};

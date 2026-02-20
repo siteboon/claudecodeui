@@ -8,14 +8,14 @@ import ErrorBoundary from '../../ErrorBoundary';
 
 import MainContentHeader from './subcomponents/MainContentHeader';
 import MainContentStateView from './subcomponents/MainContentStateView';
-import EditorSidebar from './subcomponents/EditorSidebar';
 import TaskMasterPanel from './subcomponents/TaskMasterPanel';
 import type { MainContentProps } from '../types/types';
 
 import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import { useUiPreferences } from '../../../hooks/useUiPreferences';
-import { useEditorSidebar } from '../hooks/useEditorSidebar';
+import { useEditorSidebar } from '../../code-editor/hooks/useEditorSidebar';
+import EditorSidebar from '../../code-editor/view/EditorSidebar';
 import type { Project } from '../../../types/app';
 
 const AnyStandaloneShell = StandaloneShell as any;
@@ -162,16 +162,16 @@ function MainContent({
           <div className={`h-full overflow-hidden ${activeTab === 'preview' ? 'block' : 'hidden'}`} />
         </div>
 
-          <EditorSidebar
-            editingFile={editingFile}
-            isMobile={isMobile}
-            editorExpanded={editorExpanded}
-            editorWidth={editorWidth}
-            hasManualWidth={hasManualWidth}
-            resizeHandleRef={resizeHandleRef}
-            onResizeStart={handleResizeStart}
-            onCloseEditor={handleCloseEditor}
-            onToggleEditorExpand={handleToggleEditorExpand}
+        <EditorSidebar
+          editingFile={editingFile}
+          isMobile={isMobile}
+          editorExpanded={editorExpanded}
+          editorWidth={editorWidth}
+          hasManualWidth={hasManualWidth}
+          resizeHandleRef={resizeHandleRef}
+          onResizeStart={handleResizeStart}
+          onCloseEditor={handleCloseEditor}
+          onToggleEditorExpand={handleToggleEditorExpand}
           projectPath={selectedProject.path}
           fillSpace={activeTab === 'files'}
         />
