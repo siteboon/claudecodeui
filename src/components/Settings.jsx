@@ -599,7 +599,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
           authenticated: data.authenticated,
           email: data.email,
           loading: false,
-          error: data.error || null
+          error: data.error || null,
+          isBedrock: data.isBedrock || false
         });
       } else {
         setClaudeAuthStatus({
