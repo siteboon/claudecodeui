@@ -1,26 +1,19 @@
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { cn } from '../../lib/utils';
-import ImageViewer from '../ImageViewer';
-import { ICON_SIZE_CLASS, getFileIconData } from './constants/fileIcons';
-import { useExpandedDirectories } from './hooks/useExpandedDirectories';
-import { useFileTreeData } from './hooks/useFileTreeData';
-import { useFileTreeSearch } from './hooks/useFileTreeSearch';
-import { useFileTreeViewMode } from './hooks/useFileTreeViewMode';
-import type { FileTreeImageSelection, FileTreeNode } from './types/types';
-import { formatFileSize, formatRelativeTime, isImageFile } from './utils/fileTreeUtils';
-import FileTreeBody from './view/FileTreeBody';
-import FileTreeDetailedColumns from './view/FileTreeDetailedColumns';
-import FileTreeHeader from './view/FileTreeHeader';
-import FileTreeLoadingState from './view/FileTreeLoadingState';
-import { Project } from '../../types/app';
-
-type ImageViewerProps = {
-  file: FileTreeImageSelection;
-  onClose: () => void;
-};
-
-const ImageViewerComponent = ImageViewer as unknown as (props: ImageViewerProps) => JSX.Element;
+import { cn } from '../../../lib/utils';
+import ImageViewer from './ImageViewer';
+import { ICON_SIZE_CLASS, getFileIconData } from '../constants/fileIcons';
+import { useExpandedDirectories } from '../hooks/useExpandedDirectories';
+import { useFileTreeData } from '../hooks/useFileTreeData';
+import { useFileTreeSearch } from '../hooks/useFileTreeSearch';
+import { useFileTreeViewMode } from '../hooks/useFileTreeViewMode';
+import type { FileTreeImageSelection, FileTreeNode } from '../types/types';
+import { formatFileSize, formatRelativeTime, isImageFile } from '../utils/fileTreeUtils';
+import FileTreeBody from './FileTreeBody';
+import FileTreeDetailedColumns from './FileTreeDetailedColumns';
+import FileTreeHeader from './FileTreeHeader';
+import FileTreeLoadingState from './FileTreeLoadingState';
+import { Project } from '../../../types/app';
 
 type FileTreeProps =  {
   selectedProject: Project | null;
@@ -100,7 +93,7 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
       />
 
       {selectedImage && (
-        <ImageViewerComponent
+        <ImageViewer
           file={selectedImage}
           onClose={() => setSelectedImage(null)}
         />
