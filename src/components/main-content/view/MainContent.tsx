@@ -3,7 +3,7 @@ import React, { useEffect } from 'react';
 import ChatInterface from '../../chat/view/ChatInterface';
 import FileTree from '../../file-tree/FileTree';
 import StandaloneShell from '../../StandaloneShell';
-import GitPanel from '../../GitPanel';
+import GitPanel from '../../git-panel/view/GitPanel';
 import ErrorBoundary from '../../ErrorBoundary';
 
 import MainContentHeader from './subcomponents/MainContentHeader';
@@ -19,7 +19,6 @@ import { useEditorSidebar } from '../hooks/useEditorSidebar';
 import type { Project } from '../../../types/app';
 
 const AnyStandaloneShell = StandaloneShell as any;
-const AnyGitPanel = GitPanel as any;
 
 type TaskMasterContextValue = {
   currentProject?: Project | null;
@@ -154,7 +153,7 @@ function MainContent({
 
           {activeTab === 'git' && (
             <div className="h-full overflow-hidden">
-              <AnyGitPanel selectedProject={selectedProject} isMobile={isMobile} onFileOpen={handleFileOpen} />
+              <GitPanel selectedProject={selectedProject} isMobile={isMobile} onFileOpen={handleFileOpen} />
             </div>
           )}
 
