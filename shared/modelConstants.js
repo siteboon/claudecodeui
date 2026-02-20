@@ -8,7 +8,7 @@
  *
  * Note: Claude uses two different formats:
  * - SDK format ('sonnet', 'opus') - used by the UI and claude-sdk.js
- * - API format ('claude-sonnet-4.5') - used by slash commands for display
+ * - API format ('claude-sonnet-4.5', 'claude-opus-4.6') - used by slash commands for display
  */
 export const CLAUDE_MODELS = {
   // Models in SDK format (what the actual SDK accepts)
@@ -30,6 +30,7 @@ export const CURSOR_MODELS = {
   OPTIONS: [
     { value: 'gpt-5.2-high', label: 'GPT-5.2 High' },
     { value: 'gemini-3-pro', label: 'Gemini 3 Pro' },
+    { value: 'opus-4.6-thinking', label: 'Claude 4.6 Opus (Thinking)' },
     { value: 'opus-4.5-thinking', label: 'Claude 4.5 Opus (Thinking)' },
     { value: 'gpt-5.2', label: 'GPT-5.2' },
     { value: 'gpt-5.1', label: 'GPT-5.1' },
@@ -38,6 +39,7 @@ export const CURSOR_MODELS = {
     { value: 'auto', label: 'Auto' },
     { value: 'sonnet-4.5', label: 'Claude 4.5 Sonnet' },
     { value: 'sonnet-4.5-thinking', label: 'Claude 4.5 Sonnet (Thinking)' },
+    { value: 'opus-4.6', label: 'Claude 4.6 Opus' },
     { value: 'opus-4.5', label: 'Claude 4.5 Opus' },
     { value: 'gpt-5.1-codex', label: 'GPT-5.1 Codex' },
     { value: 'gpt-5.1-codex-high', label: 'GPT-5.1 Codex High' },
