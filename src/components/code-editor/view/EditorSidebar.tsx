@@ -1,8 +1,21 @@
 import { useState } from 'react';
-import CodeEditor from '../../../CodeEditor';
-import type { EditorSidebarProps } from '../../types/types';
+import type { MouseEvent, MutableRefObject } from 'react';
+import type { CodeEditorFile } from '../types/types';
+import CodeEditor from './CodeEditor';
 
-const AnyCodeEditor = CodeEditor as any;
+type EditorSidebarProps = {
+  editingFile: CodeEditorFile | null;
+  isMobile: boolean;
+  editorExpanded: boolean;
+  editorWidth: number;
+  hasManualWidth: boolean;
+  resizeHandleRef: MutableRefObject<HTMLDivElement | null>;
+  onResizeStart: (event: MouseEvent<HTMLDivElement>) => void;
+  onCloseEditor: () => void;
+  onToggleEditorExpand: () => void;
+  projectPath?: string;
+  fillSpace?: boolean;
+};
 
 export default function EditorSidebar({
   editingFile,
@@ -25,7 +38,7 @@ export default function EditorSidebar({
 
   if (isMobile || poppedOut) {
     return (
-      <AnyCodeEditor
+      <CodeEditor
         file={editingFile}
         onClose={() => {
           setPoppedOut(false);
@@ -37,8 +50,8 @@ export default function EditorSidebar({
     );
   }
 
-  // Keep "fill space" as default in files tab, but allow user drag to take control.
-  const useFlex = editorExpanded || (fillSpace && !hasManualWidth);
+  // In files tab, fill the remaining width unless user has dragged manually.
+  const useFlexLayout = editorExpanded || (fillSpace && !hasManualWidth);
 
   return (
     <>
@@ -54,10 +67,10 @@ export default function EditorSidebar({
       )}
 
       <div
-        className={`flex-shrink-0 border-l border-gray-200 dark:border-gray-700 h-full overflow-hidden ${useFlex ? 'flex-1' : ''}`}
-        style={useFlex ? undefined : { width: `${editorWidth}px` }}
+        className={`flex-shrink-0 border-l border-gray-200 dark:border-gray-700 h-full overflow-hidden ${useFlexLayout ? 'flex-1' : ''}`}
+        style={useFlexLayout ? undefined : { width: `${editorWidth}px` }}
       >
-        <AnyCodeEditor
+        <CodeEditor
           file={editingFile}
           onClose={onCloseEditor}
           projectPath={projectPath}
