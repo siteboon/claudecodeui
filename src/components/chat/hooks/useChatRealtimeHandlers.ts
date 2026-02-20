@@ -956,12 +956,26 @@ export function useChatRealtimeHandlers({
 
       case 'session-status': {
         const statusSessionId = latestMessage.sessionId;
+        if (!statusSessionId) {
+          break;
+        }
+
         const isCurrentSession =
           statusSessionId === currentSessionId || (selectedSession && statusSessionId === selectedSession.id);
-        if (isCurrentSession && latestMessage.isProcessing) {
-          setIsLoading(true);
-          setCanAbortSession(true);
+
+        if (latestMessage.isProcessing) {
           onSessionProcessing?.(statusSessionId);
+          if (isCurrentSession) {
+            setIsLoading(true);
+            setCanAbortSession(true);
+          }
+          break;
+        }
+
+        onSessionInactive?.(statusSessionId);
+        onSessionNotProcessing?.(statusSessionId);
+        if (isCurrentSession) {
+          clearLoadingIndicators();
         }
         break;
       }

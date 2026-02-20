@@ -3,7 +3,7 @@ import { ArrowRight, List, Clock, Flag, CheckCircle, Circle, AlertCircle, Pause,
 import { cn } from '../lib/utils';
 import { useTaskMaster } from '../contexts/TaskMasterContext';
 import { api } from '../utils/api';
-import Shell from './Shell';
+import Shell from './shell/view/Shell';
 import TaskDetail from './TaskDetail';
 
 const NextTaskBanner = ({ onShowAllTasks, onStartTask, className = '' }) => {
