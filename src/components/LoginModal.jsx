@@ -1,5 +1,5 @@
 import { X } from 'lucide-react';
-import StandaloneShell from './StandaloneShell';
+import StandaloneShell from './standalone-shell/view/StandaloneShell';
 import { IS_PLATFORM } from '../constants/config';
 
 /**

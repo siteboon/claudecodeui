@@ -7,6 +7,7 @@ import type {
   GithubCredentialItem,
   GithubCredentialsResponse,
 } from '../view/tabs/api-settings/types';
+import { copyTextToClipboard } from '../../../utils/clipboard';
 
 type UseCredentialsSettingsArgs = {
   confirmDeleteApiKeyText: string;
@@ -205,7 +206,7 @@ export function useCredentialsSettings({
 
   const copyToClipboard = useCallback(async (text: string, id: string) => {
     try {
-      await navigator.clipboard.writeText(text);
+      await copyTextToClipboard(text);
       setCopiedKey(id);
       window.setTimeout(() => setCopiedKey(null), 2000);
     } catch (error) {

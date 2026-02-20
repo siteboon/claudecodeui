@@ -4,7 +4,7 @@ import { cn } from '../lib/utils';
 import TaskCard from './TaskCard';
 import CreateTaskModal from './CreateTaskModal';
 import { useTaskMaster } from '../contexts/TaskMasterContext';
-import Shell from './Shell';
+import Shell from './shell/view/Shell';
 import { api } from '../utils/api';
 import { useTranslation } from 'react-i18next';
 
