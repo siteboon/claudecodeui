@@ -1,5 +1,5 @@
-import CommandMenu from '../../../CommandMenu';
-import ClaudeStatus from '../../../ClaudeStatus';
+import CommandMenu from './CommandMenu';
+import ClaudeStatus from './ClaudeStatus';
 import { MicButton } from '../../../MicButton.jsx';
 import ImageAttachment from './ImageAttachment';
 import PermissionRequestsBanner from './PermissionRequestsBanner';
@@ -149,7 +149,6 @@ export default function ChatComposer({
   onTranscript,
 }: ChatComposerProps) {
   const { t } = useTranslation('chat');
-  const AnyCommandMenu = CommandMenu as any;
   const textareaRect = textareaRef.current?.getBoundingClientRect();
   const commandMenuPosition = {
     top: textareaRect ? Math.max(16, textareaRect.top - 316) : 0,
@@ -259,7 +258,7 @@ export default function ChatComposer({
           </div>
         )}
 
-        <AnyCommandMenu
+        <CommandMenu
           commands={filteredCommands}
           selectedIndex={selectedCommandIndex}
           onSelect={onCommandSelect}

@@ -1,16 +1,22 @@
-import React, { useEffect, useState } from 'react';
-import { Button } from './ui/button';
+import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
-import { authenticatedFetch } from '../utils/api';
+import { Button } from '../../ui/button';
+import { authenticatedFetch } from '../../../utils/api';
+import type { FileTreeImageSelection } from '../types/types';
 
-function ImageViewer({ file, onClose }) {
+type ImageViewerProps = {
+  file: FileTreeImageSelection;
+  onClose: () => void;
+};
+
+export default function ImageViewer({ file, onClose }: ImageViewerProps) {
   const imagePath = `/api/projects/${file.projectName}/files/content?path=${encodeURIComponent(file.path)}`;
-  const [imageUrl, setImageUrl] = useState(null);
-  const [error, setError] = useState(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let objectUrl;
+    let objectUrl: string | null = null;
     const controller = new AbortController();
 
     const loadImage = async () => {
@@ -20,7 +26,7 @@ function ImageViewer({ file, onClose }) {
         setImageUrl(null);
 
         const response = await authenticatedFetch(imagePath, {
-          signal: controller.signal
+          signal: controller.signal,
         });
 
         if (!response.ok) {
@@ -30,11 +36,11 @@ function ImageViewer({ file, onClose }) {
         const blob = await response.blob();
         objectUrl = URL.createObjectURL(blob);
         setImageUrl(objectUrl);
-      } catch (err) {
-        if (err.name === 'AbortError') {
+      } catch (loadError: unknown) {
+        if (loadError instanceof Error && loadError.name === 'AbortError') {
           return;
         }
-        console.error('Error loading image:', err);
+        console.error('Error loading image:', loadError);
         setError('Unable to load image');
       } finally {
         setLoading(false);
@@ -55,15 +61,8 @@ function ImageViewer({ file, onClose }) {
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl max-h-[90vh] w-full mx-4 overflow-hidden">
         <div className="flex items-center justify-between p-4 border-b">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-            {file.name}
-          </h3>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onClose}
-            className="h-8 w-8 p-0"
-          >
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{file.name}</h3>
+          <Button variant="ghost" size="sm" onClick={onClose} className="h-8 w-8 p-0">
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -71,7 +70,7 @@ function ImageViewer({ file, onClose }) {
         <div className="p-4 flex justify-center items-center bg-gray-50 dark:bg-gray-900 min-h-[400px]">
           {loading && (
             <div className="text-center text-gray-500 dark:text-gray-400">
-              <p>Loading image…</p>
+              <p>Loading image...</p>
             </div>
           )}
           {!loading && imageUrl && (
@@ -90,13 +89,9 @@ function ImageViewer({ file, onClose }) {
         </div>
 
         <div className="p-4 border-t bg-gray-50 dark:bg-gray-800">
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            {file.path}
-          </p>
+          <p className="text-sm text-gray-600 dark:text-gray-400">{file.path}</p>
         </div>
       </div>
     </div>
   );
 }
-
-export default ImageViewer;
