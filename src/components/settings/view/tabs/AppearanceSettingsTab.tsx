@@ -1,12 +1,11 @@
 import { Moon, Sun } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import DarkModeToggle from '../../../DarkModeToggle';
 import LanguageSelector from '../../../LanguageSelector';
 import type { CodeEditorSettingsState, ProjectSortOrder } from '../../types/types';
 
 type AppearanceSettingsTabProps = {
-  isDarkMode: boolean;
-  onToggleDarkMode: () => void;
   projectSortOrder: ProjectSortOrder;
   onProjectSortOrderChange: (value: ProjectSortOrder) => void;
   codeEditorSettings: CodeEditorSettingsState;
@@ -52,9 +51,8 @@ function ToggleCard({
         >
           <span className="sr-only">{ariaLabel}</span>
           <span
-            className={`${
-              checked ? 'translate-x-7' : 'translate-x-1'
-            } inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-200 flex items-center justify-center`}
+            className={`${checked ? 'translate-x-7' : 'translate-x-1'
+              } h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-200 flex items-center justify-center`}
           >
             {checked ? onIcon : offIcon}
           </span>
@@ -65,8 +63,6 @@ function ToggleCard({
 }
 
 export default function AppearanceSettingsTab({
-  isDarkMode,
-  onToggleDarkMode,
   projectSortOrder,
   onProjectSortOrderChange,
   codeEditorSettings,
@@ -81,15 +77,17 @@ export default function AppearanceSettingsTab({
   return (
     <div className="space-y-6 md:space-y-8">
       <div className="space-y-4">
-        <ToggleCard
-          label={t('appearanceSettings.darkMode.label')}
-          description={t('appearanceSettings.darkMode.description')}
-          checked={isDarkMode}
-          onChange={onToggleDarkMode}
-          onIcon={<Moon className="w-3.5 h-3.5 text-gray-700" />}
-          offIcon={<Sun className="w-3.5 h-3.5 text-yellow-500" />}
-          ariaLabel={t('appearanceSettings.darkMode.label')}
-        />
+        <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="font-medium text-foreground">{t('appearanceSettings.darkMode.label')}</div>
+              <div className="text-sm text-muted-foreground">
+                {t('appearanceSettings.darkMode.description')}
+              </div>
+            </div>
+            <DarkModeToggle />
+          </div>
+        </div>
       </div>
 
       <div className="space-y-4">

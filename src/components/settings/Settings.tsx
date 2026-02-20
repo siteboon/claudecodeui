@@ -29,8 +29,6 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
   const {
     activeTab,
     setActiveTab,
-    isDarkMode,
-    toggleDarkMode,
     isSaving,
     saveStatus,
     projectSortOrder,
@@ -116,8 +114,6 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
           <div className="p-4 md:p-6 space-y-6 md:space-y-8 pb-safe-area-inset-bottom">
             {activeTab === 'appearance' && (
               <AppearanceSettingsTab
-                isDarkMode={isDarkMode}
-                onToggleDarkMode={toggleDarkMode}
                 projectSortOrder={projectSortOrder}
                 onProjectSortOrderChange={setProjectSortOrder}
                 codeEditorSettings={codeEditorSettings}
