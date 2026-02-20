@@ -1,4 +1,3 @@
-import { Moon, Sun } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import DarkModeToggle from '../../../DarkModeToggle';
@@ -73,6 +72,7 @@ export default function AppearanceSettingsTab({
   onCodeEditorFontSizeChange,
 }: AppearanceSettingsTabProps) {
   const { t } = useTranslation('settings');
+  const codeEditorThemeLabel = t('appearanceSettings.codeEditor.theme.label');
 
   return (
     <div className="space-y-6 md:space-y-8">
@@ -85,7 +85,7 @@ export default function AppearanceSettingsTab({
                 {t('appearanceSettings.darkMode.description')}
               </div>
             </div>
-            <DarkModeToggle />
+            <DarkModeToggle ariaLabel={t('appearanceSettings.darkMode.label')} />
           </div>
         </div>
       </div>
@@ -120,15 +120,21 @@ export default function AppearanceSettingsTab({
       <div className="space-y-4">
         <h3 className="text-lg font-semibold text-foreground">{t('appearanceSettings.codeEditor.title')}</h3>
 
-        <ToggleCard
-          label={t('appearanceSettings.codeEditor.theme.label')}
-          description={t('appearanceSettings.codeEditor.theme.description')}
-          checked={codeEditorSettings.theme === 'dark'}
-          onChange={(enabled) => onCodeEditorThemeChange(enabled ? 'dark' : 'light')}
-          onIcon={<Moon className="w-3.5 h-3.5 text-gray-700" />}
-          offIcon={<Sun className="w-3.5 h-3.5 text-yellow-500" />}
-          ariaLabel={t('appearanceSettings.codeEditor.theme.label')}
-        />
+        <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="font-medium text-foreground">{codeEditorThemeLabel}</div>
+              <div className="text-sm text-muted-foreground">
+                {t('appearanceSettings.codeEditor.theme.description')}
+              </div>
+            </div>
+            <DarkModeToggle
+              checked={codeEditorSettings.theme === 'dark'}
+              onToggle={(enabled) => onCodeEditorThemeChange(enabled ? 'dark' : 'light')}
+              ariaLabel={codeEditorThemeLabel}
+            />
+          </div>
+        </div>
 
         <ToggleCard
           label={t('appearanceSettings.codeEditor.wordWrap.label')}
