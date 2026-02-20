@@ -1,17 +1,17 @@
 import { Settings as SettingsIcon, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import LoginModal from '../LoginModal';
-import { Button } from '../ui/button';
-import ClaudeMcpFormModal from './view/modals/ClaudeMcpFormModal';
-import CodexMcpFormModal from './view/modals/CodexMcpFormModal';
-import SettingsMainTabs from './view/SettingsMainTabs';
-import AgentsSettingsTab from './view/tabs/agents-settings/AgentsSettingsTab';
-import AppearanceSettingsTab from './view/tabs/AppearanceSettingsTab';
-import CredentialsSettingsTab from './view/tabs/api-settings/CredentialsSettingsTab';
-import GitSettingsTab from './view/tabs/git-settings/GitSettingsTab';
-import TasksSettingsTab from './view/tabs/tasks-settings/TasksSettingsTab';
-import { useSettingsController } from './hooks/useSettingsController';
-import type { AgentProvider, SettingsProject, SettingsProps } from './types/types';
+import LoginModal from '../../LoginModal';
+import { Button } from '../../ui/button';
+import ClaudeMcpFormModal from '../view/modals/ClaudeMcpFormModal';
+import CodexMcpFormModal from '../view/modals/CodexMcpFormModal';
+import SettingsMainTabs from '../view/SettingsMainTabs';
+import AgentsSettingsTab from '../view/tabs/agents-settings/AgentsSettingsTab';
+import AppearanceSettingsTab from '../view/tabs/AppearanceSettingsTab';
+import CredentialsSettingsTab from '../view/tabs/api-settings/CredentialsSettingsTab';
+import GitSettingsTab from '../view/tabs/git-settings/GitSettingsTab';
+import TasksSettingsTab from '../view/tabs/tasks-settings/TasksSettingsTab';
+import { useSettingsController } from '../hooks/useSettingsController';
+import type { AgentProvider, SettingsProject, SettingsProps } from '../types/types';
 
 type LoginModalProps = {
   isOpen: boolean;
