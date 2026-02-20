@@ -62,6 +62,9 @@
     --safe-area-inset-bottom: env(safe-area-inset-bottom);
     --safe-area-inset-left: env(safe-area-inset-left);
 
+    /* Virtual keyboard height (set by JS for iOS/Safari fallback) */
+    --keyboard-height: 0px;
+
     /* Mobile navigation dimensions - Single source of truth */
     /* Floating nav: ~52px bar + 8px bottom margin + 12px px-3 top spacing */
     --mobile-nav-height: 52px;
@@ -166,12 +169,16 @@
     overflow: hidden;
   }
 
+  /* Virtual keyboard offset — works in both PWA and regular mobile browsers */
+  .fixed.inset-0 {
+    bottom: max(env(keyboard-inset-bottom, 0px), var(--keyboard-height, 0px));
+  }
+
   /* Adjust fixed inset positioning in PWA mode */
   body.pwa-mode .fixed.inset-0 {
     top: var(--header-total-padding);
     left: var(--safe-area-inset-left);
     right: var(--safe-area-inset-right);
-    bottom: 0;
   }
   
   /* Global transition defaults */
