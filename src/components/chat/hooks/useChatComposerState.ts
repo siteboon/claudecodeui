@@ -903,8 +903,11 @@ export function useChatComposerState({
     [sendMessage, setClaudeStatus, setPendingPermissionRequests],
   );
 
+  const [isInputFocused, setIsInputFocused] = useState(false);
+
   const handleInputFocusChange = useCallback(
     (focused: boolean) => {
+      setIsInputFocused(focused);
       onInputFocusChange?.(focused);
     },
     [onInputFocusChange],
@@ -953,5 +956,6 @@ export function useChatComposerState({
     handlePermissionDecision,
     handleGrantToolPermission,
     handleInputFocusChange,
+    isInputFocused,
   };
 }

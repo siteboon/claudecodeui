@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import CodeEditor from '../../../CodeEditor';
 import type { EditorSidebarProps } from '../../types/types';
 
@@ -13,21 +14,29 @@ export default function EditorSidebar({
   onCloseEditor,
   onToggleEditorExpand,
   projectPath,
+  fillSpace,
 }: EditorSidebarProps) {
+  const [poppedOut, setPoppedOut] = useState(false);
+
   if (!editingFile) {
     return null;
   }
 
-  if (isMobile) {
+  if (isMobile || poppedOut) {
     return (
       <AnyCodeEditor
         file={editingFile}
-        onClose={onCloseEditor}
+        onClose={() => {
+          setPoppedOut(false);
+          onCloseEditor();
+        }}
         projectPath={projectPath}
         isSidebar={false}
       />
     );
   }
+
+  const useFlex = editorExpanded || fillSpace;
 
   return (
     <>
@@ -43,8 +52,8 @@ export default function EditorSidebar({
       )}
 
       <div
-        className={`flex-shrink-0 border-l border-gray-200 dark:border-gray-700 h-full overflow-hidden ${editorExpanded ? 'flex-1' : ''}`}
-        style={editorExpanded ? undefined : { width: `${editorWidth}px` }}
+        className={`flex-shrink-0 border-l border-gray-200 dark:border-gray-700 h-full overflow-hidden ${useFlex ? 'flex-1' : ''}`}
+        style={useFlex ? undefined : { width: `${editorWidth}px` }}
       >
         <AnyCodeEditor
           file={editingFile}
@@ -53,6 +62,7 @@ export default function EditorSidebar({
           isSidebar
           isExpanded={editorExpanded}
           onToggleExpand={onToggleEditorExpand}
+          onPopOut={() => setPoppedOut(true)}
         />
       </div>
     </>

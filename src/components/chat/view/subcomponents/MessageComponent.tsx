@@ -127,6 +127,14 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
             </div>
           )}
         </div>
+      ) : message.isTaskNotification ? (
+        /* Compact task notification on the left */
+        <div className="w-full">
+          <div className="flex items-center gap-2 py-0.5">
+            <span className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${message.taskStatus === 'completed' ? 'bg-green-400 dark:bg-green-500' : 'bg-amber-400 dark:bg-amber-500'}`} />
+            <span className="text-xs text-gray-500 dark:text-gray-400">{message.content}</span>
+          </div>
+        </div>
       ) : (
         /* Claude/Error/Tool messages on the left */
         <div className="w-full">
@@ -176,6 +184,8 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     autoExpandTools={autoExpandTools}
                     showRawParameters={showRawParameters}
                     rawToolInput={typeof message.toolInput === 'string' ? message.toolInput : undefined}
+                    isSubagentContainer={message.isSubagentContainer}
+                    subagentState={message.subagentState}
                   />
                 )}
                 

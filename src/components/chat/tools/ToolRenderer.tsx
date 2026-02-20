@@ -1,7 +1,8 @@
 import React, { memo, useMemo, useCallback } from 'react';
 import { getToolConfig } from './configs/toolConfigs';
-import { OneLineDisplay, CollapsibleDisplay, DiffViewer, MarkdownContent, FileListContent, TodoListContent, TaskListContent, TextContent } from './components';
+import { OneLineDisplay, CollapsibleDisplay, DiffViewer, MarkdownContent, FileListContent, TodoListContent, TaskListContent, TextContent, QuestionAnswerContent, SubagentContainer } from './components';
 import type { Project } from '../../../types/app';
+import type { SubagentChildTool } from '../types/types';
 
 type DiffLine = {
   type: string;
@@ -21,6 +22,12 @@ interface ToolRendererProps {
   autoExpandTools?: boolean;
   showRawParameters?: boolean;
   rawToolInput?: string;
+  isSubagentContainer?: boolean;
+  subagentState?: {
+    childTools: SubagentChildTool[];
+    currentToolIndex: number;
+    isComplete: boolean;
+  };
 }
 
 function getToolCategory(toolName: string): string {
@@ -31,6 +38,7 @@ function getToolCategory(toolName: string): string {
   if (['TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet'].includes(toolName)) return 'task';
   if (toolName === 'Task') return 'agent';  // Subagent task
   if (toolName === 'exit_plan_mode' || toolName === 'ExitPlanMode') return 'plan';
+  if (toolName === 'AskUserQuestion') return 'question';
   return 'default';
 }
 
@@ -49,8 +57,24 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
   selectedProject,
   autoExpandTools = false,
   showRawParameters = false,
-  rawToolInput
+  rawToolInput,
+  isSubagentContainer,
+  subagentState
 }) => {
+  // Route subagent containers to dedicated component
+  if (isSubagentContainer && subagentState) {
+    if (mode === 'result') {
+      return null;
+    }
+    return (
+      <SubagentContainer
+        toolInput={toolInput}
+        toolResult={toolResult}
+        subagentState={subagentState}
+      />
+    );
+  }
+
   const config = getToolConfig(toolName);
   const displayConfig: any = mode === 'input' ? config.input : config.result;
 
@@ -154,6 +178,15 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
 
       case 'task':
         contentComponent = <TaskListContent content={contentProps.content || ''} />;
+        break;
+
+      case 'question-answer':
+        contentComponent = (
+          <QuestionAnswerContent
+            questions={contentProps.questions || []}
+            answers={contentProps.answers || {}}
+          />
+        );
         break;
 
       case 'text':

@@ -2,6 +2,10 @@ import React from 'react';
 import type { PendingPermissionRequest } from '../../types/types';
 import { buildClaudeToolPermissionEntry, formatToolInputForDisplay } from '../../utils/chatPermissions';
 import { getClaudeSettings } from '../../utils/chatStorage';
+import { getPermissionPanel, registerPermissionPanel } from '../../tools/configs/permissionPanelRegistry';
+import { AskUserQuestionPanel } from '../../tools/components/InteractiveRenderers';
+
+registerPermissionPanel('AskUserQuestion', AskUserQuestionPanel);
 
 interface PermissionRequestsBannerProps {
   pendingPermissionRequests: PendingPermissionRequest[];
@@ -24,6 +28,17 @@ export default function PermissionRequestsBanner({
   return (
     <div className="mb-3 space-y-2">
       {pendingPermissionRequests.map((request) => {
+        const CustomPanel = getPermissionPanel(request.toolName);
+        if (CustomPanel) {
+          return (
+            <CustomPanel
+              key={request.requestId}
+              request={request}
+              onDecision={handlePermissionDecision}
+            />
+          );
+        }
+
         const rawInput = formatToolInputForDisplay(request.input);
         const permissionEntry = buildClaudeToolPermissionEntry(request.toolName, rawInput);
         const settings = getClaudeSettings();

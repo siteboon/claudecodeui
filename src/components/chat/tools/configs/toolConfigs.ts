@@ -24,7 +24,7 @@ export interface ToolDisplayConfig {
     // Collapsible config
     title?: string | ((input: any) => string);
     defaultOpen?: boolean;
-    contentType?: 'diff' | 'markdown' | 'file-list' | 'todo-list' | 'text' | 'task';
+    contentType?: 'diff' | 'markdown' | 'file-list' | 'todo-list' | 'text' | 'task' | 'question-answer';
     getContentProps?: (input: any, helpers?: any) => any;
     actionButton?: 'file-button' | 'none';
   };
@@ -35,7 +35,7 @@ export interface ToolDisplayConfig {
     title?: string | ((result: any) => string);
     defaultOpen?: boolean;
     // Special result handlers
-    contentType?: 'markdown' | 'file-list' | 'todo-list' | 'text' | 'success-message' | 'task';
+    contentType?: 'markdown' | 'file-list' | 'todo-list' | 'text' | 'success-message' | 'task' | 'question-answer';
     getMessage?: (result: any) => string;
     getContentProps?: (result: any) => any;
   };
@@ -383,7 +383,7 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
         const description = input.description || 'Running task';
         return `Subagent / ${subagentType}: ${description}`;
       },
-      defaultOpen: true,
+      defaultOpen: false,
       contentType: 'markdown',
       getContentProps: (input) => {
         // If only prompt exists (and required fields), show just the prompt
@@ -424,32 +424,66 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     },
     result: {
       type: 'collapsible',
-      title: (result) => {
-        // Check if result has content with type array (agent results often have this structure)
-        if (result && result.content && Array.isArray(result.content)) {
-          return 'Subagent Response';
-        }
-        return 'Subagent Result';
-      },
-      defaultOpen: true,
+      title: 'Subagent result',
+      defaultOpen: false,
       contentType: 'markdown',
       getContentProps: (result) => {
         // Handle agent results which may have complex structure
         if (result && result.content) {
+          let content = result.content;
+          // If content is a JSON string, try to parse it (agent results may arrive serialized)
+          if (typeof content === 'string') {
+            try {
+              const parsed = JSON.parse(content);
+              if (Array.isArray(parsed)) {
+                content = parsed;
+              }
+            } catch {
+              // Not JSON — use as-is
+              return { content };
+            }
+          }
           // If content is an array (typical for agent responses with multiple text blocks)
-          if (Array.isArray(result.content)) {
-            const textContent = result.content
+          if (Array.isArray(content)) {
+            const textContent = content
               .filter((item: any) => item.type === 'text')
               .map((item: any) => item.text)
               .join('\n\n');
             return { content: textContent || 'No response text' };
           }
-          // If content is already a string
-          return { content: String(result.content) };
+          return { content: String(content) };
         }
         // Fallback to string representation
         return { content: String(result || 'No response') };
       }
+    }
+  },
+
+  // ============================================================================
+  // INTERACTIVE TOOLS
+  // ============================================================================
+
+  AskUserQuestion: {
+    input: {
+      type: 'collapsible',
+      title: (input: any) => {
+        const count = input.questions?.length || 0;
+        const hasAnswers = input.answers && Object.keys(input.answers).length > 0;
+        if (count === 1) {
+          const header = input.questions[0]?.header || 'Question';
+          return hasAnswers ? `${header} — answered` : header;
+        }
+        return hasAnswers ? `${count} questions — answered` : `${count} questions`;
+      },
+      defaultOpen: true,
+      contentType: 'question-answer',
+      getContentProps: (input: any) => ({
+        questions: input.questions || [],
+        answers: input.answers || {}
+      }),
+    },
+    result: {
+      hideOnSuccess: true
     }
   },
 

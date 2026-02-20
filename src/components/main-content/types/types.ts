@@ -100,6 +100,7 @@ export interface EditorSidebarProps {
   onCloseEditor: () => void;
   onToggleEditorExpand: () => void;
   projectPath?: string;
+  fillSpace?: boolean;
 }
 
 export interface TaskMasterPanelProps {

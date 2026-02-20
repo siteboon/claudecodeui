@@ -55,22 +55,22 @@ export default function MainContentTitle({
       <div className="min-w-0 flex-1">
         {activeTab === 'chat' && selectedSession ? (
           <div className="min-w-0">
-            <h2 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white whitespace-nowrap overflow-x-auto scrollbar-hide">
+            <h2 className="text-sm font-semibold text-foreground whitespace-nowrap overflow-x-auto scrollbar-hide leading-tight">
               {getSessionTitle(selectedSession)}
             </h2>
-            <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{selectedProject.displayName}</div>
+            <div className="text-[11px] text-muted-foreground truncate leading-tight">{selectedProject.displayName}</div>
           </div>
         ) : showChatNewSession ? (
           <div className="min-w-0">
-            <h2 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white">{t('mainContent.newSession')}</h2>
-            <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{selectedProject.displayName}</div>
+            <h2 className="text-base font-semibold text-foreground leading-tight">{t('mainContent.newSession')}</h2>
+            <div className="text-xs text-muted-foreground truncate leading-tight">{selectedProject.displayName}</div>
           </div>
         ) : (
           <div className="min-w-0">
-            <h2 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white">
+            <h2 className="text-sm font-semibold text-foreground leading-tight">
               {getTabTitle(activeTab, shouldShowTasksTab, t)}
             </h2>
-            <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{selectedProject.displayName}</div>
+            <div className="text-[11px] text-muted-foreground truncate leading-tight">{selectedProject.displayName}</div>
           </div>
         )}
       </div>
