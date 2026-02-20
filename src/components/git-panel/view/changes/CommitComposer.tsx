@@ -1,15 +1,7 @@
 import { Check, ChevronDown, GitCommit, RefreshCw, Sparkles } from 'lucide-react';
 import { useState } from 'react';
-import { MicButton } from '../../../MicButton.jsx';
+import MicButton from '../../../mic-button/view/MicButton';
 import type { ConfirmationRequest } from '../../types/types';
-
-type MicButtonProps = {
-  onTranscript?: (transcript: string) => void;
-  className?: string;
-  mode?: string;
-};
-
-const MicButtonComponent = MicButton as unknown as (props: MicButtonProps) => JSX.Element;
 
 type CommitComposerProps = {
   isMobile: boolean;
@@ -148,7 +140,7 @@ export default function CommitComposer({
                 )}
               </button>
               <div style={{ display: 'none' }}>
-                <MicButtonComponent
+                <MicButton
                   onTranscript={(transcript) => setCommitMessage(transcript)}
                   mode="default"
                   className="p-1.5"

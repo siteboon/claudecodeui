@@ -1,6 +1,6 @@
 import CommandMenu from './CommandMenu';
 import ClaudeStatus from './ClaudeStatus';
-import { MicButton } from '../../../MicButton.jsx';
+import MicButton from '../../../mic-button/view/MicButton';
 import ImageAttachment from './ImageAttachment';
 import PermissionRequestsBanner from './PermissionRequestsBanner';
 import ChatInputControls from './ChatInputControls';
