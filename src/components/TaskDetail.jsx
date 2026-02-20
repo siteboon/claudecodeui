@@ -4,6 +4,7 @@ import { cn } from '../lib/utils';
 import TaskIndicator from './TaskIndicator';
 import { api } from '../utils/api';
 import { useTaskMaster } from '../contexts/TaskMasterContext';
+import { copyTextToClipboard } from '../utils/clipboard';
 
 const TaskDetail = ({ 
   task, 
@@ -79,7 +80,7 @@ const TaskDetail = ({
   };
 
   const copyTaskId = () => {
-    navigator.clipboard.writeText(task.id.toString());
+    copyTextToClipboard(task.id.toString());
   };
 
   const getStatusConfig = (status) => {

@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { authenticatedFetch } from "../../../../utils/api";
 import { ReleaseInfo } from "../../../../types/sharedTypes";
+import { copyTextToClipboard } from "../../../../utils/clipboard";
 
 interface VersionUpgradeModalProps {
     isOpen: boolean;
@@ -22,7 +23,7 @@ export default function VersionUpgradeModal({
     const [isUpdating, setIsUpdating] = useState(false);
     const [updateOutput, setUpdateOutput] = useState('');
     const [updateError, setUpdateError] = useState('');
-    
+
     const handleUpdateNow = useCallback(async () => {
         setIsUpdating(true);
         setUpdateOutput('Starting update...\n');
@@ -170,9 +171,7 @@ export default function VersionUpgradeModal({
                     {!updateOutput && (
                         <>
                             <button
-                                onClick={() => {
-                                    navigator.clipboard.writeText('git checkout main && git pull && npm install');
-                                }}
+                                onClick={() => copyTextToClipboard('git checkout main && git pull && npm install')}
                                 className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md transition-colors"
                             >
                                 {t('versionUpdate.buttons.copyCommand')}

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, ChevronRight, ChevronLeft, CheckCircle, AlertCircle, Settings, Server, FileText, Sparkles, ExternalLink, Copy } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { api } from '../utils/api';
+import { copyTextToClipboard } from '../utils/clipboard';
 
 const TaskMasterSetupWizard = ({ 
   isOpen = true, 
@@ -175,7 +176,7 @@ const TaskMasterSetupWizard = ({
     }
   }
 }`;
-    navigator.clipboard.writeText(mcpConfig);
+    copyTextToClipboard(mcpConfig);
   };
 
   const renderStepContent = () => {

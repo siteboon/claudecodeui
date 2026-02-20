@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 
 import ChatInterface from '../../chat/view/ChatInterface';
 import FileTree from '../../file-tree/view/FileTree';
-import StandaloneShell from '../../StandaloneShell';
+import StandaloneShell from '../../standalone-shell/view/StandaloneShell';
 import GitPanel from '../../git-panel/view/GitPanel';
 import ErrorBoundary from '../../ErrorBoundary';
 
@@ -17,8 +17,6 @@ import { useUiPreferences } from '../../../hooks/useUiPreferences';
 import { useEditorSidebar } from '../../code-editor/hooks/useEditorSidebar';
 import EditorSidebar from '../../code-editor/view/EditorSidebar';
 import type { Project } from '../../../types/app';
-
-const AnyStandaloneShell = StandaloneShell as any;
 
 type TaskMasterContextValue = {
   currentProject?: Project | null;
@@ -147,7 +145,7 @@ function MainContent({
 
           {activeTab === 'shell' && (
             <div className="h-full w-full overflow-hidden">
-              <AnyStandaloneShell project={selectedProject} session={selectedSession} showHeader={false} />
+              <StandaloneShell project={selectedProject} session={selectedSession} showHeader={false} />
             </div>
           )}
 

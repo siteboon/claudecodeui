@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { ComponentProps } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark as prismOneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { copyTextToClipboard } from '../../../../../utils/clipboard';
 
 type MarkdownCodeBlockProps = {
   inline?: boolean;
@@ -34,14 +35,6 @@ export default function MarkdownCodeBlock({
   const languageMatch = /language-(\w+)/.exec(className || '');
   const language = languageMatch ? languageMatch[1] : 'text';
 
-  const handleCopy = () => {
-    const copyPromise = navigator.clipboard?.writeText(rawContent);
-    void copyPromise?.then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
-  };
-
   return (
     <div className="relative group my-2">
       {language !== 'text' && (
@@ -50,7 +43,7 @@ export default function MarkdownCodeBlock({
 
       <button
         type="button"
-        onClick={handleCopy}
+        onClick={() => copyTextToClipboard(rawContent).then(() => setCopied(true))}
         className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity text-xs px-2 py-1 rounded-md bg-gray-700/80 hover:bg-gray-700 text-white border border-gray-600"
       >
         {copied ? 'Copied!' : 'Copy'}
