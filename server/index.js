@@ -64,7 +64,7 @@ import cliAuthRoutes from './routes/cli-auth.js';
 import userRoutes from './routes/user.js';
 import codexRoutes from './routes/codex.js';
 import geminiRoutes from './routes/gemini.js';
-import { initializeDatabase } from './database/db.js';
+import { initializeDatabase, sessionNamesDb } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { IS_PLATFORM } from './constants/config.js';
 
@@ -493,6 +493,15 @@ app.get('/api/projects/:projectName/sessions', authenticateToken, async (req, re
     try {
         const { limit = 5, offset = 0 } = req.query;
         const result = await getSessions(req.params.projectName, parseInt(limit), parseInt(offset));
+        // Apply custom session names from DB
+        if (result.sessions?.length > 0) {
+            const ids = result.sessions.map(s => s.id);
+            const customNames = sessionNamesDb.getNames(ids, 'claude');
+            for (const session of result.sessions) {
+                const custom = customNames.get(session.id);
+                if (custom) session.summary = custom;
+            }
+        }
         res.json(result);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -545,6 +554,25 @@ app.delete('/api/projects/:projectName/sessions/:sessionId', authenticateToken, 
         res.json({ success: true });
     } catch (error) {
         console.error(`[API] Error deleting session ${req.params.sessionId}:`, error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Rename session endpoint
+app.put('/api/sessions/:sessionId/rename', authenticateToken, async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+        const { summary, provider } = req.body;
+        if (!summary || typeof summary !== 'string' || summary.trim() === '') {
+            return res.status(400).json({ error: 'Summary is required' });
+        }
+        if (!provider || typeof provider !== 'string') {
+            return res.status(400).json({ error: 'Provider is required' });
+        }
+        sessionNamesDb.setName(sessionId, provider, summary.trim());
+        res.json({ success: true });
+    } catch (error) {
+        console.error(`[API] Error renaming session ${req.params.sessionId}:`, error);
         res.status(500).json({ error: error.message });
     }
 });

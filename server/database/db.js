@@ -91,6 +91,22 @@ const runMigrations = () => {
       db.exec('ALTER TABLE users ADD COLUMN has_completed_onboarding BOOLEAN DEFAULT 0');
     }
 
+    // Create session_names table if it doesn't exist (for existing installations)
+    try {
+      db.exec(`CREATE TABLE IF NOT EXISTS session_names (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT NOT NULL,
+        provider TEXT NOT NULL DEFAULT 'claude',
+        custom_name TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(session_id, provider)
+      )`);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_session_names_lookup ON session_names(session_id, provider)');
+    } catch {
+      // Table already exists
+    }
+
     console.log('Database migrations completed successfully');
   } catch (error) {
     console.error('Error running migrations:', error.message);
@@ -348,6 +364,61 @@ const credentialsDb = {
   }
 };
 
+// Session custom names database operations
+const sessionNamesDb = {
+  // Set (insert or update) a custom session name
+  setName: (sessionId, provider, customName) => {
+    try {
+      db.prepare(`
+        INSERT INTO session_names (session_id, provider, custom_name)
+        VALUES (?, ?, ?)
+        ON CONFLICT(session_id, provider)
+        DO UPDATE SET custom_name = excluded.custom_name, updated_at = CURRENT_TIMESTAMP
+      `).run(sessionId, provider, customName);
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  // Get a single custom session name
+  getName: (sessionId, provider) => {
+    try {
+      const row = db.prepare(
+        'SELECT custom_name FROM session_names WHERE session_id = ? AND provider = ?'
+      ).get(sessionId, provider);
+      return row?.custom_name || null;
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  // Batch lookup — returns Map<sessionId, customName>
+  getNames: (sessionIds, provider) => {
+    try {
+      if (!sessionIds.length) return new Map();
+      const placeholders = sessionIds.map(() => '?').join(',');
+      const rows = db.prepare(
+        `SELECT session_id, custom_name FROM session_names
+         WHERE session_id IN (${placeholders}) AND provider = ?`
+      ).all(...sessionIds, provider);
+      return new Map(rows.map(r => [r.session_id, r.custom_name]));
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  // Delete a custom session name
+  deleteName: (sessionId, provider) => {
+    try {
+      return db.prepare(
+        'DELETE FROM session_names WHERE session_id = ? AND provider = ?'
+      ).run(sessionId, provider).changes > 0;
+    } catch (err) {
+      throw err;
+    }
+  },
+};
+
 // Backward compatibility - keep old names pointing to new system
 const githubTokensDb = {
   createGithubToken: (userId, tokenName, githubToken, description = null) => {
@@ -373,5 +444,6 @@ export {
   userDb,
   apiKeysDb,
   credentialsDb,
+  sessionNamesDb,
   githubTokensDb // Backward compatibility
 };

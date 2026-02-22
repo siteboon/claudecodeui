@@ -7,6 +7,7 @@ import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 import crypto from 'crypto';
 import { CURSOR_MODELS } from '../../shared/modelConstants.js';
+import { sessionNamesDb } from '../database/db.js';
 
 const router = express.Router();
 
@@ -560,8 +561,18 @@ router.get('/sessions', async (req, res) => {
       return new Date(b.createdAt) - new Date(a.createdAt);
     });
     
-    res.json({ 
-      success: true, 
+    // Apply custom session names from DB
+    if (sessions.length > 0) {
+      const ids = sessions.map(s => s.id);
+      const customNames = sessionNamesDb.getNames(ids, 'cursor');
+      for (const session of sessions) {
+        const custom = customNames.get(session.id);
+        if (custom) session.summary = custom;
+      }
+    }
+
+    res.json({
+      success: true,
       sessions: sessions,
       cwdId: cwdId,
       path: cursorChatsPath

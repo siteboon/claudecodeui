@@ -5,6 +5,7 @@ import path from 'path';
 import os from 'os';
 import TOML from '@iarna/toml';
 import { getCodexSessions, getCodexSessionMessages, deleteCodexSession } from '../projects.js';
+import { sessionNamesDb } from '../database/db.js';
 
 const router = express.Router();
 
@@ -59,6 +60,15 @@ router.get('/sessions', async (req, res) => {
     }
 
     const sessions = await getCodexSessions(projectPath);
+    // Apply custom session names from DB
+    if (sessions?.length > 0) {
+      const ids = sessions.map(s => s.id);
+      const customNames = sessionNamesDb.getNames(ids, 'codex');
+      for (const session of sessions) {
+        const custom = customNames.get(session.id);
+        if (custom) session.summary = custom;
+      }
+    }
     res.json({ success: true, sessions });
   } catch (error) {
     console.error('Error fetching Codex sessions:', error);

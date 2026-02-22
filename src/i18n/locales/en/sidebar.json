@@ -92,6 +92,8 @@
     "enterProjectPath": "Please enter a project path",
     "deleteSessionFailed": "Failed to delete session. Please try again.",
     "deleteSessionError": "Error deleting session. Please try again.",
+    "renameSessionFailed": "Failed to rename session. Please try again.",
+    "renameSessionError": "Error renaming session. Please try again.",
     "deleteProjectFailed": "Failed to delete project. Please try again.",
     "deleteProjectError": "Error deleting project. Please try again.",
     "createProjectFailed": "Failed to create project. Please try again.",
