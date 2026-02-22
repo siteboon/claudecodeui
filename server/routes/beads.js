@@ -453,8 +453,9 @@ router.get('/issues/:projectName', async (req, res) => {
             console.warn('Failed to parse beads list output:', parseError.message);
         }
 
-        if (limit && !isNaN(parseInt(limit))) {
-            issues = issues.slice(0, parseInt(limit));
+        const limitVal = parseInt(limit, 10);
+        if (Number.isInteger(limitVal) && limitVal > 0) {
+            issues = issues.slice(0, limitVal);
         }
 
         res.json({
