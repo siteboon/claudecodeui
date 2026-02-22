@@ -130,3 +130,9 @@ dev-debug.log
 # Task files
 tasks.json
 tasks/ 
+/.beads
+/PROJECT_INDEX.md
+/bun.lock
+/PROJECT_INDEX.json
+/AGENTS.md
+/.gitattributes
