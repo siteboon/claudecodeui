@@ -50,11 +50,18 @@ export const TasksSettingsProvider = ({ children }) => {
           api.get('/beads/installation-status')
         ]);
         
+        let tmInstalled = false;
+        let tmReady = false;
+        let bdInstalled = false;
+        let bdReady = false;
+        
         if (taskmasterResponse.ok) {
-          const data = await taskmasterResponse.json();
-          setInstallationStatus(data);
-          setIsTaskMasterInstalled(data.installation?.isInstalled || false);
-          setIsTaskMasterReady(data.isReady || false);
+          const data_tm = await taskmasterResponse.json();
+          setInstallationStatus(data_tm);
+          tmInstalled = data_tm.installation?.isInstalled || false;
+          tmReady = data_tm.isReady || false;
+          setIsTaskMasterInstalled(tmInstalled);
+          setIsTaskMasterReady(tmReady);
         } else {
           console.error('Failed to check TaskMaster installation status');
           setIsTaskMasterInstalled(false);
@@ -62,10 +69,12 @@ export const TasksSettingsProvider = ({ children }) => {
         }
         
         if (beadsResponse.ok) {
-          const data = await beadsResponse.json();
-          setBeadsInstallationStatus(data);
-          setIsBeadsInstalled(data.installation?.isInstalled || false);
-          setIsBeadsReady(data.isReady || false);
+          const data_bd = await beadsResponse.json();
+          setBeadsInstallationStatus(data_bd);
+          bdInstalled = data_bd.installation?.isInstalled || false;
+          bdReady = data_bd.isReady || false;
+          setIsBeadsInstalled(bdInstalled);
+          setIsBeadsReady(bdReady);
         } else {
           console.error('Failed to check Beads installation status');
           setIsBeadsInstalled(false);
@@ -73,7 +82,7 @@ export const TasksSettingsProvider = ({ children }) => {
         }
         
         const userEnabledTasks = localStorage.getItem('tasks-enabled');
-        if (!isTaskMasterInstalled && !isBeadsInstalled && !userEnabledTasks) {
+        if (!tmInstalled && !bdInstalled && !userEnabledTasks) {
           setTasksEnabled(false);
         }
       } catch (error) {
