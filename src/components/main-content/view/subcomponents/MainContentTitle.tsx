@@ -7,9 +7,10 @@ type MainContentTitleProps = {
   selectedProject: Project;
   selectedSession: ProjectSession | null;
   shouldShowTasksTab: boolean;
+  shouldShowBeadsTab?: boolean;
 };
 
-function getTabTitle(activeTab: AppTab, shouldShowTasksTab: boolean, t: (key: string) => string) {
+function getTabTitle(activeTab: AppTab, shouldShowTasksTab: boolean, shouldShowBeadsTab: boolean, t: (key: string) => string) {
   if (activeTab === 'files') {
     return t('mainContent.projectFiles');
   }
@@ -20,6 +21,10 @@ function getTabTitle(activeTab: AppTab, shouldShowTasksTab: boolean, t: (key: st
 
   if (activeTab === 'tasks' && shouldShowTasksTab) {
     return 'TaskMaster';
+  }
+
+  if (activeTab === 'beads' && shouldShowBeadsTab) {
+    return 'Beads';
   }
 
   return 'Project';
@@ -38,6 +43,7 @@ export default function MainContentTitle({
   selectedProject,
   selectedSession,
   shouldShowTasksTab,
+  shouldShowBeadsTab = false,
 }: MainContentTitleProps) {
   const { t } = useTranslation();
 
@@ -68,7 +74,7 @@ export default function MainContentTitle({
         ) : (
           <div className="min-w-0">
             <h2 className="text-sm font-semibold text-foreground leading-tight">
-              {getTabTitle(activeTab, shouldShowTasksTab, t)}
+              {getTabTitle(activeTab, shouldShowTasksTab, shouldShowBeadsTab, t)}
             </h2>
             <div className="text-[11px] text-muted-foreground truncate leading-tight">{selectedProject.displayName}</div>
           </div>

@@ -1,4 +1,4 @@
-import { MessageSquare, Terminal, Folder, GitBranch, ClipboardCheck, type LucideIcon } from 'lucide-react';
+import { MessageSquare, Terminal, Folder, GitBranch, ClipboardCheck, CircleDot, type LucideIcon } from 'lucide-react';
 import Tooltip from '../../../Tooltip';
 import type { AppTab } from '../../../../types/app';
 import type { Dispatch, SetStateAction } from 'react';
@@ -8,6 +8,7 @@ type MainContentTabSwitcherProps = {
   activeTab: AppTab;
   setActiveTab: Dispatch<SetStateAction<AppTab>>;
   shouldShowTasksTab: boolean;
+  shouldShowBeadsTab?: boolean;
 };
 
 type TabDefinition = {
@@ -29,14 +30,27 @@ const TASKS_TAB: TabDefinition = {
   icon: ClipboardCheck,
 };
 
+const BEADS_TAB: TabDefinition = {
+  id: 'beads',
+  labelKey: 'tabs.beads',
+  icon: CircleDot,
+};
+
 export default function MainContentTabSwitcher({
   activeTab,
   setActiveTab,
   shouldShowTasksTab,
+  shouldShowBeadsTab = false,
 }: MainContentTabSwitcherProps) {
   const { t } = useTranslation();
 
-  const tabs = shouldShowTasksTab ? [...BASE_TABS, TASKS_TAB] : BASE_TABS;
+  let tabs = [...BASE_TABS];
+  if (shouldShowTasksTab) {
+    tabs.push(TASKS_TAB);
+  }
+  if (shouldShowBeadsTab) {
+    tabs.push(BEADS_TAB);
+  }
 
   return (
     <div className="inline-flex items-center bg-muted/60 rounded-lg p-[3px] gap-[2px]">

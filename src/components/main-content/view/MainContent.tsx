@@ -10,9 +10,11 @@ import MainContentHeader from './subcomponents/MainContentHeader';
 import MainContentStateView from './subcomponents/MainContentStateView';
 import EditorSidebar from './subcomponents/EditorSidebar';
 import TaskMasterPanel from './subcomponents/TaskMasterPanel';
+import BeadsPanel from './subcomponents/BeadsPanel';
 import type { MainContentProps } from '../types/types';
 
 import { useTaskMaster } from '../../../contexts/TaskMasterContext';
+import { useBeads } from '../../../contexts/BeadsContext';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import { useUiPreferences } from '../../../hooks/useUiPreferences';
 import { useEditorSidebar } from '../hooks/useEditorSidebar';
@@ -26,10 +28,17 @@ type TaskMasterContextValue = {
   setCurrentProject?: ((project: Project) => void) | null;
 };
 
+type BeadsContextValue = {
+  setCurrentProject?: ((project: Project | null) => void) | null;
+  currentProject?: Project | null;
+};
+
 type TasksSettingsContextValue = {
   tasksEnabled: boolean;
   isTaskMasterInstalled: boolean | null;
   isTaskMasterReady: boolean | null;
+  isBeadsInstalled: boolean | null;
+  isBeadsReady: boolean | null;
 };
 
 function MainContent({
@@ -58,9 +67,11 @@ function MainContent({
   const { autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter } = preferences;
 
   const { currentProject, setCurrentProject } = useTaskMaster() as TaskMasterContextValue;
-  const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings() as TasksSettingsContextValue;
+  const { currentProject: beadsProject, setCurrentProject: setBeadsProject } = useBeads() as BeadsContextValue;
+  const { tasksEnabled, isTaskMasterInstalled, isBeadsInstalled } = useTasksSettings() as TasksSettingsContextValue;
 
   const shouldShowTasksTab = Boolean(tasksEnabled && isTaskMasterInstalled);
+  const shouldShowBeadsTab = Boolean(isBeadsInstalled);
 
   const {
     editingFile,
@@ -83,10 +94,19 @@ function MainContent({
   }, [selectedProject, currentProject, setCurrentProject]);
 
   useEffect(() => {
+    if (selectedProject && selectedProject !== beadsProject) {
+      setBeadsProject?.(selectedProject);
+    }
+  }, [selectedProject, beadsProject, setBeadsProject]);
+
+  useEffect(() => {
     if (!shouldShowTasksTab && activeTab === 'tasks') {
       setActiveTab('chat');
     }
-  }, [shouldShowTasksTab, activeTab, setActiveTab]);
+    if (!shouldShowBeadsTab && activeTab === 'beads') {
+      setActiveTab('chat');
+    }
+  }, [shouldShowTasksTab, shouldShowBeadsTab, activeTab, setActiveTab]);
 
   if (isLoading) {
     return <MainContentStateView mode="loading" isMobile={isMobile} onMenuClick={onMenuClick} />;
@@ -104,6 +124,7 @@ function MainContent({
         selectedProject={selectedProject}
         selectedSession={selectedSession}
         shouldShowTasksTab={shouldShowTasksTab}
+        shouldShowBeadsTab={shouldShowBeadsTab}
         isMobile={isMobile}
         onMenuClick={onMenuClick}
       />
@@ -158,6 +179,8 @@ function MainContent({
           )}
 
           {shouldShowTasksTab && <TaskMasterPanel isVisible={activeTab === 'tasks'} />}
+
+          {shouldShowBeadsTab && <BeadsPanel isVisible={activeTab === 'beads'} />}
 
           <div className={`h-full overflow-hidden ${activeTab === 'preview' ? 'block' : 'hidden'}`} />
         </div>
