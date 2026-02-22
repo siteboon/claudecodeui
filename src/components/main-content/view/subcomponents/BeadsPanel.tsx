@@ -138,6 +138,7 @@ export default function BeadsPanel({ isVisible }: BeadsPanelProps) {
   const [viewMode, setViewMode] = useState<'list' | 'epics'>('list');
   const [isCreating, setIsCreating] = useState(false);
   const [expandedEpics, setExpandedEpics] = useState<Set<string>>(new Set());
+  const [perEpicChildren, setPerEpicChildren] = useState<Record<string, BeadsIssue[]>>({});
 
   const handleIssueClick = useCallback(async (issue: BeadsIssue) => {
     setSelectedIssue(issue);
@@ -209,7 +210,7 @@ export default function BeadsPanel({ isVisible }: BeadsPanelProps) {
     }
   }, [updateIssue, closeIssue, refreshIssues, refreshEpics]);
 
-  const toggleEpicExpansion = useCallback((epicId: string) => {
+  const toggleEpicExpansion = useCallback(async (epicId: string) => {
     setExpandedEpics(prev => {
       const next = new Set(prev);
       if (next.has(epicId)) {
@@ -219,7 +220,16 @@ export default function BeadsPanel({ isVisible }: BeadsPanelProps) {
       }
       return next;
     });
-  }, []);
+    
+    // Lazily fetch children when expanding an epic
+    if (!expandedEpics.has(epicId) && getChildren) {
+      const children = await getChildren(epicId);
+      setPerEpicChildren(prev => ({
+        ...prev,
+        [epicId]: children || []
+      }));
+    }
+  }, [expandedEpics, getChildren]);
 
   const filteredIssues = issues.filter(issue => {
     if (filterStatus !== 'all') {
@@ -448,11 +458,21 @@ export default function BeadsPanel({ isVisible }: BeadsPanelProps) {
                         </button>
                         {expandedEpics.has(epic.id) && (
                           <div className="bg-gray-900 p-2">
-                            {selectedIssueChildren.filter(c => c.dependencies?.some(d => d.depends_on_id === epic.id && d.type === 'parent-child')).length === 0 ? (
+                            {(perEpicChildren[epic.id] || []).length === 0 ? (
                               <div className="text-sm text-gray-500 p-2">No children yet</div>
                             ) : (
                               <div className="space-y-1">
-                                {/* Children will be loaded on epic expansion */}
+                                {(perEpicChildren[epic.id] || []).map((child) => (
+                                  <button
+                                    key={child.id}
+                                    onClick={() => handleIssueClick(child)}
+                                    className="w-full flex items-center gap-2 text-xs bg-gray-800 px-2 py-1 rounded hover:bg-gray-700"
+                                  >
+                                    <span className={`w-2 h-2 rounded-full ${STATUS_COLORS[child.status] || 'bg-gray-500'}`} />
+                                    <span className="font-mono text-gray-400">{child.id}</span>
+                                    <span className="truncate">{child.title}</span>
+                                  </button>
+                                ))}
                               </div>
                             )}
                             <button
