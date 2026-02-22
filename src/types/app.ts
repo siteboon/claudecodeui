@@ -1,4 +1,4 @@
-export type SessionProvider = 'claude' | 'cursor' | 'codex';
+export type SessionProvider = 'claude' | 'cursor' | 'codex' | 'gemini';
 
 export type AppTab = 'chat' | 'files' | 'shell' | 'git' | 'tasks' | 'preview';
 
@@ -66,4 +66,4 @@ export interface LoadingProgressMessage extends LoadingProgress {
 export type AppSocketMessage =
   | LoadingProgressMessage
   | ProjectsUpdatedMessage
-  | { type?: string; [key: string]: unknown };
+  | { type?: string;[key: string]: unknown };

@@ -145,6 +145,7 @@ export function useChatRealtimeHandlers({
       'claude-error',
       'cursor-error',
       'codex-error',
+      'gemini-error',
     ]);
 
     const isClaudeSystemInit =
@@ -162,8 +163,8 @@ export function useChatRealtimeHandlers({
     const systemInitSessionId = isClaudeSystemInit
       ? structuredMessageData?.session_id
       : isCursorSystemInit
-      ? rawStructuredData?.session_id
-      : null;
+        ? rawStructuredData?.session_id
+        : null;
 
     const activeViewSessionId =
       selectedSession?.id || currentSessionId || pendingViewSessionRef.current?.sessionId || null;
@@ -176,7 +177,8 @@ export function useChatRealtimeHandlers({
       !pendingViewSessionRef.current.sessionId &&
       (latestMessage.type === 'claude-error' ||
         latestMessage.type === 'cursor-error' ||
-        latestMessage.type === 'codex-error');
+        latestMessage.type === 'codex-error' ||
+        latestMessage.type === 'gemini-error');
 
     const handleBackgroundLifecycle = (sessionId?: string) => {
       if (!sessionId) {
@@ -612,9 +614,8 @@ export function useChatRealtimeHandlers({
           ...previous,
           {
             type: 'assistant',
-            content: `Using tool: ${latestMessage.tool} ${
-              latestMessage.input ? `with ${latestMessage.input}` : ''
-            }`,
+            content: `Using tool: ${latestMessage.tool} ${latestMessage.input ? `with ${latestMessage.input}` : ''
+              }`,
             timestamp: new Date(),
             isToolUse: true,
             toolName: latestMessage.tool,
@@ -914,6 +915,44 @@ export function useChatRealtimeHandlers({
           {
             type: 'error',
             content: latestMessage.error || 'An error occurred with Codex',
+            timestamp: new Date(),
+          },
+        ]);
+        break;
+
+      case 'gemini-response': {
+        const geminiData = latestMessage.data;
+        console.log('[Gemini UI] Socket received chunk:', latestMessage);
+
+        if (geminiData && geminiData.type === 'message' && typeof geminiData.content === 'string') {
+          const content = decodeHtmlEntities(geminiData.content);
+          if (content.trim()) {
+            console.log('[Gemini UI] Appending content to streamBuffer:', content);
+            streamBufferRef.current += streamBufferRef.current ? `\n${content}` : content;
+            if (!streamTimerRef.current) {
+              streamTimerRef.current = window.setTimeout(() => {
+                const chunk = streamBufferRef.current;
+                streamBufferRef.current = '';
+                streamTimerRef.current = null;
+                appendStreamingChunk(setChatMessages, chunk, true);
+                if (!geminiData.isPartial) {
+                  finalizeStreamingMessage(setChatMessages);
+                }
+              }, 100);
+            }
+          }
+        }
+        break;
+      }
+
+      case 'gemini-error':
+        setIsLoading(false);
+        setCanAbortSession(false);
+        setChatMessages((previous) => [
+          ...previous,
+          {
+            type: 'error',
+            content: latestMessage.error || 'An error occurred with Gemini',
             timestamp: new Date(),
           },
         ]);

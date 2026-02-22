@@ -48,6 +48,7 @@ import { getProjects, getSessions, getSessionMessages, renameProject, deleteSess
 import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions, resolveToolApproval } from './claude-sdk.js';
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
 import { queryCodex, abortCodexSession, isCodexSessionActive, getActiveCodexSessions } from './openai-codex.js';
+import { spawnGemini, abortGeminiSession, isGeminiSessionActive, getActiveGeminiSessions } from './gemini-cli.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
 import mcpRoutes from './routes/mcp.js';
@@ -69,7 +70,8 @@ import { IS_PLATFORM } from './constants/config.js';
 const PROVIDER_WATCH_PATHS = [
     { provider: 'claude', rootPath: path.join(os.homedir(), '.claude', 'projects') },
     { provider: 'cursor', rootPath: path.join(os.homedir(), '.cursor', 'chats') },
-    { provider: 'codex', rootPath: path.join(os.homedir(), '.codex', 'sessions') }
+    { provider: 'codex', rootPath: path.join(os.homedir(), '.codex', 'sessions') },
+    { provider: 'gemini', rootPath: path.join(os.homedir(), '.gemini', 'projects') }
 ];
 const WATCHER_IGNORED_PATTERNS = [
     '**/node_modules/**',
@@ -319,25 +321,25 @@ app.locals.wss = wss;
 
 app.use(cors());
 app.use(express.json({
-  limit: '50mb',
-  type: (req) => {
-    // Skip multipart/form-data requests (for file uploads like images)
-    const contentType = req.headers['content-type'] || '';
-    if (contentType.includes('multipart/form-data')) {
-      return false;
+    limit: '50mb',
+    type: (req) => {
+        // Skip multipart/form-data requests (for file uploads like images)
+        const contentType = req.headers['content-type'] || '';
+        if (contentType.includes('multipart/form-data')) {
+            return false;
+        }
+        return contentType.includes('json');
     }
-    return contentType.includes('json');
-  }
 }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Public health check endpoint (no authentication required)
 app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    installMode
-  });
+    res.json({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        installMode
+    });
 });
 
 // Optional API key validation (if configured)
@@ -388,17 +390,17 @@ app.use(express.static(path.join(__dirname, '../public')));
 // Static files served after API routes
 // Add cache control: HTML files should not be cached, but assets can be cached
 app.use(express.static(path.join(__dirname, '../dist'), {
-  setHeaders: (res, filePath) => {
-    if (filePath.endsWith('.html')) {
-      // Prevent HTML caching to avoid service worker issues after builds
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-      res.setHeader('Pragma', 'no-cache');
-      res.setHeader('Expires', '0');
-    } else if (filePath.match(/\.(js|css|woff2?|ttf|eot|svg|png|jpg|jpeg|gif|ico)$/)) {
-      // Cache static assets for 1 year (they have hashed names)
-      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.html')) {
+            // Prevent HTML caching to avoid service worker issues after builds
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
+        } else if (filePath.match(/\.(js|css|woff2?|ttf|eot|svg|png|jpg|jpeg|gif|ico)$/)) {
+            // Cache static assets for 1 year (they have hashed names)
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        }
     }
-  }
 }));
 
 // API Routes (protected)
@@ -496,13 +498,13 @@ app.get('/api/projects/:projectName/sessions/:sessionId/messages', authenticateT
     try {
         const { projectName, sessionId } = req.params;
         const { limit, offset } = req.query;
-        
+
         // Parse limit and offset if provided
         const parsedLimit = limit ? parseInt(limit, 10) : null;
         const parsedOffset = offset ? parseInt(offset, 10) : 0;
-        
+
         const result = await getSessionMessages(projectName, sessionId, parsedLimit, parsedOffset);
-        
+
         // Handle both old and new response formats
         if (Array.isArray(result)) {
             // Backward compatibility: no pagination parameters were provided
@@ -585,13 +587,13 @@ const expandWorkspacePath = (inputPath) => {
 app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
     try {
         const { path: dirPath } = req.query;
-        
+
         console.log('[API] Browse filesystem request for path:', dirPath);
         console.log('[API] WORKSPACES_ROOT is:', WORKSPACES_ROOT);
         // Default to home directory if no path provided
         const defaultRoot = WORKSPACES_ROOT;
         let targetPath = dirPath ? expandWorkspacePath(dirPath) : defaultRoot;
-        
+
         // Resolve and normalize the path
         targetPath = path.resolve(targetPath);
 
@@ -601,22 +603,22 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
             return res.status(403).json({ error: validation.error });
         }
         const resolvedPath = validation.resolvedPath || targetPath;
-        
+
         // Security check - ensure path is accessible
         try {
             await fs.promises.access(resolvedPath);
             const stats = await fs.promises.stat(resolvedPath);
-            
+
             if (!stats.isDirectory()) {
                 return res.status(400).json({ error: 'Path is not a directory' });
             }
         } catch (err) {
             return res.status(404).json({ error: 'Directory not accessible' });
         }
-        
+
         // Use existing getFileTree function with shallow depth (only direct children)
         const fileTree = await getFileTree(resolvedPath, 1, 0, false); // maxDepth=1, showHidden=false
-        
+
         // Filter only directories and format for suggestions
         const directories = fileTree
             .filter(item => item.type === 'directory')
@@ -632,7 +634,7 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
                 if (!aHidden && bHidden) return -1;
                 return a.name.localeCompare(b.name);
             });
-            
+
         // Add common directories if browsing home directory
         const suggestions = [];
         let resolvedWorkspaceRoot = defaultRoot;
@@ -645,17 +647,17 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
             const commonDirs = ['Desktop', 'Documents', 'Projects', 'Development', 'Dev', 'Code', 'workspace'];
             const existingCommon = directories.filter(dir => commonDirs.includes(dir.name));
             const otherDirs = directories.filter(dir => !commonDirs.includes(dir.name));
-            
+
             suggestions.push(...existingCommon, ...otherDirs);
         } else {
             suggestions.push(...directories);
         }
-        
+
         res.json({
             path: resolvedPath,
             suggestions: suggestions
         });
-        
+
     } catch (error) {
         console.error('Error browsing filesystem:', error);
         res.status(500).json({ error: 'Failed to browse filesystem' });
@@ -899,26 +901,26 @@ wss.on('connection', (ws, request) => {
  * WebSocket Writer - Wrapper for WebSocket to match SSEStreamWriter interface
  */
 class WebSocketWriter {
-  constructor(ws) {
-    this.ws = ws;
-    this.sessionId = null;
-    this.isWebSocketWriter = true;  // Marker for transport detection
-  }
-
-  send(data) {
-    if (this.ws.readyState === 1) { // WebSocket.OPEN
-      // Providers send raw objects, we stringify for WebSocket
-      this.ws.send(JSON.stringify(data));
+    constructor(ws) {
+        this.ws = ws;
+        this.sessionId = null;
+        this.isWebSocketWriter = true;  // Marker for transport detection
     }
-  }
 
-  setSessionId(sessionId) {
-    this.sessionId = sessionId;
-  }
+    send(data) {
+        if (this.ws.readyState === 1) { // WebSocket.OPEN
+            // Providers send raw objects, we stringify for WebSocket
+            this.ws.send(JSON.stringify(data));
+        }
+    }
 
-  getSessionId() {
-    return this.sessionId;
-  }
+    setSessionId(sessionId) {
+        this.sessionId = sessionId;
+    }
+
+    getSessionId() {
+        return this.sessionId;
+    }
 }
 
 // Handle chat WebSocket connections
@@ -954,6 +956,12 @@ function handleChatConnection(ws) {
                 console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
                 console.log('🤖 Model:', data.options?.model || 'default');
                 await queryCodex(data.command, data.options, writer);
+            } else if (data.type === 'gemini-command') {
+                console.log('[DEBUG] Gemini message:', data.command || '[Continue/Resume]');
+                console.log('📁 Project:', data.options?.projectPath || data.options?.cwd || 'Unknown');
+                console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
+                console.log('🤖 Model:', data.options?.model || 'default');
+                await spawnGemini(data.command, data.options, writer);
             } else if (data.type === 'cursor-resume') {
                 // Backward compatibility: treat as cursor-command with resume and no prompt
                 console.log('[DEBUG] Cursor resume session (compat):', data.sessionId);
@@ -971,6 +979,8 @@ function handleChatConnection(ws) {
                     success = abortCursorSession(data.sessionId);
                 } else if (provider === 'codex') {
                     success = abortCodexSession(data.sessionId);
+                } else if (provider === 'gemini') {
+                    success = abortGeminiSession(data.sessionId);
                 } else {
                     // Use Claude Agents SDK
                     success = await abortClaudeSDKSession(data.sessionId);
@@ -1138,7 +1148,7 @@ function handleShellConnection(ws) {
                 if (isPlainShell) {
                     welcomeMsg = `\x1b[36mStarting terminal in: ${projectPath}\x1b[0m\r\n`;
                 } else {
-                    const providerName = provider === 'cursor' ? 'Cursor' : provider === 'codex' ? 'Codex' : 'Claude';
+                    const providerName = provider === 'cursor' ? 'Cursor' : (provider === 'codex' ? 'Codex' : (provider === 'gemini' ? 'Gemini' : 'Claude'));
                     welcomeMsg = hasSession ?
                         `\x1b[36mResuming ${providerName} session ${sessionId} in: ${projectPath}\x1b[0m\r\n` :
                         `\x1b[36mStarting new ${providerName} session in: ${projectPath}\x1b[0m\r\n`;
@@ -1174,6 +1184,7 @@ function handleShellConnection(ws) {
                                 shellCommand = `cd "${projectPath}" && cursor-agent`;
                             }
                         }
+
                     } else if (provider === 'codex') {
                         // Use codex command
                         if (os.platform() === 'win32') {
@@ -1190,6 +1201,15 @@ function handleShellConnection(ws) {
                             } else {
                                 shellCommand = `cd "${projectPath}" && codex`;
                             }
+                        }
+                    } else if (provider === 'gemini') {
+                        // Use gemini command
+                        const command = initialCommand || 'gemini';
+                        if (os.platform() === 'win32') {
+                            shellCommand = `Set-Location -Path "${projectPath}"; ${command}`;
+                        } else {
+                            shellCommand = `cd "${projectPath}" && ${command}`;
+
                         }
                     } else {
                         // Use claude command (default) or initialCommand if provided
@@ -1624,203 +1644,203 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
 
 // Get token usage for a specific session
 app.get('/api/projects/:projectName/sessions/:sessionId/token-usage', authenticateToken, async (req, res) => {
-  try {
-    const { projectName, sessionId } = req.params;
-    const { provider = 'claude' } = req.query;
-    const homeDir = os.homedir();
+    try {
+        const { projectName, sessionId } = req.params;
+        const { provider = 'claude' } = req.query;
+        const homeDir = os.homedir();
 
-    // Allow only safe characters in sessionId
-    const safeSessionId = String(sessionId).replace(/[^a-zA-Z0-9._-]/g, '');
-    if (!safeSessionId) {
-      return res.status(400).json({ error: 'Invalid sessionId' });
-    }
+        // Allow only safe characters in sessionId
+        const safeSessionId = String(sessionId).replace(/[^a-zA-Z0-9._-]/g, '');
+        if (!safeSessionId) {
+            return res.status(400).json({ error: 'Invalid sessionId' });
+        }
 
-    // Handle Cursor sessions - they use SQLite and don't have token usage info
-    if (provider === 'cursor') {
-      return res.json({
-        used: 0,
-        total: 0,
-        breakdown: { input: 0, cacheCreation: 0, cacheRead: 0 },
-        unsupported: true,
-        message: 'Token usage tracking not available for Cursor sessions'
-      });
-    }
+        // Handle Cursor sessions - they use SQLite and don't have token usage info
+        if (provider === 'cursor') {
+            return res.json({
+                used: 0,
+                total: 0,
+                breakdown: { input: 0, cacheCreation: 0, cacheRead: 0 },
+                unsupported: true,
+                message: 'Token usage tracking not available for Cursor sessions'
+            });
+        }
 
-    // Handle Codex sessions
-    if (provider === 'codex') {
-      const codexSessionsDir = path.join(homeDir, '.codex', 'sessions');
+        // Handle Codex sessions
+        if (provider === 'codex') {
+            const codexSessionsDir = path.join(homeDir, '.codex', 'sessions');
 
-      // Find the session file by searching for the session ID
-      const findSessionFile = async (dir) => {
-        try {
-          const entries = await fsPromises.readdir(dir, { withFileTypes: true });
-          for (const entry of entries) {
-            const fullPath = path.join(dir, entry.name);
-            if (entry.isDirectory()) {
-              const found = await findSessionFile(fullPath);
-              if (found) return found;
-            } else if (entry.name.includes(safeSessionId) && entry.name.endsWith('.jsonl')) {
-              return fullPath;
+            // Find the session file by searching for the session ID
+            const findSessionFile = async (dir) => {
+                try {
+                    const entries = await fsPromises.readdir(dir, { withFileTypes: true });
+                    for (const entry of entries) {
+                        const fullPath = path.join(dir, entry.name);
+                        if (entry.isDirectory()) {
+                            const found = await findSessionFile(fullPath);
+                            if (found) return found;
+                        } else if (entry.name.includes(safeSessionId) && entry.name.endsWith('.jsonl')) {
+                            return fullPath;
+                        }
+                    }
+                } catch (error) {
+                    // Skip directories we can't read
+                }
+                return null;
+            };
+
+            const sessionFilePath = await findSessionFile(codexSessionsDir);
+
+            if (!sessionFilePath) {
+                return res.status(404).json({ error: 'Codex session file not found', sessionId: safeSessionId });
             }
-          }
+
+            // Read and parse the Codex JSONL file
+            let fileContent;
+            try {
+                fileContent = await fsPromises.readFile(sessionFilePath, 'utf8');
+            } catch (error) {
+                if (error.code === 'ENOENT') {
+                    return res.status(404).json({ error: 'Session file not found', path: sessionFilePath });
+                }
+                throw error;
+            }
+            const lines = fileContent.trim().split('\n');
+            let totalTokens = 0;
+            let contextWindow = 200000; // Default for Codex/OpenAI
+
+            // Find the latest token_count event with info (scan from end)
+            for (let i = lines.length - 1; i >= 0; i--) {
+                try {
+                    const entry = JSON.parse(lines[i]);
+
+                    // Codex stores token info in event_msg with type: "token_count"
+                    if (entry.type === 'event_msg' && entry.payload?.type === 'token_count' && entry.payload?.info) {
+                        const tokenInfo = entry.payload.info;
+                        if (tokenInfo.total_token_usage) {
+                            totalTokens = tokenInfo.total_token_usage.total_tokens || 0;
+                        }
+                        if (tokenInfo.model_context_window) {
+                            contextWindow = tokenInfo.model_context_window;
+                        }
+                        break; // Stop after finding the latest token count
+                    }
+                } catch (parseError) {
+                    // Skip lines that can't be parsed
+                    continue;
+                }
+            }
+
+            return res.json({
+                used: totalTokens,
+                total: contextWindow
+            });
+        }
+
+        // Handle Claude sessions (default)
+        // Extract actual project path
+        let projectPath;
+        try {
+            projectPath = await extractProjectDirectory(projectName);
         } catch (error) {
-          // Skip directories we can't read
+            console.error('Error extracting project directory:', error);
+            return res.status(500).json({ error: 'Failed to determine project path' });
         }
-        return null;
-      };
 
-      const sessionFilePath = await findSessionFile(codexSessionsDir);
+        // Construct the JSONL file path
+        // Claude stores session files in ~/.claude/projects/[encoded-project-path]/[session-id].jsonl
+        // The encoding replaces /, spaces, ~, and _ with -
+        const encodedPath = projectPath.replace(/[\\/:\s~_]/g, '-');
+        const projectDir = path.join(homeDir, '.claude', 'projects', encodedPath);
 
-      if (!sessionFilePath) {
-        return res.status(404).json({ error: 'Codex session file not found', sessionId: safeSessionId });
-      }
+        const jsonlPath = path.join(projectDir, `${safeSessionId}.jsonl`);
 
-      // Read and parse the Codex JSONL file
-      let fileContent;
-      try {
-        fileContent = await fsPromises.readFile(sessionFilePath, 'utf8');
-      } catch (error) {
-        if (error.code === 'ENOENT') {
-          return res.status(404).json({ error: 'Session file not found', path: sessionFilePath });
+        // Constrain to projectDir
+        const rel = path.relative(path.resolve(projectDir), path.resolve(jsonlPath));
+        if (rel.startsWith('..') || path.isAbsolute(rel)) {
+            return res.status(400).json({ error: 'Invalid path' });
         }
-        throw error;
-      }
-      const lines = fileContent.trim().split('\n');
-      let totalTokens = 0;
-      let contextWindow = 200000; // Default for Codex/OpenAI
 
-      // Find the latest token_count event with info (scan from end)
-      for (let i = lines.length - 1; i >= 0; i--) {
+        // Read and parse the JSONL file
+        let fileContent;
         try {
-          const entry = JSON.parse(lines[i]);
-
-          // Codex stores token info in event_msg with type: "token_count"
-          if (entry.type === 'event_msg' && entry.payload?.type === 'token_count' && entry.payload?.info) {
-            const tokenInfo = entry.payload.info;
-            if (tokenInfo.total_token_usage) {
-              totalTokens = tokenInfo.total_token_usage.total_tokens || 0;
+            fileContent = await fsPromises.readFile(jsonlPath, 'utf8');
+        } catch (error) {
+            if (error.code === 'ENOENT') {
+                return res.status(404).json({ error: 'Session file not found', path: jsonlPath });
             }
-            if (tokenInfo.model_context_window) {
-              contextWindow = tokenInfo.model_context_window;
+            throw error; // Re-throw other errors to be caught by outer try-catch
+        }
+        const lines = fileContent.trim().split('\n');
+
+        const parsedContextWindow = parseInt(process.env.CONTEXT_WINDOW, 10);
+        const contextWindow = Number.isFinite(parsedContextWindow) ? parsedContextWindow : 160000;
+        let inputTokens = 0;
+        let cacheCreationTokens = 0;
+        let cacheReadTokens = 0;
+
+        // Find the latest assistant message with usage data (scan from end)
+        for (let i = lines.length - 1; i >= 0; i--) {
+            try {
+                const entry = JSON.parse(lines[i]);
+
+                // Only count assistant messages which have usage data
+                if (entry.type === 'assistant' && entry.message?.usage) {
+                    const usage = entry.message.usage;
+
+                    // Use token counts from latest assistant message only
+                    inputTokens = usage.input_tokens || 0;
+                    cacheCreationTokens = usage.cache_creation_input_tokens || 0;
+                    cacheReadTokens = usage.cache_read_input_tokens || 0;
+
+                    break; // Stop after finding the latest assistant message
+                }
+            } catch (parseError) {
+                // Skip lines that can't be parsed
+                continue;
             }
-            break; // Stop after finding the latest token count
-          }
-        } catch (parseError) {
-          // Skip lines that can't be parsed
-          continue;
         }
-      }
 
-      return res.json({
-        used: totalTokens,
-        total: contextWindow
-      });
-    }
+        // Calculate total context usage (excluding output_tokens, as per ccusage)
+        const totalUsed = inputTokens + cacheCreationTokens + cacheReadTokens;
 
-    // Handle Claude sessions (default)
-    // Extract actual project path
-    let projectPath;
-    try {
-      projectPath = await extractProjectDirectory(projectName);
+        res.json({
+            used: totalUsed,
+            total: contextWindow,
+            breakdown: {
+                input: inputTokens,
+                cacheCreation: cacheCreationTokens,
+                cacheRead: cacheReadTokens
+            }
+        });
     } catch (error) {
-      console.error('Error extracting project directory:', error);
-      return res.status(500).json({ error: 'Failed to determine project path' });
+        console.error('Error reading session token usage:', error);
+        res.status(500).json({ error: 'Failed to read session token usage' });
     }
-
-    // Construct the JSONL file path
-    // Claude stores session files in ~/.claude/projects/[encoded-project-path]/[session-id].jsonl
-    // The encoding replaces /, spaces, ~, and _ with -
-    const encodedPath = projectPath.replace(/[\\/:\s~_]/g, '-');
-    const projectDir = path.join(homeDir, '.claude', 'projects', encodedPath);
-
-    const jsonlPath = path.join(projectDir, `${safeSessionId}.jsonl`);
-
-    // Constrain to projectDir
-    const rel = path.relative(path.resolve(projectDir), path.resolve(jsonlPath));
-    if (rel.startsWith('..') || path.isAbsolute(rel)) {
-      return res.status(400).json({ error: 'Invalid path' });
-    }
-
-    // Read and parse the JSONL file
-    let fileContent;
-    try {
-      fileContent = await fsPromises.readFile(jsonlPath, 'utf8');
-    } catch (error) {
-      if (error.code === 'ENOENT') {
-        return res.status(404).json({ error: 'Session file not found', path: jsonlPath });
-      }
-      throw error; // Re-throw other errors to be caught by outer try-catch
-    }
-    const lines = fileContent.trim().split('\n');
-
-    const parsedContextWindow = parseInt(process.env.CONTEXT_WINDOW, 10);
-    const contextWindow = Number.isFinite(parsedContextWindow) ? parsedContextWindow : 160000;
-    let inputTokens = 0;
-    let cacheCreationTokens = 0;
-    let cacheReadTokens = 0;
-
-    // Find the latest assistant message with usage data (scan from end)
-    for (let i = lines.length - 1; i >= 0; i--) {
-      try {
-        const entry = JSON.parse(lines[i]);
-
-        // Only count assistant messages which have usage data
-        if (entry.type === 'assistant' && entry.message?.usage) {
-          const usage = entry.message.usage;
-
-          // Use token counts from latest assistant message only
-          inputTokens = usage.input_tokens || 0;
-          cacheCreationTokens = usage.cache_creation_input_tokens || 0;
-          cacheReadTokens = usage.cache_read_input_tokens || 0;
-
-          break; // Stop after finding the latest assistant message
-        }
-      } catch (parseError) {
-        // Skip lines that can't be parsed
-        continue;
-      }
-    }
-
-    // Calculate total context usage (excluding output_tokens, as per ccusage)
-    const totalUsed = inputTokens + cacheCreationTokens + cacheReadTokens;
-
-    res.json({
-      used: totalUsed,
-      total: contextWindow,
-      breakdown: {
-        input: inputTokens,
-        cacheCreation: cacheCreationTokens,
-        cacheRead: cacheReadTokens
-      }
-    });
-  } catch (error) {
-    console.error('Error reading session token usage:', error);
-    res.status(500).json({ error: 'Failed to read session token usage' });
-  }
 });
 
 // Serve React app for all other routes (excluding static files)
 app.get('*', (req, res) => {
-  // Skip requests for static assets (files with extensions)
-  if (path.extname(req.path)) {
-    return res.status(404).send('Not found');
-  }
+    // Skip requests for static assets (files with extensions)
+    if (path.extname(req.path)) {
+        return res.status(404).send('Not found');
+    }
 
-  // Only serve index.html for HTML routes, not for static assets
-  // Static assets should already be handled by express.static middleware above
-  const indexPath = path.join(__dirname, '../dist/index.html');
+    // Only serve index.html for HTML routes, not for static assets
+    // Static assets should already be handled by express.static middleware above
+    const indexPath = path.join(__dirname, '../dist/index.html');
 
-  // Check if dist/index.html exists (production build available)
-  if (fs.existsSync(indexPath)) {
-    // Set no-cache headers for HTML to prevent service worker issues
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-    res.sendFile(indexPath);
-  } else {
-    // In development, redirect to Vite dev server only if dist doesn't exist
-    res.redirect(`http://localhost:${process.env.VITE_PORT || 5173}`);
-  }
+    // Check if dist/index.html exists (production build available)
+    if (fs.existsSync(indexPath)) {
+        // Set no-cache headers for HTML to prevent service worker issues
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+        res.sendFile(indexPath);
+    } else {
+        // In development, redirect to Vite dev server only if dist doesn't exist
+        res.redirect(`http://localhost:${process.env.VITE_PORT || 5173}`);
+    }
 });
 
 // Helper function to convert permissions to rwx format

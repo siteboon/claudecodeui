@@ -74,6 +74,49 @@ router.get('/codex/status', async (req, res) => {
   }
 });
 
+<<<<<<< HEAD
+=======
+router.get('/gemini/status', async (req, res) => {
+  try {
+    const result = await checkGeminiCredentials();
+
+    res.json({
+      authenticated: result.authenticated,
+      email: result.email,
+      error: result.error
+    });
+
+  } catch (error) {
+    console.error('Error checking Gemini auth status:', error);
+    res.status(500).json({
+      authenticated: false,
+      email: null,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Checks Claude authentication credentials using two methods with priority order:
+ *
+ * Priority 1: ANTHROPIC_API_KEY environment variable
+ * Priority 2: ~/.claude/.credentials.json OAuth tokens
+ *
+ * The Claude Agent SDK prioritizes environment variables over authenticated subscriptions.
+ * This matching behavior ensures consistency with how the SDK authenticates.
+ *
+ * References:
+ * - https://support.claude.com/en/articles/12304248-managing-api-key-environment-variables-in-claude-code
+ *   "Claude Code prioritizes environment variable API keys over authenticated subscriptions"
+ * - https://platform.claude.com/docs/en/agent-sdk/overview
+ *   SDK authentication documentation
+ *
+ * @returns {Promise<Object>} Authentication status with { authenticated, email, method }
+ *   - authenticated: boolean indicating if valid credentials exist
+ *   - email: user email or auth method identifier
+ *   - method: 'api_key' for env var, 'credentials_file' for OAuth tokens
+ */
+>>>>>>> 79f96bf (feat: integrate Gemini AI agent provider)
 async function checkClaudeCredentials() {
   try {
     const credPath = path.join(os.homedir(), '.claude', '.credentials.json');
@@ -256,6 +299,40 @@ async function checkCodexCredentials() {
       authenticated: false,
       email: null,
       error: error.message
+    };
+  }
+}
+
+async function checkGeminiCredentials() {
+  if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim()) {
+    return {
+      authenticated: true,
+      email: 'API Key Auth'
+    };
+  }
+
+  try {
+    const configPath = path.join(os.homedir(), '.gemini.json');
+    const content = await fs.readFile(configPath, 'utf8');
+    const config = JSON.parse(content);
+
+    if (config.apiKey || config.aistudioApiKey || config.vertexProject) {
+      return {
+        authenticated: true,
+        email: 'Configured User'
+      };
+    }
+
+    return {
+      authenticated: false,
+      email: null,
+      error: 'No valid credentials found in config'
+    };
+  } catch (error) {
+    return {
+      authenticated: false,
+      email: null,
+      error: 'Gemini CLI not configured'
     };
   }
 }

@@ -65,3 +65,19 @@ export const CODEX_MODELS = {
 
   DEFAULT: 'gpt-5.3-codex'
 };
+
+/**
+ * Gemini Models
+ */
+export const GEMINI_MODELS = {
+  OPTIONS: [
+    { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+    { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+    { value: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite' },
+    { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+    { value: 'gemini-2.0-pro-exp', label: 'Gemini 2.0 Pro Experimental' },
+    { value: 'gemini-2.0-flash-thinking-exp', label: 'Gemini 2.0 Flash Thinking' }
+  ],
+
+  DEFAULT: 'gemini-2.5-flash'
+};

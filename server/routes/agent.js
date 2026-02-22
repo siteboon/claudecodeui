@@ -9,6 +9,7 @@ import { addProjectManually } from '../projects.js';
 import { queryClaudeSDK } from '../claude-sdk.js';
 import { spawnCursor } from '../cursor-cli.js';
 import { queryCodex } from '../openai-codex.js';
+import { spawnGemini } from '../gemini-cli.js';
 import { Octokit } from '@octokit/rest';
 import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '../../shared/modelConstants.js';
 import { IS_PLATFORM } from '../constants/config.js';
@@ -855,8 +856,8 @@ router.post('/', validateExternalApiKey, async (req, res) => {
     return res.status(400).json({ error: 'message is required' });
   }
 
-  if (!['claude', 'cursor', 'codex'].includes(provider)) {
-    return res.status(400).json({ error: 'provider must be "claude", "cursor", or "codex"' });
+  if (!['claude', 'cursor', 'codex', 'gemini'].includes(provider)) {
+    return res.status(400).json({ error: 'provider must be "claude", "cursor", "codex", or "gemini"' });
   }
 
   // Validate GitHub branch/PR creation requirements
@@ -970,6 +971,16 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         sessionId: null,
         model: model || CODEX_MODELS.DEFAULT,
         permissionMode: 'bypassPermissions'
+      }, writer);
+    } else if (provider === 'gemini') {
+      console.log('✨ Starting Gemini CLI session');
+
+      await spawnGemini(message.trim(), {
+        projectPath: finalProjectPath,
+        cwd: finalProjectPath,
+        sessionId: null,
+        model: model,
+        skipPermissions: true // CLI mode bypasses permissions
       }, writer);
     }
 
