@@ -9,6 +9,7 @@ export default function MainContentHeader({
   selectedProject,
   selectedSession,
   shouldShowTasksTab,
+  shouldShowBeadsTab = false,
   isMobile,
   onMenuClick,
 }: MainContentHeaderProps) {
@@ -22,6 +23,7 @@ export default function MainContentHeader({
             selectedProject={selectedProject}
             selectedSession={selectedSession}
             shouldShowTasksTab={shouldShowTasksTab}
+            shouldShowBeadsTab={shouldShowBeadsTab}
           />
         </div>
 
@@ -30,6 +32,7 @@ export default function MainContentHeader({
             activeTab={activeTab}
             setActiveTab={setActiveTab}
             shouldShowTasksTab={shouldShowTasksTab}
+            shouldShowBeadsTab={shouldShowBeadsTab}
           />
         </div>
       </div>

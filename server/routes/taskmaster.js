@@ -1961,3 +1961,4 @@ Brief description of what this web application will do and why it's needed.
 }
 
 export default router;
+export { checkTaskMasterInstallation };

@@ -182,4 +182,22 @@ export const api = {
 
   // Generic GET method for any endpoint
   get: (endpoint) => authenticatedFetch(`/api${endpoint}`),
+
+  // Generic POST method for any endpoint
+  post: (endpoint, data) => authenticatedFetch(`/api${endpoint}`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+
+  // Generic PUT method for any endpoint
+  put: (endpoint, data) => authenticatedFetch(`/api${endpoint}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  }),
+
+  // Generic DELETE method for any endpoint
+  delete: (endpoint, options = {}) => authenticatedFetch(`/api${endpoint}`, {
+    method: 'DELETE',
+    ...options,
+  }),
 };
