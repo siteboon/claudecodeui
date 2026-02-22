@@ -53,7 +53,7 @@ export const getSessionDate = (session: SessionWithProvider): Date => {
 
 export const getSessionName = (session: SessionWithProvider, t: TFunction): string => {
   if (session.__provider === 'cursor') {
-    return session.name || t('projects.untitledSession');
+    return session.summary || session.name || t('projects.untitledSession');
   }
 
   if (session.__provider === 'codex') {

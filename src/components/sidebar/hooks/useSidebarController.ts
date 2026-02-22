@@ -405,11 +405,13 @@ export function useSidebarController({
   }, [onRefresh]);
 
   const updateSessionSummary = useCallback(
-    async (projectName: string, sessionId: string, summary: string, provider: SessionProvider) => {
+    async (_projectName: string, sessionId: string, summary: string, provider: SessionProvider) => {
       const trimmed = summary.trim();
-      setEditingSession(null);
-      setEditingSessionName('');
-      if (!trimmed) return;
+      if (!trimmed) {
+        setEditingSession(null);
+        setEditingSessionName('');
+        return;
+      }
       try {
         const response = await api.renameSession(sessionId, trimmed, provider);
         if (response.ok) {
@@ -421,6 +423,9 @@ export function useSidebarController({
       } catch (error) {
         console.error('[Sidebar] Error renaming session:', error);
         alert(t('messages.renameSessionError'));
+      } finally {
+        setEditingSession(null);
+        setEditingSessionName('');
       }
     },
     [onRefresh, t],

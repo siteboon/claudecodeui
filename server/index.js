@@ -64,7 +64,7 @@ import cliAuthRoutes from './routes/cli-auth.js';
 import userRoutes from './routes/user.js';
 import codexRoutes from './routes/codex.js';
 import geminiRoutes from './routes/gemini.js';
-import { initializeDatabase, sessionNamesDb } from './database/db.js';
+import { initializeDatabase, sessionNamesDb, applyCustomSessionNames } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { IS_PLATFORM } from './constants/config.js';
 
@@ -493,15 +493,7 @@ app.get('/api/projects/:projectName/sessions', authenticateToken, async (req, re
     try {
         const { limit = 5, offset = 0 } = req.query;
         const result = await getSessions(req.params.projectName, parseInt(limit), parseInt(offset));
-        // Apply custom session names from DB
-        if (result.sessions?.length > 0) {
-            const ids = result.sessions.map(s => s.id);
-            const customNames = sessionNamesDb.getNames(ids, 'claude');
-            for (const session of result.sessions) {
-                const custom = customNames.get(session.id);
-                if (custom) session.summary = custom;
-            }
-        }
+        applyCustomSessionNames(result.sessions, 'claude');
         res.json(result);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -562,14 +554,22 @@ app.delete('/api/projects/:projectName/sessions/:sessionId', authenticateToken, 
 app.put('/api/sessions/:sessionId/rename', authenticateToken, async (req, res) => {
     try {
         const { sessionId } = req.params;
+        const safeSessionId = String(sessionId).replace(/[^a-zA-Z0-9._-]/g, '');
+        if (!safeSessionId) {
+            return res.status(400).json({ error: 'Invalid sessionId' });
+        }
         const { summary, provider } = req.body;
         if (!summary || typeof summary !== 'string' || summary.trim() === '') {
             return res.status(400).json({ error: 'Summary is required' });
         }
-        if (!provider || typeof provider !== 'string') {
-            return res.status(400).json({ error: 'Provider is required' });
+        if (summary.trim().length > 500) {
+            return res.status(400).json({ error: 'Summary must not exceed 500 characters' });
         }
-        sessionNamesDb.setName(sessionId, provider, summary.trim());
+        const VALID_PROVIDERS = ['claude', 'codex', 'cursor'];
+        if (!provider || !VALID_PROVIDERS.includes(provider)) {
+            return res.status(400).json({ error: `Provider must be one of: ${VALID_PROVIDERS.join(', ')}` });
+        }
+        sessionNamesDb.setName(safeSessionId, provider, summary.trim());
         res.json({ success: true });
     } catch (error) {
         console.error(`[API] Error renaming session ${req.params.sessionId}:`, error);

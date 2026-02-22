@@ -66,18 +66,7 @@ import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 import os from 'os';
 import sessionManager from './sessionManager.js';
-import { sessionNamesDb } from './database/db.js';
-
-// Apply custom session names from the database (overrides CLI-generated summaries)
-function applyCustomSessionNames(sessions, provider) {
-  if (!sessions?.length) return;
-  const ids = sessions.map(s => s.id);
-  const customNames = sessionNamesDb.getNames(ids, provider);
-  for (const session of sessions) {
-    const custom = customNames.get(session.id);
-    if (custom) session.summary = custom;
-  }
-}
+import { applyCustomSessionNames } from './database/db.js';
 
 // Import TaskMaster detection functions
 async function detectTaskMasterFolder(projectPath) {

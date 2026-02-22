@@ -103,8 +103,8 @@ const runMigrations = () => {
         UNIQUE(session_id, provider)
       )`);
       db.exec('CREATE INDEX IF NOT EXISTS idx_session_names_lookup ON session_names(session_id, provider)');
-    } catch {
-      // Table already exists
+    } catch (error) {
+      console.warn('[DB] session_names migration note:', error.message);
     }
 
     console.log('Database migrations completed successfully');
@@ -419,6 +419,21 @@ const sessionNamesDb = {
   },
 };
 
+// Apply custom session names from the database (overrides CLI-generated summaries)
+function applyCustomSessionNames(sessions, provider) {
+  if (!sessions?.length) return;
+  try {
+    const ids = sessions.map(s => s.id);
+    const customNames = sessionNamesDb.getNames(ids, provider);
+    for (const session of sessions) {
+      const custom = customNames.get(session.id);
+      if (custom) session.summary = custom;
+    }
+  } catch (error) {
+    console.warn(`[DB] Failed to apply custom session names for ${provider}:`, error.message);
+  }
+}
+
 // Backward compatibility - keep old names pointing to new system
 const githubTokensDb = {
   createGithubToken: (userId, tokenName, githubToken, description = null) => {
@@ -445,5 +460,6 @@ export {
   apiKeysDb,
   credentialsDb,
   sessionNamesDb,
+  applyCustomSessionNames,
   githubTokensDb // Backward compatibility
 };
