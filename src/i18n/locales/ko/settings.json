@@ -88,7 +88,8 @@
     "appearance": "외관",
     "git": "Git",
     "apiTokens": "API & 토큰",
-    "tasks": "작업"
+    "tasks": "작업",
+    "dingtalk": "DingTalk"
   },
   "appearanceSettings": {
     "darkMode": {
@@ -414,5 +415,29 @@
       "title": "Codex MCP 정보",
       "description": "Codex는 stdio 기반 MCP 서버를 지원합니다. 추가 도구와 리소스로 Codex의 기능을 확장하는 서버를 추가할 수 있습니다."
     }
+  },
+  "dingtalk": {
+    "loading": "로딩 중...",
+    "credentials": "자격 증명",
+    "enterNewSecret": "새 시크릿을 입력하여 업데이트",
+    "testCredentials": "테스트",
+    "testing": "테스트 중...",
+    "save": "저장",
+    "saving": "저장 중...",
+    "connect": "연결",
+    "disconnect": "연결 해제",
+    "delete": "삭제",
+    "configSaved": "설정이 저장되었습니다",
+    "credentialsValid": "자격 증명이 유효합니다",
+    "credentialsInvalid": "자격 증명이 유효하지 않습니다",
+    "connected": "연결되었습니다",
+    "disconnected": "연결이 해제되었습니다",
+    "confirmDelete": "DingTalk 설정을 삭제하시겠습니까? 봇 연결이 해제됩니다.",
+    "statusConnected": "연결됨",
+    "statusDisconnected": "연결 안 됨",
+    "messages": "메시지",
+    "recentConversations": "최근 대화",
+    "noConversations": "대화가 아직 없습니다",
+    "resetConversation": "초기화"
   }
 }

@@ -59,7 +59,9 @@ import projectsRoutes, { WORKSPACES_ROOT, validateWorkspacePath } from './routes
 import cliAuthRoutes from './routes/cli-auth.js';
 import userRoutes from './routes/user.js';
 import codexRoutes from './routes/codex.js';
-import { initializeDatabase } from './database/db.js';
+import dingtalkRoutes from './routes/dingtalk.js';
+import { initDingTalkStream, isDingTalkConnected } from './dingtalk-stream.js';
+import { initializeDatabase, dingtalkDb } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { IS_PLATFORM } from './constants/config.js';
 
@@ -375,6 +377,9 @@ app.use('/api/user', authenticateToken, userRoutes);
 
 // Codex API Routes (protected)
 app.use('/api/codex', authenticateToken, codexRoutes);
+
+// DingTalk API Routes (protected)
+app.use('/api/dingtalk', authenticateToken, dingtalkRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
@@ -1923,6 +1928,33 @@ async function startServer() {
 
             // Start watching the projects folder for changes
             await setupProjectsWatcher();
+
+            // Auto-start DingTalk Stream if configured
+            try {
+              const dtClientId = process.env.DINGTALK_CLIENT_ID;
+              const dtClientSecret = process.env.DINGTALK_CLIENT_SECRET;
+              if (dtClientId && dtClientSecret) {
+                console.log(`${c.info('[INFO]')} Starting DingTalk Stream from environment variables...`);
+                await initDingTalkStream({
+                  clientId: dtClientId,
+                  clientSecret: dtClientSecret,
+                });
+                console.log(`${c.ok('[OK]')}   DingTalk Stream connected`);
+              } else {
+                // Try database config
+                const dbConfig = dingtalkDb.getActiveConfig();
+                if (dbConfig) {
+                  console.log(`${c.info('[INFO]')} Starting DingTalk Stream from database config...`);
+                  await initDingTalkStream({
+                    clientId: dbConfig.client_id,
+                    clientSecret: dbConfig.client_secret,
+                  });
+                  console.log(`${c.ok('[OK]')}   DingTalk Stream connected`);
+                }
+              }
+            } catch (dtErr) {
+              console.error(`${c.warn('[WARN]')} DingTalk Stream auto-start failed:`, dtErr.message);
+            }
         });
     } catch (error) {
         console.error('[ERROR] Failed to start server:', error);

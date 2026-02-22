@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import CredentialsSettings from './CredentialsSettings';
 import GitSettings from './GitSettings';
 import TasksSettings from './TasksSettings';
+import DingTalkSettings from './DingTalkSettings';
 import LoginModal from './LoginModal';
 import { authenticatedFetch } from '../utils/api';
 
@@ -1016,6 +1017,16 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
               >
                 {t('mainTabs.tasks')}
               </button>
+              <button
+                onClick={() => setActiveTab('dingtalk')}
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'dingtalk'
+                    ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {t('mainTabs.dingtalk', 'DingTalk')}
+              </button>
             </div>
           </div>
 
@@ -1904,6 +1915,13 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {
             {activeTab === 'api' && (
               <div className="space-y-6 md:space-y-8">
                 <CredentialsSettings />
+              </div>
+            )}
+
+            {/* DingTalk Tab */}
+            {activeTab === 'dingtalk' && (
+              <div className="space-y-6 md:space-y-8">
+                <DingTalkSettings />
               </div>
             )}
           </div>

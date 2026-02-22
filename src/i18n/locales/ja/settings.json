@@ -88,7 +88,8 @@
     "appearance": "外観",
     "git": "Git",
     "apiTokens": "API & トークン",
-    "tasks": "タスク"
+    "tasks": "タスク",
+    "dingtalk": "DingTalk"
   },
   "appearanceSettings": {
     "darkMode": {
@@ -414,5 +415,29 @@
       "title": "Codex MCPについて",
       "description": "Codexはstdioベースのツールサーバーをサポートしています。追加のツールやリソースでCodexの機能を拡張するサーバーを追加できます。"
     }
+  },
+  "dingtalk": {
+    "loading": "読み込み中...",
+    "credentials": "認証情報",
+    "enterNewSecret": "新しいシークレットを入力して更新",
+    "testCredentials": "テスト",
+    "testing": "テスト中...",
+    "save": "保存",
+    "saving": "保存中...",
+    "connect": "接続",
+    "disconnect": "切断",
+    "delete": "削除",
+    "configSaved": "設定を保存しました",
+    "credentialsValid": "認証情報は有効です",
+    "credentialsInvalid": "認証情報が無効です",
+    "connected": "接続しました",
+    "disconnected": "切断しました",
+    "confirmDelete": "DingTalk設定を削除しますか？ボットの接続が切断されます。",
+    "statusConnected": "接続済み",
+    "statusDisconnected": "未接続",
+    "messages": "メッセージ",
+    "recentConversations": "最近の会話",
+    "noConversations": "会話はまだありません",
+    "resetConversation": "リセット"
   }
 }

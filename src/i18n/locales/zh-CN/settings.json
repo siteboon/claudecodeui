@@ -88,7 +88,8 @@
     "appearance": "外观",
     "git": "Git",
     "apiTokens": "API 和令牌",
-    "tasks": "任务"
+    "tasks": "任务",
+    "dingtalk": "钉钉"
   },
   "appearanceSettings": {
     "darkMode": {
@@ -414,5 +415,29 @@
       "title": "关于 Codex MCP",
       "description": "Codex 支持基于 stdio 的 MCP 服务器。您可以添加服务器，通过额外的工具和资源来扩展 Codex 的功能。"
     }
+  },
+  "dingtalk": {
+    "loading": "加载中...",
+    "credentials": "凭证",
+    "enterNewSecret": "输入新密钥以更新",
+    "testCredentials": "测试",
+    "testing": "测试中...",
+    "save": "保存",
+    "saving": "保存中...",
+    "connect": "连接",
+    "disconnect": "断开",
+    "delete": "删除",
+    "configSaved": "配置已保存",
+    "credentialsValid": "凭证有效",
+    "credentialsInvalid": "凭证无效",
+    "connected": "连接成功",
+    "disconnected": "已断开",
+    "confirmDelete": "删除钉钉配置？这将断开机器人连接。",
+    "statusConnected": "已连接",
+    "statusDisconnected": "未连接",
+    "messages": "条消息",
+    "recentConversations": "最近会话",
+    "noConversations": "暂无会话",
+    "resetConversation": "重置"
   }
 }

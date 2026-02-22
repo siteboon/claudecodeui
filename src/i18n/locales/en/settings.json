@@ -88,7 +88,8 @@
     "appearance": "Appearance",
     "git": "Git",
     "apiTokens": "API & Tokens",
-    "tasks": "Tasks"
+    "tasks": "Tasks",
+    "dingtalk": "DingTalk"
   },
   "appearanceSettings": {
     "darkMode": {
@@ -414,5 +415,29 @@
       "title": "About Codex MCP",
       "description": "Codex supports stdio-based MCP servers. You can add servers that extend Codex's capabilities with additional tools and resources."
     }
+  },
+  "dingtalk": {
+    "loading": "Loading...",
+    "credentials": "Credentials",
+    "enterNewSecret": "Enter new secret to update",
+    "testCredentials": "Test",
+    "testing": "Testing...",
+    "save": "Save",
+    "saving": "Saving...",
+    "connect": "Connect",
+    "disconnect": "Disconnect",
+    "delete": "Delete",
+    "configSaved": "Configuration saved",
+    "credentialsValid": "Credentials are valid",
+    "credentialsInvalid": "Invalid credentials",
+    "connected": "Connected successfully",
+    "disconnected": "Disconnected",
+    "confirmDelete": "Delete DingTalk configuration? This will disconnect the bot.",
+    "statusConnected": "Connected",
+    "statusDisconnected": "Disconnected",
+    "messages": "messages",
+    "recentConversations": "Recent Conversations",
+    "noConversations": "No conversations yet",
+    "resetConversation": "Reset"
   }
 }

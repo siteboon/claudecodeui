@@ -50,3 +50,49 @@ CREATE TABLE IF NOT EXISTS user_credentials (
 CREATE INDEX IF NOT EXISTS idx_user_credentials_user_id ON user_credentials(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_credentials_type ON user_credentials(credential_type);
 CREATE INDEX IF NOT EXISTS idx_user_credentials_active ON user_credentials(is_active);
+
+-- DingTalk configuration table
+CREATE TABLE IF NOT EXISTS dingtalk_config (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    client_id TEXT NOT NULL,
+    client_secret TEXT NOT NULL,
+    is_active BOOLEAN DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_dingtalk_config_user_id ON dingtalk_config(user_id);
+
+-- DingTalk conversations table
+CREATE TABLE IF NOT EXISTS dingtalk_conversations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    dingtalk_conversation_id TEXT NOT NULL,
+    sender_staff_id TEXT NOT NULL,
+    sender_nick TEXT,
+    conversation_type TEXT NOT NULL,
+    project_path TEXT,
+    permission_mode TEXT DEFAULT 'bypassPermissions',
+    claude_session_id TEXT,
+    pending_message TEXT,
+    message_count INTEGER DEFAULT 0,
+    last_message_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(dingtalk_conversation_id, sender_staff_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_dingtalk_conv_sender ON dingtalk_conversations(sender_staff_id);
+
+-- DingTalk messages table
+CREATE TABLE IF NOT EXISTS dingtalk_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id INTEGER NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    card_out_track_id TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (conversation_id) REFERENCES dingtalk_conversations(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_dingtalk_msg_conv ON dingtalk_messages(conversation_id);

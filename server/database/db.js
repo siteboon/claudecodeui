@@ -75,6 +75,51 @@ const runMigrations = () => {
       db.exec('ALTER TABLE users ADD COLUMN has_completed_onboarding BOOLEAN DEFAULT 0');
     }
 
+    // DingTalk tables migration
+    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(r => r.name);
+    if (!tables.includes('dingtalk_config')) {
+      console.log('Running migration: Creating DingTalk tables');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS dingtalk_config (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL,
+          client_id TEXT NOT NULL,
+          client_secret TEXT NOT NULL,
+          is_active BOOLEAN DEFAULT 1,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_dingtalk_config_user_id ON dingtalk_config(user_id);
+        CREATE TABLE IF NOT EXISTS dingtalk_conversations (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          dingtalk_conversation_id TEXT NOT NULL,
+          sender_staff_id TEXT NOT NULL,
+          sender_nick TEXT,
+          conversation_type TEXT NOT NULL,
+          project_path TEXT,
+          permission_mode TEXT DEFAULT 'bypassPermissions',
+          claude_session_id TEXT,
+          pending_message TEXT,
+          message_count INTEGER DEFAULT 0,
+          last_message_at DATETIME,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(dingtalk_conversation_id, sender_staff_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_dingtalk_conv_sender ON dingtalk_conversations(sender_staff_id);
+        CREATE TABLE IF NOT EXISTS dingtalk_messages (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          conversation_id INTEGER NOT NULL,
+          role TEXT NOT NULL,
+          content TEXT NOT NULL,
+          card_out_track_id TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (conversation_id) REFERENCES dingtalk_conversations(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_dingtalk_msg_conv ON dingtalk_messages(conversation_id);
+      `);
+    }
+
     console.log('Database migrations completed successfully');
   } catch (error) {
     console.error('Error running migrations:', error.message);
@@ -332,6 +377,103 @@ const credentialsDb = {
   }
 };
 
+// DingTalk database operations
+const dingtalkDb = {
+  // Config
+  getConfig(userId) {
+    return db.prepare('SELECT * FROM dingtalk_config WHERE user_id = ? AND is_active = 1 ORDER BY created_at DESC LIMIT 1').get(userId);
+  },
+
+  saveConfig(userId, config) {
+    const existing = dingtalkDb.getConfig(userId);
+    if (existing) {
+      db.prepare(`UPDATE dingtalk_config SET client_id = ?, client_secret = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+        .run(config.clientId, config.clientSecret, existing.id);
+      return { id: existing.id };
+    } else {
+      const result = db.prepare(`INSERT INTO dingtalk_config (user_id, client_id, client_secret) VALUES (?, ?, ?)`)
+        .run(userId, config.clientId, config.clientSecret);
+      return { id: result.lastInsertRowid };
+    }
+  },
+
+  deleteConfig(userId) {
+    const result = db.prepare('DELETE FROM dingtalk_config WHERE user_id = ?').run(userId);
+    return result.changes > 0;
+  },
+
+  getActiveConfig() {
+    return db.prepare('SELECT * FROM dingtalk_config WHERE is_active = 1 ORDER BY created_at DESC LIMIT 1').get();
+  },
+
+  // Conversations
+  getOrCreateConversation(dingtalkConvId, senderStaffId, senderNick, convType) {
+    let conv = db.prepare('SELECT * FROM dingtalk_conversations WHERE dingtalk_conversation_id = ? AND sender_staff_id = ?').get(dingtalkConvId, senderStaffId);
+    if (!conv) {
+      const result = db.prepare('INSERT INTO dingtalk_conversations (dingtalk_conversation_id, sender_staff_id, sender_nick, conversation_type) VALUES (?, ?, ?, ?)')
+        .run(dingtalkConvId, senderStaffId, senderNick || null, convType);
+      conv = db.prepare('SELECT * FROM dingtalk_conversations WHERE id = ?').get(result.lastInsertRowid);
+    }
+    return conv;
+  },
+
+  updateConversationProject(id, projectPath, permissionMode) {
+    db.prepare('UPDATE dingtalk_conversations SET project_path = ?, permission_mode = ? WHERE id = ?')
+      .run(projectPath, permissionMode || 'bypassPermissions', id);
+  },
+
+  updateConversationSession(id, claudeSessionId) {
+    db.prepare('UPDATE dingtalk_conversations SET claude_session_id = ? WHERE id = ?')
+      .run(claudeSessionId, id);
+  },
+
+  setPendingMessage(id, message) {
+    db.prepare('UPDATE dingtalk_conversations SET pending_message = ? WHERE id = ?')
+      .run(message, id);
+  },
+
+  getPendingMessage(id) {
+    const row = db.prepare('SELECT pending_message FROM dingtalk_conversations WHERE id = ?').get(id);
+    return row?.pending_message || null;
+  },
+
+  clearPendingMessage(id) {
+    db.prepare('UPDATE dingtalk_conversations SET pending_message = NULL WHERE id = ?').run(id);
+  },
+
+  resetConversation(id) {
+    db.prepare('UPDATE dingtalk_conversations SET project_path = NULL, claude_session_id = NULL, pending_message = NULL WHERE id = ?').run(id);
+  },
+
+  getUserConversations(senderStaffId, limit = 10) {
+    return db.prepare(`SELECT id, dingtalk_conversation_id, project_path, permission_mode, claude_session_id, message_count, last_message_at, created_at
+      FROM dingtalk_conversations
+      WHERE sender_staff_id = ? AND project_path IS NOT NULL AND claude_session_id IS NOT NULL
+      ORDER BY last_message_at DESC LIMIT ?`).all(senderStaffId, limit);
+  },
+
+  getConversationById(id) {
+    return db.prepare('SELECT * FROM dingtalk_conversations WHERE id = ?').get(id);
+  },
+
+  listConversations(limit = 50, offset = 0) {
+    return db.prepare('SELECT * FROM dingtalk_conversations ORDER BY last_message_at DESC LIMIT ? OFFSET ?').all(limit, offset);
+  },
+
+  // Messages
+  addMessage(conversationId, role, content, cardOutTrackId = null) {
+    const result = db.prepare('INSERT INTO dingtalk_messages (conversation_id, role, content, card_out_track_id) VALUES (?, ?, ?, ?)')
+      .run(conversationId, role, content, cardOutTrackId);
+    db.prepare('UPDATE dingtalk_conversations SET message_count = message_count + 1, last_message_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(conversationId);
+    return { id: result.lastInsertRowid };
+  },
+
+  getMessages(conversationId, limit = 50, offset = 0) {
+    return db.prepare('SELECT * FROM dingtalk_messages WHERE conversation_id = ? ORDER BY created_at ASC LIMIT ? OFFSET ?').all(conversationId, limit, offset);
+  },
+};
+
 // Backward compatibility - keep old names pointing to new system
 const githubTokensDb = {
   createGithubToken: (userId, tokenName, githubToken, description = null) => {
@@ -357,5 +499,6 @@ export {
   userDb,
   apiKeysDb,
   credentialsDb,
+  dingtalkDb,
   githubTokensDb // Backward compatibility
 };
