@@ -185,9 +185,10 @@ async function detectBeadsFolder(projectPath) {
  * Run a bd CLI command and return the result
  * @param {string} cwd - Working directory to run the command in
  * @param {string[]} args - Command arguments
+ * @param {number} timeoutMs - Timeout in milliseconds (default: 30000)
  * @returns {Promise<Object>} Command result
  */
-function runBeadsCommand(cwd, args) {
+function runBeadsCommand(cwd, args, timeoutMs = 30000) {
     return new Promise((resolve) => {
         const child = spawn('bd', args, {
             cwd,
@@ -196,6 +197,21 @@ function runBeadsCommand(cwd, args) {
 
         let stdout = '';
         let stderr = '';
+        let timedOut = false;
+
+        // Set up timeout timer
+        const timeoutTimer = setTimeout(() => {
+            timedOut = true;
+            // Try SIGTERM first, then SIGKILL if needed
+            child.kill('SIGTERM');
+            
+            // Force kill with SIGKILL after 5 seconds if still running
+            setTimeout(() => {
+                if (!child.killed) {
+                    child.kill('SIGKILL');
+                }
+            }, 5000);
+        }, timeoutMs);
 
         child.stdout.on('data', (data) => {
             stdout += data.toString();
@@ -206,15 +222,26 @@ function runBeadsCommand(cwd, args) {
         });
 
         child.on('close', (code) => {
-            resolve({
-                success: code === 0,
-                code,
-                output: stdout,
-                error: stderr
-            });
+            clearTimeout(timeoutTimer);
+            if (timedOut) {
+                resolve({
+                    success: false,
+                    code: -2,
+                    output: stdout,
+                    error: stderr || 'Command timed out after ' + timeoutMs + 'ms'
+                });
+            } else {
+                resolve({
+                    success: code === 0,
+                    code,
+                    output: stdout,
+                    error: stderr
+                });
+            }
         });
 
         child.on('error', (error) => {
+            clearTimeout(timeoutTimer);
             resolve({
                 success: false,
                 code: -1,
