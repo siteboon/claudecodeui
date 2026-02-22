@@ -83,28 +83,31 @@ export default function AccountContent({ agent, authStatus, onLogin }) {
             </div>
           </div>
 
-          <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className={`font-medium ${config.textClass}`}>
-                  {authStatus?.authenticated ? t('agents.login.reAuthenticate') : t('agents.login.title')}
+          {/* Hide login section for Bedrock users */}
+          {!authStatus?.isBedrock && (
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className={`font-medium ${config.textClass}`}>
+                    {authStatus?.authenticated ? t('agents.login.reAuthenticate') : t('agents.login.title')}
+                  </div>
+                  <div className={`text-sm ${config.subtextClass}`}>
+                    {authStatus?.authenticated
+                      ? t('agents.login.reAuthDescription')
+                      : t('agents.login.description', { agent: config.name })}
+                  </div>
                 </div>
-                <div className={`text-sm ${config.subtextClass}`}>
-                  {authStatus?.authenticated
-                    ? t('agents.login.reAuthDescription')
-                    : t('agents.login.description', { agent: config.name })}
-                </div>
+                <Button
+                  onClick={onLogin}
+                  className={`${config.buttonClass} text-white`}
+                  size="sm"
+                >
+                  <LogIn className="w-4 h-4 mr-2" />
+                  {authStatus?.authenticated ? t('agents.login.reLoginButton') : t('agents.login.button')}
+                </Button>
               </div>
-              <Button
-                onClick={onLogin}
-                className={`${config.buttonClass} text-white`}
-                size="sm"
-              >
-                <LogIn className="w-4 h-4 mr-2" />
-                {authStatus?.authenticated ? t('agents.login.reLoginButton') : t('agents.login.button')}
-              </Button>
             </div>
-          </div>
+          )}
 
           {authStatus?.error && (
             <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
