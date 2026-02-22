@@ -30,8 +30,7 @@ const router = express.Router();
 async function checkBeadsInstallation() {
     return new Promise((resolve) => {
         const child = spawn('which', ['bd'], { 
-            stdio: ['ignore', 'pipe', 'pipe'],
-            shell: true 
+            stdio: ['ignore', 'pipe', 'pipe']
         });
         
         let output = '';
@@ -48,8 +47,7 @@ async function checkBeadsInstallation() {
         child.on('close', (code) => {
             if (code === 0 && output.trim()) {
                 const versionChild = spawn('bd', ['version'], { 
-                    stdio: ['ignore', 'pipe', 'pipe'],
-                    shell: true 
+                    stdio: ['ignore', 'pipe', 'pipe']
                 });
                 
                 let versionOutput = '';
@@ -193,8 +191,7 @@ function runBeadsCommand(cwd, args) {
     return new Promise((resolve) => {
         const child = spawn('bd', args, {
             cwd,
-            stdio: ['ignore', 'pipe', 'pipe'],
-            shell: true
+            stdio: ['ignore', 'pipe', 'pipe']
         });
 
         let stdout = '';
