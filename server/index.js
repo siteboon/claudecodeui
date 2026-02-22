@@ -555,7 +555,7 @@ app.put('/api/sessions/:sessionId/rename', authenticateToken, async (req, res) =
     try {
         const { sessionId } = req.params;
         const safeSessionId = String(sessionId).replace(/[^a-zA-Z0-9._-]/g, '');
-        if (!safeSessionId) {
+        if (!safeSessionId || safeSessionId !== String(sessionId)) {
             return res.status(400).json({ error: 'Invalid sessionId' });
         }
         const { summary, provider } = req.body;
