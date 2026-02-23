@@ -28,7 +28,8 @@ const readWordWrap = () => {
 };
 
 const readFontSize = () => {
-  return localStorage.getItem(CODE_EDITOR_STORAGE_KEYS.fontSize) ?? CODE_EDITOR_DEFAULTS.fontSize;
+  const stored = localStorage.getItem(CODE_EDITOR_STORAGE_KEYS.fontSize);
+  return Number(stored ?? CODE_EDITOR_DEFAULTS.fontSize);
 };
 
 export const useCodeEditorSettings = () => {

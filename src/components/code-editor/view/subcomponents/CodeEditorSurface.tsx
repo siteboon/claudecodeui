@@ -9,7 +9,7 @@ type CodeEditorSurfaceProps = {
   markdownPreview: boolean;
   isMarkdownFile: boolean;
   isDarkMode: boolean;
-  fontSize: string;
+  fontSize: number;
   showLineNumbers: boolean;
   extensions: Extension[];
 };
