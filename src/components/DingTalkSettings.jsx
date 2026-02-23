@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { Eye, EyeOff, Trash2, RotateCcw, ChevronDown, ChevronRight, MessageSquare } from 'lucide-react';
+import { Eye, EyeOff, Trash2, RotateCcw, ChevronDown, ChevronRight, MessageSquare, Plus, FolderOpen } from 'lucide-react';
 import { authenticatedFetch } from '../utils/api';
 import { useTranslation } from 'react-i18next';
 
@@ -23,6 +23,12 @@ function DingTalkSettings() {
   const [clientSecret, setClientSecret] = useState('');
 
   const [testResult, setTestResult] = useState(null);
+
+  // Project aliases
+  const [aliases, setAliases] = useState([]);
+  const [allProjects, setAllProjects] = useState([]);
+  const [selectedProjectPath, setSelectedProjectPath] = useState('');
+  const [aliasDisplayName, setAliasDisplayName] = useState('');
 
   const fetchConfig = useCallback(async () => {
     try {
@@ -52,12 +58,34 @@ function DingTalkSettings() {
     }
   }, []);
 
+  const fetchAliases = useCallback(async () => {
+    try {
+      const res = await authenticatedFetch('/api/dingtalk/aliases');
+      const data = await res.json();
+      setAliases(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Error fetching aliases:', err);
+    }
+  }, []);
+
+  const fetchAllProjects = useCallback(async () => {
+    try {
+      const res = await authenticatedFetch('/api/projects');
+      const data = await res.json();
+      setAllProjects(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Error fetching projects:', err);
+    }
+  }, []);
+
   useEffect(() => {
     fetchConfig();
     fetchStatus();
+    fetchAliases();
+    fetchAllProjects();
     const interval = setInterval(fetchStatus, 10000);
     return () => clearInterval(interval);
-  }, [fetchConfig, fetchStatus]);
+  }, [fetchConfig, fetchStatus, fetchAliases, fetchAllProjects]);
 
   const handleSave = async () => {
     if (!clientId) return;
@@ -179,6 +207,34 @@ function DingTalkSettings() {
       await fetchStatus();
     } catch (err) {
       setTestResult({ success: false, message: err.message });
+    }
+  };
+
+  const handleAddAlias = async () => {
+    if (!selectedProjectPath || !aliasDisplayName) return;
+    try {
+      const res = await authenticatedFetch('/api/dingtalk/aliases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectPath: selectedProjectPath, displayName: aliasDisplayName }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSelectedProjectPath('');
+        setAliasDisplayName('');
+        await fetchAliases();
+      }
+    } catch (err) {
+      console.error('Error adding alias:', err);
+    }
+  };
+
+  const handleRemoveAlias = async (id) => {
+    try {
+      await authenticatedFetch(`/api/dingtalk/aliases/${id}`, { method: 'DELETE' });
+      await fetchAliases();
+    } catch (err) {
+      console.error('Error removing alias:', err);
     }
   };
 
@@ -322,6 +378,85 @@ function DingTalkSettings() {
           </>
         )}
       </div>
+
+      {/* Project Aliases */}
+      {config?.configured && (
+        <div className="border-t pt-4 space-y-3">
+          <h3 className="text-sm font-semibold flex items-center gap-2">
+            <FolderOpen className="h-4 w-4" />
+            {t('dingtalk.projectAliases', 'Project Mapping')}
+          </h3>
+
+          {/* Add alias form */}
+          <div className="flex gap-2 items-end">
+            <div className="flex-1 min-w-0">
+              <label className="text-xs text-muted-foreground block mb-1">{t('dingtalk.selectProject', 'Select Project')}</label>
+              <select
+                className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
+                value={selectedProjectPath}
+                onChange={(e) => setSelectedProjectPath(e.target.value)}
+              >
+                <option value="">--</option>
+                {allProjects
+                  .filter((p) => !aliases.some((a) => a.project_path === (p.path || p.name)))
+                  .map((p) => (
+                    <option key={p.path || p.name} value={p.path || p.name}>
+                      {p.displayName || p.name || p.path}
+                    </option>
+                  ))}
+              </select>
+            </div>
+            <div className="flex-1 min-w-0">
+              <label className="text-xs text-muted-foreground block mb-1">{t('dingtalk.aliasName', 'Display Name')}</label>
+              <Input
+                value={aliasDisplayName}
+                onChange={(e) => setAliasDisplayName(e.target.value)}
+                placeholder={t('dingtalk.aliasName', 'Display Name')}
+              />
+            </div>
+            <Button
+              size="sm"
+              onClick={handleAddAlias}
+              disabled={!selectedProjectPath || !aliasDisplayName}
+            >
+              <Plus className="h-3 w-3 mr-1" />
+              {t('dingtalk.addAlias', 'Add')}
+            </Button>
+          </div>
+
+          {/* Alias list */}
+          {aliases.length === 0 ? (
+            <p className="text-xs text-muted-foreground">{t('dingtalk.noAliases', 'No project aliases configured.')}</p>
+          ) : (
+            <div className="space-y-1">
+              {aliases.map((alias) => {
+                const pathParts = alias.project_path.split('/');
+                const shortPath = pathParts.length > 3
+                  ? '.../' + pathParts.slice(-3).join('/')
+                  : alias.project_path;
+                return (
+                  <div key={alias.id} className="flex items-center justify-between p-2 rounded bg-muted/50 text-xs">
+                    <div className="flex-1 min-w-0">
+                      <span className="font-medium">{alias.display_name}</span>
+                      <span className="text-muted-foreground ml-2 truncate" title={alias.project_path}>
+                        {shortPath}
+                      </span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0"
+                      onClick={() => handleRemoveAlias(alias.id)}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Recent Conversations */}
       {config?.configured && (

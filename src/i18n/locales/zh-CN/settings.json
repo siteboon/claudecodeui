@@ -438,6 +438,13 @@
     "messages": "条消息",
     "recentConversations": "最近会话",
     "noConversations": "暂无会话",
-    "resetConversation": "重置"
+    "resetConversation": "重置",
+    "projectAliases": "项目映射",
+    "addAlias": "添加",
+    "aliasName": "显示名称",
+    "noAliases": "未配置项目别名，钉钉将显示所有项目。",
+    "selectProject": "选择项目",
+    "aliasAdded": "别名已添加",
+    "aliasRemoved": "别名已删除"
   }
 }

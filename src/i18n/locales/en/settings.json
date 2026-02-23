@@ -438,6 +438,13 @@
     "messages": "messages",
     "recentConversations": "Recent Conversations",
     "noConversations": "No conversations yet",
-    "resetConversation": "Reset"
+    "resetConversation": "Reset",
+    "projectAliases": "Project Mapping",
+    "addAlias": "Add",
+    "aliasName": "Display Name",
+    "noAliases": "No project aliases configured. All projects will be shown in DingTalk.",
+    "selectProject": "Select Project",
+    "aliasAdded": "Alias added",
+    "aliasRemoved": "Alias removed"
   }
 }

@@ -438,6 +438,13 @@
     "messages": "メッセージ",
     "recentConversations": "最近の会話",
     "noConversations": "会話はまだありません",
-    "resetConversation": "リセット"
+    "resetConversation": "リセット",
+    "projectAliases": "プロジェクトマッピング",
+    "addAlias": "追加",
+    "aliasName": "表示名",
+    "noAliases": "プロジェクトエイリアスが設定されていません。すべてのプロジェクトがDingTalkに表示されます。",
+    "selectProject": "プロジェクトを選択",
+    "aliasAdded": "エイリアスを追加しました",
+    "aliasRemoved": "エイリアスを削除しました"
   }
 }

@@ -462,18 +462,26 @@ async function processWithClaude({ userMessage, conv, accessToken, config }) {
  * Returns the items array so handleRobotMessage can cache it for number matching.
  */
 async function sendProjectList({ accessToken, config, conv }) {
+  // Check aliases first — if configured, use them as project list
+  const aliases = dingtalkDb.getProjectAliases();
+  const useAliases = aliases.length > 0;
+
   let projects = [];
-  try {
-    projects = await getProjects();
-  } catch (err) {
-    console.error('[DingTalk] Failed to get projects:', err.message);
+  if (!useAliases) {
+    try {
+      projects = await getProjects();
+    } catch (err) {
+      console.error('[DingTalk] Failed to get projects:', err.message);
+    }
   }
 
   const historyConvs = dingtalkDb.getUserConversations(conv.sender_staff_id, 5);
 
   const lines = ['### 选择项目'];
 
-  if (projects.length === 0 && historyConvs.length === 0) {
+  const projectItems = useAliases ? aliases : projects;
+
+  if (projectItems.length === 0 && historyConvs.length === 0) {
     lines.push('暂无可用项目，请先在 Claude Code UI 中添加项目。');
     await sendMessage({
       accessToken,
@@ -488,10 +496,12 @@ async function sendProjectList({ accessToken, config, conv }) {
     return;
   }
 
-  // List projects
-  if (projects.length > 0) {
-    projects.slice(0, 20).forEach((p, i) => {
-      const name = p.displayName || p.name || p.path;
+  // List projects (aliases or raw projects)
+  if (projectItems.length > 0) {
+    projectItems.slice(0, 20).forEach((item, i) => {
+      const name = useAliases
+        ? item.display_name
+        : (item.displayName || item.name || item.path);
       lines.push(`${i + 1}. ${name}`);
     });
   }
@@ -499,7 +509,7 @@ async function sendProjectList({ accessToken, config, conv }) {
   // List history conversations (continue numbering)
   if (historyConvs.length > 0) {
     lines.push('**继续历史对话：**');
-    const offset = Math.min(projects.length, 20);
+    const offset = Math.min(projectItems.length, 20);
     historyConvs.slice(0, 5).forEach((h, i) => {
       const pathParts = (h.project_path || '').split('/');
       const shortName = pathParts[pathParts.length - 1] || h.project_path || '?';
@@ -527,26 +537,36 @@ async function sendProjectList({ accessToken, config, conv }) {
  * Returns true if a valid selection was made, false otherwise.
  */
 async function handleNumberedSelection({ number, conv, accessToken, config }) {
+  // Check aliases first — mirror sendProjectList logic
+  const aliases = dingtalkDb.getProjectAliases();
+  const useAliases = aliases.length > 0;
+
   let projects = [];
-  try { projects = await getProjects(); } catch (e) { /* ignore */ }
+  if (!useAliases) {
+    try { projects = await getProjects(); } catch (e) { /* ignore */ }
+  }
+
+  const projectItems = useAliases ? aliases : projects;
 
   const historyConvs = dingtalkDb.getUserConversations(conv.sender_staff_id, 5);
-  const projectCount = Math.min(projects.length, 20);
+  const projectCount = Math.min(projectItems.length, 20);
   const historyCount = Math.min(historyConvs.length, 5);
 
   const idx = number - 1; // 0-based
 
   // Project selection
   if (idx >= 0 && idx < projectCount) {
-    const selected = projects[idx];
-    const projectPath = selected.path || selected.name;
+    const selected = projectItems[idx];
+    const projectPath = useAliases ? selected.project_path : (selected.path || selected.name);
     dingtalkDb.updateConversationProject(conv.id, projectPath, 'bypassPermissions');
 
     const pendingMessage = dingtalkDb.getPendingMessage(conv.id);
     dingtalkDb.clearPendingMessage(conv.id);
 
     // Send confirmation
-    const name = selected.displayName || selected.name || selected.path;
+    const name = useAliases
+      ? selected.display_name
+      : (selected.displayName || selected.name || selected.path);
     await sendMessage({
       accessToken,
       robotCode: config.client_id,

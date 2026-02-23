@@ -137,6 +137,40 @@ router.get('/conversations/:id/messages', (req, res) => {
   }
 });
 
+// GET /api/dingtalk/aliases — get all project aliases
+router.get('/aliases', (req, res) => {
+  try {
+    const aliases = dingtalkDb.getProjectAliases();
+    res.json(aliases);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/dingtalk/aliases — set a project alias
+router.post('/aliases', (req, res) => {
+  try {
+    const { projectPath, displayName, sortOrder } = req.body;
+    if (!projectPath || !displayName) {
+      return res.status(400).json({ error: 'projectPath and displayName are required' });
+    }
+    const result = dingtalkDb.setProjectAlias(projectPath, displayName, sortOrder || 0);
+    res.json({ success: true, id: result.id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/dingtalk/aliases/:id — delete a project alias
+router.delete('/aliases/:id', (req, res) => {
+  try {
+    const deleted = dingtalkDb.removeProjectAlias(parseInt(req.params.id));
+    res.json({ success: deleted });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/dingtalk/conversations/:id/reset — reset a conversation
 router.post('/conversations/:id/reset', (req, res) => {
   try {

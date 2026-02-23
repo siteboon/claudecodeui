@@ -96,3 +96,12 @@ CREATE TABLE IF NOT EXISTS dingtalk_messages (
 );
 
 CREATE INDEX IF NOT EXISTS idx_dingtalk_msg_conv ON dingtalk_messages(conversation_id);
+
+-- DingTalk project aliases table
+CREATE TABLE IF NOT EXISTS dingtalk_project_aliases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_path TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL,
+    sort_order INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);

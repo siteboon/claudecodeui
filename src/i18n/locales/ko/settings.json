@@ -438,6 +438,13 @@
     "messages": "메시지",
     "recentConversations": "최근 대화",
     "noConversations": "대화가 아직 없습니다",
-    "resetConversation": "초기화"
+    "resetConversation": "초기화",
+    "projectAliases": "프로젝트 매핑",
+    "addAlias": "추가",
+    "aliasName": "표시 이름",
+    "noAliases": "프로젝트 별칭이 설정되지 않았습니다. 모든 프로젝트가 DingTalk에 표시됩니다.",
+    "selectProject": "프로젝트 선택",
+    "aliasAdded": "별칭이 추가되었습니다",
+    "aliasRemoved": "별칭이 삭제되었습니다"
   }
 }

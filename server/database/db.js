@@ -120,6 +120,20 @@ const runMigrations = () => {
       `);
     }
 
+    // DingTalk project aliases migration
+    if (!tables.includes('dingtalk_project_aliases')) {
+      console.log('Running migration: Creating dingtalk_project_aliases table');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS dingtalk_project_aliases (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          project_path TEXT NOT NULL UNIQUE,
+          display_name TEXT NOT NULL,
+          sort_order INTEGER DEFAULT 0,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+    }
+
     console.log('Database migrations completed successfully');
   } catch (error) {
     console.error('Error running migrations:', error.message);
@@ -471,6 +485,29 @@ const dingtalkDb = {
 
   getMessages(conversationId, limit = 50, offset = 0) {
     return db.prepare('SELECT * FROM dingtalk_messages WHERE conversation_id = ? ORDER BY created_at ASC LIMIT ? OFFSET ?').all(conversationId, limit, offset);
+  },
+
+  // Project aliases
+  getProjectAliases() {
+    return db.prepare('SELECT * FROM dingtalk_project_aliases ORDER BY sort_order ASC, id ASC').all();
+  },
+
+  setProjectAlias(projectPath, displayName, sortOrder = 0) {
+    const existing = db.prepare('SELECT id FROM dingtalk_project_aliases WHERE project_path = ?').get(projectPath);
+    if (existing) {
+      db.prepare('UPDATE dingtalk_project_aliases SET display_name = ?, sort_order = ? WHERE id = ?')
+        .run(displayName, sortOrder, existing.id);
+      return { id: existing.id };
+    } else {
+      const result = db.prepare('INSERT INTO dingtalk_project_aliases (project_path, display_name, sort_order) VALUES (?, ?, ?)')
+        .run(projectPath, displayName, sortOrder);
+      return { id: result.lastInsertRowid };
+    }
+  },
+
+  removeProjectAlias(id) {
+    const result = db.prepare('DELETE FROM dingtalk_project_aliases WHERE id = ?').run(id);
+    return result.changes > 0;
   },
 };
 
