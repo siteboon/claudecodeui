@@ -140,9 +140,17 @@ async function spawnGemini(command, options = {}, ws) {
         const modelToUse = options.model || 'gemini-2.5-flash';
         args.push('--model', modelToUse);
 
-        // Add --yolo flag if skipPermissions is enabled
-        if (settings.skipPermissions || options.skipPermissions) {
+        // Handle approval modes and allowed tools
+        if (settings.skipPermissions || options.skipPermissions || permissionMode === 'yolo') {
             args.push('--yolo');
+        } else if (permissionMode === 'auto_edit') {
+            args.push('--approval-mode', 'auto_edit');
+        } else if (permissionMode === 'plan') {
+            args.push('--approval-mode', 'plan');
+        }
+
+        if (settings.allowedTools && settings.allowedTools.length > 0) {
+            args.push('--allowed-tools', settings.allowedTools.join(','));
         }
 
         // Try to find gemini in PATH first, then fall back to environment variable

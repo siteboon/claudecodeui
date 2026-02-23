@@ -3,7 +3,7 @@ import { AlertTriangle, Plus, Shield, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../../../../../ui/button';
 import { Input } from '../../../../../../ui/input';
-import type { CodexPermissionMode } from '../../../../../types/types';
+import type { CodexPermissionMode, GeminiPermissionMode } from '../../../../../types/types';
 
 const COMMON_CLAUDE_TOOLS = [
   'Bash(git log:*)',
@@ -489,11 +489,10 @@ function CodexPermissions({ permissionMode, onPermissionModeChange }: Omit<Codex
         <p className="text-sm text-muted-foreground">{t('permissions.codex.description')}</p>
 
         <div
-          className={`border rounded-lg p-4 cursor-pointer transition-all ${
-            permissionMode === 'default'
-              ? 'bg-gray-100 dark:bg-gray-800 border-gray-400 dark:border-gray-500'
-              : 'bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-          }`}
+          className={`border rounded-lg p-4 cursor-pointer transition-all ${permissionMode === 'default'
+            ? 'bg-gray-100 dark:bg-gray-800 border-gray-400 dark:border-gray-500'
+            : 'bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+            }`}
           onClick={() => onPermissionModeChange('default')}
         >
           <label className="flex items-start gap-3 cursor-pointer">
@@ -514,11 +513,10 @@ function CodexPermissions({ permissionMode, onPermissionModeChange }: Omit<Codex
         </div>
 
         <div
-          className={`border rounded-lg p-4 cursor-pointer transition-all ${
-            permissionMode === 'acceptEdits'
-              ? 'bg-green-50 dark:bg-green-900/20 border-green-400 dark:border-green-600'
-              : 'bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-          }`}
+          className={`border rounded-lg p-4 cursor-pointer transition-all ${permissionMode === 'acceptEdits'
+            ? 'bg-green-50 dark:bg-green-900/20 border-green-400 dark:border-green-600'
+            : 'bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+            }`}
           onClick={() => onPermissionModeChange('acceptEdits')}
         >
           <label className="flex items-start gap-3 cursor-pointer">
@@ -539,11 +537,10 @@ function CodexPermissions({ permissionMode, onPermissionModeChange }: Omit<Codex
         </div>
 
         <div
-          className={`border rounded-lg p-4 cursor-pointer transition-all ${
-            permissionMode === 'bypassPermissions'
-              ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-400 dark:border-orange-600'
-              : 'bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-          }`}
+          className={`border rounded-lg p-4 cursor-pointer transition-all ${permissionMode === 'bypassPermissions'
+            ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-400 dark:border-orange-600'
+            : 'bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+            }`}
           onClick={() => onPermissionModeChange('bypassPermissions')}
         >
           <label className="flex items-start gap-3 cursor-pointer">
@@ -582,7 +579,111 @@ function CodexPermissions({ permissionMode, onPermissionModeChange }: Omit<Codex
   );
 }
 
-type PermissionsContentProps = ClaudePermissionsProps | CursorPermissionsProps | CodexPermissionsProps;
+type GeminiPermissionsProps = {
+  agent: 'gemini';
+  permissionMode: GeminiPermissionMode;
+  onPermissionModeChange: (value: GeminiPermissionMode) => void;
+};
+
+// Gemini Permissions
+function GeminiPermissions({ permissionMode, onPermissionModeChange }: Omit<GeminiPermissionsProps, 'agent'>) {
+  const { t } = useTranslation('settings');
+  return (
+    <div className="space-y-6">
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <Shield className="w-5 h-5 text-green-500" />
+          <h3 className="text-lg font-medium text-foreground">
+            Gemini Permission Mode
+          </h3>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Control how Gemini CLI handles operation approvals.
+        </p>
+
+        {/* Default Mode */}
+        <div
+          className={`border rounded-lg p-4 cursor-pointer transition-all ${permissionMode === 'default'
+            ? 'bg-gray-100 dark:bg-gray-800 border-gray-400 dark:border-gray-500'
+            : 'bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+            }`}
+          onClick={() => onPermissionModeChange('default')}
+        >
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="radio"
+              name="geminiPermissionMode"
+              checked={permissionMode === 'default'}
+              onChange={() => onPermissionModeChange('default')}
+              className="mt-1 w-4 h-4 text-green-600"
+            />
+            <div>
+              <div className="font-medium text-foreground">Standard (Ask for Approval)</div>
+              <div className="text-sm text-muted-foreground">
+                Gemini will prompt for approval before executing commands, writing files, and fetching web resources.
+              </div>
+            </div>
+          </label>
+        </div>
+
+        {/* Auto Edit Mode */}
+        <div
+          className={`border rounded-lg p-4 cursor-pointer transition-all ${permissionMode === 'auto_edit'
+            ? 'bg-green-50 dark:bg-green-900/20 border-green-400 dark:border-green-600'
+            : 'bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+            }`}
+          onClick={() => onPermissionModeChange('auto_edit')}
+        >
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="radio"
+              name="geminiPermissionMode"
+              checked={permissionMode === 'auto_edit'}
+              onChange={() => onPermissionModeChange('auto_edit')}
+              className="mt-1 w-4 h-4 text-green-600"
+            />
+            <div>
+              <div className="font-medium text-green-900 dark:text-green-100">Auto Edit (Skip File Approvals)</div>
+              <div className="text-sm text-green-700 dark:text-green-300">
+                Gemini will automatically approve file edits and web fetches, but will still prompt for shell commands.
+              </div>
+            </div>
+          </label>
+        </div>
+
+        {/* YOLO Mode */}
+        <div
+          className={`border rounded-lg p-4 cursor-pointer transition-all ${permissionMode === 'yolo'
+            ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-400 dark:border-orange-600'
+            : 'bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+            }`}
+          onClick={() => onPermissionModeChange('yolo')}
+        >
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="radio"
+              name="geminiPermissionMode"
+              checked={permissionMode === 'yolo'}
+              onChange={() => onPermissionModeChange('yolo')}
+              className="mt-1 w-4 h-4 text-orange-600"
+            />
+            <div>
+              <div className="font-medium text-orange-900 dark:text-orange-100 flex items-center gap-2">
+                YOLO (Bypass All Permissions)
+                <AlertTriangle className="w-4 h-4" />
+              </div>
+              <div className="text-sm text-orange-700 dark:text-orange-300">
+                Gemini will execute all operations without asking for approval. Exercise caution.
+              </div>
+            </div>
+          </label>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type PermissionsContentProps = ClaudePermissionsProps | CursorPermissionsProps | CodexPermissionsProps | GeminiPermissionsProps;
 
 export default function PermissionsContent(props: PermissionsContentProps) {
   if (props.agent === 'claude') {
@@ -591,6 +692,10 @@ export default function PermissionsContent(props: PermissionsContentProps) {
 
   if (props.agent === 'cursor') {
     return <CursorPermissions {...props} />;
+  }
+
+  if (props.agent === 'gemini') {
+    return <GeminiPermissions {...props} />;
   }
 
   return <CodexPermissions {...props} />;
