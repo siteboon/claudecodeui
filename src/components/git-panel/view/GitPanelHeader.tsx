@@ -62,7 +62,7 @@ export default function GitPanelHeader({
   const aheadCount = remoteStatus?.ahead || 0;
   const behindCount = remoteStatus?.behind || 0;
   const remoteName = remoteStatus?.remoteName || 'remote';
-  const shouldShowFetchButton = aheadCount > 0 || (behindCount > 0 && aheadCount > 0);
+  const shouldShowFetchButton = aheadCount > 0 && behindCount > 0;
 
   const requestPullConfirmation = () => {
     onRequestConfirmation({
