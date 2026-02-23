@@ -15,11 +15,17 @@ const getErrorMessage = (error: unknown) => {
   return String(error);
 };
 
-export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocumentParams) => {
+export const useCodeEditorDocument = ({ file }: UseCodeEditorDocumentParams) => {
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const fileProjectName = file.projectName;
+  const filePath = file.path;
+  const fileName = file.name;
+  const fileDiffNewString = file.diffInfo?.new_string;
+  const fileDiffOldString = file.diffInfo?.old_string;
 
   useEffect(() => {
     const loadFileContent = async () => {
@@ -27,13 +33,13 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
         setLoading(true);
 
         // Diff payload may already include full old/new snapshots, so avoid disk read.
-        if (file.diffInfo && file.diffInfo.new_string !== undefined && file.diffInfo.old_string !== undefined) {
-          setContent(file.diffInfo.new_string);
+        if (file.diffInfo && fileDiffNewString !== undefined && fileDiffOldString !== undefined) {
+          setContent(fileDiffNewString);
           setLoading(false);
           return;
         }
 
-        const response = await api.readFile(file.projectName, file.path);
+        const response = await api.readFile(fileProjectName, filePath);
         if (!response.ok) {
           throw new Error(`Failed to load file: ${response.status} ${response.statusText}`);
         }
@@ -43,31 +49,21 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
       } catch (error) {
         const message = getErrorMessage(error);
         console.error('Error loading file:', error);
-        setContent(`// Error loading file: ${message}\n// File: ${file.name}\n// Path: ${file.path}`);
+        setContent(`// Error loading file: ${message}\n// File: ${fileName}\n// Path: ${filePath}`);
       } finally {
         setLoading(false);
       }
     };
 
     loadFileContent();
-  }, [file, projectPath]);
+  }, [fileDiffNewString, fileDiffOldString, fileName, filePath, fileProjectName]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
+    setSaveError(null);
 
     try {
-      console.log('Saving file:', {
-        projectName: file.projectName,
-        path: file.path,
-        contentLength: content?.length,
-      });
-
-      const response = await api.saveFile(file.projectName, file.path, content);
-      console.log('Save response:', {
-        status: response.status,
-        ok: response.ok,
-        contentType: response.headers.get('content-type'),
-      });
+      const response = await api.saveFile(fileProjectName, filePath, content);
 
       if (!response.ok) {
         const contentType = response.headers.get('content-type');
@@ -81,19 +77,18 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
         throw new Error(`Save failed: ${response.status} ${response.statusText}`);
       }
 
-      const result = await response.json();
-      console.log('Save successful:', result);
+      await response.json();
 
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2000);
     } catch (error) {
       const message = getErrorMessage(error);
       console.error('Error saving file:', error);
-      alert(`Error saving file: ${message}`);
+      setSaveError(message);
     } finally {
       setSaving(false);
     }
-  }, [content, file.path, file.projectName]);
+  }, [content, filePath, fileProjectName]);
 
   const handleDownload = useCallback(() => {
     const blob = new Blob([content], { type: 'text/plain' });
@@ -116,6 +111,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
     loading,
     saving,
     saveSuccess,
+    saveError,
     handleSave,
     handleDownload,
   };
