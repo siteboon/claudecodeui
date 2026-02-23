@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { authenticatedFetch } from "../../utils/api";
 import { ReleaseInfo } from "../../types/sharedTypes";
+import type { InstallMode } from "../../hooks/useVersionCheck";
 
 interface VersionUpgradeModalProps {
     isOpen: boolean;
@@ -9,6 +10,7 @@ interface VersionUpgradeModalProps {
     releaseInfo: ReleaseInfo | null;
     currentVersion: string;
     latestVersion: string | null;
+    installMode: InstallMode;
 }
 
 export default function VersionUpgradeModal({
@@ -16,9 +18,13 @@ export default function VersionUpgradeModal({
     onClose,
     releaseInfo,
     currentVersion,
-    latestVersion
+    latestVersion,
+    installMode
 }: VersionUpgradeModalProps) {
     const { t } = useTranslation('common');
+    const upgradeCommand = installMode === 'npm'
+        ? t('versionUpdate.npmUpgradeCommand')
+        : 'git checkout main && git pull && npm install';
     const [isUpdating, setIsUpdating] = useState(false);
     const [updateOutput, setUpdateOutput] = useState('');
     const [updateError, setUpdateError] = useState('');
@@ -150,7 +156,7 @@ export default function VersionUpgradeModal({
                         <h3 className="text-sm font-medium text-gray-900 dark:text-white">{t('versionUpdate.manualUpgrade')}</h3>
                         <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3 border">
                             <code className="text-sm text-gray-800 dark:text-gray-200 font-mono">
-                                git checkout main && git pull && npm install
+                                {upgradeCommand}
                             </code>
                         </div>
                         <p className="text-xs text-gray-600 dark:text-gray-400">
@@ -171,7 +177,7 @@ export default function VersionUpgradeModal({
                         <>
                             <button
                                 onClick={() => {
-                                    navigator.clipboard.writeText('git checkout main && git pull && npm install');
+                                    navigator.clipboard.writeText(upgradeCommand);
                                 }}
                                 className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md transition-colors"
                             >
