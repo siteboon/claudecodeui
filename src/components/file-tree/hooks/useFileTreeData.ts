@@ -17,6 +17,7 @@ export function useFileTreeData(selectedProject: Project | null): UseFileTreeDat
 
     if (!projectName) {
       setFiles([]);
+      setLoading(false);
       return;
     }
 
