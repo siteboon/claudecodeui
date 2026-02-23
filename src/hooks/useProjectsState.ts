@@ -101,6 +101,20 @@ const isUpdateAdditive = (
   );
 };
 
+const VALID_TABS: Set<string> = new Set(['chat', 'files', 'shell', 'git', 'tasks', 'preview']);
+
+const readPersistedTab = (): AppTab => {
+  try {
+    const stored = localStorage.getItem('activeTab');
+    if (stored && VALID_TABS.has(stored)) {
+      return stored as AppTab;
+    }
+  } catch {
+    // localStorage unavailable
+  }
+  return 'chat';
+};
+
 export function useProjectsState({
   sessionId,
   navigate,
@@ -111,12 +125,14 @@ export function useProjectsState({
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [selectedSession, setSelectedSession] = useState<ProjectSession | null>(null);
-  const [activeTab, setActiveTab] = useState<AppTab>(
-    () => (localStorage.getItem('activeTab') as AppTab) || 'chat'
-  );
+  const [activeTab, setActiveTab] = useState<AppTab>(readPersistedTab);
 
   useEffect(() => {
-    localStorage.setItem('activeTab', activeTab);
+    try {
+      localStorage.setItem('activeTab', activeTab);
+    } catch {
+      // Silently ignore storage errors
+    }
   }, [activeTab]);
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
