@@ -1,4 +1,4 @@
-import { DWClient, EventAck, TOPIC_ROBOT, TOPIC_CARD } from 'dingtalk-stream';
+import { DWClient, EventAck, TOPIC_ROBOT } from 'dingtalk-stream';
 import crypto from 'crypto';
 import { dingtalkDb } from './database/db.js';
 import { queryClaudeSDK } from './claude-sdk.js';
@@ -11,6 +11,16 @@ import {
   finishAICard,
   sendMessage,
 } from './dingtalk-cards.js';
+
+// 钉钉首条消息前置提示词
+const DINGTALK_SYSTEM_INSTRUCTIONS = `## 工作规范
+
+你正在通过钉钉机器人与用户交互。请严格遵循以下规则：
+
+1. **禁止在主分支操作**：所有代码修改必须先创建新分支，在新分支上进行，完成后提交该分支。绝对不允许直接在 main/master 分支上修改或提交。
+2. **拉取最新代码**：每次开始工作前，先执行 git pull 拉取最新代码。
+3. **确认方案**：在修改任何代码之前，必须先向用户说明你的修改方案，等用户确认后再执行。不要未经确认就开始改代码。
+4. **提交规范**：改动完成后，在新分支上提交代码，并告知用户分支名称。`;
 
 let streamClient = null;
 let cachedAccessToken = null;
@@ -422,8 +432,14 @@ async function processWithClaude({ userMessage, conv, accessToken, config }) {
     writer.setSessionId(conv.claude_session_id);
   }
 
+  // 首条消息拼接前置提示词
+  let finalMessage = userMessage;
+  if (!conv.claude_session_id) {
+    finalMessage = DINGTALK_SYSTEM_INSTRUCTIONS + '\n\n---\n\n' + userMessage;
+  }
+
   try {
-    await queryClaudeSDK(userMessage, {
+    await queryClaudeSDK(finalMessage, {
       projectPath: conv.project_path,
       cwd: conv.project_path,
       sessionId: conv.claude_session_id || null,
@@ -439,20 +455,13 @@ async function processWithClaude({ userMessage, conv, accessToken, config }) {
   }
 }
 
-// ==================== Project Selection (ActionCard, no template) ====================
+// ==================== Project Selection (Markdown + Number Reply) ====================
 
 /**
- * Build ActionCard button URL using dtmd protocol
+ * Send project list as markdown, user replies with number to select.
+ * Returns the items array so handleRobotMessage can cache it for number matching.
  */
-function actionUrl(action, params) {
-  const allParams = { action, ...params };
-  return `dtmd://dingtalkclient/sendMessage?content=${encodeURIComponent(JSON.stringify(allParams))}`;
-}
-
-/**
- * Send project selection as ActionCard (no template needed)
- */
-async function sendSelectionCard({ accessToken, config, conv }) {
+async function sendProjectList({ accessToken, config, conv }) {
   let projects = [];
   try {
     projects = await getProjects();
@@ -462,63 +471,44 @@ async function sendSelectionCard({ accessToken, config, conv }) {
 
   const historyConvs = dingtalkDb.getUserConversations(conv.sender_staff_id, 5);
 
-  // Build markdown text
-  const lines = ['### Select Project\n'];
+  const lines = ['### 选择项目'];
 
+  if (projects.length === 0 && historyConvs.length === 0) {
+    lines.push('暂无可用项目，请先在 Claude Code UI 中添加项目。');
+    await sendMessage({
+      accessToken,
+      robotCode: config.client_id,
+      conversationType: conv.conversation_type,
+      conversationId: conv.dingtalk_conversation_id,
+      senderStaffId: conv.sender_staff_id,
+      msgType: 'markdown',
+      title: '选择项目',
+      text: lines.join('\n\n'),
+    });
+    return;
+  }
+
+  // List projects
   if (projects.length > 0) {
-    lines.push('**Available Projects:**\n');
-    projects.slice(0, 15).forEach((p, i) => {
+    projects.slice(0, 20).forEach((p, i) => {
       const name = p.displayName || p.name || p.path;
       lines.push(`${i + 1}. ${name}`);
     });
-  } else {
-    lines.push('No projects found.\n');
   }
 
+  // List history conversations (continue numbering)
   if (historyConvs.length > 0) {
-    lines.push('\n**Recent Conversations:**\n');
-    historyConvs.forEach((h) => {
+    lines.push('**继续历史对话：**');
+    const offset = Math.min(projects.length, 20);
+    historyConvs.slice(0, 5).forEach((h, i) => {
       const pathParts = (h.project_path || '').split('/');
-      const shortName = pathParts[pathParts.length - 1] || h.project_path;
-      lines.push(`- ${shortName} (${h.message_count} msgs)`);
+      const shortName = pathParts[pathParts.length - 1] || h.project_path || '?';
+      lines.push(`${offset + i + 1}. ↩ ${shortName} (${h.message_count || 0} 条消息)`);
     });
   }
 
-  lines.push('\n---\nSelect a project below, or reply with the project number.');
-
-  // Build flat button properties (sampleActionCard6 uses buttonTitle1/buttonUrl1 format, max 6 buttons)
-  const buttons = [];
-
-  projects.slice(0, 5).forEach((p) => {
-    const name = p.displayName || p.name || p.path;
-    const projectPath = p.path || p.name;
-    buttons.push({
-      title: name.length > 20 ? name.slice(0, 18) + '..' : name,
-      url: actionUrl('selectProject', { projectPath, permissionMode: 'bypassPermissions' }),
-    });
-  });
-
-  if (historyConvs.length > 0 && buttons.length < 6) {
-    const h = historyConvs[0];
-    const pathParts = (h.project_path || '').split('/');
-    const shortName = pathParts[pathParts.length - 1] || h.project_path;
-    buttons.push({
-      title: `Resume: ${shortName.length > 14 ? shortName.slice(0, 12) + '..' : shortName}`,
-      url: actionUrl('resumeConversation', { conversationId: String(h.id) }),
-    });
-  }
-
-  const card = {
-    title: 'Select Project',
-    text: lines.join('\n'),
-    btnOrientation: '0',
-  };
-
-  // sampleActionCard6 requires buttonTitle1/buttonUrl1, buttonTitle2/buttonUrl2, etc.
-  buttons.forEach((btn, i) => {
-    card[`buttonTitle${i + 1}`] = btn.title;
-    card[`buttonUrl${i + 1}`] = btn.url;
-  });
+  lines.push('---');
+  lines.push('回复编号选择项目');
 
   await sendMessage({
     accessToken,
@@ -526,9 +516,87 @@ async function sendSelectionCard({ accessToken, config, conv }) {
     conversationType: conv.conversation_type,
     conversationId: conv.dingtalk_conversation_id,
     senderStaffId: conv.sender_staff_id,
-    msgType: 'actionCard',
-    card,
+    msgType: 'markdown',
+    title: '选择项目',
+    text: lines.join('\n\n'),
   });
+}
+
+/**
+ * Handle numbered reply for project selection.
+ * Returns true if a valid selection was made, false otherwise.
+ */
+async function handleNumberedSelection({ number, conv, accessToken, config }) {
+  let projects = [];
+  try { projects = await getProjects(); } catch (e) { /* ignore */ }
+
+  const historyConvs = dingtalkDb.getUserConversations(conv.sender_staff_id, 5);
+  const projectCount = Math.min(projects.length, 20);
+  const historyCount = Math.min(historyConvs.length, 5);
+
+  const idx = number - 1; // 0-based
+
+  // Project selection
+  if (idx >= 0 && idx < projectCount) {
+    const selected = projects[idx];
+    const projectPath = selected.path || selected.name;
+    dingtalkDb.updateConversationProject(conv.id, projectPath, 'bypassPermissions');
+
+    const pendingMessage = dingtalkDb.getPendingMessage(conv.id);
+    dingtalkDb.clearPendingMessage(conv.id);
+
+    // Send confirmation
+    const name = selected.displayName || selected.name || selected.path;
+    await sendMessage({
+      accessToken,
+      robotCode: config.client_id,
+      conversationType: conv.conversation_type,
+      conversationId: conv.dingtalk_conversation_id,
+      senderStaffId: conv.sender_staff_id,
+      msgType: 'markdown',
+      title: '已选择',
+      text: `✅ 已选择项目: **${name}**`,
+    });
+
+    if (pendingMessage) {
+      const updatedConv = dingtalkDb.getConversationById(conv.id);
+      await processWithClaude({ userMessage: pendingMessage, conv: updatedConv, accessToken, config });
+    }
+    return true;
+  }
+
+  // History conversation resume
+  const historyIdx = idx - projectCount;
+  if (historyIdx >= 0 && historyIdx < historyCount) {
+    const historicalConv = historyConvs[historyIdx];
+
+    dingtalkDb.updateConversationProject(conv.id, historicalConv.project_path, historicalConv.permission_mode);
+    dingtalkDb.updateConversationSession(conv.id, historicalConv.claude_session_id);
+
+    const pendingMessage = dingtalkDb.getPendingMessage(conv.id);
+    dingtalkDb.clearPendingMessage(conv.id);
+
+    const pathParts = (historicalConv.project_path || '').split('/');
+    const shortName = pathParts[pathParts.length - 1] || '?';
+    await sendMessage({
+      accessToken,
+      robotCode: config.client_id,
+      conversationType: conv.conversation_type,
+      conversationId: conv.dingtalk_conversation_id,
+      senderStaffId: conv.sender_staff_id,
+      msgType: 'markdown',
+      title: '已恢复',
+      text: `↩ 已恢复对话: **${shortName}** (${historicalConv.message_count || 0} 条消息)`,
+    });
+
+    if (pendingMessage) {
+      const updatedConv = dingtalkDb.getConversationById(conv.id);
+      await processWithClaude({ userMessage: pendingMessage, conv: updatedConv, accessToken, config });
+    }
+    return true;
+  }
+
+  return false;
 }
 
 // ==================== Handle Robot Message ====================
@@ -585,19 +653,17 @@ async function handleRobotMessage(data) {
         msgType: 'markdown',
         title: 'Help',
         text: [
-          '### Available Commands',
+          '### 可用命令',
           '',
           statusLine,
           '',
-          '| Command | Description |',
-          '|---------|-------------|',
-          '| **help** | Show this help message |',
-          '| **new** | Start a new conversation (clear history, re-select project) |',
-          '| **switch** | Switch to a different project |',
-          '| **reset** | Same as new |',
-          '| **status** | Show current session info |',
+          '- **help** — 显示此帮助信息',
+          '- **new** — 开始新对话（清除历史，重新选择项目）',
+          '- **switch** — 切换到其他项目',
+          '- **reset** — 同 new',
+          '- **status** — 显示当前会话信息',
           '',
-          'Any other message will be sent to Claude.',
+          '其他消息将发送给 Claude。',
         ].join('\n'),
       });
       return;
@@ -647,48 +713,23 @@ async function handleRobotMessage(data) {
 
     if (lowerMsg === 'switch' || lowerMsg === '/switch') {
       dingtalkDb.resetConversation(conv.id);
-      dingtalkDb.setPendingMessage(conv.id, null);
       const refreshedConv = dingtalkDb.getConversationById(conv.id);
-      await sendSelectionCard({ accessToken, config, conv: refreshedConv });
+      await sendProjectList({ accessToken, config, conv: refreshedConv });
       return;
     }
 
     // Try to parse numbered project selection (e.g., user replies "1", "2", etc.)
     if (!conv.project_path && /^\d+$/.test(userMessage)) {
-      const pendingMessage = dingtalkDb.getPendingMessage(conv.id);
-      if (pendingMessage) {
-        let projects = [];
-        try { projects = await getProjects(); } catch (e) { /* ignore */ }
-
-        const idx = parseInt(userMessage, 10) - 1;
-        if (idx >= 0 && idx < projects.length) {
-          const selected = projects[idx];
-          const projectPath = selected.path || selected.name;
-          dingtalkDb.updateConversationProject(conv.id, projectPath, 'bypassPermissions');
-          dingtalkDb.clearPendingMessage(conv.id);
-
-          const updatedConv = dingtalkDb.getConversationById(conv.id);
-          await processWithClaude({ userMessage: pendingMessage, conv: updatedConv, accessToken, config });
-          return;
-        }
-      }
-    }
-
-    // Try to parse ActionCard button callback (dtmd protocol sends text back)
-    if (userMessage.startsWith('{') && userMessage.includes('"action"')) {
-      try {
-        const actionData = JSON.parse(userMessage);
-        await handleButtonAction({ actionData, conv, accessToken, config });
-        return;
-      } catch (e) {
-        // Not valid JSON, treat as regular message
-      }
+      const number = parseInt(userMessage, 10);
+      const handled = await handleNumberedSelection({ number, conv, accessToken, config });
+      if (handled) return;
+      // Invalid number — fall through to show project list again
     }
 
     // Case A: No active session — need project selection
     if (!conv.project_path) {
       dingtalkDb.setPendingMessage(conv.id, userMessage);
-      await sendSelectionCard({ accessToken, config, conv });
+      await sendProjectList({ accessToken, config, conv });
       return;
     }
 
@@ -697,88 +738,6 @@ async function handleRobotMessage(data) {
   } catch (err) {
     console.error('[DingTalk] handleRobotMessage error:', err);
   }
-}
-
-// ==================== Handle Button Action ====================
-
-async function handleButtonAction({ actionData, conv, accessToken, config }) {
-  const action = actionData.action;
-
-  if (action === 'selectProject') {
-    const projectPath = actionData.projectPath;
-    const permissionMode = actionData.permissionMode || 'bypassPermissions';
-    if (!projectPath) return;
-
-    dingtalkDb.updateConversationProject(conv.id, projectPath, permissionMode);
-
-    const pendingMessage = dingtalkDb.getPendingMessage(conv.id);
-    dingtalkDb.clearPendingMessage(conv.id);
-
-    if (pendingMessage) {
-      const updatedConv = dingtalkDb.getConversationById(conv.id);
-      await processWithClaude({ userMessage: pendingMessage, conv: updatedConv, accessToken, config });
-    }
-  } else if (action === 'resumeConversation') {
-    const resumeId = parseInt(actionData.conversationId, 10);
-    if (!resumeId) return;
-
-    const historicalConv = dingtalkDb.getConversationById(resumeId);
-    if (!historicalConv) return;
-
-    dingtalkDb.updateConversationProject(conv.id, historicalConv.project_path, historicalConv.permission_mode);
-    dingtalkDb.updateConversationSession(conv.id, historicalConv.claude_session_id);
-
-    const pendingMessage = dingtalkDb.getPendingMessage(conv.id);
-    dingtalkDb.clearPendingMessage(conv.id);
-
-    if (pendingMessage) {
-      const updatedConv = dingtalkDb.getConversationById(conv.id);
-      await processWithClaude({ userMessage: pendingMessage, conv: updatedConv, accessToken, config });
-    }
-  }
-}
-
-// ==================== Handle Card Callback ====================
-
-async function handleCardCallback(data) {
-  try {
-    const userId = data?.userId;
-    if (!userId) return;
-
-    const params = data?.content?.cardPrivateData?.params || {};
-    const actionInfo = extractCardAction(params);
-    if (!actionInfo) return;
-
-    // Find the user's pending conversation
-    const convs = dingtalkDb.listConversations(100, 0);
-    const conv = convs.find(c => c.sender_staff_id === userId && c.pending_message);
-    if (!conv) return;
-
-    const config = activeConfig || dingtalkDb.getActiveConfig();
-    if (!config) return;
-
-    const accessToken = await getAccessToken(config.client_id, config.client_secret);
-
-    await handleButtonAction({
-      actionData: actionInfo,
-      conv,
-      accessToken,
-      config,
-    });
-  } catch (err) {
-    console.error('[DingTalk] handleCardCallback error:', err);
-  }
-}
-
-function extractCardAction(params) {
-  if (!params || typeof params !== 'object') return null;
-  // Try to extract action from card callback params
-  if (params.action) return params;
-  // Try parsing from content string
-  if (typeof params.content === 'string') {
-    try { return JSON.parse(params.content); } catch { return null; }
-  }
-  return null;
 }
 
 // ==================== Init / Disconnect ====================
@@ -820,25 +779,6 @@ export async function initDingTalkStream(config) {
       });
     } catch (err) {
       console.error('[DingTalk] Failed to parse robot message:', err);
-    }
-  });
-
-  // Register card callback handler
-  streamClient.registerCallbackListener(TOPIC_CARD, (msg) => {
-    const messageId = msg.headers?.messageId;
-    streamClient.socketCallBackResponse(messageId, EventAck.SUCCESS);
-
-    const eventId = `card_${messageId}`;
-    if (isEventProcessed(eventId)) return;
-    markEventProcessed(eventId);
-
-    try {
-      const data = JSON.parse(msg.data);
-      handleCardCallback(data).catch(err => {
-        console.error('[DingTalk] Error handling card callback:', err);
-      });
-    } catch (err) {
-      console.error('[DingTalk] Failed to parse card callback:', err);
     }
   });
 

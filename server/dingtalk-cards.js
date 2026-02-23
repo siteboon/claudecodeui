@@ -34,26 +34,33 @@ async function apiRequest(method, path, accessToken, body) {
   return text ? JSON.parse(text) : {};
 }
 
-// ==================== AI Streaming Card ====================
+// ==================== Generic Card Instance ====================
 
 /**
- * Create an AI Card instance (step 1)
+ * Create a card instance (step 1)
  */
-export async function createAICardInstance({ accessToken, outTrackId }) {
+export async function createCardInstance({ accessToken, outTrackId, cardTemplateId, cardData, callbackType }) {
   return apiRequest('POST', '/v1.0/card/instances', accessToken, {
-    cardTemplateId: AI_CARD_TEMPLATE_ID,
+    cardTemplateId: cardTemplateId || AI_CARD_TEMPLATE_ID,
     outTrackId,
-    cardData: { cardParamMap: {} },
-    callbackType: 'STREAM',
+    cardData: { cardParamMap: cardData || {} },
+    callbackType: callbackType || 'STREAM',
     imGroupOpenSpaceModel: { supportForward: true },
     imRobotOpenSpaceModel: { supportForward: true },
   });
 }
 
 /**
- * Deliver an AI Card to a user/group (step 2)
+ * Create an AI Card instance (uses built-in AI template)
  */
-export async function deliverAICard({ accessToken, outTrackId, openSpaceId, robotCode, conversationType }) {
+export async function createAICardInstance({ accessToken, outTrackId }) {
+  return createCardInstance({ accessToken, outTrackId, cardTemplateId: AI_CARD_TEMPLATE_ID });
+}
+
+/**
+ * Deliver a card to a user/group (step 2)
+ */
+export async function deliverCard({ accessToken, outTrackId, openSpaceId, robotCode, conversationType }) {
   const body = {
     outTrackId,
     openSpaceId,
@@ -67,6 +74,19 @@ export async function deliverAICard({ accessToken, outTrackId, openSpaceId, robo
   }
 
   return apiRequest('POST', '/v1.0/card/instances/deliver', accessToken, body);
+}
+
+// Backward compat alias
+export const deliverAICard = deliverCard;
+
+/**
+ * Update card instance data (for changing button states, etc.)
+ */
+export async function updateCardInstance({ accessToken, outTrackId, cardData }) {
+  return apiRequest('PUT', '/v1.0/card/instances', accessToken, {
+    outTrackId,
+    cardData: { cardParamMap: cardData },
+  });
 }
 
 /**
