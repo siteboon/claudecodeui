@@ -65,6 +65,8 @@ export const createEditorToolbarPanelExtension = ({
       const chunksData = hasDiff ? getChunks(view.state) : null;
       const chunks = chunksData?.chunks || [];
       const chunkCount = chunks.length;
+      const maxChunkIndex = Math.max(0, chunkCount - 1);
+      currentIndex = Math.max(0, Math.min(currentIndex, maxChunkIndex));
 
       let toolbarHtml = '<div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">';
       toolbarHtml += '<div style="display: flex; align-items: center; gap: 8px;">';
