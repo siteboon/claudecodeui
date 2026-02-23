@@ -24,21 +24,24 @@ export default function HistoryView({
 
   const toggleCommitExpanded = useCallback(
     (commitHash: string) => {
+      const isExpanding = !expandedCommits.has(commitHash);
+
       setExpandedCommits((previous) => {
         const next = new Set(previous);
         if (next.has(commitHash)) {
           next.delete(commitHash);
         } else {
           next.add(commitHash);
-          // Load commit diff lazily only the first time a commit is expanded.
-          if (!commitDiffs[commitHash]) {
-            void onFetchCommitDiff(commitHash);
-          }
         }
         return next;
       });
+
+      // Load commit diff lazily only the first time a commit is expanded.
+      if (isExpanding && !commitDiffs[commitHash]) {
+        void onFetchCommitDiff(commitHash);
+      }
     },
-    [commitDiffs, onFetchCommitDiff],
+    [commitDiffs, expandedCommits, onFetchCommitDiff, setExpandedCommits],
   );
 
   return (
