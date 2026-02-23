@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MutableRefObject } from 'react';
 import type { FitAddon } from '@xterm/addon-fit';
 import type { Terminal } from '@xterm/xterm';
@@ -50,6 +50,7 @@ export function useShellConnection({
 }: UseShellConnectionOptions): UseShellConnectionResult {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const connectingRef = useRef(false);
 
   const handleProcessCompletion = useCallback(
     (output: string) => {
@@ -101,92 +102,104 @@ export function useShellConnection({
     [handleProcessCompletion, setAuthUrl, terminalRef],
   );
 
-  const connectWebSocket = useCallback(() => {
-    if (isConnecting || isConnected) {
-      return;
-    }
-
-    try {
-      const wsUrl = getShellWebSocketUrl();
-      if (!wsUrl) {
+  const connectWebSocket = useCallback(
+    (isConnectionLocked = false) => {
+      if ((connectingRef.current && !isConnectionLocked) || isConnecting || isConnected) {
         return;
       }
 
-      const socket = new WebSocket(wsUrl);
-      wsRef.current = socket;
+      try {
+        const wsUrl = getShellWebSocketUrl();
+        if (!wsUrl) {
+          connectingRef.current = false;
+          setIsConnecting(false);
+          return;
+        }
 
-      socket.onopen = () => {
-        setIsConnected(true);
-        setIsConnecting(false);
-        setAuthUrl('');
+        connectingRef.current = true;
 
-        window.setTimeout(() => {
-          const currentTerminal = terminalRef.current;
-          const currentFitAddon = fitAddonRef.current;
-          const currentProject = selectedProjectRef.current;
-          if (!currentTerminal || !currentFitAddon || !currentProject) {
-            return;
-          }
+        const socket = new WebSocket(wsUrl);
+        wsRef.current = socket;
 
-          currentFitAddon.fit();
+        socket.onopen = () => {
+          setIsConnected(true);
+          setIsConnecting(false);
+          connectingRef.current = false;
+          setAuthUrl('');
 
-          sendSocketMessage(wsRef.current, {
-            type: 'init',
-            projectPath: currentProject.fullPath || currentProject.path || '',
-            sessionId: isPlainShellRef.current ? null : selectedSessionRef.current?.id || null,
-            hasSession: isPlainShellRef.current ? false : Boolean(selectedSessionRef.current),
-            provider: isPlainShellRef.current
-              ? 'plain-shell'
-              : selectedSessionRef.current?.__provider || 'claude',
-            cols: currentTerminal.cols,
-            rows: currentTerminal.rows,
-            initialCommand: initialCommandRef.current,
-            isPlainShell: isPlainShellRef.current,
-          });
-        }, TERMINAL_INIT_DELAY_MS);
-      };
+          window.setTimeout(() => {
+            const currentTerminal = terminalRef.current;
+            const currentFitAddon = fitAddonRef.current;
+            const currentProject = selectedProjectRef.current;
+            if (!currentTerminal || !currentFitAddon || !currentProject) {
+              return;
+            }
 
-      socket.onmessage = (event) => {
-        const rawPayload = typeof event.data === 'string' ? event.data : String(event.data ?? '');
-        handleSocketMessage(rawPayload);
-      };
+            currentFitAddon.fit();
 
-      socket.onclose = () => {
+            sendSocketMessage(wsRef.current, {
+              type: 'init',
+              projectPath: currentProject.fullPath || currentProject.path || '',
+              sessionId: isPlainShellRef.current ? null : selectedSessionRef.current?.id || null,
+              hasSession: isPlainShellRef.current ? false : Boolean(selectedSessionRef.current),
+              provider: isPlainShellRef.current
+                ? 'plain-shell'
+                : selectedSessionRef.current?.__provider || 'claude',
+              cols: currentTerminal.cols,
+              rows: currentTerminal.rows,
+              initialCommand: initialCommandRef.current,
+              isPlainShell: isPlainShellRef.current,
+            });
+          }, TERMINAL_INIT_DELAY_MS);
+        };
+
+        socket.onmessage = (event) => {
+          const rawPayload = typeof event.data === 'string' ? event.data : String(event.data ?? '');
+          handleSocketMessage(rawPayload);
+        };
+
+        socket.onclose = () => {
+          setIsConnected(false);
+          setIsConnecting(false);
+          connectingRef.current = false;
+          clearTerminalScreen();
+        };
+
+        socket.onerror = () => {
+          setIsConnected(false);
+          setIsConnecting(false);
+          connectingRef.current = false;
+        };
+      } catch {
         setIsConnected(false);
         setIsConnecting(false);
-        clearTerminalScreen();
-      };
-
-      socket.onerror = () => {
-        setIsConnected(false);
-        setIsConnecting(false);
-      };
-    } catch {
-      setIsConnected(false);
-      setIsConnecting(false);
-    }
-  }, [
-    clearTerminalScreen,
-    fitAddonRef,
-    handleSocketMessage,
-    initialCommandRef,
-    isConnected,
-    isConnecting,
-    isPlainShellRef,
-    selectedProjectRef,
-    selectedSessionRef,
-    setAuthUrl,
-    terminalRef,
-    wsRef,
-  ]);
+        connectingRef.current = false;
+      }
+    },
+    [
+      clearTerminalScreen,
+      fitAddonRef,
+      handleSocketMessage,
+      initialCommandRef,
+      isConnected,
+      isConnecting,
+      isPlainShellRef,
+      selectedProjectRef,
+      selectedSessionRef,
+      setAuthUrl,
+      terminalRef,
+      wsRef,
+    ],
+  );
 
   const connectToShell = useCallback(() => {
-    if (!isInitialized || isConnected || isConnecting) {
+    if (!isInitialized || isConnected || isConnecting || connectingRef.current) {
       return;
     }
 
+    connectingRef.current = true;
     setIsConnecting(true);
-    connectWebSocket();
+    connectWebSocket(true);
   }, [connectWebSocket, isConnected, isConnecting, isInitialized]);
 
   const disconnectFromShell = useCallback(() => {
@@ -194,6 +207,7 @@ export function useShellConnection({
     clearTerminalScreen();
     setIsConnected(false);
     setIsConnecting(false);
+    connectingRef.current = false;
     setAuthUrl('');
   }, [clearTerminalScreen, closeSocket, setAuthUrl]);
 
