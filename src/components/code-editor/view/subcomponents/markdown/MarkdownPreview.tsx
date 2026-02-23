@@ -2,7 +2,6 @@ import { useMemo } from 'react';
 import type { Components } from 'react-markdown';
 import ReactMarkdown from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
-import rehypeRaw from 'rehype-raw';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import MarkdownCodeBlock from './MarkdownCodeBlock';
@@ -39,7 +38,7 @@ const markdownPreviewComponents: Components = {
 
 export default function MarkdownPreview({ content }: MarkdownPreviewProps) {
   const remarkPlugins = useMemo(() => [remarkGfm, remarkMath], []);
-  const rehypePlugins = useMemo(() => [rehypeRaw, rehypeKatex], []);
+  const rehypePlugins = useMemo(() => [rehypeKatex], []);
 
   return (
     <ReactMarkdown
