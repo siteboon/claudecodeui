@@ -254,7 +254,9 @@ function ChatInterface({
         ? t('messageTypes.cursor')
         : provider === 'codex'
           ? t('messageTypes.codex')
-          : t('messageTypes.claude');
+          : provider === 'gemini'
+            ? t('messageTypes.gemini')
+            : t('messageTypes.claude');
 
     return (
       <div className="flex items-center justify-center h-full">
@@ -379,8 +381,10 @@ function ChatInterface({
               provider === 'cursor'
                 ? t('messageTypes.cursor')
                 : provider === 'codex'
-                ? t('messageTypes.codex')
-                : t('messageTypes.claude'),
+                  ? t('messageTypes.codex')
+                  : provider === 'gemini'
+                    ? t('messageTypes.gemini')
+                    : t('messageTypes.claude'),
           })}
           isTextareaExpanded={isTextareaExpanded}
           sendByCtrlEnter={sendByCtrlEnter}

@@ -138,7 +138,7 @@ export default function ProviderSelectionEmptyState({
           </div>
 
           {/* Provider cards — horizontal row, equal width */}
-          <div className="grid grid-cols-3 gap-2 sm:gap-2.5 mb-6">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-2.5 mb-6">
             {PROVIDERS.map((p) => {
               const active = provider === p.id;
               return (
@@ -194,15 +194,14 @@ export default function ProviderSelectionEmptyState({
             </div>
 
             <p className="text-center text-sm text-muted-foreground/70">
-              {provider === 'claude'
-                ? t('providerSelection.readyPrompt.claude', { model: claudeModel })
-                : provider === 'cursor'
-                  ? t('providerSelection.readyPrompt.cursor', { model: cursorModel })
-                  : provider === 'codex'
-                    ? t('providerSelection.readyPrompt.codex', { model: codexModel })
-                    : provider === 'gemini'
-                      ? t('providerSelection.readyPrompt.gemini', { model: geminiModel })
-                      : t('providerSelection.readyPrompt.default')}
+              {
+                {
+                  claude: t('providerSelection.readyPrompt.claude', { model: claudeModel }),
+                  cursor: t('providerSelection.readyPrompt.cursor', { model: cursorModel }),
+                  codex: t('providerSelection.readyPrompt.codex', { model: codexModel }),
+                  gemini: t('providerSelection.readyPrompt.gemini', { model: geminiModel }),
+                }[provider]
+              }
             </p>
           </div>
 

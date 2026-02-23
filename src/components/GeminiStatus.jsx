@@ -4,48 +4,48 @@ import { cn } from '../lib/utils';
 function GeminiStatus({ status, onAbort, isLoading }) {
   const [elapsedTime, setElapsedTime] = useState(0);
   const [animationPhase, setAnimationPhase] = useState(0);
-  
+
   // Update elapsed time every second
   useEffect(() => {
     if (!isLoading) {
       setElapsedTime(0);
       return;
     }
-    
+
     const startTime = Date.now();
     const timer = setInterval(() => {
       const elapsed = Math.floor((Date.now() - startTime) / 1000);
       setElapsedTime(elapsed);
     }, 1000);
-    
+
     return () => clearInterval(timer);
   }, [isLoading]);
-  
+
   // Animate the status indicator
   useEffect(() => {
     if (!isLoading) return;
-    
+
     const timer = setInterval(() => {
       setAnimationPhase(prev => (prev + 1) % 4);
     }, 500);
-    
+
     return () => clearInterval(timer);
   }, [isLoading]);
-  
+
   if (!isLoading) return null;
-  
+
   // Clever action words that cycle
   const actionWords = ['Thinking', 'Processing', 'Analyzing', 'Working', 'Computing', 'Reasoning'];
   const actionIndex = Math.floor(elapsedTime / 3) % actionWords.length;
-  
+
   // Parse status data
   const statusText = status?.text || actionWords[actionIndex];
   const canInterrupt = status?.can_interrupt !== false;
-  
+
   // Animation characters
   const spinners = ['✻', '✹', '✸', '✶'];
   const currentSpinner = spinners[animationPhase];
-  
+
   return (
     <div className="w-full mb-6 animate-in slide-in-from-bottom duration-300">
       <div className="flex items-center justify-between max-w-4xl mx-auto bg-gradient-to-r from-cyan-900 to-blue-900 dark:from-cyan-950 dark:to-blue-950 text-white rounded-lg shadow-lg px-4 py-3">
@@ -58,7 +58,7 @@ function GeminiStatus({ status, onAbort, isLoading }) {
             )}>
               {currentSpinner}
             </span>
-            
+
             {/* Status text - first line */}
             <div className="flex-1">
               <div className="flex items-center gap-2">
@@ -68,10 +68,11 @@ function GeminiStatus({ status, onAbort, isLoading }) {
             </div>
           </div>
         </div>
-        
+
         {/* Interrupt button */}
         {canInterrupt && onAbort && (
           <button
+            type="button"
             onClick={onAbort}
             className="ml-3 text-xs bg-red-600 hover:bg-red-700 text-white px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-md transition-colors flex items-center gap-1.5 flex-shrink-0"
           >

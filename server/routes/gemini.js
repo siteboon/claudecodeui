@@ -6,6 +6,11 @@ const router = express.Router();
 router.get('/sessions/:sessionId/messages', async (req, res) => {
     try {
         const { sessionId } = req.params;
+
+        if (!sessionId || typeof sessionId !== 'string' || !/^[a-zA-Z0-9_.-]{1,100}$/.test(sessionId)) {
+            return res.status(400).json({ success: false, error: 'Invalid session ID format' });
+        }
+
         const messages = sessionManager.getSessionMessages(sessionId);
 
         res.json({
@@ -25,6 +30,11 @@ router.get('/sessions/:sessionId/messages', async (req, res) => {
 router.delete('/sessions/:sessionId', async (req, res) => {
     try {
         const { sessionId } = req.params;
+
+        if (!sessionId || typeof sessionId !== 'string' || !/^[a-zA-Z0-9_.-]{1,100}$/.test(sessionId)) {
+            return res.status(400).json({ success: false, error: 'Invalid session ID format' });
+        }
+
         await sessionManager.deleteSession(sessionId);
         res.json({ success: true });
     } catch (error) {

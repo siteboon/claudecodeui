@@ -1671,6 +1671,17 @@ app.get('/api/projects/:projectName/sessions/:sessionId/token-usage', authentica
             });
         }
 
+        // Handle Gemini sessions - they are raw logs in our current setup
+        if (provider === 'gemini') {
+            return res.json({
+                used: 0,
+                total: 0,
+                breakdown: { input: 0, cacheCreation: 0, cacheRead: 0 },
+                unsupported: true,
+                message: 'Token usage tracking not available for Gemini sessions'
+            });
+        }
+
         // Handle Codex sessions
         if (provider === 'codex') {
             const codexSessionsDir = path.join(homeDir, '.codex', 'sessions');

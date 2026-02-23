@@ -336,6 +336,24 @@ export function useProjectsState({
         }
         return;
       }
+
+      const geminiSession = project.geminiSessions?.find((session) => session.id === sessionId);
+      if (geminiSession) {
+        const shouldUpdateProject = selectedProject?.name !== project.name;
+        const shouldUpdateSession =
+          selectedSession?.id !== sessionId || selectedSession.__provider !== 'gemini';
+
+        if (shouldUpdateProject) {
+          setSelectedProject(project);
+        }
+        if (shouldUpdateSession) {
+          setSelectedSession({ ...geminiSession, __provider: 'gemini' });
+        }
+        if (shouldSwitchTab) {
+          setActiveTab('chat');
+        }
+        return;
+      }
     }
   }, [sessionId, projects, selectedProject?.name, selectedSession?.id, selectedSession?.__provider]);
 

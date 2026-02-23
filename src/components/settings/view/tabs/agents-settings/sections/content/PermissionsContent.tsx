@@ -587,18 +587,18 @@ type GeminiPermissionsProps = {
 
 // Gemini Permissions
 function GeminiPermissions({ permissionMode, onPermissionModeChange }: Omit<GeminiPermissionsProps, 'agent'>) {
-  const { t } = useTranslation('settings');
+  const { t } = useTranslation(['settings', 'chat']);
   return (
     <div className="space-y-6">
       <div className="space-y-4">
         <div className="flex items-center gap-3">
           <Shield className="w-5 h-5 text-green-500" />
           <h3 className="text-lg font-medium text-foreground">
-            Gemini Permission Mode
+            {t('gemini.permissionMode')}
           </h3>
         </div>
         <p className="text-sm text-muted-foreground">
-          Control how Gemini CLI handles operation approvals.
+          {t('gemini.description')}
         </p>
 
         {/* Default Mode */}
@@ -618,9 +618,9 @@ function GeminiPermissions({ permissionMode, onPermissionModeChange }: Omit<Gemi
               className="mt-1 w-4 h-4 text-green-600"
             />
             <div>
-              <div className="font-medium text-foreground">Standard (Ask for Approval)</div>
+              <div className="font-medium text-foreground">{t('gemini.modes.default.title')}</div>
               <div className="text-sm text-muted-foreground">
-                Gemini will prompt for approval before executing commands, writing files, and fetching web resources.
+                {t('gemini.modes.default.description')}
               </div>
             </div>
           </label>
@@ -643,9 +643,9 @@ function GeminiPermissions({ permissionMode, onPermissionModeChange }: Omit<Gemi
               className="mt-1 w-4 h-4 text-green-600"
             />
             <div>
-              <div className="font-medium text-green-900 dark:text-green-100">Auto Edit (Skip File Approvals)</div>
+              <div className="font-medium text-green-900 dark:text-green-100">{t('gemini.modes.autoEdit.title')}</div>
               <div className="text-sm text-green-700 dark:text-green-300">
-                Gemini will automatically approve file edits and web fetches, but will still prompt for shell commands.
+                {t('gemini.modes.autoEdit.description')}
               </div>
             </div>
           </label>
@@ -669,11 +669,11 @@ function GeminiPermissions({ permissionMode, onPermissionModeChange }: Omit<Gemi
             />
             <div>
               <div className="font-medium text-orange-900 dark:text-orange-100 flex items-center gap-2">
-                YOLO (Bypass All Permissions)
+                {t('gemini.modes.yolo.title')}
                 <AlertTriangle className="w-4 h-4" />
               </div>
               <div className="text-sm text-orange-700 dark:text-orange-300">
-                Gemini will execute all operations without asking for approval. Exercise caution.
+                {t('gemini.modes.yolo.description')}
               </div>
             </div>
           </label>

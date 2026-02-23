@@ -379,8 +379,8 @@ const Onboarding = ({ onComplete }) => {
             <div className="space-y-3">
               {/* Claude */}
               <div className={`border rounded-lg p-4 transition-colors ${claudeAuthStatus.authenticated
-                  ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
-                  : 'border-border bg-card'
+                ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+                : 'border-border bg-card'
                 }`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -411,8 +411,8 @@ const Onboarding = ({ onComplete }) => {
 
               {/* Cursor */}
               <div className={`border rounded-lg p-4 transition-colors ${cursorAuthStatus.authenticated
-                  ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800'
-                  : 'border-border bg-card'
+                ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800'
+                : 'border-border bg-card'
                 }`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -443,8 +443,8 @@ const Onboarding = ({ onComplete }) => {
 
               {/* Codex */}
               <div className={`border rounded-lg p-4 transition-colors ${codexAuthStatus.authenticated
-                  ? 'bg-gray-100 dark:bg-gray-800/50 border-gray-300 dark:border-gray-600'
-                  : 'border-border bg-card'
+                ? 'bg-gray-100 dark:bg-gray-800/50 border-gray-300 dark:border-gray-600'
+                : 'border-border bg-card'
                 }`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -475,12 +475,12 @@ const Onboarding = ({ onComplete }) => {
 
               {/* Gemini */}
               <div className={`border rounded-lg p-4 transition-colors ${geminiAuthStatus.authenticated
-                  ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
-                  : 'border-border bg-card'
+                ? 'bg-cyan-50 dark:bg-cyan-900/20 border-cyan-200 dark:border-cyan-800'
+                : 'border-border bg-card'
                 }`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
+                    <div className="w-10 h-10 bg-cyan-100 dark:bg-cyan-900/30 rounded-full flex items-center justify-center">
                       <SessionProviderLogo provider="gemini" className="w-5 h-5" />
                     </div>
                     <div>
@@ -497,7 +497,7 @@ const Onboarding = ({ onComplete }) => {
                   {!geminiAuthStatus.authenticated && !geminiAuthStatus.loading && (
                     <button
                       onClick={handleGeminiLogin}
-                      className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors"
+                      className="bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors"
                     >
                       Login
                     </button>
@@ -539,8 +539,8 @@ const Onboarding = ({ onComplete }) => {
                 <React.Fragment key={index}>
                   <div className="flex flex-col items-center flex-1">
                     <div className={`w-12 h-12 rounded-full flex items-center justify-center border-2 transition-colors duration-200 ${index < currentStep ? 'bg-green-500 border-green-500 text-white' :
-                        index === currentStep ? 'bg-blue-600 border-blue-600 text-white' :
-                          'bg-background border-border text-muted-foreground'
+                      index === currentStep ? 'bg-blue-600 border-blue-600 text-white' :
+                        'bg-background border-border text-muted-foreground'
                       }`}>
                       {index < currentStep ? (
                         <Check className="w-6 h-6" />

@@ -227,12 +227,6 @@ export function useChatRealtimeHandlers({
         if (latestMessage.sessionId && lifecycleMessageTypes.has(String(latestMessage.type))) {
           handleBackgroundLifecycle(latestMessage.sessionId);
         }
-        console.log(
-          'Skipping message for different session:',
-          latestMessage.sessionId,
-          'current:',
-          activeViewSessionId,
-        );
         return;
       }
     }
@@ -299,11 +293,6 @@ export function useChatRealtimeHandlers({
           structuredMessageData.session_id !== currentSessionId &&
           isSystemInitForView
         ) {
-          console.log('Claude CLI session duplication detected:', {
-            originalSession: currentSessionId,
-            newSession: structuredMessageData.session_id,
-          });
-
           setIsSystemSessionChange(true);
           onNavigateToSession?.(structuredMessageData.session_id);
           return;
@@ -316,10 +305,6 @@ export function useChatRealtimeHandlers({
           !currentSessionId &&
           isSystemInitForView
         ) {
-          console.log('New session init detected:', {
-            newSession: structuredMessageData.session_id,
-          });
-
           setIsSystemSessionChange(true);
           onNavigateToSession?.(structuredMessageData.session_id);
           return;
@@ -333,7 +318,6 @@ export function useChatRealtimeHandlers({
           structuredMessageData.session_id === currentSessionId &&
           isSystemInitForView
         ) {
-          console.log('System init message for current session, ignoring');
           return;
         }
 
@@ -585,17 +569,12 @@ export function useChatRealtimeHandlers({
             }
 
             if (currentSessionId && cursorData.session_id !== currentSessionId) {
-              console.log('Cursor session switch detected:', {
-                originalSession: currentSessionId,
-                newSession: cursorData.session_id,
-              });
               setIsSystemSessionChange(true);
               onNavigateToSession?.(cursorData.session_id);
               return;
             }
 
             if (!currentSessionId) {
-              console.log('Cursor new session init detected:', { newSession: cursorData.session_id });
               setIsSystemSessionChange(true);
               onNavigateToSession?.(cursorData.session_id);
               return;
@@ -898,7 +877,6 @@ export function useChatRealtimeHandlers({
             onNavigateToSession?.(codexActualSessionId);
           }
           sessionStorage.removeItem('pendingSessionId');
-          console.log('Codex session complete, ID set to:', codexPendingSessionId);
         }
 
         if (selectedProject) {
@@ -922,12 +900,10 @@ export function useChatRealtimeHandlers({
 
       case 'gemini-response': {
         const geminiData = latestMessage.data;
-        console.log('[Gemini UI] Socket received chunk:', latestMessage);
 
         if (geminiData && geminiData.type === 'message' && typeof geminiData.content === 'string') {
           const content = decodeHtmlEntities(geminiData.content);
           if (content.trim()) {
-            console.log('[Gemini UI] Appending content to streamBuffer:', content);
             streamBufferRef.current += streamBufferRef.current ? `\n${content}` : content;
             if (!streamTimerRef.current) {
               streamTimerRef.current = window.setTimeout(() => {

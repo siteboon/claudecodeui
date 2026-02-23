@@ -105,6 +105,14 @@ class GeminiResponseHandler {
         this.ws.send(payload);
       }
     }
+    else if (event.type === 'error') {
+      let payload = {
+        type: 'gemini-error',
+        error: event.error || event.message || 'Unknown Gemini streaming error'
+      };
+      if (socketSessionId) payload.sessionId = socketSessionId;
+      this.ws.send(payload);
+    }
   }
 
   forceFlush() {

@@ -97,40 +97,37 @@ async function spawnGemini(command, options = {}, ws) {
 
         // Add MCP config flag only if MCP servers are configured
         try {
-            const fsSync = await import('fs');
             const geminiConfigPath = path.join(os.homedir(), '.gemini.json');
             let hasMcpServers = false;
 
-            if (fsSync.existsSync(geminiConfigPath)) {
-                try {
-                    const geminiConfig = JSON.parse(fsSync.readFileSync(geminiConfigPath, 'utf8'));
+            try {
+                await fs.access(geminiConfigPath);
+                const geminiConfigRaw = await fs.readFile(geminiConfigPath, 'utf8');
+                const geminiConfig = JSON.parse(geminiConfigRaw);
 
-                    // Check global MCP servers
-                    if (geminiConfig.mcpServers && Object.keys(geminiConfig.mcpServers).length > 0) {
+                // Check global MCP servers
+                if (geminiConfig.mcpServers && Object.keys(geminiConfig.mcpServers).length > 0) {
+                    hasMcpServers = true;
+                }
+
+                // Check project-specific MCP servers
+                if (!hasMcpServers && geminiConfig.geminiProjects) {
+                    const currentProjectPath = process.cwd();
+                    const projectConfig = geminiConfig.geminiProjects[currentProjectPath];
+                    if (projectConfig && projectConfig.mcpServers && Object.keys(projectConfig.mcpServers).length > 0) {
                         hasMcpServers = true;
                     }
-
-                    // Check project-specific MCP servers
-                    if (!hasMcpServers && geminiConfig.geminiProjects) {
-                        const currentProjectPath = process.cwd();
-                        const projectConfig = geminiConfig.geminiProjects[currentProjectPath];
-                        if (projectConfig && projectConfig.mcpServers && Object.keys(projectConfig.mcpServers).length > 0) {
-                            hasMcpServers = true;
-                        }
-                    }
-                } catch (e) { }
+                }
+            } catch (e) {
+                // Ignore if file doesn't exist or isn't parsable
             }
 
             if (hasMcpServers) {
-                let configPath = null;
-                if (fsSync.existsSync(geminiConfigPath)) {
-                    configPath = geminiConfigPath;
-                }
-                if (configPath) {
-                    args.push('--mcp-config', configPath);
-                }
+                args.push('--mcp-config', geminiConfigPath);
             }
-        } catch (error) { }
+        } catch (error) {
+            // Ignore outer errors
+        }
 
         // Add model for all sessions (both new and resumed)
         let modelToUse = options.model || 'gemini-2.5-flash';
@@ -188,15 +185,20 @@ async function spawnGemini(command, options = {}, ws) {
         // Add timeout handler
         let hasReceivedOutput = false;
         const timeoutMs = 30000; // 30 seconds
-        const timeout = setTimeout(() => {
-            if (!hasReceivedOutput) {
+        let timeout;
+
+        const startTimeout = () => {
+            if (timeout) clearTimeout(timeout);
+            timeout = setTimeout(() => {
                 ws.send({
                     type: 'gemini-error',
-                    error: 'Gemini CLI timeout - no response received'
+                    error: 'Gemini CLI timeout - no response received for 30 seconds'
                 });
                 geminiProcess.kill('SIGTERM');
-            }
-        }, timeoutMs);
+            }, timeoutMs);
+        };
+
+        startTimeout();
 
         // Save user message to session when starting
         if (command && capturedSessionId) {
@@ -226,7 +228,7 @@ async function spawnGemini(command, options = {}, ws) {
         geminiProcess.stdout.on('data', (data) => {
             const rawOutput = data.toString();
             hasReceivedOutput = true;
-            clearTimeout(timeout);
+            startTimeout(); // Re-arm the timeout
 
             // For new sessions, create a session ID FIRST
             if (!sessionId && !sessionCreatedSent && !capturedSessionId) {
@@ -252,6 +254,17 @@ async function spawnGemini(command, options = {}, ws) {
                 ws.send({
                     type: 'session-created',
                     sessionId: capturedSessionId
+                });
+
+                // Emit fake system init so the frontend immediately navigates and saves the session
+                ws.send({
+                    type: 'claude-response',
+                    sessionId: capturedSessionId,
+                    data: {
+                        type: 'system',
+                        subtype: 'init',
+                        session_id: capturedSessionId
+                    }
                 });
             }
 
