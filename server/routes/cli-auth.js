@@ -74,8 +74,6 @@ router.get('/codex/status', async (req, res) => {
   }
 });
 
-<<<<<<< HEAD
-=======
 router.get('/gemini/status', async (req, res) => {
   try {
     const result = await checkGeminiCredentials();
@@ -116,7 +114,6 @@ router.get('/gemini/status', async (req, res) => {
  *   - email: user email or auth method identifier
  *   - method: 'api_key' for env var, 'credentials_file' for OAuth tokens
  */
->>>>>>> 79f96bf (feat: integrate Gemini AI agent provider)
 async function checkClaudeCredentials() {
   try {
     const credPath = path.join(os.homedir(), '.claude', '.credentials.json');
