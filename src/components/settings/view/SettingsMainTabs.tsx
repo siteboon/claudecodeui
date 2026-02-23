@@ -26,7 +26,7 @@ export default function SettingsMainTabs({ activeTab, onChange }: SettingsMainTa
 
   return (
     <div className="border-b border-border">
-      <div className="flex px-4 md:px-6">
+       <div className="flex px-4 md:px-6" role="tablist" aria-label={t('mainTabs.label', { defaultValue: 'Settings' })}>
         {TAB_CONFIG.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -34,6 +34,8 @@ export default function SettingsMainTabs({ activeTab, onChange }: SettingsMainTa
           return (
             <button
               key={tab.id}
+              role="tab"
+              aria-selected={isActive}
               onClick={() => onChange(tab.id)}
               className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
                 isActive
