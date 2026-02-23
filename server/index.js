@@ -1173,13 +1173,15 @@ function handleShellConnection(ws) {
                         // Use codex command
                         if (os.platform() === 'win32') {
                             if (hasSession && sessionId) {
-                                shellCommand = `Set-Location -Path "${projectPath}"; codex resume ${sessionId}`;
+                                // Try to resume session, but with fallback to a new session if it fails
+                                shellCommand = `Set-Location -Path "${projectPath}"; codex resume "${sessionId}"; if ($LASTEXITCODE -ne 0) { codex }`;
                             } else {
                                 shellCommand = `Set-Location -Path "${projectPath}"; codex`;
                             }
                         } else {
                             if (hasSession && sessionId) {
-                                shellCommand = `cd "${projectPath}" && codex resume ${sessionId}`;
+                                // Try to resume session, but with fallback to a new session if it fails
+                                shellCommand = `cd "${projectPath}" && codex resume "${sessionId}" || codex`;
                             } else {
                                 shellCommand = `cd "${projectPath}" && codex`;
                             }
