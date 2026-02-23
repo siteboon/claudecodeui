@@ -40,7 +40,8 @@ const projectsHaveChanges = (
       nextProject.displayName !== prevProject.displayName ||
       nextProject.fullPath !== prevProject.fullPath ||
       serialize(nextProject.sessionMeta) !== serialize(prevProject.sessionMeta) ||
-      serialize(nextProject.sessions) !== serialize(prevProject.sessions);
+      serialize(nextProject.sessions) !== serialize(prevProject.sessions) ||
+      serialize(nextProject.taskmaster) !== serialize(prevProject.taskmaster);
 
     if (baseChanged) {
       return true;
@@ -52,7 +53,8 @@ const projectsHaveChanges = (
 
     return (
       serialize(nextProject.cursorSessions) !== serialize(prevProject.cursorSessions) ||
-      serialize(nextProject.codexSessions) !== serialize(prevProject.codexSessions)
+      serialize(nextProject.codexSessions) !== serialize(prevProject.codexSessions) ||
+      serialize(nextProject.geminiSessions) !== serialize(prevProject.geminiSessions)
     );
   });
 };
@@ -62,6 +64,7 @@ const getProjectSessions = (project: Project): ProjectSession[] => {
     ...(project.sessions ?? []),
     ...(project.codexSessions ?? []),
     ...(project.cursorSessions ?? []),
+    ...(project.geminiSessions ?? []),
   ];
 };
 

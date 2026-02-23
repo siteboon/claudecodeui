@@ -277,10 +277,14 @@ export function useSidebarController({
     setSessionDeleteConfirmation(null);
 
     try {
-      const response =
-        provider === 'codex'
-          ? await api.deleteCodexSession(sessionId)
-          : await api.deleteSession(projectName, sessionId);
+      let response;
+      if (provider === 'codex') {
+        response = await api.deleteCodexSession(sessionId);
+      } else if (provider === 'gemini') {
+        response = await api.deleteGeminiSession(sessionId);
+      } else {
+        response = await api.deleteSession(projectName, sessionId);
+      }
 
       if (response.ok) {
         onSessionDelete?.(sessionId);

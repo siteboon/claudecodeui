@@ -62,6 +62,7 @@ import projectsRoutes, { WORKSPACES_ROOT, validateWorkspacePath } from './routes
 import cliAuthRoutes from './routes/cli-auth.js';
 import userRoutes from './routes/user.js';
 import codexRoutes from './routes/codex.js';
+import geminiRoutes from './routes/gemini.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { IS_PLATFORM } from './constants/config.js';
@@ -380,6 +381,9 @@ app.use('/api/user', authenticateToken, userRoutes);
 
 // Codex API Routes (protected)
 app.use('/api/codex', authenticateToken, codexRoutes);
+
+// Gemini API Routes (protected)
+app.use('/api/gemini', authenticateToken, geminiRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
