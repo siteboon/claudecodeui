@@ -111,7 +111,14 @@ export function useProjectsState({
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [selectedSession, setSelectedSession] = useState<ProjectSession | null>(null);
-  const [activeTab, setActiveTab] = useState<AppTab>('chat');
+  const [activeTab, setActiveTab] = useState<AppTab>(
+    () => (localStorage.getItem('activeTab') as AppTab) || 'chat'
+  );
+
+  useEffect(() => {
+    localStorage.setItem('activeTab', activeTab);
+  }, [activeTab]);
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [loadingProgress, setLoadingProgress] = useState<LoadingProgress | null>(null);
@@ -265,8 +272,6 @@ export function useProjectsState({
       return;
     }
 
-    const shouldSwitchTab = !selectedSession || selectedSession.id !== sessionId;
-
     for (const project of projects) {
       const claudeSession = project.sessions?.find((session) => session.id === sessionId);
       if (claudeSession) {
@@ -279,9 +284,6 @@ export function useProjectsState({
         }
         if (shouldUpdateSession) {
           setSelectedSession({ ...claudeSession, __provider: 'claude' });
-        }
-        if (shouldSwitchTab) {
-          setActiveTab('chat');
         }
         return;
       }
@@ -298,9 +300,6 @@ export function useProjectsState({
         if (shouldUpdateSession) {
           setSelectedSession({ ...cursorSession, __provider: 'cursor' });
         }
-        if (shouldSwitchTab) {
-          setActiveTab('chat');
-        }
         return;
       }
 
@@ -315,9 +314,6 @@ export function useProjectsState({
         }
         if (shouldUpdateSession) {
           setSelectedSession({ ...codexSession, __provider: 'codex' });
-        }
-        if (shouldSwitchTab) {
-          setActiveTab('chat');
         }
         return;
       }
@@ -341,7 +337,7 @@ export function useProjectsState({
     (session: ProjectSession) => {
       setSelectedSession(session);
 
-      if (activeTab !== 'git' && activeTab !== 'preview') {
+      if (activeTab === 'tasks' || activeTab === 'preview') {
         setActiveTab('chat');
       }
 
