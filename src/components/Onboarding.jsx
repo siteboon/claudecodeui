@@ -16,7 +16,7 @@ const Onboarding = ({ onComplete }) => {
   const [error, setError] = useState('');
 
   const [activeLoginProvider, setActiveLoginProvider] = useState(null);
-  const [selectedProject] = useState({ name: 'default', fullPath: IS_PLATFORM ? '/workspace' : '' });
+  const [selectedProject] = useState({ name: 'default', fullPath: IS_PLATFORM ? '/Users/xuzhi/dev' : '' });
 
   const [claudeAuthStatus, setClaudeAuthStatus] = useState({
     authenticated: false,
@@ -462,7 +462,7 @@ const Onboarding = ({ onComplete }) => {
 
   return (
     <>
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="min-h-screen bg-background flex items-start justify-center p-4 overflow-y-auto">
         <div className="w-full max-w-2xl">
           {/* Progress Steps */}
           <div className="mb-8">

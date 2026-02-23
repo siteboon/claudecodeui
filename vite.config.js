@@ -11,7 +11,10 @@ export default defineConfig(({ command, mode }) => {
   const proxyHost = host === '0.0.0.0' ? 'localhost' : host
   const port = env.PORT || 3001
 
+  const basePath = env.VITE_BASE_PATH || '/'
+
   return {
+    base: basePath,
     plugins: [react()],
     server: {
       host,

@@ -1,5 +1,16 @@
 import { IS_PLATFORM } from "../constants/config";
 
+// Base path prefix for API calls when behind a gateway subpath
+const API_BASE = (window.__ROUTER_BASENAME__ || '');
+
+// Prefix a URL with the base path if it starts with /
+const prefixUrl = (url) => {
+  if (url.startsWith('/') && API_BASE && !url.startsWith(API_BASE)) {
+    return API_BASE + url;
+  }
+  return url;
+};
+
 // Utility function for authenticated API calls
 export const authenticatedFetch = (url, options = {}) => {
   const token = localStorage.getItem('auth-token');
@@ -15,7 +26,7 @@ export const authenticatedFetch = (url, options = {}) => {
     defaultHeaders['Authorization'] = `Bearer ${token}`;
   }
 
-  return fetch(url, {
+  return fetch(prefixUrl(url), {
     ...options,
     headers: {
       ...defaultHeaders,
@@ -28,13 +39,13 @@ export const authenticatedFetch = (url, options = {}) => {
 export const api = {
   // Auth endpoints (no token required)
   auth: {
-    status: () => fetch('/api/auth/status'),
-    login: (username, password) => fetch('/api/auth/login', {
+    status: () => fetch(prefixUrl('/api/auth/status')),
+    login: (username, password) => fetch(prefixUrl('/api/auth/login'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
     }),
-    register: (username, password) => fetch('/api/auth/register', {
+    register: (username, password) => fetch(prefixUrl('/api/auth/register'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),

@@ -6,7 +6,7 @@ const CursorLogo = ({ className = 'w-5 h-5' }) => {
 
   return (
     <img
-      src={isDarkMode ? "/icons/cursor-white.svg" : "/icons/cursor.svg"}
+      src={isDarkMode ? `${window.__ROUTER_BASENAME__ || ''}/icons/cursor-white.svg` : `${window.__ROUTER_BASENAME__ || ''}/icons/cursor.svg`}
       alt="Cursor"
       className={className}
     />

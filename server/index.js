@@ -379,6 +379,9 @@ app.use('/api/codex', authenticateToken, codexRoutes);
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
 
+// Base path for gateway integration (e.g., /claudeui/)
+const BASE_PATH = process.env.VITE_BASE_PATH || '/';
+
 // Serve public files (like api-docs.html)
 app.use(express.static(path.join(__dirname, '../public')));
 
@@ -1190,8 +1193,8 @@ function handleShellConnection(ws) {
 
                     console.log('🔧 Executing shell command:', shellCommand);
 
-                    // Use appropriate shell based on platform
-                    const shell = os.platform() === 'win32' ? 'powershell.exe' : 'bash';
+                    // Use appropriate shell based on platform (respect user's default shell on macOS/Linux)
+                    const shell = os.platform() === 'win32' ? 'powershell.exe' : (process.env.SHELL || '/bin/zsh');
                     const shellArgs = os.platform() === 'win32' ? ['-Command', shellCommand] : ['-c', shellCommand];
 
                     // Use terminal dimensions from client if provided, otherwise use defaults
@@ -1204,12 +1207,15 @@ function handleShellConnection(ws) {
                         cols: termCols,
                         rows: termRows,
                         cwd: os.homedir(),
-                        env: {
-                            ...process.env,
-                            TERM: 'xterm-256color',
-                            COLORTERM: 'truecolor',
-                            FORCE_COLOR: '3'
-                        }
+                        env: Object.fromEntries(
+                            Object.entries(process.env)
+                                .filter(([k]) => !k.startsWith('CLAUDE'))
+                                .concat([
+                                    ['TERM', 'xterm-256color'],
+                                    ['COLORTERM', 'truecolor'],
+                                    ['FORCE_COLOR', '3'],
+                                ])
+                        )
                     });
 
                     console.log('🟢 Shell process started with PTY, PID:', shellProcess.pid);
@@ -1790,7 +1796,6 @@ app.get('*', (req, res) => {
 
   // Check if dist/index.html exists (production build available)
   if (fs.existsSync(indexPath)) {
-    // Set no-cache headers for HTML to prevent service worker issues
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');

@@ -6,7 +6,7 @@ const CodexLogo = ({ className = 'w-5 h-5' }) => {
 
   return (
     <img
-      src={isDarkMode ? "/icons/codex-white.svg" : "/icons/codex.svg"}
+      src={isDarkMode ? `${window.__ROUTER_BASENAME__ || ''}/icons/codex-white.svg` : `${window.__ROUTER_BASENAME__ || ''}/icons/codex.svg`}
       alt="Codex"
       className={className}
     />

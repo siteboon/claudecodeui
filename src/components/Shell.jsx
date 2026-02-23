@@ -129,9 +129,10 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     try {
       let wsUrl;
 
+      const basePath = window.__ROUTER_BASENAME__ || '';
       if (IS_PLATFORM) {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        wsUrl = `${protocol}//${window.location.host}/shell`;
+        wsUrl = `${protocol}//${window.location.host}${basePath}/shell`;
       } else {
         const token = localStorage.getItem('auth-token');
         if (!token) {
@@ -140,7 +141,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
         }
 
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        wsUrl = `${protocol}//${window.location.host}/shell?token=${encodeURIComponent(token)}`;
+        wsUrl = `${protocol}//${window.location.host}${basePath}/shell?token=${encodeURIComponent(token)}`;
       }
 
       ws.current = new WebSocket(wsUrl);

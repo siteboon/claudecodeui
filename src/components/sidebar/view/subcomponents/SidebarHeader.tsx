@@ -1,4 +1,4 @@
-import { FolderPlus, Plus, RefreshCw, Search, X, PanelLeftClose } from 'lucide-react';
+import { FolderPlus, Home, Plus, RefreshCw, Search, X, PanelLeftClose } from 'lucide-react';
 import type { TFunction } from 'i18next';
 import { Button } from '../../../ui/button';
 import { Input } from '../../../ui/input';
@@ -52,17 +52,16 @@ export default function SidebarHeader({
         style={{}}
       >
         <div className="flex items-center justify-between gap-2">
-          {IS_PLATFORM ? (
+          <div className="flex items-center gap-1.5 min-w-0">
             <a
-              href="https://cloudcli.ai/dashboard"
-              className="flex items-center gap-2.5 min-w-0 hover:opacity-80 transition-opacity"
-              title={t('tooltips.viewEnvironments')}
+              href="/"
+              className="h-7 w-7 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/80 transition-colors flex-shrink-0"
+              title="Gateway Home"
             >
-              <LogoBlock />
+              <Home className="w-3.5 h-3.5" />
             </a>
-          ) : (
             <LogoBlock />
-          )}
+          </div>
 
           <div className="flex items-center gap-0.5 flex-shrink-0">
             <Button
@@ -132,17 +131,16 @@ export default function SidebarHeader({
         style={isPWA && isMobile ? { paddingTop: '16px' } : {}}
       >
         <div className="flex items-center justify-between">
-          {IS_PLATFORM ? (
+          <div className="flex items-center gap-1.5 min-w-0">
             <a
-              href="https://cloudcli.ai/dashboard"
-              className="flex items-center gap-2.5 active:opacity-70 transition-opacity min-w-0"
-              title={t('tooltips.viewEnvironments')}
+              href="/"
+              className="w-8 h-8 rounded-lg bg-muted/50 flex items-center justify-center active:scale-95 transition-all flex-shrink-0"
+              title="Gateway Home"
             >
-              <LogoBlock />
+              <Home className="w-4 h-4 text-muted-foreground" />
             </a>
-          ) : (
             <LogoBlock />
-          )}
+          </div>
 
           <div className="flex gap-1.5 flex-shrink-0">
             <button

@@ -21,7 +21,8 @@ export const useWebSocket = () => {
 
 const buildWebSocketUrl = (token: string | null) => {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  if (IS_PLATFORM) return `${protocol}//${window.location.host}/ws`; // Platform mode: Use same domain as the page (goes through proxy)
+  const basePath = window.__ROUTER_BASENAME__ || '';
+  if (IS_PLATFORM) return `${protocol}//${window.location.host}${basePath}/ws`; // Platform mode: Use same domain as the page (goes through proxy)
   if (!token) return null;
   return `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}`; // OSS mode: Use same host:port that served the page
 };

@@ -1,13 +1,13 @@
 {
-  "name": "CloudCLI UI",
-  "short_name": "CloudCLI UI",
-  "description": "CloudCLI UI web application",
-  "start_url": "/",
+  "name": "Claude Code UI",
+  "short_name": "Claude Code UI",
+  "description": "Claude Code web interface",
+  "start_url": "/claudeui/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#ffffff",
   "orientation": "portrait-primary",
-  "scope": "/",
+  "scope": "/claudeui/",
   "icons": [
     {
       "src": "/icons/icon-72x72.png",
