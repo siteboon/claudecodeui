@@ -120,6 +120,24 @@ const runMigrations = () => {
       `);
     }
 
+    // DingTalk conversation history migration
+    if (!tables.includes('dingtalk_conversation_history')) {
+      console.log('Running migration: Creating dingtalk_conversation_history table');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS dingtalk_conversation_history (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          dingtalk_conversation_id TEXT NOT NULL,
+          sender_staff_id TEXT NOT NULL,
+          project_path TEXT NOT NULL,
+          claude_session_id TEXT NOT NULL,
+          permission_mode TEXT DEFAULT 'bypassPermissions',
+          message_count INTEGER DEFAULT 0,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_dingtalk_history_sender ON dingtalk_conversation_history(sender_staff_id);
+      `);
+    }
+
     // DingTalk project aliases migration
     if (!tables.includes('dingtalk_project_aliases')) {
       console.log('Running migration: Creating dingtalk_project_aliases table');
@@ -456,6 +474,14 @@ const dingtalkDb = {
   },
 
   resetConversation(id) {
+    // Archive current session before clearing (if it has a valid session)
+    const conv = db.prepare('SELECT * FROM dingtalk_conversations WHERE id = ?').get(id);
+    if (conv && conv.project_path && conv.claude_session_id) {
+      db.prepare(`INSERT INTO dingtalk_conversation_history
+        (dingtalk_conversation_id, sender_staff_id, project_path, claude_session_id, permission_mode, message_count)
+        VALUES (?, ?, ?, ?, ?, ?)`)
+        .run(conv.dingtalk_conversation_id, conv.sender_staff_id, conv.project_path, conv.claude_session_id, conv.permission_mode, conv.message_count);
+    }
     db.prepare('UPDATE dingtalk_conversations SET project_path = NULL, claude_session_id = NULL, pending_message = NULL WHERE id = ?').run(id);
   },
 
@@ -464,6 +490,13 @@ const dingtalkDb = {
       FROM dingtalk_conversations
       WHERE sender_staff_id = ? AND project_path IS NOT NULL AND claude_session_id IS NOT NULL
       ORDER BY last_message_at DESC LIMIT ?`).all(senderStaffId, limit);
+  },
+
+  getConversationHistory(senderStaffId, limit = 5) {
+    return db.prepare(`SELECT id, project_path, claude_session_id, permission_mode, message_count, created_at
+      FROM dingtalk_conversation_history
+      WHERE sender_staff_id = ?
+      ORDER BY created_at DESC LIMIT ?`).all(senderStaffId, limit);
   },
 
   getConversationById(id) {

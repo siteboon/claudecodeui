@@ -475,13 +475,26 @@ async function sendProjectList({ accessToken, config, conv }) {
     }
   }
 
-  const historyConvs = dingtalkDb.getUserConversations(conv.sender_staff_id, 5);
+  // History from archived sessions (survives reset)
+  const historyConvs = dingtalkDb.getConversationHistory(conv.sender_staff_id, 5);
+  // Also check active conversations in other chats
+  const activeConvs = dingtalkDb.getUserConversations(conv.sender_staff_id, 5);
+  // Merge: active convs first, then archived, deduplicate by claude_session_id
+  const seenSessions = new Set();
+  const allHistory = [];
+  for (const c of [...activeConvs, ...historyConvs]) {
+    if (c.claude_session_id && !seenSessions.has(c.claude_session_id)) {
+      seenSessions.add(c.claude_session_id);
+      allHistory.push(c);
+    }
+  }
+  const mergedHistory = allHistory.slice(0, 5);
 
   const lines = ['### 选择项目'];
 
   const projectItems = useAliases ? aliases : projects;
 
-  if (projectItems.length === 0 && historyConvs.length === 0) {
+  if (projectItems.length === 0 && mergedHistory.length === 0) {
     lines.push('暂无可用项目，请先在 Claude Code UI 中添加项目。');
     await sendMessage({
       accessToken,
@@ -507,10 +520,10 @@ async function sendProjectList({ accessToken, config, conv }) {
   }
 
   // List history conversations (continue numbering)
-  if (historyConvs.length > 0) {
+  if (mergedHistory.length > 0) {
     lines.push('**继续历史对话：**');
     const offset = Math.min(projectItems.length, 20);
-    historyConvs.slice(0, 5).forEach((h, i) => {
+    mergedHistory.forEach((h, i) => {
       const pathParts = (h.project_path || '').split('/');
       const shortName = pathParts[pathParts.length - 1] || h.project_path || '?';
       lines.push(`${offset + i + 1}. ↩ ${shortName} (${h.message_count || 0} 条消息)`);
@@ -548,9 +561,21 @@ async function handleNumberedSelection({ number, conv, accessToken, config }) {
 
   const projectItems = useAliases ? aliases : projects;
 
-  const historyConvs = dingtalkDb.getUserConversations(conv.sender_staff_id, 5);
+  // Merge active + archived history (same logic as sendProjectList)
+  const historyConvs = dingtalkDb.getConversationHistory(conv.sender_staff_id, 5);
+  const activeConvs = dingtalkDb.getUserConversations(conv.sender_staff_id, 5);
+  const seenSessions = new Set();
+  const allHistory = [];
+  for (const c of [...activeConvs, ...historyConvs]) {
+    if (c.claude_session_id && !seenSessions.has(c.claude_session_id)) {
+      seenSessions.add(c.claude_session_id);
+      allHistory.push(c);
+    }
+  }
+  const mergedHistory = allHistory.slice(0, 5);
+
   const projectCount = Math.min(projectItems.length, 20);
-  const historyCount = Math.min(historyConvs.length, 5);
+  const historyCount = Math.min(mergedHistory.length, 5);
 
   const idx = number - 1; // 0-based
 
@@ -588,7 +613,7 @@ async function handleNumberedSelection({ number, conv, accessToken, config }) {
   // History conversation resume
   const historyIdx = idx - projectCount;
   if (historyIdx >= 0 && historyIdx < historyCount) {
-    const historicalConv = historyConvs[historyIdx];
+    const historicalConv = mergedHistory[historyIdx];
 
     dingtalkDb.updateConversationProject(conv.id, historicalConv.project_path, historicalConv.permission_mode);
     dingtalkDb.updateConversationSession(conv.id, historicalConv.claude_session_id);

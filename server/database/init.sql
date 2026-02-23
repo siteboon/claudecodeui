@@ -97,6 +97,20 @@ CREATE TABLE IF NOT EXISTS dingtalk_messages (
 
 CREATE INDEX IF NOT EXISTS idx_dingtalk_msg_conv ON dingtalk_messages(conversation_id);
 
+-- DingTalk conversation history (archived sessions for resume)
+CREATE TABLE IF NOT EXISTS dingtalk_conversation_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    dingtalk_conversation_id TEXT NOT NULL,
+    sender_staff_id TEXT NOT NULL,
+    project_path TEXT NOT NULL,
+    claude_session_id TEXT NOT NULL,
+    permission_mode TEXT DEFAULT 'bypassPermissions',
+    message_count INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_dingtalk_history_sender ON dingtalk_conversation_history(sender_staff_id);
+
 -- DingTalk project aliases table
 CREATE TABLE IF NOT EXISTS dingtalk_project_aliases (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
