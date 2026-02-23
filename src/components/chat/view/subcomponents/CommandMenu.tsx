@@ -156,7 +156,7 @@ export default function CommandMenu({
     return (
       <div
         ref={menuRef}
-        className="command-menu command-menu-empty"
+        className="command-menu command-menu-empty border border-gray-200 bg-white text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400"
         style={{ ...menuPosition, ...menuBaseStyle, overflowY: 'hidden', padding: '20px', opacity: 1, transform: 'translateY(0)', textAlign: 'center' }}
       >
         No commands available
@@ -169,13 +169,13 @@ export default function CommandMenu({
       ref={menuRef}
       role="listbox"
       aria-label="Available commands"
-      className="command-menu"
+      className="command-menu border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800"
       style={{ ...menuPosition, ...menuBaseStyle, opacity: isOpen ? 1 : 0, transform: isOpen ? 'translateY(0)' : 'translateY(-10px)' }}
     >
       {orderedNamespaces.map((namespace) => (
         <div key={namespace} className="command-group">
           {orderedNamespaces.length > 1 && (
-            <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', color: '#6b7280', padding: '8px 12px 4px', letterSpacing: '0.05em' }}>
+            <div className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
               {namespaceLabels[namespace] || namespace}
             </div>
           )}
@@ -190,69 +190,35 @@ export default function CommandMenu({
                 ref={isSelected ? selectedItemRef : null}
                 role="option"
                 aria-selected={isSelected}
-                className="command-item"
+                className={`command-item mb-0.5 flex cursor-pointer items-start rounded-md px-3 py-2.5 transition-colors ${
+                  isSelected ? 'bg-blue-50 dark:bg-blue-900' : 'bg-transparent'
+                }`}
                 onMouseEnter={() => onSelect && commandIndex >= 0 && onSelect(command, commandIndex, true)}
                 onClick={() => onSelect && onSelect(command, commandIndex, false)}
                 onMouseDown={(event) => event.preventDefault()}
-                style={{ display: 'flex', alignItems: 'flex-start', padding: '10px 12px', borderRadius: '6px', cursor: 'pointer', backgroundColor: isSelected ? '#eff6ff' : 'transparent', transition: 'background-color 100ms ease-in-out', marginBottom: '2px' }}
               >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: command.description ? '4px' : 0 }}>
-                    <span style={{ fontSize: '12px', flexShrink: 0 }}>{namespaceIcons[namespace] || namespaceIcons.other}</span>
-                    <span style={{ fontWeight: 600, fontSize: '14px', color: '#111827', fontFamily: 'monospace' }}>{command.name}</span>
+                <div className="min-w-0 flex-1">
+                  <div className={`flex items-center gap-2 ${command.description ? 'mb-1' : 'mb-0'}`}>
+                    <span className="shrink-0 text-xs text-gray-500 dark:text-gray-300">{namespaceIcons[namespace] || namespaceIcons.other}</span>
+                    <span className="font-mono text-sm font-semibold text-gray-900 dark:text-gray-100">{command.name}</span>
                     {command.metadata?.type && (
-                      <span className="command-metadata-badge" style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#f3f4f6', color: '#6b7280', fontWeight: 500 }}>
+                      <span className="command-metadata-badge rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-700 dark:text-gray-300">
                         {command.metadata.type}
                       </span>
                     )}
                   </div>
                   {command.description && (
-                    <div style={{ fontSize: '13px', color: '#6b7280', marginLeft: '24px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <div className="ml-6 truncate whitespace-nowrap text-[13px] text-gray-500 dark:text-gray-300">
                       {command.description}
                     </div>
                   )}
                 </div>
-                {isSelected && <span style={{ marginLeft: '8px', color: '#3b82f6', fontSize: '12px', fontWeight: 600 }}>{'<-'}</span>}
+                {isSelected && <span className="ml-2 text-xs font-semibold text-blue-500 dark:text-blue-300">{'<-'}</span>}
               </div>
             );
           })}
         </div>
       ))}
-
-      <style>{`
-        .command-menu {
-          background-color: white;
-          border: 1px solid #e5e7eb;
-        }
-        .command-menu-empty {
-          color: #6b7280;
-        }
-        @media (prefers-color-scheme: dark) {
-          .command-menu {
-            background-color: #1f2937 !important;
-            border: 1px solid #374151 !important;
-          }
-          .command-menu-empty {
-            color: #9ca3af !important;
-          }
-          .command-item[aria-selected="true"] {
-            background-color: #1e40af !important;
-          }
-          .command-item span:not(.command-metadata-badge) {
-            color: #f3f4f6 !important;
-          }
-          .command-metadata-badge {
-            background-color: #f3f4f6 !important;
-            color: #6b7280 !important;
-          }
-          .command-item div {
-            color: #d1d5db !important;
-          }
-          .command-group > div:first-child {
-            color: #9ca3af !important;
-          }
-        }
-      `}</style>
     </div>
   );
 }
