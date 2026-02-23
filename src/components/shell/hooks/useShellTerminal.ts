@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MutableRefObject, RefObject } from 'react';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -51,6 +51,7 @@ export function useShellTerminal({
   closeSocket,
 }: UseShellTerminalOptions): UseShellTerminalResult {
   const [isInitialized, setIsInitialized] = useState(false);
+  const resizeTimeoutRef = useRef<number | null>(null);
   const selectedProjectKey = selectedProject?.fullPath || selectedProject?.path || '';
   const hasSelectedProject = Boolean(selectedProject);
 
@@ -117,7 +118,10 @@ export function useShellTerminal({
         !event.altKey &&
         event.key?.toLowerCase() === 'c'
       ) {
+        event.preventDefault();
+        event.stopPropagation();
         void copyAuthUrlToClipboard(activeAuthUrl);
+        return false;
       }
 
       if (
@@ -184,7 +188,11 @@ export function useShellTerminal({
     });
 
     const resizeObserver = new ResizeObserver(() => {
-      window.setTimeout(() => {
+      if (resizeTimeoutRef.current !== null) {
+        window.clearTimeout(resizeTimeoutRef.current);
+      }
+
+      resizeTimeoutRef.current = window.setTimeout(() => {
         const currentFitAddon = fitAddonRef.current;
         const currentTerminal = terminalRef.current;
         if (!currentFitAddon || !currentTerminal) {
@@ -204,6 +212,10 @@ export function useShellTerminal({
 
     return () => {
       resizeObserver.disconnect();
+      if (resizeTimeoutRef.current !== null) {
+        window.clearTimeout(resizeTimeoutRef.current);
+        resizeTimeoutRef.current = null;
+      }
       dataSubscription.dispose();
       closeSocket();
       disposeTerminal();
