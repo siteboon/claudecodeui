@@ -17,7 +17,9 @@ export const CLAUDE_MODELS = {
     { value: 'opus', label: 'Opus' },
     { value: 'haiku', label: 'Haiku' },
     { value: 'opusplan', label: 'Opus Plan' },
-    { value: 'sonnet[1m]', label: 'Sonnet [1M]' }
+    { value: 'sonnet[1m]', label: 'Sonnet [1M]' },
+    { value: 'glm-4.7-flash', label: 'GLM-4.7 Flash' },
+    { value: 'qwen3-coder:30b', label: 'Qwen3 Coder 30B' }
   ],
 
   DEFAULT: 'sonnet'
