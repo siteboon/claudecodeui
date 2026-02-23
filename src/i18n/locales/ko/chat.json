@@ -10,7 +10,8 @@
     "tool": "도구",
     "claude": "Claude",
     "cursor": "Cursor",
-    "codex": "Codex"
+    "codex": "Codex",
+    "gemini": "Gemini"
   },
   "tools": {
     "settings": "도구 설정",

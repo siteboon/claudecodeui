@@ -16,7 +16,7 @@ export default function AssistantThinkingIndicator({ selectedProvider }: Assista
             <SessionProviderLogo provider={selectedProvider} className="w-full h-full" />
           </div>
           <div className="text-sm font-medium text-gray-900 dark:text-white">
-            {selectedProvider === 'cursor' ? 'Cursor' : selectedProvider === 'codex' ? 'Codex' : 'Claude'}
+            {selectedProvider === 'cursor' ? 'Cursor' : selectedProvider === 'codex' ? 'Codex' : selectedProvider === 'gemini' ? 'Gemini' : 'Claude'}
           </div>
         </div>
         <div className="w-full text-sm text-gray-500 dark:text-gray-400 pl-3 sm:pl-0">
