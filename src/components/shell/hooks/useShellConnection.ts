@@ -137,7 +137,7 @@ export function useShellConnection({
 
             currentFitAddon.fit();
 
-            sendSocketMessage(wsRef.current, {
+            sendSocketMessage(socket, {
               type: 'init',
               projectPath: currentProject.fullPath || currentProject.path || '',
               sessionId: isPlainShellRef.current ? null : selectedSessionRef.current?.id || null,
