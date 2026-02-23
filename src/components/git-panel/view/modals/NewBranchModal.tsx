@@ -24,16 +24,22 @@ export default function NewBranchModal({
     }
   }, [isOpen]);
 
-  const handleCreateBranch = async () => {
+  const handleCreateBranch = async (): Promise<boolean> => {
     const branchName = newBranchName.trim();
     if (!branchName) {
-      return;
+      return false;
     }
 
-    const success = await onCreateBranch(branchName);
-    if (success) {
-      setNewBranchName('');
-      onClose();
+    try {
+      const success = await onCreateBranch(branchName);
+      if (success) {
+        setNewBranchName('');
+        onClose();
+      }
+      return success;
+    } catch (error) {
+      console.error('Failed to create branch:', error);
+      return false;
     }
   };
 
