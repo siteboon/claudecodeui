@@ -958,6 +958,40 @@ export function useChatRealtimeHandlers({
         ]);
         break;
 
+      case 'gemini-tool-use':
+        setChatMessages((previous) => [
+          ...previous,
+          {
+            type: 'assistant',
+            content: '',
+            timestamp: new Date(),
+            isToolUse: true,
+            toolName: latestMessage.toolName,
+            toolInput: latestMessage.parameters ? JSON.stringify(latestMessage.parameters, null, 2) : '',
+            toolId: latestMessage.toolId,
+            toolResult: null,
+          }
+        ]);
+        break;
+
+      case 'gemini-tool-result':
+        setChatMessages((previous) =>
+          previous.map((message) => {
+            if (message.isToolUse && message.toolId === latestMessage.toolId) {
+              return {
+                ...message,
+                toolResult: {
+                  content: latestMessage.output || `Status: ${latestMessage.status}`,
+                  isError: latestMessage.status === 'error',
+                  timestamp: new Date(),
+                },
+              };
+            }
+            return message;
+          }),
+        );
+        break;
+
       case 'session-aborted': {
         const pendingSessionId =
           typeof window !== 'undefined' ? sessionStorage.getItem('pendingSessionId') : null;

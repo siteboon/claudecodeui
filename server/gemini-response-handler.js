@@ -64,6 +64,26 @@ class GeminiResponseHandler {
       if (socketSessionId) payload.sessionId = socketSessionId;
       this.ws.send(payload);
     }
+    else if (event.type === 'tool_use') {
+      let payload = {
+        type: 'gemini-tool-use',
+        toolName: event.tool_name,
+        toolId: event.tool_id,
+        parameters: event.parameters || {}
+      };
+      if (socketSessionId) payload.sessionId = socketSessionId;
+      this.ws.send(payload);
+    }
+    else if (event.type === 'tool_result') {
+      let payload = {
+        type: 'gemini-tool-result',
+        toolId: event.tool_id,
+        status: event.status,
+        output: event.output || ''
+      };
+      if (socketSessionId) payload.sessionId = socketSessionId;
+      this.ws.send(payload);
+    }
   }
 
   forceFlush() {
