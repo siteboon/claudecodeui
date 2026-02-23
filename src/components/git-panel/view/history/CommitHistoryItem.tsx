@@ -30,8 +30,10 @@ export default function CommitHistoryItem({
 }: CommitHistoryItemProps) {
   return (
     <div className="border-b border-border last:border-0">
-      <div
-        className="flex items-start p-3 hover:bg-accent/50 cursor-pointer transition-colors"
+      <button
+        type="button"
+        aria-expanded={isExpanded}
+        className="w-full flex items-start p-3 hover:bg-accent/50 cursor-pointer transition-colors text-left bg-transparent border-0"
         onClick={onToggle}
       >
         <span className="mr-2 mt-1 p-0.5 hover:bg-accent rounded">
@@ -52,7 +54,7 @@ export default function CommitHistoryItem({
             </span>
           </div>
         </div>
-      </div>
+      </button>
 
       {isExpanded && diff && (
         <div className="bg-muted/50">
