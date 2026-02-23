@@ -25,14 +25,15 @@ export default function CommitComposer({
   const [isGeneratingMessage, setIsGeneratingMessage] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(isMobile);
 
-  const handleCommit = async () => {
-    if (!commitMessage.trim() || selectedFileCount === 0) {
+  const handleCommit = async (message = commitMessage) => {
+    const trimmedMessage = message.trim();
+    if (!trimmedMessage || selectedFileCount === 0 || isCommitting) {
       return false;
     }
 
     setIsCommitting(true);
     try {
-      const success = await onCommit(commitMessage);
+      const success = await onCommit(trimmedMessage);
       if (success) {
         setCommitMessage('');
       }
@@ -68,15 +69,7 @@ export default function CommitComposer({
       type: 'commit',
       message: `Commit ${selectedFileCount} file${selectedFileCount !== 1 ? 's' : ''} with message: "${trimmedMessage}"?`,
       onConfirm: async () => {
-        setIsCommitting(true);
-        try {
-          const success = await onCommit(commitMessage);
-          if (success) {
-            setCommitMessage('');
-          }
-        } finally {
-          setIsCommitting(false);
-        }
+        await handleCommit(trimmedMessage);
       },
     });
   };
