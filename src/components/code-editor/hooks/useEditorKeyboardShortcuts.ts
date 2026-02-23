@@ -13,16 +13,19 @@ export const useEditorKeyboardShortcuts = ({
 }: UseEditorKeyboardShortcutsParams) => {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+
       if (!(event.ctrlKey || event.metaKey)) {
         return;
       }
 
-      if (event.key === 's') {
+      if (event.key.toLowerCase() === 's') {
         event.preventDefault();
         onSave();
-      } else if (event.key === 'Escape') {
-        event.preventDefault();
-        onClose();
       }
     };
 
