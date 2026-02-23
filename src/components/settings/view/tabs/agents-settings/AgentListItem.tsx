@@ -12,7 +12,7 @@ type AgentListItemProps = {
 
 type AgentConfig = {
   name: string;
-  color: 'blue' | 'purple' | 'gray';
+  color: 'blue' | 'purple' | 'gray' | 'indigo';
 };
 
 const agentConfig: Record<AgentProvider, AgentConfig> = {

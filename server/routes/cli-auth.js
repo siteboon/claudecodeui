@@ -312,21 +312,33 @@ async function checkGeminiCredentials() {
   }
 
   try {
-    const configPath = path.join(os.homedir(), '.gemini.json');
-    const content = await fs.readFile(configPath, 'utf8');
-    const config = JSON.parse(content);
+    const credsPath = path.join(os.homedir(), '.gemini', 'oauth_creds.json');
+    const content = await fs.readFile(credsPath, 'utf8');
+    const creds = JSON.parse(content);
 
-    if (config.apiKey || config.aistudioApiKey || config.vertexProject) {
+    if (creds.access_token) {
+      let email = 'OAuth Session';
+      try {
+        const accPath = path.join(os.homedir(), '.gemini', 'google_accounts.json');
+        const accContent = await fs.readFile(accPath, 'utf8');
+        const accounts = JSON.parse(accContent);
+        if (accounts.active) {
+          email = accounts.active;
+        }
+      } catch (e) {
+        // Ignore if google_accounts.json is missing
+      }
+
       return {
         authenticated: true,
-        email: 'Configured User'
+        email: email
       };
     }
 
     return {
       authenticated: false,
       email: null,
-      error: 'No valid credentials found in config'
+      error: 'No valid tokens found in oauth_creds'
     };
   } catch (error) {
     return {
