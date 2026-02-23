@@ -560,10 +560,12 @@ async function queryClaudeSDK(command, options = {}, ws) {
       return { behavior: 'deny', message: decision.message ?? 'User denied tool use' };
     };
 
-    // Create SDK query instance
+    // Create SDK query instance with base URL configuration
     const queryInstance = query({
       prompt: finalCommand,
-      options: sdkOptions
+      options: sdkOptions,
+      // Use system-defined ANTHROPIC_BASE_URL if set, otherwise use default
+      baseUrl: process.env.ANTHROPIC_BASE_URL || undefined
     });
 
     // Track the query instance for abort capability
