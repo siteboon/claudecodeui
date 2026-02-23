@@ -99,34 +99,64 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
     >
       {message.type === 'user' ? (
         /* User message bubble on the right */
-        <div className="flex items-end space-x-0 sm:space-x-3 w-full sm:w-auto sm:max-w-[85%] md:max-w-md lg:max-w-lg xl:max-w-xl">
-          <div className="bg-blue-600 text-white rounded-2xl rounded-br-md px-3 sm:px-4 py-2 shadow-sm flex-1 sm:flex-initial">
-            <div className="text-sm whitespace-pre-wrap break-words">
-              {message.content}
+        message.isInstructions ? (
+          <div className="flex items-end space-x-0 sm:space-x-3 w-full sm:w-auto sm:max-w-[85%] md:max-w-md lg:max-w-lg xl:max-w-xl">
+            <div className="bg-gray-50 dark:bg-gray-800/40 text-gray-800 dark:text-gray-200 rounded-2xl rounded-br-md px-3 sm:px-4 py-2 shadow-sm border border-gray-200 dark:border-gray-700 flex-1 sm:flex-initial">
+              <div className="text-sm">
+                <details className="group">
+                  <summary className="cursor-pointer text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 font-medium flex items-center gap-2">
+                    <svg className="w-3 h-3 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                    <span>Instructions</span>
+                  </summary>
+                  <div className="mt-2 pl-4 border-l-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 text-sm">
+                    <Markdown className="prose prose-sm max-w-none dark:prose-invert prose-gray">
+                      {String(message.content || '')}
+                    </Markdown>
+                  </div>
+                </details>
+              </div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 text-right">
+                {formattedTime}
+              </div>
             </div>
-            {message.images && message.images.length > 0 && (
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                {message.images.map((img, idx) => (
-                  <img
-                    key={img.name || idx}
-                    src={img.data}
-                    alt={img.name}
-                    className="rounded-lg max-w-full h-auto cursor-pointer hover:opacity-90 transition-opacity"
-                    onClick={() => window.open(img.data, '_blank')}
-                  />
-                ))}
+            {!isGrouped && (
+              <div className="hidden sm:flex w-8 h-8 bg-blue-600 rounded-full items-center justify-center text-white text-sm flex-shrink-0">
+                U
               </div>
             )}
-            <div className="text-xs text-blue-100 mt-1 text-right">
-              {formattedTime}
-            </div>
           </div>
-          {!isGrouped && (
-            <div className="hidden sm:flex w-8 h-8 bg-blue-600 rounded-full items-center justify-center text-white text-sm flex-shrink-0">
-              U
+        ) : (
+          <div className="flex items-end space-x-0 sm:space-x-3 w-full sm:w-auto sm:max-w-[85%] md:max-w-md lg:max-w-lg xl:max-w-xl">
+            <div className="bg-blue-600 text-white rounded-2xl rounded-br-md px-3 sm:px-4 py-2 shadow-sm flex-1 sm:flex-initial">
+              <div className="text-sm whitespace-pre-wrap break-words">
+                {message.content}
+              </div>
+              {message.images && message.images.length > 0 && (
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  {message.images.map((img, idx) => (
+                    <img
+                      key={img.name || idx}
+                      src={img.data}
+                      alt={img.name}
+                      className="rounded-lg max-w-full h-auto cursor-pointer hover:opacity-90 transition-opacity"
+                      onClick={() => window.open(img.data, '_blank')}
+                    />
+                  ))}
+                </div>
+              )}
+              <div className="text-xs text-blue-100 mt-1 text-right">
+                {formattedTime}
+              </div>
             </div>
-          )}
-        </div>
+            {!isGrouped && (
+              <div className="hidden sm:flex w-8 h-8 bg-blue-600 rounded-full items-center justify-center text-white text-sm flex-shrink-0">
+                U
+              </div>
+            )}
+          </div>
+        )
       ) : message.isTaskNotification ? (
         /* Compact task notification on the left */
         <div className="w-full">
@@ -453,4 +483,3 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
 });
 
 export default MessageComponent;
-
