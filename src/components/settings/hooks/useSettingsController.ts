@@ -364,17 +364,14 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
 
   const saveMcpServer = useCallback(
     async (serverData: ClaudeMcpFormState, editingServer: McpServer | null) => {
-      if (editingServer?.id) {
-        // Editing still follows the existing behavior: remove current entry and re-create it.
-        await deleteMcpServer(editingServer.id, editingServer.scope || 'user');
-      }
+      const newServerScope = serverData.scope || 'user';
 
       const response = await authenticatedFetch('/api/mcp/cli/add', {
         method: 'POST',
         body: JSON.stringify({
           name: serverData.name,
           type: serverData.type,
-          scope: serverData.scope,
+          scope: newServerScope,
           projectPath: serverData.projectPath,
           command: serverData.config.command,
           args: serverData.config.args || [],
@@ -392,6 +389,28 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
       const result = await toResponseJson<JsonResult>(response);
       if (!result.success) {
         throw new Error(result.error || 'Failed to save server via Claude CLI');
+      }
+
+      if (!editingServer?.id) {
+        return;
+      }
+
+      const previousServerScope = editingServer.scope || 'user';
+      const didServerIdentityChange =
+        editingServer.id !== serverData.name || previousServerScope !== newServerScope;
+
+      if (!didServerIdentityChange) {
+        return;
+      }
+
+      try {
+        await deleteMcpServer(editingServer.id, previousServerScope);
+      } catch (error) {
+        console.warn('Saved MCP server update but failed to remove the previous server entry.', {
+          previousServerId: editingServer.id,
+          previousServerScope,
+          error: getErrorMessage(error),
+        });
       }
     },
     [deleteMcpServer],
@@ -537,10 +556,6 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
 
   const saveCodexMcpServer = useCallback(
     async (serverData: CodexMcpFormState, editingServer: McpServer | null) => {
-      if (editingServer?.name) {
-        await deleteCodexMcpServer(editingServer.name);
-      }
-
       const response = await authenticatedFetch('/api/codex/mcp/cli/add', {
         method: 'POST',
         body: JSON.stringify({
@@ -559,6 +574,19 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
       const result = await toResponseJson<JsonResult>(response);
       if (!result.success) {
         throw new Error(result.error || 'Failed to save Codex MCP server');
+      }
+
+      if (!editingServer?.name || editingServer.name === serverData.name) {
+        return;
+      }
+
+      try {
+        await deleteCodexMcpServer(editingServer.name);
+      } catch (error) {
+        console.warn('Saved Codex MCP server update but failed to remove the previous server entry.', {
+          previousServerName: editingServer.name,
+          error: getErrorMessage(error),
+        });
       }
     },
     [deleteCodexMcpServer],
