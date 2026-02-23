@@ -38,7 +38,9 @@ export default function HistoryView({
 
       // Load commit diff lazily only the first time a commit is expanded.
       if (isExpanding && !commitDiffs[commitHash]) {
-        void onFetchCommitDiff(commitHash);
+        onFetchCommitDiff(commitHash).catch((err) => {
+          console.error('Failed to fetch commit diff:', err);
+        });
       }
     },
     [commitDiffs, expandedCommits, onFetchCommitDiff, setExpandedCommits],
