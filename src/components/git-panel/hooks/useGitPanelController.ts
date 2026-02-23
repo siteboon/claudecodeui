@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { authenticatedFetch } from '../../../utils/api';
 import { DEFAULT_BRANCH, RECENT_COMMITS_LIMIT } from '../constants/constants';
 import type {
@@ -22,8 +22,22 @@ import { useSelectedProvider } from './useSelectedProvider';
 // ! use authenticatedFetch directly. fetchWithAuth is redundant 
 const fetchWithAuth = authenticatedFetch as (url: string, options?: RequestInit) => Promise<Response>;
 
-async function readJson<T>(response: Response): Promise<T> {
-  return response.json() as Promise<T>;
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'AbortError';
+}
+
+async function readJson<T>(response: Response, signal?: AbortSignal): Promise<T> {
+  if (signal?.aborted) {
+    throw new DOMException('Request aborted', 'AbortError');
+  }
+
+  const data = (await response.json()) as T;
+
+  if (signal?.aborted) {
+    throw new DOMException('Request aborted', 'AbortError');
+  }
+
+  return data;
 }
 
 export function useGitPanelController({
@@ -45,20 +59,36 @@ export function useGitPanelController({
   const [isPushing, setIsPushing] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isCreatingInitialCommit, setIsCreatingInitialCommit] = useState(false);
+  const selectedProjectNameRef = useRef<string | null>(selectedProject?.name ?? null);
+
+  useEffect(() => {
+    selectedProjectNameRef.current = selectedProject?.name ?? null;
+  }, [selectedProject]);
 
   const provider = useSelectedProvider();
 
   const fetchFileDiff = useCallback(
-    async (filePath: string) => {
+    async (filePath: string, signal?: AbortSignal) => {
       if (!selectedProject) {
         return;
       }
 
+      const projectName = selectedProject.name;
+
       try {
         const response = await fetchWithAuth(
-          `/api/git/diff?project=${encodeURIComponent(selectedProject.name)}&file=${encodeURIComponent(filePath)}`,
+          `/api/git/diff?project=${encodeURIComponent(projectName)}&file=${encodeURIComponent(filePath)}`,
+          { signal },
         );
-        const data = await readJson<GitDiffResponse>(response);
+        const data = await readJson<GitDiffResponse>(response, signal);
+
+        if (
+          signal?.aborted ||
+          selectedProjectNameRef.current !== projectName ||
+          selectedProject.name !== projectName
+        ) {
+          return;
+        }
 
         if (!data.error && data.diff) {
           setGitDiff((previous) => ({
@@ -67,21 +97,35 @@ export function useGitPanelController({
           }));
         }
       } catch (error) {
+        if (signal?.aborted || isAbortError(error)) {
+          return;
+        }
+
         console.error('Error fetching file diff:', error);
       }
     },
     [selectedProject],
   );
 
-  const fetchGitStatus = useCallback(async () => {
+  const fetchGitStatus = useCallback(async (signal?: AbortSignal) => {
     if (!selectedProject) {
       return;
     }
 
+    const projectName = selectedProject.name;
+
     setIsLoading(true);
     try {
-      const response = await fetchWithAuth(`/api/git/status?project=${encodeURIComponent(selectedProject.name)}`);
-      const data = await readJson<GitStatusResponse>(response);
+      const response = await fetchWithAuth(`/api/git/status?project=${encodeURIComponent(projectName)}`, { signal });
+      const data = await readJson<GitStatusResponse>(response, signal);
+
+      if (
+        signal?.aborted ||
+        selectedProjectNameRef.current !== projectName ||
+        selectedProject.name !== projectName
+      ) {
+        return;
+      }
 
       if (data.error) {
         console.error('Git status error:', data.error);
@@ -95,13 +139,32 @@ export function useGitPanelController({
 
       const changedFiles = getAllChangedFiles(data);
       changedFiles.forEach((filePath) => {
-        void fetchFileDiff(filePath);
+        void fetchFileDiff(filePath, signal);
       });
     } catch (error) {
+      if (signal?.aborted || isAbortError(error)) {
+        return;
+      }
+
+      if (
+        selectedProjectNameRef.current !== projectName ||
+        selectedProject.name !== projectName
+      ) {
+        return;
+      }
+
       console.error('Error fetching git status:', error);
       setGitStatus({ error: 'Git operation failed', details: String(error) });
       setCurrentBranch('');
     } finally {
+      if (
+        signal?.aborted ||
+        selectedProjectNameRef.current !== projectName ||
+        selectedProject.name !== projectName
+      ) {
+        return;
+      }
+
       setIsLoading(false);
     }
   }, [fetchFileDiff, selectedProject]);
@@ -533,12 +596,10 @@ export function useGitPanelController({
       }
 
       console.error('Initial commit failed:', data.error);
-      alert(data.error || 'Failed to create initial commit');
-      return false;
+      throw new Error(data.error || 'Failed to create initial commit');
     } catch (error) {
       console.error('Error creating initial commit:', error);
-      alert('Failed to create initial commit');
-      return false;
+      throw new Error((error as { message?: string })?.message || 'Failed to create initial commit');
     } finally {
       setIsCreatingInitialCommit(false);
     }
@@ -586,6 +647,8 @@ export function useGitPanelController({
   }, [fetchBranches, fetchGitStatus, fetchRemoteStatus]);
 
   useEffect(() => {
+    const controller = new AbortController();
+
     // Reset repository-scoped state when project changes to avoid stale UI.
     setCurrentBranch('');
     setBranches([]);
@@ -594,14 +657,21 @@ export function useGitPanelController({
     setGitDiff({});
     setRecentCommits([]);
     setCommitDiffs({});
+    setIsLoading(false);
 
     if (!selectedProject) {
-      return;
+      return () => {
+        controller.abort();
+      };
     }
 
-    void fetchGitStatus();
+    void fetchGitStatus(controller.signal);
     void fetchBranches();
     void fetchRemoteStatus();
+
+    return () => {
+      controller.abort();
+    };
   }, [fetchBranches, fetchGitStatus, fetchRemoteStatus, selectedProject]);
 
   useEffect(() => {
