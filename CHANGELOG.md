@@ -3,6 +3,12 @@
 All notable changes to CloudCLI UI will be documented in this file.
 
 
+## [1.19.1](https://github.com/siteboon/claudecodeui/compare/v1.19.0...v1.19.1) (2026-02-23)
+
+### Bug Fixes
+
+* add prepublishOnly script to build before publishing ([82efac4](https://github.com/siteboon/claudecodeui/commit/82efac4704cab11ed8d1a05fe84f41312140b223))
+
 ## [1.19.0](https://github.com/siteboon/claudecodeui/compare/v1.18.2...v1.19.0) (2026-02-23)
 
 ### New Features
