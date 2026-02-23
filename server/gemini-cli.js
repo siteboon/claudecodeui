@@ -137,8 +137,18 @@ async function spawnGemini(command, options = {}, ws) {
         } catch (error) { }
 
         // Add model for all sessions (both new and resumed)
-        const modelToUse = options.model || 'gemini-2.5-flash';
+        let modelToUse = options.model || 'gemini-2.5-flash';
+
+        // Safety Fallback: Since UI clients might cache "gemini-3-pro-preview" 
+        // in localStorage, ensure we don't crash by verifying it against known stables.
+        const disabledModels = ['gemini-3.1-pro-preview', 'gemini-3-pro-preview', 'gemini-3-flash-preview'];
+        if (disabledModels.includes(modelToUse)) {
+            console.warn(`[Gemini CLI] Requested restricted model ${modelToUse}. Falling back to gemini-2.5-flash.`);
+            modelToUse = 'gemini-2.5-flash';
+        }
+
         args.push('--model', modelToUse);
+        args.push('--output-format', 'stream-json');
 
         // Handle approval modes and allowed tools
         if (settings.skipPermissions || options.skipPermissions || permissionMode === 'yolo') {
@@ -206,38 +216,21 @@ async function spawnGemini(command, options = {}, ws) {
             sessionManager.addMessage(capturedSessionId, 'user', command);
         }
 
-        // Create response handler for intelligent buffering
+        // Create response handler for NDJSON buffering
         let responseHandler;
         if (ws) {
             responseHandler = new GeminiResponseHandler(ws, {
-                partialDelay: 300,
-                maxWaitTime: 1500,
-                minBufferSize: 30
+                onContentFragment: (content) => {
+                    fullResponse += content;
+                }
             });
         }
 
-        // Handle stdout (Gemini outputs plain text)
+        // Handle stdout
         geminiProcess.stdout.on('data', (data) => {
             const rawOutput = data.toString();
             hasReceivedOutput = true;
             clearTimeout(timeout);
-
-            // Filter out debug messages and system messages
-            const lines = rawOutput.split('\n');
-            const filteredLines = lines.filter(line => {
-                // Skip debug messages and "Loaded cached credentials"
-                if (line.includes('[DEBUG]') ||
-                    line.includes('Flushing log events') ||
-                    line.includes('Clearcut response') ||
-                    line.includes('[MemoryDiscovery]') ||
-                    line.includes('[BfsFileSearch]') ||
-                    line.includes('Loaded cached credentials')) {
-                    return false;
-                }
-                return true;
-            });
-
-            const filteredOutput = filteredLines.join('\n').trim();
 
             // For new sessions, create a session ID FIRST
             if (!sessionId && !sessionCreatedSent && !capturedSessionId) {
@@ -266,25 +259,20 @@ async function spawnGemini(command, options = {}, ws) {
                 });
             }
 
-            if (filteredOutput) {
-                // Accumulate the full response
-                fullResponse += (fullResponse ? '\n' : '') + filteredOutput;
-
-                // Use response handler for intelligent buffering
-                if (responseHandler) {
-                    responseHandler.processData(filteredOutput);
-                } else {
-                    // Fallback to direct sending
-                    const socketSessionId = typeof ws.getSessionId === 'function' ? ws.getSessionId() : (capturedSessionId || sessionId);
-                    ws.send({
-                        type: 'gemini-response',
-                        sessionId: socketSessionId,
-                        data: {
-                            type: 'message',
-                            content: filteredOutput
-                        }
-                    });
-                }
+            if (responseHandler) {
+                responseHandler.processData(rawOutput);
+            } else if (rawOutput) {
+                // Fallback to direct sending for raw CLI mode without WS
+                fullResponse += rawOutput;
+                const socketSessionId = typeof ws.getSessionId === 'function' ? ws.getSessionId() : (capturedSessionId || sessionId);
+                ws.send({
+                    type: 'gemini-response',
+                    sessionId: socketSessionId,
+                    data: {
+                        type: 'message',
+                        content: rawOutput
+                    }
+                });
             }
         });
 
