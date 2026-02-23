@@ -1,8 +1,7 @@
-import { AlertTriangle, Check, Download, Trash2, Upload } from 'lucide-react';
+import { Check, Download, Trash2, Upload } from 'lucide-react';
 import {
   CONFIRMATION_ACTION_LABELS,
   CONFIRMATION_BUTTON_CLASSES,
-  CONFIRMATION_ICON_CLASSES,
   CONFIRMATION_ICON_CONTAINER_CLASSES,
   CONFIRMATION_TITLES,
 } from '../../constants/constants';
