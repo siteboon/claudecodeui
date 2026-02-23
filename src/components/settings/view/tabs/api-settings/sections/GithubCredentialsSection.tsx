@@ -75,6 +75,7 @@ export default function GithubCredentialsSection({
             <button
               type="button"
               onClick={onToggleNewTokenVisibility}
+              aria-label={showNewTokenPlainText ? 'Hide token' : 'Show token'}
               className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground"
             >
               {showNewTokenPlainText ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
