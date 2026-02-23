@@ -5,6 +5,8 @@ class GeminiResponseHandler {
     this.buffer = '';
     this.onContentFragment = options.onContentFragment || null;
     this.onInit = options.onInit || null;
+    this.onToolUse = options.onToolUse || null;
+    this.onToolResult = options.onToolResult || null;
   }
 
   // Process incoming raw data from Gemini stream-json
@@ -73,6 +75,9 @@ class GeminiResponseHandler {
       this.ws.send(payload);
     }
     else if (event.type === 'tool_use') {
+      if (this.onToolUse) {
+        this.onToolUse(event);
+      }
       let payload = {
         type: 'gemini-tool-use',
         toolName: event.tool_name,
@@ -83,6 +88,9 @@ class GeminiResponseHandler {
       this.ws.send(payload);
     }
     else if (event.type === 'tool_result') {
+      if (this.onToolResult) {
+        this.onToolResult(event);
+      }
       let payload = {
         type: 'gemini-tool-result',
         toolId: event.tool_id,

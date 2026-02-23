@@ -13,7 +13,7 @@ async function spawnGemini(command, options = {}, ws) {
         const { sessionId, projectPath, cwd, resume, toolsSettings, permissionMode, images } = options;
         let capturedSessionId = sessionId; // Track session ID throughout the process
         let sessionCreatedSent = false; // Track if we've already sent session-created event
-        let fullResponse = ''; // Accumulate the full response
+        let assistantBlocks = []; // Accumulate the full response blocks including tools
 
         // Use tools settings passed from frontend, or defaults
         const settings = toolsSettings || {
@@ -210,7 +210,33 @@ async function spawnGemini(command, options = {}, ws) {
         if (ws) {
             responseHandler = new GeminiResponseHandler(ws, {
                 onContentFragment: (content) => {
-                    fullResponse += content;
+                    if (assistantBlocks.length > 0 && assistantBlocks[assistantBlocks.length - 1].type === 'text') {
+                        assistantBlocks[assistantBlocks.length - 1].text += content;
+                    } else {
+                        assistantBlocks.push({ type: 'text', text: content });
+                    }
+                },
+                onToolUse: (event) => {
+                    assistantBlocks.push({
+                        type: 'tool_use',
+                        id: event.tool_id,
+                        name: event.tool_name,
+                        input: event.parameters
+                    });
+                },
+                onToolResult: (event) => {
+                    if (capturedSessionId) {
+                        if (assistantBlocks.length > 0) {
+                            sessionManager.addMessage(capturedSessionId, 'assistant', [...assistantBlocks]);
+                            assistantBlocks = [];
+                        }
+                        sessionManager.addMessage(capturedSessionId, 'user', [{
+                            type: 'tool_result',
+                            tool_use_id: event.tool_id,
+                            content: event.output === undefined ? null : event.output,
+                            is_error: event.status === 'error'
+                        }]);
+                    }
                 },
                 onInit: (event) => {
                     if (capturedSessionId) {
@@ -272,7 +298,11 @@ async function spawnGemini(command, options = {}, ws) {
                 responseHandler.processData(rawOutput);
             } else if (rawOutput) {
                 // Fallback to direct sending for raw CLI mode without WS
-                fullResponse += rawOutput;
+                if (assistantBlocks.length > 0 && assistantBlocks[assistantBlocks.length - 1].type === 'text') {
+                    assistantBlocks[assistantBlocks.length - 1].text += rawOutput;
+                } else {
+                    assistantBlocks.push({ type: 'text', text: rawOutput });
+                }
                 const socketSessionId = typeof ws.getSessionId === 'function' ? ws.getSessionId() : (capturedSessionId || sessionId);
                 ws.send({
                     type: 'gemini-response',
@@ -320,8 +350,8 @@ async function spawnGemini(command, options = {}, ws) {
             activeGeminiProcesses.delete(finalSessionId);
 
             // Save assistant response to session if we have one
-            if (finalSessionId && fullResponse) {
-                sessionManager.addMessage(finalSessionId, 'assistant', fullResponse);
+            if (finalSessionId && assistantBlocks.length > 0) {
+                sessionManager.addMessage(finalSessionId, 'assistant', assistantBlocks);
             }
 
             ws.send({
