@@ -4,6 +4,7 @@ class GeminiResponseHandler {
     this.ws = ws;
     this.buffer = '';
     this.onContentFragment = options.onContentFragment || null;
+    this.onInit = options.onInit || null;
   }
 
   // Process incoming raw data from Gemini stream-json
@@ -31,6 +32,13 @@ class GeminiResponseHandler {
 
   handleEvent(event) {
     const socketSessionId = typeof this.ws.getSessionId === 'function' ? this.ws.getSessionId() : null;
+
+    if (event.type === 'init') {
+      if (this.onInit) {
+        this.onInit(event);
+      }
+      return;
+    }
 
     if (event.type === 'message' && event.role === 'assistant') {
       const content = event.content || '';
@@ -83,6 +91,19 @@ class GeminiResponseHandler {
       };
       if (socketSessionId) payload.sessionId = socketSessionId;
       this.ws.send(payload);
+    }
+    else if (event.type === 'result') {
+      if (event.stats && event.stats.total_tokens) {
+        let payload = {
+          type: 'claude-status',
+          data: {
+            status: 'Complete',
+            tokens: event.stats.total_tokens
+          }
+        };
+        if (socketSessionId) payload.sessionId = socketSessionId;
+        this.ws.send(payload);
+      }
     }
   }
 

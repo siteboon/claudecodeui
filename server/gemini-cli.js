@@ -27,18 +27,14 @@ async function spawnGemini(command, options = {}, ws) {
 
         // Add prompt flag with command if we have a command
         if (command && command.trim()) {
-            // If we have a sessionId, include conversation history
+            args.push('--prompt', command);
+
+            // If we have a sessionId, we want to resume
             if (sessionId) {
-                const context = sessionManager.buildConversationContext(sessionId);
-                if (context) {
-                    // Combine context with current command
-                    const fullPrompt = context + command;
-                    args.push('--prompt', fullPrompt);
-                } else {
-                    args.push('--prompt', command);
+                const session = sessionManager.getSession(sessionId);
+                if (session && session.cliSessionId) {
+                    args.push('--resume', session.cliSessionId);
                 }
-            } else {
-                args.push('--prompt', command);
             }
         }
 
@@ -138,15 +134,6 @@ async function spawnGemini(command, options = {}, ws) {
 
         // Add model for all sessions (both new and resumed)
         let modelToUse = options.model || 'gemini-2.5-flash';
-
-        // Safety Fallback: Since UI clients might cache "gemini-3-pro-preview" 
-        // in localStorage, ensure we don't crash by verifying it against known stables.
-        const disabledModels = ['gemini-3.1-pro-preview', 'gemini-3-pro-preview', 'gemini-3-flash-preview'];
-        if (disabledModels.includes(modelToUse)) {
-            console.warn(`[Gemini CLI] Requested restricted model ${modelToUse}. Falling back to gemini-2.5-flash.`);
-            modelToUse = 'gemini-2.5-flash';
-        }
-
         args.push('--model', modelToUse);
         args.push('--output-format', 'stream-json');
 
@@ -222,6 +209,15 @@ async function spawnGemini(command, options = {}, ws) {
             responseHandler = new GeminiResponseHandler(ws, {
                 onContentFragment: (content) => {
                     fullResponse += content;
+                },
+                onInit: (event) => {
+                    if (capturedSessionId) {
+                        const sess = sessionManager.getSession(capturedSessionId);
+                        if (sess && !sess.cliSessionId) {
+                            sess.cliSessionId = event.session_id;
+                            sessionManager.saveSession(capturedSessionId);
+                        }
+                    }
                 }
             });
         }
