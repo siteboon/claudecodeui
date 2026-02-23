@@ -32,9 +32,8 @@ const CodeBlock = ({ node, inline, className, children, ...props }: CodeBlockPro
   if (shouldInline) {
     return (
       <code
-        className={`font-mono text-[0.9em] px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-900 border border-gray-200 dark:bg-gray-800/60 dark:text-gray-100 dark:border-gray-700 whitespace-pre-wrap break-words ${
-          className || ''
-        }`}
+        className={`font-mono text-[0.9em] px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-900 border border-gray-200 dark:bg-gray-800/60 dark:text-gray-100 dark:border-gray-700 whitespace-pre-wrap break-words ${className || ''
+          }`}
         {...props}
       >
         {children}
@@ -53,7 +52,14 @@ const CodeBlock = ({ node, inline, className, children, ...props }: CodeBlockPro
 
       <button
         type="button"
-        onClick={() => copyTextToClipboard(raw).then(() => setCopied(true))}
+        onClick={() =>
+          copyTextToClipboard(raw).then((success) => {
+            if (success) {
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            }
+          })
+        }
         className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 focus:opacity-100 active:opacity-100 transition-opacity text-xs px-2 py-1 rounded-md bg-gray-700/80 hover:bg-gray-700 text-white border border-gray-600"
         title={copied ? t('codeBlock.copied') : t('codeBlock.copyCode')}
         aria-label={copied ? t('codeBlock.copied') : t('codeBlock.copyCode')}
