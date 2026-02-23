@@ -89,9 +89,21 @@ export default function GitPanelHeader({
   };
 
   const handleSwitchBranch = async (branchName: string) => {
-    const success = await onSwitchBranch(branchName);
-    if (success) {
-      setShowBranchDropdown(false);
+    try {
+      const success = await onSwitchBranch(branchName);
+      if (success) {
+        setShowBranchDropdown(false);
+      }
+    } catch (error) {
+      console.error('[GitPanelHeader] Failed to switch branch:', error);
+    }
+  };
+
+  const handleFetch = async () => {
+    try {
+      await onFetch();
+    } catch (error) {
+      console.error('[GitPanelHeader] Failed to fetch remote changes:', error);
     }
   };
 
@@ -214,7 +226,7 @@ export default function GitPanelHeader({
 
                   {shouldShowFetchButton && (
                     <button
-                      onClick={() => void onFetch()}
+                      onClick={() => void handleFetch()}
                       disabled={isFetching}
                       className="px-2.5 py-1 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1 transition-colors"
                       title={`Fetch from ${remoteName}`}
