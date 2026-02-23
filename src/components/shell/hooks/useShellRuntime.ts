@@ -68,7 +68,7 @@ export function useShellRuntime({
       return false;
     }
 
-    const popup = window.open(url, '_blank', 'noopener,noreferrer');
+    const popup = window.open(url, '_blank');
     if (popup) {
       try {
         popup.opener = null;
