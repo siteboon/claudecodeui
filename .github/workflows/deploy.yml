@@ -1,0 +1,58 @@
+name: Deploy Claude Code UI to Mac Mini
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md']
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.MAC_MINI_HOST }}
+          username: ${{ secrets.MAC_MINI_USER }}
+          key: ${{ secrets.MAC_MINI_SSH_KEY }}
+          command_timeout: 10m
+          script: |
+            set -e
+            export PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.nvm/versions/node/$(ls $HOME/.nvm/versions/node 2>/dev/null | tail -1)/bin:$PATH"
+
+            PROD_DIR="/Users/xuzhi/prod/claudecodeui"
+            GATEWAY_DIR="/Users/xuzhi/prod/gateway"
+
+            # Clone or pull
+            if [ ! -d "$PROD_DIR/.git" ]; then
+              git clone https://github.com/GeorgeZhiXu/claudecodeui.git "$PROD_DIR"
+            else
+              cd "$PROD_DIR"
+              git fetch origin main
+              git reset --hard origin/main
+            fi
+            cd "$PROD_DIR"
+
+            # Install dependencies
+            npm install --production=false
+
+            # Build frontend
+            npm run build
+
+            # Restart PM2 process
+            pm2 delete claude-code-ui 2>/dev/null || true
+            pm2 start "$GATEWAY_DIR/pm2.d/claude-code-ui.config.js"
+            pm2 save
+
+            # Health check
+            sleep 3
+            curl -sf -o /dev/null http://127.0.0.1:3001/api/health && echo "Claude Code UI healthy" || echo "Health check failed (may need a moment to start)"
