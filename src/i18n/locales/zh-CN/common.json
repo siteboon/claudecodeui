@@ -200,6 +200,7 @@
     "viewFullRelease": "查看完整发布",
     "updateProgress": "更新进度：",
     "manualUpgrade": "手动升级：",
+    "npmUpgradeCommand": "npm install -g @siteboon/claude-code-ui@latest",
     "manualUpgradeHint": "或点击'立即更新'以自动运行更新。",
     "updateCompleted": "更新成功完成！",
     "restartServer": "请重启服务器以应用更改。",

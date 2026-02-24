@@ -21,10 +21,28 @@ const compareVersions = (v1: string, v2: string) => {
   return 0;
 };
 
+export type InstallMode = 'git' | 'npm';
+
 export const useVersionCheck = (owner: string, repo: string) => {
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [latestVersion, setLatestVersion] = useState<string | null>(null);
   const [releaseInfo, setReleaseInfo] = useState<ReleaseInfo | null>(null);
+  const [installMode, setInstallMode] = useState<InstallMode>('git');
+
+  useEffect(() => {
+    const fetchInstallMode = async () => {
+      try {
+        const response = await fetch('/health');
+        const data = await response.json();
+        if (data.installMode === 'npm' || data.installMode === 'git') {
+          setInstallMode(data.installMode);
+        }
+      } catch {
+        // Default to git on error
+      }
+    };
+    fetchInstallMode();
+  }, []);
 
   useEffect(() => {
     const checkVersion = async () => {
@@ -66,5 +84,5 @@ export const useVersionCheck = (owner: string, repo: string) => {
     return () => clearInterval(interval);
   }, [owner, repo]);
 
-  return { updateAvailable, latestVersion, currentVersion: version, releaseInfo };
+  return { updateAvailable, latestVersion, currentVersion: version, releaseInfo, installMode };
 }; 

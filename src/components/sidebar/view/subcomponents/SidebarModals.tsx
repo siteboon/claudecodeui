@@ -8,6 +8,7 @@ import Settings from '../../../Settings';
 import VersionUpgradeModal from '../../../modals/VersionUpgradeModal';
 import type { Project } from '../../../../types/app';
 import type { ReleaseInfo } from '../../../../types/sharedTypes';
+import type { InstallMode } from '../../../../hooks/useVersionCheck';
 import { normalizeProjectForSettings } from '../../utils/utils';
 import type { DeleteProjectConfirmation, SessionDeleteConfirmation, SettingsProject } from '../../types/types';
 
@@ -30,6 +31,7 @@ type SidebarModalsProps = {
   releaseInfo: ReleaseInfo | null;
   currentVersion: string;
   latestVersion: string | null;
+  installMode: InstallMode;
   t: TFunction;
 };
 
@@ -65,6 +67,7 @@ export default function SidebarModals({
   releaseInfo,
   currentVersion,
   latestVersion,
+  installMode,
   t,
 }: SidebarModalsProps) {
   // Settings expects project identity/path fields to be present for dropdown labels and local-scope MCP config.
@@ -199,6 +202,7 @@ export default function SidebarModals({
         releaseInfo={releaseInfo}
         currentVersion={currentVersion}
         latestVersion={latestVersion}
+        installMode={installMode}
       />
     </>
   );

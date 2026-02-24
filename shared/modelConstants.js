@@ -63,5 +63,5 @@ export const CODEX_MODELS = {
     { value: 'o4-mini', label: 'O4-mini' }
   ],
 
-  DEFAULT: 'gpt-5.2'
+  DEFAULT: 'gpt-5.3-codex'
 };

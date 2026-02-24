@@ -53,11 +53,11 @@ router.post('/register', async (req, res) => {
       // Generate token
       const token = generateToken(user);
       
-      // Update last login
+      db.prepare('COMMIT').run();
+
+      // Update last login (non-fatal, outside transaction)
       userDb.updateLastLogin(user.id);
 
-      db.prepare('COMMIT').run();
-      
       res.json({
         success: true,
         user: { id: user.id, username: user.username },

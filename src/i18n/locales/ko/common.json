@@ -200,6 +200,7 @@
     "viewFullRelease": "전체 릴리스 보기",
     "updateProgress": "업데이트 진행 상황:",
     "manualUpgrade": "수동 업그레이드:",
+    "npmUpgradeCommand": "npm install -g @siteboon/claude-code-ui@latest",
     "manualUpgradeHint": "또는 \"지금 업데이트\"를 클릭하여 자동으로 업데이트합니다.",
     "updateCompleted": "업데이트가 완료되었습니다!",
     "restartServer": "변경사항을 적용하려면 서버를 재시작하세요.",
