@@ -170,7 +170,7 @@ export default function CommandMenu({
       role="listbox"
       aria-label="Available commands"
       className="command-menu border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800"
-      style={{ ...menuPosition, ...menuBaseStyle, opacity: isOpen ? 1 : 0, transform: isOpen ? 'translateY(0)' : 'translateY(-10px)' }}
+      style={{ ...menuPosition, ...menuBaseStyle, opacity: 1, transform: 'translateY(0)' }}
     >
       {orderedNamespaces.map((namespace) => (
         <div key={namespace} className="command-group">
