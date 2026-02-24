@@ -51,7 +51,7 @@ jobs:
             npm install --production=false
 
             # Build frontend (VITE_BASE_PATH must be set at build time for correct asset paths)
-            VITE_BASE_PATH=/claudeui/ npm run build
+            VITE_BASE_PATH=/claudeui/ VITE_IS_PLATFORM=true npm run build
 
             # Restart PM2 process
             pm2 delete claude-code-ui 2>/dev/null || true
