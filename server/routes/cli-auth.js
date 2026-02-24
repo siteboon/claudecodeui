@@ -34,6 +34,24 @@ router.get('/claude/status', async (req, res) => {
   }
 });
 
+router.get('/claude/config', async (req, res) => {
+  try {
+    const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+    const content = await fs.readFile(settingsPath, 'utf8');
+    const settings = JSON.parse(content);
+
+    let model = settings.model;
+    if (model) {
+      // Map Bedrock/full model IDs to SDK shortnames
+      model = mapModelToSDKShortname(model);
+    }
+
+    res.json({ success: true, model: model || null });
+  } catch (error) {
+    res.json({ success: true, model: null });
+  }
+});
+
 router.get('/cursor/status', async (req, res) => {
   try {
     const result = await checkCursorStatus();
@@ -258,6 +276,29 @@ async function checkCodexCredentials() {
       error: error.message
     };
   }
+}
+
+/**
+ * Map Bedrock or full model IDs to SDK shortnames.
+ * Examples:
+ *   "global.anthropic.claude-opus-4-6-v1[1m]" → "opus[1m]"
+ *   "claude-sonnet-4-5-20250514" → "sonnet"
+ *   "opus" → "opus" (already a shortname)
+ */
+function mapModelToSDKShortname(model) {
+  const validShortnames = ['sonnet', 'opus', 'haiku', 'opusplan', 'sonnet[1m]', 'opus[1m]'];
+  if (validShortnames.includes(model)) return model;
+
+  const lc = model.toLowerCase();
+  const has1m = lc.includes('[1m]');
+
+  if (lc.includes('opus') && !lc.includes('plan')) return has1m ? 'opus[1m]' : 'opus';
+  if (lc.includes('sonnet')) return has1m ? 'sonnet[1m]' : 'sonnet';
+  if (lc.includes('haiku')) return 'haiku';
+  if (lc.includes('opusplan') || (lc.includes('opus') && lc.includes('plan'))) return 'opusplan';
+
+  // Unknown format — return as-is and let the SDK handle it
+  return model;
 }
 
 export default router;

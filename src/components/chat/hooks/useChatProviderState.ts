@@ -59,6 +59,27 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
   }, [selectedSession?.id]);
 
   useEffect(() => {
+    if (provider !== 'claude') {
+      return;
+    }
+
+    authenticatedFetch('/api/cli/claude/config')
+      .then((response) => response.json())
+      .then((data) => {
+        if (!data.success || !data.model) {
+          return;
+        }
+
+        if (!localStorage.getItem('claude-model')) {
+          setClaudeModel(data.model);
+        }
+      })
+      .catch((error) => {
+        console.error('Error loading Claude config:', error);
+      });
+  }, [provider]);
+
+  useEffect(() => {
     if (provider !== 'cursor') {
       return;
     }
