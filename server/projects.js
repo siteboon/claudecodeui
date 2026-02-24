@@ -1617,6 +1617,11 @@ async function getCodexSessionMessages(sessionId, limit = null, offset = 0) {
               continue;
             }
 
+            // Skip AGENTS.md and other instruction blocks
+            if (textContent?.includes('<INSTRUCTIONS>')) {
+              continue;
+            }
+
             // Only add if there's actual content
             if (textContent?.trim()) {
               messages.push({
