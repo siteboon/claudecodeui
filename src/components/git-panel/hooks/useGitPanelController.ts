@@ -84,8 +84,7 @@ export function useGitPanelController({
 
         if (
           signal?.aborted ||
-          selectedProjectNameRef.current !== projectName ||
-          selectedProject.name !== projectName
+          selectedProjectNameRef.current !== projectName
         ) {
           return;
         }
@@ -121,8 +120,7 @@ export function useGitPanelController({
 
       if (
         signal?.aborted ||
-        selectedProjectNameRef.current !== projectName ||
-        selectedProject.name !== projectName
+        selectedProjectNameRef.current !== projectName
       ) {
         return;
       }
@@ -147,8 +145,7 @@ export function useGitPanelController({
       }
 
       if (
-        selectedProjectNameRef.current !== projectName ||
-        selectedProject.name !== projectName
+        selectedProjectNameRef.current !== projectName
       ) {
         return;
       }
@@ -159,8 +156,7 @@ export function useGitPanelController({
     } finally {
       if (
         signal?.aborted ||
-        selectedProjectNameRef.current !== projectName ||
-        selectedProject.name !== projectName
+        selectedProjectNameRef.current !== projectName
       ) {
         return;
       }
@@ -575,7 +571,7 @@ export function useGitPanelController({
 
   const createInitialCommit = useCallback(async () => {
     if (!selectedProject) {
-      return false;
+      throw new Error('No project selected');
     }
 
     setIsCreatingInitialCommit(true);
@@ -595,11 +591,10 @@ export function useGitPanelController({
         return true;
       }
 
-      console.error('Initial commit failed:', data.error);
       throw new Error(data.error || 'Failed to create initial commit');
     } catch (error) {
       console.error('Error creating initial commit:', error);
-      throw new Error((error as { message?: string })?.message || 'Failed to create initial commit');
+      throw error;
     } finally {
       setIsCreatingInitialCommit(false);
     }
