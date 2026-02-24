@@ -15,13 +15,13 @@ const getErrorMessage = (error: unknown) => {
   return String(error);
 };
 
-export const useCodeEditorDocument = ({ file }: UseCodeEditorDocumentParams) => {
+export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocumentParams) => {
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const fileProjectName = file.projectName;
+  const fileProjectName = file.projectName ?? projectPath;
   const filePath = file.path;
   const fileName = file.name;
   const fileDiffNewString = file.diffInfo?.new_string;
@@ -37,6 +37,10 @@ export const useCodeEditorDocument = ({ file }: UseCodeEditorDocumentParams) => 
           setContent(fileDiffNewString);
           setLoading(false);
           return;
+        }
+
+        if (!fileProjectName) {
+          throw new Error('Missing project identifier');
         }
 
         const response = await api.readFile(fileProjectName, filePath);
@@ -63,6 +67,10 @@ export const useCodeEditorDocument = ({ file }: UseCodeEditorDocumentParams) => 
     setSaveError(null);
 
     try {
+      if (!fileProjectName) {
+        throw new Error('Missing project identifier');
+      }
+
       const response = await api.saveFile(fileProjectName, filePath, content);
 
       if (!response.ok) {
