@@ -23,7 +23,7 @@ export const TERMINAL_OPTIONS: ITerminalOptions = {
     foreground: '#d4d4d4',
     cursor: '#ffffff',
     cursorAccent: '#1e1e1e',
-    selection: '#264f78',
+    selectionBackground: '#264f78',
     selectionForeground: '#ffffff',
     black: '#000000',
     red: '#cd3131',
@@ -59,5 +59,5 @@ export const TERMINAL_OPTIONS: ITerminalOptions = {
       '#00ffff',
       '#ffffff',
     ],
-  } as any,
+  },
 };
