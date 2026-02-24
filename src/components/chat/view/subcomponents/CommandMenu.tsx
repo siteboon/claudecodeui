@@ -194,7 +194,7 @@ export default function CommandMenu({
                   isSelected ? 'bg-blue-50 dark:bg-blue-900' : 'bg-transparent'
                 }`}
                 onMouseEnter={() => onSelect && commandIndex >= 0 && onSelect(command, commandIndex, true)}
-                onClick={() => onSelect && onSelect(command, commandIndex, false)}
+                onClick={() => onSelect && commandIndex >= 0 && onSelect(command, commandIndex, false)}
                 onMouseDown={(event) => event.preventDefault()}
               >
                 <div className="min-w-0 flex-1">
