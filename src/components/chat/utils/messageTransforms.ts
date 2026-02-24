@@ -37,7 +37,7 @@ const parseInstructionsTaggedMessage = (rawContent: string): { content: string; 
   }
 
   const cleaned = rawContent.split(openTag).join('').split(closeTag).join('').trim();
-  return { content: cleaned || rawContent, isInstructions: true };
+  return { content: cleaned, isInstructions: true };
 };
 
 const normalizeToolInput = (value: unknown): string => {
