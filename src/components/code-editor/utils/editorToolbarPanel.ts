@@ -39,6 +39,15 @@ const getExpandIcon = (isExpanded: boolean) => {
   return '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />';
 };
 
+const escapeHtml = (value: string): string => (
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+);
+
 export const createEditorToolbarPanelExtension = ({
   file,
   showDiff,
@@ -67,19 +76,31 @@ export const createEditorToolbarPanelExtension = ({
       const chunkCount = chunks.length;
       const maxChunkIndex = Math.max(0, chunkCount - 1);
       currentIndex = Math.max(0, Math.min(currentIndex, maxChunkIndex));
+      const escapedLabels = {
+        changes: escapeHtml(labels.changes),
+        previousChange: escapeHtml(labels.previousChange),
+        nextChange: escapeHtml(labels.nextChange),
+        hideDiff: escapeHtml(labels.hideDiff),
+        showDiff: escapeHtml(labels.showDiff),
+        collapse: escapeHtml(labels.collapse),
+        expand: escapeHtml(labels.expand),
+      };
+      // Icons are static SVG path fragments controlled by this module.
+      const diffVisibilityIcon = getDiffVisibilityIcon(showDiff);
+      const expandIcon = getExpandIcon(isExpanded);
 
       let toolbarHtml = '<div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">';
       toolbarHtml += '<div style="display: flex; align-items: center; gap: 8px;">';
 
       if (hasDiff) {
         toolbarHtml += `
-          <span style="font-weight: 500;">${chunkCount > 0 ? `${currentIndex + 1}/${chunkCount}` : '0'} ${labels.changes}</span>
-          <button class="cm-diff-nav-btn cm-diff-nav-prev" title="${labels.previousChange}" ${chunkCount === 0 ? 'disabled' : ''}>
+          <span style="font-weight: 500;">${chunkCount > 0 ? `${currentIndex + 1}/${chunkCount}` : '0'} ${escapedLabels.changes}</span>
+          <button class="cm-diff-nav-btn cm-diff-nav-prev" title="${escapedLabels.previousChange}" ${chunkCount === 0 ? 'disabled' : ''}>
             <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
             </svg>
           </button>
-          <button class="cm-diff-nav-btn cm-diff-nav-next" title="${labels.nextChange}" ${chunkCount === 0 ? 'disabled' : ''}>
+          <button class="cm-diff-nav-btn cm-diff-nav-next" title="${escapedLabels.nextChange}" ${chunkCount === 0 ? 'disabled' : ''}>
             <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
             </svg>
@@ -92,9 +113,9 @@ export const createEditorToolbarPanelExtension = ({
 
       if (file.diffInfo) {
         toolbarHtml += `
-          <button class="cm-toolbar-btn cm-toggle-diff-btn" title="${showDiff ? labels.hideDiff : labels.showDiff}">
+          <button class="cm-toolbar-btn cm-toggle-diff-btn" title="${showDiff ? escapedLabels.hideDiff : escapedLabels.showDiff}">
             <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              ${getDiffVisibilityIcon(showDiff)}
+              ${diffVisibilityIcon}
             </svg>
           </button>
         `;
@@ -112,9 +133,9 @@ export const createEditorToolbarPanelExtension = ({
 
       if (isSidebar && onToggleExpand) {
         toolbarHtml += `
-          <button class="cm-toolbar-btn cm-expand-btn" title="${isExpanded ? labels.collapse : labels.expand}">
+          <button class="cm-toolbar-btn cm-expand-btn" title="${isExpanded ? escapedLabels.collapse : escapedLabels.expand}">
             <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              ${getExpandIcon(isExpanded)}
+              ${expandIcon}
             </svg>
           </button>
         `;
