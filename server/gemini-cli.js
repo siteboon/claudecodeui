@@ -9,159 +9,160 @@ import GeminiResponseHandler from './gemini-response-handler.js';
 let activeGeminiProcesses = new Map(); // Track active processes by session ID
 
 async function spawnGemini(command, options = {}, ws) {
-    return new Promise(async (resolve, reject) => {
-        const { sessionId, projectPath, cwd, resume, toolsSettings, permissionMode, images } = options;
-        let capturedSessionId = sessionId; // Track session ID throughout the process
-        let sessionCreatedSent = false; // Track if we've already sent session-created event
-        let assistantBlocks = []; // Accumulate the full response blocks including tools
+    const { sessionId, projectPath, cwd, resume, toolsSettings, permissionMode, images } = options;
+    let capturedSessionId = sessionId; // Track session ID throughout the process
+    let sessionCreatedSent = false; // Track if we've already sent session-created event
+    let assistantBlocks = []; // Accumulate the full response blocks including tools
 
-        // Use tools settings passed from frontend, or defaults
-        const settings = toolsSettings || {
-            allowedTools: [],
-            disallowedTools: [],
-            skipPermissions: false
-        };
+    // Use tools settings passed from frontend, or defaults
+    const settings = toolsSettings || {
+        allowedTools: [],
+        disallowedTools: [],
+        skipPermissions: false
+    };
 
-        // Build Gemini CLI command - start with print/resume flags first
-        const args = [];
+    // Build Gemini CLI command - start with print/resume flags first
+    const args = [];
 
-        // Add prompt flag with command if we have a command
-        if (command && command.trim()) {
-            args.push('--prompt', command);
+    // Add prompt flag with command if we have a command
+    if (command && command.trim()) {
+        args.push('--prompt', command);
 
-            // If we have a sessionId, we want to resume
-            if (sessionId) {
-                const session = sessionManager.getSession(sessionId);
-                if (session && session.cliSessionId) {
-                    args.push('--resume', session.cliSessionId);
-                }
+        // If we have a sessionId, we want to resume
+        if (sessionId) {
+            const session = sessionManager.getSession(sessionId);
+            if (session && session.cliSessionId) {
+                args.push('--resume', session.cliSessionId);
             }
         }
+    }
 
-        // Use cwd (actual project directory) instead of projectPath (Gemini's metadata directory)
-        // Clean the path by removing any non-printable characters
-        const cleanPath = (cwd || projectPath || process.cwd()).replace(/[^\x20-\x7E]/g, '').trim();
-        const workingDir = cleanPath;
+    // Use cwd (actual project directory) instead of projectPath (Gemini's metadata directory)
+    // Clean the path by removing any non-printable characters
+    const cleanPath = (cwd || projectPath || process.cwd()).replace(/[^\x20-\x7E]/g, '').trim();
+    const workingDir = cleanPath;
 
-        // Handle images by saving them to temporary files and passing paths to Gemini
-        const tempImagePaths = [];
-        let tempDir = null;
-        if (images && images.length > 0) {
-            try {
-                // Create temp directory in the project directory so Gemini can access it
-                tempDir = path.join(workingDir, '.tmp', 'images', Date.now().toString());
-                await fs.mkdir(tempDir, { recursive: true });
-
-                // Save each image to a temp file
-                for (const [index, image] of images.entries()) {
-                    // Extract base64 data and mime type
-                    const matches = image.data.match(/^data:([^;]+);base64,(.+)$/);
-                    if (!matches) {
-                        continue;
-                    }
-
-                    const [, mimeType, base64Data] = matches;
-                    const extension = mimeType.split('/')[1] || 'png';
-                    const filename = `image_${index}.${extension}`;
-                    const filepath = path.join(tempDir, filename);
-
-                    // Write base64 data to file
-                    await fs.writeFile(filepath, Buffer.from(base64Data, 'base64'));
-                    tempImagePaths.push(filepath);
-                }
-
-                // Include the full image paths in the prompt for Gemini to reference
-                // Gemini CLI can read images from file paths in the prompt
-                if (tempImagePaths.length > 0 && command && command.trim()) {
-                    const imageNote = `\n\n[Images given: ${tempImagePaths.length} images are located at the following paths:]\n${tempImagePaths.map((p, i) => `${i + 1}. ${p}`).join('\n')}`;
-                    const modifiedCommand = command + imageNote;
-
-                    // Update the command in args
-                    const promptIndex = args.indexOf('--prompt');
-                    if (promptIndex !== -1 && args[promptIndex + 1] === command) {
-                        args[promptIndex + 1] = modifiedCommand;
-                    } else if (promptIndex !== -1) {
-                        // If we're using context, update the full prompt
-                        args[promptIndex + 1] = args[promptIndex + 1] + imageNote;
-                    }
-                }
-            } catch (error) {
-                console.error('Error processing images for Gemini:', error);
-            }
-        }
-
-        // Add basic flags for Gemini
-        if (options.debug) {
-            args.push('--debug');
-        }
-
-        // Add MCP config flag only if MCP servers are configured
+    // Handle images by saving them to temporary files and passing paths to Gemini
+    const tempImagePaths = [];
+    let tempDir = null;
+    if (images && images.length > 0) {
         try {
-            const geminiConfigPath = path.join(os.homedir(), '.gemini.json');
-            let hasMcpServers = false;
+            // Create temp directory in the project directory so Gemini can access it
+            tempDir = path.join(workingDir, '.tmp', 'images', Date.now().toString());
+            await fs.mkdir(tempDir, { recursive: true });
 
-            try {
-                await fs.access(geminiConfigPath);
-                const geminiConfigRaw = await fs.readFile(geminiConfigPath, 'utf8');
-                const geminiConfig = JSON.parse(geminiConfigRaw);
-
-                // Check global MCP servers
-                if (geminiConfig.mcpServers && Object.keys(geminiConfig.mcpServers).length > 0) {
-                    hasMcpServers = true;
+            // Save each image to a temp file
+            for (const [index, image] of images.entries()) {
+                // Extract base64 data and mime type
+                const matches = image.data.match(/^data:([^;]+);base64,(.+)$/);
+                if (!matches) {
+                    continue;
                 }
 
-                // Check project-specific MCP servers
-                if (!hasMcpServers && geminiConfig.geminiProjects) {
-                    const currentProjectPath = process.cwd();
-                    const projectConfig = geminiConfig.geminiProjects[currentProjectPath];
-                    if (projectConfig && projectConfig.mcpServers && Object.keys(projectConfig.mcpServers).length > 0) {
-                        hasMcpServers = true;
-                    }
-                }
-            } catch (e) {
-                // Ignore if file doesn't exist or isn't parsable
+                const [, mimeType, base64Data] = matches;
+                const extension = mimeType.split('/')[1] || 'png';
+                const filename = `image_${index}.${extension}`;
+                const filepath = path.join(tempDir, filename);
+
+                // Write base64 data to file
+                await fs.writeFile(filepath, Buffer.from(base64Data, 'base64'));
+                tempImagePaths.push(filepath);
             }
 
-            if (hasMcpServers) {
-                args.push('--mcp-config', geminiConfigPath);
+            // Include the full image paths in the prompt for Gemini to reference
+            // Gemini CLI can read images from file paths in the prompt
+            if (tempImagePaths.length > 0 && command && command.trim()) {
+                const imageNote = `\n\n[Images given: ${tempImagePaths.length} images are located at the following paths:]\n${tempImagePaths.map((p, i) => `${i + 1}. ${p}`).join('\n')}`;
+                const modifiedCommand = command + imageNote;
+
+                // Update the command in args
+                const promptIndex = args.indexOf('--prompt');
+                if (promptIndex !== -1 && args[promptIndex + 1] === command) {
+                    args[promptIndex + 1] = modifiedCommand;
+                } else if (promptIndex !== -1) {
+                    // If we're using context, update the full prompt
+                    args[promptIndex + 1] = args[promptIndex + 1] + imageNote;
+                }
             }
         } catch (error) {
-            // Ignore outer errors
+            console.error('Error processing images for Gemini:', error);
+        }
+    }
+
+    // Add basic flags for Gemini
+    if (options.debug) {
+        args.push('--debug');
+    }
+
+    // Add MCP config flag only if MCP servers are configured
+    try {
+        const geminiConfigPath = path.join(os.homedir(), '.gemini.json');
+        let hasMcpServers = false;
+
+        try {
+            await fs.access(geminiConfigPath);
+            const geminiConfigRaw = await fs.readFile(geminiConfigPath, 'utf8');
+            const geminiConfig = JSON.parse(geminiConfigRaw);
+
+            // Check global MCP servers
+            if (geminiConfig.mcpServers && Object.keys(geminiConfig.mcpServers).length > 0) {
+                hasMcpServers = true;
+            }
+
+            // Check project-specific MCP servers
+            if (!hasMcpServers && geminiConfig.geminiProjects) {
+                const currentProjectPath = process.cwd();
+                const projectConfig = geminiConfig.geminiProjects[currentProjectPath];
+                if (projectConfig && projectConfig.mcpServers && Object.keys(projectConfig.mcpServers).length > 0) {
+                    hasMcpServers = true;
+                }
+            }
+        } catch (e) {
+            // Ignore if file doesn't exist or isn't parsable
         }
 
-        // Add model for all sessions (both new and resumed)
-        let modelToUse = options.model || 'gemini-2.5-flash';
-        args.push('--model', modelToUse);
-        args.push('--output-format', 'stream-json');
-
-        // Handle approval modes and allowed tools
-        if (settings.skipPermissions || options.skipPermissions || permissionMode === 'yolo') {
-            args.push('--yolo');
-        } else if (permissionMode === 'auto_edit') {
-            args.push('--approval-mode', 'auto_edit');
-        } else if (permissionMode === 'plan') {
-            args.push('--approval-mode', 'plan');
+        if (hasMcpServers) {
+            args.push('--mcp-config', geminiConfigPath);
         }
+    } catch (error) {
+        // Ignore outer errors
+    }
 
-        if (settings.allowedTools && settings.allowedTools.length > 0) {
-            args.push('--allowed-tools', settings.allowedTools.join(','));
-        }
+    // Add model for all sessions (both new and resumed)
+    let modelToUse = options.model || 'gemini-2.5-flash';
+    args.push('--model', modelToUse);
+    args.push('--output-format', 'stream-json');
 
-        // Try to find gemini in PATH first, then fall back to environment variable
-        const geminiPath = process.env.GEMINI_PATH || 'gemini';
-        console.log('Spawning Gemini CLI:', geminiPath, args.join(' '));
-        console.log('Working directory:', workingDir);
+    // Handle approval modes and allowed tools
+    if (settings.skipPermissions || options.skipPermissions || permissionMode === 'yolo') {
+        args.push('--yolo');
+    } else if (permissionMode === 'auto_edit') {
+        args.push('--approval-mode', 'auto_edit');
+    } else if (permissionMode === 'plan') {
+        args.push('--approval-mode', 'plan');
+    }
 
-        let spawnCmd = geminiPath;
-        let spawnArgs = args;
+    if (settings.allowedTools && settings.allowedTools.length > 0) {
+        args.push('--allowed-tools', settings.allowedTools.join(','));
+    }
 
-        // On non-Windows platforms, wrap the execution in a shell to avoid ENOEXEC
-        // which happens when the target is a script lacking a shebang.
-        if (os.platform() !== 'win32') {
-            spawnCmd = 'sh';
-            spawnArgs = ['-c', `"${geminiPath}" "$@"`, '--', ...args];
-        }
+    // Try to find gemini in PATH first, then fall back to environment variable
+    const geminiPath = process.env.GEMINI_PATH || 'gemini';
+    console.log('Spawning Gemini CLI:', geminiPath, args.join(' '));
+    console.log('Working directory:', workingDir);
 
+    let spawnCmd = geminiPath;
+    let spawnArgs = args;
+
+    // On non-Windows platforms, wrap the execution in a shell to avoid ENOEXEC
+    // which happens when the target is a script lacking a shebang.
+    if (os.platform() !== 'win32') {
+        spawnCmd = 'sh';
+        // Use exec to replace the shell process, ensuring signals hit gemini directly
+        spawnArgs = ['-c', 'exec "$0" "$@"', geminiPath, ...args];
+    }
+
+    return new Promise((resolve, reject) => {
         const geminiProcess = spawn(spawnCmd, spawnArgs, {
             cwd: workingDir,
             stdio: ['pipe', 'pipe', 'pipe'],
@@ -184,17 +185,21 @@ async function spawnGemini(command, options = {}, ws) {
 
         // Add timeout handler
         let hasReceivedOutput = false;
-        const timeoutMs = 30000; // 30 seconds
+        const timeoutMs = 120000; // 120 seconds for slower models
         let timeout;
 
         const startTimeout = () => {
             if (timeout) clearTimeout(timeout);
             timeout = setTimeout(() => {
+                const socketSessionId = typeof ws.getSessionId === 'function' ? ws.getSessionId() : (capturedSessionId || sessionId || processKey);
                 ws.send({
                     type: 'gemini-error',
-                    error: 'Gemini CLI timeout - no response received for 30 seconds'
+                    sessionId: socketSessionId,
+                    error: `Gemini CLI timeout - no response received for ${timeoutMs / 1000} seconds`
                 });
-                geminiProcess.kill('SIGTERM');
+                try {
+                    geminiProcess.kill('SIGTERM');
+                } catch (e) { }
             }, timeoutMs);
         };
 
@@ -374,7 +379,7 @@ async function spawnGemini(command, options = {}, ws) {
             if (code === 0) {
                 resolve();
             } else {
-                reject(new Error(`Gemini CLI exited with code ${code}`));
+                reject(new Error(code === null ? 'Gemini CLI process was terminated or timed out' : `Gemini CLI exited with code ${code}`));
             }
         });
 
@@ -398,34 +403,32 @@ async function spawnGemini(command, options = {}, ws) {
 }
 
 function abortGeminiSession(sessionId) {
-    let process = activeGeminiProcesses.get(sessionId);
+    let geminiProc = activeGeminiProcesses.get(sessionId);
     let processKey = sessionId;
 
-    if (!process) {
+    if (!geminiProc) {
         for (const [key, proc] of activeGeminiProcesses.entries()) {
-            if (key.includes(sessionId) || sessionId.includes(key)) {
-                process = proc;
+            if (proc.sessionId === sessionId) {
+                geminiProc = proc;
                 processKey = key;
                 break;
             }
         }
     }
 
-    if (process) {
+    if (geminiProc) {
         try {
-            process.kill('SIGTERM');
+            geminiProc.kill('SIGTERM');
             setTimeout(() => {
                 if (activeGeminiProcesses.has(processKey)) {
                     try {
-                        process.kill('SIGKILL');
+                        geminiProc.kill('SIGKILL');
                     } catch (e) { }
                 }
             }, 2000); // Wait 2 seconds before force kill
 
-            activeGeminiProcesses.delete(processKey);
             return true;
         } catch (error) {
-            activeGeminiProcesses.delete(processKey);
             return false;
         }
     }

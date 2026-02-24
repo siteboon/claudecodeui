@@ -1028,6 +1028,8 @@ function handleChatConnection(ws) {
                     isActive = isCursorSessionActive(sessionId);
                 } else if (provider === 'codex') {
                     isActive = isCodexSessionActive(sessionId);
+                } else if (provider === 'gemini') {
+                    isActive = isGeminiSessionActive(sessionId);
                 } else {
                     // Use Claude Agents SDK
                     isActive = isClaudeSDKSessionActive(sessionId);
@@ -1044,7 +1046,8 @@ function handleChatConnection(ws) {
                 const activeSessions = {
                     claude: getActiveClaudeSDKSessions(),
                     cursor: getActiveCursorSessions(),
-                    codex: getActiveCodexSessions()
+                    codex: getActiveCodexSessions(),
+                    gemini: getActiveGeminiSessions()
                 };
                 writer.send({
                     type: 'active-sessions',
@@ -1211,10 +1214,17 @@ function handleShellConnection(ws) {
                         // Use gemini command
                         const command = initialCommand || 'gemini';
                         if (os.platform() === 'win32') {
-                            shellCommand = `Set-Location -Path "${projectPath}"; ${command}`;
+                            if (hasSession && sessionId) {
+                                shellCommand = `Set-Location -Path "${projectPath}"; ${command} --resume "${sessionId}"`;
+                            } else {
+                                shellCommand = `Set-Location -Path "${projectPath}"; ${command}`;
+                            }
                         } else {
-                            shellCommand = `cd "${projectPath}" && ${command}`;
-
+                            if (hasSession && sessionId) {
+                                shellCommand = `cd "${projectPath}" && ${command} --resume "${sessionId}"`;
+                            } else {
+                                shellCommand = `cd "${projectPath}" && ${command}`;
+                            }
                         }
                     } else {
                         // Use claude command (default) or initialCommand if provided

@@ -585,7 +585,9 @@ export function useChatComposerState({
               ? 'cursor-tools-settings'
               : provider === 'codex'
                 ? 'codex-settings'
-                : 'claude-settings';
+                : provider === 'gemini'
+                  ? 'gemini-settings'
+                  : 'claude-settings';
           const savedSettings = safeLocalStorage.getItem(settingsKey);
           if (savedSettings) {
             return JSON.parse(savedSettings);

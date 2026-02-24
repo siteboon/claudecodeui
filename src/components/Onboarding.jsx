@@ -80,19 +80,19 @@ const Onboarding = ({ onComplete }) => {
     }
   }, [activeLoginProvider]);
 
-  const checkClaudeAuthStatus = async () => {
+  const checkProviderAuthStatus = async (provider, setter) => {
     try {
-      const response = await authenticatedFetch('/api/cli/claude/status');
+      const response = await authenticatedFetch(`/api/cli/${provider}/status`);
       if (response.ok) {
         const data = await response.json();
-        setClaudeAuthStatus({
+        setter({
           authenticated: data.authenticated,
           email: data.email,
           loading: false,
           error: data.error || null
         });
       } else {
-        setClaudeAuthStatus({
+        setter({
           authenticated: false,
           email: null,
           loading: false,
@@ -100,8 +100,8 @@ const Onboarding = ({ onComplete }) => {
         });
       }
     } catch (error) {
-      console.error('Error checking Claude auth status:', error);
-      setClaudeAuthStatus({
+      console.error(`Error checking ${provider} auth status:`, error);
+      setter({
         authenticated: false,
         email: null,
         loading: false,
@@ -110,95 +110,10 @@ const Onboarding = ({ onComplete }) => {
     }
   };
 
-  const checkCursorAuthStatus = async () => {
-    try {
-      const response = await authenticatedFetch('/api/cli/cursor/status');
-      if (response.ok) {
-        const data = await response.json();
-        setCursorAuthStatus({
-          authenticated: data.authenticated,
-          email: data.email,
-          loading: false,
-          error: data.error || null
-        });
-      } else {
-        setCursorAuthStatus({
-          authenticated: false,
-          email: null,
-          loading: false,
-          error: 'Failed to check authentication status'
-        });
-      }
-    } catch (error) {
-      console.error('Error checking Cursor auth status:', error);
-      setCursorAuthStatus({
-        authenticated: false,
-        email: null,
-        loading: false,
-        error: error.message
-      });
-    }
-  };
-
-  const checkCodexAuthStatus = async () => {
-    try {
-      const response = await authenticatedFetch('/api/cli/codex/status');
-      if (response.ok) {
-        const data = await response.json();
-        setCodexAuthStatus({
-          authenticated: data.authenticated,
-          email: data.email,
-          loading: false,
-          error: data.error || null
-        });
-      } else {
-        setCodexAuthStatus({
-          authenticated: false,
-          email: null,
-          loading: false,
-          error: 'Failed to check authentication status'
-        });
-      }
-    } catch (error) {
-      console.error('Error checking Codex auth status:', error);
-      setCodexAuthStatus({
-        authenticated: false,
-        email: null,
-        loading: false,
-        error: error.message
-      });
-    }
-  };
-
-  const checkGeminiAuthStatus = async () => {
-    try {
-      const response = await authenticatedFetch('/api/cli/gemini/status');
-      if (response.ok) {
-        const data = await response.json();
-        setGeminiAuthStatus({
-          authenticated: data.authenticated,
-          email: data.email,
-          loading: false,
-          error: data.error || null
-        });
-      } else {
-        setGeminiAuthStatus({
-          authenticated: false,
-          email: null,
-          loading: false,
-          error: 'Failed to check authentication status'
-        });
-      }
-    } catch (error) {
-      console.error('Error checking Gemini auth status:', error);
-      setGeminiAuthStatus({
-        authenticated: false,
-        email: null,
-        loading: false,
-        error: error.message
-      });
-    }
-  };
+  const checkClaudeAuthStatus = () => checkProviderAuthStatus('claude', setClaudeAuthStatus);
+  const checkCursorAuthStatus = () => checkProviderAuthStatus('cursor', setCursorAuthStatus);
+  const checkCodexAuthStatus = () => checkProviderAuthStatus('codex', setCodexAuthStatus);
+  const checkGeminiAuthStatus = () => checkProviderAuthStatus('gemini', setGeminiAuthStatus);
 
   const handleClaudeLogin = () => setActiveLoginProvider('claude');
   const handleCursorLogin = () => setActiveLoginProvider('cursor');
@@ -475,13 +390,13 @@ const Onboarding = ({ onComplete }) => {
 
               {/* Gemini */}
               <div className={`border rounded-lg p-4 transition-colors ${geminiAuthStatus.authenticated
-                ? 'bg-cyan-50 dark:bg-cyan-900/20 border-cyan-200 dark:border-cyan-800'
+                ? 'bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-800'
                 : 'border-border bg-card'
                 }`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-cyan-100 dark:bg-cyan-900/30 rounded-full flex items-center justify-center">
-                      <SessionProviderLogo provider="gemini" className="w-5 h-5" />
+                    <div className="w-10 h-10 bg-teal-100 dark:bg-teal-900/30 rounded-full flex items-center justify-center">
+                      <SessionProviderLogo provider="gemini" className="w-5 h-5 text-teal-600 dark:text-teal-400" />
                     </div>
                     <div>
                       <div className="font-medium text-foreground flex items-center gap-2">
@@ -497,7 +412,7 @@ const Onboarding = ({ onComplete }) => {
                   {!geminiAuthStatus.authenticated && !geminiAuthStatus.loading && (
                     <button
                       onClick={handleGeminiLogin}
-                      className="bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors"
+                      className="bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors"
                     >
                       Login
                     </button>

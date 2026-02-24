@@ -61,19 +61,6 @@ class GeminiResponseHandler {
       if (socketSessionId) payload.sessionId = socketSessionId;
       this.ws.send(payload);
     }
-    else if (event.type === 'result') {
-      // Send a finalize message string
-      let payload = {
-        type: 'gemini-response',
-        data: {
-          type: 'message',
-          content: '',
-          isPartial: false
-        }
-      };
-      if (socketSessionId) payload.sessionId = socketSessionId;
-      this.ws.send(payload);
-    }
     else if (event.type === 'tool_use') {
       if (this.onToolUse) {
         this.onToolUse(event);
@@ -101,16 +88,28 @@ class GeminiResponseHandler {
       this.ws.send(payload);
     }
     else if (event.type === 'result') {
+      // Send a finalize message string
+      let payload = {
+        type: 'gemini-response',
+        data: {
+          type: 'message',
+          content: '',
+          isPartial: false
+        }
+      };
+      if (socketSessionId) payload.sessionId = socketSessionId;
+      this.ws.send(payload);
+
       if (event.stats && event.stats.total_tokens) {
-        let payload = {
+        let statsPayload = {
           type: 'claude-status',
           data: {
             status: 'Complete',
             tokens: event.stats.total_tokens
           }
         };
-        if (socketSessionId) payload.sessionId = socketSessionId;
-        this.ws.send(payload);
+        if (socketSessionId) statsPayload.sessionId = socketSessionId;
+        this.ws.send(statsPayload);
       }
     }
     else if (event.type === 'error') {

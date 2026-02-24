@@ -903,19 +903,34 @@ export function useChatRealtimeHandlers({
 
         if (geminiData && geminiData.type === 'message' && typeof geminiData.content === 'string') {
           const content = decodeHtmlEntities(geminiData.content);
-          if (content.trim()) {
+
+          if (content) {
             streamBufferRef.current += streamBufferRef.current ? `\n${content}` : content;
-            if (!streamTimerRef.current) {
-              streamTimerRef.current = window.setTimeout(() => {
-                const chunk = streamBufferRef.current;
-                streamBufferRef.current = '';
-                streamTimerRef.current = null;
-                appendStreamingChunk(setChatMessages, chunk, true);
-                if (!geminiData.isPartial) {
-                  finalizeStreamingMessage(setChatMessages);
-                }
-              }, 100);
+          }
+
+          if (!geminiData.isPartial) {
+            // Immediate flush and finalization for the last chunk
+            if (streamTimerRef.current) {
+              clearTimeout(streamTimerRef.current);
+              streamTimerRef.current = null;
             }
+            const chunk = streamBufferRef.current;
+            streamBufferRef.current = '';
+
+            if (chunk) {
+              appendStreamingChunk(setChatMessages, chunk, true);
+            }
+            finalizeStreamingMessage(setChatMessages);
+          } else if (!streamTimerRef.current && streamBufferRef.current) {
+            streamTimerRef.current = window.setTimeout(() => {
+              const chunk = streamBufferRef.current;
+              streamBufferRef.current = '';
+              streamTimerRef.current = null;
+
+              if (chunk) {
+                appendStreamingChunk(setChatMessages, chunk, true);
+              }
+            }, 100);
           }
         }
         break;
