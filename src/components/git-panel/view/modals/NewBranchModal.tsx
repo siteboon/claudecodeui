@@ -70,7 +70,16 @@ export default function NewBranchModal({
               onChange={(event) => setNewBranchName(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && !isCreatingBranch) {
+                  event.preventDefault();
+                  event.stopPropagation();
                   void handleCreateBranch();
+                  return;
+                }
+
+                if (event.key === 'Escape' && !isCreatingBranch) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onClose();
                 }
               }}
               placeholder="feature/new-feature"
