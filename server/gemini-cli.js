@@ -27,13 +27,13 @@ async function spawnGemini(command, options = {}, ws) {
     // Add prompt flag with command if we have a command
     if (command && command.trim()) {
         args.push('--prompt', command);
+    }
 
-        // If we have a sessionId, we want to resume
-        if (sessionId) {
-            const session = sessionManager.getSession(sessionId);
-            if (session && session.cliSessionId) {
-                args.push('--resume', session.cliSessionId);
-            }
+    // If we have a sessionId, we want to resume
+    if (sessionId) {
+        const session = sessionManager.getSession(sessionId);
+        if (session && session.cliSessionId) {
+            args.push('--resume', session.cliSessionId);
         }
     }
 
