@@ -140,11 +140,7 @@ export function useShellRuntime({
 
   useEffect(() => {
     const currentSessionId = selectedSession?.id ?? null;
-    if (
-      lastSessionIdRef.current !== null &&
-      lastSessionIdRef.current !== currentSessionId &&
-      isInitialized
-    ) {
+    if (lastSessionIdRef.current !== currentSessionId && isInitialized) {
       disconnectFromShell();
     }
 
