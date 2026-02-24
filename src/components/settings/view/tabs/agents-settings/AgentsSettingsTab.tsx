@@ -24,6 +24,7 @@ export default function AgentsSettingsTab({
   mcpTestResults,
   mcpServerTools,
   mcpToolsLoading,
+  deleteError,
   onOpenMcpForm,
   onDeleteMcpServer,
   onTestMcpServer,
@@ -86,6 +87,7 @@ export default function AgentsSettingsTab({
           mcpTestResults={mcpTestResults}
           mcpServerTools={mcpServerTools}
           mcpToolsLoading={mcpToolsLoading}
+          deleteError={deleteError}
           onOpenMcpForm={onOpenMcpForm}
           onDeleteMcpServer={onDeleteMcpServer}
           onTestMcpServer={onTestMcpServer}

@@ -31,6 +31,7 @@ type ClaudeMcpServersProps = {
   testResults: Record<string, McpTestResult>;
   serverTools: Record<string, McpToolsResult>;
   toolsLoading: Record<string, boolean>;
+  deleteError?: string | null;
 };
 
 function ClaudeMcpServers({
@@ -40,6 +41,7 @@ function ClaudeMcpServers({
   onDelete,
   testResults,
   serverTools,
+  deleteError,
 }: Omit<ClaudeMcpServersProps, 'agent' | 'onTest' | 'onDiscoverTools' | 'toolsLoading'>) {
   const { t } = useTranslation('settings');
 
@@ -57,6 +59,11 @@ function ClaudeMcpServers({
           {t('mcpServers.addButton')}
         </Button>
       </div>
+      {deleteError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800/60 dark:bg-red-900/20 dark:text-red-200">
+          {deleteError}
+        </div>
+      )}
 
       <div className="space-y-2">
         {servers.map((server) => {
@@ -254,9 +261,10 @@ type CodexMcpServersProps = {
   onAdd: () => void;
   onEdit: (server: McpServer) => void;
   onDelete: (serverId: string) => void;
+  deleteError?: string | null;
 };
 
-function CodexMcpServers({ servers, onAdd, onEdit, onDelete }: Omit<CodexMcpServersProps, 'agent'>) {
+function CodexMcpServers({ servers, onAdd, onEdit, onDelete, deleteError }: Omit<CodexMcpServersProps, 'agent'>) {
   const { t } = useTranslation('settings');
 
   return (
@@ -273,6 +281,11 @@ function CodexMcpServers({ servers, onAdd, onEdit, onDelete }: Omit<CodexMcpServ
           {t('mcpServers.addButton')}
         </Button>
       </div>
+      {deleteError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800/60 dark:bg-red-900/20 dark:text-red-200">
+          {deleteError}
+        </div>
+      )}
 
       <div className="space-y-2">
         {servers.map((server) => (

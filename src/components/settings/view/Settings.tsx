@@ -31,6 +31,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     setActiveTab,
     isSaving,
     saveStatus,
+    deleteError,
     projectSortOrder,
     setProjectSortOrder,
     codeEditorSettings,
@@ -153,6 +154,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
                 onDiscoverMcpTools={handleMcpToolsDiscovery}
                 onOpenCodexMcpForm={openCodexMcpForm}
                 onDeleteCodexMcpServer={handleCodexMcpDelete}
+                deleteError={deleteError}
               />
             )}
 

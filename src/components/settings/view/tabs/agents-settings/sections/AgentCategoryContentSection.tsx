@@ -19,6 +19,7 @@ export default function AgentCategoryContentSection({
   mcpTestResults,
   mcpServerTools,
   mcpToolsLoading,
+  deleteError,
   onOpenMcpForm,
   onDeleteMcpServer,
   onTestMcpServer,
@@ -95,6 +96,7 @@ export default function AgentCategoryContentSection({
           testResults={mcpTestResults}
           serverTools={mcpServerTools}
           toolsLoading={mcpToolsLoading}
+          deleteError={deleteError}
         />
       )}
 
@@ -115,6 +117,7 @@ export default function AgentCategoryContentSection({
           onAdd={() => onOpenCodexMcpForm()}
           onEdit={(server) => onOpenCodexMcpForm(server)}
           onDelete={(serverId) => onDeleteCodexMcpServer(serverId)}
+          deleteError={deleteError}
         />
       )}
     </div>

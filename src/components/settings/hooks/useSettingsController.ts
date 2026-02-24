@@ -191,6 +191,7 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
   const [activeTab, setActiveTab] = useState<SettingsMainTab>(() => normalizeMainTab(initialTab));
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'success' | 'error' | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [projectSortOrder, setProjectSortOrder] = useState<ProjectSortOrder>('name');
   const [codeEditorSettings, setCodeEditorSettings] = useState<CodeEditorSettingsState>(() => (
     readCodeEditorSettings()
@@ -456,12 +457,14 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
         return;
       }
 
+      setDeleteError(null);
       try {
         await deleteMcpServer(serverId, scope);
         await fetchMcpServers();
+        setDeleteError(null);
         setSaveStatus('success');
       } catch (error) {
-        alert(`Error: ${getErrorMessage(error)}`);
+        setDeleteError(getErrorMessage(error));
         setSaveStatus('error');
       }
     },
@@ -609,12 +612,14 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
         return;
       }
 
+      setDeleteError(null);
       try {
         await deleteCodexMcpServer(serverName);
         await fetchCodexMcpServers();
+        setDeleteError(null);
         setSaveStatus('success');
       } catch (error) {
-        alert(`Error: ${getErrorMessage(error)}`);
+        setDeleteError(getErrorMessage(error));
         setSaveStatus('error');
       }
     },
@@ -706,6 +711,10 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
       }));
 
       setSaveStatus('success');
+      if (closeTimerRef.current !== null) {
+        window.clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
       closeTimerRef.current = window.setTimeout(() => onClose(), 1000);
     } catch (error) {
       console.error('Error saving settings:', error);
@@ -776,6 +785,7 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
   useEffect(() => () => {
     if (closeTimerRef.current !== null) {
       window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
     }
   }, []);
 
@@ -786,6 +796,7 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
     toggleDarkMode,
     isSaving,
     saveStatus,
+    deleteError,
     projectSortOrder,
     setProjectSortOrder,
     codeEditorSettings,

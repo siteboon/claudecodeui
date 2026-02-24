@@ -36,6 +36,7 @@ export type AgentsSettingsTabProps = {
   mcpTestResults: Record<string, McpTestResult>;
   mcpServerTools: Record<string, McpToolsResult>;
   mcpToolsLoading: Record<string, boolean>;
+  deleteError: string | null;
   onOpenMcpForm: (server?: McpServer) => void;
   onDeleteMcpServer: (serverId: string, scope?: string) => void;
   onTestMcpServer: (serverId: string, scope?: string) => void;
@@ -71,6 +72,7 @@ export type AgentCategoryContentSectionProps = {
   mcpTestResults: Record<string, McpTestResult>;
   mcpServerTools: Record<string, McpToolsResult>;
   mcpToolsLoading: Record<string, boolean>;
+  deleteError: string | null;
   onOpenMcpForm: (server?: McpServer) => void;
   onDeleteMcpServer: (serverId: string, scope?: string) => void;
   onTestMcpServer: (serverId: string, scope?: string) => void;
