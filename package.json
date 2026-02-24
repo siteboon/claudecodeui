@@ -1,6 +1,6 @@
 {
   "name": "@siteboon/claude-code-ui",
-  "version": "1.19.0",
+  "version": "1.20.1",
   "description": "A web-based UI for Claude Code CLI",
   "type": "module",
   "main": "server/index.js",
@@ -32,6 +32,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "start": "npm run build && npm run server",
     "release": "./release.sh",
+    "prepublishOnly": "npm run build",
     "postinstall": "node scripts/fix-node-pty.js"
   },
   "keywords": [

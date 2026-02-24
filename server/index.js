@@ -9,6 +9,8 @@ import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+const installMode = fs.existsSync(path.join(__dirname, '..', '.git')) ? 'git' : 'npm';
+
 // ANSI color codes for terminal output
 const colors = {
     reset: '\x1b[0m',
@@ -334,7 +336,8 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    installMode
   });
 });
 
@@ -456,11 +459,13 @@ app.post('/api/system/update', authenticateToken, async (req, res) => {
 
         console.log('Starting system update from directory:', projectRoot);
 
-        // Run the update command
-        const updateCommand = 'git checkout main && git pull && npm install';
+        // Run the update command based on install mode
+        const updateCommand = installMode === 'git'
+            ? 'git checkout main && git pull && npm install'
+            : 'npm install -g @siteboon/claude-code-ui@latest';
 
         const child = spawn('sh', ['-c', updateCommand], {
-            cwd: projectRoot,
+            cwd: installMode === 'git' ? projectRoot : os.homedir(),
             env: process.env
         });
 
@@ -1179,7 +1184,7 @@ function handleShellConnection(ws) {
                 if (isPlainShell) {
                     welcomeMsg = `\x1b[36mStarting terminal in: ${projectPath}\x1b[0m\r\n`;
                 } else {
-                    const providerName = provider === 'cursor' ? 'Cursor' : 'Claude';
+                    const providerName = provider === 'cursor' ? 'Cursor' : provider === 'codex' ? 'Codex' : 'Claude';
                     welcomeMsg = hasSession ?
                         `\x1b[36mResuming ${providerName} session ${sessionId} in: ${projectPath}\x1b[0m\r\n` :
                         `\x1b[36mStarting new ${providerName} session in: ${projectPath}\x1b[0m\r\n`;
@@ -1213,6 +1218,23 @@ function handleShellConnection(ws) {
                                 shellCommand = `cd "${projectPath}" && cursor-agent --resume="${sessionId}"`;
                             } else {
                                 shellCommand = `cd "${projectPath}" && cursor-agent`;
+                            }
+                        }
+                    } else if (provider === 'codex') {
+                        // Use codex command
+                        if (os.platform() === 'win32') {
+                            if (hasSession && sessionId) {
+                                // Try to resume session, but with fallback to a new session if it fails
+                                shellCommand = `Set-Location -Path "${projectPath}"; codex resume "${sessionId}"; if ($LASTEXITCODE -ne 0) { codex }`;
+                            } else {
+                                shellCommand = `Set-Location -Path "${projectPath}"; codex`;
+                            }
+                        } else {
+                            if (hasSession && sessionId) {
+                                // Try to resume session, but with fallback to a new session if it fails
+                                shellCommand = `cd "${projectPath}" && codex resume "${sessionId}" || codex`;
+                            } else {
+                                shellCommand = `cd "${projectPath}" && codex`;
                             }
                         }
                     } else {
