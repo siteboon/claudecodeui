@@ -99,7 +99,10 @@ export default function ProviderSelectionEmptyState({
   };
 
   const handleModelChange = (value: string) => {
-    if (provider === 'claude') { setClaudeModel(value); localStorage.setItem('claude-model', value); }
+    if (provider === 'claude') {
+      setClaudeModel(value);
+      // Don't save to localStorage - let CLI config be the default on page load
+    }
     else if (provider === 'codex') { setCodexModel(value); localStorage.setItem('codex-model', value); }
     else { setCursorModel(value); localStorage.setItem('cursor-model', value); }
   };

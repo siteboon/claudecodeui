@@ -18,7 +18,8 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
     return localStorage.getItem('cursor-model') || CURSOR_MODELS.DEFAULT;
   });
   const [claudeModel, setClaudeModel] = useState<string>(() => {
-    return localStorage.getItem('claude-model') || CLAUDE_MODELS.DEFAULT;
+    // Don't use localStorage - CLI config takes priority
+    return CLAUDE_MODELS.DEFAULT;
   });
   const [codexModel, setCodexModel] = useState<string>(() => {
     return localStorage.getItem('codex-model') || CODEX_MODELS.DEFAULT;
@@ -70,9 +71,8 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
           return;
         }
 
-        if (!localStorage.getItem('claude-model')) {
-          setClaudeModel(data.model);
-        }
+        // Always use CLI config as default
+        setClaudeModel(data.model);
       })
       .catch((error) => {
         console.error('Error loading Claude config:', error);
