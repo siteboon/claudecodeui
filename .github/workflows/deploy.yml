@@ -34,6 +34,11 @@ jobs:
 
             # Clone or pull
             if [ ! -d "$PROD_DIR/.git" ]; then
+              # Handle existing non-git directory (legacy copy)
+              if [ -d "$PROD_DIR" ]; then
+                BACKUP="/Users/xuzhi/prod/claudecodeui.bak.$(date +%s)"
+                mv "$PROD_DIR" "$BACKUP"
+              fi
               git clone https://github.com/GeorgeZhiXu/claudecodeui.git "$PROD_DIR"
             else
               cd "$PROD_DIR"
