@@ -6,7 +6,8 @@ import type { Project, ProjectSession } from '../../../types/app';
 import { TERMINAL_INIT_DELAY_MS } from '../constants/constants';
 import { getShellWebSocketUrl, parseShellMessage, sendSocketMessage } from '../utils/socket';
 
-const ANSI_ESCAPE_REGEX = /\x1b\[[0-9;]*m/g;
+const ANSI_ESCAPE_REGEX =
+  /(?:\u001B\[[0-?]*[ -/]*[@-~]|\u009B[0-?]*[ -/]*[@-~]|\u001B\][^\u0007\u001B]*(?:\u0007|\u001B\\)|\u009D[^\u0007\u009C]*(?:\u0007|\u009C)|\u001B[PX^_][^\u001B]*\u001B\\|[\u0090\u0098\u009E\u009F][^\u009C]*\u009C|\u001B[@-Z\\-_])/g;
 const PROCESS_EXIT_REGEX = /Process exited with code (\d+)/;
 
 type UseShellConnectionOptions = {
@@ -58,7 +59,8 @@ export function useShellConnection({
         return;
       }
 
-      const cleanOutput = output.replace(ANSI_ESCAPE_REGEX, '');
+      const sanitizedOutput = output.replace(ANSI_ESCAPE_REGEX, '');
+      const cleanOutput = sanitizedOutput;
       if (cleanOutput.includes('Process exited with code 0')) {
         onProcessCompleteRef.current(0);
         return;
