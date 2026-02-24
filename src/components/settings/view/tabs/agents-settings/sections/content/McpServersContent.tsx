@@ -20,6 +20,15 @@ const getTransportIcon = (type: string | undefined) => {
   return <Server className="w-4 h-4" />;
 };
 
+const maskSecret = (value: unknown): string => {
+  const normalizedValue = String(value ?? '');
+  if (normalizedValue.length <= 4) {
+    return '****';
+  }
+
+  return `${normalizedValue.slice(0, 2)}****${normalizedValue.slice(-2)}`;
+};
+
 type ClaudeMcpServersProps = {
   agent: 'claude';
   servers: McpServer[];
@@ -315,7 +324,7 @@ function CodexMcpServers({ servers, onAdd, onEdit, onDelete, deleteError }: Omit
                     <div>
                       {t('mcpServers.config.environment')}:{' '}
                       <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded text-xs">
-                        {Object.entries(server.config.env).map(([key, value]) => `${key}=${value}`).join(', ')}
+                        {Object.entries(server.config.env).map(([key, value]) => `${key}=${maskSecret(value)}`).join(', ')}
                       </code>
                     </div>
                   )}
