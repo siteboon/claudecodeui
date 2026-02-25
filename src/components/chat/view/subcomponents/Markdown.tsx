@@ -7,6 +7,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useTranslation } from 'react-i18next';
 import { normalizeInlineCodeFences } from '../../utils/chatFormatting';
+import { copyTextToClipboard } from '../../../../utils/clipboard';
 
 type MarkdownProps = {
   children: React.ReactNode;
@@ -31,9 +32,8 @@ const CodeBlock = ({ node, inline, className, children, ...props }: CodeBlockPro
   if (shouldInline) {
     return (
       <code
-        className={`font-mono text-[0.9em] px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-900 border border-gray-200 dark:bg-gray-800/60 dark:text-gray-100 dark:border-gray-700 whitespace-pre-wrap break-words ${
-          className || ''
-        }`}
+        className={`font-mono text-[0.9em] px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-900 border border-gray-200 dark:bg-gray-800/60 dark:text-gray-100 dark:border-gray-700 whitespace-pre-wrap break-words ${className || ''
+          }`}
         {...props}
       >
         {children}
@@ -43,43 +43,6 @@ const CodeBlock = ({ node, inline, className, children, ...props }: CodeBlockPro
 
   const match = /language-(\w+)/.exec(className || '');
   const language = match ? match[1] : 'text';
-  const textToCopy = raw;
-
-  const handleCopy = () => {
-    const doSet = () => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    };
-    try {
-      if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(textToCopy).then(doSet).catch(() => {
-          const ta = document.createElement('textarea');
-          ta.value = textToCopy;
-          ta.style.position = 'fixed';
-          ta.style.opacity = '0';
-          document.body.appendChild(ta);
-          ta.select();
-          try {
-            document.execCommand('copy');
-          } catch {}
-          document.body.removeChild(ta);
-          doSet();
-        });
-      } else {
-        const ta = document.createElement('textarea');
-        ta.value = textToCopy;
-        ta.style.position = 'fixed';
-        ta.style.opacity = '0';
-        document.body.appendChild(ta);
-        ta.select();
-        try {
-          document.execCommand('copy');
-        } catch {}
-        document.body.removeChild(ta);
-        doSet();
-      }
-    } catch {}
-  };
 
   return (
     <div className="relative group my-2">
@@ -89,7 +52,14 @@ const CodeBlock = ({ node, inline, className, children, ...props }: CodeBlockPro
 
       <button
         type="button"
-        onClick={handleCopy}
+        onClick={() =>
+          copyTextToClipboard(raw).then((success) => {
+            if (success) {
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            }
+          })
+        }
         className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 focus:opacity-100 active:opacity-100 transition-opacity text-xs px-2 py-1 rounded-md bg-gray-700/80 hover:bg-gray-700 text-white border border-gray-600"
         title={copied ? t('codeBlock.copied') : t('codeBlock.copyCode')}
         aria-label={copied ? t('codeBlock.copied') : t('codeBlock.copyCode')}
