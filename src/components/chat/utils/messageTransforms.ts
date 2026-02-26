@@ -375,24 +375,66 @@ export const convertSessionMessages = (rawMessages: any[]): ChatMessage[] => {
   });
 
   rawMessages.forEach((message) => {
-    if (message.message?.role === 'user' && message.message?.content) {
+    if (message.message?.role === 'user') {
+      const isCodexImageMarkerLine = (line: string) => {
+        const trimmed = line.trim();
+        return /^<image name=\[[^\]]+\]>$/i.test(trimmed) || /^<\/image>$/i.test(trimmed);
+      };
+
+      const stripCodexImageMarkerLines = (text: string) =>
+        text
+          .split('\n')
+          .filter((line) => !isCodexImageMarkerLine(line))
+          .join('\n')
+          .trim();
+
+      const images: Array<{ name: string; data: string }> = [];
+      const pushImage = (data: unknown, name: unknown) => {
+        if (typeof data !== 'string' || !data.trim()) {
+          return;
+        }
+        const trimmedName = typeof name === 'string' ? name.trim() : '';
+        images.push({
+          data,
+          name: trimmedName || `Image #${images.length + 1}`,
+        });
+      };
+
       let content = '';
       if (Array.isArray(message.message.content)) {
         const textParts: string[] = [];
         message.message.content.forEach((part: any) => {
-          if (part.type === 'text') {
-            textParts.push(decodeHtmlEntities(part.text));
+          if (part?.type === 'text' || part?.type === 'input_text' || part?.type === 'output_text') {
+            const decoded = decodeHtmlEntities(String(part?.text || ''));
+            if (decoded && !isCodexImageMarkerLine(decoded)) {
+              textParts.push(decoded);
+            }
+            return;
+          }
+
+          if (part?.type === 'input_image' || part?.type === 'image') {
+            const imageData = part?.image_url || part?.url || part?.data;
+            pushImage(imageData, part?.name);
           }
         });
         content = textParts.join('\n');
       } else if (typeof message.message.content === 'string') {
         content = decodeHtmlEntities(message.message.content);
-      } else {
+      } else if (message.message.content !== undefined && message.message.content !== null) {
         content = decodeHtmlEntities(String(message.message.content));
       }
 
+      if (Array.isArray(message.message?.images)) {
+        message.message.images.forEach((img: any) => {
+          const imageData = img?.data || img?.image_url || img?.url;
+          pushImage(imageData, img?.name);
+        });
+      }
+
+      content = stripCodexImageMarkerLines(content);
+
       const shouldSkip =
-        !content ||
+        (!content && images.length === 0) ||
         content.startsWith('<command-name>') ||
         content.startsWith('<command-message>') ||
         content.startsWith('<command-args>') ||
@@ -417,11 +459,15 @@ export const convertSessionMessages = (rawMessages: any[]): ChatMessage[] => {
             taskStatus: status,
           });
         } else {
-          converted.push({
+          const userMessage: ChatMessage = {
             type: 'user',
-            content: unescapeWithMathProtection(content),
+            content: content ? unescapeWithMathProtection(content) : '',
             timestamp: message.timestamp || new Date().toISOString(),
-          });
+          };
+          if (images.length > 0) {
+            userMessage.images = images;
+          }
+          converted.push(userMessage);
         }
       }
       return;

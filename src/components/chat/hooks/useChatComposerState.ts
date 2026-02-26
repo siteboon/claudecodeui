@@ -505,6 +505,25 @@ export function useChatComposerState({
         messageContent = `${selectedThinkingMode.prefix}: ${currentInput}`;
       }
 
+      // Resolve session target before any async work (e.g. image upload) to avoid
+      // races where session state changes mid-submit and incorrectly starts a new session.
+      const pendingSessionId =
+        typeof window !== 'undefined' ? sessionStorage.getItem('pendingSessionId') : null;
+      const cursorSessionId =
+        typeof window !== 'undefined' ? sessionStorage.getItem('cursorSessionId') : null;
+      const providerPendingSessionId = isCodexConversation
+        ? pendingSessionId
+        : conversationProvider === 'cursor'
+          ? cursorSessionId
+          : null;
+      const stableCurrentSessionId = isTemporarySessionId(currentSessionId) ? null : currentSessionId;
+      const stableSelectedSessionId = isTemporarySessionId(selectedSession?.id)
+        ? null
+        : selectedSession?.id || null;
+      const effectiveSessionId =
+        providerPendingSessionId || stableCurrentSessionId || stableSelectedSessionId;
+      const sessionToActivate = effectiveSessionId || `new-session-${Date.now()}`;
+
       let uploadedImages: unknown[] = [];
       if (attachedImages.length > 0) {
         const formData = new FormData();
@@ -559,11 +578,7 @@ export function useChatComposerState({
       setIsUserScrolledUp(false);
       setTimeout(() => scrollToBottom(), 100);
 
-      const effectiveSessionId =
-        currentSessionId || selectedSession?.id || sessionStorage.getItem('cursorSessionId');
-      const sessionToActivate = effectiveSessionId || `new-session-${Date.now()}`;
-
-      if (!effectiveSessionId && !selectedSession?.id) {
+      if (!effectiveSessionId && !stableSelectedSessionId) {
         if (typeof window !== 'undefined') {
           // Reset stale pending IDs from previous interrupted runs before creating a new one.
           sessionStorage.removeItem('pendingSessionId');
@@ -628,6 +643,7 @@ export function useChatComposerState({
             resume: Boolean(effectiveSessionId),
             model: codexModel,
             permissionMode: permissionMode === 'plan' ? 'default' : permissionMode,
+            images: uploadedImages,
           },
         });
       } else {

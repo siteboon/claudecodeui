@@ -1573,21 +1573,64 @@ async function getCodexSessionMessages(sessionId, limit = null, offset = 0) {
       crlfDelay: Infinity
     });
 
-    // Helper to extract text from Codex content array
-    const extractText = (content) => {
-      if (!Array.isArray(content)) return content;
-      return content
-        .map(item => {
-          if (item.type === 'input_text' || item.type === 'output_text') {
-            return item.text;
+    const isCodexImageMarkerLine = (text) => {
+      if (typeof text !== 'string') {
+        return false;
+      }
+      const trimmed = text.trim();
+      return /^<image name=\[[^\]]+\]>$/i.test(trimmed) || /^<\/image>$/i.test(trimmed);
+    };
+
+    // Extract text and image payloads from Codex content arrays.
+    const extractCodexMessageParts = (content) => {
+      const textParts = [];
+      const images = [];
+
+      if (!Array.isArray(content)) {
+        if (typeof content === 'string') {
+          const lines = content
+            .split('\n')
+            .map((line) => line.trim())
+            .filter((line) => line && !isCodexImageMarkerLine(line));
+          return { textContent: lines.join('\n').trim(), images };
+        }
+        return { textContent: '', images };
+      }
+
+      content.forEach((item) => {
+        const itemType = item?.type;
+        if (itemType === 'input_text' || itemType === 'output_text' || itemType === 'text') {
+          const text = typeof item?.text === 'string' ? item.text : '';
+          if (!text || isCodexImageMarkerLine(text)) {
+            return;
           }
-          if (item.type === 'text') {
-            return item.text;
+          textParts.push(text);
+          return;
+        }
+
+        if (itemType === 'input_image' || itemType === 'image') {
+          const data =
+            (typeof item?.image_url === 'string' && item.image_url) ||
+            (typeof item?.url === 'string' && item.url) ||
+            (typeof item?.data === 'string' && item.data) ||
+            '';
+          if (!data) {
+            return;
           }
-          return '';
-        })
-        .filter(Boolean)
-        .join('\n');
+
+          const rawName = typeof item?.name === 'string' ? item.name.trim() : '';
+          const imageName = rawName || `Image #${images.length + 1}`;
+          images.push({
+            name: imageName,
+            data,
+          });
+        }
+      });
+
+      return {
+        textContent: textParts.join('\n').trim(),
+        images,
+      };
     };
 
     for await (const line of rl) {
@@ -1610,21 +1653,22 @@ async function getCodexSessionMessages(sessionId, limit = null, offset = 0) {
           if (entry.type === 'response_item' && entry.payload?.type === 'message') {
             const content = entry.payload.content;
             const role = entry.payload.role || 'assistant';
-            const textContent = extractText(content);
+            const { textContent, images } = extractCodexMessageParts(content);
 
             // Skip system context messages (environment_context)
             if (textContent?.includes('<environment_context>')) {
               continue;
             }
 
-            // Only add if there's actual content
-            if (textContent?.trim()) {
+            // Keep image-only user messages so the UI can render the thumbnail.
+            if (textContent?.trim() || images.length > 0) {
               messages.push({
                 type: role === 'user' ? 'user' : 'assistant',
                 timestamp: entry.timestamp,
                 message: {
                   role: role,
-                  content: textContent
+                  content: textContent,
+                  images,
                 }
               });
             }
