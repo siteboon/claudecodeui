@@ -47,6 +47,7 @@ interface UseChatComposerStateArgs {
   sendMessage: (message: unknown) => void;
   sendByCtrlEnter?: boolean;
   onSessionActive?: (sessionId?: string | null) => void;
+  onSessionProcessing?: (sessionId?: string | null) => void;
   onInputFocusChange?: (focused: boolean) => void;
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onShowSettings?: () => void;
@@ -98,6 +99,7 @@ export function useChatComposerState({
   sendMessage,
   sendByCtrlEnter,
   onSessionActive,
+  onSessionProcessing,
   onInputFocusChange,
   onFileOpen,
   onShowSettings,
@@ -569,6 +571,9 @@ export function useChatComposerState({
         pendingViewSessionRef.current = { sessionId: null, startedAt: Date.now() };
       }
       onSessionActive?.(sessionToActivate);
+      if (effectiveSessionId && !isTemporarySessionId(effectiveSessionId)) {
+        onSessionProcessing?.(effectiveSessionId);
+      }
 
       const getToolsSettings = () => {
         try {
@@ -666,6 +671,7 @@ export function useChatComposerState({
       executeCommand,
       isLoading,
       onSessionActive,
+      onSessionProcessing,
       pendingViewSessionRef,
       permissionMode,
       provider,

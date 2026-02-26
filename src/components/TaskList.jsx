@@ -1,10 +1,10 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Search, Filter, ArrowUpDown, ArrowUp, ArrowDown, List, Grid, ChevronDown, Columns, Plus, Settings, Terminal, FileText, HelpCircle, X } from 'lucide-react';
 import { cn } from '../lib/utils';
 import TaskCard from './TaskCard';
 import CreateTaskModal from './CreateTaskModal';
 import { useTaskMaster } from '../contexts/TaskMasterContext';
-import Shell from './Shell';
+import Shell from './shell/view/Shell';
 import { api } from '../utils/api';
 import { useTranslation } from 'react-i18next';
 
@@ -32,6 +32,7 @@ const TaskList = ({
   const [showHelpGuide, setShowHelpGuide] = useState(false);
   const [isTaskMasterComplete, setIsTaskMasterComplete] = useState(false);
   const [showPRDDropdown, setShowPRDDropdown] = useState(false);
+  const dropdownRef = useRef(null);
 
   const { projectTaskMaster, refreshProjects, refreshTasks, setCurrentProject } = useTaskMaster();
   const { t } = useTranslation('tasks');
@@ -39,7 +40,11 @@ const TaskList = ({
   // Close PRD dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (showPRDDropdown && !event.target.closest('.relative')) {
+      if (
+        showPRDDropdown &&
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target)
+      ) {
         setShowPRDDropdown(false);
       }
     };
@@ -47,6 +52,31 @@ const TaskList = ({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showPRDDropdown]);
+
+  const loadPRDOptions = async (prd, closeDropdown = false) => {
+    if (!currentProject) {
+      return;
+    }
+
+    try {
+      const response = await api.get(`/taskmaster/prd/${encodeURIComponent(currentProject.name)}/${encodeURIComponent(prd.name)}`);
+      if (response.ok) {
+        const prdData = await response.json();
+        onShowPRDEditor?.({
+          name: prd.name,
+          content: prdData.content,
+          isExisting: true
+        });
+        if (closeDropdown) {
+          setShowPRDDropdown(false);
+        }
+      } else {
+        console.error('Failed to load PRD:', response.statusText);
+      }
+    } catch (error) {
+      console.error('Error loading PRD:', error);
+    }
+  };
 
   // Get unique status values from tasks
   const statuses = useMemo(() => {
@@ -309,23 +339,8 @@ const TaskList = ({
                             {existingPRDs.map((prd) => (
                               <button
                                 key={prd.name}
-                                onClick={async () => {
-                                  try {
-                                    // Load the PRD content from the API
-                                    const response = await api.get(`/taskmaster/prd/${encodeURIComponent(currentProject.name)}/${encodeURIComponent(prd.name)}`);
-                                    if (response.ok) {
-                                      const prdData = await response.json();
-                                      onShowPRDEditor?.({
-                                        name: prd.name,
-                                        content: prdData.content,
-                                        isExisting: true
-                                      });
-                                    } else {
-                                      console.error('Failed to load PRD:', response.statusText);
-                                    }
-                                  } catch (error) {
-                                    console.error('Error loading PRD:', error);
-                                  }
+                                onClick={() => {
+                                  void loadPRDOptions(prd);
                                 }}
                                 className="inline-flex items-center gap-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                               >
@@ -589,7 +604,7 @@ const TaskList = ({
               </button>
 
               {/* PRD Management */}
-              <div className="relative">
+              <div ref={dropdownRef} className="relative">
                 {existingPRDs.length > 0 ? (
                   // Dropdown when PRDs exist
                   <div className="relative">
@@ -624,21 +639,8 @@ const TaskList = ({
                           {existingPRDs.map((prd) => (
                             <button
                               key={prd.name}
-                              onClick={async () => {
-                                try {
-                                  const response = await api.get(`/taskmaster/prd/${encodeURIComponent(currentProject.name)}/${encodeURIComponent(prd.name)}`);
-                                  if (response.ok) {
-                                    const prdData = await response.json();
-                                    onShowPRDEditor?.({
-                                      name: prd.name,
-                                      content: prdData.content,
-                                      isExisting: true
-                                    });
-                                    setShowPRDDropdown(false);
-                                  }
-                                } catch (error) {
-                                  console.error('Error loading PRD:', error);
-                                }
+                              onClick={() => {
+                                void loadPRDOptions(prd, true);
                               }}
                               className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center gap-2"
                               title={t('prd.modified', { date: new Date(prd.modified).toLocaleDateString() })}
