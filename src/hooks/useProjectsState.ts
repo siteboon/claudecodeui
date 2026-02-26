@@ -349,9 +349,6 @@ export function useProjectsState({
         if (shouldUpdateSession) {
           setSelectedSession({ ...geminiSession, __provider: 'gemini' });
         }
-        if (shouldSwitchTab) {
-          setActiveTab('chat');
-        }
         return;
       }
     }

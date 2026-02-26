@@ -2,7 +2,7 @@ import type { SessionProvider } from '../../types/app';
 import ClaudeLogo from './ClaudeLogo';
 import CodexLogo from './CodexLogo';
 import CursorLogo from './CursorLogo';
-import GeminiLogo from './GeminiLogo';
+import GeminiLogo from '../GeminiLogo';
 
 type SessionProviderLogoProps = {
   provider?: SessionProvider | string | null;

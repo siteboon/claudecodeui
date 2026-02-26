@@ -18,6 +18,7 @@ type AgentVisualConfig = {
   textClass: string;
   subtextClass: string;
   buttonClass: string;
+  description?: string;
 };
 
 const agentConfig: Record<AgentProvider, AgentVisualConfig> = {
