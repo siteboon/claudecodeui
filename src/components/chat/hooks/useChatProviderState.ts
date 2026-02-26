@@ -8,11 +8,29 @@ interface UseChatProviderStateArgs {
   selectedSession: ProjectSession | null;
 }
 
+const VALID_PROVIDERS: SessionProvider[] = ['claude', 'cursor', 'codex'];
+
+function normalizeStoredProvider(rawProvider: string | null): SessionProvider {
+  // Backward compatibility with older provider naming.
+  if (rawProvider === 'openai') {
+    return 'codex';
+  }
+
+  if (rawProvider && VALID_PROVIDERS.includes(rawProvider as SessionProvider)) {
+    return rawProvider as SessionProvider;
+  }
+
+  return 'claude';
+}
+
 export function useChatProviderState({ selectedSession }: UseChatProviderStateArgs) {
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('default');
   const [pendingPermissionRequests, setPendingPermissionRequests] = useState<PendingPermissionRequest[]>([]);
   const [provider, setProvider] = useState<SessionProvider>(() => {
-    return (localStorage.getItem('selected-provider') as SessionProvider) || 'claude';
+    if (typeof window === 'undefined') {
+      return 'claude';
+    }
+    return normalizeStoredProvider(localStorage.getItem('selected-provider'));
   });
   const [cursorModel, setCursorModel] = useState<string>(() => {
     return localStorage.getItem('cursor-model') || CURSOR_MODELS.DEFAULT;

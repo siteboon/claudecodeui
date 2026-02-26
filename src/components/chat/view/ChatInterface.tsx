@@ -164,6 +164,7 @@ function ChatInterface({
     handleGrantToolPermission,
     handleInputFocusChange,
     isInputFocused,
+    isCodexConversation,
   } = useChatComposerState({
     selectedProject,
     selectedSession,
@@ -322,6 +323,7 @@ function ChatInterface({
           isLoading={isLoading}
           onAbortSession={handleAbortSession}
           provider={provider}
+          isCodexConversation={isCodexConversation}
           permissionMode={permissionMode}
           onModeSwitch={cyclePermissionMode}
           thinkingMode={thinkingMode}
