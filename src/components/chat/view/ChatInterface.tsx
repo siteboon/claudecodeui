@@ -163,6 +163,7 @@ function ChatInterface({
     handlePermissionDecision,
     handleGrantToolPermission,
     handleInputFocusChange,
+    isInputFocused,
   } = useChatComposerState({
     selectedProject,
     selectedSession,
@@ -179,6 +180,7 @@ function ChatInterface({
     sendMessage,
     sendByCtrlEnter,
     onSessionActive,
+    onSessionProcessing,
     onInputFocusChange,
     onFileOpen,
     onShowSettings,
@@ -236,13 +238,6 @@ function ChatInterface({
       document.removeEventListener('keydown', handleGlobalEscape, { capture: true });
     };
   }, [canAbortSession, handleAbortSession, isLoading]);
-
-  useEffect(() => {
-    const processingSessionId = selectedSession?.id || currentSessionId;
-    if (processingSessionId && isLoading && onSessionProcessing) {
-      onSessionProcessing(processingSessionId);
-    }
-  }, [currentSessionId, isLoading, onSessionProcessing, selectedSession?.id]);
 
   useEffect(() => {
     return () => {
@@ -373,6 +368,7 @@ function ChatInterface({
           onTextareaScrollSync={syncInputOverlayScroll}
           onTextareaInput={handleTextareaInput}
           onInputFocusChange={handleInputFocusChange}
+          isInputFocused={isInputFocused}
           placeholder={t('input.placeholder', {
             provider:
               provider === 'cursor'

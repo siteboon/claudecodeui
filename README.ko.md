@@ -6,7 +6,7 @@
 
 [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor CLI](https://docs.cursor.com/en/cli/overview) 및 [Codex](https://developers.openai.com/codex)를 위한 데스크톱 및 모바일 UI입니다. 로컬 또는 원격으로 사용하여 Claude Code, Cursor 또는 Codex의 활성 프로젝트와 세션을 확인하고, 어디서든(모바일 또는 데스크톱) 변경할 수 있습니다. 어디서든 작동하는 적절한 인터페이스를 제공합니다.
 
-<div align="right"><i><a href="./README.md">English</a> · <a href="./README.zh-CN.md">中文</a></i></div>
+<div align="right"><i><a href="./README.md">English</a> · <a href="./README.zh-CN.md">中文</a> · <a href="./README.ja.md">日本語</a></i></div>
 
 ## 스크린샷
 
@@ -288,31 +288,7 @@ Claude Code, Cursor 또는 Codex 세션을 사용할 수 있을 때 자동으로
 
 ### 기여하기
 
-기여를 환영합니다! 다음 가이드라인을 따라주세요:
-
-#### 시작하기
-1. 리포지토리를 **Fork**합니다
-2. Fork를 **클론**: `git clone <your-fork-url>`
-3. 의존성 **설치**: `npm install`
-4. 기능 브랜치 **생성**: `git checkout -b feature/amazing-feature`
-
-#### 개발 프로세스
-1. 기존 코드 스타일을 따라 **변경 사항을 적용**합니다
-2. **철저하게 테스트** - 모든 기능이 올바르게 작동하는지 확인
-3. **품질 검사 실행**: `npm run lint && npm run format`
-4. [Conventional Commits](https://conventionalcommits.org/)를 따르는 설명적 메시지로 **커밋**
-5. 브랜치에 **푸시**: `git push origin feature/amazing-feature`
-6. 다음을 포함하여 **풀 리퀘스트를 제출**:
-   - 변경 사항에 대한 명확한 설명
-   - UI 변경 시 스크린샷
-   - 해당되는 경우 테스트 결과
-
-#### 기여 내용
-- **버그 수정** - 안정성 향상에 도움
-- **새로운 기능** - 기능 향상 (먼저 이슈에서 논의)
-- **문서** - 가이드 및 API 문서 개선
-- **UI/UX 개선** - 더 나은 사용자 경험
-- **성능 최적화** - 더 빠르게 만들기
+기여를 환영합니다! 커밋 규칙, 개발 워크플로우, 릴리스 프로세스에 대한 자세한 내용은 [Contributing Guide](CONTRIBUTING.md)를 참조해주세요.
 
 ## 문제 해결
 

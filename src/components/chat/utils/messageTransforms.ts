@@ -354,7 +354,7 @@ export const convertSessionMessages = (rawMessages: any[]): ChatMessage[] => {
   const converted: ChatMessage[] = [];
   const toolResults = new Map<
     string,
-    { content: unknown; isError: boolean; timestamp: Date; toolUseResult: unknown }
+    { content: unknown; isError: boolean; timestamp: Date; toolUseResult: unknown; subagentTools?: unknown[] }
   >();
 
   rawMessages.forEach((message) => {
@@ -368,6 +368,7 @@ export const convertSessionMessages = (rawMessages: any[]): ChatMessage[] => {
           isError: Boolean(part.is_error),
           timestamp: new Date(message.timestamp || Date.now()),
           toolUseResult: message.toolUseResult || null,
+          subagentTools: message.subagentTools,
         });
       });
     }
@@ -484,6 +485,22 @@ export const convertSessionMessages = (rawMessages: any[]): ChatMessage[] => {
 
           if (part.type === 'tool_use') {
             const toolResult = toolResults.get(part.id);
+            const isSubagentContainer = part.name === 'Task';
+
+            // Build child tools from server-provided subagentTools data
+            const childTools: import('../types/types').SubagentChildTool[] = [];
+            if (isSubagentContainer && toolResult?.subagentTools && Array.isArray(toolResult.subagentTools)) {
+              for (const tool of toolResult.subagentTools as any[]) {
+                childTools.push({
+                  toolId: tool.toolId,
+                  toolName: tool.toolName,
+                  toolInput: tool.toolInput,
+                  toolResult: tool.toolResult || null,
+                  timestamp: new Date(tool.timestamp || Date.now()),
+                });
+              }
+            }
+
             converted.push({
               type: 'assistant',
               content: '',
@@ -491,6 +508,7 @@ export const convertSessionMessages = (rawMessages: any[]): ChatMessage[] => {
               isToolUse: true,
               toolName: part.name,
               toolInput: normalizeToolInput(part.input),
+              toolId: part.id,
               toolResult: toolResult
                 ? {
                     content:
@@ -503,6 +521,14 @@ export const convertSessionMessages = (rawMessages: any[]): ChatMessage[] => {
                 : null,
               toolError: toolResult?.isError || false,
               toolResultTimestamp: toolResult?.timestamp || new Date(),
+              isSubagentContainer,
+              subagentState: isSubagentContainer
+                ? {
+                    childTools,
+                    currentToolIndex: childTools.length > 0 ? childTools.length - 1 : -1,
+                    isComplete: Boolean(toolResult),
+                  }
+                : undefined,
             });
           }
         });

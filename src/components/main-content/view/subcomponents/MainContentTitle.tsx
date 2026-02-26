@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import SessionProviderLogo from '../../../SessionProviderLogo';
+import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
 import type { AppTab, Project, ProjectSession } from '../../../../types/app';
 
 type MainContentTitleProps = {
@@ -62,8 +62,8 @@ export default function MainContentTitle({
           </div>
         ) : showChatNewSession ? (
           <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-foreground leading-tight">{t('mainContent.newSession')}</h2>
-            <div className="text-[11px] text-muted-foreground truncate leading-tight">{selectedProject.displayName}</div>
+            <h2 className="text-base font-semibold text-foreground leading-tight">{t('mainContent.newSession')}</h2>
+            <div className="text-xs text-muted-foreground truncate leading-tight">{selectedProject.displayName}</div>
           </div>
         ) : (
           <div className="min-w-0">

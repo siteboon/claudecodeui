@@ -6,7 +6,7 @@
 
 [Claude Code](https://docs.anthropic.com/en/docs/claude-code)、[Cursor CLI](https://docs.cursor.com/en/cli/overview) 和 [Codex](https://developers.openai.com/codex) 的桌面端和移动端界面。您可以在本地或远程使用它来查看 Claude Code、Cursor 或 Codex 中的活跃项目和会话,并从任何地方(移动端或桌面端)对它们进行修改。这为您提供了一个在任何地方都能正常使用的合适界面。
 
-<div align="right"><i><a href="./README.md">English</a> · <a href="./README.ko.md">한국어</a></i></div>
+<div align="right"><i><a href="./README.md">English</a> · <a href="./README.ko.md">한국어</a> · <a href="./README.ja.md">日本語</a></i></div>
 
 ## 截图
 
@@ -290,31 +290,7 @@ Claude Code UI 支持 **[TaskMaster AI](https://github.com/eyaltoledano/claude-t
 
 ### 贡献
 
-我们欢迎贡献!请遵循以下指南:
-
-#### 入门
-1. **Fork** 仓库
-2. **克隆** 您的 fork: `git clone <your-fork-url>`
-3. **安装** 依赖: `npm install`
-4. **创建** 特性分支: `git checkout -b feature/amazing-feature`
-
-#### 开发流程
-1. **进行更改**,遵循现有代码风格
-2. **彻底测试** - 确保所有功能正常工作
-3. **运行质量检查**: `npm run lint && npm run format`
-4. **提交**,遵循 [Conventional Commits](https://conventionalcommits.org/)的描述性消息
-5. **推送** 到您的分支: `git push origin feature/amazing-feature`
-6. **提交** 拉取请求,包括:
-   - 更改的清晰描述
-   - UI 更改的截图
-   - 适用时的测试结果
-
-#### 贡献内容
-- **错误修复** - 帮助我们提高稳定性
-- **新功能** - 增强功能(先在 issue 中讨论)
-- **文档** - 改进指南和 API 文档
-- **UI/UX 改进** - 更好的用户体验
-- **性能优化** - 让它更快
+我们欢迎贡献！有关提交规范、开发流程和发布流程的详细信息,请参阅 [Contributing Guide](CONTRIBUTING.md)。
 
 ## 故障排除
 

@@ -1,6 +1,6 @@
 import React, { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import SessionProviderLogo from '../../../SessionProviderLogo';
+import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
 import type {
   ChatMessage,
   ClaudePermissionSuggestion,
@@ -184,6 +184,8 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     autoExpandTools={autoExpandTools}
                     showRawParameters={showRawParameters}
                     rawToolInput={typeof message.toolInput === 'string' ? message.toolInput : undefined}
+                    isSubagentContainer={message.isSubagentContainer}
+                    subagentState={message.subagentState}
                   />
                 )}
                 

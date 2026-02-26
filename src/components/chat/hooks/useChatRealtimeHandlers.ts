@@ -336,9 +336,43 @@ export function useChatRealtimeHandlers({
         }
 
         if (structuredMessageData && Array.isArray(structuredMessageData.content)) {
+          const parentToolUseId = rawStructuredData?.parentToolUseId;
+
           structuredMessageData.content.forEach((part: any) => {
             if (part.type === 'tool_use') {
               const toolInput = part.input ? JSON.stringify(part.input, null, 2) : '';
+
+              // Check if this is a child tool from a subagent
+              if (parentToolUseId) {
+                setChatMessages((previous) =>
+                  previous.map((message) => {
+                    if (message.toolId === parentToolUseId && message.isSubagentContainer) {
+                      const childTool = {
+                        toolId: part.id,
+                        toolName: part.name,
+                        toolInput: part.input,
+                        toolResult: null,
+                        timestamp: new Date(),
+                      };
+                      const existingChildren = message.subagentState?.childTools || [];
+                      return {
+                        ...message,
+                        subagentState: {
+                          childTools: [...existingChildren, childTool],
+                          currentToolIndex: existingChildren.length,
+                          isComplete: false,
+                        },
+                      };
+                    }
+                    return message;
+                  }),
+                );
+                return;
+              }
+
+              // Check if this is a Task tool (subagent container)
+              const isSubagentContainer = part.name === 'Task';
+
               setChatMessages((previous) => [
                 ...previous,
                 {
@@ -350,6 +384,10 @@ export function useChatRealtimeHandlers({
                   toolInput,
                   toolId: part.id,
                   toolResult: null,
+                  isSubagentContainer,
+                  subagentState: isSubagentContainer
+                    ? { childTools: [], currentToolIndex: -1, isComplete: false }
+                    : undefined,
                 },
               ]);
               return;
@@ -382,6 +420,8 @@ export function useChatRealtimeHandlers({
         }
 
         if (structuredMessageData?.role === 'user' && Array.isArray(structuredMessageData.content)) {
+          const parentToolUseId = rawStructuredData?.parentToolUseId;
+
           structuredMessageData.content.forEach((part: any) => {
             if (part.type !== 'tool_result') {
               return;
@@ -389,8 +429,32 @@ export function useChatRealtimeHandlers({
 
             setChatMessages((previous) =>
               previous.map((message) => {
-                if (message.isToolUse && message.toolId === part.tool_use_id) {
+                // Handle child tool results (route to parent's subagentState)
+                if (parentToolUseId && message.toolId === parentToolUseId && message.isSubagentContainer) {
                   return {
+                    ...message,
+                    subagentState: {
+                      ...message.subagentState!,
+                      childTools: message.subagentState!.childTools.map((child) => {
+                        if (child.toolId === part.tool_use_id) {
+                          return {
+                            ...child,
+                            toolResult: {
+                              content: part.content,
+                              isError: part.is_error,
+                              timestamp: new Date(),
+                            },
+                          };
+                        }
+                        return child;
+                      }),
+                    },
+                  };
+                }
+
+                // Handle normal tool results (including parent Task tool completion)
+                if (message.isToolUse && message.toolId === part.tool_use_id) {
+                  const result = {
                     ...message,
                     toolResult: {
                       content: part.content,
@@ -398,6 +462,14 @@ export function useChatRealtimeHandlers({
                       timestamp: new Date(),
                     },
                   };
+                  // Mark subagent as complete when parent Task receives its result
+                  if (message.isSubagentContainer && message.subagentState) {
+                    result.subagentState = {
+                      ...message.subagentState,
+                      isComplete: true,
+                    };
+                  }
+                  return result;
                 }
                 return message;
               }),
@@ -884,12 +956,26 @@ export function useChatRealtimeHandlers({
 
       case 'session-status': {
         const statusSessionId = latestMessage.sessionId;
+        if (!statusSessionId) {
+          break;
+        }
+
         const isCurrentSession =
           statusSessionId === currentSessionId || (selectedSession && statusSessionId === selectedSession.id);
-        if (isCurrentSession && latestMessage.isProcessing) {
-          setIsLoading(true);
-          setCanAbortSession(true);
+
+        if (latestMessage.isProcessing) {
           onSessionProcessing?.(statusSessionId);
+          if (isCurrentSession) {
+            setIsLoading(true);
+            setCanAbortSession(true);
+          }
+          break;
+        }
+
+        onSessionInactive?.(statusSessionId);
+        onSessionNotProcessing?.(statusSessionId);
+        if (isCurrentSession) {
+          clearLoadingIndicators();
         }
         break;
       }

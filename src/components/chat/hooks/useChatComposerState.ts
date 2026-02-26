@@ -47,6 +47,7 @@ interface UseChatComposerStateArgs {
   sendMessage: (message: unknown) => void;
   sendByCtrlEnter?: boolean;
   onSessionActive?: (sessionId?: string | null) => void;
+  onSessionProcessing?: (sessionId?: string | null) => void;
   onInputFocusChange?: (focused: boolean) => void;
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onShowSettings?: () => void;
@@ -98,6 +99,7 @@ export function useChatComposerState({
   sendMessage,
   sendByCtrlEnter,
   onSessionActive,
+  onSessionProcessing,
   onInputFocusChange,
   onFileOpen,
   onShowSettings,
@@ -271,13 +273,14 @@ export function useChatComposerState({
   }, [setChatMessages]);
 
   const executeCommand = useCallback(
-    async (command: SlashCommand) => {
+    async (command: SlashCommand, rawInput?: string) => {
       if (!command || !selectedProject) {
         return;
       }
 
       try {
-        const commandMatch = input.match(new RegExp(`${escapeRegExp(command.name)}\\s*(.*)`));
+        const effectiveInput = rawInput ?? input;
+        const commandMatch = effectiveInput.match(new RegExp(`${escapeRegExp(command.name)}\\s*(.*)`));
         const args =
           commandMatch && commandMatch[1] ? commandMatch[1].trim().split(/\s+/) : [];
 
@@ -351,6 +354,7 @@ export function useChatComposerState({
   );
 
   const {
+    slashCommands,
     slashCommandsCount,
     filteredCommands,
     frequentCommands,
@@ -473,6 +477,28 @@ export function useChatComposerState({
         return;
       }
 
+      // Intercept slash commands: if input starts with /commandName, execute as command with args
+      const trimmedInput = currentInput.trim();
+      if (trimmedInput.startsWith('/')) {
+        const firstSpace = trimmedInput.indexOf(' ');
+        const commandName = firstSpace > 0 ? trimmedInput.slice(0, firstSpace) : trimmedInput;
+        const matchedCommand = slashCommands.find((cmd: SlashCommand) => cmd.name === commandName);
+        if (matchedCommand) {
+          executeCommand(matchedCommand, trimmedInput);
+          setInput('');
+          inputValueRef.current = '';
+          setAttachedImages([]);
+          setUploadingImages(new Map());
+          setImageErrors(new Map());
+          resetCommandMenuState();
+          setIsTextareaExpanded(false);
+          if (textareaRef.current) {
+            textareaRef.current.style.height = 'auto';
+          }
+          return;
+        }
+      }
+
       let messageContent = currentInput;
       const selectedThinkingMode = thinkingModes.find((mode: { id: string; prefix?: string }) => mode.id === thinkingMode);
       if (selectedThinkingMode && selectedThinkingMode.prefix) {
@@ -545,6 +571,9 @@ export function useChatComposerState({
         pendingViewSessionRef.current = { sessionId: null, startedAt: Date.now() };
       }
       onSessionActive?.(sessionToActivate);
+      if (effectiveSessionId && !isTemporarySessionId(effectiveSessionId)) {
+        onSessionProcessing?.(effectiveSessionId);
+      }
 
       const getToolsSettings = () => {
         try {
@@ -639,8 +668,10 @@ export function useChatComposerState({
       codexModel,
       currentSessionId,
       cursorModel,
+      executeCommand,
       isLoading,
       onSessionActive,
+      onSessionProcessing,
       pendingViewSessionRef,
       permissionMode,
       provider,
@@ -654,6 +685,7 @@ export function useChatComposerState({
       setClaudeStatus,
       setIsLoading,
       setIsUserScrolledUp,
+      slashCommands,
       thinkingMode,
     ],
   );
@@ -903,8 +935,11 @@ export function useChatComposerState({
     [sendMessage, setClaudeStatus, setPendingPermissionRequests],
   );
 
+  const [isInputFocused, setIsInputFocused] = useState(false);
+
   const handleInputFocusChange = useCallback(
     (focused: boolean) => {
+      setIsInputFocused(focused);
       onInputFocusChange?.(focused);
     },
     [onInputFocusChange],
@@ -953,5 +988,6 @@ export function useChatComposerState({
     handlePermissionDecision,
     handleGrantToolPermission,
     handleInputFocusChange,
+    isInputFocused,
   };
 }

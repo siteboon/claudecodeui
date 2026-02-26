@@ -159,14 +159,7 @@
   }
 
   /* PWA mode detected by JavaScript - more reliable */
-  html.pwa-mode,
-  body.pwa-mode {
-    height: 100%;
-    overflow: hidden;
-  }
-
   body.pwa-mode #root {
-    padding-top: var(--header-total-padding);
     padding-left: var(--safe-area-inset-left);
     padding-right: var(--safe-area-inset-right);
     height: 100vh;
