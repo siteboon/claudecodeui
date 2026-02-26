@@ -1269,8 +1269,9 @@ const uploadFilesHandler = async (req, res) => {
                     await fsPromises.mkdir(parentDir, { recursive: true });
                 }
 
-                // Move file
-                await fsPromises.rename(file.path, destPath);
+                // Move file (copy + unlink to handle cross-device scenarios)
+                await fsPromises.copyFile(file.path, destPath);
+                await fsPromises.unlink(file.path);
 
                 uploadedFiles.push({
                     name: fileName,
