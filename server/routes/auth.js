@@ -131,10 +131,7 @@ router.post('/login', async (req, res) => {
 router.get('/user', authenticateToken, (req, res) => {
   if (isAuthDisabled()) {
     return res.json({
-      user: req.user || {
-        id: 1,
-        username: 'admin'
-      },
+      user: req.user,
       authDisabled: true
     });
   }

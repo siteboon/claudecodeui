@@ -5,8 +5,15 @@ import { IS_PLATFORM } from '../constants/config.js';
 // Get JWT secret from environment or use default (for development)
 const JWT_SECRET = process.env.JWT_SECRET || 'claude-ui-dev-secret-change-in-production';
 
+const AUTH_DISABLED_VALUES = new Set(['1', 'true', 'yes', 'on']);
+const AUTH_DISABLED = AUTH_DISABLED_VALUES.has(String(process.env.AUTH_DISABLED || '').toLowerCase());
+
+if (process.env.NODE_ENV === 'production' && AUTH_DISABLED) {
+  throw new Error('AUTH_DISABLED cannot be enabled in production. Refusing to start.');
+}
+
 const isAuthDisabled = () => {
-  return String(process.env.AUTH_DISABLED || '').toLowerCase() === 'true';
+  return AUTH_DISABLED;
 };
 
 const getAuthDisabledUser = () => {

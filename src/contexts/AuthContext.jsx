@@ -78,9 +78,22 @@ export const AuthProvider = ({ children }) => {
         setNeedsSetup(false);
         setToken(compatibilityToken);
         localStorage.setItem('auth-token', compatibilityToken);
-        setUser(statusData.user || { id: 1, username: 'admin' });
+
+        let authDisabledUser = statusData.user ?? null;
+        if (!authDisabledUser) {
+          try {
+            const userResponse = await api.auth.user();
+            if (userResponse.ok) {
+              const userData = await userResponse.json();
+              authDisabledUser = userData.user ?? null;
+            }
+          } catch (error) {
+            console.warn('Auth-disabled user lookup failed:', error);
+          }
+        }
+
+        setUser(authDisabledUser);
         setHasCompletedOnboarding(true);
-        setIsLoading(false);
         return;
       }
 
