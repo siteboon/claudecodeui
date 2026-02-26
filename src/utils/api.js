@@ -101,8 +101,8 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ filePath, content }),
     }),
-  getFiles: (projectName) =>
-    authenticatedFetch(`/api/projects/${projectName}/files`),
+  getFiles: (projectName, options = {}) =>
+    authenticatedFetch(`/api/projects/${projectName}/files`, options),
   transcribe: (formData) =>
     authenticatedFetch('/api/transcribe', {
       method: 'POST',

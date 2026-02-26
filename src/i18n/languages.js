@@ -24,6 +24,11 @@ export const languages = [
     label: 'Simplified Chinese',
     nativeName: '简体中文',
   },
+  {
+    value: 'ja',
+    label: 'Japanese',
+    nativeName: '日本語',
+  },
 ];
 
 /**

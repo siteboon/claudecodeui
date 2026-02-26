@@ -1,5 +1,5 @@
 import { X } from 'lucide-react';
-import StandaloneShell from './StandaloneShell';
+import StandaloneShell from './standalone-shell/view/StandaloneShell';
 import { IS_PLATFORM } from '../constants/config';
 
 /**
@@ -21,7 +21,8 @@ function LoginModal({
   project,
   onComplete,
   customCommand,
-  isAuthenticated = false
+  isAuthenticated = false,
+  isOnboarding = false
 }) {
   if (!isOpen) return null;
 
@@ -30,13 +31,13 @@ function LoginModal({
 
     switch (provider) {
       case 'claude':
-        return isAuthenticated ? 'claude setup-token --dangerously-skip-permissions' : 'claude /exit --dangerously-skip-permissions';
+        return isAuthenticated ? 'claude setup-token --dangerously-skip-permissions' : isOnboarding ? 'claude /exit --dangerously-skip-permissions' : 'claude /login --dangerously-skip-permissions';
       case 'cursor':
         return 'cursor-agent login';
       case 'codex':
         return IS_PLATFORM ? 'codex login --device-auth' : 'codex login';
       default:
-        return isAuthenticated ? 'claude setup-token --dangerously-skip-permissions' : 'claude /exit --dangerously-skip-permissions';
+        return isAuthenticated ? 'claude setup-token --dangerously-skip-permissions' : isOnboarding ? 'claude /exit --dangerously-skip-permissions' : 'claude /login --dangerously-skip-permissions';
     }
   };
 
@@ -57,9 +58,7 @@ function LoginModal({
     if (onComplete) {
       onComplete(exitCode);
     }
-    if (exitCode === 0) {
-      onClose();
-    }
+    // Keep modal open so users can read login output and close explicitly.
   };
 
   return (

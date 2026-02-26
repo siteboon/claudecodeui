@@ -1,5 +1,6 @@
 // Load environment variables from .env before other imports execute.
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
@@ -21,4 +22,8 @@ try {
   });
 } catch (e) {
   console.log('No .env file found or error reading it:', e.message);
+}
+
+if (!process.env.DATABASE_PATH) {
+  process.env.DATABASE_PATH = path.join(os.homedir(), '.cloudcli', 'auth.db');
 }

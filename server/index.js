@@ -9,6 +9,8 @@ import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+const installMode = fs.existsSync(path.join(__dirname, '..', '.git')) ? 'git' : 'npm';
+
 // ANSI color codes for terminal output
 const colors = {
     reset: '\x1b[0m',
@@ -63,8 +65,24 @@ import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { IS_PLATFORM } from './constants/config.js';
 
-// File system watcher for projects folder
-let projectsWatcher = null;
+// File system watchers for provider project/session folders
+const PROVIDER_WATCH_PATHS = [
+    { provider: 'claude', rootPath: path.join(os.homedir(), '.claude', 'projects') },
+    { provider: 'cursor', rootPath: path.join(os.homedir(), '.cursor', 'chats') },
+    { provider: 'codex', rootPath: path.join(os.homedir(), '.codex', 'sessions') }
+];
+const WATCHER_IGNORED_PATTERNS = [
+    '**/node_modules/**',
+    '**/.git/**',
+    '**/dist/**',
+    '**/build/**',
+    '**/*.tmp',
+    '**/*.swp',
+    '**/.DS_Store'
+];
+const WATCHER_DEBOUNCE_MS = 300;
+let projectsWatchers = [];
+let projectsWatcherDebounceTimer = null;
 const connectedClients = new Set();
 let isGetProjectsRunning = false; // Flag to prevent reentrant calls
 
@@ -81,94 +99,110 @@ function broadcastProgress(progress) {
     });
 }
 
-// Setup file system watcher for Claude projects folder using chokidar
+// Setup file system watchers for Claude, Cursor, and Codex project/session folders
 async function setupProjectsWatcher() {
     const chokidar = (await import('chokidar')).default;
-    const claudeProjectsPath = path.join(os.homedir(), '.claude', 'projects');
 
-    if (projectsWatcher) {
-        projectsWatcher.close();
+    if (projectsWatcherDebounceTimer) {
+        clearTimeout(projectsWatcherDebounceTimer);
+        projectsWatcherDebounceTimer = null;
     }
 
-    try {
-        // Initialize chokidar watcher with optimized settings
-        projectsWatcher = chokidar.watch(claudeProjectsPath, {
-            ignored: [
-                '**/node_modules/**',
-                '**/.git/**',
-                '**/dist/**',
-                '**/build/**',
-                '**/*.tmp',
-                '**/*.swp',
-                '**/.DS_Store'
-            ],
-            persistent: true,
-            ignoreInitial: true, // Don't fire events for existing files on startup
-            followSymlinks: false,
-            depth: 10, // Reasonable depth limit
-            awaitWriteFinish: {
-                stabilityThreshold: 100, // Wait 100ms for file to stabilize
-                pollInterval: 50
+    await Promise.all(
+        projectsWatchers.map(async (watcher) => {
+            try {
+                await watcher.close();
+            } catch (error) {
+                console.error('[WARN] Failed to close watcher:', error);
             }
-        });
+        })
+    );
+    projectsWatchers = [];
 
-        // Debounce function to prevent excessive notifications
-        let debounceTimer;
-        const debouncedUpdate = async (eventType, filePath) => {
-            clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(async () => {
-                // Prevent reentrant calls
-                if (isGetProjectsRunning) {
-                    return;
+    const debouncedUpdate = (eventType, filePath, provider, rootPath) => {
+        if (projectsWatcherDebounceTimer) {
+            clearTimeout(projectsWatcherDebounceTimer);
+        }
+
+        projectsWatcherDebounceTimer = setTimeout(async () => {
+            // Prevent reentrant calls
+            if (isGetProjectsRunning) {
+                return;
+            }
+
+            try {
+                isGetProjectsRunning = true;
+
+                // Clear project directory cache when files change
+                clearProjectDirectoryCache();
+
+                // Get updated projects list
+                const updatedProjects = await getProjects(broadcastProgress);
+
+                // Notify all connected clients about the project changes
+                const updateMessage = JSON.stringify({
+                    type: 'projects_updated',
+                    projects: updatedProjects,
+                    timestamp: new Date().toISOString(),
+                    changeType: eventType,
+                    changedFile: path.relative(rootPath, filePath),
+                    watchProvider: provider
+                });
+
+                connectedClients.forEach(client => {
+                    if (client.readyState === WebSocket.OPEN) {
+                        client.send(updateMessage);
+                    }
+                });
+
+            } catch (error) {
+                console.error('[ERROR] Error handling project changes:', error);
+            } finally {
+                isGetProjectsRunning = false;
+            }
+        }, WATCHER_DEBOUNCE_MS);
+    };
+
+    for (const { provider, rootPath } of PROVIDER_WATCH_PATHS) {
+        try {
+            // chokidar v4 emits ENOENT via the "error" event for missing roots and will not auto-recover.
+            // Ensure provider folders exist before creating the watcher so watching stays active.
+            await fsPromises.mkdir(rootPath, { recursive: true });
+
+            // Initialize chokidar watcher with optimized settings
+            const watcher = chokidar.watch(rootPath, {
+                ignored: WATCHER_IGNORED_PATTERNS,
+                persistent: true,
+                ignoreInitial: true, // Don't fire events for existing files on startup
+                followSymlinks: false,
+                depth: 10, // Reasonable depth limit
+                awaitWriteFinish: {
+                    stabilityThreshold: 100, // Wait 100ms for file to stabilize
+                    pollInterval: 50
                 }
-
-                try {
-                    isGetProjectsRunning = true;
-
-                    // Clear project directory cache when files change
-                    clearProjectDirectoryCache();
-
-                    // Get updated projects list
-                    const updatedProjects = await getProjects(broadcastProgress);
-
-                    // Notify all connected clients about the project changes
-                    const updateMessage = JSON.stringify({
-                        type: 'projects_updated',
-                        projects: updatedProjects,
-                        timestamp: new Date().toISOString(),
-                        changeType: eventType,
-                        changedFile: path.relative(claudeProjectsPath, filePath)
-                    });
-
-                    connectedClients.forEach(client => {
-                        if (client.readyState === WebSocket.OPEN) {
-                            client.send(updateMessage);
-                        }
-                    });
-
-                } catch (error) {
-                    console.error('[ERROR] Error handling project changes:', error);
-                } finally {
-                    isGetProjectsRunning = false;
-                }
-            }, 300); // 300ms debounce (slightly faster than before)
-        };
-
-        // Set up event listeners
-        projectsWatcher
-            .on('add', (filePath) => debouncedUpdate('add', filePath))
-            .on('change', (filePath) => debouncedUpdate('change', filePath))
-            .on('unlink', (filePath) => debouncedUpdate('unlink', filePath))
-            .on('addDir', (dirPath) => debouncedUpdate('addDir', dirPath))
-            .on('unlinkDir', (dirPath) => debouncedUpdate('unlinkDir', dirPath))
-            .on('error', (error) => {
-                console.error('[ERROR] Chokidar watcher error:', error);
-            })
-            .on('ready', () => {
             });
 
-    } catch (error) {
-        console.error('[ERROR] Failed to setup projects watcher:', error);
+            // Set up event listeners
+            watcher
+                .on('add', (filePath) => debouncedUpdate('add', filePath, provider, rootPath))
+                .on('change', (filePath) => debouncedUpdate('change', filePath, provider, rootPath))
+                .on('unlink', (filePath) => debouncedUpdate('unlink', filePath, provider, rootPath))
+                .on('addDir', (dirPath) => debouncedUpdate('addDir', dirPath, provider, rootPath))
+                .on('unlinkDir', (dirPath) => debouncedUpdate('unlinkDir', dirPath, provider, rootPath))
+                .on('error', (error) => {
+                    console.error(`[ERROR] ${provider} watcher error:`, error);
+                })
+                .on('ready', () => {
+                });
+
+            projectsWatchers.push(watcher);
+        } catch (error) {
+            console.error(`[ERROR] Failed to setup ${provider} watcher for ${rootPath}:`, error);
+        }
+    }
+
+    if (projectsWatchers.length === 0) {
+        console.error('[ERROR] Failed to setup any provider watchers');
     }
 }
 
@@ -178,6 +212,69 @@ const server = http.createServer(app);
 
 const ptySessionsMap = new Map();
 const PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
+const SHELL_URL_PARSE_BUFFER_LIMIT = 32768;
+const ANSI_ESCAPE_SEQUENCE_REGEX = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1B\\))/g;
+const TRAILING_URL_PUNCTUATION_REGEX = /[)\]}>.,;:!?]+$/;
+
+function stripAnsiSequences(value = '') {
+    return value.replace(ANSI_ESCAPE_SEQUENCE_REGEX, '');
+}
+
+function normalizeDetectedUrl(url) {
+    if (!url || typeof url !== 'string') return null;
+
+    const cleaned = url.trim().replace(TRAILING_URL_PUNCTUATION_REGEX, '');
+    if (!cleaned) return null;
+
+    try {
+        const parsed = new URL(cleaned);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+            return null;
+        }
+        return parsed.toString();
+    } catch {
+        return null;
+    }
+}
+
+function extractUrlsFromText(value = '') {
+    const directMatches = value.match(/https?:\/\/[^\s<>"'`\\\x1b\x07]+/gi) || [];
+
+    // Handle wrapped terminal URLs split across lines by terminal width.
+    const wrappedMatches = [];
+    const continuationRegex = /^[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]+$/;
+    const lines = value.split(/\r?\n/);
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        const startMatch = line.match(/https?:\/\/[^\s<>"'`\\\x1b\x07]+/i);
+        if (!startMatch) continue;
+
+        let combined = startMatch[0];
+        let j = i + 1;
+        while (j < lines.length) {
+            const continuation = lines[j].trim();
+            if (!continuation) break;
+            if (!continuationRegex.test(continuation)) break;
+            combined += continuation;
+            j++;
+        }
+
+        wrappedMatches.push(combined.replace(/\r?\n\s*/g, ''));
+    }
+
+    return Array.from(new Set([...directMatches, ...wrappedMatches]));
+}
+
+function shouldAutoOpenUrlFromOutput(value = '') {
+    const normalized = value.toLowerCase();
+    return (
+        normalized.includes('browser didn\'t open') ||
+        normalized.includes('open this url') ||
+        normalized.includes('continue in your browser') ||
+        normalized.includes('press enter to open') ||
+        normalized.includes('open_url:')
+    );
+}
 
 // Single WebSocket server that handles both paths
 const wss = new WebSocketServer({
@@ -238,7 +335,8 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    installMode
   });
 });
 
@@ -315,11 +413,13 @@ app.post('/api/system/update', authenticateToken, async (req, res) => {
 
         console.log('Starting system update from directory:', projectRoot);
 
-        // Run the update command
-        const updateCommand = 'git checkout main && git pull && npm install';
+        // Run the update command based on install mode
+        const updateCommand = installMode === 'git'
+            ? 'git checkout main && git pull && npm install'
+            : 'npm install -g @siteboon/claude-code-ui@latest';
 
         const child = spawn('sh', ['-c', updateCommand], {
-            cwd: projectRoot,
+            cwd: installMode === 'git' ? projectRoot : os.homedir(),
             env: process.env
         });
 
@@ -608,7 +708,6 @@ app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) =
         const { projectName } = req.params;
         const { filePath } = req.query;
 
-        console.log('[DEBUG] File read request:', projectName, filePath);
 
         // Security: ensure the requested path is inside the project root
         if (!filePath) {
@@ -649,7 +748,6 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
         const { projectName } = req.params;
         const { path: filePath } = req.query;
 
-        console.log('[DEBUG] Binary file serve request:', projectName, filePath);
 
         // Security: ensure the requested path is inside the project root
         if (!filePath) {
@@ -703,7 +801,6 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
         const { projectName } = req.params;
         const { filePath, content } = req.body;
 
-        console.log('[DEBUG] File save request:', projectName, filePath);
 
         // Security: ensure the requested path is inside the project root
         if (!filePath) {
@@ -960,7 +1057,8 @@ function handleShellConnection(ws) {
     console.log('🐚 Shell client connected');
     let shellProcess = null;
     let ptySessionKey = null;
-    let outputBuffer = [];
+    let urlDetectionBuffer = '';
+    const announcedAuthUrls = new Set();
 
     ws.on('message', async (message) => {
         try {
@@ -974,6 +1072,8 @@ function handleShellConnection(ws) {
                 const provider = data.provider || 'claude';
                 const initialCommand = data.initialCommand;
                 const isPlainShell = data.isPlainShell || (!!initialCommand && !hasSession) || provider === 'plain-shell';
+                urlDetectionBuffer = '';
+                announcedAuthUrls.clear();
 
                 // Login commands (Claude/Cursor auth) should never reuse cached sessions
                 const isLoginCommand = initialCommand && (
@@ -1038,7 +1138,7 @@ function handleShellConnection(ws) {
                 if (isPlainShell) {
                     welcomeMsg = `\x1b[36mStarting terminal in: ${projectPath}\x1b[0m\r\n`;
                 } else {
-                    const providerName = provider === 'cursor' ? 'Cursor' : 'Claude';
+                    const providerName = provider === 'cursor' ? 'Cursor' : provider === 'codex' ? 'Codex' : 'Claude';
                     welcomeMsg = hasSession ?
                         `\x1b[36mResuming ${providerName} session ${sessionId} in: ${projectPath}\x1b[0m\r\n` :
                         `\x1b[36mStarting new ${providerName} session in: ${projectPath}\x1b[0m\r\n`;
@@ -1072,6 +1172,23 @@ function handleShellConnection(ws) {
                                 shellCommand = `cd "${projectPath}" && cursor-agent --resume="${sessionId}"`;
                             } else {
                                 shellCommand = `cd "${projectPath}" && cursor-agent`;
+                            }
+                        }
+                    } else if (provider === 'codex') {
+                        // Use codex command
+                        if (os.platform() === 'win32') {
+                            if (hasSession && sessionId) {
+                                // Try to resume session, but with fallback to a new session if it fails
+                                shellCommand = `Set-Location -Path "${projectPath}"; codex resume "${sessionId}"; if ($LASTEXITCODE -ne 0) { codex }`;
+                            } else {
+                                shellCommand = `Set-Location -Path "${projectPath}"; codex`;
+                            }
+                        } else {
+                            if (hasSession && sessionId) {
+                                // Try to resume session, but with fallback to a new session if it fails
+                                shellCommand = `cd "${projectPath}" && codex resume "${sessionId}" || codex`;
+                            } else {
+                                shellCommand = `cd "${projectPath}" && codex`;
                             }
                         }
                     } else {
@@ -1113,9 +1230,7 @@ function handleShellConnection(ws) {
                             ...process.env,
                             TERM: 'xterm-256color',
                             COLORTERM: 'truecolor',
-                            FORCE_COLOR: '3',
-                            // Override browser opening commands to echo URL for detection
-                            BROWSER: os.platform() === 'win32' ? 'echo "OPEN_URL:"' : 'echo "OPEN_URL:"'
+                            FORCE_COLOR: '3'
                         }
                     });
 
@@ -1145,38 +1260,47 @@ function handleShellConnection(ws) {
                         if (session.ws && session.ws.readyState === WebSocket.OPEN) {
                             let outputData = data;
 
-                            // Check for various URL opening patterns
-                            const patterns = [
-                                // Direct browser opening commands
-                                /(?:xdg-open|open|start)\s+(https?:\/\/[^\s\x1b\x07]+)/g,
-                                // BROWSER environment variable override
+                            const cleanChunk = stripAnsiSequences(data);
+                            urlDetectionBuffer = `${urlDetectionBuffer}${cleanChunk}`.slice(-SHELL_URL_PARSE_BUFFER_LIMIT);
+
+                            outputData = outputData.replace(
                                 /OPEN_URL:\s*(https?:\/\/[^\s\x1b\x07]+)/g,
-                                // Git and other tools opening URLs
-                                /Opening\s+(https?:\/\/[^\s\x1b\x07]+)/gi,
-                                // General URL patterns that might be opened
-                                /Visit:\s*(https?:\/\/[^\s\x1b\x07]+)/gi,
-                                /View at:\s*(https?:\/\/[^\s\x1b\x07]+)/gi,
-                                /Browse to:\s*(https?:\/\/[^\s\x1b\x07]+)/gi
-                            ];
+                                '[INFO] Opening in browser: $1'
+                            );
 
-                            patterns.forEach(pattern => {
-                                let match;
-                                while ((match = pattern.exec(data)) !== null) {
-                                    const url = match[1];
-                                    console.log('[DEBUG] Detected URL for opening:', url);
+                            const emitAuthUrl = (detectedUrl, autoOpen = false) => {
+                                const normalizedUrl = normalizeDetectedUrl(detectedUrl);
+                                if (!normalizedUrl) return;
 
-                                    // Send URL opening message to client
+                                const isNewUrl = !announcedAuthUrls.has(normalizedUrl);
+                                if (isNewUrl) {
+                                    announcedAuthUrls.add(normalizedUrl);
                                     session.ws.send(JSON.stringify({
-                                        type: 'url_open',
-                                        url: url
+                                        type: 'auth_url',
+                                        url: normalizedUrl,
+                                        autoOpen
                                     }));
-
-                                    // Replace the OPEN_URL pattern with a user-friendly message
-                                    if (pattern.source.includes('OPEN_URL')) {
-                                        outputData = outputData.replace(match[0], `[INFO] Opening in browser: ${url}`);
-                                    }
                                 }
-                            });
+
+                            };
+
+                            const normalizedDetectedUrls = extractUrlsFromText(urlDetectionBuffer)
+                                .map((url) => normalizeDetectedUrl(url))
+                                .filter(Boolean);
+
+                            // Prefer the most complete URL if shorter prefix variants are also present.
+                            const dedupedDetectedUrls = Array.from(new Set(normalizedDetectedUrls)).filter((url, _, urls) =>
+                                !urls.some((otherUrl) => otherUrl !== url && otherUrl.startsWith(url))
+                            );
+
+                            dedupedDetectedUrls.forEach((url) => emitAuthUrl(url, false));
+
+                            if (shouldAutoOpenUrlFromOutput(cleanChunk) && dedupedDetectedUrls.length > 0) {
+                                const bestUrl = dedupedDetectedUrls.reduce((longest, current) =>
+                                    current.length > longest.length ? current : longest
+                                );
+                                emitAuthUrl(bestUrl, true);
+                            }
 
                             // Send regular output
                             session.ws.send(JSON.stringify({
@@ -1784,6 +1908,9 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
 }
 
 const PORT = process.env.PORT || 3001;
+const HOST = process.env.HOST || '0.0.0.0';
+// Show localhost in URL when binding to all interfaces (0.0.0.0 isn't a connectable address)
+const DISPLAY_HOST = HOST === '0.0.0.0' ? 'localhost' : HOST;
 
 // Initialize database and start server
 async function startServer() {
@@ -1803,7 +1930,7 @@ async function startServer() {
             console.log(`${c.warn('[WARN]')} Note: Requests will be proxied to Vite dev server at ${c.dim('http://localhost:' + (process.env.VITE_PORT || 5173))}`);
         }
 
-        server.listen(PORT, '0.0.0.0', async () => {
+        server.listen(PORT, HOST, async () => {
             const appInstallPath = path.join(__dirname, '..');
 
             console.log('');
@@ -1811,7 +1938,7 @@ async function startServer() {
             console.log(`  ${c.bright('Claude Code UI Server - Ready')}`);
             console.log(c.dim('═'.repeat(63)));
             console.log('');
-            console.log(`${c.info('[INFO]')} Server URL:  ${c.bright('http://0.0.0.0:' + PORT)}`);
+            console.log(`${c.info('[INFO]')} Server URL:  ${c.bright('http://' + DISPLAY_HOST + ':' + PORT)}`);
             console.log(`${c.info('[INFO]')} Installed at: ${c.dim(appInstallPath)}`);
             console.log(`${c.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
             console.log('');
