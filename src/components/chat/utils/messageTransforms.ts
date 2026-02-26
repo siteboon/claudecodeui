@@ -18,6 +18,28 @@ type CursorBlob = {
 
 const asArray = <T>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : []);
 
+const parseInstructionsTaggedMessage = (rawContent: string): { content: string; isInstructions: boolean } => {
+  const openTag = '<INSTRUCTIONS>';
+  const closeTag = '</INSTRUCTIONS>';
+
+  const openIndex = rawContent.indexOf(openTag);
+  const closeIndex = rawContent.indexOf(closeTag);
+
+  if (openIndex === -1 && closeIndex === -1) {
+    return { content: rawContent, isInstructions: false };
+  }
+
+  if (openIndex !== -1 && closeIndex !== -1 && closeIndex > openIndex) {
+    const inner = rawContent.slice(openIndex + openTag.length, closeIndex).trim();
+    if (inner) {
+      return { content: inner, isInstructions: true };
+    }
+  }
+
+  const cleaned = rawContent.split(openTag).join('').split(closeTag).join('').trim();
+  return { content: cleaned, isInstructions: true };
+};
+
 const normalizeToolInput = (value: unknown): string => {
   if (value === null || value === undefined || value === '') {
     return '';
@@ -194,10 +216,14 @@ export const convertCursorSessionMessages = (blobs: CursorBlob[], projectPath: s
 
             if (part?.type === 'tool-call' || part?.type === 'tool_use') {
               if (textParts.length > 0 || reasoningText) {
+                const combinedText = textParts.join('\n');
+                const parsedInstructions =
+                  role === 'user' ? parseInstructionsTaggedMessage(combinedText) : { content: combinedText, isInstructions: false };
                 converted.push({
                   type: role,
-                  content: textParts.join('\n'),
+                  content: parsedInstructions.content,
                   reasoning: reasoningText ?? undefined,
+                  isInstructions: parsedInstructions.isInstructions || undefined,
                   timestamp: new Date(Date.now() + blobIdx * 1000),
                   blobId: blob.id,
                   sequence: blob.sequence,
@@ -322,13 +348,16 @@ export const convertCursorSessionMessages = (blobs: CursorBlob[], projectPath: s
     }
 
     if (text && text.trim()) {
+      const parsedInstructions =
+        role === 'user' ? parseInstructionsTaggedMessage(text) : { content: text, isInstructions: false };
       const message: ChatMessage = {
         type: role,
-        content: text,
+        content: parsedInstructions.content,
         timestamp: new Date(Date.now() + blobIdx * 1000),
         blobId: blob.id,
         sequence: blob.sequence,
         rowid: blob.rowid,
+        isInstructions: parsedInstructions.isInstructions || undefined,
       };
       if (reasoningText) {
         message.reasoning = reasoningText;
@@ -417,10 +446,12 @@ export const convertSessionMessages = (rawMessages: any[]): ChatMessage[] => {
             taskStatus: status,
           });
         } else {
+          const parsedInstructions = parseInstructionsTaggedMessage(content);
           converted.push({
             type: 'user',
-            content: unescapeWithMathProtection(content),
+            content: unescapeWithMathProtection(parsedInstructions.content),
             timestamp: message.timestamp || new Date().toISOString(),
+            isInstructions: parsedInstructions.isInstructions || undefined,
           });
         }
       }

@@ -32,6 +32,7 @@ export interface ChatMessage {
   images?: ChatImage[];
   reasoning?: string;
   isThinking?: boolean;
+  isInstructions?: boolean;
   isStreaming?: boolean;
   isInteractivePrompt?: boolean;
   isToolUse?: boolean;

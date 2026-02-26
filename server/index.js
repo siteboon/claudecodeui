@@ -61,6 +61,7 @@ import projectsRoutes, { WORKSPACES_ROOT, validateWorkspacePath } from './routes
 import cliAuthRoutes from './routes/cli-auth.js';
 import userRoutes from './routes/user.js';
 import codexRoutes from './routes/codex.js';
+import beadsRoutes from './routes/beads.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { IS_PLATFORM } from './constants/config.js';
@@ -346,6 +347,48 @@ app.use('/api', validateApiKey);
 // Authentication routes (public)
 app.use('/api/auth', authRoutes);
 
+// Public routes for installation status checks (no auth required)
+app.get('/api/taskmaster/installation-status', async (req, res) => {
+    try {
+        const { checkTaskMasterInstallation } = await import('./routes/taskmaster.js');
+        const installationStatus = await checkTaskMasterInstallation();
+        const mcpStatus = { hasMCPServer: false };
+        res.json({
+            success: true,
+            installation: installationStatus,
+            mcpServer: mcpStatus,
+            isReady: installationStatus.isInstalled
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: 'Failed to check TaskMaster installation status',
+            installation: { isInstalled: false, reason: `Server error: ${error.message}` },
+            mcpServer: { hasMCPServer: false },
+            isReady: false
+        });
+    }
+});
+
+app.get('/api/beads/installation-status', async (req, res) => {
+    try {
+        const { checkBeadsInstallation } = await import('./routes/beads.js');
+        const installationStatus = await checkBeadsInstallation();
+        res.json({
+            success: true,
+            installation: installationStatus,
+            isReady: installationStatus.isInstalled
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: 'Failed to check Beads installation status',
+            installation: { isInstalled: false, reason: `Server error: ${error.message}` },
+            isReady: false
+        });
+    }
+});
+
 // Projects API Routes (protected)
 app.use('/api/projects', authenticateToken, projectsRoutes);
 
@@ -378,6 +421,9 @@ app.use('/api/user', authenticateToken, userRoutes);
 
 // Codex API Routes (protected)
 app.use('/api/codex', authenticateToken, codexRoutes);
+
+// Beads API Routes (protected)
+app.use('/api/beads', authenticateToken, beadsRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
