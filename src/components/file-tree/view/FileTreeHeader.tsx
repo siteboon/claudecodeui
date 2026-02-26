@@ -1,4 +1,4 @@
-import { Eye, List, Search, TableProperties, X } from 'lucide-react';
+import { Eye, FileText, FolderPlus, List, RefreshCw, Search, TableProperties, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
@@ -9,6 +9,9 @@ type FileTreeHeaderProps = {
   onViewModeChange: (mode: FileTreeViewMode) => void;
   searchQuery: string;
   onSearchQueryChange: (query: string) => void;
+  onNewFile?: () => void;
+  onNewFolder?: () => void;
+  onRefresh?: () => void;
 };
 
 export default function FileTreeHeader({
@@ -16,6 +19,9 @@ export default function FileTreeHeader({
   onViewModeChange,
   searchQuery,
   onSearchQueryChange,
+  onNewFile,
+  onNewFolder,
+  onRefresh,
 }: FileTreeHeaderProps) {
   const { t } = useTranslation();
 
@@ -24,6 +30,43 @@ export default function FileTreeHeader({
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-medium text-foreground">{t('fileTree.files')}</h3>
         <div className="flex gap-0.5">
+          {(onNewFile || onNewFolder || onRefresh) && (
+            <div className="flex gap-0.5 mr-1 pr-1 border-r border-border">
+              {onNewFile && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={onNewFile}
+                  title={t('fileTree.newFile', 'New File')}
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                </Button>
+              )}
+              {onNewFolder && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={onNewFolder}
+                  title={t('fileTree.newFolder', 'New Folder')}
+                >
+                  <FolderPlus className="w-3.5 h-3.5" />
+                </Button>
+              )}
+              {onRefresh && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={onRefresh}
+                  title={t('fileTree.refresh', 'Refresh')}
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </Button>
+              )}
+            </div>
+          )}
           <Button
             variant={viewMode === 'simple' ? 'default' : 'ghost'}
             size="sm"
