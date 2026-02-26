@@ -1,6 +1,6 @@
 import { useCallback, useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertTriangle, Check, X, Loader2, Folder } from 'lucide-react';
+import { AlertTriangle, Check, X, Loader2, Folder, Upload } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import ImageViewer from './ImageViewer';
 import { ICON_SIZE_CLASS, getFileIconData } from '../constants/fileIcons';
@@ -9,6 +9,7 @@ import { useFileTreeData } from '../hooks/useFileTreeData';
 import { useFileTreeOperations } from '../hooks/useFileTreeOperations';
 import { useFileTreeSearch } from '../hooks/useFileTreeSearch';
 import { useFileTreeViewMode } from '../hooks/useFileTreeViewMode';
+import { useFileTreeUpload } from '../hooks/useFileTreeUpload';
 import type { FileTreeImageSelection, FileTreeNode } from '../types/types';
 import { formatFileSize, formatRelativeTime, isImageFile } from '../utils/fileTreeUtils';
 import FileTreeBody from './FileTreeBody';
@@ -54,6 +55,13 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
 
   // File operations
   const operations = useFileTreeOperations({
+    selectedProject,
+    onRefresh: refreshFiles,
+    showToast,
+  });
+
+  // File upload (drag and drop)
+  const upload = useFileTreeUpload({
     selectedProject,
     onRefresh: refreshFiles,
     showToast,
@@ -113,7 +121,24 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
   }
 
   return (
-    <div className="h-full flex flex-col bg-background">
+    <div
+      ref={upload.treeRef}
+      className="h-full flex flex-col bg-background relative"
+      onDragEnter={upload.handleDragEnter}
+      onDragOver={upload.handleDragOver}
+      onDragLeave={upload.handleDragLeave}
+      onDrop={upload.handleDrop}
+    >
+      {/* Drag overlay */}
+      {upload.isDragOver && (
+        <div className="absolute inset-0 z-50 bg-blue-500/10 border-2 border-dashed border-blue-500 flex items-center justify-center">
+          <div className="bg-background/95 px-6 py-4 rounded-lg shadow-lg flex items-center gap-3">
+            <Upload className="w-6 h-6 text-blue-500" />
+            <span className="text-sm font-medium">{t('fileTree.dropToUpload', 'Drop files to upload')}</span>
+          </div>
+        </div>
+      )}
+
       <FileTreeHeader
         viewMode={viewMode}
         onViewModeChange={changeViewMode}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../../utils/api';
 import type { CodeEditorFile } from '../types/types';
+import { isBinaryFile } from '../utils/binaryFile';
 
 type UseCodeEditorDocumentParams = {
   file: CodeEditorFile;
@@ -21,6 +22,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [isBinary, setIsBinary] = useState(false);
   const fileProjectName = file.projectName ?? projectPath;
   const filePath = file.path;
   const fileName = file.name;
@@ -31,6 +33,14 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
     const loadFileContent = async () => {
       try {
         setLoading(true);
+        setIsBinary(false);
+
+        // Check if file is binary by extension
+        if (isBinaryFile(file.name)) {
+          setIsBinary(true);
+          setLoading(false);
+          return;
+        }
 
         // Diff payload may already include full old/new snapshots, so avoid disk read.
         if (file.diffInfo && fileDiffNewString !== undefined && fileDiffOldString !== undefined) {
@@ -60,7 +70,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
     };
 
     loadFileContent();
-  }, [fileDiffNewString, fileDiffOldString, fileName, filePath, fileProjectName]);
+  }, [file.diffInfo, file.name, fileDiffNewString, fileDiffOldString, fileName, filePath, fileProjectName]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
@@ -120,6 +130,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
     saving,
     saveSuccess,
     saveError,
+    isBinary,
     handleSave,
     handleDownload,
   };

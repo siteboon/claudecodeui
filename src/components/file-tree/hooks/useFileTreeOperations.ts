@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import JSZip from 'jszip';
 import { api } from '../../../utils/api';
 import type { FileTreeNode } from '../types/types';
 import type { Project } from '../../../types/app';
@@ -51,7 +52,7 @@ export type UseFileTreeOperationsResult = {
 
   // Other operations
   handleCopyPath: (item: FileTreeNode) => void;
-  handleDownload: (item: FileTreeNode) => void;
+  handleDownload: (item: FileTreeNode) => Promise<void>;
 
   // Loading state
   operationLoading: boolean;
@@ -243,16 +244,101 @@ export function useFileTreeOperations({
     showToast(t('fileTree.toast.pathCopied', 'Path copied to clipboard'), 'success');
   }, [showToast, t]);
 
-  // Download file
-  const handleDownload = useCallback((item: FileTreeNode) => {
+  // Download file or folder
+  const handleDownload = useCallback(async (item: FileTreeNode) => {
     if (!selectedProject) return;
-    const link = document.createElement('a');
-    link.href = `/api/projects/${encodeURIComponent(selectedProject.name)}/files/content?path=${encodeURIComponent(item.path)}`;
-    link.download = item.name;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+
+    setOperationLoading(true);
+    try {
+      if (item.type === 'directory') {
+        // Download folder as ZIP
+        await downloadFolderAsZip(item);
+      } else {
+        // Download single file
+        await downloadSingleFile(item);
+      }
+    } catch (err) {
+      showToast((err as Error).message, 'error');
+    } finally {
+      setOperationLoading(false);
+    }
+  }, [selectedProject, showToast]);
+
+  // Download a single file
+  const downloadSingleFile = useCallback(async (item: FileTreeNode) => {
+    if (!selectedProject) return;
+
+    const response = await api.readFile(selectedProject.name, item.path);
+
+    if (!response.ok) {
+      throw new Error('Failed to download file');
+    }
+
+    const data = await response.json();
+    const content = data.content;
+
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+
+    anchor.href = url;
+    anchor.download = item.name;
+
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+
+    URL.revokeObjectURL(url);
   }, [selectedProject]);
+
+  // Download folder as ZIP
+  const downloadFolderAsZip = useCallback(async (folder: FileTreeNode) => {
+    if (!selectedProject) return;
+
+    const zip = new JSZip();
+
+    // Recursively get all files in the folder
+    const collectFiles = async (node: FileTreeNode, currentPath: string) => {
+      const fullPath = currentPath ? `${currentPath}/${node.name}` : node.name;
+
+      if (node.type === 'file') {
+        // Fetch file content
+        const response = await api.readFile(selectedProject.name, node.path);
+        if (response.ok) {
+          const data = await response.json();
+          zip.file(fullPath, data.content);
+        }
+      } else if (node.type === 'directory' && node.children) {
+        // Recursively process children
+        for (const child of node.children) {
+          await collectFiles(child, fullPath);
+        }
+      }
+    };
+
+    // If the folder has children, process them
+    if (folder.children && folder.children.length > 0) {
+      for (const child of folder.children) {
+        await collectFiles(child, '');
+      }
+    }
+
+    // Generate ZIP file
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(zipBlob);
+    const anchor = document.createElement('a');
+
+    anchor.href = url;
+    anchor.download = `${folder.name}.zip`;
+
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+
+    URL.revokeObjectURL(url);
+
+    showToast(t('fileTree.toast.folderDownloaded', 'Folder downloaded as ZIP'), 'success');
+  }, [selectedProject, showToast, t]);
 
   return {
     // Rename operations

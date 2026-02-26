@@ -239,6 +239,11 @@ const FileContextMenu = ({
             label={t('fileTree.context.copyPath', 'Copy Path')}
             onClick={() => onCopyPath?.(item)}
           />
+          <MenuItem
+            icon={Download}
+            label={t('fileTree.context.download', 'Download')}
+            onClick={() => onDownload?.(item)}
+          />
         </>
       );
     }
