@@ -167,6 +167,8 @@ export function useChatRealtimeHandlers({
 
     const activeViewSessionId =
       selectedSession?.id || currentSessionId || pendingViewSessionRef.current?.sessionId || null;
+    const isTemporarySessionId = (sessionId?: string | null) =>
+      Boolean(sessionId && sessionId.startsWith('new-session-'));
     const isSystemInitForView =
       systemInitSessionId && (!activeViewSessionId || systemInitSessionId === activeViewSessionId);
     const shouldBypassSessionFilter = isGlobalMessage || Boolean(isSystemInitForView);
@@ -237,20 +239,31 @@ export function useChatRealtimeHandlers({
 
     switch (latestMessage.type) {
       case 'session-created':
-        if (latestMessage.sessionId && !currentSessionId) {
-          sessionStorage.setItem('pendingSessionId', latestMessage.sessionId);
-          if (pendingViewSessionRef.current && !pendingViewSessionRef.current.sessionId) {
-            pendingViewSessionRef.current.sessionId = latestMessage.sessionId;
-          }
-
-          setIsSystemSessionChange(true);
-          onReplaceTemporarySession?.(latestMessage.sessionId);
-
-          setPendingPermissionRequests((previous) =>
-            previous.map((request) =>
-              request.sessionId ? request : { ...request, sessionId: latestMessage.sessionId },
-            ),
+        {
+          const selectedSessionId = selectedSession?.id || null;
+          const waitingForSessionBinding = Boolean(
+            pendingViewSessionRef.current && !pendingViewSessionRef.current.sessionId,
           );
+          const shouldBindCreatedSession =
+            waitingForSessionBinding ||
+            ((!selectedSessionId || isTemporarySessionId(selectedSessionId)) &&
+              (!currentSessionId || isTemporarySessionId(currentSessionId)));
+
+          if (latestMessage.sessionId && shouldBindCreatedSession) {
+            sessionStorage.setItem('pendingSessionId', latestMessage.sessionId);
+            if (pendingViewSessionRef.current && !pendingViewSessionRef.current.sessionId) {
+              pendingViewSessionRef.current.sessionId = latestMessage.sessionId;
+            }
+
+            setIsSystemSessionChange(true);
+            onReplaceTemporarySession?.(latestMessage.sessionId);
+
+            setPendingPermissionRequests((previous) =>
+              previous.map((request) =>
+                request.sessionId ? request : { ...request, sessionId: latestMessage.sessionId },
+              ),
+            );
+          }
         }
         break;
 
