@@ -1,4 +1,4 @@
-import { Eye, List, Search, TableProperties, X } from 'lucide-react';
+import { Eye, FileText, FolderPlus, List, MinusSquare, RefreshCw, Search, TableProperties, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
@@ -9,6 +9,11 @@ type FileTreeHeaderProps = {
   onViewModeChange: (mode: FileTreeViewMode) => void;
   searchQuery: string;
   onSearchQueryChange: (query: string) => void;
+  // Toolbar actions
+  onNewFile?: () => void;
+  onNewFolder?: () => void;
+  onRefresh?: () => void;
+  onCollapseAll?: () => void;
 };
 
 export default function FileTreeHeader({
@@ -16,6 +21,10 @@ export default function FileTreeHeader({
   onViewModeChange,
   searchQuery,
   onSearchQueryChange,
+  onNewFile,
+  onNewFolder,
+  onRefresh,
+  onCollapseAll,
 }: FileTreeHeaderProps) {
   const { t } = useTranslation();
 
@@ -54,6 +63,56 @@ export default function FileTreeHeader({
         </div>
       </div>
 
+      {/* Toolbar buttons */}
+      <div className="flex items-center gap-1">
+        {onNewFile && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs gap-1"
+            onClick={onNewFile}
+            title={`${t('fileTree.newFile', 'New File')} (⌘N)`}
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{t('fileTree.newFile', 'New File')}</span>
+          </Button>
+        )}
+        {onNewFolder && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs gap-1"
+            onClick={onNewFolder}
+            title={`${t('fileTree.newFolder', 'New Folder')} (⇧⌘N)`}
+          >
+            <FolderPlus className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{t('fileTree.newFolder', 'New Folder')}</span>
+          </Button>
+        )}
+        {onRefresh && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0"
+            onClick={onRefresh}
+            title={t('fileTree.refresh', 'Refresh')}
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+          </Button>
+        )}
+        {onCollapseAll && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0"
+            onClick={onCollapseAll}
+            title={t('fileTree.collapseAll', 'Collapse All')}
+          >
+            <MinusSquare className="w-3.5 h-3.5" />
+          </Button>
+        )}
+      </div>
+
       <div className="relative">
         <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
         <Input
@@ -78,4 +137,3 @@ export default function FileTreeHeader({
     </div>
   );
 }
-

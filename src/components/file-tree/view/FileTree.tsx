@@ -42,7 +42,7 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
 
   const { files, loading, refreshFiles } = useFileTreeData(selectedProject);
   const { viewMode, changeViewMode } = useFileTreeViewMode();
-  const { expandedDirs, toggleDirectory, expandDirectories } = useExpandedDirectories();
+  const { expandedDirs, toggleDirectory, expandDirectories, collapseAll } = useExpandedDirectories();
   const { searchQuery, setSearchQuery, filteredFiles } = useFileTreeSearch({
     files,
     expandDirectories,
@@ -99,6 +99,10 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
         onViewModeChange={changeViewMode}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
+        onNewFile={() => operations.handleStartCreate('', 'file')}
+        onNewFolder={() => operations.handleStartCreate('', 'directory')}
+        onRefresh={refreshFiles}
+        onCollapseAll={collapseAll}
       />
 
       {viewMode === 'detailed' && filteredFiles.length > 0 && <FileTreeDetailedColumns />}
