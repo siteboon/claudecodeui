@@ -18,13 +18,29 @@ import { Project } from '../../../types/app';
 type FileTreeProps =  {
   selectedProject: Project | null;
   onFileOpen?: (filePath: string) => void;
+  // File operation callbacks (optional - enables context menu)
+  onRename?: (item: FileTreeNode) => void;
+  onDelete?: (item: FileTreeNode) => void;
+  onNewFile?: (path: string) => void;
+  onNewFolder?: (path: string) => void;
+  onCopyPath?: (item: FileTreeNode) => void;
+  onDownload?: (item: FileTreeNode) => void;
 }
 
-export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps) {
+export default function FileTree({
+  selectedProject,
+  onFileOpen,
+  onRename,
+  onDelete,
+  onNewFile,
+  onNewFolder,
+  onCopyPath,
+  onDownload,
+}: FileTreeProps) {
   const { t } = useTranslation();
   const [selectedImage, setSelectedImage] = useState<FileTreeImageSelection | null>(null);
 
-  const { files, loading } = useFileTreeData(selectedProject);
+  const { files, loading, refreshFiles } = useFileTreeData(selectedProject);
   const { viewMode, changeViewMode } = useFileTreeViewMode();
   const { expandedDirs, toggleDirectory, expandDirectories } = useExpandedDirectories();
   const { searchQuery, setSearchQuery, filteredFiles } = useFileTreeSearch({
@@ -65,6 +81,42 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
     [t],
   );
 
+  // Context menu handlers - wrap callbacks with refresh
+  const handleRename = useCallback((item: FileTreeNode) => {
+    onRename?.(item);
+    refreshFiles();
+  }, [onRename, refreshFiles]);
+
+  const handleDelete = useCallback((item: FileTreeNode) => {
+    onDelete?.(item);
+    refreshFiles();
+  }, [onDelete, refreshFiles]);
+
+  const handleNewFile = useCallback((path: string) => {
+    onNewFile?.(path);
+    refreshFiles();
+  }, [onNewFile, refreshFiles]);
+
+  const handleNewFolder = useCallback((path: string) => {
+    onNewFolder?.(path);
+    refreshFiles();
+  }, [onNewFolder, refreshFiles]);
+
+  const handleCopyPath = useCallback((item: FileTreeNode) => {
+    onCopyPath?.(item);
+  }, [onCopyPath]);
+
+  const handleDownload = useCallback((item: FileTreeNode) => {
+    onDownload?.(item);
+  }, [onDownload]);
+
+  const handleRefresh = useCallback(() => {
+    refreshFiles();
+  }, [refreshFiles]);
+
+  // Check if any context menu callbacks are provided
+  const hasContextMenu = onRename || onDelete || onNewFile || onNewFolder || onCopyPath || onDownload;
+
   if (loading) {
     return <FileTreeLoadingState />;
   }
@@ -90,6 +142,13 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
         renderFileIcon={renderFileIcon}
         formatFileSize={formatFileSize}
         formatRelativeTime={formatRelativeTimeLabel}
+        onRename={hasContextMenu ? handleRename : undefined}
+        onDelete={hasContextMenu ? handleDelete : undefined}
+        onNewFile={hasContextMenu ? handleNewFile : undefined}
+        onNewFolder={hasContextMenu ? handleNewFolder : undefined}
+        onCopyPath={hasContextMenu ? handleCopyPath : undefined}
+        onDownload={hasContextMenu ? handleDownload : undefined}
+        onRefresh={hasContextMenu ? handleRefresh : undefined}
       />
 
       {selectedImage && (

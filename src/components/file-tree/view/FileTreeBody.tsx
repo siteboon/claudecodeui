@@ -16,6 +16,13 @@ type FileTreeBodyProps = {
   renderFileIcon: (filename: string) => ReactNode;
   formatFileSize: (bytes?: number) => string;
   formatRelativeTime: (date?: string) => string;
+  onRename?: (item: FileTreeNode) => void;
+  onDelete?: (item: FileTreeNode) => void;
+  onNewFile?: (path: string) => void;
+  onNewFolder?: (path: string) => void;
+  onCopyPath?: (item: FileTreeNode) => void;
+  onDownload?: (item: FileTreeNode) => void;
+  onRefresh?: () => void;
 };
 
 export default function FileTreeBody({
@@ -28,6 +35,13 @@ export default function FileTreeBody({
   renderFileIcon,
   formatFileSize,
   formatRelativeTime,
+  onRename,
+  onDelete,
+  onNewFile,
+  onNewFolder,
+  onCopyPath,
+  onDownload,
+  onRefresh,
 }: FileTreeBodyProps) {
   const { t } = useTranslation();
 
@@ -54,9 +68,15 @@ export default function FileTreeBody({
           renderFileIcon={renderFileIcon}
           formatFileSize={formatFileSize}
           formatRelativeTime={formatRelativeTime}
+          onRename={onRename}
+          onDelete={onDelete}
+          onNewFile={onNewFile}
+          onNewFolder={onNewFolder}
+          onCopyPath={onCopyPath}
+          onDownload={onDownload}
+          onRefresh={onRefresh}
         />
       )}
     </ScrollArea>
   );
 }
-

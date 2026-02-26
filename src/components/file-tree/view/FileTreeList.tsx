@@ -10,6 +10,13 @@ type FileTreeListProps = {
   renderFileIcon: (filename: string) => ReactNode;
   formatFileSize: (bytes?: number) => string;
   formatRelativeTime: (date?: string) => string;
+  onRename?: (item: FileTreeNodeType) => void;
+  onDelete?: (item: FileTreeNodeType) => void;
+  onNewFile?: (path: string) => void;
+  onNewFolder?: (path: string) => void;
+  onCopyPath?: (item: FileTreeNodeType) => void;
+  onDownload?: (item: FileTreeNodeType) => void;
+  onRefresh?: () => void;
 };
 
 export default function FileTreeList({
@@ -20,6 +27,13 @@ export default function FileTreeList({
   renderFileIcon,
   formatFileSize,
   formatRelativeTime,
+  onRename,
+  onDelete,
+  onNewFile,
+  onNewFolder,
+  onCopyPath,
+  onDownload,
+  onRefresh,
 }: FileTreeListProps) {
   return (
     <div>
@@ -34,9 +48,15 @@ export default function FileTreeList({
           renderFileIcon={renderFileIcon}
           formatFileSize={formatFileSize}
           formatRelativeTime={formatRelativeTime}
+          onRename={onRename}
+          onDelete={onDelete}
+          onNewFile={onNewFile}
+          onNewFolder={onNewFolder}
+          onCopyPath={onCopyPath}
+          onDownload={onDownload}
+          onRefresh={onRefresh}
         />
       ))}
     </div>
   );
 }
-
