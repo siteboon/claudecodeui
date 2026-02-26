@@ -1,7 +1,8 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import { ChevronRight, Folder, FolderOpen } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import FileContextMenu from '../../FileContextMenu';
+import { Input } from '../../ui/input';
 import type { FileTreeNode as FileTreeNodeType, FileTreeViewMode } from '../types/types';
 
 type FileTreeNodeProps = {
@@ -20,6 +21,14 @@ type FileTreeNodeProps = {
   onCopyPath?: (item: FileTreeNodeType) => void;
   onDownload?: (item: FileTreeNodeType) => void;
   onRefresh?: () => void;
+  // Rename state for inline editing
+  renamingItem?: FileTreeNodeType | null;
+  renameValue?: string;
+  setRenameValue?: (value: string) => void;
+  handleConfirmRename?: () => void;
+  handleCancelRename?: () => void;
+  renameInputRef?: RefObject<HTMLInputElement>;
+  operationLoading?: boolean;
 };
 
 type TreeItemIconProps = {
@@ -66,10 +75,18 @@ export default function FileTreeNode({
   onCopyPath,
   onDownload,
   onRefresh,
+  renamingItem,
+  renameValue,
+  setRenameValue,
+  handleConfirmRename,
+  handleCancelRename,
+  renameInputRef,
+  operationLoading,
 }: FileTreeNodeProps) {
   const isDirectory = item.type === 'directory';
   const isOpen = isDirectory && expandedDirs.has(item.path);
   const hasChildren = Boolean(isDirectory && item.children && item.children.length > 0);
+  const isRenaming = renamingItem?.path === item.path;
 
   const nameClassName = cn(
     'text-[13px] leading-tight truncate',
@@ -86,6 +103,37 @@ export default function FileTreeNode({
     isDirectory && isOpen && 'border-l-2 border-primary/30',
     (isDirectory && !isOpen) || !isDirectory ? 'border-l-2 border-transparent' : '',
   );
+
+  // Render rename input if this item is being renamed
+  if (isRenaming && setRenameValue && handleConfirmRename && handleCancelRename) {
+    return (
+      <div
+        className={cn(rowClassName, 'bg-accent/30')}
+        style={{ paddingLeft: `${level * 16 + 4}px` }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <TreeItemIcon item={item} isOpen={isOpen} renderFileIcon={renderFileIcon} />
+        <Input
+          ref={renameInputRef}
+          type="text"
+          value={renameValue || ''}
+          onChange={(e) => setRenameValue(e.target.value)}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter') handleConfirmRename();
+            if (e.key === 'Escape') handleCancelRename();
+          }}
+          onBlur={() => {
+            setTimeout(() => {
+              handleConfirmRename();
+            }, 100);
+          }}
+          className="h-6 text-sm flex-1"
+          disabled={operationLoading}
+        />
+      </div>
+    );
+  }
 
   const rowContent = (
     <div
@@ -176,6 +224,13 @@ export default function FileTreeNode({
               onCopyPath={onCopyPath}
               onDownload={onDownload}
               onRefresh={onRefresh}
+              renamingItem={renamingItem}
+              renameValue={renameValue}
+              setRenameValue={setRenameValue}
+              handleConfirmRename={handleConfirmRename}
+              handleCancelRename={handleCancelRename}
+              renameInputRef={renameInputRef}
+              operationLoading={operationLoading}
             />
           ))}
         </div>

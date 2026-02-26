@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import type { FileTreeNode as FileTreeNodeType, FileTreeViewMode } from '../types/types';
 import FileTreeNode from './FileTreeNode';
 
@@ -17,6 +17,14 @@ type FileTreeListProps = {
   onCopyPath?: (item: FileTreeNodeType) => void;
   onDownload?: (item: FileTreeNodeType) => void;
   onRefresh?: () => void;
+  // Rename state for inline editing
+  renamingItem?: FileTreeNodeType | null;
+  renameValue?: string;
+  setRenameValue?: (value: string) => void;
+  handleConfirmRename?: () => void;
+  handleCancelRename?: () => void;
+  renameInputRef?: RefObject<HTMLInputElement>;
+  operationLoading?: boolean;
 };
 
 export default function FileTreeList({
@@ -34,6 +42,13 @@ export default function FileTreeList({
   onCopyPath,
   onDownload,
   onRefresh,
+  renamingItem,
+  renameValue,
+  setRenameValue,
+  handleConfirmRename,
+  handleCancelRename,
+  renameInputRef,
+  operationLoading,
 }: FileTreeListProps) {
   return (
     <div>
@@ -55,6 +70,13 @@ export default function FileTreeList({
           onCopyPath={onCopyPath}
           onDownload={onDownload}
           onRefresh={onRefresh}
+          renamingItem={renamingItem}
+          renameValue={renameValue}
+          setRenameValue={setRenameValue}
+          handleConfirmRename={handleConfirmRename}
+          handleCancelRename={handleCancelRename}
+          renameInputRef={renameInputRef}
+          operationLoading={operationLoading}
         />
       ))}
     </div>

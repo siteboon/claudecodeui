@@ -1,6 +1,6 @@
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertTriangle, Check, X, Loader2 } from 'lucide-react';
+import { AlertTriangle, Check, X, Loader2, Folder } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import ImageViewer from './ImageViewer';
 import { ICON_SIZE_CLASS, getFileIconData } from '../constants/fileIcons';
@@ -16,6 +16,8 @@ import FileTreeDetailedColumns from './FileTreeDetailedColumns';
 import FileTreeHeader from './FileTreeHeader';
 import FileTreeLoadingState from './FileTreeLoadingState';
 import { Project } from '../../../types/app';
+import { Input } from '../../ui/input';
+import { ScrollArea } from '../../ui/scroll-area';
 
 type FileTreeProps = {
   selectedProject: Project | null;
@@ -26,6 +28,8 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
   const { t } = useTranslation();
   const [selectedImage, setSelectedImage] = useState<FileTreeImageSelection | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const newItemInputRef = useRef<HTMLInputElement>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   // Show toast notification
   const showToast = useCallback((message: string, type: 'success' | 'error') => {
@@ -54,6 +58,22 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
     onRefresh: refreshFiles,
     showToast,
   });
+
+  // Focus input when creating new item
+  useEffect(() => {
+    if (operations.isCreating && newItemInputRef.current) {
+      newItemInputRef.current.focus();
+      newItemInputRef.current.select();
+    }
+  }, [operations.isCreating]);
+
+  // Focus input when renaming
+  useEffect(() => {
+    if (operations.renamingItem && renameInputRef.current) {
+      renameInputRef.current.focus();
+      renameInputRef.current.select();
+    }
+  }, [operations.renamingItem]);
 
   const renderFileIcon = useCallback((filename: string) => {
     const { icon: Icon, color } = getFileIconData(filename);
@@ -109,24 +129,66 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
 
       {viewMode === 'detailed' && filteredFiles.length > 0 && <FileTreeDetailedColumns />}
 
-      <FileTreeBody
-        files={files}
-        filteredFiles={filteredFiles}
-        searchQuery={searchQuery}
-        viewMode={viewMode}
-        expandedDirs={expandedDirs}
-        onItemClick={handleItemClick}
-        renderFileIcon={renderFileIcon}
-        formatFileSize={formatFileSize}
-        formatRelativeTime={formatRelativeTimeLabel}
-        onRename={operations.handleStartRename}
-        onDelete={operations.handleStartDelete}
-        onNewFile={(path) => operations.handleStartCreate(path, 'file')}
-        onNewFolder={(path) => operations.handleStartCreate(path, 'directory')}
-        onCopyPath={operations.handleCopyPath}
-        onDownload={operations.handleDownload}
-        onRefresh={refreshFiles}
-      />
+      <ScrollArea className="flex-1 px-2 py-1">
+        {/* New item input */}
+        {operations.isCreating && (
+          <div
+            className="flex items-center gap-1.5 py-[3px] pr-2 mb-1"
+            style={{ paddingLeft: `${(operations.newItemParent.split('/').length - 1) * 16 + 4}px` }}
+          >
+            {operations.newItemType === 'directory' ? (
+              <Folder className={cn(ICON_SIZE_CLASS, 'text-blue-500')} />
+            ) : (
+              <span className="ml-[18px]">{renderFileIcon(operations.newItemName)}</span>
+            )}
+            <Input
+              ref={newItemInputRef}
+              type="text"
+              value={operations.newItemName}
+              onChange={(e) => operations.setNewItemName(e.target.value)}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === 'Enter') operations.handleConfirmCreate();
+                if (e.key === 'Escape') operations.handleCancelCreate();
+              }}
+              onBlur={() => {
+                setTimeout(() => {
+                  if (operations.isCreating) operations.handleConfirmCreate();
+                }, 100);
+              }}
+              className="h-6 text-sm flex-1"
+              disabled={operations.operationLoading}
+            />
+          </div>
+        )}
+
+        <FileTreeBody
+          files={files}
+          filteredFiles={filteredFiles}
+          searchQuery={searchQuery}
+          viewMode={viewMode}
+          expandedDirs={expandedDirs}
+          onItemClick={handleItemClick}
+          renderFileIcon={renderFileIcon}
+          formatFileSize={formatFileSize}
+          formatRelativeTime={formatRelativeTimeLabel}
+          onRename={operations.handleStartRename}
+          onDelete={operations.handleStartDelete}
+          onNewFile={(path) => operations.handleStartCreate(path, 'file')}
+          onNewFolder={(path) => operations.handleStartCreate(path, 'directory')}
+          onCopyPath={operations.handleCopyPath}
+          onDownload={operations.handleDownload}
+          onRefresh={refreshFiles}
+          // Pass rename state and handlers for inline editing
+          renamingItem={operations.renamingItem}
+          renameValue={operations.renameValue}
+          setRenameValue={operations.setRenameValue}
+          handleConfirmRename={operations.handleConfirmRename}
+          handleCancelRename={operations.handleCancelRename}
+          renameInputRef={renameInputRef}
+          operationLoading={operations.operationLoading}
+        />
+      </ScrollArea>
 
       {selectedImage && (
         <ImageViewer

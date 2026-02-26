@@ -1,7 +1,6 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import { Folder, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { ScrollArea } from '../../ui/scroll-area';
 import type { FileTreeNode, FileTreeViewMode } from '../types/types';
 import FileTreeEmptyState from './FileTreeEmptyState';
 import FileTreeList from './FileTreeList';
@@ -23,6 +22,14 @@ type FileTreeBodyProps = {
   onCopyPath?: (item: FileTreeNode) => void;
   onDownload?: (item: FileTreeNode) => void;
   onRefresh?: () => void;
+  // Rename state for inline editing
+  renamingItem?: FileTreeNode | null;
+  renameValue?: string;
+  setRenameValue?: (value: string) => void;
+  handleConfirmRename?: () => void;
+  handleCancelRename?: () => void;
+  renameInputRef?: RefObject<HTMLInputElement>;
+  operationLoading?: boolean;
 };
 
 export default function FileTreeBody({
@@ -42,11 +49,18 @@ export default function FileTreeBody({
   onCopyPath,
   onDownload,
   onRefresh,
+  renamingItem,
+  renameValue,
+  setRenameValue,
+  handleConfirmRename,
+  handleCancelRename,
+  renameInputRef,
+  operationLoading,
 }: FileTreeBodyProps) {
   const { t } = useTranslation();
 
   return (
-    <ScrollArea className="flex-1 px-2 py-1">
+    <>
       {files.length === 0 ? (
         <FileTreeEmptyState
           icon={Folder}
@@ -75,8 +89,15 @@ export default function FileTreeBody({
           onCopyPath={onCopyPath}
           onDownload={onDownload}
           onRefresh={onRefresh}
+          renamingItem={renamingItem}
+          renameValue={renameValue}
+          setRenameValue={setRenameValue}
+          handleConfirmRename={handleConfirmRename}
+          handleCancelRename={handleCancelRename}
+          renameInputRef={renameInputRef}
+          operationLoading={operationLoading}
         />
       )}
-    </ScrollArea>
+    </>
   );
 }
