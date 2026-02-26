@@ -26,5 +26,9 @@
     "lines": "行数:",
     "characters": "文字数:",
     "shortcuts": "Ctrl+Sで保存 • Escで閉じる"
+  },
+  "binaryFile": {
+    "title": "バイナリファイル",
+    "message": "ファイル \"{{fileName}}\" はバイナリファイルのため、テキストエディタで表示できません。"
   }
 }

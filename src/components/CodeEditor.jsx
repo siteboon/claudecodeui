@@ -142,11 +142,35 @@ function MarkdownPreview({ content }) {
   );
 }
 
+// Binary file extensions (images are handled by ImageViewer, not here)
+const BINARY_EXTENSIONS = [
+  // Archives
+  'zip', 'tar', 'gz', 'rar', '7z', 'bz2', 'xz',
+  // Executables
+  'exe', 'dll', 'so', 'dylib', 'app', 'dmg', 'msi',
+  // Media
+  'mp3', 'mp4', 'wav', 'avi', 'mov', 'mkv', 'flv', 'wmv', 'm4a', 'ogg',
+  // Documents
+  'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp',
+  // Fonts
+  'ttf', 'otf', 'woff', 'woff2', 'eot',
+  // Database
+  'db', 'sqlite', 'sqlite3',
+  // Other binary
+  'bin', 'dat', 'iso', 'img', 'class', 'jar', 'war', 'pyc', 'pyo'
+];
+
+const isBinaryFile = (filename) => {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  return BINARY_EXTENSIONS.includes(ext);
+};
+
 function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded = false, onToggleExpand = null, onPopOut = null }) {
   const { t } = useTranslation('codeEditor');
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [isBinary, setIsBinary] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const savedTheme = localStorage.getItem('codeEditorTheme');
@@ -434,6 +458,14 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
     const loadFileContent = async () => {
       try {
         setLoading(true);
+        setIsBinary(false);
+
+        // Check if file is binary by extension
+        if (isBinaryFile(file.name)) {
+          setIsBinary(true);
+          setLoading(false);
+          return;
+        }
 
         // If we have diffInfo with both old and new content, we can show the diff directly
         // This handles both GitPanel (full content) and ChatInterface (full content from API)
@@ -453,6 +485,14 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
         }
 
         const data = await response.json();
+
+        // Check if server indicated binary file
+        if (data.isBinary) {
+          setIsBinary(true);
+          setLoading(false);
+          return;
+        }
+
         setContent(data.content);
       } catch (error) {
         console.error('Error loading file:', error);
@@ -624,6 +664,37 @@ function CodeEditor({ file, onClose, projectPath, isSidebar = false, isExpanded 
           </div>
         )}
       </>
+    );
+  }
+
+  // Binary file display
+  if (isBinary) {
+    const binaryContent = (
+      <div className="w-full h-full flex flex-col items-center justify-center bg-background text-muted-foreground p-8">
+        <div className="flex flex-col items-center gap-4 max-w-md text-center">
+          <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
+            <svg className="w-8 h-8 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </div>
+          <div>
+            <h3 className="text-lg font-medium text-foreground mb-2">{t('binaryFile.title', 'Binary File')}</h3>
+            <p className="text-sm text-muted-foreground">
+              {t('binaryFile.message', 'The file "{{fileName}}" cannot be displayed in the text editor because it is a binary file.', { fileName: file.name })}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+
+    if (isSidebar) {
+      return binaryContent;
+    }
+
+    return (
+      <div className="fixed inset-0 z-[9999] bg-background flex flex-col">
+        {binaryContent}
+      </div>
     );
   }
 

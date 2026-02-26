@@ -26,5 +26,9 @@
     "lines": "줄:",
     "characters": "문자:",
     "shortcuts": "Ctrl+S로 저장 • Esc로 닫기"
+  },
+  "binaryFile": {
+    "title": "바이너리 파일",
+    "message": "파일 \"{{fileName}}\"은(는) 바이너리 파일이므로 텍스트 편집기에서 표시할 수 없습니다."
   }
 }

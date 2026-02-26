@@ -114,7 +114,11 @@
     "justNow": "たった今",
     "minAgo": "{{count}}分前",
     "hoursAgo": "{{count}}時間前",
-    "daysAgo": "{{count}}日前"
+    "daysAgo": "{{count}}日前",
+    "newFile": "新規ファイル (Cmd+N)",
+    "newFolder": "新規フォルダ (Cmd+Shift+N)",
+    "refresh": "更新",
+    "collapseAll": "すべて折りたたむ"
   },
   "projectWizard": {
     "title": "新規プロジェクトを作成",

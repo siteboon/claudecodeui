@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ScrollArea } from './ui/scroll-area';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import {
-  Folder, FolderOpen, File, FileText, FileCode, List, TableProperties, Eye, Search, X,
-  ChevronRight,
+  Folder, FolderOpen, File as FileIcon, FileText, FileCode, List, TableProperties, Eye, Search, X,
+  ChevronRight, ChevronDown, RefreshCw, FolderPlus, Trash2, Pencil, Upload, Download, Copy,
+  AlertTriangle, Check, XCircle,
   FileJson, FileType, FileSpreadsheet, FileArchive,
   Hash, Braces, Terminal, Database, Globe, Palette, Music2, Video, Archive,
   Lock, Shield, Settings, Image, BookOpen, Cpu, Box, Gem, Coffee,
@@ -14,6 +15,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import ImageViewer from './ImageViewer';
+import FileContextMenu from './FileContextMenu';
 import { api } from '../utils/api';
 
 // ─── File Icon Registry ──────────────────────────────────────────────
@@ -179,7 +181,7 @@ const FILE_ICON_MAP = {
   cfg:  { icon: Settings,   color: 'text-gray-500' },
   conf: { icon: Settings,   color: 'text-gray-500' },
   log:  { icon: Scroll,     color: 'text-gray-400' },
-  map:  { icon: File,       color: 'text-gray-400' },
+  map:  { icon: FileIcon,       color: 'text-gray-400' },
 };
 
 // Special full-filename matches (highest priority)
@@ -253,11 +255,15 @@ function getFileIconData(filename) {
   }
 
   // 4. Fallback
-  return { icon: File, color: 'text-muted-foreground' };
+  return { icon: FileIcon, color: 'text-muted-foreground' };
 }
 
 
 // ─── Component ───────────────────────────────────────────────────────
+
+// Invalid filename characters
+const INVALID_FILENAME_CHARS = /[<>:"/\\|?*\x00-\x1f]/;
+const RESERVED_NAMES = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i;
 
 function FileTree({ selectedProject, onFileOpen }) {
   const { t } = useTranslation();
@@ -268,6 +274,27 @@ function FileTree({ selectedProject, onFileOpen }) {
   const [viewMode, setViewMode] = useState('detailed');
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredFiles, setFilteredFiles] = useState([]);
+
+  // File operations state
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const [newItemParent, setNewItemParent] = useState('');
+  const [newItemType, setNewItemType] = useState('file');
+  const [newItemName, setNewItemName] = useState('');
+  const [renamingItem, setRenamingItem] = useState(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [deleteDialog, setDeleteDialog] = useState({ isOpen: false, item: null });
+  const [operationLoading, setOperationLoading] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  // Drag and drop state
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [dropTarget, setDropTarget] = useState(null);
+  const [uploadProgress, setUploadProgress] = useState({});
+  const fileInputRef = useRef(null);
+  const treeRef = useRef(null);
+  const renameInputRef = useRef(null);
+  const newItemInputRef = useRef(null);
 
   useEffect(() => {
     if (selectedProject) {
@@ -300,6 +327,40 @@ function FileTree({ selectedProject, onFileOpen }) {
       expandMatches(filtered);
     }
   }, [files, searchQuery]);
+
+  // Focus rename input when shown
+  useEffect(() => {
+    if (renamingItem && renameInputRef.current) {
+      renameInputRef.current.focus();
+      // Select filename without extension
+      const extIndex = renameValue.lastIndexOf('.');
+      if (extIndex > 0) {
+        renameInputRef.current.setSelectionRange(0, extIndex);
+      } else {
+        renameInputRef.current.select();
+      }
+    }
+  }, [renamingItem, renameValue]);
+
+  // Focus new item input when shown
+  useEffect(() => {
+    if (isCreating && newItemInputRef.current) {
+      newItemInputRef.current.focus();
+      newItemInputRef.current.select();
+    }
+  }, [isCreating]);
+
+  // Auto-hide toast
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+  };
 
   const filterFiles = (items, query) => {
     return items.reduce((filtered, item) => {
@@ -353,6 +414,10 @@ function FileTree({ selectedProject, onFileOpen }) {
     setExpandedDirs(newExpanded);
   };
 
+  const collapseAll = () => {
+    setExpandedDirs(new Set());
+  };
+
   const changeViewMode = (mode) => {
     setViewMode(mode);
     localStorage.setItem('file-tree-view-mode', mode);
@@ -390,8 +455,371 @@ function FileTree({ selectedProject, onFileOpen }) {
     return <Icon className={cn(ICON_SIZE, color)} />;
   };
 
+  // ── File Operations ─────────────────────────────────────────────────
+
+  const validateFilename = (name) => {
+    if (!name || !name.trim()) {
+      return t('fileTree.validation.emptyName', 'Filename cannot be empty');
+    }
+    if (INVALID_FILENAME_CHARS.test(name)) {
+      return t('fileTree.validation.invalidChars', 'Filename contains invalid characters');
+    }
+    if (RESERVED_NAMES.test(name)) {
+      return t('fileTree.validation.reserved', 'Filename is a reserved name');
+    }
+    if (/^\.+$/.test(name)) {
+      return t('fileTree.validation.dotsOnly', 'Filename cannot be only dots');
+    }
+    return null;
+  };
+
+  // Create file or directory
+  const handleStartCreate = (parentPath, type) => {
+    setNewItemParent(parentPath || '');
+    setNewItemType(type);
+    setNewItemName(type === 'file' ? 'untitled.txt' : 'new-folder');
+    setIsCreating(true);
+    setRenamingItem(null);
+  };
+
+  const handleCancelCreate = () => {
+    setIsCreating(false);
+    setNewItemParent('');
+    setNewItemName('');
+  };
+
+  const handleConfirmCreate = async () => {
+    const error = validateFilename(newItemName);
+    if (error) {
+      showToast(error, 'error');
+      return;
+    }
+
+    setOperationLoading(true);
+    try {
+      const response = await api.post(
+        `/projects/${encodeURIComponent(selectedProject.name)}/files/create`,
+        {
+          path: newItemParent,
+          type: newItemType,
+          name: newItemName
+        }
+      );
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to create');
+      }
+
+      showToast(
+        newItemType === 'file'
+          ? t('fileTree.toast.fileCreated', 'File created successfully')
+          : t('fileTree.toast.folderCreated', 'Folder created successfully'),
+        'success'
+      );
+
+      // Expand parent directory
+      if (newItemParent) {
+        setExpandedDirs(prev => new Set(prev.add(newItemParent)));
+      }
+
+      await fetchFiles();
+      handleCancelCreate();
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setOperationLoading(false);
+    }
+  };
+
+  // Rename file or directory
+  const handleStartRename = (item) => {
+    setRenamingItem(item);
+    setRenameValue(item.name);
+    setIsCreating(false);
+  };
+
+  const handleCancelRename = () => {
+    setRenamingItem(null);
+    setRenameValue('');
+  };
+
+  const handleConfirmRename = async () => {
+    if (!renamingItem) return;
+
+    const error = validateFilename(renameValue);
+    if (error) {
+      showToast(error, 'error');
+      return;
+    }
+
+    if (renameValue === renamingItem.name) {
+      handleCancelRename();
+      return;
+    }
+
+    setOperationLoading(true);
+    try {
+      const response = await api.put(
+        `/projects/${encodeURIComponent(selectedProject.name)}/files/rename`,
+        {
+          oldPath: renamingItem.path,
+          newName: renameValue
+        }
+      );
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to rename');
+      }
+
+      showToast(t('fileTree.toast.renamed', 'Renamed successfully'), 'success');
+      await fetchFiles();
+      handleCancelRename();
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setOperationLoading(false);
+    }
+  };
+
+  // Delete file or directory
+  const handleStartDelete = (item) => {
+    setDeleteDialog({ isOpen: true, item });
+  };
+
+  const handleCancelDelete = () => {
+    setDeleteDialog({ isOpen: false, item: null });
+  };
+
+  const handleConfirmDelete = async () => {
+    const { item } = deleteDialog;
+    if (!item) return;
+
+    setOperationLoading(true);
+    try {
+      const response = await api.delete(
+        `/projects/${encodeURIComponent(selectedProject.name)}/files`,
+        {
+          body: JSON.stringify({
+            path: item.path,
+            type: item.type
+          })
+        }
+      );
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to delete');
+      }
+
+      showToast(
+        item.type === 'directory'
+          ? t('fileTree.toast.folderDeleted', 'Folder deleted')
+          : t('fileTree.toast.fileDeleted', 'File deleted'),
+        'success'
+      );
+      await fetchFiles();
+      handleCancelDelete();
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setOperationLoading(false);
+    }
+  };
+
+  // Copy path to clipboard
+  const handleCopyPath = (item) => {
+    navigator.clipboard.writeText(item.path);
+    showToast(t('fileTree.toast.pathCopied', 'Path copied to clipboard'), 'success');
+  };
+
+  // Download file
+  const handleDownload = (item) => {
+    const link = document.createElement('a');
+    link.href = `/api/projects/${encodeURIComponent(selectedProject.name)}/files/content?path=${encodeURIComponent(item.path)}`;
+    link.download = item.name;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // ── Drag and Drop ─────────────────────────────────────────────────
+
+  const handleDragEnter = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragOver = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDragLeave = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Only set isDragOver to false if we're leaving the entire tree
+    if (treeRef.current && !treeRef.current.contains(e.relatedTarget)) {
+      setIsDragOver(false);
+      setDropTarget(null);
+    }
+  }, []);
+
+  // Helper function to read all files from a directory entry recursively
+  const readAllDirectoryEntries = useCallback(async (directoryEntry, basePath = '') => {
+    console.log('[DEBUG] readAllDirectoryEntries called with basePath:', basePath, 'directory:', directoryEntry.name);
+    const files = [];
+
+    const reader = directoryEntry.createReader();
+    let entries = [];
+
+    // Read all entries from the directory (may need multiple reads)
+    let batch;
+    do {
+      batch = await new Promise((resolve, reject) => {
+        reader.readEntries(resolve, reject);
+      });
+      entries = entries.concat(batch);
+    } while (batch.length > 0);
+
+    console.log('[DEBUG] Found entries:', entries.map(e => ({ name: e.name, isFile: e.isFile, isDirectory: e.isDirectory })));
+
+    // Files to ignore (system files)
+    const ignoredFiles = ['.DS_Store', 'Thumbs.db', 'desktop.ini'];
+
+    for (const entry of entries) {
+      const entryPath = basePath ? `${basePath}/${entry.name}` : entry.name;
+      console.log('[DEBUG] Processing entry:', entry.name, '-> entryPath:', entryPath);
+
+      // Skip ignored system files
+      if (ignoredFiles.includes(entry.name)) {
+        console.log('[DEBUG] Skipping ignored file:', entry.name);
+        continue;
+      }
+
+      if (entry.isFile) {
+        const file = await new Promise((resolve, reject) => {
+          entry.file(resolve, reject);
+        });
+        // Create a new File object with the correct path
+        const fileWithPath = new File([file], entryPath, {
+          type: file.type,
+          lastModified: file.lastModified
+        });
+        console.log('[DEBUG] Created fileWithPath:', fileWithPath.name);
+        files.push(fileWithPath);
+      } else if (entry.isDirectory) {
+        const subFiles = await readAllDirectoryEntries(entry, entryPath);
+        files.push(...subFiles);
+      }
+    }
+
+    return files;
+  }, []);
+
+  const handleDrop = useCallback(async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+
+    const targetPath = dropTarget || '';
+    setOperationLoading(true);
+
+    try {
+      const files = [];
+
+      // Use DataTransferItemList for folder support
+      const items = e.dataTransfer.items;
+      if (items) {
+        for (const item of items) {
+          if (item.kind === 'file') {
+            const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
+
+            console.log('[DEBUG] Drop entry:', entry?.name, 'isDirectory:', entry?.isDirectory, 'isFile:', entry?.isFile);
+
+            if (entry) {
+              if (entry.isFile) {
+                const file = await new Promise((resolve, reject) => {
+                  entry.file(resolve, reject);
+                });
+                console.log('[DEBUG] Single file:', file.name);
+                files.push(file);
+              } else if (entry.isDirectory) {
+                // Pass the directory name as basePath so files include the folder path
+                console.log('[DEBUG] Reading directory with basePath:', entry.name);
+                const dirFiles = await readAllDirectoryEntries(entry, entry.name);
+                console.log('[DEBUG] Directory files:', dirFiles.map(f => f.name));
+                files.push(...dirFiles);
+              }
+            } else {
+              // Fallback for browsers that don't support webkitGetAsEntry
+              const file = item.getAsFile();
+              if (file) files.push(file);
+            }
+          }
+        }
+      } else {
+        // Fallback to files property
+        files.push(...Array.from(e.dataTransfer.files));
+      }
+
+      if (files.length === 0) {
+        setOperationLoading(false);
+        return;
+      }
+
+      // Debug: log file names before upload
+      console.log('[DEBUG] Files to upload:', files.map(f => ({ name: f.name, size: f.size })));
+
+      const formData = new FormData();
+      formData.append('targetPath', targetPath);
+
+      // Store relative paths separately since FormData strips path info from File.name
+      const relativePaths = [];
+      files.forEach((file, index) => {
+        // Create a new file with just the filename (without path) for FormData
+        // but store the relative path separately
+        const cleanFile = new File([file], file.name.split('/').pop(), {
+          type: file.type,
+          lastModified: file.lastModified
+        });
+        formData.append('files', cleanFile);
+        relativePaths.push(file.name); // Keep the full relative path
+      });
+
+      // Send relative paths as a JSON array
+      formData.append('relativePaths', JSON.stringify(relativePaths));
+
+      const response = await api.post(
+        `/projects/${encodeURIComponent(selectedProject.name)}/files/upload`,
+        formData
+      );
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Upload failed');
+      }
+
+      showToast(
+        t('fileTree.toast.uploaded', { count: files.length, defaultValue: `Uploaded ${files.length} file(s)` }),
+        'success'
+      );
+      await fetchFiles();
+    } catch (err) {
+      console.error('Upload error:', err);
+      showToast(err.message, 'error');
+    } finally {
+      setOperationLoading(false);
+      setDropTarget(null);
+    }
+  }, [dropTarget, selectedProject, t, readAllDirectoryEntries]);
+
   // ── Click handler shared across all view modes ──
   const handleItemClick = (item) => {
+    setSelectedItem(item);
+
     if (item.type === 'directory') {
       toggleDirectory(item.path);
     } else if (isImageFile(item.name)) {
@@ -405,6 +833,21 @@ function FileTree({ selectedProject, onFileOpen }) {
       onFileOpen(item.path);
     }
   };
+
+  // Handle keyboard events
+  const handleKeyDown = useCallback((e) => {
+    if (e.key === 'F2' && selectedItem && !renamingItem) {
+      e.preventDefault();
+      handleStartRename(selectedItem);
+    } else if (e.key === 'Delete' && selectedItem && !deleteDialog.isOpen) {
+      e.preventDefault();
+      handleStartDelete(selectedItem);
+    } else if (e.key === 'Escape') {
+      if (renamingItem) handleCancelRename();
+      if (isCreating) handleCancelCreate();
+      if (deleteDialog.isOpen) handleCancelDelete();
+    }
+  }, [selectedItem, renamingItem, deleteDialog.isOpen, isCreating]);
 
   // ── Indent guide + folder/file icon rendering ──
   const renderIndentGuides = (level) => {
@@ -455,28 +898,64 @@ function FileTree({ selectedProject, onFileOpen }) {
     return items.map((item) => {
       const isDir = item.type === 'directory';
       const isOpen = isDir && expandedDirs.has(item.path);
+      const isRenaming = renamingItem?.path === item.path;
 
       return (
         <div key={item.path} className="select-none">
-          <div
-            className={cn(
-              'group flex items-center gap-1.5 py-[3px] pr-2 cursor-pointer rounded-sm',
-              'hover:bg-accent/60 transition-colors duration-100',
-              isDir && isOpen && 'border-l-2 border-primary/30',
-              isDir && !isOpen && 'border-l-2 border-transparent',
-              !isDir && 'border-l-2 border-transparent',
-            )}
-            style={{ paddingLeft: `${level * 16 + 4}px` }}
-            onClick={() => handleItemClick(item)}
+          <FileContextMenu
+            item={item}
+            onRename={handleStartRename}
+            onDelete={handleStartDelete}
+            onNewFile={(parentPath) => handleStartCreate(parentPath, 'file')}
+            onNewFolder={(parentPath) => handleStartCreate(parentPath, 'directory')}
+            onRefresh={fetchFiles}
+            onCopyPath={handleCopyPath}
+            onDownload={handleDownload}
+            isLoading={operationLoading}
           >
-            {renderItemIcons(item)}
-            <span className={cn(
-              'text-[13px] leading-tight truncate',
-              isDir ? 'font-medium text-foreground' : 'text-foreground/90'
-            )}>
-              {item.name}
-            </span>
-          </div>
+            <div
+              className={cn(
+                'group flex items-center gap-1.5 py-[3px] pr-2 cursor-pointer rounded-sm',
+                'hover:bg-accent/60 transition-colors duration-100',
+                isDir && isOpen && 'border-l-2 border-primary/30',
+                isDir && !isOpen && 'border-l-2 border-transparent',
+                !isDir && 'border-l-2 border-transparent',
+                selectedItem?.path === item.path && 'bg-accent/40',
+              )}
+              style={{ paddingLeft: `${level * 16 + 4}px` }}
+              onClick={() => handleItemClick(item)}
+            >
+              {renderItemIcons(item)}
+              {isRenaming ? (
+                <Input
+                  ref={renameInputRef}
+                  type="text"
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    e.stopPropagation();
+                    if (e.key === 'Enter') handleConfirmRename();
+                    if (e.key === 'Escape') handleCancelRename();
+                  }}
+                  onBlur={() => {
+                    setTimeout(() => {
+                      if (renamingItem?.path === item.path) handleConfirmRename();
+                    }, 100);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="h-5 text-sm flex-1"
+                  disabled={operationLoading}
+                />
+              ) : (
+                <span className={cn(
+                  'text-[13px] leading-tight truncate',
+                  isDir ? 'font-medium text-foreground' : 'text-foreground/90'
+                )}>
+                  {item.name}
+                </span>
+              )}
+            </div>
+          </FileContextMenu>
 
           {isDir && isOpen && item.children && item.children.length > 0 && (
             <div className="relative">
@@ -498,38 +977,74 @@ function FileTree({ selectedProject, onFileOpen }) {
     return items.map((item) => {
       const isDir = item.type === 'directory';
       const isOpen = isDir && expandedDirs.has(item.path);
+      const isRenaming = renamingItem?.path === item.path;
 
       return (
         <div key={item.path} className="select-none">
-          <div
-            className={cn(
-              'group grid grid-cols-12 gap-2 py-[3px] pr-2 hover:bg-accent/60 cursor-pointer items-center rounded-sm transition-colors duration-100',
-              isDir && isOpen && 'border-l-2 border-primary/30',
-              isDir && !isOpen && 'border-l-2 border-transparent',
-              !isDir && 'border-l-2 border-transparent',
-            )}
-            style={{ paddingLeft: `${level * 16 + 4}px` }}
-            onClick={() => handleItemClick(item)}
+          <FileContextMenu
+            item={item}
+            onRename={handleStartRename}
+            onDelete={handleStartDelete}
+            onNewFile={(parentPath) => handleStartCreate(parentPath, 'file')}
+            onNewFolder={(parentPath) => handleStartCreate(parentPath, 'directory')}
+            onRefresh={fetchFiles}
+            onCopyPath={handleCopyPath}
+            onDownload={handleDownload}
+            isLoading={operationLoading}
           >
-            <div className="col-span-5 flex items-center gap-1.5 min-w-0">
-              {renderItemIcons(item)}
-              <span className={cn(
-                'text-[13px] leading-tight truncate',
-                isDir ? 'font-medium text-foreground' : 'text-foreground/90'
-              )}>
-                {item.name}
-              </span>
+            <div
+              className={cn(
+                'group grid grid-cols-12 gap-2 py-[3px] pr-2 hover:bg-accent/60 cursor-pointer items-center rounded-sm transition-colors duration-100',
+                isDir && isOpen && 'border-l-2 border-primary/30',
+                isDir && !isOpen && 'border-l-2 border-transparent',
+                !isDir && 'border-l-2 border-transparent',
+                selectedItem?.path === item.path && 'bg-accent/40',
+              )}
+              style={{ paddingLeft: `${level * 16 + 4}px` }}
+              onClick={() => handleItemClick(item)}
+            >
+              <div className="col-span-5 flex items-center gap-1.5 min-w-0">
+                {renderItemIcons(item)}
+                {isRenaming ? (
+                  <Input
+                    ref={renameInputRef}
+                    type="text"
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      if (e.key === 'Enter') handleConfirmRename();
+                      if (e.key === 'Escape') handleCancelRename();
+                    }}
+                    onBlur={() => {
+                      setTimeout(() => {
+                        if (renamingItem?.path === item.path) handleConfirmRename();
+                      }, 100);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="h-5 text-sm flex-1"
+                    disabled={operationLoading}
+                  />
+                ) : (
+                  <span className={cn(
+                    'text-[13px] leading-tight truncate',
+                    isDir ? 'font-medium text-foreground' : 'text-foreground/90'
+                  )}>
+                    {item.name}
+                  </span>
+                )}
+              </div>
+              <div className="col-span-2 text-sm text-muted-foreground tabular-nums">
+                {item.type === 'file' ? formatFileSize(item.size) : ''}
+              </div>
+              <div className="col-span-3 text-sm text-muted-foreground">
+                {formatRelativeTime(item.modified)}
+              </div>
+              <div className="col-span-2 text-sm text-muted-foreground font-mono">
+                {item.permissionsRwx || ''}
+              </div>
             </div>
-            <div className="col-span-2 text-sm text-muted-foreground tabular-nums">
-              {item.type === 'file' ? formatFileSize(item.size) : ''}
-            </div>
-            <div className="col-span-3 text-sm text-muted-foreground">
-              {formatRelativeTime(item.modified)}
-            </div>
-            <div className="col-span-2 text-sm text-muted-foreground font-mono">
-              {item.permissionsRwx || ''}
-            </div>
-          </div>
+          </FileContextMenu>
 
           {isDir && isOpen && item.children && (
             <div className="relative">
@@ -551,37 +1066,73 @@ function FileTree({ selectedProject, onFileOpen }) {
     return items.map((item) => {
       const isDir = item.type === 'directory';
       const isOpen = isDir && expandedDirs.has(item.path);
+      const isRenaming = renamingItem?.path === item.path;
 
       return (
         <div key={item.path} className="select-none">
-          <div
-            className={cn(
-              'group flex items-center justify-between py-[3px] pr-2 hover:bg-accent/60 cursor-pointer rounded-sm transition-colors duration-100',
-              isDir && isOpen && 'border-l-2 border-primary/30',
-              isDir && !isOpen && 'border-l-2 border-transparent',
-              !isDir && 'border-l-2 border-transparent',
-            )}
-            style={{ paddingLeft: `${level * 16 + 4}px` }}
-            onClick={() => handleItemClick(item)}
+          <FileContextMenu
+            item={item}
+            onRename={handleStartRename}
+            onDelete={handleStartDelete}
+            onNewFile={(parentPath) => handleStartCreate(parentPath, 'file')}
+            onNewFolder={(parentPath) => handleStartCreate(parentPath, 'directory')}
+            onRefresh={fetchFiles}
+            onCopyPath={handleCopyPath}
+            onDownload={handleDownload}
+            isLoading={operationLoading}
           >
-            <div className="flex items-center gap-1.5 min-w-0">
-              {renderItemIcons(item)}
-              <span className={cn(
-                'text-[13px] leading-tight truncate',
-                isDir ? 'font-medium text-foreground' : 'text-foreground/90'
-              )}>
-                {item.name}
-              </span>
-            </div>
-            <div className="flex items-center gap-3 text-sm text-muted-foreground flex-shrink-0 ml-2">
-              {item.type === 'file' && (
-                <>
-                  <span className="tabular-nums">{formatFileSize(item.size)}</span>
-                  <span className="font-mono">{item.permissionsRwx}</span>
-                </>
+            <div
+              className={cn(
+                'group flex items-center justify-between py-[3px] pr-2 hover:bg-accent/60 cursor-pointer rounded-sm transition-colors duration-100',
+                isDir && isOpen && 'border-l-2 border-primary/30',
+                isDir && !isOpen && 'border-l-2 border-transparent',
+                !isDir && 'border-l-2 border-transparent',
+                selectedItem?.path === item.path && 'bg-accent/40',
               )}
+              style={{ paddingLeft: `${level * 16 + 4}px` }}
+              onClick={() => handleItemClick(item)}
+            >
+              <div className="flex items-center gap-1.5 min-w-0">
+                {renderItemIcons(item)}
+                {isRenaming ? (
+                  <Input
+                    ref={renameInputRef}
+                    type="text"
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      if (e.key === 'Enter') handleConfirmRename();
+                      if (e.key === 'Escape') handleCancelRename();
+                    }}
+                    onBlur={() => {
+                      setTimeout(() => {
+                        if (renamingItem?.path === item.path) handleConfirmRename();
+                      }, 100);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="h-5 text-sm flex-1"
+                    disabled={operationLoading}
+                  />
+                ) : (
+                  <span className={cn(
+                    'text-[13px] leading-tight truncate',
+                    isDir ? 'font-medium text-foreground' : 'text-foreground/90'
+                  )}>
+                    {item.name}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-3 text-sm text-muted-foreground flex-shrink-0 ml-2">
+                {item.type === 'file' && (
+                  <>
+                    <span className="tabular-nums">{formatFileSize(item.size)}</span>
+                    <span className="font-mono">{item.permissionsRwx}</span>
+                  </>
+                )}
+              </div>
             </div>
-          </div>
+          </FileContextMenu>
 
           {isDir && isOpen && item.children && (
             <div className="relative">
@@ -611,7 +1162,16 @@ function FileTree({ selectedProject, onFileOpen }) {
 
   // ─── Main render ───────────────────────────────────────────────────
   return (
-    <div className="h-full flex flex-col bg-background">
+    <div
+      ref={treeRef}
+      className="h-full flex flex-col bg-background relative"
+      onKeyDown={handleKeyDown}
+      tabIndex={0}
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       {/* Header */}
       <div className="px-3 pt-3 pb-2 border-b border-border space-y-2">
         <div className="flex items-center justify-between">
@@ -619,6 +1179,48 @@ function FileTree({ selectedProject, onFileOpen }) {
             {t('fileTree.files')}
           </h3>
           <div className="flex gap-0.5">
+            {/* File Operations Toolbar */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={() => handleStartCreate('', 'file')}
+              title={t('fileTree.newFile', 'New File (Cmd+N)')}
+              disabled={operationLoading}
+            >
+              <FileText className="w-3.5 h-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={() => handleStartCreate('', 'directory')}
+              title={t('fileTree.newFolder', 'New Folder (Cmd+Shift+N)')}
+              disabled={operationLoading}
+            >
+              <FolderPlus className="w-3.5 h-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={fetchFiles}
+              title={t('fileTree.refresh', 'Refresh')}
+              disabled={operationLoading}
+            >
+              <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={collapseAll}
+              title={t('fileTree.collapseAll', 'Collapse All')}
+            >
+              <ChevronDown className="w-3.5 h-3.5" />
+            </Button>
+            {/* View mode buttons */}
+            <div className="w-px h-4 bg-border mx-0.5" />
             <Button
               variant={viewMode === 'simple' ? 'default' : 'ghost'}
               size="sm"
@@ -686,34 +1288,167 @@ function FileTree({ selectedProject, onFileOpen }) {
       )}
 
       <ScrollArea className="flex-1 px-2 py-1">
-        {files.length === 0 ? (
-          <div className="text-center py-8">
-            <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-3">
-              <Folder className="w-6 h-6 text-muted-foreground" />
-            </div>
-            <h4 className="font-medium text-foreground mb-1">{t('fileTree.noFilesFound')}</h4>
-            <p className="text-sm text-muted-foreground">
-              {t('fileTree.checkProjectPath')}
-            </p>
-          </div>
-        ) : filteredFiles.length === 0 && searchQuery ? (
-          <div className="text-center py-8">
-            <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-3">
-              <Search className="w-6 h-6 text-muted-foreground" />
-            </div>
-            <h4 className="font-medium text-foreground mb-1">{t('fileTree.noMatchesFound')}</h4>
-            <p className="text-sm text-muted-foreground">
-              {t('fileTree.tryDifferentSearch')}
-            </p>
-          </div>
-        ) : (
-          <div>
-            {viewMode === 'simple' && renderFileTree(filteredFiles)}
-            {viewMode === 'compact' && renderCompactView(filteredFiles)}
-            {viewMode === 'detailed' && renderDetailedView(filteredFiles)}
+        {/* New item input */}
+        {isCreating && (
+          <div
+            className="flex items-center gap-1.5 py-[3px] pr-2 mb-1"
+            style={{ paddingLeft: '4px' }}
+          >
+            {newItemType === 'directory' ? (
+              <Folder className={cn(ICON_SIZE, 'text-blue-500')} />
+            ) : (
+              <span className="ml-[18px]">{getFileIcon(newItemName)}</span>
+            )}
+            <Input
+              ref={newItemInputRef}
+              type="text"
+              value={newItemName}
+              onChange={(e) => setNewItemName(e.target.value)}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === 'Enter') handleConfirmCreate();
+                if (e.key === 'Escape') handleCancelCreate();
+              }}
+              onBlur={() => {
+                // Small delay to allow button clicks
+                setTimeout(() => {
+                  if (isCreating) handleConfirmCreate();
+                }, 100);
+              }}
+              className="h-6 text-sm flex-1"
+              disabled={operationLoading}
+            />
           </div>
         )}
+
+        <FileContextMenu
+          onNewFile={(parentPath) => handleStartCreate(parentPath, 'file')}
+          onNewFolder={(parentPath) => handleStartCreate(parentPath, 'directory')}
+          onRename={handleStartRename}
+          onDelete={handleStartDelete}
+          onRefresh={fetchFiles}
+          onCopyPath={handleCopyPath}
+          onDownload={handleDownload}
+          isLoading={operationLoading}
+        >
+          <div className="min-h-full">
+            {files.length === 0 ? (
+              <div className="text-center py-8">
+                <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-3">
+                  <Folder className="w-6 h-6 text-muted-foreground" />
+                </div>
+                <h4 className="font-medium text-foreground mb-1">{t('fileTree.noFilesFound')}</h4>
+                <p className="text-sm text-muted-foreground">
+                  {t('fileTree.checkProjectPath')}
+                </p>
+              </div>
+            ) : filteredFiles.length === 0 && searchQuery ? (
+              <div className="text-center py-8">
+                <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-3">
+                  <Search className="w-6 h-6 text-muted-foreground" />
+                </div>
+                <h4 className="font-medium text-foreground mb-1">{t('fileTree.noMatchesFound')}</h4>
+                <p className="text-sm text-muted-foreground">
+                  {t('fileTree.tryDifferentSearch')}
+                </p>
+              </div>
+            ) : (
+              <div>
+                {viewMode === 'simple' && renderFileTree(filteredFiles)}
+                {viewMode === 'compact' && renderCompactView(filteredFiles)}
+                {viewMode === 'detailed' && renderDetailedView(filteredFiles)}
+              </div>
+            )}
+          </div>
+        </FileContextMenu>
       </ScrollArea>
+
+      {/* Drag and Drop Overlay */}
+      {isDragOver && (
+        <div className="absolute inset-0 bg-primary/5 border-2 border-dashed border-primary/50 flex items-center justify-center z-10 rounded-lg">
+          <div className="text-center">
+            <Upload className="w-10 h-10 text-primary mx-auto mb-2" />
+            <p className="text-sm font-medium text-primary">
+              {t('fileTree.dropToUpload', 'Drop files to upload')}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {deleteDialog.isOpen && deleteDialog.item && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-popover border border-border rounded-lg shadow-lg max-w-md w-full mx-4 p-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-950 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold text-foreground mb-1">
+                  {t('fileTree.delete.title', 'Delete Confirmation')}
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  {deleteDialog.item.type === 'directory'
+                    ? t('fileTree.delete.folderWarning', {
+                        name: deleteDialog.item.name,
+                        defaultValue: `Are you sure you want to delete "${deleteDialog.item.name}" and all its contents?`
+                      })
+                    : t('fileTree.delete.fileWarning', {
+                        name: deleteDialog.item.name,
+                        defaultValue: `Are you sure you want to delete "${deleteDialog.item.name}"?`
+                      })
+                  }
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-4">
+              <Button
+                variant="ghost"
+                onClick={handleCancelDelete}
+                disabled={operationLoading}
+              >
+                {t('common.cancel', 'Cancel')}
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleConfirmDelete}
+                disabled={operationLoading}
+              >
+                {operationLoading ? (
+                  <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+                ) : (
+                  <Trash2 className="w-4 h-4 mr-2" />
+                )}
+                {t('fileTree.delete.confirm', 'Delete')}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toast && (
+        <div className={cn(
+          'absolute bottom-4 left-4 right-4 p-3 rounded-lg shadow-lg flex items-center gap-2 z-50 animate-in slide-in-from-bottom-2',
+          toast.type === 'error' ? 'bg-red-100 dark:bg-red-950 text-red-800 dark:text-red-200' :
+          'bg-green-100 dark:bg-green-950 text-green-800 dark:text-green-200'
+        )}>
+          {toast.type === 'error' ? (
+            <XCircle className="w-4 h-4 flex-shrink-0" />
+          ) : (
+            <Check className="w-4 h-4 flex-shrink-0" />
+          )}
+          <span className="text-sm flex-1">{toast.message}</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 p-0"
+            onClick={() => setToast(null)}
+          >
+            <X className="w-3 h-3" />
+          </Button>
+        </div>
+      )}
 
       {/* Image Viewer Modal */}
       {selectedImage && (
@@ -722,6 +1457,24 @@ function FileTree({ selectedProject, onFileOpen }) {
           onClose={() => setSelectedImage(null)}
         />
       )}
+
+      {/* Hidden file input for upload */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          const files = Array.from(e.target.files || []);
+          if (files.length > 0) {
+            // Handle file selection
+            const formData = new FormData();
+            files.forEach(file => formData.append('files', file));
+            // Upload logic would go here
+          }
+          e.target.value = '';
+        }}
+      />
     </div>
   );
 }

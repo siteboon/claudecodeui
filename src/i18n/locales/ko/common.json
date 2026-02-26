@@ -114,7 +114,11 @@
     "justNow": "방금 전",
     "minAgo": "{{count}}분 전",
     "hoursAgo": "{{count}}시간 전",
-    "daysAgo": "{{count}}일 전"
+    "daysAgo": "{{count}}일 전",
+    "newFile": "새 파일 (Cmd+N)",
+    "newFolder": "새 폴더 (Cmd+Shift+N)",
+    "refresh": "새로고침",
+    "collapseAll": "모두 접기"
   },
   "projectWizard": {
     "title": "새 프로젝트 생성",
