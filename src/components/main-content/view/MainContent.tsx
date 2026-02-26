@@ -1,14 +1,13 @@
 import React, { useEffect } from 'react';
 
 import ChatInterface from '../../chat/view/ChatInterface';
-import FileTree from '../../FileTree';
-import StandaloneShell from '../../StandaloneShell';
-import GitPanel from '../../GitPanel';
+import FileTree from '../../file-tree/view/FileTree';
+import StandaloneShell from '../../standalone-shell/view/StandaloneShell';
+import GitPanel from '../../git-panel/view/GitPanel';
 import ErrorBoundary from '../../ErrorBoundary';
 
 import MainContentHeader from './subcomponents/MainContentHeader';
 import MainContentStateView from './subcomponents/MainContentStateView';
-import EditorSidebar from './subcomponents/EditorSidebar';
 import TaskMasterPanel from './subcomponents/TaskMasterPanel';
 import BeadsPanel from './subcomponents/BeadsPanel';
 import type { MainContentProps } from '../types/types';
@@ -17,11 +16,9 @@ import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { useBeads } from '../../../contexts/BeadsContext';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import { useUiPreferences } from '../../../hooks/useUiPreferences';
-import { useEditorSidebar } from '../hooks/useEditorSidebar';
+import { useEditorSidebar } from '../../code-editor/hooks/useEditorSidebar';
+import EditorSidebar from '../../code-editor/view/EditorSidebar';
 import type { Project } from '../../../types/app';
-
-const AnyStandaloneShell = StandaloneShell as any;
-const AnyGitPanel = GitPanel as any;
 
 type TaskMasterContextValue = {
   currentProject?: Project | null;
@@ -77,6 +74,7 @@ function MainContent({
     editingFile,
     editorWidth,
     editorExpanded,
+    hasManualWidth,
     resizeHandleRef,
     handleFileOpen,
     handleCloseEditor,
@@ -130,7 +128,7 @@ function MainContent({
       />
 
       <div className="flex-1 flex min-h-0 overflow-hidden">
-        <div className={`flex flex-col min-h-0 overflow-hidden ${editorExpanded ? 'hidden' : ''} ${activeTab === 'files' && editingFile ? 'w-[280px] flex-shrink-0' : 'flex-1'}`}>
+        <div className={`flex flex-col min-h-0 min-w-0 overflow-hidden ${editorExpanded ? 'hidden' : ''} flex-1`}>
           <div className={`h-full ${activeTab === 'chat' ? 'block' : 'hidden'}`}>
             <ErrorBoundary showDetails>
               <ChatInterface
@@ -168,13 +166,13 @@ function MainContent({
 
           {activeTab === 'shell' && (
             <div className="h-full w-full overflow-hidden">
-              <AnyStandaloneShell project={selectedProject} session={selectedSession} showHeader={false} />
+              <StandaloneShell project={selectedProject} session={selectedSession} showHeader={false} />
             </div>
           )}
 
           {activeTab === 'git' && (
             <div className="h-full overflow-hidden">
-              <AnyGitPanel selectedProject={selectedProject} isMobile={isMobile} onFileOpen={handleFileOpen} />
+              <GitPanel selectedProject={selectedProject} isMobile={isMobile} onFileOpen={handleFileOpen} />
             </div>
           )}
 
@@ -190,6 +188,7 @@ function MainContent({
           isMobile={isMobile}
           editorExpanded={editorExpanded}
           editorWidth={editorWidth}
+          hasManualWidth={hasManualWidth}
           resizeHandleRef={resizeHandleRef}
           onResizeStart={handleResizeStart}
           onCloseEditor={handleCloseEditor}

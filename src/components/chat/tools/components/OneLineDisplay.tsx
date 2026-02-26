@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
+import { copyTextToClipboard } from '../../../../utils/clipboard';
 
 type ActionType = 'copy' | 'open-file' | 'jump-to-results' | 'none';
 
 interface OneLineDisplayProps {
-
   toolName: string;
   icon?: string;
   label?: string;
@@ -24,52 +24,6 @@ interface OneLineDisplayProps {
   toolResult?: any;
   toolId?: string;
 }
-
-// Fallback for environments where the async Clipboard API is unavailable or blocked.
-const copyWithLegacyExecCommand = (text: string): boolean => {
-  if (typeof document === 'undefined' || !document.body) {
-    return false;
-  }
-
-  const textarea = document.createElement('textarea');
-  textarea.value = text;
-  textarea.setAttribute('readonly', '');
-  textarea.style.position = 'fixed';
-  textarea.style.opacity = '0';
-  textarea.style.left = '-9999px';
-  document.body.appendChild(textarea);
-  textarea.select();
-  textarea.setSelectionRange(0, text.length);
-
-  let copied = false;
-  try {
-    copied = document.execCommand('copy');
-  } catch {
-    copied = false;
-  } finally {
-    document.body.removeChild(textarea);
-  }
-
-  return copied;
-};
-
-const copyTextToClipboard = async (text: string): Promise<boolean> => {
-  if (
-    typeof navigator !== 'undefined' &&
-    typeof window !== 'undefined' &&
-    window.isSecureContext &&
-    navigator.clipboard?.writeText
-  ) {
-    try {
-      await navigator.clipboard.writeText(text);
-      return true;
-    } catch {
-      // Fall back below when writeText is rejected (permissions/insecure contexts/browser limits).
-    }
-  }
-
-  return copyWithLegacyExecCommand(text);
-};
 
 /**
  * Unified one-line display for simple tool inputs and results
@@ -92,7 +46,6 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
     border: 'border-gray-300 dark:border-gray-600',
     icon: 'text-gray-500 dark:text-gray-400'
   },
-  resultId,
   toolResult,
   toolId
 }) => {
