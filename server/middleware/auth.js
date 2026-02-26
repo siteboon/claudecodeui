@@ -5,6 +5,29 @@ import { IS_PLATFORM } from '../constants/config.js';
 // Get JWT secret from environment or use default (for development)
 const JWT_SECRET = process.env.JWT_SECRET || 'claude-ui-dev-secret-change-in-production';
 
+const isAuthDisabled = () => {
+  return String(process.env.AUTH_DISABLED || '').toLowerCase() === 'true';
+};
+
+const getAuthDisabledUser = () => {
+  try {
+    const existingUser = userDb.getFirstUser();
+    if (existingUser) {
+      return {
+        id: existingUser.id,
+        username: existingUser.username
+      };
+    }
+  } catch (error) {
+    console.error('Error getting auth-disabled user:', error);
+  }
+
+  return {
+    id: 1,
+    username: 'admin'
+  };
+};
+
 // Optional API key middleware
 const validateApiKey = (req, res, next) => {
   // Skip API key validation if not configured
@@ -34,6 +57,11 @@ const authenticateToken = async (req, res, next) => {
       console.error('Platform mode error:', error);
       return res.status(500).json({ error: 'Platform mode: Failed to fetch user' });
     }
+  }
+
+  if (isAuthDisabled()) {
+    req.user = getAuthDisabledUser();
+    return next();
   }
 
   // Normal OSS JWT validation
@@ -94,6 +122,14 @@ const authenticateWebSocket = (token) => {
     }
   }
 
+  if (isAuthDisabled()) {
+    const user = getAuthDisabledUser();
+    return {
+      userId: user.id,
+      username: user.username
+    };
+  }
+
   // Normal OSS JWT validation
   if (!token) {
     return null;
@@ -113,5 +149,6 @@ export {
   authenticateToken,
   generateToken,
   authenticateWebSocket,
+  isAuthDisabled,
   JWT_SECRET
 };
