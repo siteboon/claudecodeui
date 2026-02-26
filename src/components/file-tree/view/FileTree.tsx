@@ -103,6 +103,8 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
         onNewFolder={() => operations.handleStartCreate('', 'directory')}
         onRefresh={refreshFiles}
         onCollapseAll={collapseAll}
+        loading={loading}
+        operationLoading={operations.operationLoading}
       />
 
       {viewMode === 'detailed' && filteredFiles.length > 0 && <FileTreeDetailedColumns />}
