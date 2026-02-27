@@ -4,6 +4,10 @@
     "copied": "Copied",
     "copyCode": "Copy code"
   },
+  "copyMessage": {
+    "copy": "Copy message",
+    "copied": "Message copied"
+  },
   "messageTypes": {
     "user": "U",
     "error": "Error",

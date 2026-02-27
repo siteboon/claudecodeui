@@ -4,6 +4,10 @@
     "copied": "복사됨",
     "copyCode": "코드 복사"
   },
+  "copyMessage": {
+    "copy": "메시지 복사",
+    "copied": "메시지 복사됨"
+  },
   "messageTypes": {
     "user": "U",
     "error": "오류",
