@@ -138,7 +138,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     timer && clearTimeout(timer)
                   });
                 }}
-                className="opacity-0 group-hover:opacity-100 focus:opacity-100 active:opacity-100 transition-opacity"
+                className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 active:opacity-100 transition-opacity"
                 title={messageCopied ? t('copyMessage.copied') : t('copyMessage.copy')}
                 aria-label={messageCopied ? t('copyMessage.copied') : t('copyMessage.copy')}
               >
