@@ -256,6 +256,7 @@ function ClaudePermissions({
           <li><code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">"Bash(rm:*)"</code> {t('permissions.toolExamples.bashRm')}</li>
         </ul>
       </div>
+
     </div>
   );
 }

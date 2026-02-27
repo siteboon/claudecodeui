@@ -88,7 +88,26 @@
     "appearance": "外観",
     "git": "Git",
     "apiTokens": "API & トークン",
-    "tasks": "タスク"
+    "tasks": "タスク",
+    "notifications": "通知"
+  },
+  "notifications": {
+    "title": "通知",
+    "description": "受信する通知イベントを設定します。",
+    "webPush": {
+      "title": "Webプッシュ通知",
+      "enabled": "プッシュ通知は有効です",
+      "disabled": "プッシュ通知を有効にする",
+      "loading": "更新中...",
+      "unsupported": "このブラウザではプッシュ通知がサポートされていません。",
+      "denied": "プッシュ通知がブロックされています。ブラウザの設定で許可してください。"
+    },
+    "events": {
+      "title": "イベント種別",
+      "actionRequired": "対応が必要",
+      "stop": "実行停止",
+      "error": "実行失敗"
+    }
   },
   "appearanceSettings": {
     "darkMode": {

@@ -191,6 +191,36 @@
       "failedToCreateFolder": "폴더 생성 실패"
     }
   },
+  "notifications": {
+    "genericTool": "도구",
+    "codes": {
+      "generic": {
+        "info": {
+          "title": "알림"
+        }
+      },
+      "permission": {
+        "required": {
+          "title": "작업 필요",
+          "body": "{{toolName}} 에 대한 결정을 기다리고 있습니다."
+        }
+      },
+      "run": {
+        "stopped": {
+          "title": "실행이 중지되었습니다",
+          "body": "사유: {{reason}}"
+        },
+        "failed": {
+          "title": "실행 실패"
+        }
+      },
+      "agent": {
+        "notification": {
+          "title": "에이전트 알림"
+        }
+      }
+    }
+  },
   "versionUpdate": {
     "title": "업데이트 가능",
     "newVersionReady": "새 버전이 준비되었습니다",

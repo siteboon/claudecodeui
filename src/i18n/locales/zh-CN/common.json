@@ -191,6 +191,36 @@
       "failedToCreateFolder": "创建文件夹失败"
     }
   },
+  "notifications": {
+    "genericTool": "工具",
+    "codes": {
+      "generic": {
+        "info": {
+          "title": "通知"
+        }
+      },
+      "permission": {
+        "required": {
+          "title": "需要处理",
+          "body": "{{toolName}} 正在等待你的决策。"
+        }
+      },
+      "run": {
+        "stopped": {
+          "title": "运行已停止",
+          "body": "原因：{{reason}}"
+        },
+        "failed": {
+          "title": "运行失败"
+        }
+      },
+      "agent": {
+        "notification": {
+          "title": "Agent 通知"
+        }
+      }
+    }
+  },
   "versionUpdate": {
     "title": "有可用更新",
     "newVersionReady": "新版本已准备就绪",

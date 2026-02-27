@@ -18,6 +18,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
 import { CLAUDE_MODELS } from '../shared/modelConstants.js';
+import { createNotificationEvent, notifyUserIfEnabled } from './services/notification-orchestrator.js';
 
 const activeSessions = new Map();
 const pendingToolApprovals = new Map();
@@ -461,6 +462,14 @@ async function queryClaudeSDK(command, options = {}, ws) {
   let tempImagePaths = [];
   let tempDir = null;
 
+  const emitNotification = (event) => {
+    notifyUserIfEnabled({
+      userId: ws?.userId || null,
+      writer: ws,
+      event
+    });
+  };
+
   try {
     // Map CLI options to SDK format
     const sdkOptions = mapCliOptionsToSDK(options);
@@ -476,6 +485,42 @@ async function queryClaudeSDK(command, options = {}, ws) {
     const finalCommand = imageResult.modifiedCommand;
     tempImagePaths = imageResult.tempImagePaths;
     tempDir = imageResult.tempDir;
+
+    sdkOptions.hooks = {
+      Notification: [{
+        matcher: '',
+        hooks: [async (input) => {
+          const message = typeof input?.message === 'string' ? input.message : 'Claude requires your attention.';
+          emitNotification(createNotificationEvent({
+            provider: 'claude',
+            sessionId: capturedSessionId || sessionId || null,
+            kind: 'action_required',
+            code: 'agent.notification',
+            meta: { message },
+            severity: 'warning',
+            requiresUserAction: true,
+            dedupeKey: `claude:hook:notification:${capturedSessionId || sessionId || 'none'}:${message}`
+          }));
+          return {};
+        }]
+      }],
+      Stop: [{
+        matcher: '',
+        hooks: [async (input) => {
+          const stopReason = typeof input?.stop_reason === 'string' ? input.stop_reason : 'completed';
+          emitNotification(createNotificationEvent({
+            provider: 'claude',
+            sessionId: capturedSessionId || sessionId || null,
+            kind: 'stop',
+            code: 'run.stopped',
+            meta: { stopReason },
+            severity: 'info',
+            dedupeKey: `claude:hook:stop:${capturedSessionId || sessionId || 'none'}:${stopReason}`
+          }));
+          return {};
+        }]
+      }]
+    };
 
     sdkOptions.canUseTool = async (toolName, input, context) => {
       const requiresInteraction = TOOLS_REQUIRING_INTERACTION.has(toolName);
@@ -508,6 +553,16 @@ async function queryClaudeSDK(command, options = {}, ws) {
         input,
         sessionId: capturedSessionId || sessionId || null
       });
+      emitNotification(createNotificationEvent({
+        provider: 'claude',
+        sessionId: capturedSessionId || sessionId || null,
+        kind: 'action_required',
+        code: 'permission.required',
+        meta: { toolName },
+        severity: 'warning',
+        requiresUserAction: true,
+        dedupeKey: `claude:permission:${capturedSessionId || sessionId || 'none'}:${requestId}`
+      }));
 
       const decision = await waitForToolApproval(requestId, {
         timeoutMs: requiresInteraction ? 0 : undefined,
@@ -548,10 +603,22 @@ async function queryClaudeSDK(command, options = {}, ws) {
     const prevStreamTimeout = process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT;
     process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT = '300000';
 
-    const queryInstance = query({
-      prompt: finalCommand,
-      options: sdkOptions
-    });
+    let queryInstance;
+    try {
+      queryInstance = query({
+        prompt: finalCommand,
+        options: sdkOptions
+      });
+    } catch (hookError) {
+      // Older/newer SDK versions may not accept hook shapes yet.
+      // Keep notification behavior operational via runtime events even if hook registration fails.
+      console.warn('Failed to initialize Claude query with hooks, retrying without hooks:', hookError?.message || hookError);
+      delete sdkOptions.hooks;
+      queryInstance = query({
+        prompt: finalCommand,
+        options: sdkOptions
+      });
+    }
 
     // Restore immediately — Query constructor already captured the value
     if (prevStreamTimeout !== undefined) {
@@ -653,6 +720,15 @@ async function queryClaudeSDK(command, options = {}, ws) {
       error: error.message,
       sessionId: capturedSessionId || sessionId || null
     });
+    emitNotification(createNotificationEvent({
+      provider: 'claude',
+      sessionId: capturedSessionId || sessionId || null,
+      kind: 'error',
+      code: 'run.failed',
+      meta: { error: error.message },
+      severity: 'error',
+      dedupeKey: `claude:error:${capturedSessionId || sessionId || 'none'}:${error.message}`
+    }));
 
     throw error;
   }
