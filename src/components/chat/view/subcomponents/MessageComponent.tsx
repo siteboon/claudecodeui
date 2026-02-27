@@ -126,16 +126,9 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                   const text = String(message.content || '');
                   if (!text) return;
 
-                  let timer: ReturnType<typeof setTimeout>;
                   copyTextToClipboard(text).then((success) => {
                     if (!success) return;
                     setMessageCopied(true);
-                    timer = setTimeout(() => setMessageCopied(false), 15e3);
-                  }).catch((err) => {
-                    console.error(err)
-                    setMessageCopied(false)
-                  }).finally(() => {
-                    timer && clearTimeout(timer)
                   });
                 }}
                 title={messageCopied ? t('copyMessage.copied') : t('copyMessage.copy')}
