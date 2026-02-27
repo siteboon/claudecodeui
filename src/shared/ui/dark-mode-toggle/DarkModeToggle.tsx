@@ -1,5 +1,5 @@
 import { Moon, Sun } from 'lucide-react';
-import { useTheme } from '../contexts/ThemeContext';
+import { useTheme } from '../../../contexts/ThemeContext';
 
 type DarkModeToggleProps = {
   checked?: boolean;
@@ -7,13 +7,18 @@ type DarkModeToggleProps = {
   ariaLabel?: string;
 };
 
-function DarkModeToggle({ checked, onToggle, ariaLabel = 'Toggle dark mode' }: DarkModeToggleProps) {
+function DarkModeToggle({
+  checked,
+  onToggle,
+  ariaLabel = 'Toggle dark mode',
+}: DarkModeToggleProps) {
   const { isDarkMode, toggleDarkMode } = useTheme();
+  // Support controlled usage while keeping ThemeContext as the default source of truth.
   const isControlled = typeof checked === 'boolean' && typeof onToggle === 'function';
   const isEnabled = isControlled ? checked : isDarkMode;
 
   const handleToggle = () => {
-    if (isControlled) {
+    if (isControlled && onToggle) {
       onToggle(!isEnabled);
       return;
     }

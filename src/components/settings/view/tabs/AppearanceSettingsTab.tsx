@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import DarkModeToggle from '../../../DarkModeToggle';
+import { DarkModeToggle } from '../../../../shared/ui';
 import LanguageSelector from '../../../LanguageSelector';
 import type { CodeEditorSettingsState, ProjectSortOrder } from '../../types/types';
 

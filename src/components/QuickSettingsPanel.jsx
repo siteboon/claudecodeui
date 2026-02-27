@@ -16,7 +16,7 @@ import {
   GripVertical
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import DarkModeToggle from './DarkModeToggle';
+import { DarkModeToggle } from '../shared/ui';
 
 import { useUiPreferences } from '../hooks/useUiPreferences';
 import { useTheme } from '../contexts/ThemeContext';
