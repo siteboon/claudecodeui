@@ -125,10 +125,17 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 onClick={() => {
                   const text = String(message.content || '');
                   if (!text) return;
+
+                  let timer: ReturnType<typeof setTimeout>;
                   copyTextToClipboard(text).then((success) => {
                     if (!success) return;
                     setMessageCopied(true);
-                    setTimeout(() => setMessageCopied(false), 2000);
+                    timer = setTimeout(() => setMessageCopied(false), 15e3);
+                  }).catch((err) => {
+                    console.error(err)
+                    setMessageCopied(false)
+                  }).finally(() => {
+                    timer && clearTimeout(timer)
                   });
                 }}
                 className="opacity-0 group-hover:opacity-100 focus:opacity-100 active:opacity-100 transition-opacity"
@@ -198,7 +205,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
               </div>
             </div>
           )}
-          
+
           <div className="w-full">
 
             {message.isToolUse ? (
@@ -228,7 +235,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     subagentState={message.subagentState}
                   />
                 )}
-                
+
                 {/* Tool Result Section */}
                 {message.toolResult && !shouldHideToolResult(message.toolName || 'UnknownTool', message.toolResult) && (
                   message.toolResult.isError ? (
@@ -334,7 +341,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                       const lines = (message.content || '').split('\n').filter((line) => line.trim());
                       const questionLine = lines.find((line) => line.includes('?')) || lines[0] || '';
                       const options: InteractiveOption[] = [];
-                      
+
                       // Parse the menu options
                       lines.forEach((line) => {
                         // Match lines like "❯ 1. Yes" or "  2. No"
@@ -348,13 +355,13 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                           });
                         }
                       });
-                      
+
                       return (
                         <>
                           <p className="text-sm text-amber-800 dark:text-amber-200 mb-4">
                             {questionLine}
                           </p>
-                          
+
                           {/* Option buttons */}
                           <div className="space-y-2 mb-4">
                             {options.map((option) => (
@@ -385,7 +392,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                               </button>
                             ))}
                           </div>
-                          
+
                           <div className="bg-amber-100 dark:bg-amber-800/30 rounded-lg p-3">
                             <p className="text-amber-900 dark:text-amber-100 text-sm font-medium mb-1">
                               {t('interactive.waiting')}
@@ -479,7 +486,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 })()}
               </div>
             )}
-            
+
             {!isGrouped && (
               <div className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
                 {formattedTime}
