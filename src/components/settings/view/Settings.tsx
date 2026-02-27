@@ -69,6 +69,9 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     claudeAuthStatus,
     cursorAuthStatus,
     codexAuthStatus,
+    geminiAuthStatus,
+    geminiPermissionMode,
+    setGeminiPermissionMode,
     openLoginForProvider,
     showLoginModal,
     setShowLoginModal,
@@ -114,10 +117,10 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
   const isAuthenticated = loginProvider === 'claude'
     ? claudeAuthStatus.authenticated
     : loginProvider === 'cursor'
-    ? cursorAuthStatus.authenticated
-    : loginProvider === 'codex'
-    ? codexAuthStatus.authenticated
-    : false;
+      ? cursorAuthStatus.authenticated
+      : loginProvider === 'codex'
+        ? codexAuthStatus.authenticated
+        : false;
 
   return (
     <div className="modal-backdrop fixed inset-0 flex items-center justify-center z-[9999] md:p-4 bg-background/95">
@@ -161,15 +164,19 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
                 claudeAuthStatus={claudeAuthStatus}
                 cursorAuthStatus={cursorAuthStatus}
                 codexAuthStatus={codexAuthStatus}
+                geminiAuthStatus={geminiAuthStatus}
                 onClaudeLogin={() => openLoginForProvider('claude')}
                 onCursorLogin={() => openLoginForProvider('cursor')}
                 onCodexLogin={() => openLoginForProvider('codex')}
+                onGeminiLogin={() => openLoginForProvider('gemini')}
                 claudePermissions={claudePermissions}
                 onClaudePermissionsChange={setClaudePermissions}
                 cursorPermissions={cursorPermissions}
                 onCursorPermissionsChange={setCursorPermissions}
                 codexPermissionMode={codexPermissionMode}
                 onCodexPermissionModeChange={setCodexPermissionMode}
+                geminiPermissionMode={geminiPermissionMode}
+                onGeminiPermissionModeChange={setGeminiPermissionMode}
                 mcpServers={mcpServers}
                 cursorMcpServers={cursorMcpServers}
                 codexMcpServers={codexMcpServers}
