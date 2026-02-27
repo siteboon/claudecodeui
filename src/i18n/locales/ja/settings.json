@@ -1,0 +1,418 @@
+{
+  "title": "設定",
+  "tabs": {
+    "account": "アカウント",
+    "permissions": "権限",
+    "mcpServers": "MCPサーバー",
+    "appearance": "外観"
+  },
+  "account": {
+    "title": "アカウント",
+    "language": "言語",
+    "languageLabel": "表示言語",
+    "languageDescription": "インターフェースの表示言語を選択してください",
+    "username": "ユーザー名",
+    "email": "メールアドレス",
+    "profile": "プロフィール",
+    "changePassword": "パスワードを変更"
+  },
+  "mcp": {
+    "title": "MCPサーバー",
+    "addServer": "サーバーを追加",
+    "editServer": "サーバーを編集",
+    "deleteServer": "サーバーを削除",
+    "serverName": "サーバー名",
+    "serverType": "サーバーの種類",
+    "config": "設定",
+    "testConnection": "接続テスト",
+    "status": "状態",
+    "connected": "接続済み",
+    "disconnected": "未接続",
+    "scope": {
+      "label": "スコープ",
+      "user": "ユーザー",
+      "project": "プロジェクト"
+    }
+  },
+  "appearance": {
+    "title": "外観",
+    "theme": "テーマ",
+    "codeEditor": "コードエディタ",
+    "editorTheme": "エディタのテーマ",
+    "wordWrap": "折り返し",
+    "showMinimap": "ミニマップを表示",
+    "lineNumbers": "行番号",
+    "fontSize": "フォントサイズ"
+  },
+  "actions": {
+    "saveChanges": "変更を保存",
+    "resetToDefaults": "デフォルトに戻す",
+    "cancelChanges": "変更をキャンセル"
+  },
+  "quickSettings": {
+    "title": "クイック設定",
+    "sections": {
+      "appearance": "外観",
+      "toolDisplay": "ツール表示",
+      "viewOptions": "表示オプション",
+      "inputSettings": "入力設定",
+      "whisperDictation": "Whisper音声入力"
+    },
+    "darkMode": "ダークモード",
+    "autoExpandTools": "ツールを自動展開",
+    "showRawParameters": "生パラメータを表示",
+    "showThinking": "思考を表示",
+    "autoScrollToBottom": "自動スクロール",
+    "sendByCtrlEnter": "Ctrl+Enterで送信",
+    "sendByCtrlEnterDescription": "有効にすると、Enterではなく Ctrl+Enter でメッセージを送信します。IMEユーザーの誤送信防止に便利です。",
+    "dragHandle": {
+      "dragging": "ドラッグ中",
+      "closePanel": "設定パネルを閉じる",
+      "openPanel": "設定パネルを開く",
+      "draggingStatus": "ドラッグ中...",
+      "toggleAndMove": "クリックで切替、ドラッグで移動"
+    },
+    "whisper": {
+      "modes": {
+        "default": "標準モード",
+        "defaultDescription": "音声をそのまま文字起こしします",
+        "prompt": "プロンプト強化",
+        "promptDescription": "ラフなアイデアを明確で詳細なAIプロンプトに変換します",
+        "vibe": "バイブモード",
+        "vibeDescription": "アイデアを明確なエージェント指示に整形します"
+      }
+    }
+  },
+  "mainTabs": {
+    "agents": "エージェント",
+    "appearance": "外観",
+    "git": "Git",
+    "apiTokens": "API & トークン",
+    "tasks": "タスク"
+  },
+  "appearanceSettings": {
+    "darkMode": {
+      "label": "ダークモード",
+      "description": "ライトテーマとダークテーマを切り替えます"
+    },
+    "projectSorting": {
+      "label": "プロジェクトの並び順",
+      "description": "サイドバーでのプロジェクトの並び順を設定します",
+      "alphabetical": "アルファベット順",
+      "recentActivity": "最近のアクティビティ順"
+    },
+    "codeEditor": {
+      "title": "コードエディタ",
+      "theme": {
+        "label": "エディタのテーマ",
+        "description": "コードエディタのデフォルトテーマ"
+      },
+      "wordWrap": {
+        "label": "折り返し",
+        "description": "エディタでデフォルトで折り返しを有効にします"
+      },
+      "showMinimap": {
+        "label": "ミニマップを表示",
+        "description": "差分ビューでナビゲーション用のミニマップを表示します"
+      },
+      "lineNumbers": {
+        "label": "行番号を表示",
+        "description": "エディタに行番号を表示します"
+      },
+      "fontSize": {
+        "label": "フォントサイズ",
+        "description": "エディタのフォントサイズ（ピクセル）"
+      }
+    }
+  },
+  "mcpForm": {
+    "title": {
+      "add": "MCPサーバーを追加",
+      "edit": "MCPサーバーを編集"
+    },
+    "importMode": {
+      "form": "フォーム入力",
+      "json": "JSONインポート"
+    },
+    "scope": {
+      "label": "スコープ",
+      "userGlobal": "ユーザー（グローバル）",
+      "projectLocal": "プロジェクト（ローカル）",
+      "userDescription": "ユーザースコープ: すべてのプロジェクトで利用可能",
+      "projectDescription": "ローカルスコープ: 選択したプロジェクトでのみ利用可能",
+      "cannotChange": "既存のサーバーを編集する場合、スコープは変更できません"
+    },
+    "fields": {
+      "serverName": "サーバー名",
+      "transportType": "トランスポートの種類",
+      "command": "コマンド",
+      "arguments": "引数（1行に1つ）",
+      "jsonConfig": "JSON設定",
+      "url": "URL",
+      "envVars": "環境変数（KEY=value、1行に1つ）",
+      "headers": "ヘッダー（KEY=value、1行に1つ）",
+      "selectProject": "プロジェクトを選択..."
+    },
+    "placeholders": {
+      "serverName": "my-server"
+    },
+    "validation": {
+      "missingType": "必須フィールドがありません: type",
+      "stdioRequiresCommand": "stdioタイプにはcommandフィールドが必要です",
+      "httpRequiresUrl": "{{type}}タイプにはurlフィールドが必要です",
+      "invalidJson": "無効なJSON形式です",
+      "jsonHelp": "MCPサーバー設定をJSON形式で貼り付けてください。例:",
+      "jsonExampleStdio": "• stdio: {\"type\":\"stdio\",\"command\":\"npx\",\"args\":[\"@upstash/context7-mcp\"]}",
+      "jsonExampleHttp": "• http/sse: {\"type\":\"http\",\"url\":\"https://api.example.com/mcp\"}"
+    },
+    "configDetails": "設定の詳細（{{configFile}}より）",
+    "projectPath": "パス: {{path}}",
+    "actions": {
+      "cancel": "キャンセル",
+      "saving": "保存中...",
+      "addServer": "サーバーを追加",
+      "updateServer": "サーバーを更新"
+    }
+  },
+  "saveStatus": {
+    "success": "設定を保存しました！",
+    "error": "設定の保存に失敗しました",
+    "saving": "保存中..."
+  },
+  "footerActions": {
+    "save": "設定を保存",
+    "cancel": "キャンセル"
+  },
+  "git": {
+    "title": "Git設定",
+    "description": "コミット用のGit IDを設定します。この設定は git config --global で適用されます",
+    "name": {
+      "label": "Git名前",
+      "help": "コミットに使用する名前"
+    },
+    "email": {
+      "label": "Gitメールアドレス",
+      "help": "コミットに使用するメールアドレス"
+    },
+    "actions": {
+      "save": "設定を保存",
+      "saving": "保存中..."
+    },
+    "status": {
+      "success": "保存しました"
+    }
+  },
+  "apiKeys": {
+    "title": "APIキー",
+    "description": "外部APIにアクセスするためのAPIキーを生成します。",
+    "newKey": {
+      "alertTitle": "⚠️ APIキーを保存してください",
+      "alertMessage": "このキーが表示されるのは今回限りです。安全な場所に保管してください。",
+      "iveSavedIt": "保存しました"
+    },
+    "form": {
+      "placeholder": "APIキーの名前（例: 本番サーバー）",
+      "createButton": "作成",
+      "cancelButton": "キャンセル"
+    },
+    "newButton": "新しいAPIキー",
+    "empty": "APIキーはまだ作成されていません。",
+    "list": {
+      "created": "作成日:",
+      "lastUsed": "最終使用日:"
+    },
+    "confirmDelete": "このAPIキーを削除してもよろしいですか？",
+    "status": {
+      "active": "有効",
+      "inactive": "無効"
+    },
+    "github": {
+      "title": "GitHubトークン",
+      "description": "外部APIからプライベートリポジトリをクローンするためのGitHubパーソナルアクセストークンを追加します。",
+      "descriptionAlt": "プライベートリポジトリをクローンするためのGitHubパーソナルアクセストークンを追加します。保存せずにAPIリクエストで直接トークンを渡すこともできます。",
+      "addButton": "トークンを追加",
+      "form": {
+        "namePlaceholder": "トークンの名前（例: 個人リポジトリ）",
+        "tokenPlaceholder": "GitHubパーソナルアクセストークン（ghp_...）",
+        "descriptionPlaceholder": "説明（任意）",
+        "addButton": "トークンを追加",
+        "cancelButton": "キャンセル",
+        "howToCreate": "GitHubパーソナルアクセストークンの作成方法 →"
+      },
+      "empty": "GitHubトークンはまだ追加されていません。",
+      "added": "追加日:",
+      "confirmDelete": "このGitHubトークンを削除してもよろしいですか？"
+    },
+    "apiDocsLink": "APIドキュメント",
+    "documentation": {
+      "title": "外部APIドキュメント",
+      "description": "外部APIを使用してアプリケーションからClaude/Cursorセッションを起動する方法を学びます。",
+      "viewLink": "APIドキュメントを見る →"
+    },
+    "loading": "読み込み中...",
+    "version": {
+      "updateAvailable": "アップデートあり: v{{version}}"
+    }
+  },
+  "tasks": {
+    "checking": "TaskMasterのインストールを確認しています...",
+    "notInstalled": {
+      "title": "TaskMaster AI CLIがインストールされていません",
+      "description": "タスク管理機能を使用するにはTaskMaster CLIが必要です。以下のコマンドでインストールしてください:",
+      "installCommand": "npm install -g task-master-ai",
+      "viewOnGitHub": "GitHubで見る",
+      "afterInstallation": "インストール後:",
+      "steps": {
+        "restart": "このアプリケーションを再起動してください",
+        "autoAvailable": "TaskMaster機能が自動的に利用可能になります",
+        "initCommand": "プロジェクトディレクトリで task-master init を実行してください"
+      }
+    },
+    "settings": {
+      "enableLabel": "TaskMaster統合を有効にする",
+      "enableDescription": "インターフェース全体でTaskMasterのタスク、バナー、サイドバーインジケータを表示します"
+    }
+  },
+  "agents": {
+    "authStatus": {
+      "checking": "確認中...",
+      "connected": "接続済み",
+      "notConnected": "未接続",
+      "disconnected": "切断",
+      "checkingAuth": "認証状態を確認しています...",
+      "loggedInAs": "{{email}}でログイン中",
+      "authenticatedUser": "認証済みユーザー"
+    },
+    "account": {
+      "claude": {
+        "description": "Anthropic Claude AIアシスタント"
+      },
+      "cursor": {
+        "description": "Cursor AI搭載コードエディタ"
+      },
+      "codex": {
+        "description": "OpenAI Codex AIアシスタント"
+      }
+    },
+    "connectionStatus": "接続状態",
+    "login": {
+      "title": "ログイン",
+      "reAuthenticate": "再認証",
+      "description": "{{agent}}アカウントにサインインしてAI機能を有効にします",
+      "reAuthDescription": "別のアカウントでサインインするか、認証情報を更新します",
+      "button": "ログイン",
+      "reLoginButton": "再ログイン"
+    },
+    "error": "エラー: {{error}}"
+  },
+  "permissions": {
+    "title": "権限設定",
+    "skipPermissions": {
+      "label": "権限プロンプトをスキップ（注意して使用）",
+      "claudeDescription": "--dangerously-skip-permissions フラグに相当",
+      "cursorDescription": "Cursor CLIの -f フラグに相当"
+    },
+    "allowedTools": {
+      "title": "許可されたツール",
+      "description": "権限の確認なしに自動的に許可されるツール",
+      "placeholder": "例: \"Bash(git log:*)\" または \"Write\"",
+      "quickAdd": "よく使うツールを追加:",
+      "empty": "許可されたツールはありません"
+    },
+    "blockedTools": {
+      "title": "ブロックされたツール",
+      "description": "権限の確認なしに自動的にブロックされるツール",
+      "placeholder": "例: \"Bash(rm:*)\"",
+      "empty": "ブロックされたツールはありません"
+    },
+    "allowedCommands": {
+      "title": "許可されたシェルコマンド",
+      "description": "権限の確認なしに自動的に許可されるシェルコマンド",
+      "placeholder": "例: \"Shell(ls)\" または \"Shell(git status)\"",
+      "quickAdd": "よく使うコマンドを追加:",
+      "empty": "許可されたコマンドはありません"
+    },
+    "blockedCommands": {
+      "title": "ブロックされたシェルコマンド",
+      "description": "自動的にブロックされるシェルコマンド",
+      "placeholder": "例: \"Shell(rm -rf)\" または \"Shell(sudo)\"",
+      "empty": "ブロックされたコマンドはありません"
+    },
+    "toolExamples": {
+      "title": "ツールパターンの例:",
+      "bashGitLog": "- すべてのgit logコマンドを許可",
+      "bashGitDiff": "- すべてのgit diffコマンドを許可",
+      "write": "- すべてのWriteツールの使用を許可",
+      "bashRm": "- すべてのrmコマンドをブロック（危険）"
+    },
+    "shellExamples": {
+      "title": "シェルコマンドの例:",
+      "ls": "- lsコマンドを許可",
+      "gitStatus": "- git statusを許可",
+      "npmInstall": "- npm installを許可",
+      "rmRf": "- 再帰的削除をブロック"
+    },
+    "codex": {
+      "permissionMode": "権限モード",
+      "description": "Codexがファイルの変更やコマンドの実行を処理する方法を制御します",
+      "modes": {
+        "default": {
+          "title": "デフォルト",
+          "description": "信頼されたコマンド（ls、cat、grep、git statusなど）のみ自動実行。その他のコマンドはスキップ。ワークスペースへの書き込みは可能。"
+        },
+        "acceptEdits": {
+          "title": "編集を許可",
+          "description": "ワークスペース内ですべてのコマンドを自動実行。サンドボックス環境での完全自動モード。"
+        },
+        "bypassPermissions": {
+          "title": "権限をバイパス",
+          "description": "制限なしの完全なシステムアクセス。すべてのコマンドがディスクとネットワークへの完全なアクセスで自動実行されます。注意して使用してください。"
+        }
+      },
+      "technicalDetails": "技術的な詳細",
+      "technicalInfo": {
+        "default": "sandboxMode=workspace-write, approvalPolicy=untrusted。信頼されたコマンド: cat, cd, grep, head, ls, pwd, tail, git status/log/diff/show, find（-execなし）など。",
+        "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never。すべてのコマンドがプロジェクトディレクトリ内で自動実行。",
+        "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never。完全なシステムアクセス。信頼された環境でのみ使用してください。",
+        "overrideNote": "チャットインターフェースのモードボタンを使用してセッションごとに上書きできます。"
+      }
+    },
+    "actions": {
+      "add": "追加"
+    }
+  },
+  "mcpServers": {
+    "title": "MCPサーバー",
+    "description": {
+      "claude": "Model Context Protocolサーバーは、Claudeに追加のツールやデータソースを提供します",
+      "cursor": "Model Context Protocolサーバーは、Cursorに追加のツールやデータソースを提供します",
+      "codex": "Model Context Protocolサーバーは、Codexに追加のツールやデータソースを提供します"
+    },
+    "addButton": "MCPサーバーを追加",
+    "empty": "MCPサーバーは設定されていません",
+    "serverType": "種類",
+    "scope": {
+      "local": "ローカル",
+      "user": "ユーザー"
+    },
+    "config": {
+      "command": "コマンド",
+      "url": "URL",
+      "args": "引数",
+      "environment": "環境変数"
+    },
+    "tools": {
+      "title": "ツール",
+      "count": "（{{count}}）:",
+      "more": "他{{count}}件"
+    },
+    "actions": {
+      "edit": "サーバーを編集",
+      "delete": "サーバーを削除"
+    },
+    "help": {
+      "title": "Codex MCPについて",
+      "description": "Codexはstdioベースのツールサーバーをサポートしています。追加のツールやリソースでCodexの機能を拡張するサーバーを追加できます。"
+    }
+  }
+}

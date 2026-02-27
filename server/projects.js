@@ -379,24 +379,47 @@ async function extractProjectDirectory(projectName) {
   }
 }
 
-async function getProjects() {
+async function getProjects(progressCallback = null) {
   const claudeDir = path.join(os.homedir(), '.claude', 'projects');
   const config = await loadProjectConfig();
   const projects = [];
   const existingProjects = new Set();
-  
+  const codexSessionsIndexRef = { sessionsByProject: null };
+  let totalProjects = 0;
+  let processedProjects = 0;
+  let directories = [];
+
   try {
     // Check if the .claude/projects directory exists
     await fs.access(claudeDir);
-    
+
     // First, get existing Claude projects from the file system
     const entries = await fs.readdir(claudeDir, { withFileTypes: true });
-    
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        existingProjects.add(entry.name);
-        const projectPath = path.join(claudeDir, entry.name);
-        
+    directories = entries.filter(e => e.isDirectory());
+
+    // Build set of existing project names for later
+    directories.forEach(e => existingProjects.add(e.name));
+
+    // Count manual projects not already in directories
+    const manualProjectsCount = Object.entries(config)
+      .filter(([name, cfg]) => cfg.manuallyAdded && !existingProjects.has(name))
+      .length;
+
+    totalProjects = directories.length + manualProjectsCount;
+
+    for (const entry of directories) {
+        processedProjects++;
+
+        // Emit progress
+        if (progressCallback) {
+          progressCallback({
+            phase: 'loading',
+            current: processedProjects,
+            total: totalProjects,
+            currentProject: entry.name
+          });
+        }
+
         // Extract actual project directory from JSONL sessions
         const actualProjectDir = await extractProjectDirectory(entry.name);
         
@@ -411,7 +434,11 @@ async function getProjects() {
           displayName: customName || autoDisplayName,
           fullPath: fullPath,
           isCustomName: !!customName,
-          sessions: []
+          sessions: [],
+          sessionMeta: {
+            hasMore: false,
+            total: 0
+          }
         };
         
         // Try to get sessions for this project (just first 5 for performance)
@@ -424,6 +451,10 @@ async function getProjects() {
           };
         } catch (e) {
           console.warn(`Could not load sessions for project ${entry.name}:`, e.message);
+          project.sessionMeta = {
+            hasMore: false,
+            total: 0
+          };
         }
         
         // Also fetch Cursor sessions for this project
@@ -436,7 +467,9 @@ async function getProjects() {
 
         // Also fetch Codex sessions for this project
         try {
-          project.codexSessions = await getCodexSessions(actualProjectDir);
+          project.codexSessions = await getCodexSessions(actualProjectDir, {
+            indexRef: codexSessionsIndexRef,
+          });
         } catch (e) {
           console.warn(`Could not load Codex sessions for project ${entry.name}:`, e.message);
           project.codexSessions = [];
@@ -460,20 +493,35 @@ async function getProjects() {
             status: 'error'
           };
         }
-        
-        projects.push(project);
-      }
+
+      projects.push(project);
     }
   } catch (error) {
     // If the directory doesn't exist (ENOENT), that's okay - just continue with empty projects
     if (error.code !== 'ENOENT') {
       console.error('Error reading projects directory:', error);
     }
+    // Calculate total for manual projects only (no directories exist)
+    totalProjects = Object.entries(config)
+      .filter(([name, cfg]) => cfg.manuallyAdded)
+      .length;
   }
   
   // Add manually configured projects that don't exist as folders yet
   for (const [projectName, projectConfig] of Object.entries(config)) {
     if (!existingProjects.has(projectName) && projectConfig.manuallyAdded) {
+      processedProjects++;
+
+      // Emit progress for manual projects
+      if (progressCallback) {
+        progressCallback({
+          phase: 'loading',
+          current: processedProjects,
+          total: totalProjects,
+          currentProject: projectName
+        });
+      }
+
       // Use the original path if available, otherwise extract from potential sessions
       let actualProjectDir = projectConfig.originalPath;
       
@@ -486,7 +534,7 @@ async function getProjects() {
         }
       }
       
-              const project = {
+      const project = {
           name: projectName,
           path: actualProjectDir,
           displayName: projectConfig.displayName || await generateDisplayName(projectName, actualProjectDir),
@@ -494,9 +542,13 @@ async function getProjects() {
           isCustomName: !!projectConfig.displayName,
           isManuallyAdded: true,
           sessions: [],
+          sessionMeta: {
+            hasMore: false,
+            total: 0
+          },
           cursorSessions: [],
           codexSessions: []
-        };
+      };
 
       // Try to fetch Cursor sessions for manual projects too
       try {
@@ -507,7 +559,9 @@ async function getProjects() {
 
       // Try to fetch Codex sessions for manual projects too
       try {
-        project.codexSessions = await getCodexSessions(actualProjectDir);
+        project.codexSessions = await getCodexSessions(actualProjectDir, {
+          indexRef: codexSessionsIndexRef,
+        });
       } catch (e) {
         console.warn(`Could not load Codex sessions for manual project ${projectName}:`, e.message);
       }
@@ -541,7 +595,16 @@ async function getProjects() {
       projects.push(project);
     }
   }
-  
+
+  // Emit completion after all projects (including manual) are processed
+  if (progressCallback) {
+    progressCallback({
+      phase: 'complete',
+      current: totalProjects,
+      total: totalProjects
+    });
+  }
+
   return projects;
 }
 
@@ -826,22 +889,81 @@ async function parseJsonlSessions(filePath) {
   }
 }
 
+// Parse an agent JSONL file and extract tool uses
+async function parseAgentTools(filePath) {
+  const tools = [];
+
+  try {
+    const fileStream = fsSync.createReadStream(filePath);
+    const rl = readline.createInterface({
+      input: fileStream,
+      crlfDelay: Infinity
+    });
+
+    for await (const line of rl) {
+      if (line.trim()) {
+        try {
+          const entry = JSON.parse(line);
+          // Look for assistant messages with tool_use
+          if (entry.message?.role === 'assistant' && Array.isArray(entry.message?.content)) {
+            for (const part of entry.message.content) {
+              if (part.type === 'tool_use') {
+                tools.push({
+                  toolId: part.id,
+                  toolName: part.name,
+                  toolInput: part.input,
+                  timestamp: entry.timestamp
+                });
+              }
+            }
+          }
+          // Look for tool results
+          if (entry.message?.role === 'user' && Array.isArray(entry.message?.content)) {
+            for (const part of entry.message.content) {
+              if (part.type === 'tool_result') {
+                // Find the matching tool and add result
+                const tool = tools.find(t => t.toolId === part.tool_use_id);
+                if (tool) {
+                  tool.toolResult = {
+                    content: typeof part.content === 'string' ? part.content :
+                             Array.isArray(part.content) ? part.content.map(c => c.text || '').join('\n') :
+                             JSON.stringify(part.content),
+                    isError: Boolean(part.is_error)
+                  };
+                }
+              }
+            }
+          }
+        } catch (parseError) {
+          // Skip malformed lines
+        }
+      }
+    }
+  } catch (error) {
+    console.warn(`Error parsing agent file ${filePath}:`, error.message);
+  }
+
+  return tools;
+}
+
 // Get messages for a specific session with pagination support
 async function getSessionMessages(projectName, sessionId, limit = null, offset = 0) {
   const projectDir = path.join(os.homedir(), '.claude', 'projects', projectName);
 
   try {
     const files = await fs.readdir(projectDir);
-    // agent-*.jsonl files contain session start data at this point. This needs to be revisited
-    // periodically to make sure only accurate data is there and no new functionality is added there
+    // agent-*.jsonl files contain subagent tool history - we'll process them separately
     const jsonlFiles = files.filter(file => file.endsWith('.jsonl') && !file.startsWith('agent-'));
-    
+    const agentFiles = files.filter(file => file.endsWith('.jsonl') && file.startsWith('agent-'));
+
     if (jsonlFiles.length === 0) {
       return { messages: [], total: 0, hasMore: false };
     }
-    
+
     const messages = [];
-    
+    // Map of agentId -> tools for subagent tool grouping
+    const agentToolsCache = new Map();
+
     // Process all JSONL files to find messages for this session
     for (const file of jsonlFiles) {
       const jsonlFile = path.join(projectDir, file);
@@ -850,7 +972,7 @@ async function getSessionMessages(projectName, sessionId, limit = null, offset =
         input: fileStream,
         crlfDelay: Infinity
       });
-      
+
       for await (const line of rl) {
         if (line.trim()) {
           try {
@@ -864,26 +986,55 @@ async function getSessionMessages(projectName, sessionId, limit = null, offset =
         }
       }
     }
-    
+
+    // Collect agentIds from Task tool results
+    const agentIds = new Set();
+    for (const message of messages) {
+      if (message.toolUseResult?.agentId) {
+        agentIds.add(message.toolUseResult.agentId);
+      }
+    }
+
+    // Load agent tools for each agentId found
+    for (const agentId of agentIds) {
+      const agentFileName = `agent-${agentId}.jsonl`;
+      if (agentFiles.includes(agentFileName)) {
+        const agentFilePath = path.join(projectDir, agentFileName);
+        const tools = await parseAgentTools(agentFilePath);
+        agentToolsCache.set(agentId, tools);
+      }
+    }
+
+    // Attach agent tools to their parent Task messages
+    for (const message of messages) {
+      if (message.toolUseResult?.agentId) {
+        const agentId = message.toolUseResult.agentId;
+        const agentTools = agentToolsCache.get(agentId);
+        if (agentTools && agentTools.length > 0) {
+          message.subagentTools = agentTools;
+        }
+      }
+    }
+
     // Sort messages by timestamp
-    const sortedMessages = messages.sort((a, b) => 
+    const sortedMessages = messages.sort((a, b) =>
       new Date(a.timestamp || 0) - new Date(b.timestamp || 0)
     );
-    
+
     const total = sortedMessages.length;
-    
+
     // If no limit is specified, return all messages (backward compatibility)
     if (limit === null) {
       return sortedMessages;
     }
-    
+
     // Apply pagination - for recent messages, we need to slice from the end
     // offset 0 should give us the most recent messages
     const startIndex = Math.max(0, total - offset - limit);
     const endIndex = total - offset;
     const paginatedMessages = sortedMessages.slice(startIndex, endIndex);
     const hasMore = startIndex > 0;
-    
+
     return {
       messages: paginatedMessages,
       total,
@@ -978,25 +1129,56 @@ async function isProjectEmpty(projectName) {
   }
 }
 
-// Delete an empty project
-async function deleteProject(projectName) {
+// Delete a project (force=true to delete even with sessions)
+async function deleteProject(projectName, force = false) {
   const projectDir = path.join(os.homedir(), '.claude', 'projects', projectName);
-  
+
   try {
-    // First check if the project is empty
     const isEmpty = await isProjectEmpty(projectName);
-    if (!isEmpty) {
+    if (!isEmpty && !force) {
       throw new Error('Cannot delete project with existing sessions');
     }
-    
-    // Remove the project directory
-    await fs.rm(projectDir, { recursive: true, force: true });
-    
-    // Remove from project config
+
     const config = await loadProjectConfig();
+    let projectPath = config[projectName]?.path || config[projectName]?.originalPath;
+
+    // Fallback to extractProjectDirectory if projectPath is not in config
+    if (!projectPath) {
+      projectPath = await extractProjectDirectory(projectName);
+    }
+
+    // Remove the project directory (includes all Claude sessions)
+    await fs.rm(projectDir, { recursive: true, force: true });
+
+    // Delete all Codex sessions associated with this project
+    if (projectPath) {
+      try {
+        const codexSessions = await getCodexSessions(projectPath, { limit: 0 });
+        for (const session of codexSessions) {
+          try {
+            await deleteCodexSession(session.id);
+          } catch (err) {
+            console.warn(`Failed to delete Codex session ${session.id}:`, err.message);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to delete Codex sessions:', err.message);
+      }
+
+      // Delete Cursor sessions directory if it exists
+      try {
+        const hash = crypto.createHash('md5').update(projectPath).digest('hex');
+        const cursorProjectDir = path.join(os.homedir(), '.cursor', 'chats', hash);
+        await fs.rm(cursorProjectDir, { recursive: true, force: true });
+      } catch (err) {
+        // Cursor dir may not exist, ignore
+      }
+    }
+
+    // Remove from project config
     delete config[projectName];
     await saveProjectConfig(config);
-    
+
     return true;
   } catch (error) {
     console.error(`Error deleting project ${projectName}:`, error);
@@ -1007,17 +1189,17 @@ async function deleteProject(projectName) {
 // Add a project manually to the config (without creating folders)
 async function addProjectManually(projectPath, displayName = null) {
   const absolutePath = path.resolve(projectPath);
-  
+
   try {
     // Check if the path exists
     await fs.access(absolutePath);
   } catch (error) {
     throw new Error(`Path does not exist: ${absolutePath}`);
   }
-  
+
   // Generate project name (encode path for use as directory name)
-  const projectName = absolutePath.replace(/\//g, '-');
-  
+  const projectName = absolutePath.replace(/[\\/:\s~_]/g, '-');
+
   // Check if project already exists in config
   const config = await loadProjectConfig();
   const projectDir = path.join(os.homedir(), '.claude', 'projects', projectName);
@@ -1028,13 +1210,13 @@ async function addProjectManually(projectPath, displayName = null) {
 
   // Allow adding projects even if the directory exists - this enables tracking
   // existing Claude Code or Cursor projects in the UI
-  
+
   // Add to config as manually added project
   config[projectName] = {
     manuallyAdded: true,
     originalPath: absolutePath
   };
-  
+
   if (displayName) {
     config[projectName].displayName = displayName;
   }
@@ -1165,74 +1347,114 @@ async function getCursorSessions(projectPath) {
 }
 
 
-// Fetch Codex sessions for a given project path
-async function getCodexSessions(projectPath) {
-  try {
-    const codexSessionsDir = path.join(os.homedir(), '.codex', 'sessions');
-    const sessions = [];
+function normalizeComparablePath(inputPath) {
+  if (!inputPath || typeof inputPath !== 'string') {
+    return '';
+  }
 
-    // Check if the directory exists
+  const withoutLongPathPrefix = inputPath.startsWith('\\\\?\\')
+    ? inputPath.slice(4)
+    : inputPath;
+  const normalized = path.normalize(withoutLongPathPrefix.trim());
+
+  if (!normalized) {
+    return '';
+  }
+
+  const resolved = path.resolve(normalized);
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+
+async function findCodexJsonlFiles(dir) {
+  const files = [];
+
+  try {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        files.push(...await findCodexJsonlFiles(fullPath));
+      } else if (entry.name.endsWith('.jsonl')) {
+        files.push(fullPath);
+      }
+    }
+  } catch (error) {
+    // Skip directories we can't read
+  }
+
+  return files;
+}
+
+async function buildCodexSessionsIndex() {
+  const codexSessionsDir = path.join(os.homedir(), '.codex', 'sessions');
+  const sessionsByProject = new Map();
+
+  try {
+    await fs.access(codexSessionsDir);
+  } catch (error) {
+    return sessionsByProject;
+  }
+
+  const jsonlFiles = await findCodexJsonlFiles(codexSessionsDir);
+
+  for (const filePath of jsonlFiles) {
     try {
-      await fs.access(codexSessionsDir);
+      const sessionData = await parseCodexSessionFile(filePath);
+      if (!sessionData || !sessionData.id) {
+        continue;
+      }
+
+      const normalizedProjectPath = normalizeComparablePath(sessionData.cwd);
+      if (!normalizedProjectPath) {
+        continue;
+      }
+
+      const session = {
+        id: sessionData.id,
+        summary: sessionData.summary || 'Codex Session',
+        messageCount: sessionData.messageCount || 0,
+        lastActivity: sessionData.timestamp ? new Date(sessionData.timestamp) : new Date(),
+        cwd: sessionData.cwd,
+        model: sessionData.model,
+        filePath,
+        provider: 'codex',
+      };
+
+      if (!sessionsByProject.has(normalizedProjectPath)) {
+        sessionsByProject.set(normalizedProjectPath, []);
+      }
+
+      sessionsByProject.get(normalizedProjectPath).push(session);
     } catch (error) {
-      // No Codex sessions directory
+      console.warn(`Could not parse Codex session file ${filePath}:`, error.message);
+    }
+  }
+
+  for (const sessions of sessionsByProject.values()) {
+    sessions.sort((a, b) => new Date(b.lastActivity) - new Date(a.lastActivity));
+  }
+
+  return sessionsByProject;
+}
+
+// Fetch Codex sessions for a given project path
+async function getCodexSessions(projectPath, options = {}) {
+  const { limit = 5, indexRef = null } = options;
+  try {
+    const normalizedProjectPath = normalizeComparablePath(projectPath);
+    if (!normalizedProjectPath) {
       return [];
     }
 
-    // Recursively find all .jsonl files in the sessions directory
-    const findJsonlFiles = async (dir) => {
-      const files = [];
-      try {
-        const entries = await fs.readdir(dir, { withFileTypes: true });
-        for (const entry of entries) {
-          const fullPath = path.join(dir, entry.name);
-          if (entry.isDirectory()) {
-            files.push(...await findJsonlFiles(fullPath));
-          } else if (entry.name.endsWith('.jsonl')) {
-            files.push(fullPath);
-          }
-        }
-      } catch (error) {
-        // Skip directories we can't read
-      }
-      return files;
-    };
-
-    const jsonlFiles = await findJsonlFiles(codexSessionsDir);
-
-    // Process each file to find sessions matching the project path
-    for (const filePath of jsonlFiles) {
-      try {
-        const sessionData = await parseCodexSessionFile(filePath);
-
-        // Check if this session matches the project path
-        // Handle Windows long paths with \\?\ prefix
-        const sessionCwd = sessionData?.cwd || '';
-        const cleanSessionCwd = sessionCwd.startsWith('\\\\?\\') ? sessionCwd.slice(4) : sessionCwd;
-        const cleanProjectPath = projectPath.startsWith('\\\\?\\') ? projectPath.slice(4) : projectPath;
-
-        if (sessionData && (sessionData.cwd === projectPath || cleanSessionCwd === cleanProjectPath || path.relative(cleanSessionCwd, cleanProjectPath) === '')) {
-          sessions.push({
-            id: sessionData.id,
-            summary: sessionData.summary || 'Codex Session',
-            messageCount: sessionData.messageCount || 0,
-            lastActivity: sessionData.timestamp ? new Date(sessionData.timestamp) : new Date(),
-            cwd: sessionData.cwd,
-            model: sessionData.model,
-            filePath: filePath,
-            provider: 'codex'
-          });
-        }
-      } catch (error) {
-        console.warn(`Could not parse Codex session file ${filePath}:`, error.message);
-      }
+    if (indexRef && !indexRef.sessionsByProject) {
+      indexRef.sessionsByProject = await buildCodexSessionsIndex();
     }
 
-    // Sort sessions by last activity (newest first)
-    sessions.sort((a, b) => new Date(b.lastActivity) - new Date(a.lastActivity));
+    const sessionsByProject = indexRef?.sessionsByProject || await buildCodexSessionsIndex();
+    const sessions = sessionsByProject.get(normalizedProjectPath) || [];
 
-    // Return only the first 5 sessions for performance
-    return sessions.slice(0, 5);
+    // Return limited sessions for performance (0 = unlimited for deletion)
+    return limit > 0 ? sessions.slice(0, limit) : [...sessions];
 
   } catch (error) {
     console.error('Error fetching Codex sessions:', error);

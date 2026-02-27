@@ -203,6 +203,7 @@ export async function queryCodex(command, options = {}, ws) {
   let codex;
   let thread;
   let currentSessionId = sessionId;
+  const abortController = new AbortController();
 
   try {
     // Initialize Codex SDK
@@ -232,6 +233,7 @@ export async function queryCodex(command, options = {}, ws) {
       thread,
       codex,
       status: 'running',
+      abortController,
       startedAt: new Date().toISOString()
     });
 
@@ -243,7 +245,9 @@ export async function queryCodex(command, options = {}, ws) {
     });
 
     // Execute with streaming
-    const streamedTurn = await thread.runStreamed(command);
+    const streamedTurn = await thread.runStreamed(command, {
+      signal: abortController.signal
+    });
 
     for await (const event of streamedTurn.events) {
       // Check if session was aborted
@@ -272,7 +276,8 @@ export async function queryCodex(command, options = {}, ws) {
           data: {
             used: totalTokens,
             total: 200000 // Default context window for Codex models
-          }
+          },
+          sessionId: currentSessionId
         });
       }
     }
@@ -285,20 +290,27 @@ export async function queryCodex(command, options = {}, ws) {
     });
 
   } catch (error) {
-    console.error('[Codex] Error:', error);
+    const session = currentSessionId ? activeCodexSessions.get(currentSessionId) : null;
+    const wasAborted =
+      session?.status === 'aborted' ||
+      error?.name === 'AbortError' ||
+      String(error?.message || '').toLowerCase().includes('aborted');
 
-    sendMessage(ws, {
-      type: 'codex-error',
-      error: error.message,
-      sessionId: currentSessionId
-    });
+    if (!wasAborted) {
+      console.error('[Codex] Error:', error);
+      sendMessage(ws, {
+        type: 'codex-error',
+        error: error.message,
+        sessionId: currentSessionId
+      });
+    }
 
   } finally {
     // Update session status
     if (currentSessionId) {
       const session = activeCodexSessions.get(currentSessionId);
       if (session) {
-        session.status = 'completed';
+        session.status = session.status === 'aborted' ? 'aborted' : 'completed';
       }
     }
   }
@@ -317,9 +329,11 @@ export function abortCodexSession(sessionId) {
   }
 
   session.status = 'aborted';
-
-  // The SDK doesn't have a direct abort method, but marking status
-  // will cause the streaming loop to exit
+  try {
+    session.abortController?.abort();
+  } catch (error) {
+    console.warn(`[Codex] Failed to abort session ${sessionId}:`, error);
+  }
 
   return true;
 }

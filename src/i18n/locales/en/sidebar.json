@@ -1,0 +1,112 @@
+{
+  "projects": {
+    "title": "Projects",
+    "newProject": "New Project",
+    "deleteProject": "Delete Project",
+    "renameProject": "Rename Project",
+    "noProjects": "No projects found",
+    "loadingProjects": "Loading projects...",
+    "searchPlaceholder": "Search projects...",
+    "projectNamePlaceholder": "Project name",
+    "starred": "Starred",
+    "all": "All",
+    "untitledSession": "Untitled Session",
+    "newSession": "New Session",
+    "codexSession": "Codex Session",
+    "fetchingProjects": "Fetching your Claude projects and sessions",
+    "projects": "projects",
+    "noMatchingProjects": "No matching projects",
+    "tryDifferentSearch": "Try adjusting your search term",
+    "runClaudeCli": "Run Claude CLI in a project directory to get started"
+  },
+  "app": {
+    "title": "Claude Code UI",
+    "subtitle": "AI coding assistant interface"
+  },
+  "sessions": {
+    "title": "Sessions",
+    "newSession": "New Session",
+    "deleteSession": "Delete Session",
+    "renameSession": "Rename Session",
+    "noSessions": "No sessions yet",
+    "loadingSessions": "Loading sessions...",
+    "unnamed": "Unnamed",
+    "loading": "Loading...",
+    "showMore": "Show more sessions"
+  },
+  "tooltips": {
+    "viewEnvironments": "View Environments",
+    "hideSidebar": "Hide sidebar",
+    "createProject": "Create new project",
+    "refresh": "Refresh projects and sessions (Ctrl+R)",
+    "renameProject": "Rename project (F2)",
+    "deleteProject": "Delete empty project (Delete)",
+    "addToFavorites": "Add to favorites",
+    "removeFromFavorites": "Remove from favorites",
+    "editSessionName": "Manually edit session name",
+    "deleteSession": "Delete this session permanently",
+    "save": "Save",
+    "cancel": "Cancel"
+  },
+  "navigation": {
+    "chat": "Chat",
+    "files": "Files",
+    "git": "Git",
+    "terminal": "Terminal",
+    "tasks": "Tasks"
+  },
+  "actions": {
+    "refresh": "Refresh",
+    "settings": "Settings",
+    "collapseAll": "Collapse All",
+    "expandAll": "Expand All",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "rename": "Rename"
+  },
+  "status": {
+    "active": "Active",
+    "inactive": "Inactive",
+    "thinking": "Thinking...",
+    "error": "Error",
+    "aborted": "Aborted",
+    "unknown": "Unknown"
+  },
+  "time": {
+    "justNow": "Just now",
+    "oneMinuteAgo": "1 min ago",
+    "minutesAgo": "{{count}} mins ago",
+    "oneHourAgo": "1 hour ago",
+    "hoursAgo": "{{count}} hours ago",
+    "oneDayAgo": "1 day ago",
+    "daysAgo": "{{count}} days ago"
+  },
+  "messages": {
+    "deleteConfirm": "Are you sure you want to delete this?",
+    "renameSuccess": "Renamed successfully",
+    "deleteSuccess": "Deleted successfully",
+    "errorOccurred": "An error occurred",
+    "deleteSessionConfirm": "Are you sure you want to delete this session? This action cannot be undone.",
+    "deleteProjectConfirm": "Are you sure you want to delete this empty project? This action cannot be undone.",
+    "enterProjectPath": "Please enter a project path",
+    "deleteSessionFailed": "Failed to delete session. Please try again.",
+    "deleteSessionError": "Error deleting session. Please try again.",
+    "deleteProjectFailed": "Failed to delete project. Please try again.",
+    "deleteProjectError": "Error deleting project. Please try again.",
+    "createProjectFailed": "Failed to create project. Please try again.",
+    "createProjectError": "Error creating project. Please try again."
+  },
+  "version": {
+    "updateAvailable": "Update available"
+  },
+  "deleteConfirmation": {
+    "deleteProject": "Delete Project",
+    "deleteSession": "Delete Session",
+    "confirmDelete": "Are you sure you want to delete",
+    "sessionCount_one": "This project contains {{count}} conversation.",
+    "sessionCount_other": "This project contains {{count}} conversations.",
+    "allConversationsDeleted": "All conversations will be permanently deleted.",
+    "cannotUndo": "This action cannot be undone."
+  }
+}

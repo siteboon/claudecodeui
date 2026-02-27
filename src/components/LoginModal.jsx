@@ -1,5 +1,6 @@
 import { X } from 'lucide-react';
-import StandaloneShell from './StandaloneShell';
+import StandaloneShell from './standalone-shell/view/StandaloneShell';
+import { IS_PLATFORM } from '../constants/config';
 
 /**
  * Reusable login modal component for Claude, Cursor, and Codex CLI authentication
@@ -11,6 +12,7 @@ import StandaloneShell from './StandaloneShell';
  * @param {Object} props.project - Project object containing name and path information
  * @param {Function} props.onComplete - Callback when login process completes (receives exitCode)
  * @param {string} props.customCommand - Optional custom command to override defaults
+ * @param {boolean} props.isAuthenticated - Whether user is already authenticated (for re-auth flow)
  */
 function LoginModal({
   isOpen,
@@ -18,24 +20,24 @@ function LoginModal({
   provider = 'claude',
   project,
   onComplete,
-  customCommand
+  customCommand,
+  isAuthenticated = false,
+  isOnboarding = false
 }) {
   if (!isOpen) return null;
 
   const getCommand = () => {
     if (customCommand) return customCommand;
 
-    const isPlatform = import.meta.env.VITE_IS_PLATFORM === 'true';
-
     switch (provider) {
       case 'claude':
-        return 'claude setup-token --dangerously-skip-permissions';
+        return isAuthenticated ? 'claude setup-token --dangerously-skip-permissions' : isOnboarding ? 'claude /exit --dangerously-skip-permissions' : 'claude /login --dangerously-skip-permissions';
       case 'cursor':
         return 'cursor-agent login';
       case 'codex':
-        return isPlatform ? 'codex login --device-auth' : 'codex login';
+        return IS_PLATFORM ? 'codex login --device-auth' : 'codex login';
       default:
-        return 'claude setup-token --dangerously-skip-permissions';
+        return isAuthenticated ? 'claude setup-token --dangerously-skip-permissions' : isOnboarding ? 'claude /exit --dangerously-skip-permissions' : 'claude /login --dangerously-skip-permissions';
     }
   };
 
@@ -56,9 +58,7 @@ function LoginModal({
     if (onComplete) {
       onComplete(exitCode);
     }
-    if (exitCode === 0) {
-      onClose();
-    }
+    // Keep modal open so users can read login output and close explicitly.
   };
 
   return (

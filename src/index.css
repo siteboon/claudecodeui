@@ -43,7 +43,19 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
-    
+
+    /* Nav design tokens */
+    --nav-glass-bg: 0 0% 100% / 0.7;
+    --nav-glass-blur: 20px;
+    --nav-glass-saturate: 1.8;
+    --nav-tab-glow: 221.2 83.2% 53.3% / 0.18;
+    --nav-tab-ring: 221.2 83.2% 53.3% / 0.10;
+    --nav-float-shadow: 0 0% 0% / 0.06;
+    --nav-float-ring: 214.3 31.8% 91.4% / 0.5;
+    --nav-divider-color: 214.3 31.8% 91.4% / 0.5;
+    --nav-input-bg: 210 40% 96.1% / 0.5;
+    --nav-input-focus-ring: 221.2 83.2% 53.3% / 0.22;
+
     /* Safe area CSS variables */
     --safe-area-inset-top: env(safe-area-inset-top);
     --safe-area-inset-right: env(safe-area-inset-right);
@@ -51,9 +63,10 @@
     --safe-area-inset-left: env(safe-area-inset-left);
 
     /* Mobile navigation dimensions - Single source of truth */
-    --mobile-nav-height: 60px;
-    --mobile-nav-padding: 12px;
-    --mobile-nav-total: calc(var(--mobile-nav-height) + max(env(safe-area-inset-bottom, 0px), var(--mobile-nav-padding)));
+    /* Floating nav: ~52px bar + 8px bottom margin + 12px px-3 top spacing */
+    --mobile-nav-height: 52px;
+    --mobile-nav-padding: 20px;
+    --mobile-nav-total: calc(var(--mobile-nav-height) + var(--mobile-nav-padding) + env(safe-area-inset-bottom, 0px));
 
     /* Header safe area dimensions */
     --header-safe-area-top: env(safe-area-inset-top, 0px);
@@ -91,6 +104,18 @@
     --border: 217.2 32.6% 17.5%;
     --input: 220 13% 46%;
     --ring: 217.2 91.2% 59.8%;
+
+    /* Nav design tokens — dark overrides */
+    --nav-glass-bg: 217.2 91.2% 8% / 0.55;
+    --nav-glass-blur: 24px;
+    --nav-glass-saturate: 1.6;
+    --nav-tab-glow: 217.2 91.2% 59.8% / 0.25;
+    --nav-tab-ring: 217.2 91.2% 59.8% / 0.15;
+    --nav-float-shadow: 0 0% 0% / 0.35;
+    --nav-float-ring: 217.2 32.6% 17.5% / 0.3;
+    --nav-divider-color: 217.2 32.6% 17.5% / 0.5;
+    --nav-input-bg: 217.2 32.6% 17.5% / 0.5;
+    --nav-input-focus-ring: 217.2 91.2% 59.8% / 0.25;
   }
 }
 
@@ -134,14 +159,7 @@
   }
 
   /* PWA mode detected by JavaScript - more reliable */
-  html.pwa-mode,
-  body.pwa-mode {
-    height: 100%;
-    overflow: hidden;
-  }
-
   body.pwa-mode #root {
-    padding-top: var(--header-total-padding);
     padding-left: var(--safe-area-inset-left);
     padding-right: var(--safe-area-inset-right);
     height: 100vh;
@@ -239,6 +257,42 @@
   .sidebar-transition {
     transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1),
                 opacity 300ms ease-in-out;
+  }
+
+  /* Nav glass surface — uses theme tokens */
+  .nav-glass {
+    background: hsl(var(--nav-glass-bg));
+    backdrop-filter: blur(var(--nav-glass-blur)) saturate(var(--nav-glass-saturate));
+    -webkit-backdrop-filter: blur(var(--nav-glass-blur)) saturate(var(--nav-glass-saturate));
+  }
+
+  /* Nav tab active pill glow — uses theme tokens */
+  .nav-tab-active {
+    box-shadow: 0 1px 8px hsl(var(--nav-tab-glow)),
+                0 0 0 1px hsl(var(--nav-tab-ring));
+  }
+
+  /* Floating mobile nav bar — uses theme tokens */
+  .mobile-nav-float {
+    box-shadow: 0 -1px 20px hsl(var(--nav-float-shadow)),
+                0 0 0 1px hsl(var(--nav-float-ring));
+  }
+
+  /* Subtle sidebar divider — uses theme tokens */
+  .nav-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, hsl(var(--nav-divider-color)) 20%, hsl(var(--nav-divider-color)) 80%, transparent);
+  }
+
+  /* Nav search input surface — uses theme tokens */
+  .nav-search-input {
+    background: hsl(var(--nav-input-bg));
+    border: none;
+  }
+
+  .nav-search-input:focus-within {
+    background: hsl(var(--background));
+    box-shadow: 0 0 0 2px hsl(var(--nav-input-focus-ring));
   }
   
   /* Modal and dropdown transitions */
@@ -642,7 +696,7 @@
   
   /* Safe area support for iOS devices */
   .ios-bottom-safe {
-    padding-bottom: max(env(safe-area-inset-bottom), 12px);
+    padding-bottom: env(safe-area-inset-bottom);
   }
   
   /* PWA specific header adjustments - uses CSS variables for consistency */
@@ -665,7 +719,7 @@
   
   @media screen and (max-width: 768px) {
     .chat-input-mobile {
-      padding-bottom: calc(60px + max(env(safe-area-inset-bottom), 12px));
+      padding-bottom: calc(60px + env(safe-area-inset-bottom));
     }
   }
 

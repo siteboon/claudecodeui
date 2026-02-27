@@ -1,7 +1,5 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import ClaudeLogo from './ClaudeLogo';
-
 const SetupForm = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -48,7 +46,7 @@ const SetupForm = () => {
           {/* Logo and Title */}
           <div className="text-center">
             <div className="flex justify-center mb-4">
-              <ClaudeLogo size={64} />
+              <img src="/logo.svg" alt="CloudCLI" className="w-16 h-16" />
             </div>
             <h1 className="text-2xl font-bold text-foreground">Welcome to Claude Code UI</h1>
             <p className="text-muted-foreground mt-2">

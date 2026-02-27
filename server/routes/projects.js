@@ -7,11 +7,17 @@ import { addProjectManually } from '../projects.js';
 
 const router = express.Router();
 
+function sanitizeGitError(message, token) {
+  if (!message || !token) return message;
+  return message.replace(new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), '***');
+}
+
 // Configure allowed workspace root (defaults to user's home directory)
-const WORKSPACES_ROOT = process.env.WORKSPACES_ROOT || os.homedir();
+export const WORKSPACES_ROOT = process.env.WORKSPACES_ROOT || os.homedir();
 
 // System-critical paths that should never be used as workspace directories
-const FORBIDDEN_PATHS = [
+export const FORBIDDEN_PATHS = [
+  // Unix
   '/',
   '/etc',
   '/bin',
@@ -27,7 +33,14 @@ const FORBIDDEN_PATHS = [
   '/lib64',
   '/opt',
   '/tmp',
-  '/run'
+  '/run',
+  // Windows
+  'C:\\Windows',
+  'C:\\Program Files',
+  'C:\\Program Files (x86)',
+  'C:\\ProgramData',
+  'C:\\System Volume Information',
+  'C:\\$Recycle.Bin'
 ];
 
 /**
@@ -35,7 +48,7 @@ const FORBIDDEN_PATHS = [
  * @param {string} requestedPath - The path to validate
  * @returns {Promise<{valid: boolean, resolvedPath?: string, error?: string}>}
  */
-async function validateWorkspacePath(requestedPath) {
+export async function validateWorkspacePath(requestedPath) {
   try {
     // Resolve to absolute path
     let absolutePath = path.resolve(requestedPath);
@@ -212,20 +225,7 @@ router.post('/create-workspace', async (req, res) => {
 
     // Handle new workspace creation
     if (workspaceType === 'new') {
-      // Check if path already exists
-      try {
-        await fs.access(absolutePath);
-        return res.status(400).json({
-          error: 'Path already exists. Please choose a different path or use "existing workspace" option.'
-        });
-      } catch (error) {
-        if (error.code !== 'ENOENT') {
-          throw error;
-        }
-        // Path doesn't exist - good, we can create it
-      }
-
-      // Create the directory
+      // Create the directory if it doesn't exist
       await fs.mkdir(absolutePath, { recursive: true });
 
       // If GitHub URL is provided, clone the repository
@@ -246,30 +246,55 @@ router.post('/create-workspace', async (req, res) => {
           githubToken = newGithubToken;
         }
 
-        // Clone the repository
+        // Extract repo name from URL for the clone destination
+        const normalizedUrl = githubUrl.replace(/\/+$/, '').replace(/\.git$/, '');
+        const repoName = normalizedUrl.split('/').pop() || 'repository';
+        const clonePath = path.join(absolutePath, repoName);
+
+        // Check if clone destination already exists to prevent data loss
         try {
-          await cloneGitHubRepository(githubUrl, absolutePath, githubToken);
+          await fs.access(clonePath);
+          return res.status(409).json({
+            error: 'Directory already exists',
+            details: `The destination path "${clonePath}" already exists. Please choose a different location or remove the existing directory.`
+          });
+        } catch (err) {
+          // Directory doesn't exist, which is what we want
+        }
+
+        // Clone the repository into a subfolder
+        try {
+          await cloneGitHubRepository(githubUrl, clonePath, githubToken);
         } catch (error) {
-          // Clean up created directory on failure
+          // Only clean up if clone created partial data (check if dir exists and is empty or partial)
           try {
-            await fs.rm(absolutePath, { recursive: true, force: true });
+            const stats = await fs.stat(clonePath);
+            if (stats.isDirectory()) {
+              await fs.rm(clonePath, { recursive: true, force: true });
+            }
           } catch (cleanupError) {
-            console.error('Failed to clean up directory after clone failure:', cleanupError);
-            // Continue to throw original error
+            // Directory doesn't exist or cleanup failed - ignore
           }
           throw new Error(`Failed to clone repository: ${error.message}`);
         }
+
+        // Add the cloned repo path to the project list
+        const project = await addProjectManually(clonePath);
+
+        return res.json({
+          success: true,
+          project,
+          message: 'New workspace created and repository cloned successfully'
+        });
       }
 
-      // Add the new workspace to the project list
+      // Add the new workspace to the project list (no clone)
       const project = await addProjectManually(absolutePath);
 
       return res.json({
         success: true,
         project,
-        message: githubUrl
-          ? 'New workspace created and repository cloned successfully'
-          : 'New workspace created successfully'
+        message: 'New workspace created successfully'
       });
     }
 
@@ -306,30 +331,178 @@ async function getGithubTokenById(tokenId, userId) {
 }
 
 /**
+ * Clone repository with progress streaming (SSE)
+ * GET /api/projects/clone-progress
+ */
+router.get('/clone-progress', async (req, res) => {
+  const { path: workspacePath, githubUrl, githubTokenId, newGithubToken } = req.query;
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const sendEvent = (type, data) => {
+    res.write(`data: ${JSON.stringify({ type, ...data })}\n\n`);
+  };
+
+  try {
+    if (!workspacePath || !githubUrl) {
+      sendEvent('error', { message: 'workspacePath and githubUrl are required' });
+      res.end();
+      return;
+    }
+
+    const validation = await validateWorkspacePath(workspacePath);
+    if (!validation.valid) {
+      sendEvent('error', { message: validation.error });
+      res.end();
+      return;
+    }
+
+    const absolutePath = validation.resolvedPath;
+
+    await fs.mkdir(absolutePath, { recursive: true });
+
+    let githubToken = null;
+    if (githubTokenId) {
+      const token = await getGithubTokenById(parseInt(githubTokenId), req.user.id);
+      if (!token) {
+        await fs.rm(absolutePath, { recursive: true, force: true });
+        sendEvent('error', { message: 'GitHub token not found' });
+        res.end();
+        return;
+      }
+      githubToken = token.github_token;
+    } else if (newGithubToken) {
+      githubToken = newGithubToken;
+    }
+
+    const normalizedUrl = githubUrl.replace(/\/+$/, '').replace(/\.git$/, '');
+    const repoName = normalizedUrl.split('/').pop() || 'repository';
+    const clonePath = path.join(absolutePath, repoName);
+
+    // Check if clone destination already exists to prevent data loss
+    try {
+      await fs.access(clonePath);
+      sendEvent('error', { message: `Directory "${repoName}" already exists. Please choose a different location or remove the existing directory.` });
+      res.end();
+      return;
+    } catch (err) {
+      // Directory doesn't exist, which is what we want
+    }
+
+    let cloneUrl = githubUrl;
+    if (githubToken) {
+      try {
+        const url = new URL(githubUrl);
+        url.username = githubToken;
+        url.password = '';
+        cloneUrl = url.toString();
+      } catch (error) {
+        // SSH URL or invalid - use as-is
+      }
+    }
+
+    sendEvent('progress', { message: `Cloning into '${repoName}'...` });
+
+    const gitProcess = spawn('git', ['clone', '--progress', cloneUrl, clonePath], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        GIT_TERMINAL_PROMPT: '0'
+      }
+    });
+
+    let lastError = '';
+
+    gitProcess.stdout.on('data', (data) => {
+      const message = data.toString().trim();
+      if (message) {
+        sendEvent('progress', { message });
+      }
+    });
+
+    gitProcess.stderr.on('data', (data) => {
+      const message = data.toString().trim();
+      lastError = message;
+      if (message) {
+        sendEvent('progress', { message });
+      }
+    });
+
+    gitProcess.on('close', async (code) => {
+      if (code === 0) {
+        try {
+          const project = await addProjectManually(clonePath);
+          sendEvent('complete', { project, message: 'Repository cloned successfully' });
+        } catch (error) {
+          sendEvent('error', { message: `Clone succeeded but failed to add project: ${error.message}` });
+        }
+      } else {
+        const sanitizedError = sanitizeGitError(lastError, githubToken);
+        let errorMessage = 'Git clone failed';
+        if (lastError.includes('Authentication failed') || lastError.includes('could not read Username')) {
+          errorMessage = 'Authentication failed. Please check your credentials.';
+        } else if (lastError.includes('Repository not found')) {
+          errorMessage = 'Repository not found. Please check the URL and ensure you have access.';
+        } else if (lastError.includes('already exists')) {
+          errorMessage = 'Directory already exists';
+        } else if (sanitizedError) {
+          errorMessage = sanitizedError;
+        }
+        try {
+          await fs.rm(clonePath, { recursive: true, force: true });
+        } catch (cleanupError) {
+          console.error('Failed to clean up after clone failure:', sanitizeGitError(cleanupError.message, githubToken));
+        }
+        sendEvent('error', { message: errorMessage });
+      }
+      res.end();
+    });
+
+    gitProcess.on('error', (error) => {
+      if (error.code === 'ENOENT') {
+        sendEvent('error', { message: 'Git is not installed or not in PATH' });
+      } else {
+        sendEvent('error', { message: error.message });
+      }
+      res.end();
+    });
+
+    req.on('close', () => {
+      gitProcess.kill();
+    });
+
+  } catch (error) {
+    sendEvent('error', { message: error.message });
+    res.end();
+  }
+});
+
+/**
  * Helper function to clone a GitHub repository
  */
 function cloneGitHubRepository(githubUrl, destinationPath, githubToken = null) {
   return new Promise((resolve, reject) => {
-    // Parse GitHub URL and inject token if provided
     let cloneUrl = githubUrl;
 
     if (githubToken) {
       try {
         const url = new URL(githubUrl);
-        // Format: https://TOKEN@github.com/user/repo.git
         url.username = githubToken;
         url.password = '';
         cloneUrl = url.toString();
       } catch (error) {
-        return reject(new Error('Invalid GitHub URL format'));
+        // SSH URL - use as-is
       }
     }
 
-    const gitProcess = spawn('git', ['clone', cloneUrl, destinationPath], {
+    const gitProcess = spawn('git', ['clone', '--progress', cloneUrl, destinationPath], {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {
         ...process.env,
-        GIT_TERMINAL_PROMPT: '0' // Disable git password prompts
+        GIT_TERMINAL_PROMPT: '0'
       }
     });
 
@@ -348,7 +521,6 @@ function cloneGitHubRepository(githubUrl, destinationPath, githubToken = null) {
       if (code === 0) {
         resolve({ stdout, stderr });
       } else {
-        // Parse git error messages to provide helpful feedback
         let errorMessage = 'Git clone failed';
 
         if (stderr.includes('Authentication failed') || stderr.includes('could not read Username')) {

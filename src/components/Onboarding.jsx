@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronRight, ChevronLeft, Check, GitBranch, User, Mail, LogIn, ExternalLink, Loader2 } from 'lucide-react';
-import ClaudeLogo from './ClaudeLogo';
-import CursorLogo from './CursorLogo';
-import CodexLogo from './CodexLogo';
+import SessionProviderLogo from './llm-logo-provider/SessionProviderLogo';
 import LoginModal from './LoginModal';
 import { authenticatedFetch } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
+import { IS_PLATFORM } from '../constants/config';
 
 const Onboarding = ({ onComplete }) => {
   const [currentStep, setCurrentStep] = useState(0);
@@ -15,7 +14,7 @@ const Onboarding = ({ onComplete }) => {
   const [error, setError] = useState('');
 
   const [activeLoginProvider, setActiveLoginProvider] = useState(null);
-  const [selectedProject] = useState({ name: 'default', fullPath: '' });
+  const [selectedProject] = useState({ name: 'default', fullPath: IS_PLATFORM ? '/workspace' : '' });
 
   const [claudeAuthStatus, setClaudeAuthStatus] = useState({
     authenticated: false,
@@ -346,7 +345,7 @@ const Onboarding = ({ onComplete }) => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
-                      <ClaudeLogo size={20} />
+                      <SessionProviderLogo provider="claude" className="w-5 h-5" />
                     </div>
                     <div>
                       <div className="font-medium text-foreground flex items-center gap-2">
@@ -379,7 +378,7 @@ const Onboarding = ({ onComplete }) => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center">
-                      <CursorLogo size={20} />
+                      <SessionProviderLogo provider="cursor" className="w-5 h-5" />
                     </div>
                     <div>
                       <div className="font-medium text-foreground flex items-center gap-2">
@@ -412,7 +411,7 @@ const Onboarding = ({ onComplete }) => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center">
-                      <CodexLogo className="w-5 h-5" />
+                      <SessionProviderLogo provider="codex" className="w-5 h-5" />
                     </div>
                     <div>
                       <div className="font-medium text-foreground flex items-center gap-2">
@@ -576,6 +575,7 @@ const Onboarding = ({ onComplete }) => {
           provider={activeLoginProvider}
           project={selectedProject}
           onComplete={handleLoginComplete}
+          isOnboarding={true}
         />
       )}
     </>

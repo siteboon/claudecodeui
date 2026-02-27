@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Load environment variables from .env file
+// Load environment variables before other imports execute
+import './load-env.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -7,6 +8,8 @@ import { dirname } from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+const installMode = fs.existsSync(path.join(__dirname, '..', '.git')) ? 'git' : 'npm';
 
 // ANSI color codes for terminal output
 const colors = {
@@ -27,22 +30,6 @@ const c = {
     bright: (text) => `${colors.bright}${text}${colors.reset}`,
     dim: (text) => `${colors.dim}${text}${colors.reset}`,
 };
-
-try {
-    const envPath = path.join(__dirname, '../.env');
-    const envFile = fs.readFileSync(envPath, 'utf8');
-    envFile.split('\n').forEach(line => {
-        const trimmedLine = line.trim();
-        if (trimmedLine && !trimmedLine.startsWith('#')) {
-            const [key, ...valueParts] = trimmedLine.split('=');
-            if (key && valueParts.length > 0 && !process.env[key]) {
-                process.env[key] = valueParts.join('=').trim();
-            }
-        }
-    });
-} catch (e) {
-    console.log('No .env file found or error reading it:', e.message);
-}
 
 console.log('PORT from env:', process.env.PORT);
 
@@ -70,97 +57,152 @@ import mcpUtilsRoutes from './routes/mcp-utils.js';
 import commandsRoutes from './routes/commands.js';
 import settingsRoutes from './routes/settings.js';
 import agentRoutes from './routes/agent.js';
-import projectsRoutes from './routes/projects.js';
+import projectsRoutes, { WORKSPACES_ROOT, validateWorkspacePath } from './routes/projects.js';
 import cliAuthRoutes from './routes/cli-auth.js';
 import userRoutes from './routes/user.js';
 import codexRoutes from './routes/codex.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
+import { IS_PLATFORM } from './constants/config.js';
 
-// File system watcher for projects folder
-let projectsWatcher = null;
+// File system watchers for provider project/session folders
+const PROVIDER_WATCH_PATHS = [
+    { provider: 'claude', rootPath: path.join(os.homedir(), '.claude', 'projects') },
+    { provider: 'cursor', rootPath: path.join(os.homedir(), '.cursor', 'chats') },
+    { provider: 'codex', rootPath: path.join(os.homedir(), '.codex', 'sessions') }
+];
+const WATCHER_IGNORED_PATTERNS = [
+    '**/node_modules/**',
+    '**/.git/**',
+    '**/dist/**',
+    '**/build/**',
+    '**/*.tmp',
+    '**/*.swp',
+    '**/.DS_Store'
+];
+const WATCHER_DEBOUNCE_MS = 300;
+let projectsWatchers = [];
+let projectsWatcherDebounceTimer = null;
 const connectedClients = new Set();
+let isGetProjectsRunning = false; // Flag to prevent reentrant calls
 
-// Setup file system watcher for Claude projects folder using chokidar
+// Broadcast progress to all connected WebSocket clients
+function broadcastProgress(progress) {
+    const message = JSON.stringify({
+        type: 'loading_progress',
+        ...progress
+    });
+    connectedClients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(message);
+        }
+    });
+}
+
+// Setup file system watchers for Claude, Cursor, and Codex project/session folders
 async function setupProjectsWatcher() {
     const chokidar = (await import('chokidar')).default;
-    const claudeProjectsPath = path.join(os.homedir(), '.claude', 'projects');
 
-    if (projectsWatcher) {
-        projectsWatcher.close();
+    if (projectsWatcherDebounceTimer) {
+        clearTimeout(projectsWatcherDebounceTimer);
+        projectsWatcherDebounceTimer = null;
     }
 
-    try {
-        // Initialize chokidar watcher with optimized settings
-        projectsWatcher = chokidar.watch(claudeProjectsPath, {
-            ignored: [
-                '**/node_modules/**',
-                '**/.git/**',
-                '**/dist/**',
-                '**/build/**',
-                '**/*.tmp',
-                '**/*.swp',
-                '**/.DS_Store'
-            ],
-            persistent: true,
-            ignoreInitial: true, // Don't fire events for existing files on startup
-            followSymlinks: false,
-            depth: 10, // Reasonable depth limit
-            awaitWriteFinish: {
-                stabilityThreshold: 100, // Wait 100ms for file to stabilize
-                pollInterval: 50
+    await Promise.all(
+        projectsWatchers.map(async (watcher) => {
+            try {
+                await watcher.close();
+            } catch (error) {
+                console.error('[WARN] Failed to close watcher:', error);
             }
-        });
+        })
+    );
+    projectsWatchers = [];
 
-        // Debounce function to prevent excessive notifications
-        let debounceTimer;
-        const debouncedUpdate = async (eventType, filePath) => {
-            clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(async () => {
-                try {
+    const debouncedUpdate = (eventType, filePath, provider, rootPath) => {
+        if (projectsWatcherDebounceTimer) {
+            clearTimeout(projectsWatcherDebounceTimer);
+        }
 
-                    // Clear project directory cache when files change
-                    clearProjectDirectoryCache();
+        projectsWatcherDebounceTimer = setTimeout(async () => {
+            // Prevent reentrant calls
+            if (isGetProjectsRunning) {
+                return;
+            }
 
-                    // Get updated projects list
-                    const updatedProjects = await getProjects();
+            try {
+                isGetProjectsRunning = true;
 
-                    // Notify all connected clients about the project changes
-                    const updateMessage = JSON.stringify({
-                        type: 'projects_updated',
-                        projects: updatedProjects,
-                        timestamp: new Date().toISOString(),
-                        changeType: eventType,
-                        changedFile: path.relative(claudeProjectsPath, filePath)
-                    });
+                // Clear project directory cache when files change
+                clearProjectDirectoryCache();
 
-                    connectedClients.forEach(client => {
-                        if (client.readyState === WebSocket.OPEN) {
-                            client.send(updateMessage);
-                        }
-                    });
+                // Get updated projects list
+                const updatedProjects = await getProjects(broadcastProgress);
 
-                } catch (error) {
-                    console.error('[ERROR] Error handling project changes:', error);
+                // Notify all connected clients about the project changes
+                const updateMessage = JSON.stringify({
+                    type: 'projects_updated',
+                    projects: updatedProjects,
+                    timestamp: new Date().toISOString(),
+                    changeType: eventType,
+                    changedFile: path.relative(rootPath, filePath),
+                    watchProvider: provider
+                });
+
+                connectedClients.forEach(client => {
+                    if (client.readyState === WebSocket.OPEN) {
+                        client.send(updateMessage);
+                    }
+                });
+
+            } catch (error) {
+                console.error('[ERROR] Error handling project changes:', error);
+            } finally {
+                isGetProjectsRunning = false;
+            }
+        }, WATCHER_DEBOUNCE_MS);
+    };
+
+    for (const { provider, rootPath } of PROVIDER_WATCH_PATHS) {
+        try {
+            // chokidar v4 emits ENOENT via the "error" event for missing roots and will not auto-recover.
+            // Ensure provider folders exist before creating the watcher so watching stays active.
+            await fsPromises.mkdir(rootPath, { recursive: true });
+
+            // Initialize chokidar watcher with optimized settings
+            const watcher = chokidar.watch(rootPath, {
+                ignored: WATCHER_IGNORED_PATTERNS,
+                persistent: true,
+                ignoreInitial: true, // Don't fire events for existing files on startup
+                followSymlinks: false,
+                depth: 10, // Reasonable depth limit
+                awaitWriteFinish: {
+                    stabilityThreshold: 100, // Wait 100ms for file to stabilize
+                    pollInterval: 50
                 }
-            }, 300); // 300ms debounce (slightly faster than before)
-        };
-
-        // Set up event listeners
-        projectsWatcher
-            .on('add', (filePath) => debouncedUpdate('add', filePath))
-            .on('change', (filePath) => debouncedUpdate('change', filePath))
-            .on('unlink', (filePath) => debouncedUpdate('unlink', filePath))
-            .on('addDir', (dirPath) => debouncedUpdate('addDir', dirPath))
-            .on('unlinkDir', (dirPath) => debouncedUpdate('unlinkDir', dirPath))
-            .on('error', (error) => {
-                console.error('[ERROR] Chokidar watcher error:', error);
-            })
-            .on('ready', () => {
             });
 
-    } catch (error) {
-        console.error('[ERROR] Failed to setup projects watcher:', error);
+            // Set up event listeners
+            watcher
+                .on('add', (filePath) => debouncedUpdate('add', filePath, provider, rootPath))
+                .on('change', (filePath) => debouncedUpdate('change', filePath, provider, rootPath))
+                .on('unlink', (filePath) => debouncedUpdate('unlink', filePath, provider, rootPath))
+                .on('addDir', (dirPath) => debouncedUpdate('addDir', dirPath, provider, rootPath))
+                .on('unlinkDir', (dirPath) => debouncedUpdate('unlinkDir', dirPath, provider, rootPath))
+                .on('error', (error) => {
+                    console.error(`[ERROR] ${provider} watcher error:`, error);
+                })
+                .on('ready', () => {
+                });
+
+            projectsWatchers.push(watcher);
+        } catch (error) {
+            console.error(`[ERROR] Failed to setup ${provider} watcher for ${rootPath}:`, error);
+        }
+    }
+
+    if (projectsWatchers.length === 0) {
+        console.error('[ERROR] Failed to setup any provider watchers');
     }
 }
 
@@ -170,6 +212,69 @@ const server = http.createServer(app);
 
 const ptySessionsMap = new Map();
 const PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
+const SHELL_URL_PARSE_BUFFER_LIMIT = 32768;
+const ANSI_ESCAPE_SEQUENCE_REGEX = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1B\\))/g;
+const TRAILING_URL_PUNCTUATION_REGEX = /[)\]}>.,;:!?]+$/;
+
+function stripAnsiSequences(value = '') {
+    return value.replace(ANSI_ESCAPE_SEQUENCE_REGEX, '');
+}
+
+function normalizeDetectedUrl(url) {
+    if (!url || typeof url !== 'string') return null;
+
+    const cleaned = url.trim().replace(TRAILING_URL_PUNCTUATION_REGEX, '');
+    if (!cleaned) return null;
+
+    try {
+        const parsed = new URL(cleaned);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+            return null;
+        }
+        return parsed.toString();
+    } catch {
+        return null;
+    }
+}
+
+function extractUrlsFromText(value = '') {
+    const directMatches = value.match(/https?:\/\/[^\s<>"'`\\\x1b\x07]+/gi) || [];
+
+    // Handle wrapped terminal URLs split across lines by terminal width.
+    const wrappedMatches = [];
+    const continuationRegex = /^[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]+$/;
+    const lines = value.split(/\r?\n/);
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        const startMatch = line.match(/https?:\/\/[^\s<>"'`\\\x1b\x07]+/i);
+        if (!startMatch) continue;
+
+        let combined = startMatch[0];
+        let j = i + 1;
+        while (j < lines.length) {
+            const continuation = lines[j].trim();
+            if (!continuation) break;
+            if (!continuationRegex.test(continuation)) break;
+            combined += continuation;
+            j++;
+        }
+
+        wrappedMatches.push(combined.replace(/\r?\n\s*/g, ''));
+    }
+
+    return Array.from(new Set([...directMatches, ...wrappedMatches]));
+}
+
+function shouldAutoOpenUrlFromOutput(value = '') {
+    const normalized = value.toLowerCase();
+    return (
+        normalized.includes('browser didn\'t open') ||
+        normalized.includes('open this url') ||
+        normalized.includes('continue in your browser') ||
+        normalized.includes('press enter to open') ||
+        normalized.includes('open_url:')
+    );
+}
 
 // Single WebSocket server that handles both paths
 const wss = new WebSocketServer({
@@ -178,7 +283,7 @@ const wss = new WebSocketServer({
         console.log('WebSocket connection attempt to:', info.req.url);
 
         // Platform mode: always allow connection
-        if (process.env.VITE_IS_PLATFORM === 'true') {
+        if (IS_PLATFORM) {
             const user = authenticateWebSocket(null); // Will return first user
             if (!user) {
                 console.log('[WARN] Platform mode: No user found in database');
@@ -230,7 +335,8 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    installMode
   });
 });
 
@@ -307,11 +413,13 @@ app.post('/api/system/update', authenticateToken, async (req, res) => {
 
         console.log('Starting system update from directory:', projectRoot);
 
-        // Run the update command
-        const updateCommand = 'git checkout main && git pull && npm install';
+        // Run the update command based on install mode
+        const updateCommand = installMode === 'git'
+            ? 'git checkout main && git pull && npm install'
+            : 'npm install -g @siteboon/claude-code-ui@latest';
 
         const child = spawn('sh', ['-c', updateCommand], {
-            cwd: projectRoot,
+            cwd: installMode === 'git' ? projectRoot : os.homedir(),
             env: process.env
         });
 
@@ -366,7 +474,7 @@ app.post('/api/system/update', authenticateToken, async (req, res) => {
 
 app.get('/api/projects', authenticateToken, async (req, res) => {
     try {
-        const projects = await getProjects();
+        const projects = await getProjects(broadcastProgress);
         res.json(projects);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -433,11 +541,12 @@ app.delete('/api/projects/:projectName/sessions/:sessionId', authenticateToken, 
     }
 });
 
-// Delete project endpoint (only if empty)
+// Delete project endpoint (force=true to delete with sessions)
 app.delete('/api/projects/:projectName', authenticateToken, async (req, res) => {
     try {
         const { projectName } = req.params;
-        await deleteProject(projectName);
+        const force = req.query.force === 'true';
+        await deleteProject(projectName, force);
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -461,22 +570,42 @@ app.post('/api/projects/create', authenticateToken, async (req, res) => {
     }
 });
 
+const expandWorkspacePath = (inputPath) => {
+    if (!inputPath) return inputPath;
+    if (inputPath === '~') {
+        return WORKSPACES_ROOT;
+    }
+    if (inputPath.startsWith('~/') || inputPath.startsWith('~\\')) {
+        return path.join(WORKSPACES_ROOT, inputPath.slice(2));
+    }
+    return inputPath;
+};
+
 // Browse filesystem endpoint for project suggestions - uses existing getFileTree
 app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
     try {
         const { path: dirPath } = req.query;
         
+        console.log('[API] Browse filesystem request for path:', dirPath);
+        console.log('[API] WORKSPACES_ROOT is:', WORKSPACES_ROOT);
         // Default to home directory if no path provided
-        const homeDir = os.homedir();
-        let targetPath = dirPath ? dirPath.replace('~', homeDir) : homeDir;
+        const defaultRoot = WORKSPACES_ROOT;
+        let targetPath = dirPath ? expandWorkspacePath(dirPath) : defaultRoot;
         
         // Resolve and normalize the path
         targetPath = path.resolve(targetPath);
+
+        // Security check - ensure path is within allowed workspace root
+        const validation = await validateWorkspacePath(targetPath);
+        if (!validation.valid) {
+            return res.status(403).json({ error: validation.error });
+        }
+        const resolvedPath = validation.resolvedPath || targetPath;
         
         // Security check - ensure path is accessible
         try {
-            await fs.promises.access(targetPath);
-            const stats = await fs.promises.stat(targetPath);
+            await fs.promises.access(resolvedPath);
+            const stats = await fs.promises.stat(resolvedPath);
             
             if (!stats.isDirectory()) {
                 return res.status(400).json({ error: 'Path is not a directory' });
@@ -486,7 +615,7 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
         }
         
         // Use existing getFileTree function with shallow depth (only direct children)
-        const fileTree = await getFileTree(targetPath, 1, 0, false); // maxDepth=1, showHidden=false
+        const fileTree = await getFileTree(resolvedPath, 1, 0, false); // maxDepth=1, showHidden=false
         
         // Filter only directories and format for suggestions
         const directories = fileTree
@@ -496,11 +625,23 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
                 name: item.name,
                 type: 'directory'
             }))
-            .slice(0, 20); // Limit results
+            .sort((a, b) => {
+                const aHidden = a.name.startsWith('.');
+                const bHidden = b.name.startsWith('.');
+                if (aHidden && !bHidden) return 1;
+                if (!aHidden && bHidden) return -1;
+                return a.name.localeCompare(b.name);
+            });
             
         // Add common directories if browsing home directory
         const suggestions = [];
-        if (targetPath === homeDir) {
+        let resolvedWorkspaceRoot = defaultRoot;
+        try {
+            resolvedWorkspaceRoot = await fsPromises.realpath(defaultRoot);
+        } catch (error) {
+            // Use default root as-is if realpath fails
+        }
+        if (resolvedPath === resolvedWorkspaceRoot) {
             const commonDirs = ['Desktop', 'Documents', 'Projects', 'Development', 'Dev', 'Code', 'workspace'];
             const existingCommon = directories.filter(dir => commonDirs.includes(dir.name));
             const otherDirs = directories.filter(dir => !commonDirs.includes(dir.name));
@@ -511,7 +652,7 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
         }
         
         res.json({
-            path: targetPath,
+            path: resolvedPath,
             suggestions: suggestions
         });
         
@@ -521,13 +662,52 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
     }
 });
 
+app.post('/api/create-folder', authenticateToken, async (req, res) => {
+    try {
+        const { path: folderPath } = req.body;
+        if (!folderPath) {
+            return res.status(400).json({ error: 'Path is required' });
+        }
+        const expandedPath = expandWorkspacePath(folderPath);
+        const resolvedInput = path.resolve(expandedPath);
+        const validation = await validateWorkspacePath(resolvedInput);
+        if (!validation.valid) {
+            return res.status(403).json({ error: validation.error });
+        }
+        const targetPath = validation.resolvedPath || resolvedInput;
+        const parentDir = path.dirname(targetPath);
+        try {
+            await fs.promises.access(parentDir);
+        } catch (err) {
+            return res.status(404).json({ error: 'Parent directory does not exist' });
+        }
+        try {
+            await fs.promises.access(targetPath);
+            return res.status(409).json({ error: 'Folder already exists' });
+        } catch (err) {
+            // Folder doesn't exist, which is what we want
+        }
+        try {
+            await fs.promises.mkdir(targetPath, { recursive: false });
+            res.json({ success: true, path: targetPath });
+        } catch (mkdirError) {
+            if (mkdirError.code === 'EEXIST') {
+                return res.status(409).json({ error: 'Folder already exists' });
+            }
+            throw mkdirError;
+        }
+    } catch (error) {
+        console.error('Error creating folder:', error);
+        res.status(500).json({ error: 'Failed to create folder' });
+    }
+});
+
 // Read file content endpoint
 app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) => {
     try {
         const { projectName } = req.params;
         const { filePath } = req.query;
 
-        console.log('[DEBUG] File read request:', projectName, filePath);
 
         // Security: ensure the requested path is inside the project root
         if (!filePath) {
@@ -568,7 +748,6 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
         const { projectName } = req.params;
         const { path: filePath } = req.query;
 
-        console.log('[DEBUG] Binary file serve request:', projectName, filePath);
 
         // Security: ensure the requested path is inside the project root
         if (!filePath) {
@@ -622,7 +801,6 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
         const { projectName } = req.params;
         const { filePath, content } = req.body;
 
-        console.log('[DEBUG] File save request:', projectName, filePath);
 
         // Security: ensure the requested path is inside the project root
         if (!filePath) {
@@ -879,7 +1057,8 @@ function handleShellConnection(ws) {
     console.log('🐚 Shell client connected');
     let shellProcess = null;
     let ptySessionKey = null;
-    let outputBuffer = [];
+    let urlDetectionBuffer = '';
+    const announcedAuthUrls = new Set();
 
     ws.on('message', async (message) => {
         try {
@@ -893,6 +1072,8 @@ function handleShellConnection(ws) {
                 const provider = data.provider || 'claude';
                 const initialCommand = data.initialCommand;
                 const isPlainShell = data.isPlainShell || (!!initialCommand && !hasSession) || provider === 'plain-shell';
+                urlDetectionBuffer = '';
+                announcedAuthUrls.clear();
 
                 // Login commands (Claude/Cursor auth) should never reuse cached sessions
                 const isLoginCommand = initialCommand && (
@@ -957,7 +1138,7 @@ function handleShellConnection(ws) {
                 if (isPlainShell) {
                     welcomeMsg = `\x1b[36mStarting terminal in: ${projectPath}\x1b[0m\r\n`;
                 } else {
-                    const providerName = provider === 'cursor' ? 'Cursor' : 'Claude';
+                    const providerName = provider === 'cursor' ? 'Cursor' : provider === 'codex' ? 'Codex' : 'Claude';
                     welcomeMsg = hasSession ?
                         `\x1b[36mResuming ${providerName} session ${sessionId} in: ${projectPath}\x1b[0m\r\n` :
                         `\x1b[36mStarting new ${providerName} session in: ${projectPath}\x1b[0m\r\n`;
@@ -991,6 +1172,23 @@ function handleShellConnection(ws) {
                                 shellCommand = `cd "${projectPath}" && cursor-agent --resume="${sessionId}"`;
                             } else {
                                 shellCommand = `cd "${projectPath}" && cursor-agent`;
+                            }
+                        }
+                    } else if (provider === 'codex') {
+                        // Use codex command
+                        if (os.platform() === 'win32') {
+                            if (hasSession && sessionId) {
+                                // Try to resume session, but with fallback to a new session if it fails
+                                shellCommand = `Set-Location -Path "${projectPath}"; codex resume "${sessionId}"; if ($LASTEXITCODE -ne 0) { codex }`;
+                            } else {
+                                shellCommand = `Set-Location -Path "${projectPath}"; codex`;
+                            }
+                        } else {
+                            if (hasSession && sessionId) {
+                                // Try to resume session, but with fallback to a new session if it fails
+                                shellCommand = `cd "${projectPath}" && codex resume "${sessionId}" || codex`;
+                            } else {
+                                shellCommand = `cd "${projectPath}" && codex`;
                             }
                         }
                     } else {
@@ -1032,9 +1230,7 @@ function handleShellConnection(ws) {
                             ...process.env,
                             TERM: 'xterm-256color',
                             COLORTERM: 'truecolor',
-                            FORCE_COLOR: '3',
-                            // Override browser opening commands to echo URL for detection
-                            BROWSER: os.platform() === 'win32' ? 'echo "OPEN_URL:"' : 'echo "OPEN_URL:"'
+                            FORCE_COLOR: '3'
                         }
                     });
 
@@ -1064,38 +1260,47 @@ function handleShellConnection(ws) {
                         if (session.ws && session.ws.readyState === WebSocket.OPEN) {
                             let outputData = data;
 
-                            // Check for various URL opening patterns
-                            const patterns = [
-                                // Direct browser opening commands
-                                /(?:xdg-open|open|start)\s+(https?:\/\/[^\s\x1b\x07]+)/g,
-                                // BROWSER environment variable override
+                            const cleanChunk = stripAnsiSequences(data);
+                            urlDetectionBuffer = `${urlDetectionBuffer}${cleanChunk}`.slice(-SHELL_URL_PARSE_BUFFER_LIMIT);
+
+                            outputData = outputData.replace(
                                 /OPEN_URL:\s*(https?:\/\/[^\s\x1b\x07]+)/g,
-                                // Git and other tools opening URLs
-                                /Opening\s+(https?:\/\/[^\s\x1b\x07]+)/gi,
-                                // General URL patterns that might be opened
-                                /Visit:\s*(https?:\/\/[^\s\x1b\x07]+)/gi,
-                                /View at:\s*(https?:\/\/[^\s\x1b\x07]+)/gi,
-                                /Browse to:\s*(https?:\/\/[^\s\x1b\x07]+)/gi
-                            ];
+                                '[INFO] Opening in browser: $1'
+                            );
 
-                            patterns.forEach(pattern => {
-                                let match;
-                                while ((match = pattern.exec(data)) !== null) {
-                                    const url = match[1];
-                                    console.log('[DEBUG] Detected URL for opening:', url);
+                            const emitAuthUrl = (detectedUrl, autoOpen = false) => {
+                                const normalizedUrl = normalizeDetectedUrl(detectedUrl);
+                                if (!normalizedUrl) return;
 
-                                    // Send URL opening message to client
+                                const isNewUrl = !announcedAuthUrls.has(normalizedUrl);
+                                if (isNewUrl) {
+                                    announcedAuthUrls.add(normalizedUrl);
                                     session.ws.send(JSON.stringify({
-                                        type: 'url_open',
-                                        url: url
+                                        type: 'auth_url',
+                                        url: normalizedUrl,
+                                        autoOpen
                                     }));
-
-                                    // Replace the OPEN_URL pattern with a user-friendly message
-                                    if (pattern.source.includes('OPEN_URL')) {
-                                        outputData = outputData.replace(match[0], `[INFO] Opening in browser: ${url}`);
-                                    }
                                 }
-                            });
+
+                            };
+
+                            const normalizedDetectedUrls = extractUrlsFromText(urlDetectionBuffer)
+                                .map((url) => normalizeDetectedUrl(url))
+                                .filter(Boolean);
+
+                            // Prefer the most complete URL if shorter prefix variants are also present.
+                            const dedupedDetectedUrls = Array.from(new Set(normalizedDetectedUrls)).filter((url, _, urls) =>
+                                !urls.some((otherUrl) => otherUrl !== url && otherUrl.startsWith(url))
+                            );
+
+                            dedupedDetectedUrls.forEach((url) => emitAuthUrl(url, false));
+
+                            if (shouldAutoOpenUrlFromOutput(cleanChunk) && dedupedDetectedUrls.length > 0) {
+                                const bestUrl = dedupedDetectedUrls.reduce((longest, current) =>
+                                    current.length > longest.length ? current : longest
+                                );
+                                emitAuthUrl(bestUrl, true);
+                            }
 
                             // Send regular output
                             session.ws.send(JSON.stringify({
@@ -1703,6 +1908,9 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
 }
 
 const PORT = process.env.PORT || 3001;
+const HOST = process.env.HOST || '0.0.0.0';
+// Show localhost in URL when binding to all interfaces (0.0.0.0 isn't a connectable address)
+const DISPLAY_HOST = HOST === '0.0.0.0' ? 'localhost' : HOST;
 
 // Initialize database and start server
 async function startServer() {
@@ -1722,7 +1930,7 @@ async function startServer() {
             console.log(`${c.warn('[WARN]')} Note: Requests will be proxied to Vite dev server at ${c.dim('http://localhost:' + (process.env.VITE_PORT || 5173))}`);
         }
 
-        server.listen(PORT, '0.0.0.0', async () => {
+        server.listen(PORT, HOST, async () => {
             const appInstallPath = path.join(__dirname, '..');
 
             console.log('');
@@ -1730,7 +1938,7 @@ async function startServer() {
             console.log(`  ${c.bright('Claude Code UI Server - Ready')}`);
             console.log(c.dim('═'.repeat(63)));
             console.log('');
-            console.log(`${c.info('[INFO]')} Server URL:  ${c.bright('http://0.0.0.0:' + PORT)}`);
+            console.log(`${c.info('[INFO]')} Server URL:  ${c.bright('http://' + DISPLAY_HOST + ':' + PORT)}`);
             console.log(`${c.info('[INFO]')} Installed at: ${c.dim(appInstallPath)}`);
             console.log(`${c.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
             console.log('');

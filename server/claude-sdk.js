@@ -13,41 +13,26 @@
  */
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
-// Used to mint unique approval request IDs when randomUUID is not available.
-// This keeps parallel tool approvals from colliding; it does not add any crypto/security guarantees.
 import crypto from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
 import { CLAUDE_MODELS } from '../shared/modelConstants.js';
 
-// Session tracking: Map of session IDs to active query instances
 const activeSessions = new Map();
-// In-memory registry of pending tool approvals keyed by requestId.
-// This does not persist approvals or share across processes; it exists so the
-// SDK can pause tool execution while the UI decides what to do.
 const pendingToolApprovals = new Map();
 
-// Default approval timeout kept under the SDK's 60s control timeout.
-// This does not change SDK limits; it only defines how long we wait for the UI,
-// introduced to avoid hanging the run when no decision arrives.
 const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEOUT_MS, 10) || 55000;
 
-// Generate a stable request ID for UI approval flows.
-// This does not encode tool details or get shown to users; it exists so the UI
-// can respond to the correct pending request without collisions.
+const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion']);
+
 function createRequestId() {
-  // if clause is used because randomUUID is not available in older Node.js versions
   if (typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }
   return crypto.randomBytes(16).toString('hex');
 }
 
-// Wait for a UI approval decision, honoring SDK cancellation.
-// This does not auto-approve or auto-deny; it only resolves with UI input,
-// and it cleans up the pending map to avoid leaks, introduced to prevent
-// replying after the SDK cancels the control request.
 function waitForToolApproval(requestId, options = {}) {
   const { timeoutMs = TOOL_APPROVAL_TIMEOUT_MS, signal, onCancel } = options;
 
@@ -61,24 +46,25 @@ function waitForToolApproval(requestId, options = {}) {
       resolve(decision);
     };
 
+    let timeout;
+
     const cleanup = () => {
       pendingToolApprovals.delete(requestId);
-      clearTimeout(timeout);
+      if (timeout) clearTimeout(timeout);
       if (signal && abortHandler) {
         signal.removeEventListener('abort', abortHandler);
       }
     };
 
-    // Timeout is local to this process; it does not override SDK timing.
-    // It exists to prevent the UI prompt from lingering indefinitely.
-    const timeout = setTimeout(() => {
-      onCancel?.('timeout');
-      finalize(null);
-    }, timeoutMs);
+    // timeoutMs 0 = wait indefinitely (interactive tools)
+    if (timeoutMs > 0) {
+      timeout = setTimeout(() => {
+        onCancel?.('timeout');
+        finalize(null);
+      }, timeoutMs);
+    }
 
     const abortHandler = () => {
-      // If the SDK cancels the control request, stop waiting to avoid
-      // replying after the process is no longer ready for writes.
       onCancel?.('cancelled');
       finalize({ cancelled: true });
     };
@@ -98,9 +84,6 @@ function waitForToolApproval(requestId, options = {}) {
   });
 }
 
-// Resolve a pending approval. This does not validate the decision payload;
-// validation and tool matching remain in canUseTool, which keeps this as a
-// lightweight WebSocket -> SDK relay.
 function resolveToolApproval(requestId, decision) {
   const resolver = pendingToolApprovals.get(requestId);
   if (resolver) {
@@ -175,9 +158,6 @@ function mapCliOptionsToSDK(options = {}) {
     sdkOptions.permissionMode = 'bypassPermissions';
   }
 
-  // Map allowed tools (always set to avoid implicit "allow all" defaults).
-  // This does not grant permissions by itself; it just configures the SDK,
-  // introduced because leaving it undefined made the SDK treat it as "all tools allowed."
   let allowedTools = [...(settings.allowedTools || [])];
 
   // Add plan mode default tools
@@ -192,8 +172,11 @@ function mapCliOptionsToSDK(options = {}) {
 
   sdkOptions.allowedTools = allowedTools;
 
-  // Map disallowed tools (always set so the SDK doesn't treat "undefined" as permissive).
-  // This does not override allowlists; it only feeds the canUseTool gate.
+  // Use the tools preset to make all default built-in tools available (including AskUserQuestion).
+  // This was introduced in SDK 0.1.57. Omitting this preserves existing behavior (all tools available),
+  // but being explicit ensures forward compatibility and clarity.
+  sdkOptions.tools = { type: 'preset', preset: 'claude_code' };
+
   sdkOptions.disallowedTools = settings.disallowedTools || [];
 
   // Map model (default to sonnet)
@@ -267,9 +250,13 @@ function getAllSessions() {
  * @returns {Object} Transformed message ready for WebSocket
  */
 function transformMessage(sdkMessage) {
-  // SDK messages are already in a format compatible with the frontend
-  // The CLI sends them wrapped in {type: 'claude-response', data: message}
-  // We'll do the same here to maintain compatibility
+  // Extract parent_tool_use_id for subagent tool grouping
+  if (sdkMessage.parent_tool_use_id) {
+    return {
+      ...sdkMessage,
+      parentToolUseId: sdkMessage.parent_tool_use_id
+    };
+  }
   return sdkMessage;
 }
 
@@ -490,27 +477,27 @@ async function queryClaudeSDK(command, options = {}, ws) {
     tempImagePaths = imageResult.tempImagePaths;
     tempDir = imageResult.tempDir;
 
-    // Gate tool usage with explicit UI approval when not auto-approved.
-    // This does not render UI or persist permissions; it only bridges to the UI
-    // via WebSocket and waits for the response, introduced so tool calls pause
-    // instead of auto-running when the allowlist is empty.
     sdkOptions.canUseTool = async (toolName, input, context) => {
-      if (sdkOptions.permissionMode === 'bypassPermissions') {
-        return { behavior: 'allow', updatedInput: input };
-      }
+      const requiresInteraction = TOOLS_REQUIRING_INTERACTION.has(toolName);
 
-      const isDisallowed = (sdkOptions.disallowedTools || []).some(entry =>
-        matchesToolPermission(entry, toolName, input)
-      );
-      if (isDisallowed) {
-        return { behavior: 'deny', message: 'Tool disallowed by settings' };
-      }
+      if (!requiresInteraction) {
+        if (sdkOptions.permissionMode === 'bypassPermissions') {
+          return { behavior: 'allow', updatedInput: input };
+        }
 
-      const isAllowed = (sdkOptions.allowedTools || []).some(entry =>
-        matchesToolPermission(entry, toolName, input)
-      );
-      if (isAllowed) {
-        return { behavior: 'allow', updatedInput: input };
+        const isDisallowed = (sdkOptions.disallowedTools || []).some(entry =>
+          matchesToolPermission(entry, toolName, input)
+        );
+        if (isDisallowed) {
+          return { behavior: 'deny', message: 'Tool disallowed by settings' };
+        }
+
+        const isAllowed = (sdkOptions.allowedTools || []).some(entry =>
+          matchesToolPermission(entry, toolName, input)
+        );
+        if (isAllowed) {
+          return { behavior: 'allow', updatedInput: input };
+        }
       }
 
       const requestId = createRequestId();
@@ -522,9 +509,8 @@ async function queryClaudeSDK(command, options = {}, ws) {
         sessionId: capturedSessionId || sessionId || null
       });
 
-      // Wait for the UI; if the SDK cancels, notify the UI so it can dismiss the banner.
-      // This does not retry or resurface the prompt; it just reflects the cancellation.
       const decision = await waitForToolApproval(requestId, {
+        timeoutMs: requiresInteraction ? 0 : undefined,
         signal: context?.signal,
         onCancel: (reason) => {
           ws.send({
@@ -544,8 +530,6 @@ async function queryClaudeSDK(command, options = {}, ws) {
       }
 
       if (decision.allow) {
-        // rememberEntry only updates this run's in-memory allowlist to prevent
-        // repeated prompts in the same session; persistence is handled by the UI.
         if (decision.rememberEntry && typeof decision.rememberEntry === 'string') {
           if (!sdkOptions.allowedTools.includes(decision.rememberEntry)) {
             sdkOptions.allowedTools.push(decision.rememberEntry);
@@ -560,11 +544,21 @@ async function queryClaudeSDK(command, options = {}, ws) {
       return { behavior: 'deny', message: decision.message ?? 'User denied tool use' };
     };
 
-    // Create SDK query instance
+    // Set stream-close timeout for interactive tools (Query constructor reads it synchronously). Claude Agent SDK has a default of 5s and this overrides it
+    const prevStreamTimeout = process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT;
+    process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT = '300000';
+
     const queryInstance = query({
       prompt: finalCommand,
       options: sdkOptions
     });
+
+    // Restore immediately — Query constructor already captured the value
+    if (prevStreamTimeout !== undefined) {
+      process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT = prevStreamTimeout;
+    } else {
+      delete process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT;
+    }
 
     // Track the query instance for abort capability
     if (capturedSessionId) {
@@ -599,11 +593,15 @@ async function queryClaudeSDK(command, options = {}, ws) {
         console.log('No session_id in message or already captured. message.session_id:', message.session_id, 'capturedSessionId:', capturedSessionId);
       }
 
+      // logs which model was used in the message
+      console.log("---> Model was sent using:", Object.keys(message.modelUsage || {}));
+
       // Transform and send message to WebSocket
       const transformedMessage = transformMessage(message);
       ws.send({
         type: 'claude-response',
-        data: transformedMessage
+        data: transformedMessage,
+        sessionId: capturedSessionId || sessionId || null
       });
 
       // Extract and send token budget updates from result messages
@@ -613,7 +611,8 @@ async function queryClaudeSDK(command, options = {}, ws) {
           console.log('Token budget from modelUsage:', tokenBudget);
           ws.send({
             type: 'token-budget',
-            data: tokenBudget
+            data: tokenBudget,
+            sessionId: capturedSessionId || sessionId || null
           });
         }
       }
@@ -651,7 +650,8 @@ async function queryClaudeSDK(command, options = {}, ws) {
     // Send error to WebSocket
     ws.send({
       type: 'claude-error',
-      error: error.message
+      error: error.message,
+      sessionId: capturedSessionId || sessionId || null
     });
 
     throw error;
