@@ -140,7 +140,12 @@ function ChatInterface({
     showFileDropdown,
     filteredFiles,
     selectedFileIndex,
-    renderInputWithMentions,
+    activeSkillTooltip,
+    skillInfoDialogState,
+    renderInputWithSkillDecorations,
+    openSkillInfoDialogFromMenu,
+    closeSkillInfoDialog,
+    clearSkillToken,
     selectFile,
     attachedImages,
     setAttachedImages,
@@ -362,7 +367,12 @@ function ChatInterface({
           getInputProps={getInputProps as (...args: unknown[]) => Record<string, unknown>}
           openImagePicker={openImagePicker}
           inputHighlightRef={inputHighlightRef}
-          renderInputWithMentions={renderInputWithMentions}
+          renderInputWithSkillDecorations={renderInputWithSkillDecorations}
+          activeSkillTooltip={activeSkillTooltip}
+          skillInfoDialogState={skillInfoDialogState}
+          onOpenSkillInfoFromMenu={openSkillInfoDialogFromMenu}
+          onCloseSkillInfoDialog={closeSkillInfoDialog}
+          onClearSkillToken={clearSkillToken}
           textareaRef={textareaRef}
           input={input}
           onInputChange={handleInputChange}

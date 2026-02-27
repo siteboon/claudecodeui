@@ -4,7 +4,10 @@ import MicButton from '../../../mic-button/view/MicButton';
 import ImageAttachment from './ImageAttachment';
 import PermissionRequestsBanner from './PermissionRequestsBanner';
 import ChatInputControls from './ChatInputControls';
+import SkillInfoTooltip from './SkillInfoTooltip';
+import SkillInfoDialog from './SkillInfoDialog';
 import { useTranslation } from 'react-i18next';
+import type { ActiveSkillTooltip, SkillInfoDialogState } from '../../hooks/useChatComposerState';
 import type {
   ChangeEvent,
   ClipboardEvent,
@@ -77,7 +80,12 @@ interface ChatComposerProps {
   getInputProps: (...args: unknown[]) => Record<string, unknown>;
   openImagePicker: () => void;
   inputHighlightRef: RefObject<HTMLDivElement>;
-  renderInputWithMentions: (text: string) => ReactNode;
+  renderInputWithSkillDecorations: (text: string) => ReactNode;
+  activeSkillTooltip: ActiveSkillTooltip;
+  skillInfoDialogState: SkillInfoDialogState;
+  onOpenSkillInfoFromMenu: (command: SlashCommand) => void;
+  onCloseSkillInfoDialog: () => void;
+  onClearSkillToken: () => void;
   textareaRef: RefObject<HTMLTextAreaElement>;
   input: string;
   onInputChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
@@ -134,7 +142,12 @@ export default function ChatComposer({
   getInputProps,
   openImagePicker,
   inputHighlightRef,
-  renderInputWithMentions,
+  renderInputWithSkillDecorations,
+  activeSkillTooltip,
+  skillInfoDialogState,
+  onOpenSkillInfoFromMenu,
+  onCloseSkillInfoDialog,
+  onClearSkillToken,
   textareaRef,
   input,
   onInputChange,
@@ -206,6 +219,8 @@ export default function ChatComposer({
       </div>
 
       {!hasQuestionPanel && <form onSubmit={onSubmit as (event: FormEvent<HTMLFormElement>) => void} className="relative max-w-4xl mx-auto">
+        {activeSkillTooltip && <SkillInfoTooltip info={activeSkillTooltip.info} />}
+
         {isDragActive && (
           <div className="absolute inset-0 bg-primary/15 border-2 border-dashed border-primary/50 rounded-2xl flex items-center justify-center z-50">
             <div className="bg-card rounded-xl p-4 shadow-lg border border-border/30">
@@ -269,6 +284,7 @@ export default function ChatComposer({
           commands={filteredCommands}
           selectedIndex={selectedCommandIndex}
           onSelect={onCommandSelect}
+          onViewSkillInfo={onOpenSkillInfoFromMenu}
           onClose={onCloseCommandMenu}
           position={commandMenuPosition}
           isOpen={isCommandMenuOpen}
@@ -282,9 +298,9 @@ export default function ChatComposer({
           }`}
         >
           <input {...getInputProps()} />
-          <div ref={inputHighlightRef} aria-hidden="true" className="absolute inset-0 pointer-events-none overflow-hidden rounded-2xl">
+          <div ref={inputHighlightRef} className="absolute inset-0 z-20 overflow-hidden rounded-2xl pointer-events-none">
             <div className="chat-input-placeholder block w-full pl-12 pr-20 sm:pr-40 py-1.5 sm:py-4 text-transparent text-base leading-6 whitespace-pre-wrap break-words">
-              {renderInputWithMentions(input)}
+              {renderInputWithSkillDecorations(input)}
             </div>
           </div>
 
@@ -354,6 +370,12 @@ export default function ChatComposer({
           </div>
         </div>
       </form>}
+
+      <SkillInfoDialog
+        state={skillInfoDialogState}
+        onClose={onCloseSkillInfoDialog}
+        onClear={onClearSkillToken}
+      />
     </div>
   );
 }

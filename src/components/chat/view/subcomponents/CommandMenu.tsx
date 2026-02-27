@@ -15,6 +15,7 @@ type CommandMenuProps = {
   commands?: CommandMenuCommand[];
   selectedIndex?: number;
   onSelect?: (command: CommandMenuCommand, index: number, isHover: boolean) => void;
+  onViewSkillInfo?: (command: CommandMenuCommand) => void;
   onClose: () => void;
   position?: { top: number; left: number; bottom?: number };
   isOpen?: boolean;
@@ -83,6 +84,7 @@ export default function CommandMenu({
   commands = [],
   selectedIndex = -1,
   onSelect,
+  onViewSkillInfo,
   onClose,
   position = { top: 0, left: 0 },
   isOpen = false,
@@ -186,6 +188,7 @@ export default function CommandMenu({
             const commandKey = getCommandKey(command);
             const commandIndex = commandIndexByKey.get(commandKey) ?? -1;
             const isSelected = commandIndex === selectedIndex;
+            const isSkill = command.type === 'skill' || command.namespace === 'skills';
             return (
               <div
                 key={`${namespace}-${command.name}-${command.path || ''}`}
@@ -196,6 +199,11 @@ export default function CommandMenu({
                   isSelected ? 'bg-blue-50 dark:bg-blue-900' : 'bg-transparent'
                 }`}
                 onMouseEnter={() => onSelect && commandIndex >= 0 && onSelect(command, commandIndex, true)}
+                onTouchStart={() => {
+                  if (onSelect && commandIndex >= 0) {
+                    onSelect(command, commandIndex, true);
+                  }
+                }}
                 onClick={() => onSelect && commandIndex >= 0 && onSelect(command, commandIndex, false)}
                 onMouseDown={(event) => event.preventDefault()}
               >
@@ -215,7 +223,35 @@ export default function CommandMenu({
                     </div>
                   )}
                 </div>
-                {isSelected && <span className="ml-2 text-xs font-semibold text-blue-500 dark:text-blue-300">{'<-'}</span>}
+                <div className="ml-2 flex items-start gap-1">
+                  {isSkill && onViewSkillInfo && (
+                    <button
+                      type="button"
+                      className="sm:hidden inline-flex h-6 w-6 items-center justify-center rounded-md border border-gray-200 bg-white/90 text-gray-500 transition-colors hover:text-gray-700 dark:border-gray-600 dark:bg-gray-700/80 dark:text-gray-300 dark:hover:text-gray-100"
+                      title="View skill info"
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                      }}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onViewSkillInfo(command);
+                      }}
+                      onTouchStart={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onViewSkillInfo(command);
+                      }}
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5s8.268 2.943 9.542 7c-1.274 4.057-5.065 7-9.542 7S3.732 16.057 2.458 12z" />
+                      </svg>
+                    </button>
+                  )}
+                  {isSelected && <span className="text-xs font-semibold text-blue-500 dark:text-blue-300">{'<-'}</span>}
+                </div>
               </div>
             );
           })}
