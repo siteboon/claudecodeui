@@ -18,6 +18,7 @@ type AgentVisualConfig = {
   textClass: string;
   subtextClass: string;
   buttonClass: string;
+  description?: string;
 };
 
 const agentConfig: Record<AgentProvider, AgentVisualConfig> = {
@@ -44,6 +45,15 @@ const agentConfig: Record<AgentProvider, AgentVisualConfig> = {
     textClass: 'text-gray-900 dark:text-gray-100',
     subtextClass: 'text-gray-700 dark:text-gray-300',
     buttonClass: 'bg-gray-800 hover:bg-gray-900 dark:bg-gray-700 dark:hover:bg-gray-600',
+  },
+  gemini: {
+    name: 'Gemini',
+    description: 'Google Gemini AI assistant',
+    bgClass: 'bg-indigo-50 dark:bg-indigo-900/20',
+    borderClass: 'border-indigo-200 dark:border-indigo-800',
+    textClass: 'text-indigo-900 dark:text-indigo-100',
+    subtextClass: 'text-indigo-700 dark:text-indigo-300',
+    buttonClass: 'bg-indigo-600 hover:bg-indigo-700',
   },
 };
 

@@ -40,7 +40,8 @@ const projectsHaveChanges = (
       nextProject.displayName !== prevProject.displayName ||
       nextProject.fullPath !== prevProject.fullPath ||
       serialize(nextProject.sessionMeta) !== serialize(prevProject.sessionMeta) ||
-      serialize(nextProject.sessions) !== serialize(prevProject.sessions);
+      serialize(nextProject.sessions) !== serialize(prevProject.sessions) ||
+      serialize(nextProject.taskmaster) !== serialize(prevProject.taskmaster);
 
     if (baseChanged) {
       return true;
@@ -52,7 +53,8 @@ const projectsHaveChanges = (
 
     return (
       serialize(nextProject.cursorSessions) !== serialize(prevProject.cursorSessions) ||
-      serialize(nextProject.codexSessions) !== serialize(prevProject.codexSessions)
+      serialize(nextProject.codexSessions) !== serialize(prevProject.codexSessions) ||
+      serialize(nextProject.geminiSessions) !== serialize(prevProject.geminiSessions)
     );
   });
 };
@@ -62,6 +64,7 @@ const getProjectSessions = (project: Project): ProjectSession[] => {
     ...(project.sessions ?? []),
     ...(project.codexSessions ?? []),
     ...(project.cursorSessions ?? []),
+    ...(project.geminiSessions ?? []),
   ];
 };
 
@@ -330,6 +333,21 @@ export function useProjectsState({
         }
         if (shouldUpdateSession) {
           setSelectedSession({ ...codexSession, __provider: 'codex' });
+        }
+        return;
+      }
+
+      const geminiSession = project.geminiSessions?.find((session) => session.id === sessionId);
+      if (geminiSession) {
+        const shouldUpdateProject = selectedProject?.name !== project.name;
+        const shouldUpdateSession =
+          selectedSession?.id !== sessionId || selectedSession.__provider !== 'gemini';
+
+        if (shouldUpdateProject) {
+          setSelectedProject(project);
+        }
+        if (shouldUpdateSession) {
+          setSelectedSession({ ...geminiSession, __provider: 'gemini' });
         }
         return;
       }
