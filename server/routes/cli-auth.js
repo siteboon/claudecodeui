@@ -14,13 +14,14 @@ router.get('/claude/status', async (req, res) => {
       return res.json({
         authenticated: true,
         email: credentialsResult.email || 'Authenticated',
-        method: 'credentials_file'
+        method: credentialsResult.method  // 'api_key' or 'credentials_file'
       });
     }
 
     return res.json({
       authenticated: false,
       email: null,
+      method: null,
       error: credentialsResult.error || 'Not authenticated'
     });
 
@@ -29,6 +30,7 @@ router.get('/claude/status', async (req, res) => {
     res.status(500).json({
       authenticated: false,
       email: null,
+      method: null,
       error: error.message
     });
   }
@@ -74,7 +76,41 @@ router.get('/codex/status', async (req, res) => {
   }
 });
 
+/**
+ * Checks Claude authentication credentials using two methods with priority order:
+ *
+ * Priority 1: ANTHROPIC_API_KEY environment variable
+ * Priority 2: ~/.claude/.credentials.json OAuth tokens
+ *
+ * The Claude Agent SDK prioritizes environment variables over authenticated subscriptions.
+ * This matching behavior ensures consistency with how the SDK authenticates.
+ *
+ * References:
+ * - https://support.claude.com/en/articles/12304248-managing-api-key-environment-variables-in-claude-code
+ *   "Claude Code prioritizes environment variable API keys over authenticated subscriptions"
+ * - https://platform.claude.com/docs/en/agent-sdk/overview
+ *   SDK authentication documentation
+ *
+ * @returns {Promise<Object>} Authentication status with { authenticated, email, method }
+ *   - authenticated: boolean indicating if valid credentials exist
+ *   - email: user email or auth method identifier
+ *   - method: 'api_key' for env var, 'credentials_file' for OAuth tokens
+ */
 async function checkClaudeCredentials() {
+  // Priority 1: Check for ANTHROPIC_API_KEY environment variable
+  // The SDK checks this first and uses it if present, even if OAuth tokens exist.
+  // When set, API calls are charged via pay-as-you-go rates instead of subscription.
+  if (process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY.trim()) {
+    return {
+      authenticated: true,
+      email: 'API Key Auth',
+      method: 'api_key'
+    };
+  }
+
+  // Priority 2: Check ~/.claude/.credentials.json for OAuth tokens
+  // This is the standard authentication method used by Claude CLI after running
+  // 'claude /login' or 'claude setup-token' commands.
   try {
     const credPath = path.join(os.homedir(), '.claude', '.credentials.json');
     const content = await fs.readFile(credPath, 'utf8');
@@ -87,19 +123,22 @@ async function checkClaudeCredentials() {
       if (!isExpired) {
         return {
           authenticated: true,
-          email: creds.email || creds.user || null
+          email: creds.email || creds.user || null,
+          method: 'credentials_file'
         };
       }
     }
 
     return {
       authenticated: false,
-      email: null
+      email: null,
+      method: null
     };
   } catch (error) {
     return {
       authenticated: false,
-      email: null
+      email: null,
+      method: null
     };
   }
 }
