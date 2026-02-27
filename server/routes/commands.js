@@ -5,11 +5,56 @@ import { fileURLToPath } from 'url';
 import os from 'os';
 import matter from 'gray-matter';
 import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '../../shared/modelConstants.js';
+import { loadSkillsList } from '../utils/loadSkillsList.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const router = express.Router();
+
+const providerToAgentMap = {
+  claude: 'claude-code',
+  cursor: 'cursor',
+  codex: 'codex',
+};
+
+const skillsCache = new Map();
+
+function normalizeSkills(skills, provider, agent) {
+  return skills
+    .filter((skill) => skill && typeof skill === 'object' && typeof skill.name === 'string' && skill.name.trim().length > 0)
+    .map((skill) => ({
+      name: skill.name.startsWith('/') ? skill.name : `/${skill.name}`,
+      description: typeof skill.description === 'string' ? skill.description : '',
+      namespace: 'skills',
+      type: 'skill',
+      metadata: {
+        ...skill,
+        skillName: skill.name,
+        provider,
+        agent,
+        type: 'skill',
+      },
+    }));
+}
+
+function getSkillsForProvider({ provider = 'claude', forceReloadSkills = false }) {
+  const mappedAgent = providerToAgentMap[provider] || providerToAgentMap.claude;
+
+  if (!forceReloadSkills && skillsCache.has(mappedAgent)) {
+    return skillsCache.get(mappedAgent);
+  }
+
+  try {
+    const skills = loadSkillsList(mappedAgent);
+    const normalizedSkills = normalizeSkills(skills, provider, mappedAgent);
+    skillsCache.set(mappedAgent, normalizedSkills);
+    return normalizedSkills;
+  } catch (error) {
+    console.error('Error loading skills list:', error);
+    return [];
+  }
+}
 
 /**
  * Recursively scan directory for command files (.md)
@@ -405,7 +450,12 @@ Custom commands can be created in:
  */
 router.post('/list', async (req, res) => {
   try {
-    const { projectPath } = req.body;
+    const {
+      projectPath,
+      provider = 'claude',
+      includeSkills = true,
+      forceReloadSkills = false,
+    } = req.body;
     const allCommands = [...builtInCommands];
 
     // Scan project-level commands (.claude/commands/)
@@ -435,10 +485,15 @@ router.post('/list', async (req, res) => {
     // Sort commands alphabetically by name
     customCommands.sort((a, b) => a.name.localeCompare(b.name));
 
+    const skills = includeSkills
+      ? getSkillsForProvider({ provider, forceReloadSkills })
+      : [];
+
     res.json({
       builtIn: builtInCommands,
       custom: customCommands,
-      count: allCommands.length
+      skills,
+      count: allCommands.length + skills.length
     });
   } catch (error) {
     console.error('Error listing commands:', error);

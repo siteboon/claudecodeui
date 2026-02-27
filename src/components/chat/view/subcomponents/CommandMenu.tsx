@@ -36,6 +36,7 @@ const namespaceLabels: Record<string, string> = {
   builtin: 'Built-in Commands',
   project: 'Project Commands',
   user: 'User Commands',
+  skills: 'Skills',
   other: 'Other Commands',
 };
 
@@ -44,6 +45,7 @@ const namespaceIcons: Record<string, string> = {
   builtin: '[B]',
   project: '[P]',
   user: '[U]',
+  skills: '[S]',
   other: '[O]',
 };
 

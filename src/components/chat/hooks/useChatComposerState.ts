@@ -366,8 +366,11 @@ export function useChatComposerState({
     handleToggleCommandMenu,
     handleCommandInputChange,
     handleCommandMenuKeyDown,
+    prefetchSkillsForProvider,
+    reloadSkillsForProvider,
   } = useSlashCommands({
     selectedProject,
+    provider,
     input,
     setInput,
     textareaRef,
@@ -483,7 +486,7 @@ export function useChatComposerState({
         const firstSpace = trimmedInput.indexOf(' ');
         const commandName = firstSpace > 0 ? trimmedInput.slice(0, firstSpace) : trimmedInput;
         const matchedCommand = slashCommands.find((cmd: SlashCommand) => cmd.name === commandName);
-        if (matchedCommand) {
+        if (matchedCommand && matchedCommand.type !== 'skill') {
           executeCommand(matchedCommand, trimmedInput);
           setInput('');
           inputValueRef.current = '';
@@ -962,6 +965,8 @@ export function useChatComposerState({
     resetCommandMenuState,
     handleCommandSelect,
     handleToggleCommandMenu,
+    prefetchSkillsForProvider,
+    reloadSkillsForProvider,
     showFileDropdown,
     filteredFiles: filteredFiles as MentionableFile[],
     selectedFileIndex,

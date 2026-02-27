@@ -164,6 +164,8 @@ function ChatInterface({
     handleGrantToolPermission,
     handleInputFocusChange,
     isInputFocused,
+    prefetchSkillsForProvider,
+    reloadSkillsForProvider,
   } = useChatComposerState({
     selectedProject,
     selectedSession,
@@ -291,6 +293,8 @@ function ChatInterface({
           isTaskMasterInstalled={isTaskMasterInstalled}
           onShowAllTasks={onShowAllTasks}
           setInput={setInput}
+          prefetchSkillsForProvider={prefetchSkillsForProvider}
+          reloadSkillsForProvider={reloadSkillsForProvider}
           isLoadingMoreMessages={isLoadingMoreMessages}
           hasMoreMessages={hasMoreMessages}
           totalMessages={totalMessages}

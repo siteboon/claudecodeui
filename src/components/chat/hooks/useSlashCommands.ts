@@ -3,7 +3,7 @@ import type { Dispatch, KeyboardEvent, RefObject, SetStateAction } from 'react';
 import Fuse from 'fuse.js';
 import { authenticatedFetch } from '../../../utils/api';
 import { safeLocalStorage } from '../utils/chatStorage';
-import type { Project } from '../../../types/app';
+import type { Project, SessionProvider } from '../../../types/app';
 
 const COMMAND_QUERY_DEBOUNCE_MS = 150;
 
@@ -19,16 +19,18 @@ export interface SlashCommand {
 
 interface UseSlashCommandsOptions {
   selectedProject: Project | null;
+  provider: SessionProvider;
   input: string;
   setInput: Dispatch<SetStateAction<string>>;
   textareaRef: RefObject<HTMLTextAreaElement>;
   onExecuteCommand: (command: SlashCommand, rawInput?: string) => void | Promise<void>;
 }
 
-const getCommandHistoryKey = (projectName: string) => `command_history_${projectName}`;
+const getCommandHistoryKey = (projectName: string, provider: SessionProvider) =>
+  `command_history_${projectName}_${provider}`;
 
-const readCommandHistory = (projectName: string): Record<string, number> => {
-  const history = safeLocalStorage.getItem(getCommandHistoryKey(projectName));
+const readCommandHistory = (projectName: string, provider: SessionProvider): Record<string, number> => {
+  const history = safeLocalStorage.getItem(getCommandHistoryKey(projectName, provider));
   if (!history) {
     return {};
   }
@@ -41,8 +43,12 @@ const readCommandHistory = (projectName: string): Record<string, number> => {
   }
 };
 
-const saveCommandHistory = (projectName: string, history: Record<string, number>) => {
-  safeLocalStorage.setItem(getCommandHistoryKey(projectName), JSON.stringify(history));
+const saveCommandHistory = (
+  projectName: string,
+  provider: SessionProvider,
+  history: Record<string, number>,
+) => {
+  safeLocalStorage.setItem(getCommandHistoryKey(projectName, provider), JSON.stringify(history));
 };
 
 const isPromiseLike = (value: unknown): value is Promise<unknown> =>
@@ -50,6 +56,7 @@ const isPromiseLike = (value: unknown): value is Promise<unknown> =>
 
 export function useSlashCommands({
   selectedProject,
+  provider,
   input,
   setInput,
   textareaRef,
@@ -63,6 +70,8 @@ export function useSlashCommands({
   const [slashPosition, setSlashPosition] = useState(-1);
 
   const commandQueryTimerRef = useRef<number | null>(null);
+  const baseCommandsRef = useRef<SlashCommand[]>([]);
+  const skillsByProviderRef = useRef<Partial<Record<SessionProvider, SlashCommand[]>>>({});
 
   const clearCommandQueryTimer = useCallback(() => {
     if (commandQueryTimerRef.current !== null) {
@@ -79,57 +88,132 @@ export function useSlashCommands({
     clearCommandQueryTimer();
   }, [clearCommandQueryTimer]);
 
-  useEffect(() => {
-    const fetchCommands = async () => {
+  const buildSortedCommands = useCallback(
+    (baseCommands: SlashCommand[], skills: SlashCommand[], targetProvider: SessionProvider) => {
+      if (!selectedProject) {
+        return [];
+      }
+
+      const allCommands = [...baseCommands, ...skills];
+      const parsedHistory = readCommandHistory(selectedProject.name, targetProvider);
+
+      return allCommands.sort((commandA, commandB) => {
+        const commandAUsage = parsedHistory[commandA.name] || 0;
+        const commandBUsage = parsedHistory[commandB.name] || 0;
+        return commandBUsage - commandAUsage;
+      });
+    },
+    [selectedProject],
+  );
+
+  const fetchAndCacheCommands = useCallback(
+    async (targetProvider: SessionProvider, forceReloadSkills = false) => {
       if (!selectedProject) {
         setSlashCommands([]);
         setFilteredCommands([]);
+        return [] as SlashCommand[];
+      }
+
+      const canUseSkillsCache =
+        !forceReloadSkills &&
+        baseCommandsRef.current.length > 0 &&
+        Array.isArray(skillsByProviderRef.current[targetProvider]);
+
+      if (canUseSkillsCache) {
+        const commandsFromCache = buildSortedCommands(
+          baseCommandsRef.current,
+          skillsByProviderRef.current[targetProvider] || [],
+          targetProvider,
+        );
+        setSlashCommands(commandsFromCache);
+        return commandsFromCache;
+      }
+
+      const response = await authenticatedFetch('/api/commands/list', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          projectPath: selectedProject.path,
+          provider: targetProvider,
+          includeSkills: true,
+          forceReloadSkills,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch commands');
+      }
+
+      const data = await response.json();
+      const builtInCommands = ((data.builtIn || []) as SlashCommand[]).map((command) => ({
+        ...command,
+        type: 'built-in',
+      }));
+      const customCommands = ((data.custom || []) as SlashCommand[]).map((command) => ({
+        ...command,
+        type: 'custom',
+      }));
+      const skills = ((data.skills || []) as SlashCommand[]).map((command) => ({
+        ...command,
+        type: 'skill',
+      }));
+
+      baseCommandsRef.current = [...builtInCommands, ...customCommands];
+      skillsByProviderRef.current[targetProvider] = skills;
+
+      const mergedCommands = buildSortedCommands(baseCommandsRef.current, skills, targetProvider);
+      setSlashCommands(mergedCommands);
+      return mergedCommands;
+    },
+    [buildSortedCommands, selectedProject],
+  );
+
+  useEffect(() => {
+    if (!selectedProject) {
+      setSlashCommands([]);
+      setFilteredCommands([]);
+      baseCommandsRef.current = [];
+      skillsByProviderRef.current = {};
+      return;
+    }
+
+    fetchAndCacheCommands(provider).catch((error) => {
+      console.error('Error fetching slash commands:', error);
+      setSlashCommands([]);
+    });
+  }, [selectedProject, provider, fetchAndCacheCommands]);
+
+  const prefetchSkillsForProvider = useCallback(
+    async (targetProvider: SessionProvider) => {
+      if (!selectedProject || skillsByProviderRef.current[targetProvider]) {
         return;
       }
 
       try {
-        const response = await authenticatedFetch('/api/commands/list', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            projectPath: selectedProject.path,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch commands');
-        }
-
-        const data = await response.json();
-        const allCommands: SlashCommand[] = [
-          ...((data.builtIn || []) as SlashCommand[]).map((command) => ({
-            ...command,
-            type: 'built-in',
-          })),
-          ...((data.custom || []) as SlashCommand[]).map((command) => ({
-            ...command,
-            type: 'custom',
-          })),
-        ];
-
-        const parsedHistory = readCommandHistory(selectedProject.name);
-        const sortedCommands = [...allCommands].sort((commandA, commandB) => {
-          const commandAUsage = parsedHistory[commandA.name] || 0;
-          const commandBUsage = parsedHistory[commandB.name] || 0;
-          return commandBUsage - commandAUsage;
-        });
-
-        setSlashCommands(sortedCommands);
+        await fetchAndCacheCommands(targetProvider);
       } catch (error) {
-        console.error('Error fetching slash commands:', error);
-        setSlashCommands([]);
+        console.error('Error prefetching skills:', error);
       }
-    };
+    },
+    [fetchAndCacheCommands, selectedProject],
+  );
 
-    fetchCommands();
-  }, [selectedProject]);
+  const reloadSkillsForProvider = useCallback(
+    async (targetProvider: SessionProvider) => {
+      if (!selectedProject) {
+        return;
+      }
+
+      try {
+        await fetchAndCacheCommands(targetProvider, true);
+      } catch (error) {
+        console.error('Error reloading skills:', error);
+      }
+    },
+    [fetchAndCacheCommands, selectedProject],
+  );
 
   useEffect(() => {
     if (!showCommandMenu) {
@@ -173,9 +257,10 @@ export function useSlashCommands({
       return [];
     }
 
-    const parsedHistory = readCommandHistory(selectedProject.name);
+    const parsedHistory = readCommandHistory(selectedProject.name, provider);
 
     return slashCommands
+      .filter((command) => command.type !== 'skill')
       .map((command) => ({
         ...command,
         usageCount: parsedHistory[command.name] || 0,
@@ -183,19 +268,19 @@ export function useSlashCommands({
       .filter((command) => command.usageCount > 0)
       .sort((commandA, commandB) => commandB.usageCount - commandA.usageCount)
       .slice(0, 5);
-  }, [selectedProject, slashCommands]);
+  }, [selectedProject, slashCommands, provider]);
 
   const trackCommandUsage = useCallback(
     (command: SlashCommand) => {
-      if (!selectedProject) {
+      if (!selectedProject || command.type === 'skill') {
         return;
       }
 
-      const parsedHistory = readCommandHistory(selectedProject.name);
+      const parsedHistory = readCommandHistory(selectedProject.name, provider);
       parsedHistory[command.name] = (parsedHistory[command.name] || 0) + 1;
-      saveCommandHistory(selectedProject.name, parsedHistory);
+      saveCommandHistory(selectedProject.name, provider, parsedHistory);
     },
-    [selectedProject],
+    [selectedProject, provider],
   );
 
   const selectCommandFromKeyboard = useCallback(
@@ -208,6 +293,10 @@ export function useSlashCommands({
 
       setInput(newInput);
       resetCommandMenuState();
+
+      if (command.type === 'skill') {
+        return;
+      }
 
       const executionResult = onExecuteCommand(command);
       if (isPromiseLike(executionResult)) {
@@ -231,6 +320,24 @@ export function useSlashCommands({
       }
 
       trackCommandUsage(command);
+
+      if (command.type === 'skill') {
+        if (slashPosition >= 0) {
+          const textBeforeSlash = input.slice(0, slashPosition);
+          const textAfterSlash = input.slice(slashPosition);
+          const spaceIndex = textAfterSlash.indexOf(' ');
+          const textAfterQuery = spaceIndex !== -1 ? textAfterSlash.slice(spaceIndex) : '';
+          const newInput = `${textBeforeSlash}${command.name} ${textAfterQuery}`;
+          setInput(newInput);
+        } else {
+          const newInput = command.name.endsWith(' ') ? command.name : `${command.name} `;
+          setInput(newInput);
+        }
+
+        resetCommandMenuState();
+        return;
+      }
+
       const executionResult = onExecuteCommand(command);
 
       if (isPromiseLike(executionResult)) {
@@ -371,5 +478,7 @@ export function useSlashCommands({
     handleToggleCommandMenu,
     handleCommandInputChange,
     handleCommandMenuKeyDown,
+    prefetchSkillsForProvider,
+    reloadSkillsForProvider,
   };
 }

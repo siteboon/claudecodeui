@@ -1,5 +1,5 @@
-import React from 'react';
-import { Check, ChevronDown } from 'lucide-react';
+import React, { useState } from 'react';
+import { Check, ChevronDown, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
 import NextTaskBanner from '../../../NextTaskBanner.jsx';
@@ -22,6 +22,8 @@ interface ProviderSelectionEmptyStateProps {
   isTaskMasterInstalled: boolean | null;
   onShowAllTasks?: (() => void) | null;
   setInput: React.Dispatch<React.SetStateAction<string>>;
+  prefetchSkillsForProvider: (provider: SessionProvider) => Promise<void>;
+  reloadSkillsForProvider: (provider: SessionProvider) => Promise<void>;
 }
 
 type ProviderDef = {
@@ -88,13 +90,17 @@ export default function ProviderSelectionEmptyState({
   isTaskMasterInstalled,
   onShowAllTasks,
   setInput,
+  prefetchSkillsForProvider,
+  reloadSkillsForProvider,
 }: ProviderSelectionEmptyStateProps) {
   const { t } = useTranslation('chat');
+  const [isReloadingSkills, setIsReloadingSkills] = useState(false);
   const nextTaskPrompt = t('tasks.nextTaskPrompt', { defaultValue: 'Start the next task' });
 
   const selectProvider = (next: SessionProvider) => {
     setProvider(next);
     localStorage.setItem('selected-provider', next);
+    void prefetchSkillsForProvider(next);
     setTimeout(() => textareaRef.current?.focus(), 100);
   };
 
@@ -102,6 +108,19 @@ export default function ProviderSelectionEmptyState({
     if (provider === 'claude') { setClaudeModel(value); localStorage.setItem('claude-model', value); }
     else if (provider === 'codex') { setCodexModel(value); localStorage.setItem('codex-model', value); }
     else { setCursorModel(value); localStorage.setItem('cursor-model', value); }
+  };
+
+  const handleReloadSkills = async () => {
+    if (isReloadingSkills) {
+      return;
+    }
+
+    setIsReloadingSkills(true);
+    try {
+      await reloadSkillsForProvider(provider);
+    } finally {
+      setIsReloadingSkills(false);
+    }
   };
 
   const modelConfig = getModelConfig(provider);
@@ -163,6 +182,16 @@ export default function ProviderSelectionEmptyState({
           <div className={`transition-all duration-200 ${provider ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1 pointer-events-none'}`}>
             <div className="flex items-center justify-center gap-2 mb-5">
               <span className="text-sm text-muted-foreground">{t('providerSelection.selectModel')}</span>
+              <button
+                type="button"
+                onClick={handleReloadSkills}
+                disabled={isReloadingSkills}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 px-2 py-1 text-xs text-muted-foreground hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-60"
+                title="Reload skills"
+              >
+                <RefreshCw className={`h-3 w-3 ${isReloadingSkills ? 'animate-spin' : ''}`} />
+                <span>{isReloadingSkills ? 'Reloading…' : 'Reload skills'}</span>
+              </button>
               <div className="relative">
                 <select
                   value={currentModel}

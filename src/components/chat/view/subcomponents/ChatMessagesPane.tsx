@@ -30,6 +30,8 @@ interface ChatMessagesPaneProps {
   isTaskMasterInstalled: boolean | null;
   onShowAllTasks?: (() => void) | null;
   setInput: Dispatch<SetStateAction<string>>;
+  prefetchSkillsForProvider: (provider: SessionProvider) => Promise<void>;
+  reloadSkillsForProvider: (provider: SessionProvider) => Promise<void>;
   isLoadingMoreMessages: boolean;
   hasMoreMessages: boolean;
   totalMessages: number;
@@ -74,6 +76,8 @@ export default function ChatMessagesPane({
   isTaskMasterInstalled,
   onShowAllTasks,
   setInput,
+  prefetchSkillsForProvider,
+  reloadSkillsForProvider,
   isLoadingMoreMessages,
   hasMoreMessages,
   totalMessages,
@@ -156,6 +160,8 @@ export default function ChatMessagesPane({
           isTaskMasterInstalled={isTaskMasterInstalled}
           onShowAllTasks={onShowAllTasks}
           setInput={setInput}
+          prefetchSkillsForProvider={prefetchSkillsForProvider}
+          reloadSkillsForProvider={reloadSkillsForProvider}
         />
       ) : (
         <>
