@@ -45,7 +45,7 @@
   "author": "CloudCLI UI Contributors",
   "license": "GPL-3.0",
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.1.71",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.59",
     "@codemirror/lang-css": "^6.3.1",
     "@codemirror/lang-html": "^6.4.9",
     "@codemirror/lang-javascript": "^6.2.4",
@@ -66,7 +66,7 @@
     "@xterm/addon-webgl": "^0.18.0",
     "@xterm/xterm": "^5.5.0",
     "bcrypt": "^6.0.0",
-    "better-sqlite3": "^12.2.0",
+    "better-sqlite3": "^12.6.2",
     "chokidar": "^4.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

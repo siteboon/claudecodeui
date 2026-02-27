@@ -12,7 +12,7 @@ type AgentListItemProps = {
 
 type AgentConfig = {
   name: string;
-  color: 'blue' | 'purple' | 'gray';
+  color: 'blue' | 'purple' | 'gray' | 'indigo';
 };
 
 const agentConfig: Record<AgentProvider, AgentConfig> = {
@@ -28,6 +28,10 @@ const agentConfig: Record<AgentProvider, AgentConfig> = {
     name: 'Codex',
     color: 'gray',
   },
+  gemini: {
+    name: 'Gemini',
+    color: 'indigo',
+  }
 };
 
 const colorClasses = {
@@ -49,6 +53,12 @@ const colorClasses = {
     bg: 'bg-gray-100 dark:bg-gray-800/50',
     dot: 'bg-gray-700 dark:bg-gray-300',
   },
+  indigo: {
+    border: 'border-l-indigo-500 md:border-l-indigo-500',
+    borderBottom: 'border-b-indigo-500',
+    bg: 'bg-indigo-50 dark:bg-indigo-900/20',
+    dot: 'bg-indigo-500',
+  },
 } as const;
 
 export default function AgentListItem({
@@ -66,11 +76,10 @@ export default function AgentListItem({
     return (
       <button
         onClick={onClick}
-        className={`flex-1 text-center py-3 px-2 border-b-2 transition-colors ${
-          isSelected
-            ? `${colors.borderBottom} ${colors.bg}`
-            : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'
-        }`}
+        className={`flex-1 text-center py-3 px-2 border-b-2 transition-colors ${isSelected
+          ? `${colors.borderBottom} ${colors.bg}`
+          : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'
+          }`}
       >
         <div className="flex flex-col items-center gap-1">
           <SessionProviderLogo provider={agentId} className="w-5 h-5" />
@@ -86,11 +95,10 @@ export default function AgentListItem({
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left p-3 border-l-4 transition-colors ${
-        isSelected
-          ? `${colors.border} ${colors.bg}`
-          : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'
-      }`}
+      className={`w-full text-left p-3 border-l-4 transition-colors ${isSelected
+        ? `${colors.border} ${colors.bg}`
+        : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'
+        }`}
     >
       <div className="flex items-center gap-2 mb-1">
         <SessionProviderLogo provider={agentId} className="w-4 h-4" />
