@@ -43,6 +43,45 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
+
+    /* Nav design tokens */
+    --nav-glass-bg: 0 0% 100% / 0.7;
+    --nav-glass-blur: 20px;
+    --nav-glass-saturate: 1.8;
+    --nav-tab-glow: 221.2 83.2% 53.3% / 0.18;
+    --nav-tab-ring: 221.2 83.2% 53.3% / 0.10;
+    --nav-float-shadow: 0 0% 0% / 0.06;
+    --nav-float-ring: 214.3 31.8% 91.4% / 0.5;
+    --nav-divider-color: 214.3 31.8% 91.4% / 0.5;
+    --nav-input-bg: 210 40% 96.1% / 0.5;
+    --nav-input-focus-ring: 221.2 83.2% 53.3% / 0.22;
+
+    /* Safe area CSS variables */
+    --safe-area-inset-top: env(safe-area-inset-top);
+    --safe-area-inset-right: env(safe-area-inset-right);
+    --safe-area-inset-bottom: env(safe-area-inset-bottom);
+    --safe-area-inset-left: env(safe-area-inset-left);
+
+    /* Mobile navigation dimensions - Single source of truth */
+    /* Floating nav: ~52px bar + 8px bottom margin + 12px px-3 top spacing */
+    --mobile-nav-height: 52px;
+    --mobile-nav-padding: 20px;
+    --mobile-nav-total: calc(var(--mobile-nav-height) + var(--mobile-nav-padding) + env(safe-area-inset-bottom, 0px));
+
+    /* Header safe area dimensions */
+    --header-safe-area-top: env(safe-area-inset-top, 0px);
+    --header-base-padding: 8px;
+    --header-total-padding: calc(var(--header-safe-area-top) + var(--header-base-padding));
+  }
+  
+  /* Fallback for older iOS versions */
+  @supports (padding-top: constant(safe-area-inset-top)) {
+    :root {
+      --safe-area-inset-top: constant(safe-area-inset-top);
+      --safe-area-inset-right: constant(safe-area-inset-right);
+      --safe-area-inset-bottom: constant(safe-area-inset-bottom);
+      --safe-area-inset-left: constant(safe-area-inset-left);
+    }
   }
 
   .dark {
@@ -63,8 +102,20 @@
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
     --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
+    --input: 220 13% 46%;
     --ring: 217.2 91.2% 59.8%;
+
+    /* Nav design tokens — dark overrides */
+    --nav-glass-bg: 217.2 91.2% 8% / 0.55;
+    --nav-glass-blur: 24px;
+    --nav-glass-saturate: 1.6;
+    --nav-tab-glow: 217.2 91.2% 59.8% / 0.25;
+    --nav-tab-ring: 217.2 91.2% 59.8% / 0.15;
+    --nav-float-shadow: 0 0% 0% / 0.35;
+    --nav-float-ring: 217.2 32.6% 17.5% / 0.3;
+    --nav-divider-color: 217.2 32.6% 17.5% / 0.5;
+    --nav-input-bg: 217.2 32.6% 17.5% / 0.5;
+    --nav-input-focus-ring: 217.2 91.2% 59.8% / 0.25;
   }
 }
 
@@ -82,10 +133,45 @@
     padding: 0;
   }
 
-  html, body, #root {
+  html, body {
     height: 100%;
     margin: 0;
     padding: 0;
+  }
+  
+  /* Root element with safe area padding for PWA */
+  #root {
+    min-height: 100vh;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  
+  /* Apply safe area padding in standalone mode */
+  @supports (padding-top: env(safe-area-inset-top)) {
+    @media (display-mode: standalone) {
+      #root {
+        padding-top: var(--safe-area-inset-top);
+        padding-left: var(--safe-area-inset-left);
+        padding-right: var(--safe-area-inset-right);
+      }
+    }
+  }
+
+  /* PWA mode detected by JavaScript - more reliable */
+  body.pwa-mode #root {
+    padding-left: var(--safe-area-inset-left);
+    padding-right: var(--safe-area-inset-right);
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* Adjust fixed inset positioning in PWA mode */
+  body.pwa-mode .fixed.inset-0 {
+    top: var(--header-total-padding);
+    left: var(--safe-area-inset-left);
+    right: var(--safe-area-inset-right);
+    bottom: 0;
   }
   
   /* Global transition defaults */
@@ -171,6 +257,42 @@
   .sidebar-transition {
     transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1),
                 opacity 300ms ease-in-out;
+  }
+
+  /* Nav glass surface — uses theme tokens */
+  .nav-glass {
+    background: hsl(var(--nav-glass-bg));
+    backdrop-filter: blur(var(--nav-glass-blur)) saturate(var(--nav-glass-saturate));
+    -webkit-backdrop-filter: blur(var(--nav-glass-blur)) saturate(var(--nav-glass-saturate));
+  }
+
+  /* Nav tab active pill glow — uses theme tokens */
+  .nav-tab-active {
+    box-shadow: 0 1px 8px hsl(var(--nav-tab-glow)),
+                0 0 0 1px hsl(var(--nav-tab-ring));
+  }
+
+  /* Floating mobile nav bar — uses theme tokens */
+  .mobile-nav-float {
+    box-shadow: 0 -1px 20px hsl(var(--nav-float-shadow)),
+                0 0 0 1px hsl(var(--nav-float-ring));
+  }
+
+  /* Subtle sidebar divider — uses theme tokens */
+  .nav-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, hsl(var(--nav-divider-color)) 20%, hsl(var(--nav-divider-color)) 80%, transparent);
+  }
+
+  /* Nav search input surface — uses theme tokens */
+  .nav-search-input {
+    background: hsl(var(--nav-input-bg));
+    border: none;
+  }
+
+  .nav-search-input:focus-within {
+    background: hsl(var(--background));
+    box-shadow: 0 0 0 2px hsl(var(--nav-input-focus-ring));
   }
   
   /* Modal and dropdown transitions */
@@ -379,18 +501,18 @@
     color: rgb(156 163 175) !important;
     opacity: 1 !important;
   }
-  
+
   .dark .chat-input-placeholder::placeholder {
     color: rgb(75 85 99) !important;
     opacity: 1 !important;
     -webkit-text-fill-color: rgb(75 85 99) !important;
   }
-  
+
   .chat-input-placeholder::-webkit-input-placeholder {
     color: rgb(156 163 175) !important;
     opacity: 1 !important;
   }
-  
+
   .dark .chat-input-placeholder::-webkit-input-placeholder {
     color: rgb(75 85 99) !important;
     opacity: 1 !important;
@@ -559,16 +681,6 @@
       transform: inherit !important;
     }
     
-    /* Preserve backgrounds for containers and modals */
-    .fixed:hover,
-    .modal:hover,
-    .bg-white:hover,
-    .bg-gray-800:hover,
-    .bg-gray-900:hover,
-    [class*="bg-"]:hover {
-      background-color: revert !important;
-    }
-    
     /* Force buttons to be immediately clickable */
     button, [role="button"], .cursor-pointer {
       cursor: pointer !important;
@@ -584,12 +696,30 @@
   
   /* Safe area support for iOS devices */
   .ios-bottom-safe {
-    padding-bottom: max(env(safe-area-inset-bottom), 12px);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  /* PWA specific header adjustments - uses CSS variables for consistency */
+  .pwa-header-safe {
+    padding-top: var(--header-base-padding);
+  }
+
+  /* When PWA mode is detected by JavaScript */
+  body.pwa-mode .pwa-header-safe {
+    /* Reset padding since #root already handles safe area */
+    padding-top: 0px !important;
+  }
+
+  /* For mobile PWA, add bottom padding for better spacing */
+  @media screen and (max-width: 768px) {
+    body.pwa-mode .pwa-header-safe {
+      padding-bottom: 8px;
+    }
   }
   
   @media screen and (max-width: 768px) {
     .chat-input-mobile {
-      padding-bottom: calc(60px + max(env(safe-area-inset-bottom), 12px));
+      padding-bottom: calc(60px + env(safe-area-inset-bottom));
     }
   }
 
@@ -612,6 +742,16 @@
   .chat-message * {
     max-width: 100%;
     box-sizing: border-box;
+  }
+
+  /* Hide scrollbar utility for horizontal scroll */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
   }
 }
 
@@ -649,8 +789,14 @@
   
   /* Improved textarea styling */
   .chat-input-placeholder {
+    display: block !important;
     scrollbar-width: thin;
     scrollbar-color: rgba(156, 163, 175, 0.3) transparent;
+  }
+
+  /* Ensure container fits textarea tightly */
+  .chat-input-placeholder:not(:focus) {
+    height: auto;
   }
   
   .chat-input-placeholder::-webkit-scrollbar {
@@ -745,5 +891,17 @@
   .dark select option {
     background-color: rgb(31 41 55) !important;
     color: rgb(243 244 246) !important;
+  }
+
+  /* Tool details chevron animation */
+  details[open] .details-chevron,
+  details[open] summary svg[class*="group-open"] {
+    transform: rotate(180deg);
+  }
+
+  /* Smooth chevron transition */
+  .details-chevron,
+  summary svg[class*="transition-transform"] {
+    transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
   }
 }

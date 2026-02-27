@@ -1,0 +1,205 @@
+{
+  "codeBlock": {
+    "copy": "コピー",
+    "copied": "コピーしました",
+    "copyCode": "コードをコピー"
+  },
+  "messageTypes": {
+    "user": "U",
+    "error": "エラー",
+    "tool": "ツール",
+    "claude": "Claude",
+    "cursor": "Cursor",
+    "codex": "Codex"
+  },
+  "tools": {
+    "settings": "ツール設定",
+    "error": "ツールエラー",
+    "result": "ツール結果",
+    "viewParams": "入力パラメータを表示",
+    "viewRawParams": "生パラメータを表示",
+    "viewDiff": "編集差分を表示:",
+    "creatingFile": "新規ファイルを作成:",
+    "updatingTodo": "Todoリストを更新中",
+    "read": "読み取り",
+    "readFile": "ファイルを読み取り",
+    "updateTodo": "Todoリストを更新",
+    "readTodo": "Todoリストを読み取り",
+    "searchResults": "件の結果"
+  },
+  "search": {
+    "found": "{{count}}件の{{type}}が見つかりました",
+    "file": "ファイル",
+    "files": "ファイル",
+    "pattern": "パターン:",
+    "in": "場所:"
+  },
+  "fileOperations": {
+    "updated": "ファイルを更新しました",
+    "created": "ファイルを作成しました",
+    "written": "ファイルを書き込みました",
+    "diff": "差分",
+    "newFile": "新規ファイル",
+    "viewContent": "ファイルの内容を表示",
+    "viewFullOutput": "全出力を表示（{{count}}文字）",
+    "contentDisplayed": "ファイルの内容は上の差分ビューに表示されています"
+  },
+  "interactive": {
+    "title": "インタラクティブプロンプト",
+    "waiting": "CLIでの応答を待っています",
+    "instruction": "Claudeが実行されているターミナルでオプションを選択してください。",
+    "selectedOption": "✓ Claudeがオプション{{number}}を選択しました",
+    "instructionDetail": "CLIでは、矢印キーまたは番号を入力してオプションを選択します。"
+  },
+  "thinking": {
+    "title": "思考中...",
+    "emoji": "💭 思考中..."
+  },
+  "json": {
+    "response": "JSONレスポンス"
+  },
+  "permissions": {
+    "grant": "{{tool}}に権限を付与",
+    "added": "権限を追加しました",
+    "addTo": "{{entry}}を許可されたツールに追加します。",
+    "retry": "権限を保存しました。ツールを使用するにはリクエストを再試行してください。",
+    "error": "権限を更新できませんでした。もう一度お試しください。",
+    "openSettings": "設定を開く"
+  },
+  "todo": {
+    "updated": "Todoリストを更新しました",
+    "current": "現在のTodoリスト"
+  },
+  "plan": {
+    "viewPlan": "📋 実装プランを表示",
+    "title": "実装プラン"
+  },
+  "usageLimit": {
+    "resetAt": "Claudeの使用制限に達しました。制限は**{{time}} {{timezone}}** - {{date}}にリセットされます"
+  },
+  "codex": {
+    "permissionMode": "権限モード",
+    "modes": {
+      "default": "デフォルトモード",
+      "acceptEdits": "編集を許可",
+      "bypassPermissions": "権限をバイパス",
+      "plan": "プランモード"
+    },
+    "descriptions": {
+      "default": "信頼されたコマンド（ls、cat、grep、git statusなど）のみ自動実行。その他のコマンドはスキップ。ワークスペースへの書き込みは可能。",
+      "acceptEdits": "ワークスペース内ですべてのコマンドを自動実行。サンドボックス環境での完全自動モード。",
+      "bypassPermissions": "制限なしの完全なシステムアクセス。すべてのコマンドがディスクとネットワークへの完全なアクセスで自動実行されます。注意して使用してください。",
+      "plan": "プランニングモード - コマンドは実行されません"
+    },
+    "technicalDetails": "技術的な詳細"
+  },
+  "input": {
+    "placeholder": "/ でコマンド、@ でファイル指定、または {{provider}} に何でも聞いてください...",
+    "placeholderDefault": "メッセージを入力...",
+    "disabled": "入力無効",
+    "attachFiles": "ファイルを添付",
+    "attachImages": "画像を添付",
+    "send": "送信",
+    "stop": "停止",
+    "hintText": {
+      "ctrlEnter": "Ctrl+Enterで送信 • Shift+Enterで改行 • Tabでモード切替 • / でスラッシュコマンド",
+      "enter": "Enterで送信 • Shift+Enterで改行 • Tabでモード切替 • / でスラッシュコマンド"
+    },
+    "clickToChangeMode": "クリックで権限モードを変更（または入力欄でTab）",
+    "showAllCommands": "すべてのコマンドを表示"
+  },
+  "thinkingMode": {
+    "selector": {
+      "title": "思考モード",
+      "description": "拡張思考によりClaudeがより多くの選択肢を検討できます",
+      "active": "有効",
+      "tip": "高い思考モードは時間がかかりますが、より深い分析が得られます"
+    },
+    "modes": {
+      "none": {
+        "name": "標準",
+        "description": "通常のClaudeの応答",
+        "prefix": ""
+      },
+      "think": {
+        "name": "Think",
+        "description": "基本的な拡張思考",
+        "prefix": "think"
+      },
+      "thinkHard": {
+        "name": "Think Hard",
+        "description": "より深い検討",
+        "prefix": "think hard"
+      },
+      "thinkHarder": {
+        "name": "Think Harder",
+        "description": "代替案を含む深い分析",
+        "prefix": "think harder"
+      },
+      "ultrathink": {
+        "name": "Ultrathink",
+        "description": "最大限の思考予算",
+        "prefix": "ultrathink"
+      }
+    },
+    "buttonTitle": "思考モード: {{mode}}"
+  },
+  "providerSelection": {
+    "title": "AIアシスタントを選択",
+    "description": "新しい会話を始めるプロバイダーを選択してください",
+    "selectModel": "モデルを選択",
+    "providerInfo": {
+      "anthropic": "by Anthropic",
+      "openai": "by OpenAI",
+      "cursorEditor": "AIコードエディタ"
+    },
+    "readyPrompt": {
+      "claude": "{{model}}でClaudeを使用する準備ができました。下にメッセージを入力してください。",
+      "cursor": "{{model}}でCursorを使用する準備ができました。下にメッセージを入力してください。",
+      "codex": "{{model}}でCodexを使用する準備ができました。下にメッセージを入力してください。",
+      "default": "上からプロバイダーを選択して開始してください"
+    }
+  },
+  "session": {
+    "continue": {
+      "title": "会話を続ける",
+      "description": "コードについて質問したり、変更をリクエストしたり、開発タスクのサポートを受けられます"
+    },
+    "loading": {
+      "olderMessages": "過去のメッセージを読み込んでいます...",
+      "sessionMessages": "セッションメッセージを読み込んでいます..."
+    },
+    "messages": {
+      "showingOf": "{{total}}件中{{shown}}件を表示",
+      "scrollToLoad": "上にスクロールしてさらに読み込む",
+      "showingLast": "最新{{count}}件を表示（全{{total}}件）",
+      "loadEarlier": "過去のメッセージを読み込む"
+    }
+  },
+  "shell": {
+    "selectProject": {
+      "title": "プロジェクトを選択",
+      "description": "プロジェクトを選択してそのディレクトリでシェルを開きます"
+    },
+    "status": {
+      "newSession": "新しいセッション",
+      "initializing": "初期化中...",
+      "restarting": "再起動中..."
+    },
+    "actions": {
+      "disconnect": "切断",
+      "disconnectTitle": "シェルから切断",
+      "restart": "再起動",
+      "restartTitle": "シェルを再起動（先に切断してください）",
+      "connect": "シェルで続行",
+      "connectTitle": "シェルに接続"
+    },
+    "loading": "ターミナルを読み込んでいます...",
+    "connecting": "シェルに接続しています...",
+    "startSession": "新しいClaudeセッションを開始",
+    "resumeSession": "セッションを再開: {{displayName}}...",
+    "runCommand": "{{projectName}}で{{command}}を実行",
+    "startCli": "{{projectName}}でClaude CLIを起動しています",
+    "defaultCommand": "コマンド"
+  }
+}

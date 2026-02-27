@@ -2,7 +2,9 @@ import React from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import SetupForm from './SetupForm';
 import LoginForm from './LoginForm';
+import Onboarding from './Onboarding';
 import { MessageSquare } from 'lucide-react';
+import { IS_PLATFORM } from '../constants/config';
 
 const LoadingScreen = () => (
   <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -24,7 +26,19 @@ const LoadingScreen = () => (
 );
 
 const ProtectedRoute = ({ children }) => {
-  const { user, isLoading, needsSetup } = useAuth();
+  const { user, isLoading, needsSetup, hasCompletedOnboarding, refreshOnboardingStatus } = useAuth();
+
+  if (IS_PLATFORM) {
+    if (isLoading) {
+      return <LoadingScreen />;
+    }
+
+    if (!hasCompletedOnboarding) {
+      return <Onboarding onComplete={refreshOnboardingStatus} />;
+    }
+
+    return children;
+  }
 
   if (isLoading) {
     return <LoadingScreen />;
@@ -36,6 +50,10 @@ const ProtectedRoute = ({ children }) => {
 
   if (!user) {
     return <LoginForm />;
+  }
+
+  if (!hasCompletedOnboarding) {
+    return <Onboarding onComplete={refreshOnboardingStatus} />;
   }
 
   return children;

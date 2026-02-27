@@ -1,12 +1,51 @@
 import express from 'express';
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import { promises as fs } from 'fs';
 import { extractProjectDirectory } from '../projects.js';
+import { queryClaudeSDK } from '../claude-sdk.js';
+import { spawnCursor } from '../cursor-cli.js';
 
 const router = express.Router();
 const execAsync = promisify(exec);
+
+function spawnAsync(command, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      ...options,
+      shell: false,
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    child.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    child.on('error', (error) => {
+      reject(error);
+    });
+
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve({ stdout, stderr });
+        return;
+      }
+
+      const error = new Error(`Command failed: ${command} ${args.join(' ')}`);
+      error.code = code;
+      error.stdout = stdout;
+      error.stderr = stderr;
+      reject(error);
+    });
+  });
+}
 
 // Helper function to get the actual project path from the encoded project name
 async function getActualProjectPath(projectName) {
@@ -19,6 +58,35 @@ async function getActualProjectPath(projectName) {
   }
 }
 
+// Helper function to strip git diff headers
+function stripDiffHeaders(diff) {
+  if (!diff) return '';
+
+  const lines = diff.split('\n');
+  const filteredLines = [];
+  let startIncluding = false;
+
+  for (const line of lines) {
+    // Skip all header lines including diff --git, index, file mode, and --- / +++ file paths
+    if (line.startsWith('diff --git') ||
+        line.startsWith('index ') ||
+        line.startsWith('new file mode') ||
+        line.startsWith('deleted file mode') ||
+        line.startsWith('---') ||
+        line.startsWith('+++')) {
+      continue;
+    }
+
+    // Start including lines from @@ hunk headers onwards
+    if (line.startsWith('@@') || startIncluding) {
+      startIncluding = true;
+      filteredLines.push(line);
+    }
+  }
+
+  return filteredLines.join('\n');
+}
+
 // Helper function to validate git repository
 async function validateGitRepository(projectPath) {
   try {
@@ -29,19 +97,16 @@ async function validateGitRepository(projectPath) {
   }
 
   try {
-    // Use --show-toplevel to get the root of the git repository
-    const { stdout: gitRoot } = await execAsync('git rev-parse --show-toplevel', { cwd: projectPath });
-    const normalizedGitRoot = path.resolve(gitRoot.trim());
-    const normalizedProjectPath = path.resolve(projectPath);
-    
-    // Ensure the git root matches our project path (prevent using parent git repos)
-    if (normalizedGitRoot !== normalizedProjectPath) {
-      throw new Error(`Project directory is not a git repository. This directory is inside a git repository at ${normalizedGitRoot}, but git operations should be run from the repository root.`);
+    // Allow any directory that is inside a work tree (repo root or nested folder).
+    const { stdout: insideWorkTreeOutput } = await execAsync('git rev-parse --is-inside-work-tree', { cwd: projectPath });
+    const isInsideWorkTree = insideWorkTreeOutput.trim() === 'true';
+    if (!isInsideWorkTree) {
+      throw new Error('Not inside a git work tree');
     }
-  } catch (error) {
-    if (error.message.includes('Project directory is not a git repository')) {
-      throw error;
-    }
+
+    // Ensure git can resolve the repository root for this directory.
+    await execAsync('git rev-parse --show-toplevel', { cwd: projectPath });
+  } catch {
     throw new Error('Not a git repository. This directory does not contain a .git folder. Initialize a git repository with "git init" to use source control features.');
   }
 }
@@ -49,35 +114,47 @@ async function validateGitRepository(projectPath) {
 // Get git status for a project
 router.get('/status', async (req, res) => {
   const { project } = req.query;
-  
+
   if (!project) {
     return res.status(400).json({ error: 'Project name is required' });
   }
 
   try {
     const projectPath = await getActualProjectPath(project);
-    console.log('Git status for project:', project, '-> path:', projectPath);
-    
+
     // Validate git repository
     await validateGitRepository(projectPath);
 
-    // Get current branch
-    const { stdout: branch } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: projectPath });
-    
+    // Get current branch - handle case where there are no commits yet
+    let branch = 'main';
+    let hasCommits = true;
+    try {
+      const { stdout: branchOutput } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: projectPath });
+      branch = branchOutput.trim();
+    } catch (error) {
+      // No HEAD exists - repository has no commits yet
+      if (error.message.includes('unknown revision') || error.message.includes('ambiguous argument')) {
+        hasCommits = false;
+        branch = 'main';
+      } else {
+        throw error;
+      }
+    }
+
     // Get git status
     const { stdout: statusOutput } = await execAsync('git status --porcelain', { cwd: projectPath });
-    
+
     const modified = [];
     const added = [];
     const deleted = [];
     const untracked = [];
-    
+
     statusOutput.split('\n').forEach(line => {
       if (!line.trim()) return;
-      
+
       const status = line.substring(0, 2);
       const file = line.substring(3);
-      
+
       if (status === 'M ' || status === ' M' || status === 'MM') {
         modified.push(file);
       } else if (status === 'A ' || status === 'AM') {
@@ -88,9 +165,10 @@ router.get('/status', async (req, res) => {
         untracked.push(file);
       }
     });
-    
+
     res.json({
-      branch: branch.trim(),
+      branch,
+      hasCommits,
       modified,
       added,
       deleted,
@@ -98,9 +176,9 @@ router.get('/status', async (req, res) => {
     });
   } catch (error) {
     console.error('Git status error:', error);
-    res.json({ 
-      error: error.message.includes('not a git repository') || error.message.includes('Project directory is not a git repository') 
-        ? error.message 
+    res.json({
+      error: error.message.includes('not a git repository') || error.message.includes('Project directory is not a git repository')
+        ? error.message
         : 'Git operation failed',
       details: error.message.includes('not a git repository') || error.message.includes('Project directory is not a git repository')
         ? error.message
@@ -123,33 +201,158 @@ router.get('/diff', async (req, res) => {
     // Validate git repository
     await validateGitRepository(projectPath);
     
-    // Check if file is untracked
+    // Check if file is untracked or deleted
     const { stdout: statusOutput } = await execAsync(`git status --porcelain "${file}"`, { cwd: projectPath });
     const isUntracked = statusOutput.startsWith('??');
-    
+    const isDeleted = statusOutput.trim().startsWith('D ') || statusOutput.trim().startsWith(' D');
+
     let diff;
     if (isUntracked) {
       // For untracked files, show the entire file content as additions
-      const fileContent = await fs.readFile(path.join(projectPath, file), 'utf-8');
+      const filePath = path.join(projectPath, file);
+      const stats = await fs.stat(filePath);
+
+      if (stats.isDirectory()) {
+        // For directories, show a simple message
+        diff = `Directory: ${file}\n(Cannot show diff for directories)`;
+      } else {
+        const fileContent = await fs.readFile(filePath, 'utf-8');
+        const lines = fileContent.split('\n');
+        diff = `--- /dev/null\n+++ b/${file}\n@@ -0,0 +1,${lines.length} @@\n` +
+               lines.map(line => `+${line}`).join('\n');
+      }
+    } else if (isDeleted) {
+      // For deleted files, show the entire file content from HEAD as deletions
+      const { stdout: fileContent } = await execAsync(`git show HEAD:"${file}"`, { cwd: projectPath });
       const lines = fileContent.split('\n');
-      diff = `--- /dev/null\n+++ b/${file}\n@@ -0,0 +1,${lines.length} @@\n` + 
-             lines.map(line => `+${line}`).join('\n');
+      diff = `--- a/${file}\n+++ /dev/null\n@@ -1,${lines.length} +0,0 @@\n` +
+             lines.map(line => `-${line}`).join('\n');
     } else {
       // Get diff for tracked files
-      const { stdout } = await execAsync(`git diff HEAD -- "${file}"`, { cwd: projectPath });
-      diff = stdout || '';
-      
-      // If no unstaged changes, check for staged changes
-      if (!diff) {
+      // First check for unstaged changes (working tree vs index)
+      const { stdout: unstagedDiff } = await execAsync(`git diff -- "${file}"`, { cwd: projectPath });
+
+      if (unstagedDiff) {
+        // Show unstaged changes if they exist
+        diff = stripDiffHeaders(unstagedDiff);
+      } else {
+        // If no unstaged changes, check for staged changes (index vs HEAD)
         const { stdout: stagedDiff } = await execAsync(`git diff --cached -- "${file}"`, { cwd: projectPath });
-        diff = stagedDiff;
+        diff = stripDiffHeaders(stagedDiff) || '';
       }
     }
-    
+
     res.json({ diff });
   } catch (error) {
     console.error('Git diff error:', error);
     res.json({ error: error.message });
+  }
+});
+
+// Get file content with diff information for CodeEditor
+router.get('/file-with-diff', async (req, res) => {
+  const { project, file } = req.query;
+
+  if (!project || !file) {
+    return res.status(400).json({ error: 'Project name and file path are required' });
+  }
+
+  try {
+    const projectPath = await getActualProjectPath(project);
+
+    // Validate git repository
+    await validateGitRepository(projectPath);
+
+    // Check file status
+    const { stdout: statusOutput } = await execAsync(`git status --porcelain "${file}"`, { cwd: projectPath });
+    const isUntracked = statusOutput.startsWith('??');
+    const isDeleted = statusOutput.trim().startsWith('D ') || statusOutput.trim().startsWith(' D');
+
+    let currentContent = '';
+    let oldContent = '';
+
+    if (isDeleted) {
+      // For deleted files, get content from HEAD
+      const { stdout: headContent } = await execAsync(`git show HEAD:"${file}"`, { cwd: projectPath });
+      oldContent = headContent;
+      currentContent = headContent; // Show the deleted content in editor
+    } else {
+      // Get current file content
+      const filePath = path.join(projectPath, file);
+      const stats = await fs.stat(filePath);
+
+      if (stats.isDirectory()) {
+        // Cannot show content for directories
+        return res.status(400).json({ error: 'Cannot show diff for directories' });
+      }
+
+      currentContent = await fs.readFile(filePath, 'utf-8');
+
+      if (!isUntracked) {
+        // Get the old content from HEAD for tracked files
+        try {
+          const { stdout: headContent } = await execAsync(`git show HEAD:"${file}"`, { cwd: projectPath });
+          oldContent = headContent;
+        } catch (error) {
+          // File might be newly added to git (staged but not committed)
+          oldContent = '';
+        }
+      }
+    }
+
+    res.json({
+      currentContent,
+      oldContent,
+      isDeleted,
+      isUntracked
+    });
+  } catch (error) {
+    console.error('Git file-with-diff error:', error);
+    res.json({ error: error.message });
+  }
+});
+
+// Create initial commit
+router.post('/initial-commit', async (req, res) => {
+  const { project } = req.body;
+
+  if (!project) {
+    return res.status(400).json({ error: 'Project name is required' });
+  }
+
+  try {
+    const projectPath = await getActualProjectPath(project);
+
+    // Validate git repository
+    await validateGitRepository(projectPath);
+
+    // Check if there are already commits
+    try {
+      await execAsync('git rev-parse HEAD', { cwd: projectPath });
+      return res.status(400).json({ error: 'Repository already has commits. Use regular commit instead.' });
+    } catch (error) {
+      // No HEAD - this is good, we can create initial commit
+    }
+
+    // Add all files
+    await execAsync('git add .', { cwd: projectPath });
+
+    // Create initial commit
+    const { stdout } = await execAsync('git commit -m "Initial commit"', { cwd: projectPath });
+
+    res.json({ success: true, output: stdout, message: 'Initial commit created successfully' });
+  } catch (error) {
+    console.error('Git initial commit error:', error);
+
+    // Handle the case where there's nothing to commit
+    if (error.message.includes('nothing to commit')) {
+      return res.status(400).json({
+        error: 'Nothing to commit',
+        details: 'No files found in the repository. Add some files first.'
+      });
+    }
+
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -192,7 +395,6 @@ router.get('/branches', async (req, res) => {
 
   try {
     const projectPath = await getActualProjectPath(project);
-    console.log('Git branches for project:', project, '-> path:', projectPath);
     
     // Validate git repository
     await validateGitRepository(projectPath);
@@ -277,11 +479,17 @@ router.get('/commits', async (req, res) => {
 
   try {
     const projectPath = await getActualProjectPath(project);
+    await validateGitRepository(projectPath);
+    const parsedLimit = Number.parseInt(String(limit), 10);
+    const safeLimit = Number.isFinite(parsedLimit) && parsedLimit > 0
+      ? Math.min(parsedLimit, 100)
+      : 10;
     
     // Get commit log with stats
-    const { stdout } = await execAsync(
-      `git log --pretty=format:'%H|%an|%ae|%ad|%s' --date=relative -n ${limit}`,
-      { cwd: projectPath }
+    const { stdout } = await spawnAsync(
+      'git',
+      ['log', '--pretty=format:%H|%an|%ae|%ad|%s', '--date=relative', '-n', String(safeLimit)],
+      { cwd: projectPath },
     );
     
     const commits = stdout
@@ -342,19 +550,24 @@ router.get('/commit-diff', async (req, res) => {
   }
 });
 
-// Generate commit message based on staged changes
+// Generate commit message based on staged changes using AI
 router.post('/generate-commit-message', async (req, res) => {
-  const { project, files } = req.body;
-  
+  const { project, files, provider = 'claude' } = req.body;
+
   if (!project || !files || files.length === 0) {
     return res.status(400).json({ error: 'Project name and files are required' });
   }
 
+  // Validate provider
+  if (!['claude', 'cursor'].includes(provider)) {
+    return res.status(400).json({ error: 'provider must be "claude" or "cursor"' });
+  }
+
   try {
     const projectPath = await getActualProjectPath(project);
-    
+
     // Get diff for selected files
-    let combinedDiff = '';
+    let diffContext = '';
     for (const file of files) {
       try {
         const { stdout } = await execAsync(
@@ -362,17 +575,36 @@ router.post('/generate-commit-message', async (req, res) => {
           { cwd: projectPath }
         );
         if (stdout) {
-          combinedDiff += `\n--- ${file} ---\n${stdout}`;
+          diffContext += `\n--- ${file} ---\n${stdout}`;
         }
       } catch (error) {
         console.error(`Error getting diff for ${file}:`, error);
       }
     }
-    
-    // Use AI to generate commit message (simple implementation)
-    // In a real implementation, you might want to use GPT or Claude API
-    const message = generateSimpleCommitMessage(files, combinedDiff);
-    
+
+    // If no diff found, might be untracked files
+    if (!diffContext.trim()) {
+      // Try to get content of untracked files
+      for (const file of files) {
+        try {
+          const filePath = path.join(projectPath, file);
+          const stats = await fs.stat(filePath);
+
+          if (!stats.isDirectory()) {
+            const content = await fs.readFile(filePath, 'utf-8');
+            diffContext += `\n--- ${file} (new file) ---\n${content.substring(0, 1000)}\n`;
+          } else {
+            diffContext += `\n--- ${file} (new directory) ---\n`;
+          }
+        } catch (error) {
+          console.error(`Error reading file ${file}:`, error);
+        }
+      }
+    }
+
+    // Generate commit message using AI
+    const message = await generateCommitMessageWithAI(files, diffContext, provider, projectPath);
+
     res.json({ message });
   } catch (error) {
     console.error('Generate commit message error:', error);
@@ -380,44 +612,143 @@ router.post('/generate-commit-message', async (req, res) => {
   }
 });
 
-// Simple commit message generator (can be replaced with AI)
-function generateSimpleCommitMessage(files, diff) {
-  const fileCount = files.length;
-  const isMultipleFiles = fileCount > 1;
-  
-  // Analyze the diff to determine the type of change
-  const additions = (diff.match(/^\+[^+]/gm) || []).length;
-  const deletions = (diff.match(/^-[^-]/gm) || []).length;
-  
-  // Determine the primary action
-  let action = 'Update';
-  if (additions > 0 && deletions === 0) {
-    action = 'Add';
-  } else if (deletions > 0 && additions === 0) {
-    action = 'Remove';
-  } else if (additions > deletions * 2) {
-    action = 'Enhance';
-  } else if (deletions > additions * 2) {
-    action = 'Refactor';
-  }
-  
-  // Generate message based on files
-  if (isMultipleFiles) {
-    const components = new Set(files.map(f => {
-      const parts = f.split('/');
-      return parts[parts.length - 2] || parts[0];
-    }));
-    
-    if (components.size === 1) {
-      return `${action} ${[...components][0]} component`;
-    } else {
-      return `${action} multiple components`;
+/**
+ * Generates a commit message using AI (Claude SDK or Cursor CLI)
+ * @param {Array<string>} files - List of changed files
+ * @param {string} diffContext - Git diff content
+ * @param {string} provider - 'claude' or 'cursor'
+ * @param {string} projectPath - Project directory path
+ * @returns {Promise<string>} Generated commit message
+ */
+async function generateCommitMessageWithAI(files, diffContext, provider, projectPath) {
+  // Create the prompt
+  const prompt = `Generate a conventional commit message for these changes.
+
+REQUIREMENTS:
+- Format: type(scope): subject
+- Include body explaining what changed and why
+- Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore
+- Subject under 50 chars, body wrapped at 72 chars
+- Focus on user-facing changes, not implementation details
+- Consider what's being added AND removed
+- Return ONLY the commit message (no markdown, explanations, or code blocks)
+
+FILES CHANGED:
+${files.map(f => `- ${f}`).join('\n')}
+
+DIFFS:
+${diffContext.substring(0, 4000)}
+
+Generate the commit message:`;
+
+  try {
+    // Create a simple writer that collects the response
+    let responseText = '';
+    const writer = {
+      send: (data) => {
+        try {
+          const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+          console.log('🔍 Writer received message type:', parsed.type);
+
+          // Handle different message formats from Claude SDK and Cursor CLI
+          // Claude SDK sends: {type: 'claude-response', data: {message: {content: [...]}}}
+          if (parsed.type === 'claude-response' && parsed.data) {
+            const message = parsed.data.message || parsed.data;
+            console.log('📦 Claude response message:', JSON.stringify(message, null, 2).substring(0, 500));
+            if (message.content && Array.isArray(message.content)) {
+              // Extract text from content array
+              for (const item of message.content) {
+                if (item.type === 'text' && item.text) {
+                  console.log('✅ Extracted text chunk:', item.text.substring(0, 100));
+                  responseText += item.text;
+                }
+              }
+            }
+          }
+          // Cursor CLI sends: {type: 'cursor-output', output: '...'}
+          else if (parsed.type === 'cursor-output' && parsed.output) {
+            console.log('✅ Cursor output:', parsed.output.substring(0, 100));
+            responseText += parsed.output;
+          }
+          // Also handle direct text messages
+          else if (parsed.type === 'text' && parsed.text) {
+            console.log('✅ Direct text:', parsed.text.substring(0, 100));
+            responseText += parsed.text;
+          }
+        } catch (e) {
+          // Ignore parse errors
+          console.error('Error parsing writer data:', e);
+        }
+      },
+      setSessionId: () => {}, // No-op for this use case
+    };
+
+    console.log('🚀 Calling AI agent with provider:', provider);
+    console.log('📝 Prompt length:', prompt.length);
+
+    // Call the appropriate agent
+    if (provider === 'claude') {
+      await queryClaudeSDK(prompt, {
+        cwd: projectPath,
+        permissionMode: 'bypassPermissions',
+        model: 'sonnet'
+      }, writer);
+    } else if (provider === 'cursor') {
+      await spawnCursor(prompt, {
+        cwd: projectPath,
+        skipPermissions: true
+      }, writer);
     }
-  } else {
-    const fileName = files[0].split('/').pop();
-    const componentName = fileName.replace(/\.(jsx?|tsx?|css|scss)$/, '');
-    return `${action} ${componentName}`;
+
+    console.log('📊 Total response text collected:', responseText.length, 'characters');
+    console.log('📄 Response preview:', responseText.substring(0, 200));
+
+    // Clean up the response
+    const cleanedMessage = cleanCommitMessage(responseText);
+    console.log('🧹 Cleaned message:', cleanedMessage.substring(0, 200));
+
+    return cleanedMessage || 'chore: update files';
+  } catch (error) {
+    console.error('Error generating commit message with AI:', error);
+    // Fallback to simple message
+    return `chore: update ${files.length} file${files.length !== 1 ? 's' : ''}`;
   }
+}
+
+/**
+ * Cleans the AI-generated commit message by removing markdown, code blocks, and extra formatting
+ * @param {string} text - Raw AI response
+ * @returns {string} Clean commit message
+ */
+function cleanCommitMessage(text) {
+  if (!text || !text.trim()) {
+    return '';
+  }
+
+  let cleaned = text.trim();
+
+  // Remove markdown code blocks
+  cleaned = cleaned.replace(/```[a-z]*\n/g, '');
+  cleaned = cleaned.replace(/```/g, '');
+
+  // Remove markdown headers
+  cleaned = cleaned.replace(/^#+\s*/gm, '');
+
+  // Remove leading/trailing quotes
+  cleaned = cleaned.replace(/^["']|["']$/g, '');
+
+  // If there are multiple lines, take everything (subject + body)
+  // Just clean up extra blank lines
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+
+  // Remove any explanatory text before the actual commit message
+  // Look for conventional commit pattern and start from there
+  const conventionalCommitMatch = cleaned.match(/(feat|fix|docs|style|refactor|perf|test|build|ci|chore)(\(.+?\))?:.+/s);
+  if (conventionalCommitMatch) {
+    cleaned = cleaned.substring(cleaned.indexOf(conventionalCommitMatch[0]));
+  }
+
+  return cleaned.trim();
 }
 
 // Get remote status (ahead/behind commits with smart remote detection)
@@ -765,10 +1096,17 @@ router.post('/discard', async (req, res) => {
     }
 
     const status = statusOutput.substring(0, 2);
-    
+
     if (status === '??') {
-      // Untracked file - delete it
-      await fs.unlink(path.join(projectPath, file));
+      // Untracked file or directory - delete it
+      const filePath = path.join(projectPath, file);
+      const stats = await fs.stat(filePath);
+
+      if (stats.isDirectory()) {
+        await fs.rm(filePath, { recursive: true, force: true });
+      } else {
+        await fs.unlink(filePath);
+      }
     } else if (status.includes('M') || status.includes('D')) {
       // Modified or deleted file - restore from HEAD
       await execAsync(`git restore "${file}"`, { cwd: projectPath });
@@ -809,10 +1147,18 @@ router.post('/delete-untracked', async (req, res) => {
       return res.status(400).json({ error: 'File is not untracked. Use discard for tracked files.' });
     }
 
-    // Delete the untracked file
-    await fs.unlink(path.join(projectPath, file));
-    
-    res.json({ success: true, message: `Untracked file ${file} deleted successfully` });
+    // Delete the untracked file or directory
+    const filePath = path.join(projectPath, file);
+    const stats = await fs.stat(filePath);
+
+    if (stats.isDirectory()) {
+      // Use rm with recursive option for directories
+      await fs.rm(filePath, { recursive: true, force: true });
+      res.json({ success: true, message: `Untracked directory ${file} deleted successfully` });
+    } else {
+      await fs.unlink(filePath);
+      res.json({ success: true, message: `Untracked file ${file} deleted successfully` });
+    }
   } catch (error) {
     console.error('Git delete untracked error:', error);
     res.status(500).json({ error: error.message });
