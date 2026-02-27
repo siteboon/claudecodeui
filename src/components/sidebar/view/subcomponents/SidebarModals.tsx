@@ -5,7 +5,7 @@ import type { TFunction } from 'i18next';
 import { Button } from '../../../../shared/view/ui';
 import ProjectCreationWizard from '../../../ProjectCreationWizard';
 import Settings from '../../../settings/view/Settings';
-import VersionUpgradeModal from '../modals/VersionUpgradeModal';
+import VersionUpgradeModal from '../../../version-upgrade/view';
 import type { Project } from '../../../../types/app';
 import type { ReleaseInfo } from '../../../../types/sharedTypes';
 import type { InstallMode } from '../../../../hooks/useVersionCheck';
