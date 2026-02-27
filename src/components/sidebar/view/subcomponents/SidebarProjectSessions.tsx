@@ -1,6 +1,6 @@
 import { ChevronDown, Plus } from 'lucide-react';
 import type { TFunction } from 'i18next';
-import { Button } from '../../../ui/button';
+import { Button } from '../../../../shared/view/ui';
 import type { Project, ProjectSession, SessionProvider } from '../../../../types/app';
 import type { SessionWithProvider, TouchHandlerFactory } from '../../types/types';
 import SidebarSessionItem from './SidebarSessionItem';

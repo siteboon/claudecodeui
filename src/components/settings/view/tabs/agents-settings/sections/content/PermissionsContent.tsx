@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { AlertTriangle, Plus, Shield, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Button } from '../../../../../../ui/button';
-import { Input } from '../../../../../../ui/input';
+import { Button, Input } from '../../../../../../../shared/view/ui';
 import type { CodexPermissionMode, GeminiPermissionMode } from '../../../../../types/types';
 
 const COMMON_CLAUDE_TOOLS = [

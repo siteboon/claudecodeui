@@ -1,4 +1,4 @@
-import { ScrollArea } from '../../../ui/scroll-area';
+import { ScrollArea } from '../../../../shared/view/ui';
 import type { TFunction } from 'i18next';
 import type { Project } from '../../../../types/app';
 import type { ReleaseInfo } from '../../../../types/sharedTypes';

@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Button } from '../../../ui/button';
-import { Input } from '../../../ui/input';
+import { Button, Input } from '../../../../shared/view/ui';
 import { DEFAULT_CODEX_MCP_FORM } from '../../constants/constants';
 import type { CodexMcpFormState, McpServer } from '../../types/types';
 

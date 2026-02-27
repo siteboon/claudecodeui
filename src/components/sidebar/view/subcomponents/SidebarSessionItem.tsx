@@ -1,5 +1,4 @@
-import { Badge } from '../../../ui/badge';
-import { Button } from '../../../ui/button';
+import { Badge, Button } from '../../../../shared/view/ui';
 import { Check, Clock, Edit2, Trash2, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
 import { cn } from '../../../../lib/utils';

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, FolderPlus, GitBranch, Key, ChevronRight, ChevronLeft, Check, Loader2, AlertCircle, FolderOpen, Eye, EyeOff, Plus } from 'lucide-react';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
+import { Button, Input } from '../shared/view/ui';
 import { api } from '../utils/api';
 import { useTranslation } from 'react-i18next';
 

@@ -1,7 +1,7 @@
 import { Settings as SettingsIcon, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import LoginModal from '../../LoginModal';
-import { Button } from '../../ui/button';
+import { Button } from '../../../shared/view/ui';
 import ClaudeMcpFormModal from '../view/modals/ClaudeMcpFormModal';
 import CodexMcpFormModal from '../view/modals/CodexMcpFormModal';
 import SettingsMainTabs from '../view/SettingsMainTabs';

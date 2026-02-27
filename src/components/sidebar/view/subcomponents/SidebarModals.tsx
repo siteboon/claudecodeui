@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import ReactDOM from 'react-dom';
 import { AlertTriangle, Trash2 } from 'lucide-react';
 import type { TFunction } from 'i18next';
-import { Button } from '../../../ui/button';
+import { Button } from '../../../../shared/view/ui';
 import ProjectCreationWizard from '../../../ProjectCreationWizard';
 import Settings from '../../../settings/view/Settings';
 import VersionUpgradeModal from '../modals/VersionUpgradeModal';

@@ -1,6 +1,6 @@
 import { Check, Copy } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Button } from '../../../../../ui/button';
+import { Button } from '../../../../../../shared/view/ui';
 import type { CreatedApiKey } from '../types';
 
 type NewApiKeyAlertProps = {

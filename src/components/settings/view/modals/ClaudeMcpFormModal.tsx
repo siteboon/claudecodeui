@@ -2,8 +2,7 @@ import { FolderOpen, Globe, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Input } from '../../../ui/input';
-import { Button } from '../../../ui/button';
+import { Button, Input } from '../../../../shared/view/ui';
 import { DEFAULT_CLAUDE_MCP_FORM } from '../../constants/constants';
 import type { ClaudeMcpFormState, McpServer, McpScope, McpTransportType, SettingsProject } from '../../types/types';
 

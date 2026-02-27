@@ -1,6 +1,6 @@
 import { memo, useMemo } from 'react';
 import { CheckCircle2, Circle, Clock, type LucideIcon } from 'lucide-react';
-import { Badge } from '../../../../ui/badge';
+import { Badge } from '../../../../../shared/view/ui';
 
 type TodoStatus = 'completed' | 'in_progress' | 'pending';
 type TodoPriority = 'high' | 'medium' | 'low';

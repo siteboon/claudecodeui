@@ -1,8 +1,7 @@
 import { Check, GitBranch } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useGitSettings } from '../../../hooks/useGitSettings';
-import { Button } from '../../../../ui/button';
-import { Input } from '../../../../ui/input';
+import { Button, Input } from '../../../../../shared/view/ui';
 
 export default function GitSettingsTab() {
   const { t } = useTranslation('settings');

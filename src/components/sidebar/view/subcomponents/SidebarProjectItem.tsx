@@ -1,4 +1,4 @@
-import { Button } from '../../../ui/button';
+import { Button } from '../../../../shared/view/ui';
 import { Check, ChevronDown, ChevronRight, Edit3, Folder, FolderOpen, Star, Trash2, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
 import { cn } from '../../../../lib/utils';

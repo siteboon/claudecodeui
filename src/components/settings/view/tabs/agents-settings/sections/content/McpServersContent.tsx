@@ -1,7 +1,6 @@
 import { Edit3, Globe, Plus, Server, Terminal, Trash2, Zap } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Badge } from '../../../../../../ui/badge';
-import { Button } from '../../../../../../ui/button';
+import { Badge, Button } from '../../../../../../../shared/view/ui';
 import type { McpServer, McpToolsResult, McpTestResult } from '../../../../../types/types';
 
 const getTransportIcon = (type: string | undefined) => {

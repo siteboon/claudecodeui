@@ -1,7 +1,6 @@
 import { FolderPlus, Plus, RefreshCw, Search, X, PanelLeftClose } from 'lucide-react';
 import type { TFunction } from 'i18next';
-import { Button } from '../../../ui/button';
-import { Input } from '../../../ui/input';
+import { Button, Input } from '../../../../shared/view/ui';
 import { IS_PLATFORM } from '../../../../constants/config';
 
 type SidebarHeaderProps = {
