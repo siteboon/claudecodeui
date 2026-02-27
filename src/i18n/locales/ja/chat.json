@@ -4,6 +4,10 @@
     "copied": "コピーしました",
     "copyCode": "コードをコピー"
   },
+  "copyMessage": {
+    "copy": "メッセージをコピー",
+    "copied": "メッセージをコピーしました"
+  },
   "messageTypes": {
     "user": "U",
     "error": "エラー",
