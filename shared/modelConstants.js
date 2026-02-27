@@ -8,19 +8,22 @@
  *
  * Note: Claude uses two different formats:
  * - SDK format ('sonnet', 'opus') - used by the UI and claude-sdk.js
- * - API format ('claude-sonnet-4.5') - used by slash commands for display
+ * - API format ('claude-sonnet-4-6') - used by slash commands for display
  */
 export const CLAUDE_MODELS = {
   // Models in SDK format (what the actual SDK accepts)
   OPTIONS: [
+    { value: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
     { value: 'sonnet', label: 'Sonnet' },
+    { value: 'claude-opus-4-6', label: 'Opus 4.6' },
     { value: 'opus', label: 'Opus' },
+    { value: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5' },
     { value: 'haiku', label: 'Haiku' },
     { value: 'opusplan', label: 'Opus Plan' },
     { value: 'sonnet[1m]', label: 'Sonnet [1M]' }
   ],
 
-  DEFAULT: 'sonnet'
+  DEFAULT: 'claude-sonnet-4-6'
 };
 
 /**
