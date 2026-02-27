@@ -48,6 +48,7 @@ export default function FileTreeHeader({
               className="h-7 w-7 p-0"
               onClick={onNewFile}
               title={t('fileTree.newFile', 'New File (Cmd+N)')}
+              aria-label={t('fileTree.newFile', 'New File (Cmd+N)')}
               disabled={operationLoading}
             >
               <FileText className="w-3.5 h-3.5" />
@@ -60,6 +61,7 @@ export default function FileTreeHeader({
               className="h-7 w-7 p-0"
               onClick={onNewFolder}
               title={t('fileTree.newFolder', 'New Folder (Cmd+Shift+N)')}
+              aria-label={t('fileTree.newFolder', 'New Folder (Cmd+Shift+N)')}
               disabled={operationLoading}
             >
               <FolderPlus className="w-3.5 h-3.5" />
@@ -72,6 +74,7 @@ export default function FileTreeHeader({
               className="h-7 w-7 p-0"
               onClick={onRefresh}
               title={t('fileTree.refresh', 'Refresh')}
+              aria-label={t('fileTree.refresh', 'Refresh')}
               disabled={operationLoading}
             >
               <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
@@ -84,6 +87,7 @@ export default function FileTreeHeader({
               className="h-7 w-7 p-0"
               onClick={onCollapseAll}
               title={t('fileTree.collapseAll', 'Collapse All')}
+              aria-label={t('fileTree.collapseAll', 'Collapse All')}
             >
               <ChevronDown className="w-3.5 h-3.5" />
             </Button>
@@ -97,6 +101,7 @@ export default function FileTreeHeader({
             className="h-7 w-7 p-0"
             onClick={() => onViewModeChange('simple')}
             title={t('fileTree.simpleView')}
+            aria-label={t('fileTree.simpleView')}
           >
             <List className="w-3.5 h-3.5" />
           </Button>
@@ -106,6 +111,7 @@ export default function FileTreeHeader({
             className="h-7 w-7 p-0"
             onClick={() => onViewModeChange('compact')}
             title={t('fileTree.compactView')}
+            aria-label={t('fileTree.compactView')}
           >
             <Eye className="w-3.5 h-3.5" />
           </Button>
@@ -115,6 +121,7 @@ export default function FileTreeHeader({
             className="h-7 w-7 p-0"
             onClick={() => onViewModeChange('detailed')}
             title={t('fileTree.detailedView')}
+            aria-label={t('fileTree.detailedView')}
           >
             <TableProperties className="w-3.5 h-3.5" />
           </Button>
@@ -138,6 +145,7 @@ export default function FileTreeHeader({
             className="absolute right-0.5 top-1/2 -translate-y-1/2 h-5 w-5 p-0 hover:bg-accent"
             onClick={() => onSearchQueryChange('')}
             title={t('fileTree.clearSearch')}
+            aria-label={t('fileTree.clearSearch')}
           >
             <X className="w-3 h-3" />
           </Button>

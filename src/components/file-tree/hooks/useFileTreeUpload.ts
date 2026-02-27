@@ -10,7 +10,6 @@ type UseFileTreeUploadOptions = {
 
 // Helper function to read all files from a directory entry recursively
 const readAllDirectoryEntries = async (directoryEntry: FileSystemDirectoryEntry, basePath = ''): Promise<File[]> => {
-  console.log('[DEBUG] readAllDirectoryEntries called with basePath:', basePath, 'directory:', directoryEntry.name);
   const files: File[] = [];
 
   const reader = directoryEntry.createReader();
@@ -24,8 +23,6 @@ const readAllDirectoryEntries = async (directoryEntry: FileSystemDirectoryEntry,
     });
     entries = entries.concat(batch);
   } while (batch.length > 0);
-
-  console.log('[DEBUG] Found entries:', entries.map(e => ({ name: e.name, isFile: e.isFile, isDirectory: e.isDirectory })));
 
   // Files to ignore (system files)
   const ignoredFiles = ['.DS_Store', 'Thumbs.db', 'desktop.ini'];
@@ -50,7 +47,6 @@ const readAllDirectoryEntries = async (directoryEntry: FileSystemDirectoryEntry,
         lastModified: file.lastModified,
       });
       files.push(fileWithPath);
-      console.log('[DEBUG] Added file:', entryPath);
     } else if (entry.isDirectory) {
       const dirEntry = entry as FileSystemDirectoryEntry;
       const subFiles = await readAllDirectoryEntries(dirEntry, entryPath);
@@ -110,18 +106,14 @@ export const useFileTreeUpload = ({
           if (item.kind === 'file') {
             const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
 
-            console.log('[DEBUG] Drop entry:', entry?.name, 'isDirectory:', entry?.isDirectory, 'isFile:', entry?.isFile);
-
             if (entry) {
               if (entry.isFile) {
                 const file = await new Promise<File>((resolve, reject) => {
                   (entry as FileSystemFileEntry).file(resolve, reject);
                 });
-                console.log('[DEBUG] Single file:', file.name);
                 files.push(file);
               } else if (entry.isDirectory) {
                 // Pass the directory name as basePath so files include the folder path
-                console.log('[DEBUG] Reading directory with basePath:', entry.name);
                 const dirFiles = await readAllDirectoryEntries(entry as FileSystemDirectoryEntry, entry.name);
                 files.push(...dirFiles);
               }
@@ -141,8 +133,6 @@ export const useFileTreeUpload = ({
         setDropTarget(null);
         return;
       }
-
-      console.log('[DEBUG] Files to upload:', files.map(f => ({ name: f.name, size: f.size })));
 
       const formData = new FormData();
       formData.append('targetPath', targetPath);

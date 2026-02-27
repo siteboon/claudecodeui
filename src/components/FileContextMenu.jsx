@@ -7,9 +7,7 @@ import {
   Trash2,
   Copy,
   Download,
-  RefreshCw,
-  ChevronRight,
-  MoreHorizontal
+  RefreshCw
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
