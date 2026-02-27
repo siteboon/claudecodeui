@@ -1218,7 +1218,7 @@ function handleShellConnection(ws) {
                         if (hasSession && sessionId) {
                             try {
                                 // Gemini CLI enforces its own native session IDs, unlike other agents that accept arbitrary string names.
-                                // The UI only knows about its internal generated `sessionId` (e.g. gemini_1234). 
+                                // The UI only knows about its internal generated `sessionId` (e.g. gemini_1234).
                                 // We must fetch the mapping from the backend session manager to pass the native `cliSessionId` to the shell.
                                 const sess = sessionManager.getSession(sessionId);
                                 if (sess && sess.cliSessionId) {
@@ -1791,8 +1791,8 @@ app.get('/api/projects/:projectName/sessions/:sessionId/token-usage', authentica
 
         // Construct the JSONL file path
         // Claude stores session files in ~/.claude/projects/[encoded-project-path]/[session-id].jsonl
-        // The encoding replaces /, spaces, ~, and _ with -
-        const encodedPath = projectPath.replace(/[\\/:\s~_]/g, '-');
+        // The encoding replaces any non-alphanumeric character (except -) with -
+        const encodedPath = projectPath.replace(/[^a-zA-Z0-9-]/g, '-');
         const projectDir = path.join(homeDir, '.claude', 'projects', encodedPath);
 
         const jsonlPath = path.join(projectDir, `${safeSessionId}.jsonl`);
