@@ -145,6 +145,7 @@ export function useChatRealtimeHandlers({
       'claude-error',
       'cursor-error',
       'codex-error',
+      'gemini-error',
     ]);
 
     const isClaudeSystemInit =
@@ -162,8 +163,8 @@ export function useChatRealtimeHandlers({
     const systemInitSessionId = isClaudeSystemInit
       ? structuredMessageData?.session_id
       : isCursorSystemInit
-      ? rawStructuredData?.session_id
-      : null;
+        ? rawStructuredData?.session_id
+        : null;
 
     const activeViewSessionId =
       selectedSession?.id || currentSessionId || pendingViewSessionRef.current?.sessionId || null;
@@ -176,7 +177,8 @@ export function useChatRealtimeHandlers({
       !pendingViewSessionRef.current.sessionId &&
       (latestMessage.type === 'claude-error' ||
         latestMessage.type === 'cursor-error' ||
-        latestMessage.type === 'codex-error');
+        latestMessage.type === 'codex-error' ||
+        latestMessage.type === 'gemini-error');
 
     const handleBackgroundLifecycle = (sessionId?: string) => {
       if (!sessionId) {
@@ -225,12 +227,6 @@ export function useChatRealtimeHandlers({
         if (latestMessage.sessionId && lifecycleMessageTypes.has(String(latestMessage.type))) {
           handleBackgroundLifecycle(latestMessage.sessionId);
         }
-        console.log(
-          'Skipping message for different session:',
-          latestMessage.sessionId,
-          'current:',
-          activeViewSessionId,
-        );
         return;
       }
     }
@@ -297,11 +293,6 @@ export function useChatRealtimeHandlers({
           structuredMessageData.session_id !== currentSessionId &&
           isSystemInitForView
         ) {
-          console.log('Claude CLI session duplication detected:', {
-            originalSession: currentSessionId,
-            newSession: structuredMessageData.session_id,
-          });
-
           setIsSystemSessionChange(true);
           onNavigateToSession?.(structuredMessageData.session_id);
           return;
@@ -314,10 +305,6 @@ export function useChatRealtimeHandlers({
           !currentSessionId &&
           isSystemInitForView
         ) {
-          console.log('New session init detected:', {
-            newSession: structuredMessageData.session_id,
-          });
-
           setIsSystemSessionChange(true);
           onNavigateToSession?.(structuredMessageData.session_id);
           return;
@@ -331,7 +318,6 @@ export function useChatRealtimeHandlers({
           structuredMessageData.session_id === currentSessionId &&
           isSystemInitForView
         ) {
-          console.log('System init message for current session, ignoring');
           return;
         }
 
@@ -583,17 +569,12 @@ export function useChatRealtimeHandlers({
             }
 
             if (currentSessionId && cursorData.session_id !== currentSessionId) {
-              console.log('Cursor session switch detected:', {
-                originalSession: currentSessionId,
-                newSession: cursorData.session_id,
-              });
               setIsSystemSessionChange(true);
               onNavigateToSession?.(cursorData.session_id);
               return;
             }
 
             if (!currentSessionId) {
-              console.log('Cursor new session init detected:', { newSession: cursorData.session_id });
               setIsSystemSessionChange(true);
               onNavigateToSession?.(cursorData.session_id);
               return;
@@ -612,9 +593,8 @@ export function useChatRealtimeHandlers({
           ...previous,
           {
             type: 'assistant',
-            content: `Using tool: ${latestMessage.tool} ${
-              latestMessage.input ? `with ${latestMessage.input}` : ''
-            }`,
+            content: `Using tool: ${latestMessage.tool} ${latestMessage.input ? `with ${latestMessage.input}` : ''
+              }`,
             timestamp: new Date(),
             isToolUse: true,
             toolName: latestMessage.tool,
@@ -897,7 +877,6 @@ export function useChatRealtimeHandlers({
             onNavigateToSession?.(codexActualSessionId);
           }
           sessionStorage.removeItem('pendingSessionId');
-          console.log('Codex session complete, ID set to:', codexPendingSessionId);
         }
 
         if (selectedProject) {
@@ -917,6 +896,91 @@ export function useChatRealtimeHandlers({
             timestamp: new Date(),
           },
         ]);
+        break;
+
+      case 'gemini-response': {
+        const geminiData = latestMessage.data;
+
+        if (geminiData && geminiData.type === 'message' && typeof geminiData.content === 'string') {
+          const content = decodeHtmlEntities(geminiData.content);
+
+          if (content) {
+            streamBufferRef.current += streamBufferRef.current ? `\n${content}` : content;
+          }
+
+          if (!geminiData.isPartial) {
+            // Immediate flush and finalization for the last chunk
+            if (streamTimerRef.current) {
+              clearTimeout(streamTimerRef.current);
+              streamTimerRef.current = null;
+            }
+            const chunk = streamBufferRef.current;
+            streamBufferRef.current = '';
+
+            if (chunk) {
+              appendStreamingChunk(setChatMessages, chunk, true);
+            }
+            finalizeStreamingMessage(setChatMessages);
+          } else if (!streamTimerRef.current && streamBufferRef.current) {
+            streamTimerRef.current = window.setTimeout(() => {
+              const chunk = streamBufferRef.current;
+              streamBufferRef.current = '';
+              streamTimerRef.current = null;
+
+              if (chunk) {
+                appendStreamingChunk(setChatMessages, chunk, true);
+              }
+            }, 100);
+          }
+        }
+        break;
+      }
+
+      case 'gemini-error':
+        setIsLoading(false);
+        setCanAbortSession(false);
+        setChatMessages((previous) => [
+          ...previous,
+          {
+            type: 'error',
+            content: latestMessage.error || 'An error occurred with Gemini',
+            timestamp: new Date(),
+          },
+        ]);
+        break;
+
+      case 'gemini-tool-use':
+        setChatMessages((previous) => [
+          ...previous,
+          {
+            type: 'assistant',
+            content: '',
+            timestamp: new Date(),
+            isToolUse: true,
+            toolName: latestMessage.toolName,
+            toolInput: latestMessage.parameters ? JSON.stringify(latestMessage.parameters, null, 2) : '',
+            toolId: latestMessage.toolId,
+            toolResult: null,
+          }
+        ]);
+        break;
+
+      case 'gemini-tool-result':
+        setChatMessages((previous) =>
+          previous.map((message) => {
+            if (message.isToolUse && message.toolId === latestMessage.toolId) {
+              return {
+                ...message,
+                toolResult: {
+                  content: latestMessage.output || `Status: ${latestMessage.status}`,
+                  isError: latestMessage.status === 'error',
+                  timestamp: new Date(),
+                },
+              };
+            }
+            return message;
+          }),
+        );
         break;
 
       case 'session-aborted': {

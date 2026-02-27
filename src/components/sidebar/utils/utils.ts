@@ -48,7 +48,7 @@ export const getSessionDate = (session: SessionWithProvider): Date => {
     return new Date(session.createdAt || session.lastActivity || 0);
   }
 
-  return new Date(session.lastActivity || 0);
+  return new Date(session.lastActivity || session.createdAt || 0);
 };
 
 export const getSessionName = (session: SessionWithProvider, t: TFunction): string => {
@@ -58,6 +58,10 @@ export const getSessionName = (session: SessionWithProvider, t: TFunction): stri
 
   if (session.__provider === 'codex') {
     return session.summary || session.name || t('projects.codexSession');
+  }
+
+  if (session.__provider === 'gemini') {
+    return session.summary || session.name || t('projects.newSession');
   }
 
   return session.summary || t('projects.newSession');
@@ -72,7 +76,7 @@ export const getSessionTime = (session: SessionWithProvider): string => {
     return String(session.createdAt || session.lastActivity || '');
   }
 
-  return String(session.lastActivity || '');
+  return String(session.lastActivity || session.createdAt || '');
 };
 
 export const createSessionViewModel = (
@@ -86,6 +90,7 @@ export const createSessionViewModel = (
   return {
     isCursorSession: session.__provider === 'cursor',
     isCodexSession: session.__provider === 'codex',
+    isGeminiSession: session.__provider === 'gemini',
     isActive: diffInMinutes < 10,
     sessionName: getSessionName(session, t),
     sessionTime: getSessionTime(session),
@@ -112,7 +117,12 @@ export const getAllSessions = (
     __provider: 'codex' as const,
   }));
 
-  return [...claudeSessions, ...cursorSessions, ...codexSessions].sort(
+  const geminiSessions = (project.geminiSessions || []).map((session) => ({
+    ...session,
+    __provider: 'gemini' as const,
+  }));
+
+  return [...claudeSessions, ...cursorSessions, ...codexSessions, ...geminiSessions].sort(
     (a, b) => getSessionDate(b).getTime() - getSessionDate(a).getTime(),
   );
 };
@@ -205,8 +215,8 @@ export const normalizeProjectForSettings = (project: Project): SettingsProject =
     typeof project.fullPath === 'string' && project.fullPath.length > 0
       ? project.fullPath
       : typeof project.path === 'string'
-      ? project.path
-      : '';
+        ? project.path
+        : '';
 
   return {
     name: project.name,
