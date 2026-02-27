@@ -60,6 +60,7 @@ export default function ClaudeStatus({
     return null;
   }
 
+  // Note: showThinking only controls the reasoning accordion in messages, not this processing indicator
   const actionIndex = Math.floor(elapsedTime / 3) % ACTION_WORDS.length;
   const statusText = status?.text || ACTION_WORDS[actionIndex];
   const tokens = status?.tokens || fakeTokens;
@@ -101,6 +102,7 @@ export default function ClaudeStatus({
 
         {canInterrupt && onAbort && (
           <button
+            type="button"
             onClick={onAbort}
             className="ml-2 sm:ml-3 text-xs bg-red-600 hover:bg-red-700 active:bg-red-800 text-white px-2 py-1 sm:px-3 sm:py-1.5 rounded-md transition-colors flex items-center gap-1 sm:gap-1.5 flex-shrink-0 font-medium"
           >

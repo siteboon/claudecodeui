@@ -9,15 +9,19 @@ export default function AgentsSettingsTab({
   claudeAuthStatus,
   cursorAuthStatus,
   codexAuthStatus,
+  geminiAuthStatus,
   onClaudeLogin,
   onCursorLogin,
   onCodexLogin,
+  onGeminiLogin,
   claudePermissions,
   onClaudePermissionsChange,
   cursorPermissions,
   onCursorPermissionsChange,
   codexPermissionMode,
   onCodexPermissionModeChange,
+  geminiPermissionMode,
+  onGeminiPermissionModeChange,
   mcpServers,
   cursorMcpServers,
   codexMcpServers,
@@ -48,13 +52,19 @@ export default function AgentsSettingsTab({
       authStatus: codexAuthStatus,
       onLogin: onCodexLogin,
     },
+    gemini: {
+      authStatus: geminiAuthStatus,
+      onLogin: onGeminiLogin,
+    },
   }), [
     claudeAuthStatus,
     codexAuthStatus,
     cursorAuthStatus,
+    geminiAuthStatus,
     onClaudeLogin,
     onCodexLogin,
     onCursorLogin,
+    onGeminiLogin,
   ]);
 
   return (
@@ -81,6 +91,8 @@ export default function AgentsSettingsTab({
           onCursorPermissionsChange={onCursorPermissionsChange}
           codexPermissionMode={codexPermissionMode}
           onCodexPermissionModeChange={onCodexPermissionModeChange}
+          geminiPermissionMode={geminiPermissionMode}
+          onGeminiPermissionModeChange={onGeminiPermissionModeChange}
           mcpServers={mcpServers}
           cursorMcpServers={cursorMcpServers}
           codexMcpServers={codexMcpServers}
