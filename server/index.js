@@ -1730,7 +1730,7 @@ app.get('/api/projects/:projectName/sessions/:sessionId/token-usage', authentica
     // Construct the JSONL file path
     // Claude stores session files in ~/.claude/projects/[encoded-project-path]/[session-id].jsonl
     // The encoding replaces /, spaces, ~, and _ with -
-    const encodedPath = projectPath.replace(/[\\/:\s~_]/g, '-');
+    const encodedPath = projectPath.replace(/[^a-zA-Z0-9-]/g, '-');
     const projectDir = path.join(homeDir, '.claude', 'projects', encodedPath);
 
     const jsonlPath = path.join(projectDir, `${safeSessionId}.jsonl`);
