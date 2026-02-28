@@ -104,6 +104,7 @@ export type SkillInfoDialogState =
       mode: 'menu-mobile' | 'token-touch';
       info: SkillInfo;
       tokenRange?: SkillTokenRange;
+      usageText?: string;
     };
 
 export type ActiveSkillTooltip = {
@@ -195,6 +196,58 @@ const createFakeSubmitEvent = () => {
 const isTemporarySessionId = (sessionId: string | null | undefined) =>
   Boolean(sessionId && sessionId.startsWith('new-session-'));
 
+const trimSkillTokenAroundCursor = (
+  value: string,
+  cursorPos: number,
+  fallbackSlashPosition = -1,
+): { nextInput: string; nextCursor: number } => {
+  const boundedCursor = Math.max(0, Math.min(cursorPos, value.length));
+  const beforeCursor = value.slice(0, boundedCursor);
+  const slashMatch = beforeCursor.match(/(^|\s)(\/\S*)$/);
+
+  const derivedSlashPosition = slashMatch
+    ? (slashMatch.index || 0) + slashMatch[1].length
+    : fallbackSlashPosition >= 0
+      ? fallbackSlashPosition
+      : -1;
+
+  if (derivedSlashPosition < 0 || derivedSlashPosition > value.length) {
+    return {
+      nextInput: value,
+      nextCursor: boundedCursor,
+    };
+  }
+
+  let tokenEnd = derivedSlashPosition;
+  while (tokenEnd < value.length && !/\s/.test(value[tokenEnd])) {
+    tokenEnd += 1;
+  }
+
+  if (tokenEnd <= derivedSlashPosition || value[derivedSlashPosition] !== '/') {
+    return {
+      nextInput: value,
+      nextCursor: boundedCursor,
+    };
+  }
+
+  let gapEnd = tokenEnd;
+  while (gapEnd < value.length && value[gapEnd] === ' ') {
+    gapEnd += 1;
+  }
+
+  const before = value.slice(0, derivedSlashPosition);
+  const after = value.slice(gapEnd);
+  const needsSpacer = before.length > 0 && !/\s$/.test(before) && after.length > 0 && !/^\s/.test(after);
+  const spacer = needsSpacer ? ' ' : '';
+  const nextInput = `${before}${spacer}${after}`;
+  const nextCursor = Math.min(derivedSlashPosition + spacer.length, nextInput.length);
+
+  return {
+    nextInput,
+    nextCursor,
+  };
+};
+
 export function useChatComposerState({
   selectedProject,
   selectedSession,
@@ -238,6 +291,7 @@ export function useChatComposerState({
   const [thinkingMode, setThinkingMode] = useState('none');
   const [hoveredSkillTokenRange, setHoveredSkillTokenRange] = useState<SkillTokenRange | null>(null);
   const [skillInfoDialogState, setSkillInfoDialogState] = useState<SkillInfoDialogState>({ open: false });
+  const [mobileSkillUsageText, setMobileSkillUsageText] = useState('');
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputHighlightRef = useRef<HTMLDivElement>(null);
@@ -468,6 +522,22 @@ export function useChatComposerState({
   );
 
   const {
+    showFileDropdown,
+    filteredFiles,
+    selectedFileIndex,
+    cursorPosition,
+    renderInputWithMentions,
+    selectFile,
+    setCursorPosition,
+    handleFileMentionsKeyDown,
+  } = useFileMentions({
+    selectedProject,
+    input,
+    setInput,
+    textareaRef,
+  });
+
+  const {
     slashCommands,
     slashCommandsCount,
     filteredCommands,
@@ -475,6 +545,7 @@ export function useChatComposerState({
     commandQuery,
     showCommandMenu,
     selectedCommandIndex,
+    slashPosition,
     resetCommandMenuState,
     handleCommandSelect,
     handleToggleCommandMenu,
@@ -489,22 +560,7 @@ export function useChatComposerState({
     setInput,
     textareaRef,
     onExecuteCommand: executeCommand,
-  });
-
-  const {
-    showFileDropdown,
-    filteredFiles,
-    selectedFileIndex,
-    cursorPosition,
-    renderInputWithMentions,
-    selectFile,
-    setCursorPosition,
-    handleFileMentionsKeyDown,
-  } = useFileMentions({
-    selectedProject,
-    input,
-    setInput,
-    textareaRef,
+    onCursorPositionChange: setCursorPosition,
   });
 
   const skillCommands = useMemo(
@@ -537,58 +593,61 @@ export function useChatComposerState({
     }
 
     const cursorPos = Math.max(0, Math.min(cursorPosition, input.length));
+    const beforeCursor = input.slice(0, cursorPos);
+    const afterCursor = input.slice(cursorPos);
+    const slashContextMatch = beforeCursor.match(/(^|\s)(\/\S+)(\s*)$/);
 
-    let tokenStart = cursorPos;
-    while (tokenStart > 0 && !/\s/.test(input[tokenStart - 1])) {
-      tokenStart -= 1;
-    }
-
-    let tokenEnd = cursorPos;
-    while (tokenEnd < input.length && !/\s/.test(input[tokenEnd])) {
-      tokenEnd += 1;
-    }
-
-    const tokenText = input.slice(tokenStart, tokenEnd);
-    if (!tokenText.startsWith('/')) {
+    if (!slashContextMatch) {
       return null;
     }
 
-    const matchingCommands = skillCommands.filter((command) => command.name.startsWith(tokenText));
-    const exactCommand = skillCommandByName.get(tokenText) || null;
+    const tokenStart = (slashContextMatch.index || 0) + slashContextMatch[1].length;
+    const tokenPrefix = slashContextMatch[2];
+    const spacingBeforeCursor = slashContextMatch[3] || '';
+    const tokenTail = afterCursor.match(/^\S*/)?.[0] || '';
+    const fullToken = `${tokenPrefix}${tokenTail}`;
 
-    let trailingSpaceCount = 0;
-    while (tokenEnd + trailingSpaceCount < input.length && input[tokenEnd + trailingSpaceCount] === ' ') {
-      trailingSpaceCount += 1;
+    if (!fullToken.startsWith('/')) {
+      return null;
     }
 
-    const cursorInsideToken = cursorPos >= tokenStart && cursorPos <= tokenEnd;
-    const cursorAtSingleTrailingSpace = cursorPos === tokenEnd + 1 && trailingSpaceCount === 1;
+    const matchingCommands = skillCommands.filter((command) => command.name.startsWith(fullToken));
+    const exactCommand = skillCommandByName.get(fullToken) || null;
+
+    const hasTokenTailAfterCursor = tokenTail.length > 0;
+    const cursorInSlashSpaceArea = !hasTokenTailAfterCursor;
+
+    const lineSuffix = afterCursor.split(/\r?\n/, 1)[0] || '';
+    const spacingAfterCursor = lineSuffix.match(/^(\s*)/)?.[1] || '';
+    const immediateSpaceCount = spacingBeforeCursor.length + spacingAfterCursor.length;
 
     const inlineHintCommand =
-      matchingCommands.length === 1 && cursorInsideToken && trailingSpaceCount === 0
+      matchingCommands.length === 1 &&
+      cursorInSlashSpaceArea &&
+      (tokenTail.length === 0 || spacingBeforeCursor.length > 0)
         ? matchingCommands[0]
         : null;
 
     let tooltipCommand: SlashCommand | null = null;
 
-    if (exactCommand) {
-      const isPrefixAmbiguous = matchingCommands.length > 1;
-      if (isPrefixAmbiguous) {
-        if (cursorAtSingleTrailingSpace) {
+    if (!inlineHintCommand) {
+      if (exactCommand) {
+        const isPrefixAmbiguous = matchingCommands.length > 1;
+        if (isPrefixAmbiguous) {
+          if (spacingBeforeCursor.length === 1 && tokenTail.length === 0) {
+            tooltipCommand = exactCommand;
+          }
+        } else if (immediateSpaceCount <= 1) {
           tooltipCommand = exactCommand;
         }
-      } else if ((cursorInsideToken || cursorAtSingleTrailingSpace) && trailingSpaceCount <= 1) {
-        tooltipCommand = exactCommand;
       }
-    } else if (matchingCommands.length === 1 && cursorInsideToken && trailingSpaceCount === 0) {
-      tooltipCommand = matchingCommands[0];
     }
 
     if (!inlineHintCommand && !tooltipCommand) {
       return null;
     }
 
-    const command = tooltipCommand || inlineHintCommand;
+    const command = inlineHintCommand || tooltipCommand;
     if (!command) {
       return null;
     }
@@ -600,9 +659,10 @@ export function useChatComposerState({
         start: tokenStart,
         end: tokenStart + command.name.length,
       },
-      hasSingleTrailingSpace: trailingSpaceCount === 1,
       showInlineHint: Boolean(inlineHintCommand),
       showTooltip: Boolean(tooltipCommand),
+      hintCursorPosition: cursorPos,
+      fullToken,
     };
   }, [cursorPosition, input, skillCommandByName, skillCommands]);
 
@@ -665,6 +725,7 @@ export function useChatComposerState({
 
   const closeSkillInfoDialog = useCallback(() => {
     setHoveredSkillTokenRange(null);
+    setMobileSkillUsageText('');
     setSkillInfoDialogState({ open: false });
   }, []);
 
@@ -674,10 +735,12 @@ export function useChatComposerState({
     }
 
     setHoveredSkillTokenRange(null);
+    setMobileSkillUsageText('');
     setSkillInfoDialogState({
       open: true,
       mode: 'menu-mobile',
       info: normalizeSkillInfo(command),
+      usageText: '',
     });
   }, []);
 
@@ -718,6 +781,7 @@ export function useChatComposerState({
 
     if (!range) {
       setHoveredSkillTokenRange(null);
+      setMobileSkillUsageText('');
       setSkillInfoDialogState({ open: false });
       return;
     }
@@ -750,8 +814,68 @@ export function useChatComposerState({
     });
 
     setHoveredSkillTokenRange(null);
+    setMobileSkillUsageText('');
     setSkillInfoDialogState({ open: false });
   }, [setCursorPosition, skillInfoDialogState]);
+
+  const applySkillUsageFromDialog = useCallback(() => {
+    if (!skillInfoDialogState.open || skillInfoDialogState.mode !== 'menu-mobile') {
+      return;
+    }
+
+    const skillName = skillInfoDialogState.info.commandName;
+    if (!skillName || !skillName.startsWith('/')) {
+      setMobileSkillUsageText('');
+      setSkillInfoDialogState({ open: false });
+      return;
+    }
+
+    const usageText = mobileSkillUsageText.trim();
+    const baseInput = inputValueRef.current;
+    const currentCursor = Math.max(0, Math.min(cursorPosition, baseInput.length));
+    const { nextInput: trimmedInput, nextCursor } = trimSkillTokenAroundCursor(baseInput, currentCursor, slashPosition);
+    const hasUsage = usageText.length > 0;
+    const insertion = hasUsage ? `${skillName} ${usageText}` : `${skillName}`;
+    const prefixedInput = trimmedInput.slice(0, nextCursor);
+    const suffixedInput = trimmedInput.slice(nextCursor);
+    const needsLeadingSpace = prefixedInput.length > 0 && !/\s$/.test(prefixedInput);
+    const needsTrailingSpace = hasUsage && suffixedInput.length > 0 && !/^\s/.test(suffixedInput);
+    const insertedText = `${needsLeadingSpace ? ' ' : ''}${insertion}${needsTrailingSpace ? ' ' : ''}`;
+    const nextValue = `${prefixedInput}${insertedText}${suffixedInput}`;
+    const caretPosition = prefixedInput.length + insertedText.length;
+
+    setInput(nextValue);
+    inputValueRef.current = nextValue;
+    setCursorPosition(caretPosition);
+    setHoveredSkillTokenRange(null);
+    setMobileSkillUsageText('');
+    setSkillInfoDialogState({ open: false });
+
+    requestAnimationFrame(() => {
+      if (!textareaRef.current) {
+        return;
+      }
+      textareaRef.current.focus();
+      textareaRef.current.setSelectionRange(caretPosition, caretPosition);
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+      const lineHeight = parseInt(window.getComputedStyle(textareaRef.current).lineHeight);
+      setIsTextareaExpanded(textareaRef.current.scrollHeight > lineHeight * 2);
+    });
+  }, [cursorPosition, mobileSkillUsageText, setCursorPosition, skillInfoDialogState, slashPosition]);
+
+  const updateSkillUsageText = useCallback((value: string) => {
+    setMobileSkillUsageText(value);
+    setSkillInfoDialogState((previous) => {
+      if (!previous.open || previous.mode !== 'menu-mobile') {
+        return previous;
+      }
+      return {
+        ...previous,
+        usageText: value,
+      };
+    });
+  }, []);
 
   const renderInputWithSkillDecorations = useCallback(
     (text: string): ReactNode => {
@@ -765,20 +889,39 @@ export function useChatComposerState({
       );
 
       if (skillRanges.length === 0) {
-        const baseSegments: ReactNode[] = [renderInputWithMentions(text)];
-        if (inlineSkillArgumentHint) {
-          baseSegments.push(
+        if (inlineSkillArgumentHint && activeTypedSkillToken) {
+          const cursor = Math.max(0, Math.min(activeTypedSkillToken.hintCursorPosition, text.length));
+          const beforeHintText = text.slice(0, cursor);
+          const afterHintText = text.slice(cursor);
+          const hintWidthCh = Math.max(8, inlineSkillArgumentHint.length + 2);
+
+          return [
+            createElement('span', { key: 'skill-no-range-before' }, renderInputWithMentions(beforeHintText)),
             createElement(
               'span',
               {
-                key: 'skill-inline-hint-empty',
-                className: 'ml-1 text-muted-foreground/60',
+                key: 'skill-inline-hint-overlay',
+                className: 'relative pointer-events-none',
               },
-              inlineSkillArgumentHint,
+              createElement('span', {
+                key: 'skill-inline-hint-spacer',
+                className: 'inline-block',
+                style: { width: `${hintWidthCh}ch` },
+              }),
+              createElement(
+                'span',
+                {
+                  key: 'skill-inline-hint-text',
+                  className: 'absolute left-0 top-0 text-muted-foreground/60',
+                },
+                inlineSkillArgumentHint,
+              ),
             ),
-          );
+            createElement('span', { key: 'skill-no-range-after' }, renderInputWithMentions(afterHintText)),
+          ];
         }
-        return baseSegments;
+
+        return [renderInputWithMentions(text)];
       }
 
       let offset = 0;
@@ -786,13 +929,72 @@ export function useChatComposerState({
 
       skillRanges.forEach((range, index) => {
         if (range.start > offset) {
-          segments.push(
-            createElement(
-              'span',
-              { key: `skill-text-${index}` },
-              renderInputWithMentions(text.slice(offset, range.start)),
-            ),
-          );
+          const plainSegmentStart = offset;
+          const plainSegmentEnd = range.start;
+          const plainSegmentText = text.slice(plainSegmentStart, plainSegmentEnd);
+
+          if (
+            inlineSkillArgumentHint &&
+            activeTypedSkillToken &&
+            activeTypedSkillToken.hintCursorPosition >= plainSegmentStart &&
+            activeTypedSkillToken.hintCursorPosition <= plainSegmentEnd
+          ) {
+            const splitIndex = activeTypedSkillToken.hintCursorPosition - plainSegmentStart;
+            const beforeHintText = plainSegmentText.slice(0, splitIndex);
+            const afterHintText = plainSegmentText.slice(splitIndex);
+            const hintWidthCh = Math.max(8, inlineSkillArgumentHint.length + 2);
+
+            if (beforeHintText) {
+              segments.push(
+                createElement(
+                  'span',
+                  { key: `skill-text-before-hint-${index}` },
+                  renderInputWithMentions(beforeHintText),
+                ),
+              );
+            }
+
+            segments.push(
+              createElement(
+                'span',
+                {
+                  key: `skill-inline-hint-${index}`,
+                  className: 'relative pointer-events-none',
+                },
+                createElement('span', {
+                  key: `skill-inline-hint-spacer-${index}`,
+                  className: 'inline-block',
+                  style: { width: `${hintWidthCh}ch` },
+                }),
+                createElement(
+                  'span',
+                  {
+                    key: `skill-inline-hint-text-${index}`,
+                    className: 'absolute left-0 top-0 text-muted-foreground/60',
+                  },
+                  inlineSkillArgumentHint,
+                ),
+              ),
+            );
+
+            if (afterHintText) {
+              segments.push(
+                createElement(
+                  'span',
+                  { key: `skill-text-after-hint-${index}` },
+                  renderInputWithMentions(afterHintText),
+                ),
+              );
+            }
+          } else {
+            segments.push(
+              createElement(
+                'span',
+                { key: `skill-text-${index}` },
+                renderInputWithMentions(plainSegmentText),
+              ),
+            );
+          }
         }
 
         const tokenText = text.slice(range.start, range.end);
@@ -822,31 +1024,77 @@ export function useChatComposerState({
       });
 
       if (offset < text.length) {
-        segments.push(
-          createElement(
-            'span',
-            { key: 'skill-tail' },
-            renderInputWithMentions(text.slice(offset)),
-          ),
-        );
-      }
+        const tailStart = offset;
+        const tailText = text.slice(offset);
 
-      if (inlineSkillArgumentHint) {
-        segments.push(
-          createElement(
-            'span',
-            {
-              key: 'skill-inline-hint',
-              className: 'ml-1 text-muted-foreground/60',
-            },
-            inlineSkillArgumentHint,
-          ),
-        );
+        if (
+          inlineSkillArgumentHint &&
+          activeTypedSkillToken &&
+          activeTypedSkillToken.hintCursorPosition >= tailStart &&
+          activeTypedSkillToken.hintCursorPosition <= text.length
+        ) {
+          const splitIndex = activeTypedSkillToken.hintCursorPosition - tailStart;
+          const beforeHintText = tailText.slice(0, splitIndex);
+          const afterHintText = tailText.slice(splitIndex);
+          const hintWidthCh = Math.max(8, inlineSkillArgumentHint.length + 2);
+
+          if (beforeHintText) {
+            segments.push(
+              createElement(
+                'span',
+                { key: 'skill-tail-before-hint' },
+                renderInputWithMentions(beforeHintText),
+              ),
+            );
+          }
+
+          segments.push(
+            createElement(
+              'span',
+              {
+                key: 'skill-inline-hint-tail',
+                className: 'relative pointer-events-none',
+              },
+              createElement('span', {
+                key: 'skill-inline-hint-tail-spacer',
+                className: 'inline-block',
+                style: { width: `${hintWidthCh}ch` },
+              }),
+              createElement(
+                'span',
+                {
+                  key: 'skill-inline-hint-tail-text',
+                  className: 'absolute left-0 top-0 text-muted-foreground/60',
+                },
+                inlineSkillArgumentHint,
+              ),
+            ),
+          );
+
+          if (afterHintText) {
+            segments.push(
+              createElement(
+                'span',
+                { key: 'skill-tail-after-hint' },
+                renderInputWithMentions(afterHintText),
+              ),
+            );
+          }
+        } else {
+          segments.push(
+            createElement(
+              'span',
+              { key: 'skill-tail' },
+              renderInputWithMentions(tailText),
+            ),
+          );
+        }
       }
 
       return segments;
     },
     [
+      activeTypedSkillToken,
       inlineSkillArgumentHint,
       renderInputWithMentions,
       skillCommands,
@@ -1475,6 +1723,9 @@ export function useChatComposerState({
     openSkillInfoDialogFromMenu,
     closeSkillInfoDialog,
     clearSkillToken,
+    mobileSkillUsageText,
+    updateSkillUsageText,
+    applySkillUsageFromDialog,
     selectFile,
     attachedImages,
     setAttachedImages,

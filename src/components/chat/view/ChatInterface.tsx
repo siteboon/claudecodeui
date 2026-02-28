@@ -146,6 +146,9 @@ function ChatInterface({
     openSkillInfoDialogFromMenu,
     closeSkillInfoDialog,
     clearSkillToken,
+    mobileSkillUsageText,
+    updateSkillUsageText,
+    applySkillUsageFromDialog,
     selectFile,
     attachedImages,
     setAttachedImages,
@@ -373,6 +376,9 @@ function ChatInterface({
           onOpenSkillInfoFromMenu={openSkillInfoDialogFromMenu}
           onCloseSkillInfoDialog={closeSkillInfoDialog}
           onClearSkillToken={clearSkillToken}
+          mobileSkillUsageText={mobileSkillUsageText}
+          onSkillUsageTextChange={updateSkillUsageText}
+          onApplySkillUsage={applySkillUsageFromDialog}
           textareaRef={textareaRef}
           input={input}
           onInputChange={handleInputChange}

@@ -14,9 +14,12 @@ type SkillInfoDialogProps = {
           argumentHint?: string;
           allowedTools?: string[];
         };
+        usageText?: string;
       };
   onClose: () => void;
   onClear?: () => void;
+  onUsageChange?: (value: string) => void;
+  onUsageApply?: () => void;
 };
 
 const formatMetadata = (metadata?: Record<string, unknown>): string | null => {
@@ -43,7 +46,13 @@ const formatMetadata = (metadata?: Record<string, unknown>): string | null => {
   }
 };
 
-export default function SkillInfoDialog({ state, onClose, onClear }: SkillInfoDialogProps) {
+export default function SkillInfoDialog({
+  state,
+  onClose,
+  onClear,
+  onUsageChange,
+  onUsageApply,
+}: SkillInfoDialogProps) {
   useEffect(() => {
     if (!state.open) {
       return;
@@ -117,6 +126,18 @@ export default function SkillInfoDialog({ state, onClose, onClear }: SkillInfoDi
           </div>
         )}
 
+        {state.mode === 'menu-mobile' && (
+          <div className="mb-3">
+            <label className="mb-1 block text-sm font-medium text-foreground">usage:</label>
+            <textarea
+              value={state.usageText || ''}
+              onChange={(event) => onUsageChange?.(event.target.value)}
+              placeholder="Arguments for this skill"
+              className="min-h-[84px] w-full resize-y rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+            />
+          </div>
+        )}
+
         <div className="mt-4 flex justify-end gap-2">
           {state.mode === 'token-touch' && onClear && (
             <button
@@ -127,12 +148,23 @@ export default function SkillInfoDialog({ state, onClose, onClear }: SkillInfoDi
               Clear
             </button>
           )}
+
+          {state.mode === 'menu-mobile' && onUsageApply && (
+            <button
+              type="button"
+              onClick={onUsageApply}
+              className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-sm text-primary hover:bg-primary/15"
+            >
+              Usage
+            </button>
+          )}
+
           <button
             type="button"
             onClick={onClose}
             className="rounded-lg border border-border px-3 py-1.5 text-sm text-foreground hover:bg-accent/60"
           >
-            Ok
+            Close
           </button>
         </div>
       </div>

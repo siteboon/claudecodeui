@@ -24,6 +24,7 @@ interface UseSlashCommandsOptions {
   setInput: Dispatch<SetStateAction<string>>;
   textareaRef: RefObject<HTMLTextAreaElement>;
   onExecuteCommand: (command: SlashCommand, rawInput?: string) => void | Promise<void>;
+  onCursorPositionChange?: (cursorPosition: number) => void;
 }
 
 const getCommandHistoryKey = (projectName: string, provider: SessionProvider) =>
@@ -61,6 +62,7 @@ export function useSlashCommands({
   setInput,
   textareaRef,
   onExecuteCommand,
+  onCursorPositionChange,
 }: UseSlashCommandsOptions) {
   const [slashCommands, setSlashCommands] = useState<SlashCommand[]>([]);
   const [filteredCommands, setFilteredCommands] = useState<SlashCommand[]>([]);
@@ -327,6 +329,7 @@ export function useSlashCommands({
     (command: SlashCommand) => {
       const { newInput, newCursorPosition } = replaceActiveSlashToken(command);
       setInput(newInput);
+      onCursorPositionChange?.(newCursorPosition);
 
       requestAnimationFrame(() => {
         if (!textareaRef.current) {
@@ -338,7 +341,7 @@ export function useSlashCommands({
         }
       });
     },
-    [replaceActiveSlashToken, setInput, textareaRef],
+    [onCursorPositionChange, replaceActiveSlashToken, setInput, textareaRef],
   );
 
   const selectCommandFromKeyboard = useCallback(
@@ -514,6 +517,7 @@ export function useSlashCommands({
     commandQuery,
     showCommandMenu,
     selectedCommandIndex,
+    slashPosition,
     resetCommandMenuState,
     handleCommandSelect,
     handleToggleCommandMenu,

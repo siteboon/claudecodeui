@@ -86,6 +86,9 @@ interface ChatComposerProps {
   onOpenSkillInfoFromMenu: (command: SlashCommand) => void;
   onCloseSkillInfoDialog: () => void;
   onClearSkillToken: () => void;
+  mobileSkillUsageText: string;
+  onSkillUsageTextChange: (value: string) => void;
+  onApplySkillUsage: () => void;
   textareaRef: RefObject<HTMLTextAreaElement>;
   input: string;
   onInputChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
@@ -148,6 +151,9 @@ export default function ChatComposer({
   onOpenSkillInfoFromMenu,
   onCloseSkillInfoDialog,
   onClearSkillToken,
+  mobileSkillUsageText,
+  onSkillUsageTextChange,
+  onApplySkillUsage,
   textareaRef,
   input,
   onInputChange,
@@ -372,9 +378,16 @@ export default function ChatComposer({
       </form>}
 
       <SkillInfoDialog
-        state={skillInfoDialogState}
+        state={{
+          ...skillInfoDialogState,
+          ...(skillInfoDialogState.open && skillInfoDialogState.mode === 'menu-mobile'
+            ? { usageText: mobileSkillUsageText }
+            : {}),
+        }}
         onClose={onCloseSkillInfoDialog}
         onClear={onClearSkillToken}
+        onUsageChange={onSkillUsageTextChange}
+        onUsageApply={onApplySkillUsage}
       />
     </div>
   );
