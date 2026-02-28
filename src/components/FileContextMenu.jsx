@@ -178,14 +178,12 @@ const FileContextMenu = ({
             icon={Pencil}
             label={t('fileTree.context.rename', 'Rename')}
             onClick={() => onRename?.(item)}
-            shortcut="F2"
           />
           <MenuItem
             icon={Trash2}
             label={t('fileTree.context.delete', 'Delete')}
             onClick={() => onDelete?.(item)}
             danger
-            shortcut="Del"
           />
           <MenuDivider />
           <MenuItem
@@ -209,27 +207,23 @@ const FileContextMenu = ({
             icon={FileText}
             label={t('fileTree.context.newFile', 'New File')}
             onClick={() => onNewFile?.(item.path)}
-            shortcut="⌘N"
           />
           <MenuItem
             icon={FolderPlus}
             label={t('fileTree.context.newFolder', 'New Folder')}
             onClick={() => onNewFolder?.(item.path)}
-            shortcut="⇧⌘N"
           />
           <MenuDivider />
           <MenuItem
             icon={Pencil}
             label={t('fileTree.context.rename', 'Rename')}
             onClick={() => onRename?.(item)}
-            shortcut="F2"
           />
           <MenuItem
             icon={Trash2}
             label={t('fileTree.context.delete', 'Delete')}
             onClick={() => onDelete?.(item)}
             danger
-            shortcut="Del"
           />
           <MenuDivider />
           <MenuItem
@@ -253,20 +247,17 @@ const FileContextMenu = ({
           icon={FileText}
           label={t('fileTree.context.newFile', 'New File')}
           onClick={() => onNewFile?.('')}
-          shortcut="⌘N"
         />
         <MenuItem
           icon={FolderPlus}
           label={t('fileTree.context.newFolder', 'New Folder')}
           onClick={() => onNewFolder?.('')}
-          shortcut="⇧⌘N"
         />
         <MenuDivider />
         <MenuItem
           icon={RefreshCw}
           label={t('fileTree.context.refresh', 'Refresh')}
           onClick={onRefresh}
-          shortcut="⌘R"
         />
       </>
     );
