@@ -1,6 +1,6 @@
 {
   "name": "@siteboon/claude-code-ui",
-  "version": "1.20.1",
+  "version": "1.21.0",
   "description": "A web-based UI for Claude Code CLI",
   "type": "module",
   "main": "server/index.js",
@@ -45,7 +45,7 @@
   "author": "CloudCLI UI Contributors",
   "license": "GPL-3.0",
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.1.71",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.59",
     "@codemirror/lang-css": "^6.3.1",
     "@codemirror/lang-html": "^6.4.9",
     "@codemirror/lang-javascript": "^6.2.4",
