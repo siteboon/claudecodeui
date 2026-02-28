@@ -855,7 +855,7 @@ export function useChatComposerState({
                 'span',
                 {
                   key: 'skill-inline-hint-text',
-                  className: 'absolute left-0 top-0 text-muted-foreground/60',
+                  className: 'absolute left-0 text-muted-foreground/60',
                 },
                 inlineSkillArgumentHint,
               ),
@@ -913,7 +913,7 @@ export function useChatComposerState({
                   'span',
                   {
                     key: `skill-inline-hint-text-${index}`,
-                    className: 'absolute left-0 top-0 text-muted-foreground/60',
+                    className: 'absolute left-0 text-muted-foreground/60',
                   },
                   inlineSkillArgumentHint,
                 ),
@@ -1007,7 +1007,7 @@ export function useChatComposerState({
                 'span',
                 {
                   key: 'skill-inline-hint-tail-text',
-                  className: 'absolute left-0 top-0 text-muted-foreground/60',
+                  className: 'absolute left-0 text-muted-foreground/60',
                 },
                 inlineSkillArgumentHint,
               ),

@@ -212,7 +212,7 @@ const QuickSettingsPanel = ({ provider, reloadSkillsForProvider }) => {
     try {
       await reloadSkillsForProvider(provider);
     } finally {
-      setIsReloadingSkills(false);
+      setTimeout(() => setIsReloadingSkills(false), 500);
     }
   };
 
@@ -339,9 +339,6 @@ const QuickSettingsPanel = ({ provider, reloadSkillsForProvider }) => {
                   <RefreshCw className={`h-4 w-4 text-gray-600 dark:text-gray-400 ${isReloadingSkills ? 'animate-spin' : ''}`} />
                   {t('quickSettings.reloadSkills.label')}
                 </span>
-                <span className="text-xs text-gray-500 dark:text-gray-400">
-                  {isReloadingSkills ? t('quickSettings.reloadSkills.loading') : t('quickSettings.reloadSkills.description')}
-                </span>
               </button>
             </div>
             {/* View Options */}
@@ -386,7 +383,7 @@ const QuickSettingsPanel = ({ provider, reloadSkillsForProvider }) => {
             {/* Whisper Dictation Settings - HIDDEN */}
             <div className="space-y-2" style={{ display: 'none' }}>
               <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">{t('quickSettings.sections.whisperDictation')}</h4>
-              
+
               <div className="space-y-2">
                 <label className="flex items-start p-3 rounded-lg bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition-colors border border-transparent hover:border-gray-300 dark:hover:border-gray-600">
                   <input
