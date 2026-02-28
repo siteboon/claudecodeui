@@ -593,9 +593,6 @@ async function queryClaudeSDK(command, options = {}, ws) {
         console.log('No session_id in message or already captured. message.session_id:', message.session_id, 'capturedSessionId:', capturedSessionId);
       }
 
-      // logs which model was used in the message
-      console.log("---> Model was sent using:", Object.keys(message.modelUsage || {}));
-
       // Transform and send message to WebSocket
       const transformedMessage = transformMessage(message);
       ws.send({
@@ -606,6 +603,10 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
       // Extract and send token budget updates from result messages
       if (message.type === 'result') {
+        const models = Object.keys(message.modelUsage || {});
+        if (models.length > 0) {
+          console.log("---> Model was sent using:", models);
+        }
         const tokenBudget = extractTokenBudget(message);
         if (tokenBudget) {
           console.log('Token budget from modelUsage:', tokenBudget);
