@@ -112,7 +112,9 @@ export default function SkillInfoDialog({
         {state.info.argumentHint && (
           <div className="mb-2 text-sm">
             <span className="font-medium text-foreground">{t('skillInfoDialog.fields.argumentHint')} </span>
-            <span className="font-mono text-muted-foreground">{state.info.argumentHint}</span>
+            <span className="font-mono text-muted-foreground break-words">
+              {state.info.argumentHint}
+            </span>
           </div>
         )}
 

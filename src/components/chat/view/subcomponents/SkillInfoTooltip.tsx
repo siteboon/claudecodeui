@@ -61,7 +61,9 @@ export default function SkillInfoTooltip({ info }: SkillInfoTooltipProps) {
       {info.argumentHint && (
         <div className="mb-1">
           <span className="font-medium text-foreground">{t('skillInfoDialog.fields.argumentHint')} </span>
-          <span className="text-muted-foreground font-mono">{info.argumentHint}</span>
+          <span className="text-muted-foreground font-mono break-words">
+            {info.argumentHint}
+          </span>
         </div>
       )}
 

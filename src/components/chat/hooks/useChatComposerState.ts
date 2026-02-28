@@ -867,7 +867,6 @@ export function useChatComposerState({
           const cursor = Math.max(0, Math.min(activeTypedSkillToken.hintCursorPosition, text.length));
           const beforeHintText = text.slice(0, cursor);
           const afterHintText = text.slice(cursor);
-          const hintWidthCh = Math.max(8, inlineSkillArgumentHint.length + 2);
 
           return [
             createElement('span', { key: 'skill-no-range-before' }, renderInputWithMentions(beforeHintText)),
@@ -877,16 +876,19 @@ export function useChatComposerState({
                 key: 'skill-inline-hint-overlay',
                 className: 'relative pointer-events-none',
               },
-              createElement('span', {
-                key: 'skill-inline-hint-spacer',
-                className: 'inline-block',
-                style: { width: `${hintWidthCh}ch` },
-              }),
+              createElement(
+                'span',
+                {
+                  key: 'skill-inline-hint-spacer',
+                  className: 'invisible whitespace-pre-wrap break-words',
+                },
+                inlineSkillArgumentHint,
+              ),
               createElement(
                 'span',
                 {
                   key: 'skill-inline-hint-text',
-                  className: 'absolute left-0 text-muted-foreground/60',
+                  className: 'absolute inset-0 text-muted-foreground/60 whitespace-pre-wrap break-words',
                 },
                 inlineSkillArgumentHint,
               ),
@@ -916,7 +918,6 @@ export function useChatComposerState({
             const splitIndex = activeTypedSkillToken.hintCursorPosition - plainSegmentStart;
             const beforeHintText = plainSegmentText.slice(0, splitIndex);
             const afterHintText = plainSegmentText.slice(splitIndex);
-            const hintWidthCh = Math.max(8, inlineSkillArgumentHint.length + 2);
 
             if (beforeHintText) {
               segments.push(
@@ -935,16 +936,19 @@ export function useChatComposerState({
                   key: `skill-inline-hint-${index}`,
                   className: 'relative pointer-events-none',
                 },
-                createElement('span', {
-                  key: `skill-inline-hint-spacer-${index}`,
-                  className: 'inline-block',
-                  style: { width: `${hintWidthCh}ch` },
-                }),
+                createElement(
+                  'span',
+                  {
+                    key: `skill-inline-hint-spacer-${index}`,
+                    className: 'invisible whitespace-pre-wrap break-words',
+                  },
+                  inlineSkillArgumentHint,
+                ),
                 createElement(
                   'span',
                   {
                     key: `skill-inline-hint-text-${index}`,
-                    className: 'absolute left-0 text-muted-foreground/60',
+                    className: 'absolute inset-0 text-muted-foreground/60 whitespace-pre-wrap break-words',
                   },
                   inlineSkillArgumentHint,
                 ),
@@ -1010,7 +1014,6 @@ export function useChatComposerState({
           const splitIndex = activeTypedSkillToken.hintCursorPosition - tailStart;
           const beforeHintText = tailText.slice(0, splitIndex);
           const afterHintText = tailText.slice(splitIndex);
-          const hintWidthCh = Math.max(8, inlineSkillArgumentHint.length + 2);
 
           if (beforeHintText) {
             segments.push(
@@ -1029,16 +1032,19 @@ export function useChatComposerState({
                 key: 'skill-inline-hint-tail',
                 className: 'relative pointer-events-none',
               },
-              createElement('span', {
-                key: 'skill-inline-hint-tail-spacer',
-                className: 'inline-block',
-                style: { width: `${hintWidthCh}ch` },
-              }),
+              createElement(
+                'span',
+                {
+                  key: 'skill-inline-hint-tail-spacer',
+                  className: 'invisible whitespace-pre-wrap break-words',
+                },
+                inlineSkillArgumentHint,
+              ),
               createElement(
                 'span',
                 {
                   key: 'skill-inline-hint-tail-text',
-                  className: 'absolute left-0 text-muted-foreground/60',
+                  className: 'absolute inset-0 text-muted-foreground/60 whitespace-pre-wrap break-words',
                 },
                 inlineSkillArgumentHint,
               ),
