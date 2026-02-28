@@ -74,6 +74,7 @@ export function useSlashCommands({
   const commandQueryTimerRef = useRef<number | null>(null);
   const baseCommandsRef = useRef<SlashCommand[]>([]);
   const skillsByProviderRef = useRef<Partial<Record<SessionProvider, SlashCommand[]>>>({});
+  const activeProviderRef = useRef<SessionProvider>(provider);
 
   const clearCommandQueryTimer = useCallback(() => {
     if (commandQueryTimerRef.current !== null) {
@@ -127,7 +128,9 @@ export function useSlashCommands({
           skillsByProviderRef.current[targetProvider] || [],
           targetProvider,
         );
-        setSlashCommands(commandsFromCache);
+        if (activeProviderRef.current === targetProvider) {
+          setSlashCommands(commandsFromCache);
+        }
         return commandsFromCache;
       }
 
@@ -166,11 +169,17 @@ export function useSlashCommands({
       skillsByProviderRef.current[targetProvider] = skills;
 
       const mergedCommands = buildSortedCommands(baseCommandsRef.current, skills, targetProvider);
-      setSlashCommands(mergedCommands);
+      if (activeProviderRef.current === targetProvider) {
+        setSlashCommands(mergedCommands);
+      }
       return mergedCommands;
     },
     [buildSortedCommands, selectedProject],
   );
+
+  useEffect(() => {
+    activeProviderRef.current = provider;
+  }, [provider]);
 
   useEffect(() => {
     if (!selectedProject) {
@@ -346,6 +355,7 @@ export function useSlashCommands({
 
   const selectCommandFromKeyboard = useCallback(
     (command: SlashCommand) => {
+      trackCommandUsage(command);
       applySlashCommandInsertion(command);
       resetCommandMenuState();
 
@@ -360,7 +370,7 @@ export function useSlashCommands({
         });
       }
     },
-    [applySlashCommandInsertion, resetCommandMenuState, onExecuteCommand],
+    [trackCommandUsage, applySlashCommandInsertion, resetCommandMenuState, onExecuteCommand],
   );
 
   const handleCommandSelect = useCallback(

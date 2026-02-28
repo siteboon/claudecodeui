@@ -88,9 +88,12 @@ export default function SkillInfoDialog({
       <div
         role="dialog"
         aria-modal="true"
+        aria-labelledby="skill-info-dialog-title"
         className={`relative w-full overflow-y-auto overscroll-contain bg-card shadow-2xl ${state.mode === 'token-touch' ? 'max-h-screen rounded-none border-0 p-5' : 'max-h-[min(85vh,640px)] max-w-md rounded-xl border border-border p-4'}`}
       >
-        <div className="mb-3 text-base font-semibold text-foreground">{state.info.commandName}</div>
+        <h2 id="skill-info-dialog-title" className="mb-3 text-base font-semibold text-foreground">
+          {state.info.commandName}
+        </h2>
 
         {state.info.description && (
           <div className="mb-2 text-sm">
@@ -133,8 +136,14 @@ export default function SkillInfoDialog({
 
         {state.mode === 'menu-mobile' && (
           <div className="mb-3">
-            <label className="mb-1 block text-sm font-medium text-foreground">{t('skillInfoDialog.usage.label')}</label>
+            <label
+              htmlFor="skill-usage-textarea"
+              className="mb-1 block text-sm font-medium text-foreground"
+            >
+              {t('skillInfoDialog.usage.label')}
+            </label>
             <textarea
+              id="skill-usage-textarea"
               value={state.usageText || ''}
               onChange={(event) => onUsageChange?.(event.target.value)}
               placeholder={state.info?.argumentHint ?? t('skillInfoDialog.usage.placeholder')}

@@ -231,6 +231,7 @@ export default function CommandMenu({
                     <button
                       type="button"
                       className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-gray-200 bg-white/90 text-gray-500 transition-colors hover:text-gray-700 dark:border-gray-600 dark:bg-gray-700/80 dark:text-gray-300 dark:hover:text-gray-100"
+                      aria-label={t('commandMenu.viewSkillInfo')}
                       title={t('commandMenu.viewSkillInfo')}
                       onMouseDown={(event) => {
                         event.preventDefault();

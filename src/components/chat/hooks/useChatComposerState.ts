@@ -32,6 +32,9 @@ type PendingViewSession = {
   startedAt: number;
 };
 
+const isSkillCommand = (command: SlashCommand) =>
+  command.type === 'skill' || command.namespace === 'skills';
+
 interface UseChatComposerStateArgs {
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
@@ -567,7 +570,7 @@ export function useChatComposerState({
   });
 
   const skillCommands = useMemo(
-    () => slashCommands.filter((command) => command.type === 'skill'),
+    () => slashCommands.filter(isSkillCommand),
     [slashCommands],
   );
 
@@ -676,7 +679,7 @@ export function useChatComposerState({
   }, []);
 
   const openSkillInfoDialogFromMenu = useCallback((command: SlashCommand) => {
-    if (!command || command.type !== 'skill') {
+    if (!command || !isSkillCommand(command)) {
       return;
     }
 
@@ -785,7 +788,7 @@ export function useChatComposerState({
     const prefixedInput = trimmedInput.slice(0, nextCursor);
     const suffixedInput = trimmedInput.slice(nextCursor);
     const needsLeadingSpace = prefixedInput.length > 0 && !/\s$/.test(prefixedInput);
-    const needsTrailingSpace = hasUsage && suffixedInput.length > 0 && !/^\s/.test(suffixedInput);
+    const needsTrailingSpace = suffixedInput.length > 0 && !/^\s/.test(suffixedInput);
     const insertedText = `${needsLeadingSpace ? ' ' : ''}${insertion}${needsTrailingSpace ? ' ' : ''}`;
     const nextValue = `${prefixedInput}${insertedText}${suffixedInput}`;
     const caretPosition = prefixedInput.length + insertedText.length;
@@ -1144,7 +1147,7 @@ export function useChatComposerState({
         const firstSpace = trimmedInput.indexOf(' ');
         const commandName = firstSpace > 0 ? trimmedInput.slice(0, firstSpace) : trimmedInput;
         const matchedCommand = slashCommands.find((cmd: SlashCommand) => cmd.name === commandName);
-        if (matchedCommand && matchedCommand.type !== 'skill') {
+        if (matchedCommand && !isSkillCommand(matchedCommand)) {
           executeCommand(matchedCommand, trimmedInput);
           setInput('');
           inputValueRef.current = '';
