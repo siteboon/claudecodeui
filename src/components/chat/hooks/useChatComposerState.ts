@@ -166,19 +166,28 @@ const normalizeSkillInfo = (command: SlashCommand): SkillInfo => {
   };
 };
 
-const findSkillTokenRanges = (value: string, skillNames: string[]): SkillTokenRange[] => {
-  if (!value || skillNames.length === 0) {
-    return [];
+const createSkillTokenPattern = (skillNames: string[]): RegExp | null => {
+  if (skillNames.length === 0) {
+    return null;
   }
 
   const sortedSkillNames = [...skillNames].sort((nameA, nameB) => nameB.length - nameA.length);
-  const pattern = new RegExp(
+
+  return new RegExp(
     `(^|\\s)(${sortedSkillNames.map((name) => escapeRegExp(name)).join('|')})(?=\\s|$)`,
     'g',
   );
+};
+
+const findSkillTokenRanges = (value: string, skillTokenPattern: RegExp | null): SkillTokenRange[] => {
+  if (!value || !skillTokenPattern) {
+    return [];
+  }
+
+  skillTokenPattern.lastIndex = 0;
 
   const ranges: SkillTokenRange[] = [];
-  let match = pattern.exec(value);
+  let match = skillTokenPattern.exec(value);
 
   while (match) {
     const tokenText = match[2];
@@ -187,7 +196,7 @@ const findSkillTokenRanges = (value: string, skillNames: string[]): SkillTokenRa
       start,
       end: start + tokenText.length,
     });
-    match = pattern.exec(value);
+    match = skillTokenPattern.exec(value);
   }
 
   return ranges;
@@ -579,6 +588,11 @@ export function useChatComposerState({
     [skillCommands],
   );
 
+  const skillTokenPattern = useMemo(
+    () => createSkillTokenPattern(skillCommands.map((command) => command.name)),
+    [skillCommands],
+  );
+
   const activeTypedSkillToken = useMemo(() => {
     if (skillCommands.length === 0) {
       return null;
@@ -601,6 +615,23 @@ export function useChatComposerState({
 
     if (!fullToken.startsWith('/')) {
       return null;
+    }
+
+    const exactMatch = skillCommandByName.get(fullToken);
+
+    if (exactMatch) {
+      return {
+        command: exactMatch,
+        info: normalizeSkillInfo(exactMatch),
+        range: {
+          start: tokenStart,
+          end: tokenStart + exactMatch.name.length,
+        },
+        showInlineHint: true,
+        showTooltip: false,
+        hintCursorPosition: cursorPos,
+        fullToken,
+      };
     }
 
     const matchingCommands = skillCommands.filter((command) => command.name.startsWith(fullToken));
@@ -626,10 +657,7 @@ export function useChatComposerState({
   }, [cursorPosition, input, skillCommandByName, skillCommands]);
 
   const skillTokenDetails = useMemo<SkillTokenDetail[]>(() => {
-    const ranges = findSkillTokenRanges(
-      input,
-      skillCommands.map((command) => command.name),
-    );
+    const ranges = findSkillTokenRanges(input, skillTokenPattern);
 
     return ranges
       .map((range) => {
@@ -646,7 +674,7 @@ export function useChatComposerState({
         };
       })
       .filter((entry): entry is SkillTokenDetail => Boolean(entry));
-  }, [input, skillCommands, skillCommandByName]);
+  }, [input, skillCommandByName, skillTokenPattern]);
 
   const skillTokenMap = useMemo(() => {
     return new Map(
@@ -832,10 +860,7 @@ export function useChatComposerState({
         return '';
       }
 
-      const skillRanges = findSkillTokenRanges(
-        text,
-        skillCommands.map((command) => command.name),
-      );
+      const skillRanges = findSkillTokenRanges(text, skillTokenPattern);
 
       if (skillRanges.length === 0) {
         if (inlineSkillArgumentHint && activeTypedSkillToken) {
@@ -1046,7 +1071,7 @@ export function useChatComposerState({
       activeTypedSkillToken,
       inlineSkillArgumentHint,
       renderInputWithMentions,
-      skillCommands,
+      skillTokenPattern,
       handleSkillTokenMouseEnter,
       handleSkillTokenMouseLeave,
       handleSkillTokenTouch,
