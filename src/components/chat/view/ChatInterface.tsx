@@ -302,7 +302,6 @@ function ChatInterface({
           onShowAllTasks={onShowAllTasks}
           setInput={setInput}
           prefetchSkillsForProvider={prefetchSkillsForProvider}
-          reloadSkillsForProvider={reloadSkillsForProvider}
           isLoadingMoreMessages={isLoadingMoreMessages}
           hasMoreMessages={hasMoreMessages}
           totalMessages={totalMessages}
@@ -403,7 +402,10 @@ function ChatInterface({
         />
       </div>
 
-      <QuickSettingsPanel />
+      <QuickSettingsPanel
+        provider={provider}
+        reloadSkillsForProvider={reloadSkillsForProvider}
+      />
     </>
   );
 }

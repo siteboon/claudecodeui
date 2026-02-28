@@ -138,7 +138,7 @@ export default function SkillInfoDialog({
               value={state.usageText || ''}
               onChange={(event) => onUsageChange?.(event.target.value)}
               placeholder={state.info?.argumentHint ?? t('skillInfoDialog.usage.placeholder')}
-              className="min-h-[84px] w-full resize-y rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+              className="min-h-[84px] w-full resize-y rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-primary/40"
             />
           </div>
         )}

@@ -13,7 +13,8 @@ import {
   Sparkles,
   FileText,
   Languages,
-  GripVertical
+  GripVertical,
+  RefreshCw
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import DarkModeToggle from './DarkModeToggle';
@@ -25,12 +26,13 @@ import LanguageSelector from './LanguageSelector';
 import { useDeviceSettings } from '../hooks/useDeviceSettings';
 
 
-const QuickSettingsPanel = () => {
+const QuickSettingsPanel = ({ provider, reloadSkillsForProvider }) => {
   const { t } = useTranslation('settings');
   const [isOpen, setIsOpen] = useState(false);
   const [whisperMode, setWhisperMode] = useState(() => {
     return localStorage.getItem('whisperMode') || 'default';
   });
+  const [isReloadingSkills, setIsReloadingSkills] = useState(false);
   const { isDarkMode } = useTheme();
 
   const { isMobile } = useDeviceSettings({ trackPWA: false });
@@ -201,6 +203,19 @@ const QuickSettingsPanel = () => {
     setIsOpen((previous) => !previous);
   };
 
+  const handleReloadSkills = async () => {
+    if (isReloadingSkills || !reloadSkillsForProvider || !provider) {
+      return;
+    }
+
+    setIsReloadingSkills(true);
+    try {
+      await reloadSkillsForProvider(provider);
+    } finally {
+      setIsReloadingSkills(false);
+    }
+  };
+
   return (
     <>
       {/* Pull Tab - Combined drag handle and toggle button */}
@@ -312,6 +327,22 @@ const QuickSettingsPanel = () => {
                   className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 focus:ring-2 dark:focus:ring-blue-400 bg-gray-100 dark:bg-gray-800 checked:bg-blue-600 dark:checked:bg-blue-600"
                 />
               </label>
+
+              <button
+                type="button"
+                onClick={handleReloadSkills}
+                disabled={isReloadingSkills || !provider}
+                className="flex w-full items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors border border-transparent hover:border-gray-300 dark:hover:border-gray-600 disabled:cursor-not-allowed disabled:opacity-60"
+                title={t('quickSettings.reloadSkills.title')}
+              >
+                <span className="flex items-center gap-2 text-sm text-gray-900 dark:text-white">
+                  <RefreshCw className={`h-4 w-4 text-gray-600 dark:text-gray-400 ${isReloadingSkills ? 'animate-spin' : ''}`} />
+                  {t('quickSettings.reloadSkills.label')}
+                </span>
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  {isReloadingSkills ? t('quickSettings.reloadSkills.loading') : t('quickSettings.reloadSkills.description')}
+                </span>
+              </button>
             </div>
             {/* View Options */}
             <div className="space-y-2">

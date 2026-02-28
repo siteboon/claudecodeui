@@ -226,6 +226,7 @@ export default function CommandMenu({
                   )}
                 </div>
                 <div className="ml-2 flex items-start gap-1">
+                  {isSelected && <span className="text-xs font-semibold text-blue-500 dark:text-blue-300">{'<-'}</span>}
                   {isSkill && onViewSkillInfo && (
                     <button
                       type="button"
@@ -252,7 +253,6 @@ export default function CommandMenu({
                       </svg>
                     </button>
                   )}
-                  {isSelected && <span className="text-xs font-semibold text-blue-500 dark:text-blue-300">{'<-'}</span>}
                 </div>
               </div>
             );
