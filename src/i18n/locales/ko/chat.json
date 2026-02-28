@@ -4,13 +4,18 @@
     "copied": "복사됨",
     "copyCode": "코드 복사"
   },
+  "copyMessage": {
+    "copy": "메시지 복사",
+    "copied": "메시지 복사됨"
+  },
   "messageTypes": {
     "user": "U",
     "error": "오류",
     "tool": "도구",
     "claude": "Claude",
     "cursor": "Cursor",
-    "codex": "Codex"
+    "codex": "Codex",
+    "gemini": "Gemini"
   },
   "tools": {
     "settings": "도구 설정",
@@ -151,15 +156,17 @@
     "description": "새 대화를 시작할 프로바이더를 선택하세요",
     "selectModel": "모델 선택",
     "providerInfo": {
-      "anthropic": "by Anthropic",
-      "openai": "by OpenAI",
-      "cursorEditor": "AI 코드 에디터"
+      "anthropic": "Anthropic 제공",
+      "openai": "OpenAI 제공",
+      "cursorEditor": "AI 코드 에디터",
+      "google": "Google 제공"
     },
     "readyPrompt": {
-      "claude": "{{model}}로 Claude를 사용할 준비가 되었습니다. 아래에 메시지를 입력하세요.",
-      "cursor": "{{model}}로 Cursor를 사용할 준비가 되었습니다. 아래에 메시지를 입력하세요.",
-      "codex": "{{model}}로 Codex를 사용할 준비가 되었습니다. 아래에 메시지를 입력하세요.",
-      "default": "시작하려면 위에서 프로바이더를 선택하세요"
+      "claude": "{{model}} 모델로 Claude를 사용할 준비가 되었습니다. 아래에 메시지를 입력하세요.",
+      "cursor": "{{model}} 모델로 Cursor를 사용할 준비가 되었습니다. 아래에 메시지를 입력하세요.",
+      "codex": "{{model}} 모델로 Codex를 사용할 준비가 되었습니다. 아래에 메시지를 입력하세요.",
+      "gemini": "{{model}} 모델로 Gemini를 사용할 준비가 되었습니다. 아래에 메시지를 입력하세요.",
+      "default": "시작하려면 위에서 제공자를 선택하세요"
     }
   },
   "session": {

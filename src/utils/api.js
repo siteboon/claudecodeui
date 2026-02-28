@@ -46,7 +46,7 @@ export const api = {
   // Protected endpoints
   // config endpoint removed - no longer needed (frontend uses window.location)
   projects: () => authenticatedFetch('/api/projects'),
-  sessions: (projectName, limit = 5, offset = 0) => 
+  sessions: (projectName, limit = 5, offset = 0) =>
     authenticatedFetch(`/api/projects/${projectName}/sessions?limit=${limit}&offset=${offset}`),
   sessionMessages: (projectName, sessionId, limit = null, offset = 0, provider = 'claude') => {
     const params = new URLSearchParams();
@@ -56,12 +56,13 @@ export const api = {
     }
     const queryString = params.toString();
 
-    // Route to the correct endpoint based on provider
     let url;
     if (provider === 'codex') {
       url = `/api/codex/sessions/${sessionId}/messages${queryString ? `?${queryString}` : ''}`;
     } else if (provider === 'cursor') {
       url = `/api/cursor/sessions/${sessionId}/messages${queryString ? `?${queryString}` : ''}`;
+    } else if (provider === 'gemini') {
+      url = `/api/gemini/sessions/${sessionId}/messages${queryString ? `?${queryString}` : ''}`;
     } else {
       url = `/api/projects/${projectName}/sessions/${sessionId}/messages${queryString ? `?${queryString}` : ''}`;
     }
@@ -78,6 +79,10 @@ export const api = {
     }),
   deleteCodexSession: (sessionId) =>
     authenticatedFetch(`/api/codex/sessions/${sessionId}`, {
+      method: 'DELETE',
+    }),
+  deleteGeminiSession: (sessionId) =>
+    authenticatedFetch(`/api/gemini/sessions/${sessionId}`, {
       method: 'DELETE',
     }),
   deleteProject: (projectName, force = false) =>
@@ -140,18 +145,18 @@ export const api = {
   // TaskMaster endpoints
   taskmaster: {
     // Initialize TaskMaster in a project
-    init: (projectName) => 
+    init: (projectName) =>
       authenticatedFetch(`/api/taskmaster/init/${projectName}`, {
         method: 'POST',
       }),
-    
+
     // Add a new task
     addTask: (projectName, { prompt, title, description, priority, dependencies }) =>
       authenticatedFetch(`/api/taskmaster/add-task/${projectName}`, {
         method: 'POST',
         body: JSON.stringify({ prompt, title, description, priority, dependencies }),
       }),
-    
+
     // Parse PRD to generate tasks
     parsePRD: (projectName, { fileName, numTasks, append }) =>
       authenticatedFetch(`/api/taskmaster/parse-prd/${projectName}`, {
@@ -177,7 +182,7 @@ export const api = {
         body: JSON.stringify(updates),
       }),
   },
-  
+
   // Browse filesystem for project suggestions
   browseFilesystem: (dirPath = null) => {
     const params = new URLSearchParams();

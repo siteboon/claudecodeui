@@ -4,13 +4,18 @@
     "copied": "已复制",
     "copyCode": "复制代码"
   },
+  "copyMessage": {
+    "copy": "复制消息",
+    "copied": "消息已复制"
+  },
   "messageTypes": {
     "user": "U",
     "error": "错误",
     "tool": "工具",
     "claude": "Claude",
     "cursor": "Cursor",
-    "codex": "Codex"
+    "codex": "Codex",
+    "gemini": "Gemini"
   },
   "tools": {
     "settings": "工具设置",
@@ -151,15 +156,17 @@
     "description": "选择一个供应商以开始新对话",
     "selectModel": "选择模型",
     "providerInfo": {
-      "anthropic": "Anthropic",
-      "openai": "OpenAI",
-      "cursorEditor": "AI 代码编辑器"
+      "anthropic": "由 Anthropic 提供",
+      "openai": "由 OpenAI 提供",
+      "cursorEditor": "AI 代码编辑器",
+      "google": "由 Google 提供"
     },
     "readyPrompt": {
-      "claude": "已准备好使用 Claude {{model}}。在下方输入您的消息。",
-      "cursor": "已准备好使用 Cursor {{model}}。在下方输入您的消息。",
-      "codex": "已准备好使用 Codex {{model}}。在下方输入您的消息。",
-      "default": "请在上方选择一个供应商以开始"
+      "claude": "准备好使用带有 {{model}} 的 Claude。请在下方开始输入您的消息。",
+      "cursor": "准备好使用带有 {{model}} 的 Cursor。请在下方开始输入您的消息。",
+      "codex": "准备好使用带有 {{model}} 的 Codex。请在下方开始输入您的消息。",
+      "gemini": "准备好使用带有 {{model}} 的 Gemini。请在下方开始输入您的消息。",
+      "default": "请在上方选择一个提供者以开始"
     }
   },
   "session": {

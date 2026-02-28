@@ -40,7 +40,8 @@ const projectsHaveChanges = (
       nextProject.displayName !== prevProject.displayName ||
       nextProject.fullPath !== prevProject.fullPath ||
       serialize(nextProject.sessionMeta) !== serialize(prevProject.sessionMeta) ||
-      serialize(nextProject.sessions) !== serialize(prevProject.sessions);
+      serialize(nextProject.sessions) !== serialize(prevProject.sessions) ||
+      serialize(nextProject.taskmaster) !== serialize(prevProject.taskmaster);
 
     if (baseChanged) {
       return true;
@@ -52,7 +53,8 @@ const projectsHaveChanges = (
 
     return (
       serialize(nextProject.cursorSessions) !== serialize(prevProject.cursorSessions) ||
-      serialize(nextProject.codexSessions) !== serialize(prevProject.codexSessions)
+      serialize(nextProject.codexSessions) !== serialize(prevProject.codexSessions) ||
+      serialize(nextProject.geminiSessions) !== serialize(prevProject.geminiSessions)
     );
   });
 };
@@ -62,6 +64,7 @@ const getProjectSessions = (project: Project): ProjectSession[] => {
     ...(project.sessions ?? []),
     ...(project.codexSessions ?? []),
     ...(project.cursorSessions ?? []),
+    ...(project.geminiSessions ?? []),
   ];
 };
 
@@ -101,6 +104,20 @@ const isUpdateAdditive = (
   );
 };
 
+const VALID_TABS: Set<string> = new Set(['chat', 'files', 'shell', 'git', 'tasks', 'preview']);
+
+const readPersistedTab = (): AppTab => {
+  try {
+    const stored = localStorage.getItem('activeTab');
+    if (stored && VALID_TABS.has(stored)) {
+      return stored as AppTab;
+    }
+  } catch {
+    // localStorage unavailable
+  }
+  return 'chat';
+};
+
 export function useProjectsState({
   sessionId,
   navigate,
@@ -111,7 +128,16 @@ export function useProjectsState({
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [selectedSession, setSelectedSession] = useState<ProjectSession | null>(null);
-  const [activeTab, setActiveTab] = useState<AppTab>('chat');
+  const [activeTab, setActiveTab] = useState<AppTab>(readPersistedTab);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('activeTab', activeTab);
+    } catch {
+      // Silently ignore storage errors
+    }
+  }, [activeTab]);
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [loadingProgress, setLoadingProgress] = useState<LoadingProgress | null>(null);
@@ -265,8 +291,6 @@ export function useProjectsState({
       return;
     }
 
-    const shouldSwitchTab = !selectedSession || selectedSession.id !== sessionId;
-
     for (const project of projects) {
       const claudeSession = project.sessions?.find((session) => session.id === sessionId);
       if (claudeSession) {
@@ -279,9 +303,6 @@ export function useProjectsState({
         }
         if (shouldUpdateSession) {
           setSelectedSession({ ...claudeSession, __provider: 'claude' });
-        }
-        if (shouldSwitchTab) {
-          setActiveTab('chat');
         }
         return;
       }
@@ -298,9 +319,6 @@ export function useProjectsState({
         if (shouldUpdateSession) {
           setSelectedSession({ ...cursorSession, __provider: 'cursor' });
         }
-        if (shouldSwitchTab) {
-          setActiveTab('chat');
-        }
         return;
       }
 
@@ -316,8 +334,20 @@ export function useProjectsState({
         if (shouldUpdateSession) {
           setSelectedSession({ ...codexSession, __provider: 'codex' });
         }
-        if (shouldSwitchTab) {
-          setActiveTab('chat');
+        return;
+      }
+
+      const geminiSession = project.geminiSessions?.find((session) => session.id === sessionId);
+      if (geminiSession) {
+        const shouldUpdateProject = selectedProject?.name !== project.name;
+        const shouldUpdateSession =
+          selectedSession?.id !== sessionId || selectedSession.__provider !== 'gemini';
+
+        if (shouldUpdateProject) {
+          setSelectedProject(project);
+        }
+        if (shouldUpdateSession) {
+          setSelectedSession({ ...geminiSession, __provider: 'gemini' });
         }
         return;
       }
@@ -341,7 +371,7 @@ export function useProjectsState({
     (session: ProjectSession) => {
       setSelectedSession(session);
 
-      if (activeTab !== 'git' && activeTab !== 'preview') {
+      if (activeTab === 'tasks' || activeTab === 'preview') {
         setActiveTab('chat');
       }
 

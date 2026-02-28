@@ -41,6 +41,7 @@ interface UseChatComposerStateArgs {
   cursorModel: string;
   claudeModel: string;
   codexModel: string;
+  geminiModel: string;
   isLoading: boolean;
   canAbortSession: boolean;
   tokenBudget: Record<string, unknown> | null;
@@ -93,6 +94,7 @@ export function useChatComposerState({
   cursorModel,
   claudeModel,
   codexModel,
+  geminiModel,
   isLoading,
   canAbortSession,
   tokenBudget,
@@ -289,7 +291,7 @@ export function useChatComposerState({
           projectName: selectedProject.name,
           sessionId: currentSessionId,
           provider,
-          model: provider === 'cursor' ? cursorModel : provider === 'codex' ? codexModel : claudeModel,
+          model: provider === 'cursor' ? cursorModel : provider === 'codex' ? codexModel : provider === 'gemini' ? geminiModel : claudeModel,
           tokenUsage: tokenBudget,
         };
 
@@ -343,6 +345,7 @@ export function useChatComposerState({
       codexModel,
       currentSessionId,
       cursorModel,
+      geminiModel,
       handleBuiltInCommand,
       handleCustomCommand,
       input,
@@ -581,8 +584,10 @@ export function useChatComposerState({
             provider === 'cursor'
               ? 'cursor-tools-settings'
               : provider === 'codex'
-              ? 'codex-settings'
-              : 'claude-settings';
+                ? 'codex-settings'
+                : provider === 'gemini'
+                  ? 'gemini-settings'
+                  : 'claude-settings';
           const savedSettings = safeLocalStorage.getItem(settingsKey);
           if (savedSettings) {
             return JSON.parse(savedSettings);
@@ -630,6 +635,21 @@ export function useChatComposerState({
             permissionMode: permissionMode === 'plan' ? 'default' : permissionMode,
           },
         });
+      } else if (provider === 'gemini') {
+        sendMessage({
+          type: 'gemini-command',
+          command: messageContent,
+          sessionId: effectiveSessionId,
+          options: {
+            cwd: resolvedProjectPath,
+            projectPath: resolvedProjectPath,
+            sessionId: effectiveSessionId,
+            resume: Boolean(effectiveSessionId),
+            model: geminiModel,
+            permissionMode,
+            toolsSettings,
+          },
+        });
       } else {
         sendMessage({
           type: 'claude-command',
@@ -669,6 +689,7 @@ export function useChatComposerState({
       currentSessionId,
       cursorModel,
       executeCommand,
+      geminiModel,
       isLoading,
       onSessionActive,
       onSessionProcessing,
