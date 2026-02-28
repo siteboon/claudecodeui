@@ -93,8 +93,27 @@ export function useChatSessionState({
   const scrollPositionRef = useRef({ height: 0, top: 0 });
   const loadAllFinishedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadAllOverlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingScrollToMessageRef = useRef<number | null>(null);
 
   const createDiff = useMemo<DiffCalculator>(() => createCachedDiffCalculator(), []);
+
+  const convertedMessages = useMemo(() => {
+    return convertSessionMessages(sessionMessages);
+  }, [sessionMessages]);
+
+  const loadEarlierMessages = useCallback(() => {
+    setVisibleMessageCount((previousCount) => previousCount + 100);
+  }, []);
+
+  const isNearBottom = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container) {
+      return false;
+    }
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    // Allow a bit more buffer for bottom detection
+    return scrollHeight - scrollTop - clientHeight < 100;
+  }, []);
 
   const loadSessionMessages = useCallback(
     async (projectName: string, sessionId: string, loadMore = false, provider: Provider | string = 'claude') => {
@@ -178,10 +197,6 @@ export function useChatSessionState({
     }
   }, []);
 
-  const convertedMessages = useMemo(() => {
-    return convertSessionMessages(sessionMessages);
-  }, [sessionMessages]);
-
   const scrollToBottom = useCallback(() => {
     const container = scrollContainerRef.current;
     if (!container) {
@@ -199,21 +214,26 @@ export function useChatSessionState({
     }
   }, [allMessagesLoaded, scrollToBottom]);
 
-  const isNearBottom = useCallback(() => {
-    const container = scrollContainerRef.current;
-    if (!container) {
-      return false;
-    }
-    const { scrollTop, scrollHeight, clientHeight } = container;
-    return scrollHeight - scrollTop - clientHeight < 50;
-  }, []);
-
   const loadOlderMessages = useCallback(
     async (container: HTMLDivElement) => {
       if (!container || isLoadingMoreRef.current || isLoadingMoreMessages) {
         return false;
       }
       if (allMessagesLoadedRef.current) return false;
+      // First check if we have more messages already in memory but not shown
+      if (chatMessages.length > visibleMessageCount) {
+        const previousScrollHeight = container.scrollHeight;
+        const previousScrollTop = container.scrollTop;
+
+        pendingScrollRestoreRef.current = {
+          height: previousScrollHeight,
+          top: previousScrollTop,
+        };
+
+        loadEarlierMessages();
+        return true;
+      }
+
       if (!hasMoreMessages || !selectedSession || !selectedProject) {
         return false;
       }
@@ -251,12 +271,81 @@ export function useChatSessionState({
         isLoadingMoreRef.current = false;
       }
     },
-    [hasMoreMessages, isLoadingMoreMessages, loadSessionMessages, selectedProject, selectedSession],
+    [chatMessages.length, hasMoreMessages, isLoadingMoreMessages, loadEarlierMessages, loadSessionMessages, selectedProject, selectedSession, visibleMessageCount],
   );
+
+
+
+  const scrollToPreviousUserMessage = useCallback(() => {
+    if (!scrollContainerRef.current || chatMessages.length === 0) return;
+
+    const container = scrollContainerRef.current;
+    const viewportTop = container.scrollTop;
+
+    // Find all rendered chat message elements
+    const messageElements = Array.from(container.querySelectorAll('.chat-message[data-message-index]'));
+    if (messageElements.length === 0) return;
+
+    // Find the first message element that is partially or fully in viewport
+    let firstVisibleGlobalIndex = -1;
+    for (let i = 0; i < messageElements.length; i++) {
+      const el = messageElements[i] as HTMLElement;
+      if (el.offsetTop + el.offsetHeight > viewportTop + 10) {
+        firstVisibleGlobalIndex = parseInt(el.getAttribute('data-message-index') || '-1', 10);
+        break;
+      }
+    }
+
+    if (firstVisibleGlobalIndex === -1) {
+      // Fallback: use the last message's index
+      const lastEl = messageElements[messageElements.length - 1] as HTMLElement;
+      firstVisibleGlobalIndex = parseInt(lastEl.getAttribute('data-message-index') || '-1', 10);
+    }
+
+    console.log('[ScrollDebug] scrollToPreviousUserMessage', {
+      viewportTop,
+      firstVisibleGlobalIndex,
+      totalChatMessages: chatMessages.length
+    });
+
+    // Search backwards in the global chatMessages array starting from the message BEFORE the first visible one
+    let targetGlobalIndex = -1;
+    for (let i = firstVisibleGlobalIndex - 1; i >= 0; i--) {
+      if (chatMessages[i].type === 'user') {
+        targetGlobalIndex = i;
+        break;
+      }
+    }
+
+    if (targetGlobalIndex === -1) {
+      console.log('[ScrollDebug] No earlier user message found in loaded history');
+      if (hasMoreMessages) {
+        console.log('[ScrollDebug] Triggering server load');
+        loadOlderMessages(container);
+      }
+      return;
+    }
+
+    console.log('[ScrollDebug] Target user message found at global index', targetGlobalIndex);
+
+    // Is it rendered?
+    const targetEl = container.querySelector(`[data-message-index="${targetGlobalIndex}"]`) as HTMLElement;
+    if (targetEl) {
+      console.log('[ScrollDebug] Scrolling to rendered message element');
+      container.scrollTop = Math.max(0, targetEl.offsetTop - 20);
+    } else {
+      // Need to load more messages into DOM
+      console.log('[ScrollDebug] Message not rendered, increasing visible count');
+      pendingScrollToMessageRef.current = targetGlobalIndex;
+      // Ensure the count is high enough
+      const requiredCount = chatMessages.length - targetGlobalIndex + 10;
+      setVisibleMessageCount(prev => Math.max(prev + 100, requiredCount));
+    }
+  }, [chatMessages, hasMoreMessages, loadOlderMessages]);
 
   const handleScroll = useCallback(async () => {
     const container = scrollContainerRef.current;
-    if (!container) {
+    if (!container || pendingInitialScrollRef.current) {
       return;
     }
 
@@ -285,17 +374,33 @@ export function useChatSessionState({
   }, [isNearBottom, loadOlderMessages]);
 
   useLayoutEffect(() => {
-    if (!pendingScrollRestoreRef.current || !scrollContainerRef.current) {
+    const container = scrollContainerRef.current;
+    if (!container || chatMessages.length === 0) return;
+
+    // Handle scroll restoration (for pagination)
+    if (pendingScrollRestoreRef.current) {
+      const { height, top } = pendingScrollRestoreRef.current;
+      const newScrollHeight = container.scrollHeight;
+      const scrollDiff = newScrollHeight - height;
+      container.scrollTop = top + Math.max(scrollDiff, 0);
+      pendingScrollRestoreRef.current = null;
       return;
     }
 
-    const { height, top } = pendingScrollRestoreRef.current;
-    const container = scrollContainerRef.current;
-    const newScrollHeight = container.scrollHeight;
-    const scrollDiff = newScrollHeight - height;
-    container.scrollTop = top + Math.max(scrollDiff, 0);
-    pendingScrollRestoreRef.current = null;
-  }, [chatMessages.length]);
+    // Handle scrolling to a specific message index (for "scroll up" robustness)
+    if (pendingScrollToMessageRef.current !== null) {
+      const targetGlobalIndex = pendingScrollToMessageRef.current;
+
+      const targetEl = container.querySelector(`[data-message-index="${targetGlobalIndex}"]`) as HTMLElement;
+
+      if (targetEl) {
+        console.log('[ScrollDebug] Scrolling to pending message element via data-index', { targetGlobalIndex, offsetTop: targetEl.offsetTop });
+        container.scrollTop = Math.max(0, targetEl.offsetTop - 20);
+      }
+
+      pendingScrollToMessageRef.current = null;
+    }
+  }, [chatMessages.length, visibleMessageCount]);
 
   useEffect(() => {
     pendingInitialScrollRef.current = true;
@@ -315,9 +420,9 @@ export function useChatSessionState({
       return;
     }
 
-    pendingInitialScrollRef.current = false;
     setTimeout(() => {
       scrollToBottom();
+      pendingInitialScrollRef.current = false;
     }, 200);
   }, [chatMessages.length, isLoadingSessionMessages, scrollToBottom]);
 
@@ -598,109 +703,67 @@ export function useChatSessionState({
     }
   }, [currentSessionId, isLoading, processingSessions, selectedSession?.id]);
 
-  // Show "Load all" overlay after a batch finishes loading, persist for 2s then hide
-  const prevLoadingRef = useRef(false);
-  useEffect(() => {
-    const wasLoading = prevLoadingRef.current;
-    prevLoadingRef.current = isLoadingMoreMessages;
-
-    if (wasLoading && !isLoadingMoreMessages && hasMoreMessages) {
-      if (loadAllOverlayTimerRef.current) clearTimeout(loadAllOverlayTimerRef.current);
-      setShowLoadAllOverlay(true);
-      loadAllOverlayTimerRef.current = setTimeout(() => {
-        setShowLoadAllOverlay(false);
-      }, 2000);
-    }
-    if (!hasMoreMessages && !isLoadingMoreMessages) {
-      if (loadAllOverlayTimerRef.current) clearTimeout(loadAllOverlayTimerRef.current);
-      setShowLoadAllOverlay(false);
-    }
-    return () => {
-      if (loadAllOverlayTimerRef.current) clearTimeout(loadAllOverlayTimerRef.current);
-    };
-  }, [isLoadingMoreMessages, hasMoreMessages]);
-
   const loadAllMessages = useCallback(async () => {
-    if (!selectedSession || !selectedProject) return;
-    if (isLoadingAllMessages) return;
-    const sessionProvider = selectedSession.__provider || 'claude';
-    if (sessionProvider === 'cursor') {
-      setVisibleMessageCount(Infinity);
-      setAllMessagesLoaded(true);
-      allMessagesLoadedRef.current = true;
-      setLoadAllJustFinished(true);
-      if (loadAllFinishedTimerRef.current) clearTimeout(loadAllFinishedTimerRef.current);
-      loadAllFinishedTimerRef.current = setTimeout(() => {
-        setLoadAllJustFinished(false);
-        setShowLoadAllOverlay(false);
-      }, 1000);
+    if (!selectedProject || !selectedSession || isLoadingAllMessages || allMessagesLoaded) {
       return;
     }
 
-    const requestSessionId = selectedSession.id;
+    const sessionProvider = selectedSession.__provider || 'claude';
+    if (sessionProvider === 'cursor') {
+      return;
+    }
 
-    allMessagesLoadedRef.current = true;
-    isLoadingMoreRef.current = true;
     setIsLoadingAllMessages(true);
     setShowLoadAllOverlay(true);
 
-    const container = scrollContainerRef.current;
-    const previousScrollHeight = container ? container.scrollHeight : 0;
-    const previousScrollTop = container ? container.scrollTop : 0;
-
     try {
-      const response = await (api.sessionMessages as any)(
-        selectedProject.name,
-        requestSessionId,
-        null,
-        0,
-        sessionProvider,
-      );
+      let allLoadedMessages: any[] = [];
+      let currentOffset = 0;
+      let hasMore = true;
 
-      if (currentSessionId !== requestSessionId) return;
+      while (hasMore) {
+        const response = await (api.sessionMessages as any)(
+          selectedProject.name,
+          selectedSession.id,
+          100, // Load in larger chunks
+          currentOffset,
+          sessionProvider,
+        );
 
-      if (response.ok) {
-        const data = await response.json();
-        const allMessages = data.messages || data;
-
-        if (container) {
-          pendingScrollRestoreRef.current = {
-            height: previousScrollHeight,
-            top: previousScrollTop,
-          };
+        if (!response.ok) {
+          throw new Error('Failed to load messages');
         }
 
-        setSessionMessages(Array.isArray(allMessages) ? allMessages : []);
-        setHasMoreMessages(false);
-        setTotalMessages(Array.isArray(allMessages) ? allMessages.length : 0);
-        messagesOffsetRef.current = Array.isArray(allMessages) ? allMessages.length : 0;
+        const data = await response.json();
+        const chunk = data.messages || [];
+        allLoadedMessages = [...chunk, ...allLoadedMessages];
+        currentOffset += chunk.length;
+        hasMore = Boolean(data.hasMore);
 
-        setVisibleMessageCount(Infinity);
-        setAllMessagesLoaded(true);
-
-        setLoadAllJustFinished(true);
-        if (loadAllFinishedTimerRef.current) clearTimeout(loadAllFinishedTimerRef.current);
-        loadAllFinishedTimerRef.current = setTimeout(() => {
-          setLoadAllJustFinished(false);
-          setShowLoadAllOverlay(false);
-        }, 1000);
-      } else {
-        allMessagesLoadedRef.current = false;
-        setShowLoadAllOverlay(false);
+        // Optional: Add a small delay to prevent UI freezing
+        await new Promise((resolve) => setTimeout(resolve, 10));
       }
+
+      setSessionMessages(allLoadedMessages);
+      setAllMessagesLoaded(true);
+      allMessagesLoadedRef.current = true;
+      setVisibleMessageCount(allLoadedMessages.length);
+      setLoadAllJustFinished(true);
+
+      if (loadAllFinishedTimerRef.current) clearTimeout(loadAllFinishedTimerRef.current);
+      loadAllFinishedTimerRef.current = setTimeout(() => {
+        setLoadAllJustFinished(false);
+      }, 2000);
     } catch (error) {
       console.error('Error loading all messages:', error);
-      allMessagesLoadedRef.current = false;
-      setShowLoadAllOverlay(false);
     } finally {
-      isLoadingMoreRef.current = false;
       setIsLoadingAllMessages(false);
+      if (loadAllOverlayTimerRef.current) clearTimeout(loadAllOverlayTimerRef.current);
+      loadAllOverlayTimerRef.current = setTimeout(() => {
+        setShowLoadAllOverlay(false);
+      }, 500);
     }
-  }, [selectedSession, selectedProject, isLoadingAllMessages, currentSessionId]);
-
-  const loadEarlierMessages = useCallback(() => {
-    setVisibleMessageCount((previousCount) => previousCount + 100);
-  }, []);
+  }, [allMessagesLoaded, isLoadingAllMessages, selectedProject, selectedSession, setSessionMessages]);
 
   return {
     chatMessages,
@@ -737,6 +800,7 @@ export function useChatSessionState({
     scrollContainerRef,
     scrollToBottom,
     scrollToBottomAndReset,
+    scrollToPreviousUserMessage,
     isNearBottom,
     handleScroll,
     loadSessionMessages,

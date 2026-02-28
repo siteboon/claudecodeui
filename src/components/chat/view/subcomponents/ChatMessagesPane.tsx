@@ -243,11 +243,14 @@ export default function ChatMessagesPane({
 
           {visibleMessages.map((message, index) => {
             const prevMessage = index > 0 ? visibleMessages[index - 1] : null;
+            // index here is relative to visibleMessages. We need the global index in chatMessages.
+            const globalIndex = chatMessages.indexOf(message);
+
             return (
               <MessageComponent
                 key={getMessageKey(message)}
                 message={message}
-                index={index}
+                index={globalIndex !== -1 ? globalIndex : index}
                 prevMessage={prevMessage}
                 createDiff={createDiff}
                 onFileOpen={onFileOpen}
