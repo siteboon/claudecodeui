@@ -39,7 +39,7 @@ export default function SkillInfoTooltip({ info }: SkillInfoTooltipProps) {
   const metadataText = formatMetadata(info.metadata);
 
   return (
-    <div className="pointer-events-none fixed left-1/2 top-3 z-[1200] w-[min(92vw,560px)] -translate-x-1/2 rounded-xl border border-border/60 bg-card/95 px-4 py-3 text-xs shadow-xl backdrop-blur-sm">
+    <div className="pointer-events-auto fixed left-1/2 top-3 z-[1200] max-h-[min(60vh,420px)] w-[min(92vw,560px)] -translate-x-1/2 overflow-y-auto overscroll-contain rounded-xl border border-border/60 bg-card/95 px-4 py-3 text-xs shadow-xl backdrop-blur-sm select-text">
       <div className="mb-1 text-sm font-semibold text-foreground">{info.commandName}</div>
 
       {info.description && (
@@ -73,7 +73,11 @@ export default function SkillInfoTooltip({ info }: SkillInfoTooltipProps) {
       {metadataText && (
         <div>
           <div className="font-medium text-foreground mb-1">metadata:</div>
-          <pre className="max-h-32 overflow-auto rounded-md bg-muted/60 p-2 text-[11px] leading-relaxed text-muted-foreground whitespace-pre-wrap break-words">
+          <pre
+            className="pointer-events-auto max-h-32 overflow-auto overscroll-contain rounded-md bg-muted/60 p-2 text-[11px] leading-relaxed text-muted-foreground whitespace-pre-wrap break-words select-text"
+            onMouseDown={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+          >
             {metadataText}
           </pre>
         </div>

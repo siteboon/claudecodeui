@@ -76,7 +76,7 @@ export default function SkillInfoDialog({ state, onClose, onClear }: SkillInfoDi
       <div
         role="dialog"
         aria-modal="true"
-        className="relative w-full max-w-md rounded-xl border border-border bg-card p-4 shadow-2xl"
+        className="relative max-h-[min(85vh,640px)] w-full max-w-md overflow-y-auto overscroll-contain rounded-xl border border-border bg-card p-4 shadow-2xl"
       >
         <div className="mb-3 text-base font-semibold text-foreground">{state.info.commandName}</div>
 
@@ -111,7 +111,7 @@ export default function SkillInfoDialog({ state, onClose, onClear }: SkillInfoDi
         {metadataText && (
           <div className="mb-3">
             <div className="mb-1 text-sm font-medium text-foreground">metadata:</div>
-            <pre className="max-h-32 overflow-auto rounded-md bg-muted/60 p-2 text-[11px] leading-relaxed text-muted-foreground whitespace-pre-wrap break-words">
+            <pre className="max-h-40 overflow-auto overscroll-contain rounded-md bg-muted/60 p-2 text-[11px] leading-relaxed text-muted-foreground whitespace-pre-wrap break-words">
               {metadataText}
             </pre>
           </div>
