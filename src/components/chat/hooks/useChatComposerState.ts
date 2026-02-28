@@ -166,25 +166,25 @@ const findSkillTokenRanges = (value: string, skillNames: string[]): SkillTokenRa
     return [];
   }
 
+  const sortedSkillNames = [...skillNames].sort((nameA, nameB) => nameB.length - nameA.length);
+  const pattern = new RegExp(
+    `(^|\\s)(${sortedSkillNames.map((name) => escapeRegExp(name)).join('|')})(?=\\s|$)`,
+    'g',
+  );
+
   const ranges: SkillTokenRange[] = [];
+  let match = pattern.exec(value);
 
-  skillNames.forEach((name) => {
-    const escaped = escapeRegExp(name);
-    const pattern = new RegExp(`(^|\\s)(${escaped})(?=\\s|$)`, 'g');
-    let match = pattern.exec(value);
+  while (match) {
+    const tokenText = match[2];
+    const start = match.index + (match[1]?.length || 0);
+    ranges.push({
+      start,
+      end: start + tokenText.length,
+    });
+    match = pattern.exec(value);
+  }
 
-    while (match) {
-      const tokenText = match[2];
-      const start = match.index + (match[1]?.length || 0);
-      ranges.push({
-        start,
-        end: start + tokenText.length,
-      });
-      match = pattern.exec(value);
-    }
-  });
-
-  ranges.sort((rangeA, rangeB) => rangeA.start - rangeB.start);
   return ranges;
 };
 
@@ -495,6 +495,7 @@ export function useChatComposerState({
     showFileDropdown,
     filteredFiles,
     selectedFileIndex,
+    cursorPosition,
     renderInputWithMentions,
     selectFile,
     setCursorPosition,
@@ -531,34 +532,79 @@ export function useChatComposerState({
   }, [showCommandMenu, selectedCommandIndex, filteredCommands]);
 
   const activeTypedSkillToken = useMemo(() => {
-    const trimmedStart = input.trimStart();
-    if (!trimmedStart.startsWith('/')) {
+    if (skillCommands.length === 0) {
       return null;
     }
 
-    const match = trimmedStart.match(/^(\/\S+)\s*$/);
-    if (!match) {
+    const cursorPos = Math.max(0, Math.min(cursorPosition, input.length));
+
+    let tokenStart = cursorPos;
+    while (tokenStart > 0 && !/\s/.test(input[tokenStart - 1])) {
+      tokenStart -= 1;
+    }
+
+    let tokenEnd = cursorPos;
+    while (tokenEnd < input.length && !/\s/.test(input[tokenEnd])) {
+      tokenEnd += 1;
+    }
+
+    const tokenText = input.slice(tokenStart, tokenEnd);
+    if (!tokenText.startsWith('/')) {
       return null;
     }
 
-    const token = match[1];
-    const command = skillCommandByName.get(token);
+    const matchingCommands = skillCommands.filter((command) => command.name.startsWith(tokenText));
+    const exactCommand = skillCommandByName.get(tokenText) || null;
+
+    let trailingSpaceCount = 0;
+    while (tokenEnd + trailingSpaceCount < input.length && input[tokenEnd + trailingSpaceCount] === ' ') {
+      trailingSpaceCount += 1;
+    }
+
+    const cursorInsideToken = cursorPos >= tokenStart && cursorPos <= tokenEnd;
+    const cursorAtSingleTrailingSpace = cursorPos === tokenEnd + 1 && trailingSpaceCount === 1;
+
+    const inlineHintCommand =
+      matchingCommands.length === 1 && cursorInsideToken && trailingSpaceCount === 0
+        ? matchingCommands[0]
+        : null;
+
+    let tooltipCommand: SlashCommand | null = null;
+
+    if (exactCommand) {
+      const isPrefixAmbiguous = matchingCommands.length > 1;
+      if (isPrefixAmbiguous) {
+        if (cursorAtSingleTrailingSpace) {
+          tooltipCommand = exactCommand;
+        }
+      } else if ((cursorInsideToken || cursorAtSingleTrailingSpace) && trailingSpaceCount <= 1) {
+        tooltipCommand = exactCommand;
+      }
+    } else if (matchingCommands.length === 1 && cursorInsideToken && trailingSpaceCount === 0) {
+      tooltipCommand = matchingCommands[0];
+    }
+
+    if (!inlineHintCommand && !tooltipCommand) {
+      return null;
+    }
+
+    const command = tooltipCommand || inlineHintCommand;
     if (!command) {
       return null;
     }
-
-    const leadingWhitespaceLength = input.length - trimmedStart.length;
-    const tokenStart = leadingWhitespaceLength;
 
     return {
       command,
       info: normalizeSkillInfo(command),
       range: {
         start: tokenStart,
-        end: tokenStart + token.length,
+        end: tokenStart + command.name.length,
       },
+      hasSingleTrailingSpace: trailingSpaceCount === 1,
+      showInlineHint: Boolean(inlineHintCommand),
+      showTooltip: Boolean(tooltipCommand),
     };
-  }, [input, skillCommandByName]);
+  }, [cursorPosition, input, skillCommandByName, skillCommands]);
 
   const skillTokenDetails = useMemo<SkillTokenDetail[]>(() => {
     const ranges = findSkillTokenRanges(
@@ -597,7 +643,8 @@ export function useChatComposerState({
     return skillTokenMap.get(`${hoveredSkillTokenRange.start}-${hoveredSkillTokenRange.end}`) || null;
   }, [hoveredSkillTokenRange, skillTokenMap]);
 
-  const inlineSkillArgumentHint = activeTypedSkillToken ? activeTypedSkillToken.info.argumentHint || null : null;
+  const inlineSkillArgumentHint =
+    activeTypedSkillToken?.showInlineHint ? activeTypedSkillToken.info.argumentHint || null : null;
 
   const activeSkillTooltip = activeHoveredSkill
     ? {
@@ -609,7 +656,7 @@ export function useChatComposerState({
           source: 'menu-selection' as SkillTooltipSource,
           info: menuSelectedSkill.info,
         }
-      : activeTypedSkillToken
+      : activeTypedSkillToken?.showTooltip
         ? {
             source: 'typed-match' as SkillTooltipSource,
             info: activeTypedSkillToken.info,
@@ -1187,6 +1234,15 @@ export function useChatComposerState({
     [handleCommandInputChange, resetCommandMenuState, setCursorPosition],
   );
 
+  const updateCursorAndMenus = useCallback(
+    (target: HTMLTextAreaElement) => {
+      const nextCursor = target.selectionStart;
+      setCursorPosition(nextCursor);
+      handleCommandInputChange(target.value, nextCursor);
+    },
+    [handleCommandInputChange, setCursorPosition],
+  );
+
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
       if (handleCommandMenuKeyDown(event)) {
@@ -1195,6 +1251,22 @@ export function useChatComposerState({
 
       if (handleFileMentionsKeyDown(event)) {
         return;
+      }
+
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'Home' || event.key === 'End') {
+        requestAnimationFrame(() => {
+          if (textareaRef.current) {
+            updateCursorAndMenus(textareaRef.current);
+          }
+        });
+      }
+
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a') {
+        requestAnimationFrame(() => {
+          if (textareaRef.current) {
+            updateCursorAndMenus(textareaRef.current);
+          }
+        });
       }
 
       if (event.key === 'Tab' && !showFileDropdown && !showCommandMenu) {
@@ -1225,14 +1297,16 @@ export function useChatComposerState({
       sendByCtrlEnter,
       showCommandMenu,
       showFileDropdown,
+      textareaRef,
+      updateCursorAndMenus,
     ],
   );
 
   const handleTextareaClick = useCallback(
     (event: MouseEvent<HTMLTextAreaElement>) => {
-      setCursorPosition(event.currentTarget.selectionStart);
+      updateCursorAndMenus(event.currentTarget);
     },
-    [setCursorPosition],
+    [updateCursorAndMenus],
   );
 
   const handleTextareaInput = useCallback(
@@ -1240,13 +1314,13 @@ export function useChatComposerState({
       const target = event.currentTarget;
       target.style.height = 'auto';
       target.style.height = `${target.scrollHeight}px`;
-      setCursorPosition(target.selectionStart);
+      updateCursorAndMenus(target);
       syncInputOverlayScroll(target);
 
       const lineHeight = parseInt(window.getComputedStyle(target).lineHeight);
       setIsTextareaExpanded(target.scrollHeight > lineHeight * 2);
     },
-    [setCursorPosition, syncInputOverlayScroll],
+    [syncInputOverlayScroll, updateCursorAndMenus],
   );
 
   const handleClearInput = useCallback(() => {

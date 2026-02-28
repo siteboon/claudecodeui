@@ -283,15 +283,67 @@ export function useSlashCommands({
     [selectedProject, provider],
   );
 
+  const replaceActiveSlashToken = useCallback(
+    (command: SlashCommand) => {
+      const currentValue = textareaRef.current?.value ?? input;
+      const currentCursor = textareaRef.current?.selectionStart ?? currentValue.length;
+      const textBeforeCursor = currentValue.slice(0, currentCursor);
+      const slashMatch = textBeforeCursor.match(/(^|\s)\/(\S*)$/);
+      const derivedSlashPosition = slashMatch
+        ? (slashMatch.index || 0) + slashMatch[1].length
+        : slashPosition;
+
+      if (derivedSlashPosition < 0 || derivedSlashPosition > currentValue.length) {
+        const fallbackInput = currentValue.trim().length
+          ? `${currentValue} ${command.name} `
+          : `${command.name} `;
+        return {
+          newInput: fallbackInput,
+          newCursorPosition: fallbackInput.length,
+        };
+      }
+
+      const textBeforeSlash = currentValue.slice(0, derivedSlashPosition);
+      let tokenEnd = derivedSlashPosition;
+      while (tokenEnd < currentValue.length && !/\s/.test(currentValue[tokenEnd])) {
+        tokenEnd += 1;
+      }
+      const textAfterToken = currentValue.slice(tokenEnd);
+
+      const needsTrailingSpace = textAfterToken.length === 0 || !/^\s/.test(textAfterToken);
+      const insertedCommand = needsTrailingSpace ? `${command.name} ` : command.name;
+      const newInput = `${textBeforeSlash}${insertedCommand}${textAfterToken}`;
+      const newCursorPosition = textBeforeSlash.length + insertedCommand.length;
+
+      return {
+        newInput,
+        newCursorPosition,
+      };
+    },
+    [input, slashPosition, textareaRef],
+  );
+
+  const applySlashCommandInsertion = useCallback(
+    (command: SlashCommand) => {
+      const { newInput, newCursorPosition } = replaceActiveSlashToken(command);
+      setInput(newInput);
+
+      requestAnimationFrame(() => {
+        if (!textareaRef.current) {
+          return;
+        }
+        textareaRef.current.setSelectionRange(newCursorPosition, newCursorPosition);
+        if (!textareaRef.current.matches(':focus')) {
+          textareaRef.current.focus();
+        }
+      });
+    },
+    [replaceActiveSlashToken, setInput, textareaRef],
+  );
+
   const selectCommandFromKeyboard = useCallback(
     (command: SlashCommand) => {
-      const textBeforeSlash = input.slice(0, slashPosition);
-      const textAfterSlash = input.slice(slashPosition);
-      const spaceIndex = textAfterSlash.indexOf(' ');
-      const textAfterQuery = spaceIndex !== -1 ? textAfterSlash.slice(spaceIndex) : '';
-      const newInput = `${textBeforeSlash}${command.name} ${textAfterQuery}`;
-
-      setInput(newInput);
+      applySlashCommandInsertion(command);
       resetCommandMenuState();
 
       if (command.type === 'skill') {
@@ -305,7 +357,7 @@ export function useSlashCommands({
         });
       }
     },
-    [input, slashPosition, setInput, resetCommandMenuState, onExecuteCommand],
+    [applySlashCommandInsertion, resetCommandMenuState, onExecuteCommand],
   );
 
   const handleCommandSelect = useCallback(
@@ -322,18 +374,7 @@ export function useSlashCommands({
       trackCommandUsage(command);
 
       if (command.type === 'skill') {
-        if (slashPosition >= 0) {
-          const textBeforeSlash = input.slice(0, slashPosition);
-          const textAfterSlash = input.slice(slashPosition);
-          const spaceIndex = textAfterSlash.indexOf(' ');
-          const textAfterQuery = spaceIndex !== -1 ? textAfterSlash.slice(spaceIndex) : '';
-          const newInput = `${textBeforeSlash}${command.name} ${textAfterQuery}`;
-          setInput(newInput);
-        } else {
-          const newInput = command.name.endsWith(' ') ? command.name : `${command.name} `;
-          setInput(newInput);
-        }
-
+        applySlashCommandInsertion(command);
         resetCommandMenuState();
         return;
       }
@@ -351,7 +392,7 @@ export function useSlashCommands({
         resetCommandMenuState();
       }
     },
-    [selectedProject, trackCommandUsage, onExecuteCommand, resetCommandMenuState],
+    [selectedProject, trackCommandUsage, applySlashCommandInsertion, onExecuteCommand, resetCommandMenuState],
   );
 
   const handleToggleCommandMenu = useCallback(() => {

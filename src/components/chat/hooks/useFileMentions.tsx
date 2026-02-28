@@ -260,6 +260,7 @@ export function useFileMentions({ selectedProject, input, setInput, textareaRef 
     showFileDropdown,
     filteredFiles,
     selectedFileIndex,
+    cursorPosition,
     renderInputWithMentions,
     selectFile,
     setCursorPosition,
