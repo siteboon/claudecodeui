@@ -78,7 +78,7 @@ export default function SkillInfoDialog({
   const metadataText = formatMetadata(state.info.metadata);
 
   return (
-    <div className="fixed inset-0 z-[1300] flex items-center justify-center p-4">
+    <div className={`fixed inset-0 z-[1300] flex ${state.mode === 'token-touch' ? 'items-stretch justify-stretch p-0' : 'items-center justify-center p-4'}`}>
       <button
         type="button"
         className="fixed inset-0 bg-black/60 backdrop-blur-sm"
@@ -88,7 +88,7 @@ export default function SkillInfoDialog({
       <div
         role="dialog"
         aria-modal="true"
-        className="relative max-h-[min(85vh,640px)] w-full max-w-md overflow-y-auto overscroll-contain rounded-xl border border-border bg-card p-4 shadow-2xl"
+        className={`relative w-full overflow-y-auto overscroll-contain bg-card shadow-2xl ${state.mode === 'token-touch' ? 'max-h-screen rounded-none border-0 p-5' : 'max-h-[min(85vh,640px)] max-w-md rounded-xl border border-border p-4'}`}
       >
         <div className="mb-3 text-base font-semibold text-foreground">{state.info.commandName}</div>
 

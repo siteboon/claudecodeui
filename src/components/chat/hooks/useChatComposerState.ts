@@ -112,7 +112,7 @@ export type ActiveSkillTooltip = {
   info: SkillInfo;
 } | null;
 
-type SkillTooltipSource = 'menu-selection' | 'typed-match' | 'token-hover';
+type SkillTooltipSource = 'token-hover';
 
 const extractText = (value: unknown): string | undefined => {
   if (typeof value !== 'string') {
@@ -573,20 +573,6 @@ export function useChatComposerState({
     [skillCommands],
   );
 
-  const menuSelectedSkill = useMemo(() => {
-    if (!showCommandMenu || selectedCommandIndex < 0 || selectedCommandIndex >= filteredCommands.length) {
-      return null;
-    }
-    const selected = filteredCommands[selectedCommandIndex];
-    if (!selected || selected.type !== 'skill') {
-      return null;
-    }
-    return {
-      command: selected,
-      info: normalizeSkillInfo(selected),
-    };
-  }, [showCommandMenu, selectedCommandIndex, filteredCommands]);
-
   const activeTypedSkillToken = useMemo(() => {
     if (skillCommands.length === 0) {
       return null;
@@ -612,45 +598,12 @@ export function useChatComposerState({
     }
 
     const matchingCommands = skillCommands.filter((command) => command.name.startsWith(fullToken));
-    const exactCommand = skillCommandByName.get(fullToken) || null;
 
-    const hasTokenTailAfterCursor = tokenTail.length > 0;
-    const cursorInSlashSpaceArea = !hasTokenTailAfterCursor;
-
-    const lineSuffix = afterCursor.split(/\r?\n/, 1)[0] || '';
-    const spacingAfterCursor = lineSuffix.match(/^(\s*)/)?.[1] || '';
-    const immediateSpaceCount = spacingBeforeCursor.length + spacingAfterCursor.length;
-
-    const inlineHintCommand =
-      matchingCommands.length === 1 &&
-      cursorInSlashSpaceArea &&
-      (tokenTail.length === 0 || spacingBeforeCursor.length > 0)
-        ? matchingCommands[0]
-        : null;
-
-    let tooltipCommand: SlashCommand | null = null;
-
-    if (!inlineHintCommand) {
-      if (exactCommand) {
-        const isPrefixAmbiguous = matchingCommands.length > 1;
-        if (isPrefixAmbiguous) {
-          if (spacingBeforeCursor.length === 1 && tokenTail.length === 0) {
-            tooltipCommand = exactCommand;
-          }
-        } else if (immediateSpaceCount <= 1) {
-          tooltipCommand = exactCommand;
-        }
-      }
-    }
-
-    if (!inlineHintCommand && !tooltipCommand) {
+    if (matchingCommands.length !== 1) {
       return null;
     }
 
-    const command = inlineHintCommand || tooltipCommand;
-    if (!command) {
-      return null;
-    }
+    const command = matchingCommands[0];
 
     return {
       command,
@@ -659,8 +612,8 @@ export function useChatComposerState({
         start: tokenStart,
         end: tokenStart + command.name.length,
       },
-      showInlineHint: Boolean(inlineHintCommand),
-      showTooltip: Boolean(tooltipCommand),
+      showInlineHint: true,
+      showTooltip: false,
       hintCursorPosition: cursorPos,
       fullToken,
     };
@@ -711,17 +664,7 @@ export function useChatComposerState({
         source: 'token-hover' as SkillTooltipSource,
         info: activeHoveredSkill.info,
       }
-    : menuSelectedSkill
-      ? {
-          source: 'menu-selection' as SkillTooltipSource,
-          info: menuSelectedSkill.info,
-        }
-      : activeTypedSkillToken?.showTooltip
-        ? {
-            source: 'typed-match' as SkillTooltipSource,
-            info: activeTypedSkillToken.info,
-          }
-        : null;
+    : null;
 
   const closeSkillInfoDialog = useCallback(() => {
     setHoveredSkillTokenRange(null);
