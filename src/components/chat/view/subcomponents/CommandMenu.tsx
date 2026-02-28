@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { CSSProperties } from 'react';
 
 type CommandMenuCommand = {
@@ -32,13 +33,13 @@ const menuBaseStyle: CSSProperties = {
   transition: 'opacity 150ms ease-in-out, transform 150ms ease-in-out',
 };
 
-const namespaceLabels: Record<string, string> = {
-  frequent: 'Frequently Used',
-  builtin: 'Built-in Commands',
-  project: 'Project Commands',
-  user: 'User Commands',
-  skills: 'Skills',
-  other: 'Other Commands',
+const namespaceLabelKeys: Record<string, string> = {
+  frequent: 'commandMenu.namespace.frequent',
+  builtin: 'commandMenu.namespace.builtin',
+  project: 'commandMenu.namespace.project',
+  user: 'commandMenu.namespace.user',
+  skills: 'commandMenu.namespace.skills',
+  other: 'commandMenu.namespace.other',
 };
 
 const namespaceIcons: Record<string, string> = {
@@ -90,6 +91,7 @@ export default function CommandMenu({
   isOpen = false,
   frequentCommands = [],
 }: CommandMenuProps) {
+  const { t } = useTranslation('chat');
   const menuRef = useRef<HTMLDivElement | null>(null);
   const selectedItemRef = useRef<HTMLDivElement | null>(null);
   const menuPosition = getMenuPosition(position);
@@ -163,7 +165,7 @@ export default function CommandMenu({
         className="command-menu command-menu-empty border border-gray-200 bg-white text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400"
         style={{ ...menuPosition, ...menuBaseStyle, overflowY: 'hidden', padding: '20px', opacity: 1, transform: 'translateY(0)', textAlign: 'center' }}
       >
-        No commands available
+        {t('commandMenu.noCommands')}
       </div>
     );
   }
@@ -172,7 +174,7 @@ export default function CommandMenu({
     <div
       ref={menuRef}
       role="listbox"
-      aria-label="Available commands"
+      aria-label={t('commandMenu.aria.availableCommands')}
       className="command-menu border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800"
       style={{ ...menuPosition, ...menuBaseStyle, opacity: 1, transform: 'translateY(0)' }}
     >
@@ -180,7 +182,7 @@ export default function CommandMenu({
         <div key={namespace} className="command-group">
           {orderedNamespaces.length > 1 && (
             <div className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-              {namespaceLabels[namespace] || namespace}
+              {t(namespaceLabelKeys[namespace] || namespaceLabelKeys.other)}
             </div>
           )}
 
@@ -228,7 +230,7 @@ export default function CommandMenu({
                     <button
                       type="button"
                       className="sm:hidden inline-flex h-6 w-6 items-center justify-center rounded-md border border-gray-200 bg-white/90 text-gray-500 transition-colors hover:text-gray-700 dark:border-gray-600 dark:bg-gray-700/80 dark:text-gray-300 dark:hover:text-gray-100"
-                      title="View skill info"
+                      title={t('commandMenu.viewSkillInfo')}
                       onMouseDown={(event) => {
                         event.preventDefault();
                         event.stopPropagation();

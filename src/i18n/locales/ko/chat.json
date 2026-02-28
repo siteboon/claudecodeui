@@ -94,6 +94,7 @@
     "technicalDetails": "기술 상세"
   },
   "input": {
+    "dropImagesHere": "여기에 이미지를 드롭하세요",
     "placeholder": "/를 입력하여 명령어, @를 입력하여 파일, 또는 {{provider}}에게 무엇이든 물어보세요...",
     "placeholderDefault": "메시지를 입력하세요...",
     "disabled": "입력 비활성화",
@@ -213,5 +214,39 @@
   },
   "tasks": {
     "nextTaskPrompt": "다음 작업 시작"
+  },
+  "commandMenu": {
+    "noCommands": "사용 가능한 명령어가 없습니다",
+    "viewSkillInfo": "스킬 정보 보기",
+    "aria": {
+      "availableCommands": "사용 가능한 명령어"
+    },
+    "namespace": {
+      "frequent": "자주 사용하는 명령어",
+      "builtin": "내장 명령어",
+      "project": "프로젝트 명령어",
+      "user": "사용자 명령어",
+      "skills": "스킬",
+      "other": "기타 명령어"
+    }
+  },
+  "skillInfoDialog": {
+    "closeAriaLabel": "스킬 정보 닫기",
+    "fields": {
+      "description": "description:",
+      "compatibility": "compatibility:",
+      "argumentHint": "argument-hint:",
+      "allowedTools": "allowed-tools:",
+      "metadata": "metadata:"
+    },
+    "usage": {
+      "label": "usage:",
+      "placeholder": "이 스킬에 대한 인수"
+    },
+    "actions": {
+      "clear": "Clear",
+      "usage": "Usage",
+      "close": "Close"
+    }
   }
 }

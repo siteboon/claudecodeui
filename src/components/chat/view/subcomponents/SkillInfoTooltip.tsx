@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 type SkillInfoTooltipProps = {
   info: {
@@ -36,6 +37,7 @@ const formatMetadata = (metadata?: Record<string, unknown>): string | null => {
 };
 
 export default function SkillInfoTooltip({ info }: SkillInfoTooltipProps) {
+  const { t } = useTranslation('chat');
   const metadataText = formatMetadata(info.metadata);
 
   return (
@@ -44,35 +46,35 @@ export default function SkillInfoTooltip({ info }: SkillInfoTooltipProps) {
 
       {info.description && (
         <div className="mb-1">
-          <span className="font-medium text-foreground">description: </span>
+          <span className="font-medium text-foreground">{t('skillInfoDialog.fields.description')} </span>
           <span className="text-muted-foreground">{info.description}</span>
         </div>
       )}
 
       {info.compatibility && (
         <div className="mb-1">
-          <span className="font-medium text-foreground">compatibility: </span>
+          <span className="font-medium text-foreground">{t('skillInfoDialog.fields.compatibility')} </span>
           <span className="text-muted-foreground">{info.compatibility}</span>
         </div>
       )}
 
       {info.argumentHint && (
         <div className="mb-1">
-          <span className="font-medium text-foreground">argument-hint: </span>
+          <span className="font-medium text-foreground">{t('skillInfoDialog.fields.argumentHint')} </span>
           <span className="text-muted-foreground font-mono">{info.argumentHint}</span>
         </div>
       )}
 
       {info.allowedTools && info.allowedTools.length > 0 && (
         <div className="mb-1">
-          <span className="font-medium text-foreground">allowed-tools: </span>
+          <span className="font-medium text-foreground">{t('skillInfoDialog.fields.allowedTools')} </span>
           <span className="text-muted-foreground">{info.allowedTools.join(', ')}</span>
         </div>
       )}
 
       {metadataText && (
         <div>
-          <div className="font-medium text-foreground mb-1">metadata:</div>
+          <div className="font-medium text-foreground mb-1">{t('skillInfoDialog.fields.metadata')}</div>
           <pre
             className="pointer-events-auto max-h-32 overflow-auto overscroll-contain rounded-md bg-muted/60 p-2 text-[11px] leading-relaxed text-muted-foreground whitespace-pre-wrap break-words select-text"
             onMouseDown={(event) => event.stopPropagation()}

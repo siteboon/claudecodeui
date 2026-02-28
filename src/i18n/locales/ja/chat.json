@@ -94,6 +94,7 @@
     "technicalDetails": "技術的な詳細"
   },
   "input": {
+    "dropImagesHere": "ここに画像をドロップ",
     "placeholder": "/ でコマンド、@ でファイル指定、または {{provider}} に何でも聞いてください...",
     "placeholderDefault": "メッセージを入力...",
     "disabled": "入力無効",
@@ -201,5 +202,39 @@
     "runCommand": "{{projectName}}で{{command}}を実行",
     "startCli": "{{projectName}}でClaude CLIを起動しています",
     "defaultCommand": "コマンド"
+  },
+  "commandMenu": {
+    "noCommands": "利用可能なコマンドがありません",
+    "viewSkillInfo": "スキル情報を表示",
+    "aria": {
+      "availableCommands": "利用可能なコマンド"
+    },
+    "namespace": {
+      "frequent": "よく使うコマンド",
+      "builtin": "組み込みコマンド",
+      "project": "プロジェクトコマンド",
+      "user": "ユーザーコマンド",
+      "skills": "スキル",
+      "other": "その他のコマンド"
+    }
+  },
+  "skillInfoDialog": {
+    "closeAriaLabel": "スキル情報を閉じる",
+    "fields": {
+      "description": "description:",
+      "compatibility": "compatibility:",
+      "argumentHint": "argument-hint:",
+      "allowedTools": "allowed-tools:",
+      "metadata": "metadata:"
+    },
+    "usage": {
+      "label": "usage:",
+      "placeholder": "このスキルの引数"
+    },
+    "actions": {
+      "clear": "クリア",
+      "usage": "Usage",
+      "close": "閉じる"
+    }
   }
 }

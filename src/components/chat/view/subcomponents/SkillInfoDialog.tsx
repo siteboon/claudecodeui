@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 
 type SkillInfoDialogProps = {
   state:
@@ -53,6 +54,8 @@ export default function SkillInfoDialog({
   onUsageChange,
   onUsageApply,
 }: SkillInfoDialogProps) {
+  const { t } = useTranslation('chat');
+
   useEffect(() => {
     if (!state.open) {
       return;
@@ -80,7 +83,7 @@ export default function SkillInfoDialog({
         type="button"
         className="fixed inset-0 bg-black/60 backdrop-blur-sm"
         onClick={onClose}
-        aria-label="Close skill info"
+        aria-label={t('skillInfoDialog.closeAriaLabel')}
       />
       <div
         role="dialog"
@@ -91,48 +94,50 @@ export default function SkillInfoDialog({
 
         {state.info.description && (
           <div className="mb-2 text-sm">
-            <span className="font-medium text-foreground">description: </span>
+            <span className="font-medium text-foreground">{t('skillInfoDialog.fields.description')} </span>
             <span className="text-muted-foreground">{state.info.description}</span>
           </div>
         )}
 
         {state.info.compatibility && (
           <div className="mb-2 text-sm">
-            <span className="font-medium text-foreground">compatibility: </span>
+            <span className="font-medium text-foreground">{t('skillInfoDialog.fields.compatibility')} </span>
             <span className="text-muted-foreground">{state.info.compatibility}</span>
           </div>
         )}
 
         {state.info.argumentHint && (
           <div className="mb-2 text-sm">
-            <span className="font-medium text-foreground">argument-hint: </span>
+            <span className="font-medium text-foreground">{t('skillInfoDialog.fields.argumentHint')} </span>
             <span className="font-mono text-muted-foreground">{state.info.argumentHint}</span>
           </div>
         )}
 
         {state.info.allowedTools && state.info.allowedTools.length > 0 && (
           <div className="mb-2 text-sm">
-            <span className="font-medium text-foreground">allowed-tools: </span>
+            <span className="font-medium text-foreground">{t('skillInfoDialog.fields.allowedTools')} </span>
             <span className="text-muted-foreground">{state.info.allowedTools.join(', ')}</span>
           </div>
         )}
 
         {metadataText && (
-          <div className="mb-3">
-            <div className="mb-1 text-sm font-medium text-foreground">metadata:</div>
-            <pre className="max-h-40 overflow-auto overscroll-contain rounded-md bg-muted/60 p-2 text-[11px] leading-relaxed text-muted-foreground whitespace-pre-wrap break-words">
+          <details className="mb-3 rounded-md border border-border/60 bg-muted/20 p-2" open>
+            <summary className="cursor-pointer text-sm font-medium text-foreground list-none">
+              {t('skillInfoDialog.fields.metadata')}
+            </summary>
+            <pre className="mt-2 max-h-40 overflow-auto overscroll-contain rounded-md bg-muted/60 p-2 text-[11px] leading-relaxed text-muted-foreground whitespace-pre-wrap break-words">
               {metadataText}
             </pre>
-          </div>
+          </details>
         )}
 
         {state.mode === 'menu-mobile' && (
           <div className="mb-3">
-            <label className="mb-1 block text-sm font-medium text-foreground">usage:</label>
+            <label className="mb-1 block text-sm font-medium text-foreground">{t('skillInfoDialog.usage.label')}</label>
             <textarea
               value={state.usageText || ''}
               onChange={(event) => onUsageChange?.(event.target.value)}
-              placeholder="Arguments for this skill"
+              placeholder={state.info?.argumentHint ?? t('skillInfoDialog.usage.placeholder')}
               className="min-h-[84px] w-full resize-y rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
             />
           </div>
@@ -145,7 +150,7 @@ export default function SkillInfoDialog({
               onClick={onClear}
               className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-sm text-destructive hover:bg-destructive/15"
             >
-              Clear
+              {t('skillInfoDialog.actions.clear')}
             </button>
           )}
 
@@ -155,7 +160,7 @@ export default function SkillInfoDialog({
               onClick={onUsageApply}
               className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-sm text-primary hover:bg-primary/15"
             >
-              Usage
+              {t('skillInfoDialog.actions.usage')}
             </button>
           )}
 
@@ -164,7 +169,7 @@ export default function SkillInfoDialog({
             onClick={onClose}
             className="rounded-lg border border-border px-3 py-1.5 text-sm text-foreground hover:bg-accent/60"
           >
-            Close
+            {t('skillInfoDialog.actions.close')}
           </button>
         </div>
       </div>

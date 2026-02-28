@@ -94,6 +94,7 @@
     "technicalDetails": "Technical details"
   },
   "input": {
+    "dropImagesHere": "Drop images here",
     "placeholder": "Type / for commands, @ for files, or ask {{provider}} anything...",
     "placeholderDefault": "Type your message...",
     "disabled": "Input disabled",
@@ -213,5 +214,39 @@
   },
   "tasks": {
     "nextTaskPrompt": "Start the next task"
+  },
+  "commandMenu": {
+    "noCommands": "No commands available",
+    "viewSkillInfo": "View skill info",
+    "aria": {
+      "availableCommands": "Available commands"
+    },
+    "namespace": {
+      "frequent": "Frequently Used",
+      "builtin": "Built-in Commands",
+      "project": "Project Commands",
+      "user": "User Commands",
+      "skills": "Skills",
+      "other": "Other Commands"
+    }
+  },
+  "skillInfoDialog": {
+    "closeAriaLabel": "Close skill info",
+    "fields": {
+      "description": "description:",
+      "compatibility": "compatibility:",
+      "argumentHint": "argument-hint:",
+      "allowedTools": "allowed-tools:",
+      "metadata": "metadata:"
+    },
+    "usage": {
+      "label": "usage:",
+      "placeholder": "Arguments for this skill"
+    },
+    "actions": {
+      "clear": "Clear",
+      "usage": "Usage",
+      "close": "Close"
+    }
   }
 }

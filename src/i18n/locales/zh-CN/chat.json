@@ -94,6 +94,7 @@
     "technicalDetails": "技术细节"
   },
   "input": {
+    "dropImagesHere": "将图片拖放到此处",
     "placeholder": "输入 / 调用命令，@ 选择文件，或向 {{provider}} 提问...",
     "placeholderDefault": "输入您的消息...",
     "disabled": "输入已禁用",
@@ -213,5 +214,39 @@
   },
   "tasks": {
     "nextTaskPrompt": "开始下一个任务"
+  },
+  "commandMenu": {
+    "noCommands": "没有可用命令",
+    "viewSkillInfo": "查看技能信息",
+    "aria": {
+      "availableCommands": "可用命令"
+    },
+    "namespace": {
+      "frequent": "常用命令",
+      "builtin": "内置命令",
+      "project": "项目命令",
+      "user": "用户命令",
+      "skills": "技能",
+      "other": "其他命令"
+    }
+  },
+  "skillInfoDialog": {
+    "closeAriaLabel": "关闭技能信息",
+    "fields": {
+      "description": "description:",
+      "compatibility": "compatibility:",
+      "argumentHint": "argument-hint:",
+      "allowedTools": "allowed-tools:",
+      "metadata": "metadata:"
+    },
+    "usage": {
+      "label": "usage:",
+      "placeholder": "该技能的参数"
+    },
+    "actions": {
+      "clear": "清除",
+      "usage": "Usage",
+      "close": "关闭"
+    }
   }
 }
