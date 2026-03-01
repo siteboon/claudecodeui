@@ -73,8 +73,12 @@ interface CommandExecutionResult {
   action?: string;
   data?: any;
   content?: string;
+  command?: string;
+  metadata?: any;
+  isSkill?: boolean;
   hasBashCommands?: boolean;
   hasFileIncludes?: boolean;
+  userArgs?: string; // The user's args text after the skill name
 }
 
 const createFakeSubmitEvent = () => {
@@ -129,6 +133,7 @@ export function useChatComposerState({
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputHighlightRef = useRef<HTMLDivElement>(null);
+  const pendingSkillContentRef = useRef<string | null>(null);
   const handleSubmitRef = useRef<
     ((event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>) => Promise<void>) | null
   >(null);
@@ -243,7 +248,50 @@ export function useChatComposerState({
   );
 
   const handleCustomCommand = useCallback(async (result: CommandExecutionResult) => {
-    const { content, hasBashCommands } = result;
+    const { content, hasBashCommands, isSkill, command: commandName, metadata, userArgs } = result;
+
+    // If this is a skill, show a card and either:
+    // - If user provided args, immediately send args as the prompt with skill attached
+    // - If no args, store skill content for the next user message
+    if (isSkill) {
+      const skillContent = content || '';
+
+      // Show a collapsible card for the loaded skill
+      setChatMessages((previous) => [
+        ...previous,
+        {
+          type: 'skill-loaded',
+          content: skillContent,
+          skillName: commandName || 'skill',
+          skillDescription: metadata?.description || '',
+          timestamp: Date.now(),
+        },
+      ]);
+
+      if (userArgs && userArgs.trim()) {
+        // User provided args (e.g., "/skill-name do something") - immediately execute
+        // Store skill content and set input to the user's args, then auto-submit
+        pendingSkillContentRef.current = skillContent;
+        setInput(userArgs.trim());
+        inputValueRef.current = userArgs.trim();
+
+        // Defer submit to next tick so the skill card and input are reflected
+        setTimeout(() => {
+          if (handleSubmitRef.current) {
+            handleSubmitRef.current(createFakeSubmitEvent());
+          }
+        }, 0);
+      } else {
+        // No args - store skill content for the next user message
+        pendingSkillContentRef.current = skillContent;
+        setInput('');
+        inputValueRef.current = '';
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+        }
+      }
+      return;
+    }
 
     if (hasBashCommands) {
       const confirmed = window.confirm(
@@ -272,7 +320,7 @@ export function useChatComposerState({
         handleSubmitRef.current(createFakeSubmitEvent());
       }
     }, 0);
-  }, [setChatMessages]);
+  }, [setChatMessages, textareaRef]);
 
   const executeCommand = useCallback(
     async (command: SlashCommand, rawInput?: string) => {
@@ -283,8 +331,8 @@ export function useChatComposerState({
       try {
         const effectiveInput = rawInput ?? input;
         const commandMatch = effectiveInput.match(new RegExp(`${escapeRegExp(command.name)}\\s*(.*)`));
-        const args =
-          commandMatch && commandMatch[1] ? commandMatch[1].trim().split(/\s+/) : [];
+        const argsText = commandMatch && commandMatch[1] ? commandMatch[1].trim() : '';
+        const args = argsText ? argsText.split(/\s+/) : [];
 
         const context = {
           projectPath: selectedProject.fullPath || selectedProject.path,
@@ -325,6 +373,8 @@ export function useChatComposerState({
           setInput('');
           inputValueRef.current = '';
         } else if (result.type === 'custom') {
+          // Pass the raw args text so skills can use it as the user's prompt
+          result.userArgs = argsText;
           await handleCustomCommand(result);
         }
       } catch (error) {
@@ -374,7 +424,6 @@ export function useChatComposerState({
     input,
     setInput,
     textareaRef,
-    onExecuteCommand: executeCommand,
   });
 
   const {
@@ -480,26 +529,133 @@ export function useChatComposerState({
         return;
       }
 
-      // Intercept slash commands: if input starts with /commandName, execute as command with args
+      // Intercept slash commands: extract all slash commands from input (space-separated)
       const trimmedInput = currentInput.trim();
-      if (trimmedInput.startsWith('/')) {
-        const firstSpace = trimmedInput.indexOf(' ');
-        const commandName = firstSpace > 0 ? trimmedInput.slice(0, firstSpace) : trimmedInput;
+
+      // Pattern to match slash commands: /command-name (must be preceded by start or space, followed by space or end)
+      const slashCommandPattern = /(^|\s)(\/[a-zA-Z0-9_:-]+)(?=\s|$)/g;
+      const foundCommands: { command: SlashCommand; match: string }[] = [];
+      let match;
+
+      while ((match = slashCommandPattern.exec(trimmedInput)) !== null) {
+        const commandName = match[2]; // The /command-name part
         const matchedCommand = slashCommands.find((cmd: SlashCommand) => cmd.name === commandName);
         if (matchedCommand) {
-          executeCommand(matchedCommand, trimmedInput);
-          setInput('');
-          inputValueRef.current = '';
-          setAttachedImages([]);
-          setUploadingImages(new Map());
-          setImageErrors(new Map());
-          resetCommandMenuState();
-          setIsTextareaExpanded(false);
-          if (textareaRef.current) {
-            textareaRef.current.style.height = 'auto';
-          }
-          return;
+          foundCommands.push({ command: matchedCommand, match: commandName });
         }
+      }
+
+      // If we found any slash commands, load them all first
+      if (foundCommands.length > 0) {
+        // Remove all matched slash commands from the input to get the remaining text
+        let remainingText = trimmedInput;
+        foundCommands.forEach(({ match }) => {
+          remainingText = remainingText.replace(new RegExp(`(^|\\s)${escapeRegExp(match)}(?=\\s|$)`, 'g'), ' ');
+        });
+        remainingText = remainingText.trim();
+
+        // Load all commands/skills sequentially
+        const loadAllCommands = async () => {
+          const skillContents: string[] = [];
+
+          for (const { command } of foundCommands) {
+            try {
+              // Execute command without args to just load it
+              const response = await authenticatedFetch('/api/commands/execute', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  commandName: command.name,
+                  commandPath: command.path,
+                  args: [],
+                  context: {
+                    projectPath: selectedProject ? (selectedProject.fullPath || selectedProject.path) : undefined,
+                    projectName: selectedProject?.name,
+                    sessionId: currentSessionId,
+                    provider,
+                    model: provider === 'cursor' ? cursorModel : provider === 'codex' ? codexModel : provider === 'gemini' ? geminiModel : claudeModel,
+                    tokenUsage: tokenBudget,
+                  },
+                }),
+              });
+
+              if (!response.ok) {
+                throw new Error(`Failed to load ${command.name}`);
+              }
+
+              const result = (await response.json()) as CommandExecutionResult;
+
+              // Handle skills: show card and collect content
+              if (result.isSkill && result.content) {
+                setChatMessages((previous) => [
+                  ...previous,
+                  {
+                    type: 'skill-loaded',
+                    content: result.content,
+                    skillName: command.name,
+                    skillDescription: result.metadata?.description || '',
+                    timestamp: Date.now(),
+                  },
+                ]);
+                skillContents.push(result.content);
+              } else if (!result.isSkill) {
+                // Handle regular commands: execute them normally
+                await handleCustomCommand({ ...result, userArgs: remainingText });
+                return; // Exit early for commands
+              }
+            } catch (error) {
+              console.error(`Error loading ${command.name}:`, error);
+              setChatMessages((previous) => [
+                ...previous,
+                {
+                  type: 'assistant',
+                  content: `⚠️ Failed to load ${command.name}`,
+                  timestamp: Date.now(),
+                },
+              ]);
+            }
+          }
+
+          // After all skills are loaded, handle remaining text
+          if (skillContents.length > 0) {
+            const combinedSkillContent = skillContents.join('\n\n---\n\n');
+            pendingSkillContentRef.current = combinedSkillContent;
+
+            if (remainingText) {
+              // Auto-submit with remaining text
+              setInput(remainingText);
+              inputValueRef.current = remainingText;
+
+              setTimeout(() => {
+                if (handleSubmitRef.current) {
+                  handleSubmitRef.current(createFakeSubmitEvent());
+                }
+              }, 100);
+            } else {
+              // No remaining text, just store skill content for next message
+              setInput('');
+              inputValueRef.current = '';
+              if (textareaRef.current) {
+                textareaRef.current.focus();
+              }
+            }
+          }
+        };
+
+        loadAllCommands();
+
+        // Clear UI state
+        setAttachedImages([]);
+        setUploadingImages(new Map());
+        setImageErrors(new Map());
+        resetCommandMenuState();
+        setIsTextareaExpanded(false);
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto';
+        }
+        return;
       }
 
       let messageContent = currentInput;
@@ -651,6 +807,12 @@ export function useChatComposerState({
           },
         });
       } else {
+        // Check if there's a pending skill to attach
+        const skillContent = pendingSkillContentRef.current;
+        if (skillContent) {
+          pendingSkillContentRef.current = null; // Clear after using
+        }
+
         sendMessage({
           type: 'claude-command',
           command: messageContent,
@@ -663,6 +825,7 @@ export function useChatComposerState({
             permissionMode,
             model: claudeModel,
             images: uploadedImages,
+            skillContent, // Attach skill content if present
           },
         });
       }

@@ -22,7 +22,6 @@ interface UseSlashCommandsOptions {
   input: string;
   setInput: Dispatch<SetStateAction<string>>;
   textareaRef: RefObject<HTMLTextAreaElement>;
-  onExecuteCommand: (command: SlashCommand, rawInput?: string) => void | Promise<void>;
 }
 
 const getCommandHistoryKey = (projectName: string) => `command_history_${projectName}`;
@@ -45,15 +44,11 @@ const saveCommandHistory = (projectName: string, history: Record<string, number>
   safeLocalStorage.setItem(getCommandHistoryKey(projectName), JSON.stringify(history));
 };
 
-const isPromiseLike = (value: unknown): value is Promise<unknown> =>
-  Boolean(value) && typeof (value as Promise<unknown>).then === 'function';
-
 export function useSlashCommands({
   selectedProject,
   input,
   setInput,
   textareaRef,
-  onExecuteCommand,
 }: UseSlashCommandsOptions) {
   const [slashCommands, setSlashCommands] = useState<SlashCommand[]>([]);
   const [filteredCommands, setFilteredCommands] = useState<SlashCommand[]>([]);
@@ -81,12 +76,6 @@ export function useSlashCommands({
 
   useEffect(() => {
     const fetchCommands = async () => {
-      if (!selectedProject) {
-        setSlashCommands([]);
-        setFilteredCommands([]);
-        return;
-      }
-
       try {
         const response = await authenticatedFetch('/api/commands/list', {
           method: 'POST',
@@ -94,7 +83,7 @@ export function useSlashCommands({
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            projectPath: selectedProject.path,
+            projectPath: selectedProject?.path,
           }),
         });
 
@@ -112,9 +101,11 @@ export function useSlashCommands({
             ...command,
             type: 'custom',
           })),
-        ];
+        ]
 
-        const parsedHistory = readCommandHistory(selectedProject.name);
+;
+
+        const parsedHistory = selectedProject ? readCommandHistory(selectedProject.name) : {};
         const sortedCommands = [...allCommands].sort((commandA, commandB) => {
           const commandAUsage = parsedHistory[commandA.name] || 0;
           const commandBUsage = parsedHistory[commandB.name] || 0;
@@ -209,14 +200,16 @@ export function useSlashCommands({
       setInput(newInput);
       resetCommandMenuState();
 
-      const executionResult = onExecuteCommand(command);
-      if (isPromiseLike(executionResult)) {
-        executionResult.catch(() => {
-          // Keep behavior silent; execution errors are handled by caller.
-        });
-      }
+      // Position cursor after command name
+      setTimeout(() => {
+        if (textareaRef.current) {
+          const cursorPos = textBeforeSlash.length + command.name.length + 1;
+          textareaRef.current.setSelectionRange(cursorPos, cursorPos);
+          textareaRef.current.focus();
+        }
+      }, 0);
     },
-    [input, slashPosition, setInput, resetCommandMenuState, onExecuteCommand],
+    [input, slashPosition, setInput, resetCommandMenuState, textareaRef],
   );
 
   const handleCommandSelect = useCallback(
@@ -231,20 +224,27 @@ export function useSlashCommands({
       }
 
       trackCommandUsage(command);
-      const executionResult = onExecuteCommand(command);
 
-      if (isPromiseLike(executionResult)) {
-        executionResult.then(() => {
-          resetCommandMenuState();
-        });
-        executionResult.catch(() => {
-          // Keep behavior silent; execution errors are handled by caller.
-        });
-      } else {
-        resetCommandMenuState();
-      }
+      // Insert command name into input
+      const textBeforeSlash = input.slice(0, slashPosition);
+      const textAfterSlash = input.slice(slashPosition);
+      const spaceIndex = textAfterSlash.indexOf(' ');
+      const textAfterQuery = spaceIndex !== -1 ? textAfterSlash.slice(spaceIndex) : '';
+      const newInput = `${textBeforeSlash}${command.name} ${textAfterQuery}`;
+
+      setInput(newInput);
+      resetCommandMenuState();
+
+      // Position cursor after command name
+      setTimeout(() => {
+        if (textareaRef.current) {
+          const cursorPos = textBeforeSlash.length + command.name.length + 1;
+          textareaRef.current.setSelectionRange(cursorPos, cursorPos);
+          textareaRef.current.focus();
+        }
+      }, 0);
     },
-    [selectedProject, trackCommandUsage, onExecuteCommand, resetCommandMenuState],
+    [selectedProject, input, slashPosition, setInput, resetCommandMenuState, textareaRef, trackCommandUsage, setSelectedCommandIndex],
   );
 
   const handleToggleCommandMenu = useCallback(() => {

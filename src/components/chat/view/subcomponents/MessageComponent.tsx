@@ -99,7 +99,38 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
       ref={messageRef}
       className={`chat-message ${message.type} ${isGrouped ? 'grouped' : ''} ${message.type === 'user' ? 'flex justify-end px-3 sm:px-0' : 'px-3 sm:px-0'}`}
     >
-      {message.type === 'user' ? (
+      {message.type === 'skill-loaded' ? (
+        /* Skill loaded card - collapsible */
+        <div className="w-full">
+          <details className="group border border-purple-200 dark:border-purple-800 rounded-lg overflow-hidden bg-purple-50 dark:bg-purple-900/20">
+            <summary className="cursor-pointer flex items-center gap-3 py-3 px-4 hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors select-none">
+              <div className="flex items-center justify-center w-8 h-8 bg-purple-600 rounded-full flex-shrink-0">
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-purple-900 dark:text-purple-100">
+                  Loaded skill: {(message as any).skillName || 'skill'}
+                </div>
+                {(message as any).skillDescription && (
+                  <div className="text-xs text-purple-700 dark:text-purple-300 mt-0.5 truncate">
+                    {(message as any).skillDescription}
+                  </div>
+                )}
+              </div>
+              <svg className="w-4 h-4 text-purple-600 dark:text-purple-400 transition-transform group-open:rotate-180 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </summary>
+            <div className="border-t border-purple-200 dark:border-purple-800 bg-white dark:bg-gray-900 p-4">
+              <div className="text-xs text-gray-600 dark:text-gray-400 whitespace-pre-wrap break-words font-mono max-h-96 overflow-y-auto">
+                {message.content}
+              </div>
+            </div>
+          </details>
+        </div>
+      ) : message.type === 'user' ? (
         /* User message bubble on the right */
         <div className="flex items-end space-x-0 sm:space-x-3 w-full sm:w-auto sm:max-w-[85%] md:max-w-md lg:max-w-lg xl:max-w-xl">
           <div className="bg-blue-600 text-white rounded-2xl rounded-br-md px-3 sm:px-4 py-2 shadow-sm flex-1 sm:flex-initial group">
