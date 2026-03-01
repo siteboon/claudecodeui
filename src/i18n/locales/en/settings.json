@@ -83,6 +83,21 @@
       }
     }
   },
+  "terminalShortcuts": {
+    "title": "Terminal Shortcuts",
+    "sectionKeys": "Keys",
+    "sectionNavigation": "Navigation",
+    "escape": "Escape",
+    "tab": "Tab",
+    "shiftTab": "Shift+Tab",
+    "arrowUp": "Arrow Up",
+    "arrowDown": "Arrow Down",
+    "scrollDown": "Scroll Down",
+    "handle": {
+      "closePanel": "Close shortcuts panel",
+      "openPanel": "Open shortcuts panel"
+    }
+  },
   "mainTabs": {
     "agents": "Agents",
     "appearance": "Appearance",

@@ -83,6 +83,21 @@
       }
     }
   },
+  "terminalShortcuts": {
+    "title": "ターミナルショートカット",
+    "sectionKeys": "キー",
+    "sectionNavigation": "ナビゲーション",
+    "escape": "Escape",
+    "tab": "Tab",
+    "shiftTab": "Shift+Tab",
+    "arrowUp": "上矢印",
+    "arrowDown": "下矢印",
+    "scrollDown": "下にスクロール",
+    "handle": {
+      "closePanel": "ショートカットパネルを閉じる",
+      "openPanel": "ショートカットパネルを開く"
+    }
+  },
   "mainTabs": {
     "agents": "エージェント",
     "appearance": "外観",
