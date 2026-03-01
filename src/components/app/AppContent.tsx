@@ -10,6 +10,7 @@ import { useWebSocket } from '../../contexts/WebSocketContext';
 import { useDeviceSettings } from '../../hooks/useDeviceSettings';
 import { useSessionProtection } from '../../hooks/useSessionProtection';
 import { useProjectsState } from '../../hooks/useProjectsState';
+import { useSidebarResize } from '../sidebar/hooks/useSidebarResize';
 
 export default function AppContent() {
   const navigate = useNavigate();
@@ -27,6 +28,12 @@ export default function AppContent() {
     markSessionAsNotProcessing,
     replaceTemporarySession,
   } = useSessionProtection();
+
+  const {
+    sidebarWidth,
+    resizeHandleRef,
+    handleResizeStart,
+  } = useSidebarResize();
 
   const {
     selectedProject,
@@ -74,9 +81,22 @@ export default function AppContent() {
   return (
     <div className="fixed inset-0 flex bg-background">
       {!isMobile ? (
-        <div className="h-full flex-shrink-0 border-r border-border/50">
-          <Sidebar {...sidebarSharedProps} />
-        </div>
+        <>
+          <div
+            className="h-full flex-shrink-0"
+            style={{ width: `${sidebarWidth}px` }}
+          >
+            <Sidebar {...sidebarSharedProps} />
+          </div>
+          <div
+            ref={resizeHandleRef}
+            onMouseDown={handleResizeStart}
+            className="flex-shrink-0 w-1 bg-border/50 hover:bg-primary/50 cursor-col-resize transition-colors relative group"
+            title="Drag to resize"
+          >
+            <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-1 bg-primary opacity-0 group-hover:opacity-100 transition-opacity" />
+          </div>
+        </>
       ) : (
         <div
           className={`fixed inset-0 z-50 flex transition-all duration-150 ease-out ${sidebarOpen ? 'opacity-100 visible' : 'opacity-0 invisible'

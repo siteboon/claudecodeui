@@ -49,8 +49,7 @@ export default function SidebarContent({
 }: SidebarContentProps) {
   return (
     <div
-      className="h-full flex flex-col bg-background/80 backdrop-blur-sm md:select-none md:w-72"
-      style={{}}
+      className="h-full flex flex-col bg-background/80 backdrop-blur-sm md:select-none border-r border-border/50"
     >
       <SidebarHeader
         isPWA={isPWA}
