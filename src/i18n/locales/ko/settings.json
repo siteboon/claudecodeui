@@ -83,6 +83,21 @@
       }
     }
   },
+  "terminalShortcuts": {
+    "title": "터미널 단축키",
+    "sectionKeys": "키",
+    "sectionNavigation": "탐색",
+    "escape": "Escape",
+    "tab": "Tab",
+    "shiftTab": "Shift+Tab",
+    "arrowUp": "위쪽 화살표",
+    "arrowDown": "아래쪽 화살표",
+    "scrollDown": "아래로 스크롤",
+    "handle": {
+      "closePanel": "단축키 패널 닫기",
+      "openPanel": "단축키 패널 열기"
+    }
+  },
   "mainTabs": {
     "agents": "에이전트",
     "appearance": "외관",

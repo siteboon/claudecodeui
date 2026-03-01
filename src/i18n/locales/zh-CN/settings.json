@@ -83,6 +83,21 @@
       }
     }
   },
+  "terminalShortcuts": {
+    "title": "终端快捷键",
+    "sectionKeys": "按键",
+    "sectionNavigation": "导航",
+    "escape": "Escape",
+    "tab": "Tab",
+    "shiftTab": "Shift+Tab",
+    "arrowUp": "上箭头",
+    "arrowDown": "下箭头",
+    "scrollDown": "滚动到底部",
+    "handle": {
+      "closePanel": "关闭快捷键面板",
+      "openPanel": "打开快捷键面板"
+    }
+  },
   "mainTabs": {
     "agents": "智能体",
     "appearance": "外观",
