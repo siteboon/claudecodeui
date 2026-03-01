@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
 type SkillInfoDialogProps = {
@@ -55,20 +55,71 @@ export default function SkillInfoDialog({
   onUsageApply,
 }: SkillInfoDialogProps) {
   const { t } = useTranslation('chat');
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!state.open) {
       return;
     }
 
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+
+    const focusableSelector =
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+    const getFocusableElements = () =>
+      Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(focusableSelector) ?? []);
+
+    const focusFirst = () => {
+      const focusable = getFocusableElements();
+      if (focusable.length > 0) {
+        focusable[0].focus();
+        return;
+      }
+      dialogRef.current?.focus();
+    };
+
+    focusFirst();
+
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         onClose();
+        return;
+      }
+
+      if (event.key !== 'Tab') {
+        return;
+      }
+
+      const focusable = getFocusableElements();
+      if (focusable.length === 0) {
+        event.preventDefault();
+        dialogRef.current?.focus();
+        return;
+      }
+
+      const currentIndex = focusable.indexOf(document.activeElement as HTMLElement);
+      const lastIndex = focusable.length - 1;
+
+      if (event.shiftKey) {
+        if (currentIndex <= 0) {
+          event.preventDefault();
+          focusable[lastIndex].focus();
+        }
+        return;
+      }
+
+      if (currentIndex === -1 || currentIndex >= lastIndex) {
+        event.preventDefault();
+        focusable[0].focus();
       }
     };
 
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      previouslyFocused?.focus?.();
+    };
   }, [state.open, onClose]);
 
   if (!state.open) {
@@ -86,6 +137,8 @@ export default function SkillInfoDialog({
         aria-label={t('skillInfoDialog.closeAriaLabel')}
       />
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="skill-info-dialog-title"
