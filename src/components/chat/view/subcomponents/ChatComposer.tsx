@@ -57,6 +57,7 @@ interface ChatComposerProps {
   isUserScrolledUp: boolean;
   hasMessages: boolean;
   onScrollToBottom: () => void;
+  onScrollToPreviousUserMessage: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement> | MouseEvent<HTMLButtonElement> | TouchEvent<HTMLButtonElement>) => void;
   isDragActive: boolean;
   attachedImages: File[];
@@ -114,6 +115,7 @@ export default function ChatComposer({
   isUserScrolledUp,
   hasMessages,
   onScrollToBottom,
+  onScrollToPreviousUserMessage,
   onSubmit,
   isDragActive,
   attachedImages,
@@ -202,6 +204,7 @@ export default function ChatComposer({
           isUserScrolledUp={isUserScrolledUp}
           hasMessages={hasMessages}
           onScrollToBottom={onScrollToBottom}
+          onScrollToPreviousUserMessage={onScrollToPreviousUserMessage}
         />}
       </div>
 
@@ -243,11 +246,10 @@ export default function ChatComposer({
             {filteredFiles.map((file, index) => (
               <div
                 key={file.path}
-                className={`px-4 py-3 cursor-pointer border-b border-border/30 last:border-b-0 touch-manipulation ${
-                  index === selectedFileIndex
-                    ? 'bg-primary/8 text-primary'
-                    : 'hover:bg-accent/50 text-foreground'
-                }`}
+                className={`px-4 py-3 cursor-pointer border-b border-border/30 last:border-b-0 touch-manipulation ${index === selectedFileIndex
+                  ? 'bg-primary/8 text-primary'
+                  : 'hover:bg-accent/50 text-foreground'
+                  }`}
                 onMouseDown={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
@@ -277,9 +279,8 @@ export default function ChatComposer({
 
         <div
           {...getRootProps()}
-          className={`relative bg-card/80 backdrop-blur-sm rounded-2xl shadow-sm border border-border/50 focus-within:shadow-md focus-within:border-primary/30 focus-within:ring-1 focus-within:ring-primary/15 transition-all duration-200 overflow-hidden ${
-            isTextareaExpanded ? 'chat-input-expanded' : ''
-          }`}
+          className={`relative bg-card/80 backdrop-blur-sm rounded-2xl shadow-sm border border-border/50 focus-within:shadow-md focus-within:border-primary/30 focus-within:ring-1 focus-within:ring-primary/15 transition-all duration-200 overflow-hidden ${isTextareaExpanded ? 'chat-input-expanded' : ''
+            }`}
         >
           <input {...getInputProps()} />
           <div ref={inputHighlightRef} aria-hidden="true" className="absolute inset-0 pointer-events-none overflow-hidden rounded-2xl">
@@ -345,9 +346,8 @@ export default function ChatComposer({
             </button>
 
             <div
-              className={`absolute bottom-1 left-12 right-14 sm:right-40 text-xs text-muted-foreground/50 pointer-events-none hidden sm:block transition-opacity duration-200 ${
-                input.trim() ? 'opacity-0' : 'opacity-100'
-              }`}
+              className={`absolute bottom-1 left-12 right-14 sm:right-40 text-xs text-muted-foreground/50 pointer-events-none hidden sm:block transition-opacity duration-200 ${input.trim() ? 'opacity-0' : 'opacity-100'
+                }`}
             >
               {sendByCtrlEnter ? t('input.hintText.ctrlEnter') : t('input.hintText.enter')}
             </div>
