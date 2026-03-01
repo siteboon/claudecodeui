@@ -142,7 +142,15 @@ function ChatInterface({
     showFileDropdown,
     filteredFiles,
     selectedFileIndex,
-    renderInputWithMentions,
+    activeSkillTooltip,
+    skillInfoDialogState,
+    renderInputWithSkillDecorations,
+    openSkillInfoDialogFromMenu,
+    closeSkillInfoDialog,
+    clearSkillToken,
+    mobileSkillUsageText,
+    updateSkillUsageText,
+    applySkillUsageFromDialog,
     selectFile,
     attachedImages,
     setAttachedImages,
@@ -166,6 +174,8 @@ function ChatInterface({
     handleGrantToolPermission,
     handleInputFocusChange,
     isInputFocused,
+    prefetchSkillsForProvider,
+    reloadSkillsForProvider,
   } = useChatComposerState({
     selectedProject,
     selectedSession,
@@ -298,6 +308,7 @@ function ChatInterface({
           isTaskMasterInstalled={isTaskMasterInstalled}
           onShowAllTasks={onShowAllTasks}
           setInput={setInput}
+          prefetchSkillsForProvider={prefetchSkillsForProvider}
           isLoadingMoreMessages={isLoadingMoreMessages}
           hasMoreMessages={hasMoreMessages}
           totalMessages={totalMessages}
@@ -365,7 +376,15 @@ function ChatInterface({
           getInputProps={getInputProps as (...args: unknown[]) => Record<string, unknown>}
           openImagePicker={openImagePicker}
           inputHighlightRef={inputHighlightRef}
-          renderInputWithMentions={renderInputWithMentions}
+          renderInputWithSkillDecorations={renderInputWithSkillDecorations}
+          activeSkillTooltip={activeSkillTooltip}
+          skillInfoDialogState={skillInfoDialogState}
+          onOpenSkillInfoFromMenu={openSkillInfoDialogFromMenu}
+          onCloseSkillInfoDialog={closeSkillInfoDialog}
+          onClearSkillToken={clearSkillToken}
+          mobileSkillUsageText={mobileSkillUsageText}
+          onSkillUsageTextChange={updateSkillUsageText}
+          onApplySkillUsage={applySkillUsageFromDialog}
           textareaRef={textareaRef}
           input={input}
           onInputChange={handleInputChange}
@@ -392,7 +411,10 @@ function ChatInterface({
         />
       </div>
 
-      <QuickSettingsPanel />
+      <QuickSettingsPanel
+        provider={provider}
+        reloadSkillsForProvider={reloadSkillsForProvider}
+      />
     </>
   );
 }

@@ -72,6 +72,12 @@
       "draggingStatus": "正在拖拽...",
       "toggleAndMove": "点击切换，拖拽移动"
     },
+    "reloadSkills": {
+      "label": "重新加载技能",
+      "description": "刷新提供方技能",
+      "loading": "重新加载中...",
+      "title": "重新加载提供方技能"
+    },
     "whisper": {
       "modes": {
         "default": "默认模式",
