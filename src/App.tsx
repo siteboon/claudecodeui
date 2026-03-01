@@ -25,19 +25,23 @@ function detectRouterBasename() {
     document.querySelector('link[rel="icon"][href]')?.getAttribute('href'),
   ].filter((value): value is string => Boolean(value));
 
+  let detectedBasename = '';
   for (const candidate of candidatePaths) {
     try {
-      const pathname = new URL(candidate, window.location.origin).pathname;
+      const pathname = new URL(candidate, document.baseURI || window.location.href).pathname;
       const match = pathname.match(/^(.*)\/(?:assets\/|manifest\.json$|favicon\.(?:svg|png)$)/);
       if (match) {
-        return match[1] ? match[1].replace(/\/+$/, '') : '';
+        const normalized = match[1] ? match[1].replace(/\/+$/, '') : '';
+        if (normalized.length > detectedBasename.length) {
+          detectedBasename = normalized;
+        }
       }
     } catch {
       // Ignore invalid candidate URLs and continue checking other hints.
     }
   }
 
-  return '';
+  return detectedBasename;
 }
 
 export default function App() {
