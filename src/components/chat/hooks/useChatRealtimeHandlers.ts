@@ -1080,6 +1080,16 @@ export function useChatRealtimeHandlers({
         break;
       }
 
+      case 'pending-permissions-response': {
+        // Server returned pending permissions for this session
+        if (latestMessage.sessionId && currentSessionId && latestMessage.sessionId !== currentSessionId) {
+          break;
+        }
+        const serverRequests = latestMessage.data || [];
+        setPendingPermissionRequests(serverRequests);
+        break;
+      }
+
       default:
         break;
     }
