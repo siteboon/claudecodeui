@@ -1,6 +1,6 @@
 # Task 4: Slash Commands & Skills Support — Design Doc
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> **Status: COMPLETED** — PR [#466](https://github.com/siteboon/claudecodeui/pull/466) created at commit `d7e89c6`.
 
 **Goal:** Port all slash command enhancements from `feature/personal-enhancements` to a single focused PR for upstream.
 
