@@ -25,21 +25,29 @@
 
 ---
 
-## Current Git State (2026-03-01 19:30 UTC+8)
+## Current Git State (2026-03-01 20:00 UTC+8)
 
-- **Current branch:** `feat/slash-commands-skills` (at commit `d7e89c6`)
+- **Current branch:** `feat/slash-commands-skills` (at commit `68f5272`)
 - **Stash:** `WIP: unstaged changes during PR split` (from `feature/personal-enhancements`)
 - **feature/personal-enhancements:** Untouched, safe
 - **Branches created & pushed:** `fix/react18-message-sync`, `fix/websocket-permission-persistence`, `feat/system-injected-messages`, `feat/slash-commands-skills`
 - **PRs open:** [#461](https://github.com/siteboon/claudecodeui/pull/461), [#462](https://github.com/siteboon/claudecodeui/pull/462), [#463](https://github.com/siteboon/claudecodeui/pull/463), [#466](https://github.com/siteboon/claudecodeui/pull/466)
 
-**To resume next task:**
-```bash
-cd /e/Heyang5/claudecodeui
-git checkout main
-# Task 5 needs brainstorming first:
-# /superpowers:brainstorm 深度研究 Task 5 (Background Tasks)，分析上游最新代码结构，设计全面的移植方案
+**下一轮启动指令（复制粘贴即可）：**
 ```
+git checkout main
+
+然后执行 Task 5 brainstorming:
+/superpowers:brainstorm 深度研究 Task 5 (Background Tasks Management)。分析 feature/personal-enhancements 分支中后台任务相关的所有 commits 和文件，对比 upstream/main 最新代码结构，设计全面的移植方案。参考 @docs/plans/2026-03-01-upstream-pr-contribution.md 中的 Task 5 描述和 Lessons Learned。
+```
+
+**Task 5 涉及的 feature 分支文件（供 brainstorm 参考）：**
+- 新文件: `server/ws-clients.js`, `src/components/chat/BackgroundTasksPage.tsx`, `src/components/chat/BackgroundTasksPopover.tsx`
+- 新 i18n: `src/i18n/locales/*/backgroundTasks.json` (en, ja, ko, zh-CN)
+- 修改: `server/claude-sdk.js` (后台会话管理), `server/index.js` (API 路由), `server/routes/commands.js` (getToolInputSummary)
+- 修改: `src/components/app/AppContent.tsx`, `src/components/sidebar/Sidebar.tsx`
+- 修改: `src/components/chat/hooks/useChatRealtimeHandlers.ts`, `src/contexts/WebSocketContext.tsx`
+- 修改: `src/i18n/i18n.ts` (注册 backgroundTasks namespace)
 
 ---
 
