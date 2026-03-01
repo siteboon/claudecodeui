@@ -65,7 +65,7 @@ export default function SkillInfoDialog({
     const previouslyFocused = document.activeElement as HTMLElement | null;
 
     const focusableSelector =
-      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
     const getFocusableElements = () =>
       Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(focusableSelector) ?? []);
