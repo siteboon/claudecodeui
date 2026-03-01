@@ -68,6 +68,8 @@ import { initializeDatabase, sessionNamesDb, applyCustomSessionNames } from './d
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { IS_PLATFORM } from './constants/config.js';
 
+const VALID_PROVIDERS = ['claude', 'codex', 'cursor', 'gemini'];
+
 // File system watchers for provider project/session folders
 const PROVIDER_WATCH_PATHS = [
     { provider: 'claude', rootPath: path.join(os.homedir(), '.claude', 'projects') },
@@ -542,6 +544,7 @@ app.delete('/api/projects/:projectName/sessions/:sessionId', authenticateToken, 
         const { projectName, sessionId } = req.params;
         console.log(`[API] Deleting session: ${sessionId} from project: ${projectName}`);
         await deleteSession(projectName, sessionId);
+        sessionNamesDb.deleteName(sessionId, 'claude');
         console.log(`[API] Session ${sessionId} deleted successfully`);
         res.json({ success: true });
     } catch (error) {
@@ -565,7 +568,6 @@ app.put('/api/sessions/:sessionId/rename', authenticateToken, async (req, res) =
         if (summary.trim().length > 500) {
             return res.status(400).json({ error: 'Summary must not exceed 500 characters' });
         }
-        const VALID_PROVIDERS = ['claude', 'codex', 'cursor'];
         if (!provider || !VALID_PROVIDERS.includes(provider)) {
             return res.status(400).json({ error: `Provider must be one of: ${VALID_PROVIDERS.join(', ')}` });
         }
@@ -1710,7 +1712,7 @@ app.get('/api/projects/:projectName/sessions/:sessionId/token-usage', authentica
 
         // Allow only safe characters in sessionId
         const safeSessionId = String(sessionId).replace(/[^a-zA-Z0-9._-]/g, '');
-        if (!safeSessionId) {
+        if (!safeSessionId || safeSessionId !== String(sessionId)) {
             return res.status(400).json({ error: 'Invalid sessionId' });
         }
 
