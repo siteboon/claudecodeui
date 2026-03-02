@@ -26,7 +26,7 @@ const LoadingScreen = () => (
 );
 
 const ProtectedRoute = ({ children }) => {
-  const { user, isLoading, needsSetup, hasCompletedOnboarding, refreshOnboardingStatus } = useAuth();
+  const { user, isLoading, needsSetup, authDisabled, hasCompletedOnboarding, refreshOnboardingStatus } = useAuth();
 
   if (IS_PLATFORM) {
     if (isLoading) {
@@ -42,6 +42,10 @@ const ProtectedRoute = ({ children }) => {
 
   if (isLoading) {
     return <LoadingScreen />;
+  }
+
+  if (authDisabled) {
+    return children;
   }
 
   if (needsSetup) {

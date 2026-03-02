@@ -1,17 +1,26 @@
 import express from 'express';
 import bcrypt from 'bcrypt';
 import { userDb, db } from '../database/db.js';
-import { generateToken, authenticateToken } from '../middleware/auth.js';
+import { generateToken, authenticateToken, isAuthDisabled } from '../middleware/auth.js';
 
 const router = express.Router();
 
 // Check auth status and setup requirements
 router.get('/status', async (req, res) => {
   try {
+    if (isAuthDisabled()) {
+      return res.json({
+        needsSetup: false,
+        isAuthenticated: true,
+        authDisabled: true
+      });
+    }
+
     const hasUsers = await userDb.hasUsers();
     res.json({ 
       needsSetup: !hasUsers,
-      isAuthenticated: false // Will be overridden by frontend if token exists
+      isAuthenticated: false, // Will be overridden by frontend if token exists
+      authDisabled: false
     });
   } catch (error) {
     console.error('Auth status error:', error);
@@ -120,8 +129,16 @@ router.post('/login', async (req, res) => {
 
 // Get current user (protected route)
 router.get('/user', authenticateToken, (req, res) => {
+  if (isAuthDisabled()) {
+    return res.json({
+      user: req.user,
+      authDisabled: true
+    });
+  }
+
   res.json({
-    user: req.user
+    user: req.user,
+    authDisabled: false
   });
 });
 

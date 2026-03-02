@@ -10,6 +10,7 @@ const AuthContext = createContext({
   logout: () => {},
   isLoading: true,
   needsSetup: false,
+  authDisabled: false,
   hasCompletedOnboarding: true,
   refreshOnboardingStatus: () => {},
   error: null
@@ -28,6 +29,7 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(localStorage.getItem('auth-token'));
   const [isLoading, setIsLoading] = useState(true);
   const [needsSetup, setNeedsSetup] = useState(false);
+  const [authDisabled, setAuthDisabled] = useState(false);
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(true);
   const [error, setError] = useState(null);
 
@@ -64,10 +66,36 @@ export const AuthProvider = ({ children }) => {
     try {
       setIsLoading(true);
       setError(null);
+      setAuthDisabled(false);
 
       // Check if system needs setup
       const statusResponse = await api.auth.status();
       const statusData = await statusResponse.json();
+
+      if (statusData.authDisabled) {
+        const compatibilityToken = 'auth-disabled-token';
+        setAuthDisabled(true);
+        setNeedsSetup(false);
+        setToken(compatibilityToken);
+        localStorage.setItem('auth-token', compatibilityToken);
+
+        let authDisabledUser = statusData.user ?? null;
+        if (!authDisabledUser) {
+          try {
+            const userResponse = await api.auth.user();
+            if (userResponse.ok) {
+              const userData = await userResponse.json();
+              authDisabledUser = userData.user ?? null;
+            }
+          } catch (error) {
+            console.warn('Auth-disabled user lookup failed:', error);
+          }
+        }
+
+        setUser(authDisabledUser);
+        setHasCompletedOnboarding(true);
+        return;
+      }
 
       if (statusData.needsSetup) {
         setNeedsSetup(true);
@@ -156,6 +184,10 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
+    if (authDisabled) {
+      return;
+    }
+
     setToken(null);
     setUser(null);
     localStorage.removeItem('auth-token');
@@ -176,6 +208,7 @@ export const AuthProvider = ({ children }) => {
     logout,
     isLoading,
     needsSetup,
+    authDisabled,
     hasCompletedOnboarding,
     refreshOnboardingStatus,
     error
