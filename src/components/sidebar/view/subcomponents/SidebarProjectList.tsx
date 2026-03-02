@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import type { TFunction } from 'i18next';
 import type { LoadingProgress, Project, ProjectSession, SessionProvider } from '../../../../types/app';
 import type {
@@ -102,6 +103,15 @@ export default function SidebarProjectList({
       t={t}
     />
   );
+
+  useEffect(() => {
+    let baseTitle = 'CloudCLI UI';
+    const displayName = selectedProject?.displayName?.trim();
+    if (displayName) {
+      baseTitle = `${displayName} - ${baseTitle}`;
+    }
+    document.title = baseTitle;
+  }, [selectedProject]);
 
   const showProjects = !isLoading && projects.length > 0 && filteredProjects.length > 0;
 
