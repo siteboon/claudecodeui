@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react';
-import { cn } from '../../../../lib/utils';
+import { cn } from '../../../lib/utils';
 
 type TooltipPosition = 'top' | 'bottom' | 'left' | 'right';
 

@@ -1,6 +1,6 @@
-export { Badge, badgeVariants } from './badge';
-export { Button, buttonVariants } from './button';
-export { DarkModeToggle } from './dark-mode-toggle';
-export { Input } from './input';
-export { ScrollArea } from './scroll-area';
-export { Tooltip } from './tooltip';
+export { Badge, badgeVariants } from './Badge';
+export { Button, buttonVariants } from './Button';
+export { default as DarkModeToggle } from './DarkModeToggle';
+export { Input } from './Input';
+export { ScrollArea } from './ScrollArea';
+export { default as Tooltip } from './Tooltip';
