@@ -298,10 +298,15 @@ export function useChatSessionState({
     pendingScrollRestoreRef.current = null;
   }, [chatMessages.length]);
 
+  const prevSessionMessagesLengthRef = useRef(0);
+  const isInitialLoadRef = useRef(true);
+
   useEffect(() => {
     pendingInitialScrollRef.current = true;
     topLoadLockRef.current = false;
     pendingScrollRestoreRef.current = null;
+    prevSessionMessagesLengthRef.current = 0;
+    isInitialLoadRef.current = true;
     setVisibleMessageCount(INITIAL_VISIBLE_MESSAGES);
     setIsUserScrolledUp(false);
   }, [selectedProject?.name, selectedSession?.id]);
@@ -503,8 +508,6 @@ export function useChatSessionState({
     }
   }, [pendingViewSessionRef, selectedSession?.id]);
 
-  const prevSessionMessagesLengthRef = useRef(0);
-  const isInitialLoadRef = useRef(true);
 
   useEffect(() => {
     // Only sync sessionMessages to chatMessages when:
