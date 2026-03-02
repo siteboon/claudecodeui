@@ -75,10 +75,13 @@ function MainContent({
   });
 
   useEffect(() => {
-    if (selectedProject && selectedProject !== currentProject) {
+    const selectedProjectName = selectedProject?.name;
+    const currentProjectName = currentProject?.name;
+
+    if (selectedProject && selectedProjectName !== currentProjectName) {
       setCurrentProject?.(selectedProject);
     }
-  }, [selectedProject, currentProject, setCurrentProject]);
+  }, [selectedProject, currentProject?.name, setCurrentProject]);
 
   useEffect(() => {
     if (!shouldShowTasksTab && activeTab === 'tasks') {
