@@ -9,7 +9,6 @@ import type { PrdFile, TaskMasterPanelProps, TaskMasterTask, TaskSelection } fro
 
 const AnyTaskList = TaskList as any;
 const AnyTaskDetail = TaskDetail as any;
-const AnyPRDEditor = PRDEditor as any;
 
 type TaskMasterContextValue = {
   tasks?: TaskMasterTask[];
@@ -178,7 +177,7 @@ export default function TaskMasterPanel({ isVisible }: TaskMasterPanelProps) {
       )}
 
       {showPRDEditor && (
-        <AnyPRDEditor
+        <PRDEditor
           project={currentProject}
           projectPath={currentProject?.fullPath || currentProject?.path}
           onClose={handleClosePrdEditor}
@@ -186,6 +185,7 @@ export default function TaskMasterPanel({ isVisible }: TaskMasterPanelProps) {
           file={{
             name: selectedPRD?.name || 'prd.txt',
             content: selectedPRD?.content || '',
+            isExisting: selectedPRD?.isExisting,
           }}
           onSave={handlePrdSave}
         />
