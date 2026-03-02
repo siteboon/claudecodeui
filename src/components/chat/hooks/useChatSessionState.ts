@@ -93,6 +93,7 @@ export function useChatSessionState({
   const scrollPositionRef = useRef({ height: 0, top: 0 });
   const loadAllFinishedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadAllOverlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastLoadedSessionIdRef = useRef<string | null>(null);
 
   const createDiff = useMemo<DiffCalculator>(() => createCachedDiffCalculator(), []);
 
@@ -297,10 +298,15 @@ export function useChatSessionState({
     pendingScrollRestoreRef.current = null;
   }, [chatMessages.length]);
 
+  const prevSessionMessagesLengthRef = useRef(0);
+  const isInitialLoadRef = useRef(true);
+
   useEffect(() => {
     pendingInitialScrollRef.current = true;
     topLoadLockRef.current = false;
     pendingScrollRestoreRef.current = null;
+    prevSessionMessagesLengthRef.current = 0;
+    isInitialLoadRef.current = true;
     setVisibleMessageCount(INITIAL_VISIBLE_MESSAGES);
     setIsUserScrolledUp(false);
   }, [selectedProject?.name, selectedSession?.id]);
@@ -373,6 +379,14 @@ export function useChatSessionState({
           }
         }
 
+        // Skip loading if session ID hasn't changed and we already loaded it
+        if (lastLoadedSessionIdRef.current === selectedSession.id) {
+          setTimeout(() => {
+            isLoadingSessionRef.current = false;
+          }, 250);
+          return;
+        }
+
         if (provider === 'cursor') {
           setCurrentSessionId(selectedSession.id);
           sessionStorage.setItem('cursorSessionId', selectedSession.id);
@@ -400,6 +414,9 @@ export function useChatSessionState({
             setIsSystemSessionChange(false);
           }
         }
+
+        // Update the last loaded session ID
+        lastLoadedSessionIdRef.current = selectedSession.id;
       } else {
         if (!isSystemSessionChange) {
           resetStreamingState();
@@ -417,6 +434,7 @@ export function useChatSessionState({
         setHasMoreMessages(false);
         setTotalMessages(0);
         setTokenBudget(null);
+        lastLoadedSessionIdRef.current = null;
       }
 
       setTimeout(() => {
@@ -433,7 +451,7 @@ export function useChatSessionState({
     pendingViewSessionRef,
     resetStreamingState,
     selectedProject,
-    selectedSession,
+    selectedSession?.id, // Only depend on session ID, not the entire object
     sendMessage,
     ws,
   ]);
@@ -490,11 +508,26 @@ export function useChatSessionState({
     }
   }, [pendingViewSessionRef, selectedSession?.id]);
 
+
   useEffect(() => {
-    if (sessionMessages.length > 0) {
-      setChatMessages(convertedMessages);
+    // Only sync sessionMessages to chatMessages when:
+    // 1. Not currently loading (to avoid overwriting user's just-sent message)
+    // 2. SessionMessages actually changed
+    // 3. Either it's initial load OR sessionMessages increased (new messages from server)
+    if (
+      sessionMessages.length > 0 &&
+      sessionMessages.length !== prevSessionMessagesLengthRef.current &&
+      !isLoading
+    ) {
+      // Only update if this is initial load or if sessionMessages grew (server added messages)
+      // Don't update if sessionMessages shrunk (user might have just sent a message)
+      if (isInitialLoadRef.current || sessionMessages.length > prevSessionMessagesLengthRef.current) {
+        setChatMessages(convertedMessages);
+        isInitialLoadRef.current = false;
+      }
+      prevSessionMessagesLengthRef.current = sessionMessages.length;
     }
-  }, [convertedMessages, sessionMessages.length]);
+  }, [convertedMessages, sessionMessages.length, isLoading, setChatMessages]);
 
   useEffect(() => {
     if (selectedProject && chatMessages.length > 0) {
