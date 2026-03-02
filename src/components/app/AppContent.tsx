@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -16,7 +16,8 @@ export default function AppContent() {
   const { sessionId } = useParams<{ sessionId?: string }>();
   const { t } = useTranslation('common');
   const { isMobile } = useDeviceSettings({ trackPWA: false });
-  const { ws, sendMessage, latestMessage } = useWebSocket();
+  const { ws, sendMessage, latestMessage, isConnected } = useWebSocket();
+  const wasConnectedRef = useRef(false);
 
   const {
     activeSessions,
@@ -70,6 +71,24 @@ export default function AppContent() {
       }
     };
   }, [openSettings]);
+
+  // Permission recovery: query pending permissions on WebSocket reconnect or session change
+  useEffect(() => {
+    const isReconnect = isConnected && !wasConnectedRef.current;
+
+    if (isReconnect) {
+      wasConnectedRef.current = true;
+    } else if (!isConnected) {
+      wasConnectedRef.current = false;
+    }
+
+    if (isConnected && selectedSession?.id) {
+      sendMessage({
+        type: 'get-pending-permissions',
+        sessionId: selectedSession.id
+      });
+    }
+  }, [isConnected, selectedSession?.id, sendMessage]);
 
   return (
     <div className="fixed inset-0 flex bg-background">
