@@ -1054,7 +1054,7 @@ function handleChatConnection(ws) {
             } else if (data.type === 'get-pending-permissions') {
                 // Return pending permission requests for a session
                 const sessionId = data.sessionId;
-                if (sessionId) {
+                if (sessionId && isClaudeSDKSessionActive(sessionId)) {
                     const pending = getPendingApprovalsForSession(sessionId);
                     writer.send({
                         type: 'pending-permissions-response',
