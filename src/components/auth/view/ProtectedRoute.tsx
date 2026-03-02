@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
-import Onboarding from '../../Onboarding';
 import { IS_PLATFORM } from '../../../constants/config';
 import { useAuth } from '../context/AuthContext';
 import AuthLoadingScreen from './AuthLoadingScreen';
 import LoginForm from './LoginForm';
+import Onboarding from '../../onboarding/view/Onboarding';
 import SetupForm from './SetupForm';
 
 type ProtectedRouteProps = {

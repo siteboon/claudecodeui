@@ -2,7 +2,7 @@ import { Button } from '../../../../shared/view/ui';
 import { Check, ChevronDown, ChevronRight, Edit3, Folder, FolderOpen, Star, Trash2, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
 import { cn } from '../../../../lib/utils';
-import TaskIndicator from '../../../TaskIndicator';
+import TaskIndicator from './TaskIndicator';
 import type { Project, ProjectSession, SessionProvider } from '../../../../types/app';
 import type { MCPServerStatus, SessionWithProvider, TouchHandlerFactory } from '../../types/types';
 import { getTaskIndicatorStatus } from '../../utils/utils';

@@ -1,78 +1,109 @@
-import { X, ExternalLink, KeyRound } from 'lucide-react';
-import StandaloneShell from './standalone-shell/view/StandaloneShell';
-import { IS_PLATFORM } from '../constants/config';
+import { ExternalLink, KeyRound, X } from 'lucide-react';
+import StandaloneShell from '../../standalone-shell/view/StandaloneShell';
+import { IS_PLATFORM } from '../../../constants/config';
+import type { CliProvider } from '../types';
 
-/**
- * Reusable login modal component for Claude, Cursor, Codex, and Gemini CLI authentication
- *
- * @param {Object} props
- * @param {boolean} props.isOpen - Whether the modal is visible
- * @param {Function} props.onClose - Callback when modal is closed
- * @param {'claude'|'cursor'|'codex'|'gemini'} props.provider - Which CLI provider to authenticate with
- * @param {Object} props.project - Project object containing name and path information
- * @param {Function} props.onComplete - Callback when login process completes (receives exitCode)
- * @param {string} props.customCommand - Optional custom command to override defaults
- * @param {boolean} props.isAuthenticated - Whether user is already authenticated (for re-auth flow)
- */
-function LoginModal({
+type LoginModalProject = {
+  name?: string;
+  displayName?: string;
+  fullPath?: string;
+  path?: string;
+  [key: string]: unknown;
+};
+
+type ProviderLoginModalProps = {
+  isOpen: boolean;
+  onClose: () => void;
+  provider?: CliProvider;
+  project?: LoginModalProject | null;
+  onComplete?: (exitCode: number) => void;
+  customCommand?: string;
+  isAuthenticated?: boolean;
+  isOnboarding?: boolean;
+};
+
+const getProviderCommand = ({
+  provider,
+  customCommand,
+  isAuthenticated,
+  isOnboarding,
+}: {
+  provider: CliProvider;
+  customCommand?: string;
+  isAuthenticated: boolean;
+  isOnboarding: boolean;
+}) => {
+  if (customCommand) {
+    return customCommand;
+  }
+
+  if (provider === 'claude') {
+    if (isAuthenticated) {
+      return 'claude setup-token --dangerously-skip-permissions';
+    }
+    return isOnboarding
+      ? 'claude /exit --dangerously-skip-permissions'
+      : 'claude /login --dangerously-skip-permissions';
+  }
+
+  if (provider === 'cursor') {
+    return 'cursor-agent login';
+  }
+
+  if (provider === 'codex') {
+    return IS_PLATFORM ? 'codex login --device-auth' : 'codex login';
+  }
+
+  return 'gemini status';
+};
+
+const getProviderTitle = (provider: CliProvider) => {
+  if (provider === 'claude') return 'Claude CLI Login';
+  if (provider === 'cursor') return 'Cursor CLI Login';
+  if (provider === 'codex') return 'Codex CLI Login';
+  return 'Gemini CLI Configuration';
+};
+
+const normalizeProject = (project?: LoginModalProject | null) => {
+  const normalizedName = project?.name || 'default';
+  const normalizedFullPath = project?.fullPath ?? project?.path ?? (IS_PLATFORM ? '/workspace' : '');
+
+  return {
+    name: normalizedName,
+    displayName: project?.displayName || normalizedName,
+    fullPath: normalizedFullPath,
+    path: project?.path ?? normalizedFullPath,
+  };
+};
+
+export default function ProviderLoginModal({
   isOpen,
   onClose,
   provider = 'claude',
-  project,
+  project = null,
   onComplete,
   customCommand,
   isAuthenticated = false,
-  isOnboarding = false
-}) {
-  if (!isOpen) return null;
+  isOnboarding = false,
+}: ProviderLoginModalProps) {
+  if (!isOpen) {
+    return null;
+  }
 
-  const getCommand = () => {
-    if (customCommand) return customCommand;
+  const command = getProviderCommand({ provider, customCommand, isAuthenticated, isOnboarding });
+  const title = getProviderTitle(provider);
+  const shellProject = normalizeProject(project);
 
-    switch (provider) {
-      case 'claude':
-        return isAuthenticated ? 'claude setup-token --dangerously-skip-permissions' : isOnboarding ? 'claude /exit --dangerously-skip-permissions' : 'claude /login --dangerously-skip-permissions';
-      case 'cursor':
-        return 'cursor-agent login';
-      case 'codex':
-        return IS_PLATFORM ? 'codex login --device-auth' : 'codex login';
-      case 'gemini':
-        // No explicit interactive login command for gemini CLI exists yet similar to Claude, so we'll just check status or instruct the user to configure `.gemini.json`
-        return 'gemini status';
-      default:
-        return isAuthenticated ? 'claude setup-token --dangerously-skip-permissions' : isOnboarding ? 'claude /exit --dangerously-skip-permissions' : 'claude /login --dangerously-skip-permissions';
-    }
-  };
-
-  const getTitle = () => {
-    switch (provider) {
-      case 'claude':
-        return 'Claude CLI Login';
-      case 'cursor':
-        return 'Cursor CLI Login';
-      case 'codex':
-        return 'Codex CLI Login';
-      case 'gemini':
-        return 'Gemini CLI Configuration';
-      default:
-        return 'CLI Login';
-    }
-  };
-
-  const handleComplete = (exitCode) => {
-    if (onComplete) {
-      onComplete(exitCode);
-    }
-    // Keep modal open so users can read login output and close explicitly.
+  const handleComplete = (exitCode: number) => {
+    onComplete?.(exitCode);
+    // Keep the modal open so users can read terminal output before closing.
   };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] max-md:items-stretch max-md:justify-stretch">
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl h-3/4 flex flex-col md:max-w-4xl md:h-3/4 md:rounded-lg md:m-4 max-md:max-w-none max-md:h-full max-md:rounded-none max-md:m-0">
         <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-            {getTitle()}
-          </h3>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
@@ -81,6 +112,7 @@ function LoginModal({
             <X className="w-6 h-6" />
           </button>
         </div>
+
         <div className="flex-1 overflow-hidden">
           {provider === 'gemini' ? (
             <div className="flex flex-col items-center justify-center h-full p-8 text-center bg-gray-50 dark:bg-gray-900/50">
@@ -88,12 +120,10 @@ function LoginModal({
                 <KeyRound className="w-8 h-8 text-blue-600 dark:text-blue-400" />
               </div>
 
-              <h4 className="text-xl font-medium text-gray-900 dark:text-white mb-3">
-                Setup Gemini API Access
-              </h4>
+              <h4 className="text-xl font-medium text-gray-900 dark:text-white mb-3">Setup Gemini API Access</h4>
 
               <p className="text-gray-600 dark:text-gray-400 max-w-md mb-8">
-                The Gemini CLI requires an API key to function. Unlike Claude, you'll need to configure this directly in your terminal first.
+                The Gemini CLI requires an API key to function. Configure it in your terminal first.
               </p>
 
               <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 max-w-lg w-full text-left shadow-sm">
@@ -103,7 +133,7 @@ function LoginModal({
                       1
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">Get your API Key</p>
+                      <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">Get your API key</p>
                       <a
                         href="https://aistudio.google.com/app/apikey"
                         target="_blank"
@@ -137,17 +167,10 @@ function LoginModal({
               </button>
             </div>
           ) : (
-            <StandaloneShell
-              project={project}
-              command={getCommand()}
-              onComplete={handleComplete}
-              minimal={true}
-            />
+            <StandaloneShell project={shellProject} command={command} onComplete={handleComplete} minimal={true} />
           )}
         </div>
       </div>
     </div>
   );
 }
-
-export default LoginModal;

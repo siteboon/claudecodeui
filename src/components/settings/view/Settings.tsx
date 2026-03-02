@@ -1,6 +1,6 @@
 import { Settings as SettingsIcon, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import LoginModal from '../../LoginModal';
+import ProviderLoginModal from '../../provider-auth/view/ProviderLoginModal';
 import { Button } from '../../../shared/view/ui';
 import ClaudeMcpFormModal from '../view/modals/ClaudeMcpFormModal';
 import CodexMcpFormModal from '../view/modals/CodexMcpFormModal';
@@ -11,18 +11,7 @@ import CredentialsSettingsTab from '../view/tabs/api-settings/CredentialsSetting
 import GitSettingsTab from '../view/tabs/git-settings/GitSettingsTab';
 import TasksSettingsTab from '../view/tabs/tasks-settings/TasksSettingsTab';
 import { useSettingsController } from '../hooks/useSettingsController';
-import type { AgentProvider, SettingsProject, SettingsProps } from '../types/types';
-
-type LoginModalProps = {
-  isOpen: boolean;
-  onClose: () => void;
-  provider: AgentProvider | '';
-  project: SettingsProject | null;
-  onComplete: (exitCode: number) => void;
-  isAuthenticated: boolean;
-};
-
-const LoginModalComponent = LoginModal as unknown as (props: LoginModalProps) => JSX.Element;
+import type { SettingsProps } from '../types/types';
 
 function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: SettingsProps) {
   const { t } = useTranslation('settings');
@@ -225,11 +214,11 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
         </div>
       </div>
 
-      <LoginModalComponent
-        key={loginProvider}
+      <ProviderLoginModal
+        key={loginProvider || 'claude'}
         isOpen={showLoginModal}
         onClose={() => setShowLoginModal(false)}
-        provider={loginProvider}
+        provider={loginProvider || 'claude'}
         project={selectedProject}
         onComplete={handleLoginComplete}
         isAuthenticated={isAuthenticated}

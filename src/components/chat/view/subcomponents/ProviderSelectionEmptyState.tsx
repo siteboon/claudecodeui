@@ -2,9 +2,9 @@ import React from 'react';
 import { Check, ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
-import NextTaskBanner from '../../../NextTaskBanner.jsx';
 import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS, GEMINI_MODELS } from '../../../../../shared/modelConstants';
 import type { ProjectSession, SessionProvider } from '../../../../types/app';
+import { NextTaskBanner } from '../../../task-master';
 
 interface ProviderSelectionEmptyStateProps {
   selectedSession: ProjectSession | null;
