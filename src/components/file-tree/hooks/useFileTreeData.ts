@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../../../utils/api';
 import type { Project } from '../../../types/app';
 import type { FileTreeNode } from '../types/types';
@@ -6,11 +6,18 @@ import type { FileTreeNode } from '../types/types';
 type UseFileTreeDataResult = {
   files: FileTreeNode[];
   loading: boolean;
+  refreshFiles: () => void;
 };
 
 export function useFileTreeData(selectedProject: Project | null): UseFileTreeDataResult {
   const [files, setFiles] = useState<FileTreeNode[]>([]);
   const [loading, setLoading] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const refreshFiles = useCallback(() => {
+    setRefreshKey((prev) => prev + 1);
+  }, []);
 
   useEffect(() => {
     const projectName = selectedProject?.name;
@@ -21,7 +28,12 @@ export function useFileTreeData(selectedProject: Project | null): UseFileTreeDat
       return;
     }
 
-    const abortController = new AbortController();
+    // Abort previous request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
+
     // Track mount state so aborted or late responses do not enqueue stale state updates.
     let isActive = true;
 
@@ -30,7 +42,7 @@ export function useFileTreeData(selectedProject: Project | null): UseFileTreeDat
         setLoading(true);
       }
       try {
-        const response = await api.getFiles(projectName, { signal: abortController.signal });
+        const response = await api.getFiles(projectName, { signal: abortControllerRef.current!.signal });
 
         if (!response.ok) {
           const errorText = await response.text();
@@ -65,12 +77,13 @@ export function useFileTreeData(selectedProject: Project | null): UseFileTreeDat
 
     return () => {
       isActive = false;
-      abortController.abort();
+      abortControllerRef.current?.abort();
     };
-  }, [selectedProject?.name]);
+  }, [selectedProject?.name, refreshKey]);
 
   return {
     files,
     loading,
+    refreshFiles,
   };
 }
