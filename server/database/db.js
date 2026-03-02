@@ -91,6 +91,18 @@ const runMigrations = () => {
       db.exec('ALTER TABLE users ADD COLUMN has_completed_onboarding BOOLEAN DEFAULT 0');
     }
 
+    // Create session_names table if it doesn't exist (for existing installations)
+    db.exec(`CREATE TABLE IF NOT EXISTS session_names (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT NOT NULL,
+      provider TEXT NOT NULL DEFAULT 'claude',
+      custom_name TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(session_id, provider)
+    )`);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_session_names_lookup ON session_names(session_id, provider)');
+
     console.log('Database migrations completed successfully');
   } catch (error) {
     console.error('Error running migrations:', error.message);
@@ -348,6 +360,60 @@ const credentialsDb = {
   }
 };
 
+// Session custom names database operations
+const sessionNamesDb = {
+  // Set (insert or update) a custom session name
+  setName: (sessionId, provider, customName) => {
+    db.prepare(`
+      INSERT INTO session_names (session_id, provider, custom_name)
+      VALUES (?, ?, ?)
+      ON CONFLICT(session_id, provider)
+      DO UPDATE SET custom_name = excluded.custom_name, updated_at = CURRENT_TIMESTAMP
+    `).run(sessionId, provider, customName);
+  },
+
+  // Get a single custom session name
+  getName: (sessionId, provider) => {
+    const row = db.prepare(
+      'SELECT custom_name FROM session_names WHERE session_id = ? AND provider = ?'
+    ).get(sessionId, provider);
+    return row?.custom_name || null;
+  },
+
+  // Batch lookup — returns Map<sessionId, customName>
+  getNames: (sessionIds, provider) => {
+    if (!sessionIds.length) return new Map();
+    const placeholders = sessionIds.map(() => '?').join(',');
+    const rows = db.prepare(
+      `SELECT session_id, custom_name FROM session_names
+       WHERE session_id IN (${placeholders}) AND provider = ?`
+    ).all(...sessionIds, provider);
+    return new Map(rows.map(r => [r.session_id, r.custom_name]));
+  },
+
+  // Delete a custom session name
+  deleteName: (sessionId, provider) => {
+    return db.prepare(
+      'DELETE FROM session_names WHERE session_id = ? AND provider = ?'
+    ).run(sessionId, provider).changes > 0;
+  },
+};
+
+// Apply custom session names from the database (overrides CLI-generated summaries)
+function applyCustomSessionNames(sessions, provider) {
+  if (!sessions?.length) return;
+  try {
+    const ids = sessions.map(s => s.id);
+    const customNames = sessionNamesDb.getNames(ids, provider);
+    for (const session of sessions) {
+      const custom = customNames.get(session.id);
+      if (custom) session.summary = custom;
+    }
+  } catch (error) {
+    console.warn(`[DB] Failed to apply custom session names for ${provider}:`, error.message);
+  }
+}
+
 // Backward compatibility - keep old names pointing to new system
 const githubTokensDb = {
   createGithubToken: (userId, tokenName, githubToken, description = null) => {
@@ -373,5 +439,7 @@ export {
   userDb,
   apiKeysDb,
   credentialsDb,
+  sessionNamesDb,
+  applyCustomSessionNames,
   githubTokensDb // Backward compatibility
 };

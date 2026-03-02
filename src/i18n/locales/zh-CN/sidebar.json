@@ -92,6 +92,8 @@
     "enterProjectPath": "请输入项目路径",
     "deleteSessionFailed": "删除会话失败，请重试。",
     "deleteSessionError": "删除会话时出错，请重试。",
+    "renameSessionFailed": "重命名会话失败，请重试。",
+    "renameSessionError": "重命名会话时出错，请重试。",
     "deleteProjectFailed": "删除项目失败，请重试。",
     "deleteProjectError": "删除项目时出错，请重试。",
     "createProjectFailed": "创建项目失败，请重试。",

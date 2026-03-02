@@ -50,7 +50,7 @@ export type SidebarProjectListProps = {
   onEditingSessionNameChange: (value: string) => void;
   onStartEditingSession: (sessionId: string, initialName: string) => void;
   onCancelEditingSession: () => void;
-  onSaveEditingSession: (projectName: string, sessionId: string, summary: string) => void;
+  onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: SessionProvider) => void;
   touchHandlerFactory: TouchHandlerFactory;
   t: TFunction;
 };

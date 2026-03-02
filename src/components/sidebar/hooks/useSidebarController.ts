@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type React from 'react';
 import type { TFunction } from 'i18next';
 import { api } from '../../../utils/api';
-import type { Project, ProjectSession } from '../../../types/app';
+import type { Project, ProjectSession, SessionProvider } from '../../../types/app';
 import type {
   AdditionalSessionsByProject,
   DeleteProjectConfirmation,
@@ -405,12 +405,30 @@ export function useSidebarController({
   }, [onRefresh]);
 
   const updateSessionSummary = useCallback(
-    async (_projectName: string, _sessionId: string, _summary: string) => {
-      // Session rename endpoint is not currently exposed on the API.
-      setEditingSession(null);
-      setEditingSessionName('');
+    async (_projectName: string, sessionId: string, summary: string, provider: SessionProvider) => {
+      const trimmed = summary.trim();
+      if (!trimmed) {
+        setEditingSession(null);
+        setEditingSessionName('');
+        return;
+      }
+      try {
+        const response = await api.renameSession(sessionId, trimmed, provider);
+        if (response.ok) {
+          await onRefresh();
+        } else {
+          console.error('[Sidebar] Failed to rename session:', response.status);
+          alert(t('messages.renameSessionFailed'));
+        }
+      } catch (error) {
+        console.error('[Sidebar] Error renaming session:', error);
+        alert(t('messages.renameSessionError'));
+      } finally {
+        setEditingSession(null);
+        setEditingSessionName('');
+      }
     },
-    [],
+    [onRefresh, t],
   );
 
   const collapseSidebar = useCallback(() => {
