@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef } from 'react';
-import QuickSettingsPanel from '../../QuickSettingsPanel';
+import { QuickSettingsPanel } from '../../quick-settings-panel';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import { useTranslation } from 'react-i18next';
 import ChatMessagesPane from './subcomponents/ChatMessagesPane';
@@ -10,6 +10,7 @@ import { useChatSessionState } from '../hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '../hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '../hooks/useChatComposerState';
 import type { Provider } from '../types/types';
+
 
 type PendingViewSession = {
   sessionId: string | null;
