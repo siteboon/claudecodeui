@@ -42,8 +42,8 @@ const toAbsolutePath = (projectPath: string, filePath?: string) => {
 };
 
 export const calculateDiff = (oldStr: string, newStr: string): DiffLine[] => {
-  const oldLines = oldStr.split('\n');
-  const newLines = newStr.split('\n');
+  const oldLines = (oldStr ?? '').split('\n');
+  const newLines = (newStr ?? '').split('\n');
 
   // Use LCS alignment so insertions/deletions don't cascade into a full-file "changed" diff.
   const lcsTable: number[][] = Array.from({ length: oldLines.length + 1 }, () =>
@@ -350,6 +350,116 @@ export const convertCursorSessionMessages = (blobs: CursorBlob[], projectPath: s
   return converted;
 };
 
+interface ClassifiedMessage {
+  injectedType: ChatMessage['injectedType'];
+  injectedSummary: string;
+  taskStatus?: string;
+}
+
+const classifyUserMessage = (content: string): ClassifiedMessage | null => {
+  // 1. <task-notification> — parse status/summary
+  const taskNotifRegex = /<task-notification>\s*<task-id>[^<]*<\/task-id>\s*(?:<tool-use-id>[^<]*<\/tool-use-id>\s*)?<output-file>[^<]*<\/output-file>\s*<status>([^<]*)<\/status>\s*<summary>([^<]*)<\/summary>\s*<\/task-notification>/;
+  const taskMatch = taskNotifRegex.exec(content);
+  if (taskMatch) {
+    return {
+      injectedType: 'task-notification',
+      injectedSummary: taskMatch[2]?.trim() || 'Background task finished',
+      taskStatus: taskMatch[1]?.trim() || 'completed',
+    };
+  }
+
+  // 2. <system-reminder> — extract first meaningful line as summary
+  if (content.startsWith('<system-reminder>')) {
+    const innerMatch = content.match(/<system-reminder>\s*\n?(.*)/s);
+    const firstLine = innerMatch?.[1]?.split('\n').find(l => l.trim())?.trim() || 'System reminder';
+    return {
+      injectedType: 'system-reminder',
+      injectedSummary: firstLine.length > 80 ? firstLine.slice(0, 77) + '...' : firstLine,
+    };
+  }
+
+  // 3. Command-related tags
+  if (content.startsWith('<command-name>')) {
+    const nameMatch = content.match(/<command-name>([^<]*)<\/command-name>/);
+    return {
+      injectedType: 'command',
+      injectedSummary: nameMatch?.[1]?.trim() || 'Command',
+    };
+  }
+  if (content.startsWith('<command-message>') || content.startsWith('<command-args>')) {
+    return {
+      injectedType: 'command',
+      injectedSummary: 'Command arguments',
+    };
+  }
+  if (content.startsWith('<local-command-stdout>') || content.startsWith('<local-command-caveat>')) {
+    return {
+      injectedType: 'command',
+      injectedSummary: 'Command output',
+    };
+  }
+
+  // 4. Hook output
+  if (content.includes('<user-prompt-submit-hook>')) {
+    return {
+      injectedType: 'hook',
+      injectedSummary: 'Hook output',
+    };
+  }
+
+  // 5. Background task completion results (injected by server after subagent finishes)
+  if (content.startsWith('[Background task completed]')) {
+    const agentMatch = content.match(/Agent\s+(\S+)\s+finished/);
+    const agentId = agentMatch?.[1] || '';
+    const summary = agentId ? `Agent ${agentId} completed` : 'Background task completed';
+    return {
+      injectedType: 'background-task-result',
+      injectedSummary: summary,
+    };
+  }
+
+  // 6. Session continuation / interruption / errors
+  if (content.startsWith('Caveat:')) {
+    return {
+      injectedType: 'continuation',
+      injectedSummary: content.length > 80 ? content.slice(0, 77) + '...' : content,
+    };
+  }
+  if (content.startsWith('This session is being continued from a previous') || content.startsWith('This session is a continuation')) {
+    return {
+      injectedType: 'continuation',
+      injectedSummary: 'Session continuation',
+    };
+  }
+  if (content.startsWith('[Request interrupted')) {
+    return {
+      injectedType: 'continuation',
+      injectedSummary: 'Request interrupted',
+    };
+  }
+  if (content.startsWith('Invalid API key')) {
+    return {
+      injectedType: 'other',
+      injectedSummary: 'Invalid API key',
+    };
+  }
+  if (content === 'Warmup') {
+    return {
+      injectedType: 'other',
+      injectedSummary: 'Warmup',
+    };
+  }
+  // TaskMaster system prompts (should be hidden)
+  if (content.includes('{"subtasks":') || content.includes('CRITICAL: You MUST respond with ONLY a JSON')) {
+    return {
+      injectedType: 'other',
+      injectedSummary: 'TaskMaster system prompt',
+    };
+  }
+
+  return null;
+};
+
 export const convertSessionMessages = (rawMessages: any[]): ChatMessage[] => {
   const converted: ChatMessage[] = [];
   const toolResults = new Map<
@@ -391,38 +501,53 @@ export const convertSessionMessages = (rawMessages: any[]): ChatMessage[] => {
         content = decodeHtmlEntities(String(message.message.content));
       }
 
-      const shouldSkip =
-        !content ||
-        content.startsWith('<command-name>') ||
-        content.startsWith('<command-message>') ||
-        content.startsWith('<command-args>') ||
-        content.startsWith('<local-command-stdout>') ||
-        content.startsWith('<system-reminder>') ||
-        content.startsWith('Caveat:') ||
-        content.startsWith('This session is being continued from a previous') ||
-        content.startsWith('[Request interrupted');
+      if (!content) {
+        return;
+      }
 
-      if (!shouldSkip) {
-        // Parse <task-notification> blocks into compact system messages
-        const taskNotifRegex = /<task-notification>\s*<task-id>[^<]*<\/task-id>\s*<output-file>[^<]*<\/output-file>\s*<status>([^<]*)<\/status>\s*<summary>([^<]*)<\/summary>\s*<\/task-notification>/g;
-        const taskNotifMatch = taskNotifRegex.exec(content);
-        if (taskNotifMatch) {
-          const status = taskNotifMatch[1]?.trim() || 'completed';
-          const summary = taskNotifMatch[2]?.trim() || 'Background task finished';
+      const classified = classifyUserMessage(content);
+      if (classified) {
+        // Task notifications keep existing compact pill rendering (backward compat)
+        if (classified.injectedType === 'task-notification') {
           converted.push({
             type: 'assistant',
-            content: summary,
+            content: classified.injectedSummary || content,
             timestamp: message.timestamp || new Date().toISOString(),
             isTaskNotification: true,
-            taskStatus: status,
+            taskStatus: classified.taskStatus || 'completed',
+            isSystemInjected: true,
+            injectedType: 'task-notification',
+            injectedSummary: classified.injectedSummary,
+          });
+        } else if (classified.injectedType === 'background-task-result') {
+          // Background task result: collapsible card, collapsed by default
+          const resultIdx = content.indexOf('\n\nResult:\n');
+          const resultBody = resultIdx >= 0 ? content.slice(resultIdx + '\n\nResult:\n'.length) : content;
+          converted.push({
+            type: 'assistant',
+            content: resultBody,
+            timestamp: message.timestamp || new Date().toISOString(),
+            isSystemInjected: true,
+            injectedType: 'background-task-result',
+            injectedSummary: classified.injectedSummary,
           });
         } else {
+          // All other system-injected messages: show with muted styling
           converted.push({
             type: 'user',
-            content: unescapeWithMathProtection(content),
+            content,
             timestamp: message.timestamp || new Date().toISOString(),
+            isSystemInjected: true,
+            injectedType: classified.injectedType,
+            injectedSummary: classified.injectedSummary,
           });
         }
+      } else {
+        converted.push({
+          type: 'user',
+          content: unescapeWithMathProtection(content),
+          timestamp: message.timestamp || new Date().toISOString(),
+        });
       }
       return;
     }

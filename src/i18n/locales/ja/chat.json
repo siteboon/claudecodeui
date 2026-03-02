@@ -205,5 +205,14 @@
     "runCommand": "{{projectName}}で{{command}}を実行",
     "startCli": "{{projectName}}でClaude CLIを起動しています",
     "defaultCommand": "コマンド"
+  },
+  "systemInjected": {
+    "system-reminder": "システムリマインダー",
+    "task-notification": "タスク通知",
+    "background-task-result": "バックグラウンドタスク結果",
+    "hook": "フック出力",
+    "command": "コマンド",
+    "continuation": "セッション情報",
+    "other": "システム"
   }
 }
