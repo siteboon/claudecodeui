@@ -214,7 +214,7 @@ export function useSlashCommands({
 
   const handleCommandSelect = useCallback(
     (command: SlashCommand | null, index: number, isHover: boolean) => {
-      if (!command || !selectedProject) {
+      if (!command) {
         return;
       }
 
@@ -244,7 +244,7 @@ export function useSlashCommands({
         }
       }, 0);
     },
-    [selectedProject, input, slashPosition, setInput, resetCommandMenuState, textareaRef, trackCommandUsage, setSelectedCommandIndex],
+    [input, slashPosition, setInput, resetCommandMenuState, textareaRef, trackCommandUsage, setSelectedCommandIndex],
   );
 
   const handleToggleCommandMenu = useCallback(() => {

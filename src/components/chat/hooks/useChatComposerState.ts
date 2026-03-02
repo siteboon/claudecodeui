@@ -628,11 +628,13 @@ export function useChatComposerState({
               setInput(remainingText);
               inputValueRef.current = remainingText;
 
-              setTimeout(() => {
-                if (handleSubmitRef.current) {
-                  handleSubmitRef.current(createFakeSubmitEvent());
-                }
-              }, 100);
+              queueMicrotask(() => {
+                requestAnimationFrame(() => {
+                  if (handleSubmitRef.current) {
+                    handleSubmitRef.current(createFakeSubmitEvent());
+                  }
+                });
+              });
             } else {
               // No remaining text, just store skill content for next message
               setInput('');
@@ -853,6 +855,7 @@ export function useChatComposerState({
       cursorModel,
       executeCommand,
       geminiModel,
+      handleCustomCommand,
       isLoading,
       onSessionActive,
       onSessionProcessing,

@@ -111,7 +111,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium text-purple-900 dark:text-purple-100">
-                  Loaded skill: {(message as any).skillName || 'skill'}
+                  {t('skillLoaded', { name: (message as any).skillName || 'skill' })}
                 </div>
                 {(message as any).skillDescription && (
                   <div className="text-xs text-purple-700 dark:text-purple-300 mt-0.5 truncate">

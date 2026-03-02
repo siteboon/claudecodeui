@@ -576,12 +576,17 @@ router.post('/load', async (req, res) => {
       });
     }
 
-    // Security: Prevent path traversal
-    const resolvedPath = path.resolve(commandPath);
-    if (!resolvedPath.startsWith(path.resolve(os.homedir())) &&
-        !resolvedPath.includes('.claude/commands') &&
-        !resolvedPath.includes('.claude/skills') &&
-        !resolvedPath.includes('.claude/plugins')) {
+    // Security: Prevent path traversal and symlink escapes
+    const resolvedPath = await fs.realpath(path.resolve(commandPath));
+    const userCommandsBase = path.resolve(path.join(os.homedir(), '.claude', 'commands'));
+    const userSkillsBase = path.resolve(path.join(os.homedir(), '.claude', 'skills'));
+    const userPluginsBase = path.resolve(path.join(os.homedir(), '.claude', 'plugins'));
+    const isUnder = (base) => {
+      const rel = path.relative(base, resolvedPath);
+      return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+    };
+
+    if (!(isUnder(userCommandsBase) || isUnder(userSkillsBase) || isUnder(userPluginsBase))) {
       return res.status(403).json({
         error: 'Access denied',
         message: 'Command must be in .claude/commands, .claude/skills, or .claude/plugins directory'
@@ -589,7 +594,7 @@ router.post('/load', async (req, res) => {
     }
 
     // Read and parse the command file
-    const content = await fs.readFile(commandPath, 'utf8');
+    const content = await fs.readFile(resolvedPath, 'utf8');
     const { data: metadata, content: commandContent } = matter(content);
 
     res.json({
@@ -656,10 +661,11 @@ router.post('/execute', async (req, res) => {
     }
 
     // Load command content
-    // Security: validate commandPath is within allowed directories
+    // Security: validate commandPath is within allowed directories, resolve symlinks
     let isSkill = false;
+    let resolvedCommandPath;
     {
-      const resolvedPath = path.resolve(commandPath);
+      resolvedCommandPath = await fs.realpath(path.resolve(commandPath));
       const userCommandsBase = path.resolve(path.join(os.homedir(), '.claude', 'commands'));
       const userSkillsBase = path.resolve(path.join(os.homedir(), '.claude', 'skills'));
       const userPluginsBase = path.resolve(path.join(os.homedir(), '.claude', 'plugins'));
@@ -667,7 +673,7 @@ router.post('/execute', async (req, res) => {
         ? path.resolve(path.join(context.projectPath, '.claude', 'commands'))
         : null;
       const isUnder = (base) => {
-        const rel = path.relative(base, resolvedPath);
+        const rel = path.relative(base, resolvedCommandPath);
         return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
       };
 
@@ -681,7 +687,7 @@ router.post('/execute', async (req, res) => {
         });
       }
     }
-    const content = await fs.readFile(commandPath, 'utf8');
+    const content = await fs.readFile(resolvedCommandPath, 'utf8');
     const { data: metadata, content: commandContent } = matter(content);
     // Basic argument replacement (will be enhanced in command parser utility)
     let processedContent = commandContent;
