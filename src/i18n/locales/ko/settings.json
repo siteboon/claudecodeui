@@ -88,7 +88,26 @@
     "appearance": "외관",
     "git": "Git",
     "apiTokens": "API & 토큰",
-    "tasks": "작업"
+    "tasks": "작업",
+    "notifications": "알림"
+  },
+  "notifications": {
+    "title": "알림",
+    "description": "수신할 알림 이벤트를 설정합니다.",
+    "webPush": {
+      "title": "웹 푸시 알림",
+      "enabled": "푸시 알림이 활성화되었습니다",
+      "disabled": "푸시 알림 활성화",
+      "loading": "업데이트 중...",
+      "unsupported": "이 브라우저에서는 푸시 알림이 지원되지 않습니다.",
+      "denied": "푸시 알림이 차단되었습니다. 브라우저 설정에서 허용해 주세요."
+    },
+    "events": {
+      "title": "이벤트 유형",
+      "actionRequired": "작업 필요",
+      "stop": "실행 중지",
+      "error": "실행 실패"
+    }
   },
   "appearanceSettings": {
     "darkMode": {

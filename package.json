@@ -99,6 +99,7 @@
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",
     "tailwind-merge": "^3.3.1",
+    "web-push": "^3.6.7",
     "ws": "^8.14.2"
   },
   "devDependencies": {

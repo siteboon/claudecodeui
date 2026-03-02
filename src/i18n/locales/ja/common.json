@@ -191,6 +191,36 @@
       "failedToCreateFolder": "フォルダの作成に失敗しました"
     }
   },
+  "notifications": {
+    "genericTool": "ツール",
+    "codes": {
+      "generic": {
+        "info": {
+          "title": "通知"
+        }
+      },
+      "permission": {
+        "required": {
+          "title": "対応が必要です",
+          "body": "{{toolName}} があなたの判断を待っています。"
+        }
+      },
+      "run": {
+        "stopped": {
+          "title": "実行が停止しました",
+          "body": "理由: {{reason}}"
+        },
+        "failed": {
+          "title": "実行に失敗しました"
+        }
+      },
+      "agent": {
+        "notification": {
+          "title": "エージェント通知"
+        }
+      }
+    }
+  },
   "versionUpdate": {
     "title": "アップデートのお知らせ",
     "newVersionReady": "新しいバージョンが利用可能です",

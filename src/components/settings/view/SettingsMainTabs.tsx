@@ -19,6 +19,7 @@ const TAB_CONFIG: MainTabConfig[] = [
   { id: 'git', labelKey: 'mainTabs.git', icon: GitBranch },
   { id: 'api', labelKey: 'mainTabs.apiTokens', icon: Key },
   { id: 'tasks', labelKey: 'mainTabs.tasks' },
+  { id: 'notifications', labelKey: 'mainTabs.notifications' },
 ];
 
 export default function SettingsMainTabs({ activeTab, onChange }: SettingsMainTabsProps) {
@@ -26,7 +27,7 @@ export default function SettingsMainTabs({ activeTab, onChange }: SettingsMainTa
 
   return (
     <div className="border-b border-border">
-       <div className="flex px-4 md:px-6" role="tablist" aria-label={t('mainTabs.label', { defaultValue: 'Settings' })}>
+       <div className="flex px-4 md:px-6 overflow-x-auto scrollbar-hide" role="tablist" aria-label={t('mainTabs.label', { defaultValue: 'Settings' })}>
         {TAB_CONFIG.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -37,7 +38,7 @@ export default function SettingsMainTabs({ activeTab, onChange }: SettingsMainTa
               role="tab"
               aria-selected={isActive}
               onClick={() => onChange(tab.id)}
-              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                 isActive
                   ? 'border-blue-600 text-blue-600 dark:text-blue-400'
                   : 'border-transparent text-muted-foreground hover:text-foreground'

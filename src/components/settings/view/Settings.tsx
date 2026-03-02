@@ -9,8 +9,10 @@ import AgentsSettingsTab from '../view/tabs/agents-settings/AgentsSettingsTab';
 import AppearanceSettingsTab from '../view/tabs/AppearanceSettingsTab';
 import CredentialsSettingsTab from '../view/tabs/api-settings/CredentialsSettingsTab';
 import GitSettingsTab from '../view/tabs/git-settings/GitSettingsTab';
+import NotificationsSettingsTab from '../view/tabs/NotificationsSettingsTab';
 import TasksSettingsTab from '../view/tabs/tasks-settings/TasksSettingsTab';
 import { useSettingsController } from '../hooks/useSettingsController';
+import { useWebPush } from '../../../hooks/useWebPush';
 import type { AgentProvider, SettingsProject, SettingsProps } from '../types/types';
 
 type LoginModalProps = {
@@ -38,6 +40,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     updateCodeEditorSetting,
     claudePermissions,
     setClaudePermissions,
+    notificationPreferences,
+    setNotificationPreferences,
     cursorPermissions,
     setCursorPermissions,
     codexPermissionMode,
@@ -81,6 +85,30 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     projects,
     onClose,
   });
+
+  const {
+    permission: pushPermission,
+    isSubscribed: isPushSubscribed,
+    isLoading: isPushLoading,
+    subscribe: pushSubscribe,
+    unsubscribe: pushUnsubscribe,
+  } = useWebPush();
+
+  const handleEnablePush = async () => {
+    await pushSubscribe();
+    setNotificationPreferences({
+      ...notificationPreferences,
+      channels: { ...notificationPreferences.channels, webPush: true },
+    });
+  };
+
+  const handleDisablePush = async () => {
+    await pushUnsubscribe();
+    setNotificationPreferences({
+      ...notificationPreferences,
+      channels: { ...notificationPreferences.channels, webPush: false },
+    });
+  };
 
   if (!isOpen) {
     return null;
@@ -169,6 +197,18 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
               <div className="space-y-6 md:space-y-8">
                 <TasksSettingsTab />
               </div>
+            )}
+
+            {activeTab === 'notifications' && (
+              <NotificationsSettingsTab
+                notificationPreferences={notificationPreferences}
+                onNotificationPreferencesChange={setNotificationPreferences}
+                pushPermission={pushPermission}
+                isPushSubscribed={isPushSubscribed}
+                isPushLoading={isPushLoading}
+                onEnablePush={handleEnablePush}
+                onDisablePush={handleDisablePush}
+              />
             )}
 
             {activeTab === 'api' && (

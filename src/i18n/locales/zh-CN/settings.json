@@ -88,7 +88,26 @@
     "appearance": "外观",
     "git": "Git",
     "apiTokens": "API 和令牌",
-    "tasks": "任务"
+    "tasks": "任务",
+    "notifications": "通知"
+  },
+  "notifications": {
+    "title": "通知",
+    "description": "控制你希望接收的通知事件。",
+    "webPush": {
+      "title": "Web 推送通知",
+      "enabled": "推送通知已启用",
+      "disabled": "启用推送通知",
+      "loading": "更新中...",
+      "unsupported": "此浏览器不支持推送通知。",
+      "denied": "推送通知已被阻止，请在浏览器设置中允许。"
+    },
+    "events": {
+      "title": "事件类型",
+      "actionRequired": "需要处理",
+      "stop": "运行已停止",
+      "error": "运行失败"
+    }
   },
   "appearanceSettings": {
     "darkMode": {

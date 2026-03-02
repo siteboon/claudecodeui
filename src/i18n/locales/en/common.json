@@ -191,6 +191,36 @@
       "failedToCreateFolder": "Failed to create folder"
     }
   },
+  "notifications": {
+    "genericTool": "a tool",
+    "codes": {
+      "generic": {
+        "info": {
+          "title": "Notification"
+        }
+      },
+      "permission": {
+        "required": {
+          "title": "Action Required",
+          "body": "{{toolName}} is waiting for your decision."
+        }
+      },
+      "run": {
+        "stopped": {
+          "title": "Run Stopped",
+          "body": "Reason: {{reason}}"
+        },
+        "failed": {
+          "title": "Run Failed"
+        }
+      },
+      "agent": {
+        "notification": {
+          "title": "Agent Notification"
+        }
+      }
+    }
+  },
   "versionUpdate": {
     "title": "Update Available",
     "newVersionReady": "A new version is ready",
