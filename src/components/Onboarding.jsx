@@ -3,7 +3,7 @@ import { ChevronRight, ChevronLeft, Check, GitBranch, User, Mail, LogIn, Externa
 import SessionProviderLogo from './llm-logo-provider/SessionProviderLogo';
 import LoginModal from './LoginModal';
 import { authenticatedFetch } from '../utils/api';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from './auth/context/AuthContext';
 import { IS_PLATFORM } from '../constants/config';
 
 const Onboarding = ({ onComplete }) => {

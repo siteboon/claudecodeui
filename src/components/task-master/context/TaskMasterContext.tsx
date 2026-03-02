@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../../utils/api';
-import { useAuth } from '../../../contexts/AuthContext';
+import { useAuth } from '../../auth/context/AuthContext';
 import { useWebSocket } from '../../../contexts/WebSocketContext';
 import type {
   TaskMasterContextError,
@@ -14,12 +14,6 @@ import type {
 } from '../types';
 
 const TaskMasterContext = createContext<TaskMasterContextValue | null>(null);
-
-type AuthContextValue = {
-  user: unknown;
-  token: string | null;
-  isLoading: boolean;
-};
 
 function createTaskMasterError(context: string, error: unknown): TaskMasterContextError {
   const message = error instanceof Error ? error.message : `Failed to ${context}`;
@@ -64,7 +58,7 @@ export function useTaskMaster() {
 
 export function TaskMasterProvider({ children }: { children: React.ReactNode }) {
   const { latestMessage } = useWebSocket();
-  const { user, token, isLoading: isAuthLoading } = useAuth() as AuthContextValue;
+  const { user, token, isLoading: isAuthLoading } = useAuth();
 
   const [projects, setProjects] = useState<TaskMasterProject[]>([]);
   const [currentProject, setCurrentProjectState] = useState<TaskMasterProject | null>(null);
