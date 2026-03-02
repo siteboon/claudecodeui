@@ -1,7 +1,7 @@
 import { Moon, Sun } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { DarkModeToggle } from '../../../shared/view/ui';
-import LanguageSelector from '../../LanguageSelector.jsx';
+import LanguageSelector from '../../../shared/view/ui/LanguageSelector';
 import {
   INPUT_SETTING_TOGGLES,
   SETTING_ROW_CLASS,

@@ -1,3 +1,13 @@
+
+
+import { useTranslation } from 'react-i18next';
+import { Languages } from 'lucide-react';
+import { languages } from '../../../i18n/languages';
+
+type LanguageSelectorProps = {
+  compact?: boolean;
+};
+
 /**
  * Language Selector Component
  *
@@ -7,15 +17,10 @@
  * Props:
  * @param {boolean} compact - If true, uses compact style (default: false)
  */
-
-import { useTranslation } from 'react-i18next';
-import { Languages } from 'lucide-react';
-import { languages } from '../i18n/languages';
-
-function LanguageSelector({ compact = false }) {
+export default function LanguageSelector({ compact = false }: LanguageSelectorProps) {
   const { i18n, t } = useTranslation('settings');
 
-  const handleLanguageChange = (event) => {
+  const handleLanguageChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const newLanguage = event.target.value;
     i18n.changeLanguage(newLanguage);
   };
@@ -70,5 +75,3 @@ function LanguageSelector({ compact = false }) {
     </div>
   );
 }
-
-export default LanguageSelector;
