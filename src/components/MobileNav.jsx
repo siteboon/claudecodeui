@@ -1,7 +1,5 @@
-import React from 'react';
 import { MessageSquare, Folder, Terminal, GitBranch, ClipboardCheck } from 'lucide-react';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
-import { useTaskMaster } from '../contexts/TaskMasterContext';
 
 function MobileNav({ activeTab, setActiveTab, isInputFocused }) {
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
