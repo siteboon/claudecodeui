@@ -6,7 +6,7 @@ type DiffLine = {
   lineNum: number;
 };
 
-interface DiffViewerProps {
+interface ToolDiffViewerProps {
   oldContent: string;
   newContent: string;
   filePath: string;
@@ -19,7 +19,7 @@ interface DiffViewerProps {
 /**
  * Compact diff viewer — VS Code-style
  */
-export const DiffViewer: React.FC<DiffViewerProps> = ({
+export const ToolDiffViewer: React.FC<ToolDiffViewerProps> = ({
   oldContent,
   newContent,
   filePath,

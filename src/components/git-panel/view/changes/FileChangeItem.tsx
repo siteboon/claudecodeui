@@ -1,16 +1,7 @@
 import { ChevronRight, Trash2 } from 'lucide-react';
-import DiffViewer from '../../../DiffViewer.jsx';
 import type { FileStatusCode } from '../../types/types';
 import { getStatusBadgeClass, getStatusLabel } from '../../utils/gitPanelUtils';
-
-type DiffViewerProps = {
-  diff: string;
-  fileName: string;
-  isMobile: boolean;
-  wrapText: boolean;
-};
-
-const DiffViewerComponent = DiffViewer as unknown as (props: DiffViewerProps) => JSX.Element;
+import GitDiffViewer from '../shared/DiffViewer';
 
 type FileChangeItemProps = {
   filePath: string;
@@ -104,9 +95,8 @@ export default function FileChangeItem({
       </div>
 
       <div
-        className={`bg-muted/50 transition-all duration-400 ease-in-out overflow-hidden ${
-          isExpanded && diff ? 'max-h-[600px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'
-        }`}
+        className={`bg-muted/50 transition-all duration-400 ease-in-out overflow-hidden ${isExpanded && diff ? 'max-h-[600px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'
+          }`}
       >
         <div className="flex items-center justify-between p-2 border-b border-border">
           <span className="flex items-center gap-2">
@@ -130,7 +120,7 @@ export default function FileChangeItem({
         </div>
 
         <div className="max-h-96 overflow-y-auto">
-          {diff && <DiffViewerComponent diff={diff} fileName={filePath} isMobile={isMobile} wrapText={wrapText} />}
+          {diff && <GitDiffViewer diff={diff} isMobile={isMobile} wrapText={wrapText} />}
         </div>
       </div>
     </div>

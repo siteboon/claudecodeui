@@ -1,15 +1,8 @@
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import DiffViewer from '../../../DiffViewer.jsx';
+
 import type { GitCommitSummary } from '../../types/types';
+import GitDiffViewer from '../shared/DiffViewer';
 
-type DiffViewerProps = {
-  diff: string;
-  fileName: string;
-  isMobile: boolean;
-  wrapText: boolean;
-};
-
-const DiffViewerComponent = DiffViewer as unknown as (props: DiffViewerProps) => JSX.Element;
 
 type CommitHistoryItemProps = {
   commit: GitCommitSummary;
@@ -62,7 +55,7 @@ export default function CommitHistoryItem({
             <div className="text-sm font-mono text-muted-foreground mb-2">
               {commit.stats}
             </div>
-            <DiffViewerComponent diff={diff} fileName="commit" isMobile={isMobile} wrapText={wrapText} />
+            <GitDiffViewer diff={diff} isMobile={isMobile} wrapText={wrapText} />
           </div>
         </div>
       )}

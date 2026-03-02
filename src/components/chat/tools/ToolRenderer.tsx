@@ -1,6 +1,6 @@
 import React, { memo, useMemo, useCallback } from 'react';
 import { getToolConfig } from './configs/toolConfigs';
-import { OneLineDisplay, CollapsibleDisplay, DiffViewer, MarkdownContent, FileListContent, TodoListContent, TaskListContent, TextContent, QuestionAnswerContent, SubagentContainer } from './components';
+import { OneLineDisplay, CollapsibleDisplay, ToolDiffViewer, MarkdownContent, FileListContent, TodoListContent, TaskListContent, TextContent, QuestionAnswerContent, SubagentContainer } from './components';
 import type { Project } from '../../../types/app';
 import type { SubagentChildTool } from '../types/types';
 
@@ -142,7 +142,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
       case 'diff':
         if (createDiff) {
           contentComponent = (
-            <DiffViewer
+            <ToolDiffViewer
               {...contentProps}
               createDiff={createDiff}
               onFileClick={() => onFileOpen?.(contentProps.filePath)}
