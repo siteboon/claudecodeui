@@ -190,6 +190,11 @@ function mapCliOptionsToSDK(options = {}) {
     preset: 'claude_code'  // Required to use CLAUDE.md
   };
 
+  // Inject skill content if provided
+  if (options.skillContent) {
+    sdkOptions.systemPrompt.append = options.skillContent;
+  }
+
   // Map setting sources for CLAUDE.md loading
   // This loads CLAUDE.md from project, user (~/.config/claude/CLAUDE.md), and local directories
   sdkOptions.settingSources = ['project', 'user', 'local'];

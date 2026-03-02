@@ -1,4 +1,5 @@
 {
+  "skillLoaded": "Loaded skill: {{name}}",
   "codeBlock": {
     "copy": "Copy",
     "copied": "Copied",

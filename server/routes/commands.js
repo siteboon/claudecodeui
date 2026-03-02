@@ -12,6 +12,109 @@ const __dirname = path.dirname(__filename);
 const router = express.Router();
 
 /**
+ * Scan user skills from ~/.claude/skills/
+ * Each subdirectory is a skill with a SKILL.md file.
+ * @param {string} skillsDir - Path to ~/.claude/skills/
+ * @returns {Promise<Array>} Array of skill command objects
+ */
+async function scanUserSkills(skillsDir) {
+  const skills = [];
+  try {
+    await fs.access(skillsDir);
+    const entries = await fs.readdir(skillsDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const skillMdPath = path.join(skillsDir, entry.name, 'SKILL.md');
+      try {
+        const content = await fs.readFile(skillMdPath, 'utf8');
+        const { data: frontmatter } = matter(content);
+        const skillName = frontmatter.name || entry.name;
+        const description = frontmatter.description || '';
+        skills.push({
+          name: `/${skillName}`,
+          description,
+          namespace: 'user-skill',
+          path: skillMdPath,
+          metadata: frontmatter,
+        });
+      } catch (err) {
+        // No SKILL.md or parse error — skip
+      }
+    }
+  } catch (err) {
+    if (err.code !== 'ENOENT' && err.code !== 'EACCES') {
+      console.error('Error scanning user skills:', err.message);
+    }
+  }
+  return skills;
+}
+
+/**
+ * Scan plugin skills from ~/.claude/plugins/
+ * Reads installed_plugins.json to find each plugin's installPath,
+ * then scans installPath/skills/ for SKILL.md files.
+ * Command name format: /{plugin-name}:{skill-name}
+ * @param {string} pluginsDir - Path to ~/.claude/plugins/
+ * @returns {Promise<Array>} Array of plugin skill command objects
+ */
+async function scanPluginSkills(pluginsDir) {
+  const skills = [];
+  const installedJson = path.join(pluginsDir, 'installed_plugins.json');
+
+  try {
+    const content = await fs.readFile(installedJson, 'utf8');
+    const data = JSON.parse(content);
+    const plugins = data.plugins || {};
+
+    const seen = new Set();
+
+    for (const [pluginKey, installations] of Object.entries(plugins)) {
+      const pluginName = pluginKey.split('@')[0];
+      if (!installations || !installations.length) continue;
+
+      const installPath = installations[0].installPath;
+      if (!installPath) continue;
+
+      const dedupeKey = `${pluginName}:${installPath}`;
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+
+      const skillsSubDir = path.join(installPath, 'skills');
+      try {
+        await fs.access(skillsSubDir);
+        const entries = await fs.readdir(skillsSubDir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (!entry.isDirectory()) continue;
+          const skillMdPath = path.join(skillsSubDir, entry.name, 'SKILL.md');
+          try {
+            const content = await fs.readFile(skillMdPath, 'utf8');
+            const { data: frontmatter } = matter(content);
+            const skillName = frontmatter.name || entry.name;
+            const description = frontmatter.description || '';
+            skills.push({
+              name: `/${pluginName}:${skillName}`,
+              description,
+              namespace: `plugin:${pluginName}`,
+              path: skillMdPath,
+              metadata: frontmatter,
+            });
+          } catch (err) {
+            // No SKILL.md or parse error — skip
+          }
+        }
+      } catch (err) {
+        // No skills/ directory in this plugin — skip
+      }
+    }
+  } catch (err) {
+    if (err.code !== 'ENOENT' && err.code !== 'EACCES') {
+      console.error('Error scanning plugin skills:', err.message);
+    }
+  }
+  return skills;
+}
+
+/**
  * Recursively scan directory for command files (.md)
  * @param {string} dir - Directory to scan
  * @param {string} baseDir - Base directory for relative paths
@@ -429,6 +532,16 @@ router.post('/list', async (req, res) => {
     );
     allCommands.push(...userCommands);
 
+    // Scan user skills (~/.claude/skills/)
+    const userSkillsDir = path.join(homeDir, '.claude', 'skills');
+    const userSkills = await scanUserSkills(userSkillsDir);
+    allCommands.push(...userSkills);
+
+    // Scan plugin skills (~/.claude/plugins/)
+    const pluginsDir = path.join(homeDir, '.claude', 'plugins');
+    const pluginSkills = await scanPluginSkills(pluginsDir);
+    allCommands.push(...pluginSkills);
+
     // Separate built-in and custom commands
     const customCommands = allCommands.filter(cmd => cmd.namespace !== 'builtin');
 
@@ -463,18 +576,25 @@ router.post('/load', async (req, res) => {
       });
     }
 
-    // Security: Prevent path traversal
-    const resolvedPath = path.resolve(commandPath);
-    if (!resolvedPath.startsWith(path.resolve(os.homedir())) &&
-        !resolvedPath.includes('.claude/commands')) {
+    // Security: Prevent path traversal and symlink escapes
+    const resolvedPath = await fs.realpath(path.resolve(commandPath));
+    const userCommandsBase = path.resolve(path.join(os.homedir(), '.claude', 'commands'));
+    const userSkillsBase = path.resolve(path.join(os.homedir(), '.claude', 'skills'));
+    const userPluginsBase = path.resolve(path.join(os.homedir(), '.claude', 'plugins'));
+    const isUnder = (base) => {
+      const rel = path.relative(base, resolvedPath);
+      return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+    };
+
+    if (!(isUnder(userCommandsBase) || isUnder(userSkillsBase) || isUnder(userPluginsBase))) {
       return res.status(403).json({
         error: 'Access denied',
-        message: 'Command must be in .claude/commands directory'
+        message: 'Command must be in .claude/commands, .claude/skills, or .claude/plugins directory'
       });
     }
 
     // Read and parse the command file
-    const content = await fs.readFile(commandPath, 'utf8');
+    const content = await fs.readFile(resolvedPath, 'utf8');
     const { data: metadata, content: commandContent } = matter(content);
 
     res.json({
@@ -541,25 +661,33 @@ router.post('/execute', async (req, res) => {
     }
 
     // Load command content
-    // Security: validate commandPath is within allowed directories
+    // Security: validate commandPath is within allowed directories, resolve symlinks
+    let isSkill = false;
+    let resolvedCommandPath;
     {
-      const resolvedPath = path.resolve(commandPath);
-      const userBase = path.resolve(path.join(os.homedir(), '.claude', 'commands'));
+      resolvedCommandPath = await fs.realpath(path.resolve(commandPath));
+      const userCommandsBase = path.resolve(path.join(os.homedir(), '.claude', 'commands'));
+      const userSkillsBase = path.resolve(path.join(os.homedir(), '.claude', 'skills'));
+      const userPluginsBase = path.resolve(path.join(os.homedir(), '.claude', 'plugins'));
       const projectBase = context?.projectPath
         ? path.resolve(path.join(context.projectPath, '.claude', 'commands'))
         : null;
       const isUnder = (base) => {
-        const rel = path.relative(base, resolvedPath);
+        const rel = path.relative(base, resolvedCommandPath);
         return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
       };
-      if (!(isUnder(userBase) || (projectBase && isUnder(projectBase)))) {
+
+      // Check if this is a skill
+      isSkill = isUnder(userSkillsBase) || isUnder(userPluginsBase);
+
+      if (!(isUnder(userCommandsBase) || isUnder(userSkillsBase) || isUnder(userPluginsBase) || (projectBase && isUnder(projectBase)))) {
         return res.status(403).json({
           error: 'Access denied',
-          message: 'Command must be in .claude/commands directory'
+          message: 'Command must be in .claude/commands, .claude/skills, or .claude/plugins directory'
         });
       }
     }
-    const content = await fs.readFile(commandPath, 'utf8');
+    const content = await fs.readFile(resolvedCommandPath, 'utf8');
     const { data: metadata, content: commandContent } = matter(content);
     // Basic argument replacement (will be enhanced in command parser utility)
     let processedContent = commandContent;
@@ -579,6 +707,7 @@ router.post('/execute', async (req, res) => {
       command: commandName,
       content: processedContent,
       metadata,
+      isSkill,
       hasFileIncludes: processedContent.includes('@'),
       hasBashCommands: processedContent.includes('!')
     });

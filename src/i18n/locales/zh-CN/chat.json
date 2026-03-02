@@ -1,4 +1,5 @@
 {
+  "skillLoaded": "已加载技能: {{name}}",
   "codeBlock": {
     "copy": "复制",
     "copied": "已复制",
