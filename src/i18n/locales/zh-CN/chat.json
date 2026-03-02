@@ -227,7 +227,6 @@
     "background-task-result": "后台任务结果",
     "hook": "Hook 输出",
     "command": "命令",
-    "skill": "技能",
     "continuation": "会话信息",
     "other": "系统"
   }

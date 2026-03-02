@@ -212,7 +212,6 @@
     "background-task-result": "バックグラウンドタスク結果",
     "hook": "フック出力",
     "command": "コマンド",
-    "skill": "スキル",
     "continuation": "セッション情報",
     "other": "システム"
   }

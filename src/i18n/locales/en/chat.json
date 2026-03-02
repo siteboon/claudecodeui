@@ -245,7 +245,6 @@
     "background-task-result": "Background Task Result",
     "hook": "Hook Output",
     "command": "Command",
-    "skill": "Skill",
     "continuation": "Session Info",
     "other": "System"
   }

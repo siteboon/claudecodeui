@@ -227,7 +227,6 @@
     "background-task-result": "백그라운드 작업 결과",
     "hook": "Hook 출력",
     "command": "명령어",
-    "skill": "스킬",
     "continuation": "세션 정보",
     "other": "시스템"
   }

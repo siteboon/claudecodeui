@@ -400,7 +400,7 @@ const classifyUserMessage = (content: string): ClassifiedMessage | null => {
   }
 
   // 4. Hook output
-  if (content.startsWith('<user-prompt-submit-hook>') || content.includes('<user-prompt-submit-hook>')) {
+  if (content.includes('<user-prompt-submit-hook>')) {
     return {
       injectedType: 'hook',
       injectedSummary: 'Hook output',
