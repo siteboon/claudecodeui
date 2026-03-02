@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import TaskList from '../../../TaskList';
 import TaskDetail from '../../../TaskDetail';
-import PRDEditor from '../../../PRDEditor';
+import PRDEditor from '../../../prd-editor';
 import { useTaskMaster } from '../../../../contexts/TaskMasterContext';
 import { api } from '../../../../utils/api';
 import type { Project } from '../../../../types/app';
