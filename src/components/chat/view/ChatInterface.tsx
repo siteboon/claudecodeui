@@ -109,6 +109,7 @@ function ChatInterface({
     scrollContainerRef,
     scrollToBottom,
     scrollToBottomAndReset,
+    scrollToPreviousUserMessage,
     handleScroll,
   } = useChatSessionState({
     selectedProject,
@@ -341,6 +342,7 @@ function ChatInterface({
           isUserScrolledUp={isUserScrolledUp}
           hasMessages={chatMessages.length > 0}
           onScrollToBottom={scrollToBottomAndReset}
+          onScrollToPreviousUserMessage={scrollToPreviousUserMessage}
           onSubmit={handleSubmit}
           isDragActive={isDragActive}
           attachedImages={attachedImages}
