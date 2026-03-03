@@ -1,12 +1,20 @@
 <div align="center">
-  <img src="public/logo.svg" alt="Claude Code UI" width="64" height="64">
+  <img src="public/logo.svg" alt="CloudCLI UI" width="64" height="64">
   <h1>Cloud CLI (aka Claude Code UI)</h1>
 </div>
 
 
-A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor CLI](https://docs.cursor.com/en/cli/overview), [Codex](https://developers.openai.com/codex), and [Gemini-CLI](https://geminicli.com/). You can use it locally or remotely to view your active projects and sessions and make changes to them from everywhere (mobile or desktop). This gives you a proper interface that works everywhere. 
+A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor CLI](https://docs.cursor.com/en/cli/overview), [Codex](https://developers.openai.com/codex), and [Gemini-CLI](https://geminicli.com/). You can use it locally or remotely to view your active projects and sessions and make changes to them from everywhere (mobile or desktop). This gives you a proper interface that works everywhere.
 
-<a href="https://trendshift.io/repositories/15586" target="_blank"><img src="https://trendshift.io/api/badge/repositories/15586" alt="siteboon%2Fclaudecodeui | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+<p align="center">
+  <a href="https://cloudcli.ai">CloudCLI Cloud</a> · <a href="https://discord.gg/buxwujPNRE">Discord</a> · <a href="https://github.com/siteboon/claudecodeui/issues">Bug Reports</a> · <a href="CONTRIBUTING.md">Contributing</a>
+</p>
+
+<p align="center">
+  <a href="https://discord.gg/buxwujPNRE"><img src="https://img.shields.io/badge/Discord-Join%20Community-5865F2?logo=discord&logoColor=white" alt="Join our Discord"></a>
+  <a href="https://trendshift.io/repositories/15586" target="_blank"><img src="https://trendshift.io/api/badge/repositories/15586" alt="siteboon%2Fclaudecodeui | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+</p>
+
 <div align="right"><i><b>English</b> · <a href="./README.ko.md">한국어</a> · <a href="./README.zh-CN.md">中文</a> · <a href="./README.ja.md">日本語</a></i></div>
 
 ## Screenshots
@@ -56,7 +64,15 @@ A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/cla
 
 ## Quick Start
 
-### Prerequisites
+### CloudCLI Cloud (Recommended)
+
+The fastest way to get started — no local setup required. Get a fully managed, containerized development environment accessible from the web, mobile app, API, or your favorite IDE.
+
+**[Get started with CloudCLI Cloud](https://cloudcli.ai)**
+
+### Self-Hosted (Open Source)
+
+#### Prerequisites
 
 - [Node.js](https://nodejs.org/) v22 or higher
 - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and configured, and/or
@@ -64,7 +80,7 @@ A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/cla
 - [Codex](https://developers.openai.com/codex) installed and configured, and/or
 - [Gemini-CLI](https://geminicli.com/) installed and configured
 
-### One-click Operation (Recommended)
+#### One-click Operation
 
 No installation required, direct operation:
 
@@ -121,7 +137,7 @@ cloudcli status                   # Show current configuration
 
 ### Run as Background Service (Recommended for Production)
 
-For production use, run Claude Code UI as a background service using PM2 (Process Manager 2):
+For production use, run CloudCLI as a background service using PM2 (Process Manager 2):
 
 #### Install PM2
 
@@ -145,7 +161,7 @@ pm2 start cloudcli --name "claude-code-ui" -- --port 8080
 
 #### Auto-Start on System Boot
 
-To make Claude Code UI start automatically when your system boots:
+To make CloudCLI UI start automatically when your system boots:
 
 ```bash
 # Generate startup script for your platform
@@ -209,7 +225,7 @@ To use Claude Code's full functionality, you'll need to manually enable tools:
 
 ## TaskMaster AI Integration *(Optional)*
 
-Claude Code UI supports **[TaskMaster AI](https://github.com/eyaltoledano/claude-task-master)** (aka claude-task-master) integration for advanced project management and AI-powered task planning.
+CloudCLI UI supports **[TaskMaster AI](https://github.com/eyaltoledano/claude-task-master)** (aka claude-task-master) integration for advanced project management and AI-powered task planning.
 
 It provides
 - AI-powered task generation from PRDs (Product Requirements Documents)
@@ -338,6 +354,8 @@ This project is open source and free to use, modify, and distribute under the GP
 ## Support & Community
 
 ### Stay Updated
+- **[Join our Discord](https://discord.gg/buxwujPNRE)** - Get help, share feedback, and connect with the community
+- **[CloudCLI Cloud](https://cloudcli.ai)** - Try the hosted cloud version
 - **Star** this repository to show support
 - **Watch** for updates and new releases
 - **Follow** the project for announcements
