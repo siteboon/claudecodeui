@@ -63,7 +63,8 @@
     "cancel": "キャンセル",
     "save": "保存",
     "delete": "削除",
-    "rename": "名前の変更"
+    "rename": "名前の変更",
+    "joinCommunity": "コミュニティに参加"
   },
   "status": {
     "active": "アクティブ",
