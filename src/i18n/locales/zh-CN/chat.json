@@ -220,5 +220,14 @@
   },
   "tasks": {
     "nextTaskPrompt": "开始下一个任务"
+  },
+  "systemInjected": {
+    "system-reminder": "系统提醒",
+    "task-notification": "任务通知",
+    "background-task-result": "后台任务结果",
+    "hook": "Hook 输出",
+    "command": "命令",
+    "continuation": "会话信息",
+    "other": "系统"
   }
 }

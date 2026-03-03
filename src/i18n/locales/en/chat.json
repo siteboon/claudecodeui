@@ -238,5 +238,14 @@
   },
   "tasks": {
     "nextTaskPrompt": "Start the next task"
+  },
+  "systemInjected": {
+    "system-reminder": "System Reminder",
+    "task-notification": "Task Notification",
+    "background-task-result": "Background Task Result",
+    "hook": "Hook Output",
+    "command": "Command",
+    "continuation": "Session Info",
+    "other": "System"
   }
 }

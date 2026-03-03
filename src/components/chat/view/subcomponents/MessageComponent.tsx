@@ -97,9 +97,31 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
   return (
     <div
       ref={messageRef}
-      className={`chat-message ${message.type} ${isGrouped ? 'grouped' : ''} ${message.type === 'user' ? 'flex justify-end px-3 sm:px-0' : 'px-3 sm:px-0'}`}
+      className={`chat-message ${message.type} ${isGrouped ? 'grouped' : ''} ${message.type === 'user' && !message.isSystemInjected ? 'flex justify-end px-3 sm:px-0' : 'px-3 sm:px-0'}`}
     >
-      {message.type === 'user' ? (
+      {message.isSystemInjected && !message.isTaskNotification && message.injectedType !== 'background-task-result' ? (
+        /* System-injected message — muted, collapsed by default */
+        <div className="w-full">
+          <details className="group">
+            <summary className="cursor-pointer flex items-center gap-2 py-1 px-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800/60 transition-colors select-none">
+              <svg className="w-3 h-3 text-gray-400 dark:text-gray-500 transition-transform group-open:rotate-90 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                {t(`systemInjected.${message.injectedType || 'other'}`)}
+              </span>
+              <span className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                {String(message.injectedSummary || '')}
+              </span>
+            </summary>
+            <div className="mt-1 ml-5 border-l-2 border-gray-300 dark:border-gray-600 pl-3">
+              <pre className="text-xs text-gray-600 dark:text-gray-400 whitespace-pre-wrap break-words font-mono bg-gray-50 dark:bg-gray-800/40 rounded p-2 max-h-64 overflow-y-auto">
+                {message.content}
+              </pre>
+            </div>
+          </details>
+        </div>
+      ) : message.type === 'user' ? (
         /* User message bubble on the right */
         <div className="flex items-end space-x-0 sm:space-x-3 w-full sm:w-auto sm:max-w-[85%] md:max-w-md lg:max-w-lg xl:max-w-xl">
           <div className="bg-blue-600 text-white rounded-2xl rounded-br-md px-3 sm:px-4 py-2 shadow-sm flex-1 sm:flex-initial group">
@@ -165,6 +187,35 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
               U
             </div>
           )}
+        </div>
+      ) : message.injectedType === 'background-task-result' ? (
+        /* Background task result — collapsible card, collapsed by default */
+        <div className="w-full">
+          <details className="group border border-emerald-200 dark:border-emerald-800/60 rounded-lg overflow-hidden bg-emerald-50/50 dark:bg-emerald-900/10">
+            <summary className="cursor-pointer flex items-center gap-3 py-2.5 px-3 hover:bg-emerald-100/60 dark:hover:bg-emerald-900/20 transition-colors select-none">
+              <div className="flex items-center justify-center w-6 h-6 bg-emerald-500 dark:bg-emerald-600 rounded-full flex-shrink-0">
+                <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="text-sm font-medium text-emerald-900 dark:text-emerald-100">
+                  {String(message.injectedSummary || '') || t('systemInjected.background-task-result')}
+                </span>
+              </div>
+              <span className="text-[10px] text-emerald-600/70 dark:text-emerald-400/60 flex-shrink-0">
+                {formattedTime}
+              </span>
+              <svg className="w-4 h-4 text-emerald-500 dark:text-emerald-400 transition-transform group-open:rotate-90 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </summary>
+            <div className="border-t border-emerald-200 dark:border-emerald-800/60 bg-white dark:bg-gray-900 p-3">
+              <pre className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words font-mono max-h-96 overflow-y-auto">
+                {message.content}
+              </pre>
+            </div>
+          </details>
         </div>
       ) : message.isTaskNotification ? (
         /* Compact task notification on the left */
