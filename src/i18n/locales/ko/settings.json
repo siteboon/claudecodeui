@@ -84,6 +84,7 @@
     }
   },
   "mainTabs": {
+    "label": "설정",
     "agents": "에이전트",
     "appearance": "외관",
     "git": "Git",
