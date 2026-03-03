@@ -72,6 +72,12 @@
       "draggingStatus": "Dragging...",
       "toggleAndMove": "Click to toggle, drag to move"
     },
+    "reloadSkills": {
+      "label": "Reload skills",
+      "description": "Refresh provider skills",
+      "loading": "Reloading...",
+      "title": "Reload provider skills"
+    },
     "whisper": {
       "modes": {
         "default": "Default Mode",

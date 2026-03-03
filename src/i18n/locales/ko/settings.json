@@ -72,6 +72,12 @@
       "draggingStatus": "드래그 중...",
       "toggleAndMove": "클릭하여 토글, 드래그하여 이동"
     },
+    "reloadSkills": {
+      "label": "스킬 다시 불러오기",
+      "description": "프로바이더 스킬 새로고침",
+      "loading": "다시 불러오는 중...",
+      "title": "프로바이더 스킬 다시 불러오기"
+    },
     "whisper": {
       "modes": {
         "default": "기본 모드",

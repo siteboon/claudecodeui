@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { CSSProperties } from 'react';
 
 type CommandMenuCommand = {
@@ -15,6 +16,7 @@ type CommandMenuProps = {
   commands?: CommandMenuCommand[];
   selectedIndex?: number;
   onSelect?: (command: CommandMenuCommand, index: number, isHover: boolean) => void;
+  onViewSkillInfo?: (command: CommandMenuCommand) => void;
   onClose: () => void;
   position?: { top: number; left: number; bottom?: number };
   isOpen?: boolean;
@@ -31,12 +33,13 @@ const menuBaseStyle: CSSProperties = {
   transition: 'opacity 150ms ease-in-out, transform 150ms ease-in-out',
 };
 
-const namespaceLabels: Record<string, string> = {
-  frequent: 'Frequently Used',
-  builtin: 'Built-in Commands',
-  project: 'Project Commands',
-  user: 'User Commands',
-  other: 'Other Commands',
+const namespaceLabelKeys: Record<string, string> = {
+  frequent: 'commandMenu.namespace.frequent',
+  builtin: 'commandMenu.namespace.builtin',
+  project: 'commandMenu.namespace.project',
+  user: 'commandMenu.namespace.user',
+  skills: 'commandMenu.namespace.skills',
+  other: 'commandMenu.namespace.other',
 };
 
 const namespaceIcons: Record<string, string> = {
@@ -44,6 +47,7 @@ const namespaceIcons: Record<string, string> = {
   builtin: '[B]',
   project: '[P]',
   user: '[U]',
+  skills: '[S]',
   other: '[O]',
 };
 
@@ -81,11 +85,13 @@ export default function CommandMenu({
   commands = [],
   selectedIndex = -1,
   onSelect,
+  onViewSkillInfo,
   onClose,
   position = { top: 0, left: 0 },
   isOpen = false,
   frequentCommands = [],
 }: CommandMenuProps) {
+  const { t } = useTranslation('chat');
   const menuRef = useRef<HTMLDivElement | null>(null);
   const selectedItemRef = useRef<HTMLDivElement | null>(null);
   const menuPosition = getMenuPosition(position);
@@ -159,7 +165,7 @@ export default function CommandMenu({
         className="command-menu command-menu-empty border border-gray-200 bg-white text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400"
         style={{ ...menuPosition, ...menuBaseStyle, overflowY: 'hidden', padding: '20px', opacity: 1, transform: 'translateY(0)', textAlign: 'center' }}
       >
-        No commands available
+        {t('commandMenu.noCommands')}
       </div>
     );
   }
@@ -168,7 +174,7 @@ export default function CommandMenu({
     <div
       ref={menuRef}
       role="listbox"
-      aria-label="Available commands"
+      aria-label={t('commandMenu.aria.availableCommands')}
       className="command-menu border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800"
       style={{ ...menuPosition, ...menuBaseStyle, opacity: 1, transform: 'translateY(0)' }}
     >
@@ -176,7 +182,7 @@ export default function CommandMenu({
         <div key={namespace} className="command-group">
           {orderedNamespaces.length > 1 && (
             <div className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-              {namespaceLabels[namespace] || namespace}
+              {t(namespaceLabelKeys[namespace] || namespaceLabelKeys.other)}
             </div>
           )}
 
@@ -184,6 +190,7 @@ export default function CommandMenu({
             const commandKey = getCommandKey(command);
             const commandIndex = commandIndexByKey.get(commandKey) ?? -1;
             const isSelected = commandIndex === selectedIndex;
+            const isSkill = command.type === 'skill' || command.namespace === 'skills';
             return (
               <div
                 key={`${namespace}-${command.name}-${command.path || ''}`}
@@ -194,6 +201,11 @@ export default function CommandMenu({
                   isSelected ? 'bg-blue-50 dark:bg-blue-900' : 'bg-transparent'
                 }`}
                 onMouseEnter={() => onSelect && commandIndex >= 0 && onSelect(command, commandIndex, true)}
+                onTouchStart={() => {
+                  if (onSelect && commandIndex >= 0) {
+                    onSelect(command, commandIndex, true);
+                  }
+                }}
                 onClick={() => onSelect && commandIndex >= 0 && onSelect(command, commandIndex, false)}
                 onMouseDown={(event) => event.preventDefault()}
               >
@@ -213,7 +225,36 @@ export default function CommandMenu({
                     </div>
                   )}
                 </div>
-                {isSelected && <span className="ml-2 text-xs font-semibold text-blue-500 dark:text-blue-300">{'<-'}</span>}
+                <div className="ml-2 flex items-start gap-1">
+                  {isSelected && <span className="text-xs font-semibold text-blue-500 dark:text-blue-300">{'<-'}</span>}
+                  {isSkill && onViewSkillInfo && (
+                    <button
+                      type="button"
+                      className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-gray-200 bg-white/90 text-gray-500 transition-colors hover:text-gray-700 dark:border-gray-600 dark:bg-gray-700/80 dark:text-gray-300 dark:hover:text-gray-100"
+                      aria-label={t('commandMenu.viewSkillInfo')}
+                      title={t('commandMenu.viewSkillInfo')}
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                      }}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onViewSkillInfo(command);
+                      }}
+                      onTouchStart={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onViewSkillInfo(command);
+                      }}
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5s8.268 2.943 9.542 7c-1.274 4.057-5.065 7-9.542 7S3.732 16.057 2.458 12z" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })}

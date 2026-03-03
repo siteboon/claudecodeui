@@ -24,6 +24,7 @@ interface ProviderSelectionEmptyStateProps {
   isTaskMasterInstalled: boolean | null;
   onShowAllTasks?: (() => void) | null;
   setInput: React.Dispatch<React.SetStateAction<string>>;
+  prefetchSkillsForProvider: (provider: SessionProvider) => Promise<void>;
 }
 
 type ProviderDef = {
@@ -102,6 +103,7 @@ export default function ProviderSelectionEmptyState({
   isTaskMasterInstalled,
   onShowAllTasks,
   setInput,
+  prefetchSkillsForProvider,
 }: ProviderSelectionEmptyStateProps) {
   const { t } = useTranslation('chat');
   const nextTaskPrompt = t('tasks.nextTaskPrompt', { defaultValue: 'Start the next task' });
@@ -109,6 +111,7 @@ export default function ProviderSelectionEmptyState({
   const selectProvider = (next: SessionProvider) => {
     setProvider(next);
     localStorage.setItem('selected-provider', next);
+    void prefetchSkillsForProvider(next);
     setTimeout(() => textareaRef.current?.focus(), 100);
   };
 

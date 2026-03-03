@@ -72,6 +72,12 @@
       "draggingStatus": "ドラッグ中...",
       "toggleAndMove": "クリックで切替、ドラッグで移動"
     },
+    "reloadSkills": {
+      "label": "スキルを再読み込み",
+      "description": "プロバイダーのスキルを更新",
+      "loading": "再読み込み中...",
+      "title": "プロバイダーのスキルを再読み込み"
+    },
     "whisper": {
       "modes": {
         "default": "標準モード",
