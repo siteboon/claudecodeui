@@ -46,6 +46,12 @@ export interface ChatMessage {
     currentToolIndex: number;
     isComplete: boolean;
   };
+  isSystemInjected?: boolean;
+  injectedType?: string;
+  injectedSummary?: string;
+  isTaskNotification?: boolean;
+  skillName?: string;
+  skillDescription?: string;
   [key: string]: unknown;
 }
 

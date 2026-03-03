@@ -450,7 +450,8 @@ const classifyUserMessage = (content: string): ClassifiedMessage | null => {
     };
   }
   // TaskMaster system prompts (should be hidden)
-  if (content.includes('{"subtasks":') || content.includes('CRITICAL: You MUST respond with ONLY a JSON')) {
+  // Require the JSON to appear at the start of content to avoid false positives on normal messages
+  if (content.trimStart().startsWith('{"subtasks":') || content.includes('CRITICAL: You MUST respond with ONLY a JSON')) {
     return {
       injectedType: 'other',
       injectedSummary: 'TaskMaster system prompt',
