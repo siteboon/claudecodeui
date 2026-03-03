@@ -69,7 +69,8 @@ async function scanPluginSkills(pluginsDir) {
     const seen = new Set();
 
     for (const [pluginKey, installations] of Object.entries(plugins)) {
-      const pluginName = pluginKey.split('@')[0];
+      const versionSeparatorIndex = pluginKey.lastIndexOf('@');
+      const pluginName = versionSeparatorIndex > 0 ? pluginKey.slice(0, versionSeparatorIndex) : pluginKey;
       if (!installations || !installations.length) continue;
 
       const installPath = installations[0].installPath;

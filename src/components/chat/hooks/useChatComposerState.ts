@@ -600,6 +600,9 @@ export function useChatComposerState({
                   },
                 ]);
                 skillContents.push(result.content);
+              } else if (result.type === 'builtin') {
+                handleBuiltInCommand(result);
+                return;
               } else if (!result.isSkill) {
                 // Handle regular commands: execute them normally
                 await handleCustomCommand({ ...result, userArgs: remainingText });
