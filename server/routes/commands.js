@@ -568,7 +568,7 @@ router.post('/list', async (req, res) => {
  */
 router.post('/load', async (req, res) => {
   try {
-    const { commandPath } = req.body;
+    const { commandPath, projectPath } = req.body;
 
     if (!commandPath) {
       return res.status(400).json({
@@ -581,12 +581,15 @@ router.post('/load', async (req, res) => {
     const userCommandsBase = path.resolve(path.join(os.homedir(), '.claude', 'commands'));
     const userSkillsBase = path.resolve(path.join(os.homedir(), '.claude', 'skills'));
     const userPluginsBase = path.resolve(path.join(os.homedir(), '.claude', 'plugins'));
+    const projectBase = projectPath
+      ? path.resolve(path.join(projectPath, '.claude', 'commands'))
+      : null;
     const isUnder = (base) => {
       const rel = path.relative(base, resolvedPath);
       return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
     };
 
-    if (!(isUnder(userCommandsBase) || isUnder(userSkillsBase) || isUnder(userPluginsBase))) {
+    if (!(isUnder(userCommandsBase) || isUnder(userSkillsBase) || isUnder(userPluginsBase) || (projectBase && isUnder(projectBase)))) {
       return res.status(403).json({
         error: 'Access denied',
         message: 'Command must be in .claude/commands, .claude/skills, or .claude/plugins directory'

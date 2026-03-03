@@ -646,9 +646,9 @@ export function useChatComposerState({
           }
         };
 
-        loadAllCommands();
+        await loadAllCommands();
 
-        // Clear UI state
+        // Clear UI state after commands are fully loaded
         setAttachedImages([]);
         setUploadingImages(new Map());
         setImageErrors(new Map());

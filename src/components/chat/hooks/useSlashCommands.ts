@@ -191,6 +191,9 @@ export function useSlashCommands({
 
   const selectCommandFromKeyboard = useCallback(
     (command: SlashCommand) => {
+      if (slashPosition === -1) {
+        return;
+      }
       const textBeforeSlash = input.slice(0, slashPosition);
       const textAfterSlash = input.slice(slashPosition);
       const spaceIndex = textAfterSlash.indexOf(' ');
@@ -224,6 +227,10 @@ export function useSlashCommands({
       }
 
       trackCommandUsage(command);
+
+      if (slashPosition === -1) {
+        return;
+      }
 
       // Insert command name into input
       const textBeforeSlash = input.slice(0, slashPosition);
