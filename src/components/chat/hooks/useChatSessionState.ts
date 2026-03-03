@@ -93,7 +93,7 @@ export function useChatSessionState({
   const scrollPositionRef = useRef({ height: 0, top: 0 });
   const loadAllFinishedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadAllOverlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastLoadedSessionIdRef = useRef<string | null>(null);
+  const lastLoadedSessionKeyRef = useRef<string | null>(null);
 
   const createDiff = useMemo<DiffCalculator>(() => createCachedDiffCalculator(), []);
 
@@ -379,8 +379,9 @@ export function useChatSessionState({
           }
         }
 
-        // Skip loading if session ID hasn't changed and we already loaded it
-        if (lastLoadedSessionIdRef.current === selectedSession.id) {
+        // Skip loading if session+project+provider hasn't changed
+        const sessionKey = `${selectedSession.id}:${selectedProject.name}:${provider}`;
+        if (lastLoadedSessionKeyRef.current === sessionKey) {
           setTimeout(() => {
             isLoadingSessionRef.current = false;
           }, 250);
@@ -415,8 +416,8 @@ export function useChatSessionState({
           }
         }
 
-        // Update the last loaded session ID
-        lastLoadedSessionIdRef.current = selectedSession.id;
+        // Update the last loaded session key
+        lastLoadedSessionKeyRef.current = sessionKey;
       } else {
         if (!isSystemSessionChange) {
           resetStreamingState();
@@ -434,7 +435,7 @@ export function useChatSessionState({
         setHasMoreMessages(false);
         setTotalMessages(0);
         setTokenBudget(null);
-        lastLoadedSessionIdRef.current = null;
+        lastLoadedSessionKeyRef.current = null;
       }
 
       setTimeout(() => {
@@ -512,16 +513,14 @@ export function useChatSessionState({
   useEffect(() => {
     // Only sync sessionMessages to chatMessages when:
     // 1. Not currently loading (to avoid overwriting user's just-sent message)
-    // 2. SessionMessages actually changed
+    // 2. SessionMessages actually changed (including from non-empty to empty)
     // 3. Either it's initial load OR sessionMessages increased (new messages from server)
     if (
-      sessionMessages.length > 0 &&
       sessionMessages.length !== prevSessionMessagesLengthRef.current &&
       !isLoading
     ) {
-      // Only update if this is initial load or if sessionMessages grew (server added messages)
-      // Don't update if sessionMessages shrunk (user might have just sent a message)
-      if (isInitialLoadRef.current || sessionMessages.length > prevSessionMessagesLengthRef.current) {
+      // Only update if this is initial load, sessionMessages grew, or was cleared to empty
+      if (isInitialLoadRef.current || sessionMessages.length === 0 || sessionMessages.length > prevSessionMessagesLengthRef.current) {
         setChatMessages(convertedMessages);
         isInitialLoadRef.current = false;
       }
