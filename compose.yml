@@ -8,4 +8,19 @@ services:
       - 3001:3001
     environment:
       - NODE_ENV=production
-    working_dir: /app
+    user: 1000:1000
+    volumes:
+      # mount cloudcli data
+      - ./data:/app/data
+      # mount agents configs, skills, rules, etc.
+      # remove ones that you want
+      - ~/.codex:/app/.codex
+      - ~/.claude:/app/.claude
+      - ~/.cursor:/app/.cursor
+      - ~/.gemini:/app/.gemini
+      # mount projects
+      - ~/projects:/home/yusing/projects
+      # mount agent binaries, or install them inside the container
+      - /usr/bin/codex:/usr/bin/codex:ro
+      - /usr/bin/claude:/usr/bin/claude:ro
+      - /usr/bin/gemini:/usr/bin/gemini:ro
