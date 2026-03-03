@@ -1,0 +1,11 @@
+services:
+  claude-code-ui:
+    image: siteboon/claude-code-ui:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - 3001:3001
+    environment:
+      - NODE_ENV=production
+    working_dir: /app
