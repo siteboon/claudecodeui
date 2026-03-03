@@ -7,6 +7,7 @@ import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 import crypto from 'crypto';
 import { CURSOR_MODELS } from '../../shared/modelConstants.js';
+import { applyCustomSessionNames } from '../database/db.js';
 
 const router = express.Router();
 
@@ -560,8 +561,10 @@ router.get('/sessions', async (req, res) => {
       return new Date(b.createdAt) - new Date(a.createdAt);
     });
     
-    res.json({ 
-      success: true, 
+    applyCustomSessionNames(sessions, 'cursor');
+
+    res.json({
+      success: true,
       sessions: sessions,
       cwdId: cwdId,
       path: cursorChatsPath

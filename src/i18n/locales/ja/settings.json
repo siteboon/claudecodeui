@@ -84,6 +84,7 @@
     }
   },
   "mainTabs": {
+    "label": "設定",
     "agents": "エージェント",
     "appearance": "外観",
     "git": "Git",

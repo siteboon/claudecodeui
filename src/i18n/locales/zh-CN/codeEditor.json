@@ -26,5 +26,9 @@
     "lines": "行数：",
     "characters": "字符数：",
     "shortcuts": "按 Ctrl+S 保存 • Esc 关闭"
+  },
+  "binaryFile": {
+    "title": "二进制文件",
+    "message": "文件 \"{{fileName}}\" 无法在文本编辑器中显示，因为它是二进制文件。"
   }
 }
