@@ -63,7 +63,8 @@
     "cancel": "Cancel",
     "save": "Save",
     "delete": "Delete",
-    "rename": "Rename"
+    "rename": "Rename",
+    "joinCommunity": "Join Community"
   },
   "status": {
     "active": "Active",
