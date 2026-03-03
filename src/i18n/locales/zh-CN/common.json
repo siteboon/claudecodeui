@@ -114,7 +114,11 @@
     "justNow": "刚刚",
     "minAgo": "{{count}} 分钟前",
     "hoursAgo": "{{count}} 小时前",
-    "daysAgo": "{{count}} 天前"
+    "daysAgo": "{{count}} 天前",
+    "newFile": "新建文件 (Cmd+N)",
+    "newFolder": "新建文件夹 (Cmd+Shift+N)",
+    "refresh": "刷新",
+    "collapseAll": "全部折叠"
   },
   "projectWizard": {
     "title": "创建新项目",
