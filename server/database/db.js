@@ -381,7 +381,7 @@ const credentialsDb = {
 const DEFAULT_NOTIFICATION_PREFERENCES = {
   channels: {
     inApp: false,
-    webPush: true
+    webPush: false
   },
   events: {
     actionRequired: true,
@@ -396,7 +396,7 @@ const normalizeNotificationPreferences = (value) => {
   return {
     channels: {
       inApp: source.channels?.inApp === true,
-      webPush: source.channels?.webPush !== false
+      webPush: source.channels?.webPush === true
     },
     events: {
       actionRequired: source.events?.actionRequired !== false,

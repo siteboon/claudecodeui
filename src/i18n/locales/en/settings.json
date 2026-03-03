@@ -97,8 +97,9 @@
     "description": "Control which notification events you receive.",
     "webPush": {
       "title": "Web Push Notifications",
+      "enable": "Enable Push Notifications",
+      "disable": "Disable Push Notifications",
       "enabled": "Push notifications are enabled",
-      "disabled": "Enable push notifications",
       "loading": "Updating...",
       "unsupported": "Push notifications are not supported in this browser.",
       "denied": "Push notifications are blocked. Please allow them in your browser settings."
