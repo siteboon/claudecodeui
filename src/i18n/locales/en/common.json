@@ -114,7 +114,11 @@
     "justNow": "just now",
     "minAgo": "{{count}} min ago",
     "hoursAgo": "{{count}} hours ago",
-    "daysAgo": "{{count}} days ago"
+    "daysAgo": "{{count}} days ago",
+    "newFile": "New File (Cmd+N)",
+    "newFolder": "New Folder (Cmd+Shift+N)",
+    "refresh": "Refresh",
+    "collapseAll": "Collapse All"
   },
   "projectWizard": {
     "title": "Create New Project",

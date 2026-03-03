@@ -884,6 +884,436 @@ app.get('/api/projects/:projectName/files', authenticateToken, async (req, res) 
     }
 });
 
+// ============================================================================
+// FILE OPERATIONS API ENDPOINTS
+// ============================================================================
+
+/**
+ * Validate that a path is within the project root
+ * @param {string} projectRoot - The project root path
+ * @param {string} targetPath - The path to validate
+ * @returns {{ valid: boolean, resolved?: string, error?: string }}
+ */
+function validatePathInProject(projectRoot, targetPath) {
+    const resolved = path.isAbsolute(targetPath)
+        ? path.resolve(targetPath)
+        : path.resolve(projectRoot, targetPath);
+    const normalizedRoot = path.resolve(projectRoot) + path.sep;
+    if (!resolved.startsWith(normalizedRoot)) {
+        return { valid: false, error: 'Path must be under project root' };
+    }
+    return { valid: true, resolved };
+}
+
+/**
+ * Validate filename - check for invalid characters
+ * @param {string} name - The filename to validate
+ * @returns {{ valid: boolean, error?: string }}
+ */
+function validateFilename(name) {
+    if (!name || !name.trim()) {
+        return { valid: false, error: 'Filename cannot be empty' };
+    }
+    // Check for invalid characters (Windows + Unix)
+    const invalidChars = /[<>:"/\\|?*\x00-\x1f]/;
+    if (invalidChars.test(name)) {
+        return { valid: false, error: 'Filename contains invalid characters' };
+    }
+    // Check for reserved names (Windows)
+    const reserved = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i;
+    if (reserved.test(name)) {
+        return { valid: false, error: 'Filename is a reserved name' };
+    }
+    // Check for dots only
+    if (/^\.+$/.test(name)) {
+        return { valid: false, error: 'Filename cannot be only dots' };
+    }
+    return { valid: true };
+}
+
+// POST /api/projects/:projectName/files/create - Create new file or directory
+app.post('/api/projects/:projectName/files/create', authenticateToken, async (req, res) => {
+    try {
+        const { projectName } = req.params;
+        const { path: parentPath, type, name } = req.body;
+
+        // Validate input
+        if (!name || !type) {
+            return res.status(400).json({ error: 'Name and type are required' });
+        }
+
+        if (!['file', 'directory'].includes(type)) {
+            return res.status(400).json({ error: 'Type must be "file" or "directory"' });
+        }
+
+        const nameValidation = validateFilename(name);
+        if (!nameValidation.valid) {
+            return res.status(400).json({ error: nameValidation.error });
+        }
+
+        // Get project root
+        const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+        if (!projectRoot) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+
+        // Build and validate target path
+        const targetDir = parentPath || '';
+        const targetPath = targetDir ? path.join(targetDir, name) : name;
+        const validation = validatePathInProject(projectRoot, targetPath);
+        if (!validation.valid) {
+            return res.status(403).json({ error: validation.error });
+        }
+
+        const resolvedPath = validation.resolved;
+
+        // Check if already exists
+        try {
+            await fsPromises.access(resolvedPath);
+            return res.status(409).json({ error: `${type === 'file' ? 'File' : 'Directory'} already exists` });
+        } catch {
+            // Doesn't exist, which is what we want
+        }
+
+        // Create file or directory
+        if (type === 'directory') {
+            await fsPromises.mkdir(resolvedPath, { recursive: false });
+        } else {
+            // Ensure parent directory exists
+            const parentDir = path.dirname(resolvedPath);
+            try {
+                await fsPromises.access(parentDir);
+            } catch {
+                await fsPromises.mkdir(parentDir, { recursive: true });
+            }
+            await fsPromises.writeFile(resolvedPath, '', 'utf8');
+        }
+
+        res.json({
+            success: true,
+            path: resolvedPath,
+            name,
+            type,
+            message: `${type === 'file' ? 'File' : 'Directory'} created successfully`
+        });
+    } catch (error) {
+        console.error('Error creating file/directory:', error);
+        if (error.code === 'EACCES') {
+            res.status(403).json({ error: 'Permission denied' });
+        } else if (error.code === 'ENOENT') {
+            res.status(404).json({ error: 'Parent directory not found' });
+        } else {
+            res.status(500).json({ error: error.message });
+        }
+    }
+});
+
+// PUT /api/projects/:projectName/files/rename - Rename file or directory
+app.put('/api/projects/:projectName/files/rename', authenticateToken, async (req, res) => {
+    try {
+        const { projectName } = req.params;
+        const { oldPath, newName } = req.body;
+
+        // Validate input
+        if (!oldPath || !newName) {
+            return res.status(400).json({ error: 'oldPath and newName are required' });
+        }
+
+        const nameValidation = validateFilename(newName);
+        if (!nameValidation.valid) {
+            return res.status(400).json({ error: nameValidation.error });
+        }
+
+        // Get project root
+        const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+        if (!projectRoot) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+
+        // Validate old path
+        const oldValidation = validatePathInProject(projectRoot, oldPath);
+        if (!oldValidation.valid) {
+            return res.status(403).json({ error: oldValidation.error });
+        }
+
+        const resolvedOldPath = oldValidation.resolved;
+
+        // Check if old path exists
+        try {
+            await fsPromises.access(resolvedOldPath);
+        } catch {
+            return res.status(404).json({ error: 'File or directory not found' });
+        }
+
+        // Build and validate new path
+        const parentDir = path.dirname(resolvedOldPath);
+        const resolvedNewPath = path.join(parentDir, newName);
+        const newValidation = validatePathInProject(projectRoot, resolvedNewPath);
+        if (!newValidation.valid) {
+            return res.status(403).json({ error: newValidation.error });
+        }
+
+        // Check if new path already exists
+        try {
+            await fsPromises.access(resolvedNewPath);
+            return res.status(409).json({ error: 'A file or directory with this name already exists' });
+        } catch {
+            // Doesn't exist, which is what we want
+        }
+
+        // Rename
+        await fsPromises.rename(resolvedOldPath, resolvedNewPath);
+
+        res.json({
+            success: true,
+            oldPath: resolvedOldPath,
+            newPath: resolvedNewPath,
+            newName,
+            message: 'Renamed successfully'
+        });
+    } catch (error) {
+        console.error('Error renaming file/directory:', error);
+        if (error.code === 'EACCES') {
+            res.status(403).json({ error: 'Permission denied' });
+        } else if (error.code === 'ENOENT') {
+            res.status(404).json({ error: 'File or directory not found' });
+        } else if (error.code === 'EXDEV') {
+            res.status(400).json({ error: 'Cannot move across different filesystems' });
+        } else {
+            res.status(500).json({ error: error.message });
+        }
+    }
+});
+
+// DELETE /api/projects/:projectName/files - Delete file or directory
+app.delete('/api/projects/:projectName/files', authenticateToken, async (req, res) => {
+    try {
+        const { projectName } = req.params;
+        const { path: targetPath, type } = req.body;
+
+        // Validate input
+        if (!targetPath) {
+            return res.status(400).json({ error: 'Path is required' });
+        }
+
+        // Get project root
+        const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+        if (!projectRoot) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+
+        // Validate path
+        const validation = validatePathInProject(projectRoot, targetPath);
+        if (!validation.valid) {
+            return res.status(403).json({ error: validation.error });
+        }
+
+        const resolvedPath = validation.resolved;
+
+        // Check if path exists and get stats
+        let stats;
+        try {
+            stats = await fsPromises.stat(resolvedPath);
+        } catch {
+            return res.status(404).json({ error: 'File or directory not found' });
+        }
+
+        // Prevent deleting the project root itself
+        if (resolvedPath === path.resolve(projectRoot)) {
+            return res.status(403).json({ error: 'Cannot delete project root directory' });
+        }
+
+        // Delete based on type
+        if (stats.isDirectory()) {
+            await fsPromises.rm(resolvedPath, { recursive: true, force: true });
+        } else {
+            await fsPromises.unlink(resolvedPath);
+        }
+
+        res.json({
+            success: true,
+            path: resolvedPath,
+            type: stats.isDirectory() ? 'directory' : 'file',
+            message: 'Deleted successfully'
+        });
+    } catch (error) {
+        console.error('Error deleting file/directory:', error);
+        if (error.code === 'EACCES') {
+            res.status(403).json({ error: 'Permission denied' });
+        } else if (error.code === 'ENOENT') {
+            res.status(404).json({ error: 'File or directory not found' });
+        } else if (error.code === 'ENOTEMPTY') {
+            res.status(400).json({ error: 'Directory is not empty' });
+        } else {
+            res.status(500).json({ error: error.message });
+        }
+    }
+});
+
+// POST /api/projects/:projectName/files/upload - Upload files
+// Dynamic import of multer for file uploads
+const uploadFilesHandler = async (req, res) => {
+    // Dynamic import of multer
+    const multer = (await import('multer')).default;
+
+    const uploadMiddleware = multer({
+        storage: multer.diskStorage({
+            destination: (req, file, cb) => {
+                cb(null, os.tmpdir());
+            },
+            filename: (req, file, cb) => {
+                // Use a unique temp name, but preserve original name in file.originalname
+                // Note: file.originalname may contain path separators for folder uploads
+                const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+                // For temp file, just use a safe unique name without the path
+                cb(null, `upload-${uniqueSuffix}`);
+            }
+        }),
+        limits: {
+            fileSize: 50 * 1024 * 1024, // 50MB limit
+            files: 20 // Max 20 files at once
+        }
+    });
+
+    // Use multer middleware
+    uploadMiddleware.array('files', 20)(req, res, async (err) => {
+        if (err) {
+            console.error('Multer error:', err);
+            if (err.code === 'LIMIT_FILE_SIZE') {
+                return res.status(400).json({ error: 'File too large. Maximum size is 50MB.' });
+            }
+            if (err.code === 'LIMIT_FILE_COUNT') {
+                return res.status(400).json({ error: 'Too many files. Maximum is 20 files.' });
+            }
+            return res.status(500).json({ error: err.message });
+        }
+
+        try {
+            const { projectName } = req.params;
+            const { targetPath, relativePaths } = req.body;
+
+            // Parse relative paths if provided (for folder uploads)
+            let filePaths = [];
+            if (relativePaths) {
+                try {
+                    filePaths = JSON.parse(relativePaths);
+                } catch (e) {
+                    console.log('[DEBUG] Failed to parse relativePaths:', relativePaths);
+                }
+            }
+
+            console.log('[DEBUG] File upload request:', {
+                projectName,
+                targetPath: JSON.stringify(targetPath),
+                targetPathType: typeof targetPath,
+                filesCount: req.files?.length,
+                relativePaths: filePaths
+            });
+
+            if (!req.files || req.files.length === 0) {
+                return res.status(400).json({ error: 'No files provided' });
+            }
+
+            // Get project root
+            const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+            if (!projectRoot) {
+                return res.status(404).json({ error: 'Project not found' });
+            }
+
+            console.log('[DEBUG] Project root:', projectRoot);
+
+            // Validate and resolve target path
+            // If targetPath is empty or '.', use project root directly
+            const targetDir = targetPath || '';
+            let resolvedTargetDir;
+
+            console.log('[DEBUG] Target dir:', JSON.stringify(targetDir));
+
+            if (!targetDir || targetDir === '.' || targetDir === './') {
+                // Empty path means upload to project root
+                resolvedTargetDir = path.resolve(projectRoot);
+                console.log('[DEBUG] Using project root as target:', resolvedTargetDir);
+            } else {
+                const validation = validatePathInProject(projectRoot, targetDir);
+                if (!validation.valid) {
+                    console.log('[DEBUG] Path validation failed:', validation.error);
+                    return res.status(403).json({ error: validation.error });
+                }
+                resolvedTargetDir = validation.resolved;
+                console.log('[DEBUG] Resolved target dir:', resolvedTargetDir);
+            }
+
+            // Ensure target directory exists
+            try {
+                await fsPromises.access(resolvedTargetDir);
+            } catch {
+                await fsPromises.mkdir(resolvedTargetDir, { recursive: true });
+            }
+
+            // Move uploaded files from temp to target directory
+            const uploadedFiles = [];
+            console.log('[DEBUG] Processing files:', req.files.map(f => ({ originalname: f.originalname, path: f.path })));
+            for (let i = 0; i < req.files.length; i++) {
+                const file = req.files[i];
+                // Use relative path if provided (for folder uploads), otherwise use originalname
+                const fileName = (filePaths && filePaths[i]) ? filePaths[i] : file.originalname;
+                console.log('[DEBUG] Processing file:', fileName, '(originalname:', file.originalname + ')');
+                const destPath = path.join(resolvedTargetDir, fileName);
+
+                // Validate destination path
+                const destValidation = validatePathInProject(projectRoot, destPath);
+                if (!destValidation.valid) {
+                    console.log('[DEBUG] Destination validation failed for:', destPath);
+                    // Clean up temp file
+                    await fsPromises.unlink(file.path).catch(() => {});
+                    continue;
+                }
+
+                // Ensure parent directory exists (for nested files from folder upload)
+                const parentDir = path.dirname(destPath);
+                try {
+                    await fsPromises.access(parentDir);
+                } catch {
+                    await fsPromises.mkdir(parentDir, { recursive: true });
+                }
+
+                // Move file (copy + unlink to handle cross-device scenarios)
+                await fsPromises.copyFile(file.path, destPath);
+                await fsPromises.unlink(file.path);
+
+                uploadedFiles.push({
+                    name: fileName,
+                    path: destPath,
+                    size: file.size,
+                    mimeType: file.mimetype
+                });
+            }
+
+            res.json({
+                success: true,
+                files: uploadedFiles,
+                targetPath: resolvedTargetDir,
+                message: `Uploaded ${uploadedFiles.length} file(s) successfully`
+            });
+        } catch (error) {
+            console.error('Error uploading files:', error);
+            // Clean up any remaining temp files
+            if (req.files) {
+                for (const file of req.files) {
+                    await fsPromises.unlink(file.path).catch(() => {});
+                }
+            }
+            if (error.code === 'EACCES') {
+                res.status(403).json({ error: 'Permission denied' });
+            } else {
+                res.status(500).json({ error: error.message });
+            }
+        }
+    });
+};
+
+app.post('/api/projects/:projectName/files/upload', authenticateToken, uploadFilesHandler);
+
 // WebSocket connection handler that routes based on URL path
 wss.on('connection', (ws, request) => {
     const url = request.url;

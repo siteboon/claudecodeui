@@ -65,12 +65,15 @@ export const useEditorSidebar = ({
         return;
       }
 
-      const container = resizeHandleRef.current?.parentElement;
-      if (!container) {
+      // Get the main container (parent of EditorSidebar's parent) that contains both left content and editor
+      const editorContainer = resizeHandleRef.current?.parentElement;
+      const mainContainer = editorContainer?.parentElement;
+      if (!mainContainer) {
         return;
       }
 
-      const containerRect = container.getBoundingClientRect();
+      const containerRect = mainContainer.getBoundingClientRect();
+      // Calculate new editor width: distance from mouse to right edge of main container
       const newWidth = containerRect.right - event.clientX;
 
       const minWidth = 300;
