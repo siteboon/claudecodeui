@@ -356,7 +356,10 @@ interface ClassifiedMessage {
   taskStatus?: string;
 }
 
-const classifyUserMessage = (content: string): ClassifiedMessage | null => {
+const classifyUserMessage = (rawContent: string): ClassifiedMessage | null => {
+  // Normalize: trim leading/trailing whitespace so startsWith checks aren't bypassed
+  const content = rawContent.trim();
+
   // 1. <task-notification> — parse status/summary
   const taskNotifRegex = /<task-notification>\s*<task-id>[^<]*<\/task-id>\s*(?:<tool-use-id>[^<]*<\/tool-use-id>\s*)?<output-file>[^<]*<\/output-file>\s*<status>([^<]*)<\/status>\s*<summary>([^<]*)<\/summary>\s*<\/task-notification>/;
   const taskMatch = taskNotifRegex.exec(content);
@@ -451,7 +454,7 @@ const classifyUserMessage = (content: string): ClassifiedMessage | null => {
   }
   // TaskMaster system prompts (should be hidden)
   // Require the JSON to appear at the start of content to avoid false positives on normal messages
-  if (content.trimStart().startsWith('{"subtasks":') || content.includes('CRITICAL: You MUST respond with ONLY a JSON')) {
+  if (content.startsWith('{"subtasks":') || content.includes('CRITICAL: You MUST respond with ONLY a JSON')) {
     return {
       injectedType: 'other',
       injectedSummary: 'TaskMaster system prompt',

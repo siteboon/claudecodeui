@@ -50,6 +50,7 @@ export interface ChatMessage {
   injectedType?: string;
   injectedSummary?: string;
   isTaskNotification?: boolean;
+  taskStatus?: string;
   skillName?: string;
   skillDescription?: string;
   [key: string]: unknown;
