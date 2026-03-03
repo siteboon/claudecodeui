@@ -9,7 +9,7 @@ import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import SidebarCollapsed from './subcomponents/SidebarCollapsed';
 import SidebarContent from './subcomponents/SidebarContent';
 import SidebarModals from './subcomponents/SidebarModals';
-import type { Project } from '../../../types/app';
+import type { Project, SessionProvider } from '../../../types/app';
 import type { SidebarProjectListProps } from './subcomponents/SidebarProjectList';
 import type { MCPServerStatus, SidebarProps } from '../types/types';
 
@@ -172,8 +172,8 @@ function Sidebar({
       setEditingSession(null);
       setEditingSessionName('');
     },
-    onSaveEditingSession: (projectName, sessionId, summary) => {
-      void updateSessionSummary(projectName, sessionId, summary);
+    onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: SessionProvider) => {
+      void updateSessionSummary(projectName, sessionId, summary, provider);
     },
     touchHandlerFactory: handleTouchClick,
     t,
