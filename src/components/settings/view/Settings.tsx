@@ -96,6 +96,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
 
   const handleEnablePush = async () => {
     await pushSubscribe();
+    // Server sets webPush: true in preferences on subscribe; sync local state
     setNotificationPreferences({
       ...notificationPreferences,
       channels: { ...notificationPreferences.channels, webPush: true },
@@ -104,6 +105,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
 
   const handleDisablePush = async () => {
     await pushUnsubscribe();
+    // Server sets webPush: false in preferences on unsubscribe; sync local state
     setNotificationPreferences({
       ...notificationPreferences,
       channels: { ...notificationPreferences.channels, webPush: false },

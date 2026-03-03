@@ -67,7 +67,8 @@ function buildPushBody(event) {
       : 'Action Required: A tool needs your approval',
     'run.stopped': event.meta?.stopReason || 'Run Stopped: The run has stopped',
     'run.failed': event.meta?.error ? `Run Failed: ${event.meta.error}` : 'Run Failed: The run encountered an error',
-    'agent.notification': event.meta?.message ? String(event.meta.message) : 'You have a new notification'
+    'agent.notification': event.meta?.message ? String(event.meta.message) : 'You have a new notification',
+    'push.enabled': 'Push notifications are now enabled!'
   };
 
   return {
