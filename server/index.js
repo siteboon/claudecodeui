@@ -45,7 +45,7 @@ import fetch from 'node-fetch';
 import mime from 'mime-types';
 
 import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
-import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions, resolveToolApproval } from './claude-sdk.js';
+import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions, resolveToolApproval, getPendingApprovalsForSession, reconnectSessionWriter } from './claude-sdk.js';
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
 import { queryCodex, abortCodexSession, isCodexSessionActive, getActiveCodexSessions } from './openai-codex.js';
 import { spawnGemini, abortGeminiSession, isGeminiSessionActive, getActiveGeminiSessions } from './gemini-cli.js';
@@ -1380,6 +1380,10 @@ class WebSocketWriter {
         }
     }
 
+    updateWebSocket(newRawWs) {
+        this.ws = newRawWs;
+    }
+
     setSessionId(sessionId) {
         this.sessionId = sessionId;
     }
@@ -1494,6 +1498,11 @@ function handleChatConnection(ws) {
                 } else {
                     // Use Claude Agents SDK
                     isActive = isClaudeSDKSessionActive(sessionId);
+                    if (isActive) {
+                        // Reconnect the session's writer to the new WebSocket so
+                        // subsequent SDK output flows to the refreshed client.
+                        reconnectSessionWriter(sessionId, ws);
+                    }
                 }
 
                 writer.send({
@@ -1502,6 +1511,17 @@ function handleChatConnection(ws) {
                     provider,
                     isProcessing: isActive
                 });
+            } else if (data.type === 'get-pending-permissions') {
+                // Return pending permission requests for a session
+                const sessionId = data.sessionId;
+                if (sessionId && isClaudeSDKSessionActive(sessionId)) {
+                    const pending = getPendingApprovalsForSession(sessionId);
+                    writer.send({
+                        type: 'pending-permissions-response',
+                        sessionId,
+                        data: pending
+                    });
+                }
             } else if (data.type === 'get-active-sessions') {
                 // Get all currently active sessions
                 const activeSessions = {
