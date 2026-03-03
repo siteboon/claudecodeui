@@ -232,6 +232,26 @@ async function saveProjectConfig(config) {
   await fs.writeFile(configPath, JSON.stringify(config, null, 2), 'utf8');
 }
 
+// Persist a successfully resolved project path to project-config.json
+// so it survives server restarts without re-parsing JSONL files.
+// Fire-and-forget: does not block the caller.
+// Writes are serialized through a promise queue to prevent race conditions.
+let persistQueue = Promise.resolve();
+
+function persistOriginalPath(projectName, resolvedPath) {
+  persistQueue = persistQueue
+    .then(async () => {
+      const config = await loadProjectConfig();
+      if (config[projectName]?.originalPath === resolvedPath) return;
+      if (!config[projectName]) config[projectName] = {};
+      config[projectName].originalPath = resolvedPath;
+      await saveProjectConfig(config);
+    })
+    .catch(err => {
+      console.error(`[projects] Failed to persist originalPath for ${projectName}:`, err);
+    });
+}
+
 // Generate better display name from path
 async function generateDisplayName(projectName, actualProjectDir = null) {
   // Use actual project directory if provided, otherwise decode from project name
@@ -282,6 +302,7 @@ async function extractProjectDirectory(projectName) {
   let latestTimestamp = 0;
   let latestCwd = null;
   let extractedPath;
+  let fromJsonl = false;
 
   try {
     // Check if the project directory exists
@@ -290,8 +311,23 @@ async function extractProjectDirectory(projectName) {
     const files = await fs.readdir(projectDir);
     const jsonlFiles = files.filter(file => file.endsWith('.jsonl'));
 
-    if (jsonlFiles.length === 0) {
-      // Fall back to decoded project name if no sessions
+    // Try sessions-index.json for the correct project path
+    const sessionsIndexPath = path.join(projectDir, 'sessions-index.json');
+    try {
+      const indexData = JSON.parse(await fs.readFile(sessionsIndexPath, 'utf8'));
+      const firstEntry = indexData.entries?.find(e => e.projectPath);
+      if (firstEntry?.projectPath) {
+        extractedPath = firstEntry.projectPath;
+        fromJsonl = true;
+      }
+    } catch {
+      // sessions-index.json doesn't exist or is malformed — continue
+    }
+
+    if (extractedPath) {
+      // Already resolved from sessions-index.json
+    } else if (jsonlFiles.length === 0) {
+      // No session files and no index — fall back to decoded project name
       extractedPath = projectName.replace(/-/g, '/');
     } else {
       // Process all JSONL files to collect cwd values
@@ -333,6 +369,7 @@ async function extractProjectDirectory(projectName) {
       } else if (cwdCounts.size === 1) {
         // Only one cwd, use it
         extractedPath = Array.from(cwdCounts.keys())[0];
+        fromJsonl = true;
       } else {
         // Multiple cwd values - prefer the most recent one if it has reasonable usage
         const mostRecentCount = cwdCounts.get(latestCwd) || 0;
@@ -341,11 +378,13 @@ async function extractProjectDirectory(projectName) {
         // Use most recent if it has at least 25% of the max count
         if (mostRecentCount >= maxCount * 0.25) {
           extractedPath = latestCwd;
+          fromJsonl = true;
         } else {
           // Otherwise use the most frequently used cwd
           for (const [cwd, count] of cwdCounts.entries()) {
             if (count === maxCount) {
               extractedPath = cwd;
+              fromJsonl = true;
               break;
             }
           }
@@ -356,6 +395,11 @@ async function extractProjectDirectory(projectName) {
           extractedPath = latestCwd || projectName.replace(/-/g, '/');
         }
       }
+    }
+
+    // Persist successfully resolved JSONL paths so they survive server restarts
+    if (fromJsonl && extractedPath) {
+      persistOriginalPath(projectName, extractedPath);
     }
 
     // Cache the result
