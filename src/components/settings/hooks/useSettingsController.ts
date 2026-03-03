@@ -41,6 +41,7 @@ type StatusApiResponse = {
   authenticated?: boolean;
   email?: string | null;
   error?: string | null;
+  method?: string;
 };
 
 type JsonResult = {
@@ -267,6 +268,7 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
         email: data.email || null,
         loading: false,
         error: data.error || null,
+        method: data.method,
       });
     } catch (error) {
       console.error(`Error checking ${provider} auth status:`, error);
