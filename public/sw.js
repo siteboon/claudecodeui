@@ -19,6 +19,11 @@ self.addEventListener('install', event => {
 
 // Fetch event
 self.addEventListener('fetch', event => {
+  // Never cache API requests or WebSocket upgrades
+  if (event.request.url.includes('/api/') || event.request.url.includes('/ws')) {
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request)
       .then(response => {
@@ -60,8 +65,8 @@ self.addEventListener('push', event => {
 
   const options = {
     body: payload.body || '',
-    icon: '/logo.png',
-    badge: '/logo.png',
+    icon: '/logo-256.png',
+    badge: '/logo-128.png',
     data: payload.data || {},
     tag: payload.data?.code || 'default',
     renotify: true

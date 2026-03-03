@@ -62,30 +62,17 @@ function createNotificationEvent({
 
 function buildPushBody(event) {
   const CODE_MAP = {
-    'permission.required': {
-      title: 'Action Required',
-      body: event.meta?.toolName
-        ? `Tool "${event.meta.toolName}" needs approval`
-        : 'A tool needs your approval'
-    },
-    'run.stopped': {
-      title: 'Run Stopped',
-      body: event.meta?.stopReason || 'The run has stopped'
-    },
-    'run.failed': {
-      title: 'Run Failed',
-      body: event.meta?.error ? String(event.meta.error) : 'The run encountered an error'
-    },
-    'agent.notification': {
-      title: 'Agent Notification',
-      body: event.meta?.message ? String(event.meta.message) : 'You have a new notification'
-    }
+    'permission.required': event.meta?.toolName
+      ? `Action Required: Tool "${event.meta.toolName}" needs approval`
+      : 'Action Required: A tool needs your approval',
+    'run.stopped': event.meta?.stopReason || 'Run Stopped: The run has stopped',
+    'run.failed': event.meta?.error ? `Run Failed: ${event.meta.error}` : 'Run Failed: The run encountered an error',
+    'agent.notification': event.meta?.message ? String(event.meta.message) : 'You have a new notification'
   };
 
-  const mapped = CODE_MAP[event.code];
   return {
-    title: mapped?.title || 'Claude Code UI',
-    body: mapped?.body || 'You have a new notification',
+    title: 'Claude Code UI',
+    body: CODE_MAP[event.code] || 'You have a new notification',
     data: {
       sessionId: event.sessionId || null,
       code: event.code
