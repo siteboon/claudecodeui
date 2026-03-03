@@ -99,6 +99,7 @@
     }
   },
   "mainTabs": {
+    "label": "Settings",
     "agents": "Agents",
     "appearance": "Appearance",
     "git": "Git",

@@ -63,7 +63,8 @@
     "cancel": "キャンセル",
     "save": "保存",
     "delete": "削除",
-    "rename": "名前の変更"
+    "rename": "名前の変更",
+    "joinCommunity": "コミュニティに参加"
   },
   "status": {
     "active": "アクティブ",
@@ -92,6 +93,8 @@
     "enterProjectPath": "プロジェクトのパスを入力してください",
     "deleteSessionFailed": "セッションの削除に失敗しました。もう一度お試しください。",
     "deleteSessionError": "セッションの削除でエラーが発生しました。もう一度お試しください。",
+    "renameSessionFailed": "セッション名の変更に失敗しました。もう一度お試しください。",
+    "renameSessionError": "セッション名の変更でエラーが発生しました。もう一度お試しください。",
     "deleteProjectFailed": "プロジェクトの削除に失敗しました。もう一度お試しください。",
     "deleteProjectError": "プロジェクトの削除でエラーが発生しました。もう一度お試しください。",
     "createProjectFailed": "プロジェクトの作成に失敗しました。もう一度お試しください。",
