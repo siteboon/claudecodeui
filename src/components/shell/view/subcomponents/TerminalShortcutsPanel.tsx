@@ -1,4 +1,4 @@
-import { type MutableRefObject, type MouseEvent, type TouchEvent, useState, useCallback, useEffect, useRef } from 'react';
+import { type MutableRefObject, useState, useCallback, useEffect, useRef } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -23,7 +23,7 @@ type TerminalShortcutsPanelProps = {
   isConnected: boolean;
 };
 
-const preventFocusSteal = (e: MouseEvent) => e.preventDefault();
+const preventFocusSteal = (e: React.PointerEvent) => e.preventDefault();
 
 export default function TerminalShortcutsPanel({
   wsRef,
@@ -51,24 +51,11 @@ export default function TerminalShortcutsPanel({
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current);
+    }
     closeTimeoutRef.current = setTimeout(() => setIsOpen(false), 50);
   }, []);
-
-  const handleShortcutTouch = useCallback(
-    (e: TouchEvent, action: () => void) => {
-      e.preventDefault();
-      handleShortcutAction(action);
-    },
-    [handleShortcutAction],
-  );
-
-  const handleToggleTouch = useCallback(
-    (e: TouchEvent) => {
-      e.preventDefault();
-      handleToggle();
-    },
-    [handleToggle],
-  );
 
   const sendInput = useCallback(
     (data: string) => {
@@ -86,8 +73,7 @@ export default function TerminalShortcutsPanel({
       {/* Pull Tab */}
       <button
         type="button"
-        onMouseDown={preventFocusSteal}
-        onTouchEnd={handleToggleTouch}
+        onPointerDown={preventFocusSteal}
         onClick={handleToggle}
         className={`fixed ${
           isOpen ? 'right-64' : 'right-0'
@@ -133,13 +119,8 @@ export default function TerminalShortcutsPanel({
                   <button
                     type="button"
                     key={shortcut.id}
-                    onMouseDown={preventFocusSteal}
-                    onTouchEnd={(e) =>
-                      handleShortcutTouch(e, () => sendInput(shortcut.sequence))
-                    }
-                    onClick={() =>
-                      handleShortcutAction(() => sendInput(shortcut.sequence))
-                    }
+                    onPointerDown={preventFocusSteal}
+                    onClick={() => handleShortcutAction(() => sendInput(shortcut.sequence))}
                     disabled={!isConnected}
                     className="w-full flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors border border-transparent hover:border-gray-300 dark:hover:border-gray-600"
                   >
@@ -160,8 +141,7 @@ export default function TerminalShortcutsPanel({
                 </h4>
                 <button
                   type="button"
-                  onMouseDown={preventFocusSteal}
-                  onTouchEnd={(e) => handleShortcutTouch(e, scrollToBottom)}
+                  onPointerDown={preventFocusSteal}
                   onClick={() => handleShortcutAction(scrollToBottom)}
                   disabled={!isConnected}
                   className="w-full flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors border border-transparent hover:border-gray-300 dark:hover:border-gray-600"
@@ -181,8 +161,7 @@ export default function TerminalShortcutsPanel({
       {isOpen && (
         <div
           className="fixed inset-0 bg-background/80 backdrop-blur-sm z-30 transition-opacity duration-150 ease-out"
-          onMouseDown={preventFocusSteal}
-          onTouchEnd={handleToggleTouch}
+          onPointerDown={preventFocusSteal}
           onClick={handleToggle}
         />
       )}
