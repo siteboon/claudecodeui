@@ -15,6 +15,7 @@ export function useShellRuntime({
   autoConnect,
   isRestarting,
   onProcessComplete,
+  onOutputRef,
 }: UseShellRuntimeOptions): UseShellRuntimeResult {
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -118,6 +119,7 @@ export function useShellRuntime({
     closeSocket,
     clearTerminalScreen,
     setAuthUrl: setCurrentAuthUrl,
+    onOutputRef,
   });
 
   useEffect(() => {

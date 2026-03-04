@@ -1,15 +1,25 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import '@xterm/xterm/css/xterm.css';
 import type { Project, ProjectSession } from '../../../types/app';
-import { SHELL_RESTART_DELAY_MS } from '../constants/constants';
+import {
+  PROMPT_BUFFER_SCAN_LINES,
+  PROMPT_DEBOUNCE_MS,
+  PROMPT_MAX_OPTIONS,
+  PROMPT_MIN_OPTIONS,
+  PROMPT_OPTION_SCAN_LINES,
+  SHELL_RESTART_DELAY_MS,
+} from '../constants/constants';
 import { useShellRuntime } from '../hooks/useShellRuntime';
+import { sendSocketMessage } from '../utils/socket';
 import { getSessionDisplayName } from '../utils/auth';
 import ShellConnectionOverlay from './subcomponents/ShellConnectionOverlay';
 import ShellEmptyState from './subcomponents/ShellEmptyState';
 import ShellHeader from './subcomponents/ShellHeader';
 import ShellMinimalView from './subcomponents/ShellMinimalView';
 import TerminalShortcutsPanel from './subcomponents/TerminalShortcutsPanel';
+
+type CliPromptOption = { number: string; label: string };
 
 type ShellProps = {
   selectedProject?: Project | null;
@@ -34,6 +44,9 @@ export default function Shell({
 }: ShellProps) {
   const { t } = useTranslation('chat');
   const [isRestarting, setIsRestarting] = useState(false);
+  const [cliPromptOptions, setCliPromptOptions] = useState<CliPromptOption[] | null>(null);
+  const promptCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onOutputRef = useRef<(() => void) | null>(null);
 
   // Keep the public API stable for existing callers that still pass `isActive`.
   void isActive;
@@ -60,7 +73,102 @@ export default function Shell({
     autoConnect,
     isRestarting,
     onProcessComplete,
+    onOutputRef,
   });
+
+  // Check xterm.js buffer for CLI prompt patterns (❯ N. label)
+  const checkBufferForPrompt = useCallback(() => {
+    const term = terminalRef.current;
+    if (!term) return;
+    const buf = term.buffer.active;
+    const lastContentRow = buf.baseY + buf.cursorY;
+    const scanEnd = Math.min(buf.baseY + buf.length - 1, lastContentRow + 10);
+    const scanStart = Math.max(0, lastContentRow - PROMPT_BUFFER_SCAN_LINES);
+    const lines: string[] = [];
+    for (let i = scanStart; i <= scanEnd; i++) {
+      const line = buf.getLine(i);
+      if (line) lines.push(line.translateToString().trimEnd());
+    }
+
+    let footerIdx = -1;
+    for (let i = lines.length - 1; i >= 0; i--) {
+      if (/esc to cancel/i.test(lines[i]) || /enter to select/i.test(lines[i])) {
+        footerIdx = i;
+        break;
+      }
+    }
+
+    let anchorIdx = footerIdx;
+    if (anchorIdx === -1) {
+      for (let i = lines.length - 1; i >= 0; i--) {
+        if (/^\s*[❯›>]\s*\d+\.\s+/.test(lines[i])) {
+          let lastOpt = i;
+          for (let j = i + 1; j < lines.length; j++) {
+            if (/^\s*\d+\.\s+/.test(lines[j])) lastOpt = j;
+            else break;
+          }
+          anchorIdx = lastOpt + 1;
+          break;
+        }
+      }
+    }
+
+    if (anchorIdx === -1) {
+      setCliPromptOptions(null);
+      return;
+    }
+
+    const optMap = new Map<string, string>();
+    const optScanStart = Math.max(0, anchorIdx - PROMPT_OPTION_SCAN_LINES);
+    for (let i = anchorIdx - 1; i >= optScanStart; i--) {
+      const match = lines[i].match(/^\s*[❯›>]?\s*(\d+)\.\s+(.+)/);
+      if (match) {
+        const num = match[1];
+        const label = match[2].trim();
+        if (parseInt(num, 10) <= PROMPT_MAX_OPTIONS && label.length > 0 && !optMap.has(num)) {
+          optMap.set(num, label);
+        }
+      }
+    }
+
+    const valid: CliPromptOption[] = [];
+    for (let i = 1; i <= optMap.size; i++) {
+      if (optMap.has(String(i))) valid.push({ number: String(i), label: optMap.get(String(i))! });
+      else break;
+    }
+
+    setCliPromptOptions(valid.length >= PROMPT_MIN_OPTIONS ? valid : null);
+  }, [terminalRef]);
+
+  // Schedule prompt check after terminal output (debounced)
+  const schedulePromptCheck = useCallback(() => {
+    if (promptCheckTimer.current) clearTimeout(promptCheckTimer.current);
+    promptCheckTimer.current = setTimeout(checkBufferForPrompt, PROMPT_DEBOUNCE_MS);
+  }, [checkBufferForPrompt]);
+
+  // Wire up the onOutput callback
+  useEffect(() => {
+    onOutputRef.current = schedulePromptCheck;
+  }, [schedulePromptCheck]);
+
+  // Cleanup prompt check timer on unmount
+  useEffect(() => {
+    return () => {
+      if (promptCheckTimer.current) clearTimeout(promptCheckTimer.current);
+    };
+  }, []);
+
+  // Clear stale prompt options on disconnect
+  useEffect(() => {
+    if (!isConnected) setCliPromptOptions(null);
+  }, [isConnected]);
+
+  const sendInput = useCallback(
+    (data: string) => {
+      sendSocketMessage(wsRef.current, { type: 'input', data });
+    },
+    [wsRef],
+  );
 
   const sessionDisplayName = useMemo(() => getSessionDisplayName(selectedSession), [selectedSession]);
   const sessionDisplayNameShort = useMemo(
@@ -159,6 +267,40 @@ export default function Shell({
             onConnect={connectToShell}
           />
         )}
+
+        {cliPromptOptions && isConnected && (
+          <div
+            className="absolute inset-x-0 bottom-0 z-10 border-t border-gray-700/80 bg-gray-800/95 px-3 py-2 backdrop-blur-sm"
+            onMouseDown={(e) => e.preventDefault()}
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              {cliPromptOptions.map((opt) => (
+                <button
+                  type="button"
+                  key={opt.number}
+                  onClick={() => {
+                    sendInput(opt.number);
+                    setCliPromptOptions(null);
+                  }}
+                  className="px-3 py-1.5 text-xs font-medium rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors max-w-36 truncate"
+                  title={`${opt.number}. ${opt.label}`}
+                >
+                  {opt.number}. {opt.label}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  sendInput('\x1b');
+                  setCliPromptOptions(null);
+                }}
+                className="px-3 py-1.5 text-xs font-medium rounded bg-gray-700 text-gray-200 hover:bg-gray-600 transition-colors"
+              >
+                Esc
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <TerminalShortcutsPanel
@@ -166,6 +308,7 @@ export default function Shell({
         terminalRef={terminalRef}
         isConnected={isConnected}
       />
+
     </div>
   );
 }
