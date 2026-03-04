@@ -64,6 +64,7 @@ function Sidebar({
     setSearchMode,
     conversationResults,
     isSearching,
+    searchProgress,
     clearConversationResults,
     deletingProjects,
     deleteConfirmation,
@@ -232,6 +233,7 @@ function Sidebar({
             }}
             conversationResults={conversationResults}
             isSearching={isSearching}
+            searchProgress={searchProgress}
             onConversationResultClick={(projectName: string, sessionId: string) => {
               const project = projects.find(p => p.name === projectName);
               if (project) {
@@ -240,7 +242,11 @@ function Sidebar({
                 const session = sessions.find(s => s.id === sessionId);
                 if (session) {
                   handleSessionClick(session, projectName);
+                } else {
+                  handleSessionClick({ id: sessionId, __provider: 'claude' as SessionProvider, __projectName: projectName }, projectName);
                 }
+              } else {
+                handleSessionClick({ id: sessionId, __provider: 'claude' as SessionProvider, __projectName: projectName }, projectName);
               }
             }}
             onRefresh={() => {

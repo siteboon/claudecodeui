@@ -1,3 +1,4 @@
+import { type ReactNode } from 'react';
 import { Folder, MessageSquare, Search } from 'lucide-react';
 import type { TFunction } from 'i18next';
 import { ScrollArea } from '../../../../shared/view/ui';
@@ -6,12 +7,12 @@ import type { ReleaseInfo } from '../../../../types/sharedTypes';
 import SidebarFooter from './SidebarFooter';
 import SidebarHeader from './SidebarHeader';
 import SidebarProjectList, { type SidebarProjectListProps } from './SidebarProjectList';
-import type { ConversationSearchResults } from '../../hooks/useSidebarController';
+import type { ConversationSearchResults, SearchProgress } from '../../hooks/useSidebarController';
 
 type SearchMode = 'projects' | 'conversations';
 
 function HighlightedSnippet({ snippet, highlights }: { snippet: string; highlights: { start: number; end: number }[] }) {
-  const parts: React.ReactNode[] = [];
+  const parts: ReactNode[] = [];
   let cursor = 0;
   for (const h of highlights) {
     if (h.start > cursor) {
@@ -46,6 +47,7 @@ type SidebarContentProps = {
   onSearchModeChange: (mode: SearchMode) => void;
   conversationResults: ConversationSearchResults | null;
   isSearching: boolean;
+  searchProgress: SearchProgress | null;
   onConversationResultClick: (projectName: string, sessionId: string) => void;
   onRefresh: () => void;
   isRefreshing: boolean;
@@ -72,6 +74,7 @@ export default function SidebarContent({
   onSearchModeChange,
   conversationResults,
   isSearching,
+  searchProgress,
   onConversationResultClick,
   onRefresh,
   isRefreshing,
@@ -86,6 +89,7 @@ export default function SidebarContent({
   t,
 }: SidebarContentProps) {
   const showConversationSearch = searchMode === 'conversations' && searchFilter.trim().length >= 2;
+  const hasPartialResults = conversationResults && conversationResults.results.length > 0;
 
   return (
     <div
@@ -111,14 +115,19 @@ export default function SidebarContent({
 
       <ScrollArea className="flex-1 overflow-y-auto overscroll-contain md:px-1.5 md:py-2">
         {showConversationSearch ? (
-          isSearching ? (
+          isSearching && !hasPartialResults ? (
             <div className="text-center py-12 md:py-8 px-4">
               <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-4 md:mb-3">
                 <div className="w-6 h-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
               </div>
               <p className="text-sm text-muted-foreground">{t('search.searching')}</p>
+              {searchProgress && (
+                <p className="text-xs text-muted-foreground/60 mt-1">
+                  {t('search.projectsScanned', { count: searchProgress.scannedProjects })}/{searchProgress.totalProjects}
+                </p>
+              )}
             </div>
-          ) : conversationResults && conversationResults.results.length === 0 ? (
+          ) : !isSearching && conversationResults && conversationResults.results.length === 0 ? (
             <div className="text-center py-12 md:py-8 px-4">
               <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-4 md:mb-3">
                 <Search className="w-6 h-6 text-muted-foreground" />
@@ -126,11 +135,29 @@ export default function SidebarContent({
               <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">{t('search.noResults')}</h3>
               <p className="text-sm text-muted-foreground">{t('search.tryDifferentQuery')}</p>
             </div>
-          ) : conversationResults ? (
+          ) : hasPartialResults ? (
             <div className="space-y-3 px-2">
-              <p className="text-xs text-muted-foreground px-1">
-                {conversationResults.totalMatches} {t('search.matches')}
-              </p>
+              <div className="flex items-center justify-between px-1">
+                <p className="text-xs text-muted-foreground">
+                  {t('search.matches', { count: conversationResults.totalMatches })}
+                </p>
+                {isSearching && searchProgress && (
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 animate-spin rounded-full border-[1.5px] border-muted-foreground/40 border-t-primary" />
+                    <p className="text-[10px] text-muted-foreground/60">
+                      {searchProgress.scannedProjects}/{searchProgress.totalProjects}
+                    </p>
+                  </div>
+                )}
+              </div>
+              {isSearching && searchProgress && (
+                <div className="mx-1 h-0.5 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-primary/60 rounded-full transition-all duration-300"
+                    style={{ width: `${Math.round((searchProgress.scannedProjects / searchProgress.totalProjects) * 100)}%` }}
+                  />
+                </div>
+              )}
               {conversationResults.results.map((projectResult) => (
                 <div key={projectResult.projectName} className="space-y-1">
                   <div className="flex items-center gap-1.5 px-1 py-1">

@@ -50,6 +50,11 @@ export type ConversationSearchResults = {
   query: string;
 };
 
+export type SearchProgress = {
+  scannedProjects: number;
+  totalProjects: number;
+};
+
 type UseSidebarControllerArgs = {
   projects: Project[];
   selectedProject: Project | null;
@@ -105,8 +110,10 @@ export function useSidebarController({
   const [searchMode, setSearchMode] = useState<'projects' | 'conversations'>('projects');
   const [conversationResults, setConversationResults] = useState<ConversationSearchResults | null>(null);
   const [isSearching, setIsSearching] = useState(false);
+  const [searchProgress, setSearchProgress] = useState<SearchProgress | null>(null);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchSeqRef = useRef(0);
+  const eventSourceRef = useRef<EventSource | null>(null);
 
   const isSidebarCollapsed = !isMobile && !sidebarVisible;
 
@@ -176,43 +183,97 @@ export function useSidebarController({
     };
   }, []);
 
-  // Debounced conversation search
+  // Debounced conversation search with SSE streaming
   useEffect(() => {
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
 
-    if (searchMode !== 'conversations' || searchFilter.trim().length < 2) {
+    const query = searchFilter.trim();
+    if (searchMode !== 'conversations' || query.length < 2) {
+      searchSeqRef.current += 1;
       setConversationResults(null);
+      setSearchProgress(null);
       setIsSearching(false);
       return;
     }
 
     setIsSearching(true);
     const seq = ++searchSeqRef.current;
-    searchTimeoutRef.current = setTimeout(async () => {
-      try {
-        const response = await api.searchConversations(searchFilter.trim());
-        if (seq !== searchSeqRef.current) return;
-        if (response.ok) {
-          const data = await response.json();
-          setConversationResults(data);
-        } else {
-          setConversationResults({ results: [], totalMatches: 0, query: searchFilter });
+
+    searchTimeoutRef.current = setTimeout(() => {
+      if (seq !== searchSeqRef.current) return;
+
+      const url = api.searchConversationsUrl(query);
+      const es = new EventSource(url);
+      eventSourceRef.current = es;
+
+      const accumulated: ConversationProjectResult[] = [];
+      let totalMatches = 0;
+
+      es.addEventListener('result', (evt) => {
+        if (seq !== searchSeqRef.current) { es.close(); return; }
+        try {
+          const data = JSON.parse(evt.data) as {
+            projectResult: ConversationProjectResult;
+            totalMatches: number;
+            scannedProjects: number;
+            totalProjects: number;
+          };
+          accumulated.push(data.projectResult);
+          totalMatches = data.totalMatches;
+          setConversationResults({ results: [...accumulated], totalMatches, query });
+          setSearchProgress({ scannedProjects: data.scannedProjects, totalProjects: data.totalProjects });
+        } catch {
+          // Ignore malformed SSE data
         }
-      } catch {
-        if (seq !== searchSeqRef.current) return;
-        setConversationResults({ results: [], totalMatches: 0, query: searchFilter });
-      } finally {
-        if (seq === searchSeqRef.current) {
-          setIsSearching(false);
+      });
+
+      es.addEventListener('progress', (evt) => {
+        if (seq !== searchSeqRef.current) { es.close(); return; }
+        try {
+          const data = JSON.parse(evt.data) as { totalMatches: number; scannedProjects: number; totalProjects: number };
+          totalMatches = data.totalMatches;
+          setSearchProgress({ scannedProjects: data.scannedProjects, totalProjects: data.totalProjects });
+        } catch {
+          // Ignore malformed SSE data
         }
-      }
+      });
+
+      es.addEventListener('done', () => {
+        if (seq !== searchSeqRef.current) { es.close(); return; }
+        es.close();
+        eventSourceRef.current = null;
+        setIsSearching(false);
+        setSearchProgress(null);
+        if (accumulated.length === 0) {
+          setConversationResults({ results: [], totalMatches: 0, query });
+        }
+      });
+
+      es.addEventListener('error', () => {
+        if (seq !== searchSeqRef.current) { es.close(); return; }
+        es.close();
+        eventSourceRef.current = null;
+        setIsSearching(false);
+        setSearchProgress(null);
+        if (accumulated.length === 0) {
+          setConversationResults({ results: [], totalMatches: 0, query });
+        }
+      });
     }, 400);
 
     return () => {
       if (searchTimeoutRef.current) {
         clearTimeout(searchTimeoutRef.current);
+      }
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
       }
     };
   }, [searchFilter, searchMode]);
@@ -562,7 +623,17 @@ export function useSidebarController({
     setSearchMode,
     conversationResults,
     isSearching,
-    clearConversationResults: useCallback(() => setConversationResults(null), []),
+    searchProgress,
+    clearConversationResults: useCallback(() => {
+      searchSeqRef.current += 1;
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      setIsSearching(false);
+      setSearchProgress(null);
+      setConversationResults(null);
+    }, []),
     setSearchFilter,
     setDeleteConfirmation,
     setSessionDeleteConfirmation,

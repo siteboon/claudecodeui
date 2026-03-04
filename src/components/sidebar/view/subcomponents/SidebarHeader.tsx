@@ -150,6 +150,7 @@ export default function SidebarHeader({
               {searchFilter && (
                 <button
                   onClick={onClearSearchFilter}
+                  aria-label={t('tooltips.clearSearch')}
                   className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 hover:bg-accent rounded-md"
                 >
                   <X className="w-3 h-3 text-muted-foreground" />
@@ -241,6 +242,7 @@ export default function SidebarHeader({
               {searchFilter && (
                 <button
                   onClick={onClearSearchFilter}
+                  aria-label={t('tooltips.clearSearch')}
                   className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 hover:bg-accent rounded-md"
                 >
                   <X className="w-3.5 h-3.5 text-muted-foreground" />

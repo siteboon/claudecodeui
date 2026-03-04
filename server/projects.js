@@ -1862,13 +1862,17 @@ async function deleteCodexSession(sessionId) {
   }
 }
 
-async function searchConversations(query, limit = 50) {
+async function searchConversations(query, limit = 50, onProjectResult = null, signal = null) {
+  const safeQuery = typeof query === 'string' ? query.trim() : '';
+  const safeLimit = Math.max(1, Math.min(Number.isFinite(limit) ? limit : 50, 200));
   const claudeDir = path.join(os.homedir(), '.claude', 'projects');
   const config = await loadProjectConfig();
   const results = [];
   let totalMatches = 0;
-  const words = query.toLowerCase().split(/\s+/).filter(w => w.length > 0);
-  if (words.length === 0) return { results: [], totalMatches: 0, query };
+  const words = safeQuery.toLowerCase().split(/\s+/).filter(w => w.length > 0);
+  if (words.length === 0) return { results: [], totalMatches: 0, query: safeQuery };
+
+  const isAborted = () => signal?.aborted === true;
 
   const isSystemMessage = (textContent) => {
     return typeof textContent === 'string' && (
@@ -1902,10 +1906,19 @@ async function searchConversations(query, limit = 50) {
   };
 
   const buildSnippet = (text, textLower, snippetLen = 150) => {
-    const firstIndex = Math.min(...words.map(w => textLower.indexOf(w)));
+    let firstIndex = -1;
+    let firstWordLen = 0;
+    for (const w of words) {
+      const idx = textLower.indexOf(w);
+      if (idx !== -1 && (firstIndex === -1 || idx < firstIndex)) {
+        firstIndex = idx;
+        firstWordLen = w.length;
+      }
+    }
+    if (firstIndex === -1) firstIndex = 0;
     const halfLen = Math.floor(snippetLen / 2);
     let start = Math.max(0, firstIndex - halfLen);
-    let end = Math.min(text.length, firstIndex + halfLen + words[0].length);
+    let end = Math.min(text.length, firstIndex + halfLen + firstWordLen);
     let snippet = text.slice(start, end).replace(/\n/g, ' ');
     const prefix = start > 0 ? '...' : '';
     const suffix = end < text.length ? '...' : '';
@@ -1936,9 +1949,11 @@ async function searchConversations(query, limit = 50) {
     await fs.access(claudeDir);
     const entries = await fs.readdir(claudeDir, { withFileTypes: true });
     const projectDirs = entries.filter(e => e.isDirectory());
+    let scannedProjects = 0;
+    const totalProjects = projectDirs.length;
 
     for (const projectEntry of projectDirs) {
-      if (totalMatches >= limit) break;
+      if (totalMatches >= safeLimit || isAborted()) break;
 
       const projectName = projectEntry.name;
       const projectDir = path.join(claudeDir, projectName);
@@ -1963,11 +1978,13 @@ async function searchConversations(query, limit = 50) {
       };
 
       for (const file of jsonlFiles) {
-        if (totalMatches >= limit) break;
+        if (totalMatches >= safeLimit || isAborted()) break;
 
         const filePath = path.join(projectDir, file);
         const sessionMatches = new Map();
-        let sessionSummary = 'New Session';
+        const sessionSummaries = new Map();
+        const pendingSummaries = new Map();
+        const sessionLastMessages = new Map();
         let currentSessionId = null;
 
         try {
@@ -1978,7 +1995,7 @@ async function searchConversations(query, limit = 50) {
           });
 
           for await (const line of rl) {
-            if (totalMatches >= limit) break;
+            if (totalMatches >= safeLimit || isAborted()) break;
             if (!line.trim()) continue;
 
             let entry;
@@ -1988,11 +2005,38 @@ async function searchConversations(query, limit = 50) {
               continue;
             }
 
-            if (entry.sessionId && !currentSessionId) {
+            if (entry.sessionId) {
               currentSessionId = entry.sessionId;
             }
             if (entry.type === 'summary' && entry.summary) {
-              sessionSummary = entry.summary;
+              const sid = entry.sessionId || currentSessionId;
+              if (sid) {
+                sessionSummaries.set(sid, entry.summary);
+              } else if (entry.leafUuid) {
+                pendingSummaries.set(entry.leafUuid, entry.summary);
+              }
+            }
+
+            // Apply pending summary via parentUuid
+            if (entry.parentUuid && currentSessionId && !sessionSummaries.has(currentSessionId)) {
+              const pending = pendingSummaries.get(entry.parentUuid);
+              if (pending) sessionSummaries.set(currentSessionId, pending);
+            }
+
+            // Track last user/assistant message for fallback title
+            if (entry.message?.content && currentSessionId && !entry.isApiErrorMessage) {
+              const role = entry.message.role;
+              if (role === 'user' || role === 'assistant') {
+                const text = extractText(entry.message.content);
+                if (text && !isSystemMessage(text)) {
+                  if (!sessionLastMessages.has(currentSessionId)) {
+                    sessionLastMessages.set(currentSessionId, {});
+                  }
+                  const msgs = sessionLastMessages.get(currentSessionId);
+                  if (role === 'user') msgs.user = text;
+                  else msgs.assistant = text;
+                }
+              }
             }
 
             if (!entry.message?.content) continue;
@@ -2029,21 +2073,31 @@ async function searchConversations(query, limit = 50) {
         for (const [sessionId, matches] of sessionMatches) {
           projectResult.sessions.push({
             sessionId,
-            sessionSummary,
+            sessionSummary: sessionSummaries.get(sessionId) || (() => {
+              const msgs = sessionLastMessages.get(sessionId);
+              const lastMsg = msgs?.user || msgs?.assistant;
+              return lastMsg ? (lastMsg.length > 50 ? lastMsg.substring(0, 50) + '...' : lastMsg) : 'New Session';
+            })(),
             matches
           });
         }
       }
 
+      scannedProjects++;
       if (projectResult.sessions.length > 0) {
         results.push(projectResult);
+        if (onProjectResult) {
+          onProjectResult({ projectResult, totalMatches, scannedProjects, totalProjects });
+        }
+      } else if (onProjectResult && scannedProjects % 10 === 0) {
+        onProjectResult({ projectResult: null, totalMatches, scannedProjects, totalProjects });
       }
     }
   } catch {
     // claudeDir doesn't exist
   }
 
-  return { results, totalMatches, query };
+  return { results, totalMatches, query: safeQuery };
 }
 
 export {

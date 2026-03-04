@@ -46,7 +46,8 @@
     "editSessionName": "Manually edit session name",
     "deleteSession": "Delete this session permanently",
     "save": "Save",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "clearSearch": "Clear search"
   },
   "navigation": {
     "chat": "Chat",
@@ -110,7 +111,10 @@
     "searching": "Searching...",
     "noResults": "No results found",
     "tryDifferentQuery": "Try a different search query",
-    "matches": "matches"
+    "matches_one": "{{count}} match",
+    "matches_other": "{{count}} matches",
+    "projectsScanned_one": "{{count}} project scanned",
+    "projectsScanned_other": "{{count}} projects scanned"
   },
   "deleteConfirmation": {
     "deleteProject": "Delete Project",
