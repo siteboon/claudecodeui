@@ -103,20 +103,19 @@ export default function Shell({
       return;
     }
 
+    // Scan upward from footer collecting numbered options.
+    // Non-matching lines are allowed (multi-line labels, blank separators)
+    // because CLI prompts may wrap options across multiple terminal rows.
     const optMap = new Map<string, string>();
     const optScanStart = Math.max(0, footerIdx - PROMPT_OPTION_SCAN_LINES);
-    let started = false;
     for (let i = footerIdx - 1; i >= optScanStart; i--) {
       const match = lines[i].match(/^\s*[❯›>]?\s*(\d+)\.\s+(.+)/);
       if (match) {
-        started = true;
         const num = match[1];
         const label = match[2].trim();
         if (parseInt(num, 10) <= PROMPT_MAX_OPTIONS && label.length > 0 && !optMap.has(num)) {
           optMap.set(num, label);
         }
-      } else if (started) {
-        break;
       }
     }
 
