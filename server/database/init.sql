@@ -50,3 +50,16 @@ CREATE TABLE IF NOT EXISTS user_credentials (
 CREATE INDEX IF NOT EXISTS idx_user_credentials_user_id ON user_credentials(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_credentials_type ON user_credentials(credential_type);
 CREATE INDEX IF NOT EXISTS idx_user_credentials_active ON user_credentials(is_active);
+
+-- Session custom names (provider-agnostic display name overrides)
+CREATE TABLE IF NOT EXISTS session_names (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    provider TEXT NOT NULL DEFAULT 'claude',
+    custom_name TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(session_id, provider)
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_names_lookup ON session_names(session_id, provider);

@@ -1080,6 +1080,19 @@ export function useChatRealtimeHandlers({
         break;
       }
 
+      case 'pending-permissions-response': {
+        // Server returned pending permissions for this session
+        const permSessionId = latestMessage.sessionId;
+        const isCurrentPermSession =
+          permSessionId === currentSessionId || (selectedSession && permSessionId === selectedSession.id);
+        if (permSessionId && !isCurrentPermSession) {
+          break;
+        }
+        const serverRequests = latestMessage.data || [];
+        setPendingPermissionRequests(serverRequests);
+        break;
+      }
+
       default:
         break;
     }

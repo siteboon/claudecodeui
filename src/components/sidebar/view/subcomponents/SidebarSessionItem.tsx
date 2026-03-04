@@ -19,7 +19,7 @@ type SidebarSessionItemProps = {
   onEditingSessionNameChange: (value: string) => void;
   onStartEditingSession: (sessionId: string, initialName: string) => void;
   onCancelEditingSession: () => void;
-  onSaveEditingSession: (projectName: string, sessionId: string, summary: string) => void;
+  onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: SessionProvider) => void;
   onProjectSelect: (project: Project) => void;
   onSessionSelect: (session: SessionWithProvider, projectName: string) => void;
   onDeleteSession: (
@@ -58,7 +58,7 @@ export default function SidebarSessionItem({
   };
 
   const saveEditedSession = () => {
-    onSaveEditingSession(project.name, session.id, editingSessionName);
+    onSaveEditingSession(project.name, session.id, editingSessionName, session.__provider);
   };
 
   const requestDeleteSession = () => {
@@ -161,9 +161,8 @@ export default function SidebarSessionItem({
           </div>
         </Button>
 
-        {!sessionView.isCursorSession && (
-          <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200">
-            {editingSession === session.id && !sessionView.isCodexSession ? (
+        <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200">
+            {editingSession === session.id ? (
               <>
                 <input
                   type="text"
@@ -204,32 +203,31 @@ export default function SidebarSessionItem({
               </>
             ) : (
               <>
-                {!sessionView.isCodexSession && (
-                  <button
-                    className="w-6 h-6 bg-gray-50 hover:bg-gray-100 dark:bg-gray-900/20 dark:hover:bg-gray-900/40 rounded flex items-center justify-center"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onStartEditingSession(session.id, session.summary || t('projects.newSession'));
-                    }}
-                    title={t('tooltips.editSessionName')}
-                  >
-                    <Edit2 className="w-3 h-3 text-gray-600 dark:text-gray-400" />
-                  </button>
-                )}
                 <button
-                  className="w-6 h-6 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 rounded flex items-center justify-center"
+                  className="w-6 h-6 bg-gray-50 hover:bg-gray-100 dark:bg-gray-900/20 dark:hover:bg-gray-900/40 rounded flex items-center justify-center"
                   onClick={(event) => {
                     event.stopPropagation();
-                    requestDeleteSession();
+                    onStartEditingSession(session.id, sessionView.sessionName);
                   }}
-                  title={t('tooltips.deleteSession')}
+                  title={t('tooltips.editSessionName')}
                 >
-                  <Trash2 className="w-3 h-3 text-red-600 dark:text-red-400" />
+                  <Edit2 className="w-3 h-3 text-gray-600 dark:text-gray-400" />
                 </button>
+                {!sessionView.isCursorSession && (
+                  <button
+                    className="w-6 h-6 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 rounded flex items-center justify-center"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      requestDeleteSession();
+                    }}
+                    title={t('tooltips.deleteSession')}
+                  >
+                    <Trash2 className="w-3 h-3 text-red-600 dark:text-red-400" />
+                  </button>
+                )}
               </>
             )}
           </div>
-        )}
       </div>
     </div>
   );
