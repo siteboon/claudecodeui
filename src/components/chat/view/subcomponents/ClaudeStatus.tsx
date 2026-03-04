@@ -150,11 +150,18 @@ export default function ClaudeStatus({
 
                 <p className="truncate text-sm font-semibold text-foreground sm:text-[15px]">
                   {cleanStatusText}
-                  {isLoading && <span className="text-primary">{animatedDots}</span>}
+                  {isLoading && (
+                    <span aria-hidden="true" className="text-primary">
+                      {animatedDots}
+                    </span>
+                  )}
                 </p>
 
                 <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground sm:text-xs">
-                  <span className="inline-flex items-center -ml-2 rounded-full border border-border/70 bg-background/60 px-2 py-0.5">
+                  <span
+                    aria-hidden="true"
+                    className="inline-flex items-center -ml-2 rounded-full border border-border/70 bg-background/60 px-2 py-0.5"
+                  >
                     {elapsedLabel}
                   </span>
                 </div>
