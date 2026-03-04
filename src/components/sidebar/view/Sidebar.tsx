@@ -60,6 +60,11 @@ function Sidebar({
     editingSession,
     editingSessionName,
     searchFilter,
+    searchMode,
+    setSearchMode,
+    conversationResults,
+    isSearching,
+    clearConversationResults,
     deletingProjects,
     deleteConfirmation,
     sessionDeleteConfirmation,
@@ -220,6 +225,24 @@ function Sidebar({
             searchFilter={searchFilter}
             onSearchFilterChange={setSearchFilter}
             onClearSearchFilter={() => setSearchFilter('')}
+            searchMode={searchMode}
+            onSearchModeChange={(mode: 'projects' | 'conversations') => {
+              setSearchMode(mode);
+              if (mode === 'projects') clearConversationResults();
+            }}
+            conversationResults={conversationResults}
+            isSearching={isSearching}
+            onConversationResultClick={(projectName: string, sessionId: string) => {
+              const project = projects.find(p => p.name === projectName);
+              if (project) {
+                handleProjectSelect(project);
+                const sessions = getProjectSessions(project);
+                const session = sessions.find(s => s.id === sessionId);
+                if (session) {
+                  handleSessionClick(session, projectName);
+                }
+              }
+            }}
             onRefresh={() => {
               void refreshProjects();
             }}

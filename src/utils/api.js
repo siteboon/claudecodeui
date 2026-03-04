@@ -94,6 +94,8 @@ export const api = {
     authenticatedFetch(`/api/projects/${projectName}${force ? '?force=true' : ''}`, {
       method: 'DELETE',
     }),
+  searchConversations: (query, limit = 50) =>
+    authenticatedFetch(`/api/search/conversations?q=${encodeURIComponent(query)}&limit=${limit}`),
   createProject: (path) =>
     authenticatedFetch('/api/projects/create', {
       method: 'POST',

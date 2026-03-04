@@ -1862,6 +1862,190 @@ async function deleteCodexSession(sessionId) {
   }
 }
 
+async function searchConversations(query, limit = 50) {
+  const claudeDir = path.join(os.homedir(), '.claude', 'projects');
+  const config = await loadProjectConfig();
+  const results = [];
+  let totalMatches = 0;
+  const words = query.toLowerCase().split(/\s+/).filter(w => w.length > 0);
+  if (words.length === 0) return { results: [], totalMatches: 0, query };
+
+  const isSystemMessage = (textContent) => {
+    return typeof textContent === 'string' && (
+      textContent.startsWith('<command-name>') ||
+      textContent.startsWith('<command-message>') ||
+      textContent.startsWith('<command-args>') ||
+      textContent.startsWith('<local-command-stdout>') ||
+      textContent.startsWith('<system-reminder>') ||
+      textContent.startsWith('Caveat:') ||
+      textContent.startsWith('This session is being continued from a previous') ||
+      textContent.startsWith('Invalid API key') ||
+      textContent.includes('{"subtasks":') ||
+      textContent.includes('CRITICAL: You MUST respond with ONLY a JSON') ||
+      textContent === 'Warmup'
+    );
+  };
+
+  const extractText = (content) => {
+    if (typeof content === 'string') return content;
+    if (Array.isArray(content)) {
+      return content
+        .filter(part => part.type === 'text' && part.text)
+        .map(part => part.text)
+        .join(' ');
+    }
+    return '';
+  };
+
+  const allWordsMatch = (textLower) => {
+    return words.every(w => textLower.includes(w));
+  };
+
+  const buildSnippet = (text, textLower, snippetLen = 150) => {
+    const firstIndex = Math.min(...words.map(w => textLower.indexOf(w)));
+    const halfLen = Math.floor(snippetLen / 2);
+    let start = Math.max(0, firstIndex - halfLen);
+    let end = Math.min(text.length, firstIndex + halfLen + words[0].length);
+    let snippet = text.slice(start, end).replace(/\n/g, ' ');
+    const prefix = start > 0 ? '...' : '';
+    const suffix = end < text.length ? '...' : '';
+    snippet = prefix + snippet + suffix;
+    const snippetLower = snippet.toLowerCase();
+    const highlights = [];
+    for (const word of words) {
+      let pos = 0;
+      while ((pos = snippetLower.indexOf(word, pos)) !== -1) {
+        highlights.push({ start: pos, end: pos + word.length });
+        pos += word.length;
+      }
+    }
+    highlights.sort((a, b) => a.start - b.start);
+    const merged = [];
+    for (const h of highlights) {
+      const last = merged[merged.length - 1];
+      if (last && h.start <= last.end) {
+        last.end = Math.max(last.end, h.end);
+      } else {
+        merged.push({ ...h });
+      }
+    }
+    return { snippet, highlights: merged };
+  };
+
+  try {
+    await fs.access(claudeDir);
+    const entries = await fs.readdir(claudeDir, { withFileTypes: true });
+    const projectDirs = entries.filter(e => e.isDirectory());
+
+    for (const projectEntry of projectDirs) {
+      if (totalMatches >= limit) break;
+
+      const projectName = projectEntry.name;
+      const projectDir = path.join(claudeDir, projectName);
+      const displayName = config[projectName]?.displayName
+        || await generateDisplayName(projectName);
+
+      let files;
+      try {
+        files = await fs.readdir(projectDir);
+      } catch {
+        continue;
+      }
+
+      const jsonlFiles = files.filter(
+        file => file.endsWith('.jsonl') && !file.startsWith('agent-')
+      );
+
+      const projectResult = {
+        projectName,
+        projectDisplayName: displayName,
+        sessions: []
+      };
+
+      for (const file of jsonlFiles) {
+        if (totalMatches >= limit) break;
+
+        const filePath = path.join(projectDir, file);
+        const sessionMatches = new Map();
+        let sessionSummary = 'New Session';
+        let currentSessionId = null;
+
+        try {
+          const fileStream = fsSync.createReadStream(filePath);
+          const rl = readline.createInterface({
+            input: fileStream,
+            crlfDelay: Infinity
+          });
+
+          for await (const line of rl) {
+            if (totalMatches >= limit) break;
+            if (!line.trim()) continue;
+
+            let entry;
+            try {
+              entry = JSON.parse(line);
+            } catch {
+              continue;
+            }
+
+            if (entry.sessionId && !currentSessionId) {
+              currentSessionId = entry.sessionId;
+            }
+            if (entry.type === 'summary' && entry.summary) {
+              sessionSummary = entry.summary;
+            }
+
+            if (!entry.message?.content) continue;
+            if (entry.message.role !== 'user' && entry.message.role !== 'assistant') continue;
+            if (entry.isApiErrorMessage) continue;
+
+            const text = extractText(entry.message.content);
+            if (!text || isSystemMessage(text)) continue;
+
+            const textLower = text.toLowerCase();
+            if (!allWordsMatch(textLower)) continue;
+
+            const sessionId = entry.sessionId || currentSessionId || file.replace('.jsonl', '');
+            if (!sessionMatches.has(sessionId)) {
+              sessionMatches.set(sessionId, []);
+            }
+
+            const matches = sessionMatches.get(sessionId);
+            if (matches.length < 2) {
+              const { snippet, highlights } = buildSnippet(text, textLower);
+              matches.push({
+                role: entry.message.role,
+                snippet,
+                highlights,
+                timestamp: entry.timestamp || null
+              });
+              totalMatches++;
+            }
+          }
+        } catch {
+          continue;
+        }
+
+        for (const [sessionId, matches] of sessionMatches) {
+          projectResult.sessions.push({
+            sessionId,
+            sessionSummary,
+            matches
+          });
+        }
+      }
+
+      if (projectResult.sessions.length > 0) {
+        results.push(projectResult);
+      }
+    }
+  } catch {
+    // claudeDir doesn't exist
+  }
+
+  return { results, totalMatches, query };
+}
+
 export {
   getProjects,
   getSessions,
@@ -1878,5 +2062,6 @@ export {
   clearProjectDirectoryCache,
   getCodexSessions,
   getCodexSessionMessages,
-  deleteCodexSession
+  deleteCodexSession,
+  searchConversations
 };

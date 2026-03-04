@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type React from 'react';
 import type { TFunction } from 'i18next';
 import { api } from '../../../utils/api';
 import type { Project, ProjectSession, SessionProvider } from '../../../types/app';
@@ -18,6 +19,36 @@ import {
   readProjectSortOrder,
   sortProjects,
 } from '../utils/utils';
+
+type SnippetHighlight = {
+  start: number;
+  end: number;
+};
+
+type ConversationMatch = {
+  role: string;
+  snippet: string;
+  highlights: SnippetHighlight[];
+  timestamp: string | null;
+};
+
+type ConversationSession = {
+  sessionId: string;
+  sessionSummary: string;
+  matches: ConversationMatch[];
+};
+
+type ConversationProjectResult = {
+  projectName: string;
+  projectDisplayName: string;
+  sessions: ConversationSession[];
+};
+
+export type ConversationSearchResults = {
+  results: ConversationProjectResult[];
+  totalMatches: number;
+  query: string;
+};
 
 type UseSidebarControllerArgs = {
   projects: Project[];
@@ -71,6 +102,11 @@ export function useSidebarController({
   const [sessionDeleteConfirmation, setSessionDeleteConfirmation] = useState<SessionDeleteConfirmation | null>(null);
   const [showVersionModal, setShowVersionModal] = useState(false);
   const [starredProjects, setStarredProjects] = useState<Set<string>>(() => loadStarredProjects());
+  const [searchMode, setSearchMode] = useState<'projects' | 'conversations'>('projects');
+  const [conversationResults, setConversationResults] = useState<ConversationSearchResults | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchSeqRef = useRef(0);
 
   const isSidebarCollapsed = !isMobile && !sidebarVisible;
 
@@ -139,6 +175,62 @@ export function useSidebarController({
       clearInterval(interval);
     };
   }, []);
+
+  // Debounced conversation search
+  useEffect(() => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    if (searchMode !== 'conversations' || searchFilter.trim().length < 2) {
+      setConversationResults(null);
+      setIsSearching(false);
+      return;
+    }
+
+    setIsSearching(true);
+    const seq = ++searchSeqRef.current;
+    searchTimeoutRef.current = setTimeout(async () => {
+      try {
+        const response = await api.searchConversations(searchFilter.trim());
+        if (seq !== searchSeqRef.current) return;
+        if (response.ok) {
+          const data = await response.json();
+          setConversationResults(data);
+        } else {
+          setConversationResults({ results: [], totalMatches: 0, query: searchFilter });
+        }
+      } catch {
+        if (seq !== searchSeqRef.current) return;
+        setConversationResults({ results: [], totalMatches: 0, query: searchFilter });
+      } finally {
+        if (seq === searchSeqRef.current) {
+          setIsSearching(false);
+        }
+      }
+    }, 400);
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [searchFilter, searchMode]);
+
+  const handleTouchClick = useCallback(
+    (callback: () => void) =>
+      (event: React.TouchEvent<HTMLElement>) => {
+        const target = event.target as HTMLElement;
+        if (target.closest('.overflow-y-auto') || target.closest('[data-scroll-container]')) {
+          return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        callback();
+      },
+    [],
+  );
 
   const toggleProject = useCallback((projectName: string) => {
     setExpandedProjects((prev) => {
@@ -466,6 +558,11 @@ export function useSidebarController({
     setEditingName,
     setEditingSession,
     setEditingSessionName,
+    searchMode,
+    setSearchMode,
+    conversationResults,
+    isSearching,
+    clearConversationResults: useCallback(() => setConversationResults(null), []),
     setSearchFilter,
     setDeleteConfirmation,
     setSessionDeleteConfirmation,
