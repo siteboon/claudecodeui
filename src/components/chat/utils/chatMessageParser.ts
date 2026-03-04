@@ -267,13 +267,18 @@ export function parseChatMessageForUi(message: ChatMessage): ParsedUiMessage {
 
   if (!message.isToolUse) {
     const summaryItems = extractSummaryItems(content);
+    const firstLine = (content.split('\n')[0] || '').trim();
+    const explicitSummary = Boolean((message as any).isSummary);
+    const summaryHeading = /^summary\s*[:\-]\s*/i.test(firstLine);
+    const completionHeading = /\b(refactoring\s+)?complete(?:d)?[.!]?$/i.test(firstLine);
     const looksLikeSummary =
-      Boolean((message as any).isSummary) ||
-      summaryItems.length > 0 ||
-      /(complete|completed|done|fixed|refactoring complete|summary)/i.test(content.split('\n')[0] || '');
+      explicitSummary ||
+      summaryItems.length > 1 ||
+      summaryHeading ||
+      completionHeading;
 
     if (looksLikeSummary && content.length < 2500) {
-      const title = (content.split('\n')[0] || 'Summary').replace(/^[-*•]\s+/, '').trim();
+      const title = (firstLine || 'Summary').replace(/^[-*•]\s+/, '').trim();
       return {
         kind: 'summary-completion',
         collapsible: false,
@@ -334,7 +339,7 @@ export function parseChatMessageForUi(message: ChatMessage): ParsedUiMessage {
     };
   }
 
-  if (toolNameLower === 'edit' || toolNameLower === 'applypatch') {
+  if (toolNameLower === 'edit') {
     const path = toText(toolInputObj?.file_path ?? toolInputObj?.path).trim();
     const oldContent = toText(toolInputObj?.old_string || '');
     const newContent = toText(toolInputObj?.new_string || '');
@@ -437,25 +442,15 @@ export function parseChatMessageForUi(message: ChatMessage): ParsedUiMessage {
     };
   }
 
-  const isExternalTool = toolNameLower.startsWith('mcp_') || toolNameLower.includes(':') || toolNameLower.includes('fetch');
-  if (isExternalTool || message.isToolUse) {
-    return {
-      kind: 'tool-invocation',
-      collapsible: true,
-      defaultOpen: false,
-      toolName,
-      toolId: toText(message.toolId || message.toolCallId).trim() || undefined,
-      status: message.toolResult ? 'done' : 'running',
-      toolInputRaw: toText(message.toolInput),
-      content: toolResultText,
-    };
-  }
-
+  // Fallback for any remaining tool-use message that does not match a known tool kind.
   return {
-    kind: 'streaming-prose',
-    collapsible: false,
-    defaultOpen: true,
-    isStreaming: Boolean(message.isStreaming),
-    content,
+    kind: 'tool-invocation',
+    collapsible: true,
+    defaultOpen: false,
+    toolName,
+    toolId: toText(message.toolId || message.toolCallId).trim() || undefined,
+    status: message.toolResult ? 'done' : 'running',
+    toolInputRaw: toText(message.toolInput),
+    content: toolResultText,
   };
 }

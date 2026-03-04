@@ -64,6 +64,8 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
       (prevMessage.type === 'tool') ||
       (prevMessage.type === 'error'));
   const messageRef = React.useRef<HTMLDivElement | null>(null);
+  const previousToolIdRef = React.useRef<string | undefined>(undefined);
+  const previousPermissionEntryRef = React.useRef<string | undefined>(undefined);
   const [isExpanded, setIsExpanded] = React.useState(false);
   const [messageCopied, setMessageCopied] = React.useState(false);
   const [permissionGrantState, setPermissionGrantState] = React.useState<'idle' | 'granted' | 'error'>('idle');
@@ -103,7 +105,17 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
   );
 
   React.useEffect(() => {
+    const currentToolId = parsedUiMessage.toolId;
+    const currentEntry = permissionSuggestion?.entry;
+    if (
+      previousToolIdRef.current === currentToolId &&
+      previousPermissionEntryRef.current === currentEntry
+    ) {
+      return;
+    }
     setPermissionGrantState('idle');
+    previousToolIdRef.current = currentToolId;
+    previousPermissionEntryRef.current = currentEntry;
   }, [parsedUiMessage.toolId, permissionSuggestion?.entry]);
 
   if (shouldHideThinkingMessage) {
