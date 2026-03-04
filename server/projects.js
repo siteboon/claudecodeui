@@ -1834,6 +1834,168 @@ async function deleteCodexSession(sessionId) {
   }
 }
 
+async function searchConversations(query, limit = 50) {
+  const claudeDir = path.join(os.homedir(), '.claude', 'projects');
+  const config = await loadProjectConfig();
+  const results = [];
+  let totalMatches = 0;
+  const queryLower = query.toLowerCase();
+
+  const isSystemMessage = (textContent) => {
+    return typeof textContent === 'string' && (
+      textContent.startsWith('<command-name>') ||
+      textContent.startsWith('<command-message>') ||
+      textContent.startsWith('<command-args>') ||
+      textContent.startsWith('<local-command-stdout>') ||
+      textContent.startsWith('<system-reminder>') ||
+      textContent.startsWith('Caveat:') ||
+      textContent.startsWith('This session is being continued from a previous') ||
+      textContent.startsWith('Invalid API key') ||
+      textContent.includes('{"subtasks":') ||
+      textContent.includes('CRITICAL: You MUST respond with ONLY a JSON') ||
+      textContent === 'Warmup'
+    );
+  };
+
+  const extractText = (content) => {
+    if (typeof content === 'string') return content;
+    if (Array.isArray(content)) {
+      return content
+        .filter(part => part.type === 'text' && part.text)
+        .map(part => part.text)
+        .join(' ');
+    }
+    return '';
+  };
+
+  const buildSnippet = (text, matchIndex, snippetLen = 150) => {
+    const halfLen = Math.floor(snippetLen / 2);
+    let start = Math.max(0, matchIndex - halfLen);
+    let end = Math.min(text.length, matchIndex + query.length + halfLen);
+    let snippet = text.slice(start, end).replace(/\n/g, ' ');
+    if (start > 0) snippet = '...' + snippet;
+    if (end < text.length) snippet = snippet + '...';
+    const matchStart = matchIndex - start + (start > 0 ? 3 : 0);
+    const matchEnd = matchStart + query.length;
+    return { snippet, matchStart, matchEnd };
+  };
+
+  try {
+    await fs.access(claudeDir);
+    const entries = await fs.readdir(claudeDir, { withFileTypes: true });
+    const projectDirs = entries.filter(e => e.isDirectory());
+
+    for (const projectEntry of projectDirs) {
+      if (totalMatches >= limit) break;
+
+      const projectName = projectEntry.name;
+      const projectDir = path.join(claudeDir, projectName);
+      const displayName = config[projectName]?.displayName
+        || await generateDisplayName(projectName);
+
+      let files;
+      try {
+        files = await fs.readdir(projectDir);
+      } catch {
+        continue;
+      }
+
+      const jsonlFiles = files.filter(
+        file => file.endsWith('.jsonl') && !file.startsWith('agent-')
+      );
+
+      const projectResult = {
+        projectName,
+        projectDisplayName: displayName,
+        sessions: []
+      };
+
+      for (const file of jsonlFiles) {
+        if (totalMatches >= limit) break;
+
+        const filePath = path.join(projectDir, file);
+        const sessionMatches = new Map();
+        let sessionSummary = 'New Session';
+        let currentSessionId = null;
+
+        try {
+          const fileStream = fsSync.createReadStream(filePath);
+          const rl = readline.createInterface({
+            input: fileStream,
+            crlfDelay: Infinity
+          });
+
+          for await (const line of rl) {
+            if (totalMatches >= limit) break;
+            if (!line.trim()) continue;
+
+            let entry;
+            try {
+              entry = JSON.parse(line);
+            } catch {
+              continue;
+            }
+
+            if (entry.sessionId && !currentSessionId) {
+              currentSessionId = entry.sessionId;
+            }
+            if (entry.type === 'summary' && entry.summary) {
+              sessionSummary = entry.summary;
+            }
+
+            if (!entry.message?.content) continue;
+            if (entry.message.role !== 'user' && entry.message.role !== 'assistant') continue;
+            if (entry.isApiErrorMessage) continue;
+
+            const text = extractText(entry.message.content);
+            if (!text || isSystemMessage(text)) continue;
+
+            const textLower = text.toLowerCase();
+            const matchIndex = textLower.indexOf(queryLower);
+            if (matchIndex === -1) continue;
+
+            const sessionId = entry.sessionId || currentSessionId || file.replace('.jsonl', '');
+            if (!sessionMatches.has(sessionId)) {
+              sessionMatches.set(sessionId, []);
+            }
+
+            const matches = sessionMatches.get(sessionId);
+            if (matches.length < 2) {
+              const { snippet, matchStart, matchEnd } = buildSnippet(text, matchIndex);
+              matches.push({
+                role: entry.message.role,
+                snippet,
+                matchStart,
+                matchEnd,
+                timestamp: entry.timestamp || null
+              });
+              totalMatches++;
+            }
+          }
+        } catch {
+          continue;
+        }
+
+        for (const [sessionId, matches] of sessionMatches) {
+          projectResult.sessions.push({
+            sessionId,
+            sessionSummary,
+            matches
+          });
+        }
+      }
+
+      if (projectResult.sessions.length > 0) {
+        results.push(projectResult);
+      }
+    }
+  } catch {
+    // claudeDir doesn't exist
+  }
+
+  return { results, totalMatches, query };
+}
+
 export {
   getProjects,
   getSessions,
@@ -1850,5 +2012,6 @@ export {
   clearProjectDirectoryCache,
   getCodexSessions,
   getCodexSessionMessages,
-  deleteCodexSession
+  deleteCodexSession,
+  searchConversations
 };

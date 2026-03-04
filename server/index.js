@@ -44,7 +44,7 @@ import pty from 'node-pty';
 import fetch from 'node-fetch';
 import mime from 'mime-types';
 
-import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
+import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache, searchConversations } from './projects.js';
 import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions, resolveToolApproval, getPendingApprovalsForSession, reconnectSessionWriter } from './claude-sdk.js';
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
 import { queryCodex, abortCodexSession, isCodexSessionActive, getActiveCodexSessions } from './openai-codex.js';
@@ -604,6 +604,24 @@ app.post('/api/projects/create', authenticateToken, async (req, res) => {
         res.json({ success: true, project });
     } catch (error) {
         console.error('Error creating project:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Search conversations content
+app.get('/api/search/conversations', authenticateToken, async (req, res) => {
+    try {
+        const query = req.query.q;
+        const limit = parseInt(req.query.limit) || 50;
+
+        if (!query || query.length < 2) {
+            return res.status(400).json({ error: 'Query must be at least 2 characters' });
+        }
+
+        const results = await searchConversations(query, limit);
+        res.json(results);
+    } catch (error) {
+        console.error('Error searching conversations:', error);
         res.status(500).json({ error: error.message });
     }
 });

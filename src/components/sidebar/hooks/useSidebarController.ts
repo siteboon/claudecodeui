@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type React from 'react';
 import type { TFunction } from 'i18next';
 import { api } from '../../../utils/api';
@@ -72,6 +72,10 @@ export function useSidebarController({
   const [sessionDeleteConfirmation, setSessionDeleteConfirmation] = useState<SessionDeleteConfirmation | null>(null);
   const [showVersionModal, setShowVersionModal] = useState(false);
   const [starredProjects, setStarredProjects] = useState<Set<string>>(() => loadStarredProjects());
+  const [searchMode, setSearchMode] = useState<'projects' | 'conversations'>('projects');
+  const [conversationResults, setConversationResults] = useState<any>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isSidebarCollapsed = !isMobile && !sidebarVisible;
 
@@ -140,6 +144,42 @@ export function useSidebarController({
       clearInterval(interval);
     };
   }, []);
+
+  // Debounced conversation search
+  useEffect(() => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    if (searchMode !== 'conversations' || searchFilter.trim().length < 2) {
+      setConversationResults(null);
+      setIsSearching(false);
+      return;
+    }
+
+    setIsSearching(true);
+    searchTimeoutRef.current = setTimeout(async () => {
+      try {
+        const response = await api.searchConversations(searchFilter.trim());
+        if (response.ok) {
+          const data = await response.json();
+          setConversationResults(data);
+        } else {
+          setConversationResults({ results: [], totalMatches: 0, query: searchFilter });
+        }
+      } catch {
+        setConversationResults({ results: [], totalMatches: 0, query: searchFilter });
+      } finally {
+        setIsSearching(false);
+      }
+    }, 400);
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [searchFilter, searchMode]);
 
   const handleTouchClick = useCallback(
     (callback: () => void) =>
@@ -483,6 +523,10 @@ export function useSidebarController({
     setEditingName,
     setEditingSession,
     setEditingSessionName,
+    searchMode,
+    setSearchMode,
+    conversationResults,
+    isSearching,
     setSearchFilter,
     setDeleteConfirmation,
     setSessionDeleteConfirmation,

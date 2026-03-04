@@ -103,6 +103,15 @@
   "version": {
     "updateAvailable": "Update available"
   },
+  "search": {
+    "modeProjects": "Projects",
+    "modeConversations": "Conversations",
+    "conversationsPlaceholder": "Search in conversations...",
+    "searching": "Searching...",
+    "noResults": "No results found",
+    "tryDifferentQuery": "Try a different search query",
+    "matches": "matches"
+  },
   "deleteConfirmation": {
     "deleteProject": "Delete Project",
     "deleteSession": "Delete Session",
