@@ -49,8 +49,12 @@ export interface ParsedUiMessage {
   additions?: number;
   deletions?: number;
   toolName?: string;
+  toolId?: string;
   toolInputRaw?: string;
   listItems?: string[];
+  outputs?: string[];
+  generated?: unknown;
+  permissionRequest?: boolean;
 }
 
 const LANGUAGE_BY_EXT: Record<string, string> = {
@@ -164,11 +168,9 @@ const extractSearchResults = (toolResult: unknown): SearchResultItem[] => {
   const obj = toObject(toolResult);
   if (!obj) return [];
 
-  const list =
-    toArray(obj.results) ||
-    toArray(obj.items) ||
-    toArray(obj.data) ||
-    toArray(obj.content);
+  const list = [obj.results, obj.items, obj.data, obj.content]
+    .map((source) => toArray(source))
+    .find((source) => source.length > 0) || [];
 
   if (!Array.isArray(list) || list.length === 0) return [];
 
@@ -212,9 +214,11 @@ const extractTreeItems = (toolInput: unknown, toolResult: unknown): TreeItem[] =
       }
       const row = toObject(entry);
       if (!row) return null;
+      const normalizedType = toText(row.type || row.kind).trim().toLowerCase();
+      const isFolder = ['dir', 'directory', 'folder'].includes(normalizedType);
       return {
         name: toText(row.name || row.path || row.file || ''),
-        type: String(row.type || '').toLowerCase() === 'dir' || String(row.kind || '').toLowerCase() === 'folder' ? 'folder' : 'file',
+        type: isFolder ? 'folder' : 'file',
         size: toText(row.size || '').trim() || undefined,
       } as TreeItem;
     })
@@ -232,6 +236,7 @@ const extractSummaryItems = (content: string): string[] => {
 
 export function parseChatMessageForUi(message: ChatMessage): ParsedUiMessage {
   const content = toText(message.content || '');
+  const toolName = String(message.toolName || 'UnknownTool');
 
   if (message.isThinking) {
     return {
@@ -253,6 +258,10 @@ export function parseChatMessageForUi(message: ChatMessage): ParsedUiMessage {
       content: content || extractResultText(message.toolResult),
       details: message.toolResult?.isError ? extractResultText(message.toolResult) : undefined,
       status: 'error',
+      toolName,
+      toolId: toText(message.toolId || message.toolCallId).trim() || undefined,
+      toolInputRaw: toText(message.toolInput),
+      permissionRequest: Boolean(message.toolResult?.isError && message.toolName),
     };
   }
 
@@ -283,7 +292,6 @@ export function parseChatMessageForUi(message: ChatMessage): ParsedUiMessage {
     };
   }
 
-  const toolName = String(message.toolName || 'UnknownTool');
   const toolNameLower = toolName.toLowerCase();
   const toolInputObj = toObject(message.toolInput);
   const toolResultText = extractResultText(message.toolResult);
@@ -359,6 +367,22 @@ export function parseChatMessageForUi(message: ChatMessage): ParsedUiMessage {
   const isImageTool = toolNameLower.includes('image') || toolNameLower.includes('dall') || toolNameLower.includes('vision');
   if (isImageTool) {
     const status = message.toolResult ? 'done' : 'generating';
+    const resultObj = toObject(message.toolResult);
+    const candidateOutputs = [
+      resultObj?.outputs,
+      resultObj?.images,
+      resultObj?.generated,
+      resultObj?.result,
+      resultObj?.output,
+      resultObj?.content,
+      resultObj?.data,
+    ];
+    const outputs = candidateOutputs
+      .flatMap((candidate) => {
+        if (Array.isArray(candidate)) return candidate.map((item) => toText(item).trim()).filter(Boolean);
+        const single = toText(candidate).trim();
+        return single ? [single] : [];
+      });
     return {
       kind: 'image-generation',
       collapsible: true,
@@ -366,7 +390,11 @@ export function parseChatMessageForUi(message: ChatMessage): ParsedUiMessage {
       title: 'Image Generation',
       status,
       content: toolResultText,
+      output: outputs[0] || undefined,
+      outputs: outputs.length ? outputs : undefined,
+      generated: resultObj?.generated ?? resultObj?.output ?? resultObj?.outputs,
       toolName,
+      toolId: toText(message.toolId || message.toolCallId).trim() || undefined,
     };
   }
 
@@ -416,6 +444,7 @@ export function parseChatMessageForUi(message: ChatMessage): ParsedUiMessage {
       collapsible: true,
       defaultOpen: false,
       toolName,
+      toolId: toText(message.toolId || message.toolCallId).trim() || undefined,
       status: message.toolResult ? 'done' : 'running',
       toolInputRaw: toText(message.toolInput),
       content: toolResultText,

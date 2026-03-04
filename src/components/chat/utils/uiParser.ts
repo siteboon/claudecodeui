@@ -17,6 +17,22 @@ const SKIP_PREFIXES = [
 const TASK_NOTIFICATION_REGEX =
   /<task-notification>\s*<task-id>[^<]*<\/task-id>\s*<output-file>[^<]*<\/output-file>\s*<status>([^<]*)<\/status>\s*<summary>([^<]*)<\/summary>\s*<\/task-notification>/;
 
+const normalizeTaskStatus = (rawStatus: string | undefined): string => {
+  const status = (rawStatus || '').trim().toLowerCase();
+  if (!status) return 'completed';
+
+  if (['done', 'success', 'ok', 'completed', 'complete'].includes(status)) {
+    return 'completed';
+  }
+  if (['failed', 'failure', 'error', 'errored'].includes(status)) {
+    return 'failed';
+  }
+  if (['running', 'in_progress', 'in progress', 'processing'].includes(status)) {
+    return 'running';
+  }
+  return status;
+};
+
 export function parseUiMessageContent(rawContent: string): UiParsedMessage {
   const content = rawContent.trim();
   if (!content) {
@@ -33,11 +49,10 @@ export function parseUiMessageContent(rawContent: string): UiParsedMessage {
   if (taskMatch) {
     return {
       kind: 'taskNotification',
-      status: taskMatch[1]?.trim() || 'completed',
+      status: normalizeTaskStatus(taskMatch[1]),
       summary: taskMatch[2]?.trim() || 'Background task finished',
     };
   }
 
   return { kind: 'text', content };
 }
-

@@ -27,6 +27,7 @@ import { formatUsageLimitText } from '../../utils/chatFormatting';
 import { copyTextToClipboard } from '../../../../utils/clipboard';
 import type { Project } from '../../../../types/app';
 import { parseChatMessageForUi } from '../../utils/chatMessageParser';
+import { getClaudePermissionSuggestion } from '../../utils/chatPermissions';
 
 type DiffLine = {
   type: string;
@@ -65,6 +66,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
   const messageRef = React.useRef<HTMLDivElement | null>(null);
   const [isExpanded, setIsExpanded] = React.useState(false);
   const [messageCopied, setMessageCopied] = React.useState(false);
+  const [permissionGrantState, setPermissionGrantState] = React.useState<'idle' | 'granted' | 'error'>('idle');
 
   React.useEffect(() => {
     const node = messageRef.current;
@@ -95,6 +97,14 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
   const formattedTime = useMemo(() => new Date(message.timestamp).toLocaleTimeString(), [message.timestamp]);
   const shouldHideThinkingMessage = Boolean(message.isThinking && !showThinking);
   const parsedUiMessage = useMemo(() => parseChatMessageForUi(message), [message]);
+  const permissionSuggestion = useMemo(
+    () => getClaudePermissionSuggestion(message, String(provider)),
+    [message, provider],
+  );
+
+  React.useEffect(() => {
+    setPermissionGrantState('idle');
+  }, [parsedUiMessage.toolId, permissionSuggestion?.entry]);
 
   if (shouldHideThinkingMessage) {
     return null;
@@ -470,6 +480,32 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     {parsedUiMessage.details && (
                       <div className="mt-2 text-xs leading-5 text-slate-600 dark:text-slate-400 whitespace-pre-wrap">{parsedUiMessage.details}</div>
                     )}
+                    {onGrantToolPermission && permissionSuggestion && parsedUiMessage.permissionRequest && (
+                      <div className="mt-3 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const result = onGrantToolPermission(permissionSuggestion);
+                            if (result?.success) {
+                              setPermissionGrantState('granted');
+                            } else {
+                              setPermissionGrantState('error');
+                            }
+                          }}
+                          disabled={permissionSuggestion.isAllowed || permissionGrantState === 'granted'}
+                          className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${
+                            permissionSuggestion.isAllowed || permissionGrantState === 'granted'
+                              ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                              : 'border-red-400/40 bg-red-500/10 text-red-700 dark:text-red-200 hover:bg-red-500/20'
+                          }`}
+                        >
+                          {permissionSuggestion.isAllowed || permissionGrantState === 'granted' ? 'Permission added' : `Allow ${permissionSuggestion.toolName}`}
+                        </button>
+                        {permissionGrantState === 'error' && (
+                          <span className="text-xs text-red-800 dark:text-red-300">Could not update permission rule</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -486,6 +522,11 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     <pre className="mt-2 max-h-[260px] overflow-auto whitespace-pre-wrap break-words text-xs leading-5 text-slate-700 dark:text-slate-300 font-mono">
                       {parsedUiMessage.toolInputRaw}
                     </pre>
+                    {parsedUiMessage.content && (
+                      <pre className="mt-2 max-h-[280px] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-violet-400/20 dark:border-violet-300/20 bg-violet-500/10 dark:bg-violet-500/5 p-2 text-xs leading-5 text-slate-700 dark:text-slate-200 font-mono">
+                        {parsedUiMessage.content}
+                      </pre>
+                    )}
                   </details>
                 )}
 
@@ -503,8 +544,40 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                       </span>
                     </div>
                     {parsedUiMessage.status === 'done' && (
-                      <div className="mt-2 h-32 rounded-lg bg-gradient-to-r from-pink-500/30 via-violet-500/30 to-blue-500/30 flex items-center justify-center text-xs text-slate-700 dark:text-slate-200">
-                        Preview
+                      <div className="mt-2">
+                        {(() => {
+                          const outputs = parsedUiMessage.outputs || [];
+                          const imageUrls = outputs.filter((value) => /^(https?:\/\/|data:image\/)/i.test(value));
+                          if (imageUrls.length > 0) {
+                            return (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {imageUrls.map((imageUrl, imageIndex) => (
+                                  <img
+                                    key={`${imageUrl}-${imageIndex}`}
+                                    src={imageUrl}
+                                    alt={`Generated ${imageIndex + 1}`}
+                                    className="w-full h-auto rounded-lg border border-pink-400/20 dark:border-pink-300/20"
+                                  />
+                                ))}
+                              </div>
+                            );
+                          }
+
+                          const textOutput = outputs.find((value) => value.trim().length > 0) || String(parsedUiMessage.content || '');
+                          if (textOutput.trim()) {
+                            return (
+                              <pre className="max-h-[240px] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-pink-400/20 dark:border-pink-300/20 bg-white/50 dark:bg-slate-900/40 p-2 text-xs leading-5 text-slate-700 dark:text-slate-200">
+                                {textOutput}
+                              </pre>
+                            );
+                          }
+
+                          return (
+                            <div className="h-20 rounded-lg border border-dashed border-pink-400/30 dark:border-pink-300/30 flex items-center justify-center text-xs text-slate-600 dark:text-slate-300">
+                              No generated output available
+                            </div>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>
