@@ -76,7 +76,7 @@ export const TaskListContent: React.FC<TaskListContentProps> = ({ content }) => 
   // If we couldn't parse any tasks, fall back to text display
   if (tasks.length === 0) {
     return (
-      <pre className="text-[11px] font-mono text-gray-600 dark:text-gray-400 whitespace-pre-wrap">
+      <pre className="text-2xs font-mono text-gray-600 dark:text-gray-400 whitespace-pre-wrap">
         {content}
       </pre>
     );
@@ -88,7 +88,7 @@ export const TaskListContent: React.FC<TaskListContentProps> = ({ content }) => 
   return (
     <div>
       <div className="flex items-center gap-2 mb-1.5">
-        <span className="text-[11px] text-gray-500 dark:text-gray-400">
+        <span className="text-2xs text-gray-500 dark:text-gray-400">
           {completed}/{total} completed
         </span>
         <div className="flex-1 h-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
@@ -107,13 +107,13 @@ export const TaskListContent: React.FC<TaskListContentProps> = ({ content }) => 
               className="flex items-center gap-1.5 py-0.5 group"
             >
               <span className="flex-shrink-0">{config.icon}</span>
-              <span className="text-[11px] font-mono text-gray-400 dark:text-gray-500 flex-shrink-0">
+              <span className="text-2xs font-mono text-gray-400 dark:text-gray-500 flex-shrink-0">
                 #{task.id}
               </span>
               <span className={`text-xs truncate flex-1 ${config.textClass}`}>
                 {task.subject}
               </span>
-              <span className={`text-[10px] px-1 py-px rounded border flex-shrink-0 ${config.badgeClass}`}>
+              <span className={`text-2xs px-1 py-px rounded border flex-shrink-0 ${config.badgeClass}`}>
                 {task.status.replace('_', ' ')}
               </span>
             </div>

@@ -95,7 +95,7 @@ function MainContent({
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col modern-main-shell">
       <MainContentHeader
         activeTab={activeTab}
         setActiveTab={setActiveTab}

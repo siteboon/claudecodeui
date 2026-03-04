@@ -23,38 +23,38 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 220 28% 97%;
+    --foreground: 224 42% 12%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 224 42% 12%;
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
+    --primary: 221 78% 54%;
     --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --secondary: 214 33% 94%;
+    --secondary-foreground: 222 39% 14%;
+    --muted: 214 33% 94%;
+    --muted-foreground: 218 14% 42%;
+    --accent: 214 33% 93%;
+    --accent-foreground: 222 39% 14%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
+    --border: 216 26% 88%;
+    --input: 216 26% 88%;
+    --ring: 221 78% 54%;
     --radius: 0.5rem;
 
     /* Nav design tokens */
-    --nav-glass-bg: 0 0% 100% / 0.7;
-    --nav-glass-blur: 20px;
+    --nav-glass-bg: 0 0% 100% / 0.78;
+    --nav-glass-blur: 24px;
     --nav-glass-saturate: 1.8;
-    --nav-tab-glow: 221.2 83.2% 53.3% / 0.18;
-    --nav-tab-ring: 221.2 83.2% 53.3% / 0.10;
-    --nav-float-shadow: 0 0% 0% / 0.06;
-    --nav-float-ring: 214.3 31.8% 91.4% / 0.5;
-    --nav-divider-color: 214.3 31.8% 91.4% / 0.5;
-    --nav-input-bg: 210 40% 96.1% / 0.5;
-    --nav-input-focus-ring: 221.2 83.2% 53.3% / 0.22;
+    --nav-tab-glow: 221 78% 54% / 0.22;
+    --nav-tab-ring: 221 78% 54% / 0.14;
+    --nav-float-shadow: 220 40% 10% / 0.11;
+    --nav-float-ring: 216 26% 88% / 0.65;
+    --nav-divider-color: 216 26% 84% / 0.7;
+    --nav-input-bg: 214 34% 94% / 0.75;
+    --nav-input-focus-ring: 221 78% 54% / 0.25;
 
     /* Safe area CSS variables */
     --safe-area-inset-top: env(safe-area-inset-top);
@@ -72,6 +72,19 @@
     --header-safe-area-top: env(safe-area-inset-top, 0px);
     --header-base-padding: 8px;
     --header-total-padding: calc(var(--header-safe-area-top) + var(--header-base-padding));
+
+    /* Typography tokens */
+    --font-sans: "Inter", "IBM Plex Sans", "Manrope", "Avenir Next", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    --font-serif: "Source Serif 4", "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+    --font-mono: "JetBrains Mono", "IBM Plex Mono", "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    --text-2xs: 0.6875rem; /* 11px */
+    --text-xs: 0.75rem;    /* 12px */
+    --text-sm: 0.8125rem;  /* 13px */
+    --text-md: 0.9375rem;  /* 15px */
+    --text-lg: 1rem;       /* 16px */
+    --text-xl: 1.125rem;   /* 18px */
+    --text-2xl: 1.25rem;   /* 20px */
+    --text-3xl: 1.5rem;    /* 24px */
   }
   
   /* Fallback for older iOS versions */
@@ -85,37 +98,37 @@
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 217.2 91.2% 8%;
-    --card-foreground: 210 40% 98%;
-    --popover: 217.2 91.2% 8%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
+    --background: 222 32% 8%;
+    --foreground: 210 40% 97%;
+    --card: 223 28% 11%;
+    --card-foreground: 210 40% 97%;
+    --popover: 223 28% 11%;
+    --popover-foreground: 210 40% 97%;
+    --primary: 216 92% 64%;
     --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
+    --secondary: 221 24% 18%;
     --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
+    --muted: 221 24% 18%;
+    --muted-foreground: 216 13% 67%;
+    --accent: 221 24% 18%;
     --accent-foreground: 210 40% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 220 13% 46%;
-    --ring: 217.2 91.2% 59.8%;
+    --border: 220 21% 23%;
+    --input: 220 21% 23%;
+    --ring: 216 92% 64%;
 
     /* Nav design tokens — dark overrides */
-    --nav-glass-bg: 217.2 91.2% 8% / 0.55;
+    --nav-glass-bg: 223 28% 11% / 0.7;
     --nav-glass-blur: 24px;
     --nav-glass-saturate: 1.6;
-    --nav-tab-glow: 217.2 91.2% 59.8% / 0.25;
-    --nav-tab-ring: 217.2 91.2% 59.8% / 0.15;
-    --nav-float-shadow: 0 0% 0% / 0.35;
-    --nav-float-ring: 217.2 32.6% 17.5% / 0.3;
-    --nav-divider-color: 217.2 32.6% 17.5% / 0.5;
-    --nav-input-bg: 217.2 32.6% 17.5% / 0.5;
-    --nav-input-focus-ring: 217.2 91.2% 59.8% / 0.25;
+    --nav-tab-glow: 216 92% 64% / 0.3;
+    --nav-tab-ring: 216 92% 64% / 0.2;
+    --nav-float-shadow: 220 70% 2% / 0.45;
+    --nav-float-ring: 220 21% 23% / 0.5;
+    --nav-divider-color: 220 21% 23% / 0.7;
+    --nav-input-bg: 221 24% 18% / 0.8;
+    --nav-input-focus-ring: 216 92% 64% / 0.28;
   }
 }
 
@@ -125,10 +138,23 @@
     box-sizing: border-box;
     transition: none;
   }
+
+  html {
+    font-size: 16px;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-kerning: normal;
+    font-feature-settings: "cv01", "cv02", "cv03", "cv04", "ss01", "ss02";
+  }
   
   body {
     @apply bg-background text-foreground;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-family: var(--font-sans);
+    font-size: var(--text-md);
+    line-height: 1.58;
+    letter-spacing: 0.01em;
+    font-weight: 450;
     margin: 0;
     padding: 0;
   }
@@ -215,6 +241,90 @@
   .transition-shadow {
     transition: box-shadow 200ms ease-in-out;
   }
+
+  /* Semantic global typography rhythm */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-sans);
+    font-weight: 650;
+    letter-spacing: -0.015em;
+    line-height: 1.25;
+    text-wrap: balance;
+    color: hsl(var(--foreground));
+  }
+
+  h1 {
+    font-size: clamp(1.5rem, 1.25rem + 0.8vw, 2rem);
+  }
+
+  h2 {
+    font-size: clamp(1.25rem, 1.15rem + 0.45vw, 1.625rem);
+  }
+
+  h3 {
+    font-size: clamp(1.0625rem, 1rem + 0.2vw, 1.25rem);
+  }
+
+  h4 {
+    font-size: 1rem;
+  }
+
+  h5 {
+    font-size: 0.9375rem;
+  }
+
+  h6 {
+    font-size: 0.875rem;
+    letter-spacing: 0.02em;
+  }
+
+  p, li, blockquote, td, th, label, input, textarea, select, button {
+    font-family: var(--font-sans);
+    font-size: inherit;
+    line-height: inherit;
+  }
+
+  code, pre, kbd, samp {
+    font-family: var(--font-mono);
+    font-variant-ligatures: none;
+  }
+
+  small {
+    font-size: var(--text-xs);
+    line-height: 1.45;
+    letter-spacing: 0.01em;
+  }
+
+  /* Consistent control typography */
+  button, input, textarea, select {
+    font-size: var(--text-sm);
+    line-height: 1.4;
+  }
+
+  /* Improve prose readability app-wide */
+  .prose {
+    font-family: var(--font-sans);
+    font-size: var(--text-md);
+    line-height: 1.7;
+    letter-spacing: 0.005em;
+  }
+
+  .prose p,
+  .prose li {
+    margin-top: 0.45em;
+    margin-bottom: 0.45em;
+  }
+
+  .prose :where(h1, h2, h3, h4, h5, h6) {
+    font-weight: 650;
+    line-height: 1.3;
+    letter-spacing: -0.012em;
+    margin-top: 1.1em;
+    margin-bottom: 0.45em;
+  }
+
+  .prose code {
+    font-size: 0.86em;
+  }
   
   /* Respect reduced motion preference */
   @media (prefers-reduced-motion: reduce) {
@@ -227,6 +337,23 @@
       scroll-behavior: auto !important;
     }
   }
+}
+
+.modern-app-shell {
+  background:
+    radial-gradient(1100px 620px at -12% -10%, hsl(var(--primary) / 0.14), transparent 55%),
+    radial-gradient(900px 540px at 112% 0%, hsl(194 88% 46% / 0.1), transparent 50%),
+    hsl(var(--background));
+}
+
+.modern-sidebar-shell {
+  background: hsl(var(--card) / 0.72);
+  backdrop-filter: blur(24px) saturate(1.2);
+}
+
+.modern-main-shell {
+  background: hsl(var(--card) / 0.52);
+  backdrop-filter: blur(16px) saturate(1.15);
 }
 
 @layer utilities {
@@ -287,11 +414,13 @@
   /* Nav search input surface — uses theme tokens */
   .nav-search-input {
     background: hsl(var(--nav-input-bg));
-    border: none;
+    border: 1px solid hsl(var(--border) / 0.55);
+    box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.35);
   }
 
   .nav-search-input:focus-within {
     background: hsl(var(--background));
+    border-color: hsl(var(--primary) / 0.4);
     box-shadow: 0 0 0 2px hsl(var(--nav-input-focus-ring));
   }
   

@@ -35,7 +35,7 @@ export const AuthProvider = ({ children }) => {
     if (IS_PLATFORM) {
       setUser({ username: 'platform-user' });
       setNeedsSetup(false);
-      checkOnboardingStatus();
+      setHasCompletedOnboarding(true); // Skip onboarding in platform mode
       setIsLoading(false);
       return;
     }

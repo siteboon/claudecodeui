@@ -96,7 +96,7 @@ export default function ChatInputControls({
         </svg>
         {slashCommandsCount > 0 && (
           <span
-            className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[10px] font-bold rounded-full w-4 h-4 sm:w-5 sm:h-5 flex items-center justify-center"
+            className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-2xs font-bold rounded-full w-4 h-4 sm:w-5 sm:h-5 flex items-center justify-center"
           >
             {slashCommandsCount}
           </span>

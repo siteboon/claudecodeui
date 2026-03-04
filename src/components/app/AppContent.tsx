@@ -72,9 +72,9 @@ export default function AppContent() {
   }, [openSettings]);
 
   return (
-    <div className="fixed inset-0 flex bg-background">
+    <div className="fixed inset-0 flex modern-app-shell">
       {!isMobile ? (
-        <div className="h-full flex-shrink-0 border-r border-border/50">
+        <div className="h-full flex-shrink-0 border-r border-border/50 modern-sidebar-shell">
           <Sidebar {...sidebarSharedProps} />
         </div>
       ) : (

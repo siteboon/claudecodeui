@@ -39,7 +39,7 @@ export default function MainContentTabSwitcher({
   const tabs = shouldShowTasksTab ? [...BASE_TABS, TASKS_TAB] : BASE_TABS;
 
   return (
-    <div className="inline-flex items-center bg-muted/60 rounded-lg p-[3px] gap-[2px]">
+    <div className="inline-flex items-center bg-muted/60 border border-border/50 rounded-xl p-1 gap-1 shadow-sm">
       {tabs.map((tab) => {
         const Icon = tab.icon;
         const isActive = tab.id === activeTab;
@@ -48,9 +48,9 @@ export default function MainContentTabSwitcher({
           <Tooltip key={tab.id} content={t(tab.labelKey)} position="bottom">
             <button
               onClick={() => setActiveTab(tab.id)}
-              className={`relative flex items-center gap-1.5 px-2.5 py-[5px] text-sm font-medium rounded-md transition-all duration-150 ${
+              className={`relative flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-all duration-150 ${
                 isActive
-                  ? 'bg-background text-foreground shadow-sm'
+                  ? 'bg-background text-foreground shadow-sm border border-border/40'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >

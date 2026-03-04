@@ -35,23 +35,23 @@ export default function SidebarHeader({
 }: SidebarHeaderProps) {
   const LogoBlock = () => (
     <div className="flex items-center gap-2.5 min-w-0">
-      <div className="w-7 h-7 bg-primary/90 rounded-lg flex items-center justify-center shadow-sm flex-shrink-0">
+      <div className="w-8 h-8 bg-primary rounded-xl flex items-center justify-center shadow-[0_10px_24px_hsl(var(--primary)/0.28)] flex-shrink-0">
         <svg className="w-3.5 h-3.5 text-primary-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
         </svg>
       </div>
-      <h1 className="text-sm font-semibold text-foreground tracking-tight truncate">{t('app.title')}</h1>
+      <div className="min-w-0">
+        <h1 className="text-sm font-semibold text-foreground tracking-tight truncate">{t('app.title')}</h1>
+        <p className="text-2xs text-muted-foreground/90 leading-tight mt-0.5">{projectsCount} projects</p>
+      </div>
     </div>
   );
 
   return (
     <div className="flex-shrink-0">
       {/* Desktop header */}
-      <div
-        className="hidden md:block px-3 pt-3 pb-2"
-        style={{}}
-      >
-        <div className="flex items-center justify-between gap-2">
+      <div className="hidden md:block px-3 pt-3 pb-2.5">
+        <div className="flex items-center justify-between gap-2 rounded-2xl bg-card/65 border border-border/45 px-2.5 py-2 shadow-sm">
           {IS_PLATFORM ? (
             <a
               href="https://cloudcli.ai/dashboard"
@@ -64,11 +64,11 @@ export default function SidebarHeader({
             <LogoBlock />
           )}
 
-          <div className="flex items-center gap-0.5 flex-shrink-0">
+          <div className="flex items-center gap-1 flex-shrink-0">
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground hover:bg-accent/80 rounded-lg"
+              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground hover:bg-accent/80 rounded-xl border border-transparent hover:border-border/45"
               onClick={onRefresh}
               disabled={isRefreshing}
               title={t('tooltips.refresh')}
@@ -82,7 +82,7 @@ export default function SidebarHeader({
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground hover:bg-accent/80 rounded-lg"
+              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground hover:bg-accent/80 rounded-xl border border-transparent hover:border-border/45"
               onClick={onCreateProject}
               title={t('tooltips.createProject')}
             >
@@ -91,7 +91,7 @@ export default function SidebarHeader({
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground hover:bg-accent/80 rounded-lg"
+              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground hover:bg-accent/80 rounded-xl border border-transparent hover:border-border/45"
               onClick={onCollapseSidebar}
               title={t('tooltips.hideSidebar')}
             >
@@ -102,14 +102,14 @@ export default function SidebarHeader({
 
         {/* Search bar */}
         {projectsCount > 0 && !isLoading && (
-          <div className="relative mt-2.5">
+          <div className="relative mt-3">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/50 pointer-events-none" />
             <Input
               type="text"
               placeholder={t('projects.searchPlaceholder')}
               value={searchFilter}
               onChange={(event) => onSearchFilterChange(event.target.value)}
-              className="nav-search-input pl-9 pr-8 h-9 text-sm rounded-xl border-0 placeholder:text-muted-foreground/40 focus-visible:ring-0 focus-visible:ring-offset-0 transition-all duration-200"
+              className="nav-search-input pl-9 pr-8 h-10 text-sm rounded-xl border border-border/50 placeholder:text-muted-foreground/45 focus-visible:ring-0 focus-visible:ring-offset-0 transition-all duration-200 shadow-[0_8px_20px_hsl(224_42%_12%/0.06)]"
             />
             {searchFilter && (
               <button
@@ -128,10 +128,10 @@ export default function SidebarHeader({
 
       {/* Mobile header */}
       <div
-        className="md:hidden p-3 pb-2"
+        className="md:hidden p-3 pb-2.5"
         style={isPWA && isMobile ? { paddingTop: '16px' } : {}}
       >
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between rounded-2xl bg-card/70 border border-border/45 px-2.5 py-2 shadow-sm">
           {IS_PLATFORM ? (
             <a
               href="https://cloudcli.ai/dashboard"
@@ -146,14 +146,14 @@ export default function SidebarHeader({
 
           <div className="flex gap-1.5 flex-shrink-0">
             <button
-              className="w-8 h-8 rounded-lg bg-muted/50 flex items-center justify-center active:scale-95 transition-all"
+              className="w-9 h-9 rounded-xl bg-muted/60 flex items-center justify-center active:scale-95 transition-all"
               onClick={onRefresh}
               disabled={isRefreshing}
             >
               <RefreshCw className={`w-4 h-4 text-muted-foreground ${isRefreshing ? 'animate-spin' : ''}`} />
             </button>
             <button
-              className="w-8 h-8 rounded-lg bg-primary/90 text-primary-foreground flex items-center justify-center active:scale-95 transition-all"
+              className="w-9 h-9 rounded-xl bg-primary text-primary-foreground flex items-center justify-center active:scale-95 transition-all shadow-[0_10px_20px_hsl(var(--primary)/0.25)]"
               onClick={onCreateProject}
             >
               <FolderPlus className="w-4 h-4" />
@@ -163,14 +163,14 @@ export default function SidebarHeader({
 
         {/* Mobile search */}
         {projectsCount > 0 && !isLoading && (
-          <div className="relative mt-2.5">
+          <div className="relative mt-3">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50 pointer-events-none" />
             <Input
               type="text"
               placeholder={t('projects.searchPlaceholder')}
               value={searchFilter}
               onChange={(event) => onSearchFilterChange(event.target.value)}
-              className="nav-search-input pl-10 pr-9 h-10 text-sm rounded-xl border-0 placeholder:text-muted-foreground/40 focus-visible:ring-0 focus-visible:ring-offset-0 transition-all duration-200"
+              className="nav-search-input pl-10 pr-9 h-10 text-sm rounded-xl border border-border/50 placeholder:text-muted-foreground/40 focus-visible:ring-0 focus-visible:ring-offset-0 transition-all duration-200"
             />
             {searchFilter && (
               <button

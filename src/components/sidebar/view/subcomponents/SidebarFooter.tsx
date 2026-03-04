@@ -26,9 +26,9 @@ export default function SidebarFooter({
         <>
           <div className="nav-divider" />
           {/* Desktop update */}
-          <div className="hidden md:block px-2 py-1.5">
+          <div className="hidden md:block px-2.5 py-2">
             <button
-              className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left hover:bg-blue-50/80 dark:hover:bg-blue-900/15 transition-colors group"
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left hover:bg-blue-50/80 dark:hover:bg-blue-900/15 transition-colors group border border-blue-200/50 dark:border-blue-700/30 shadow-[0_6px_16px_rgba(37,99,235,0.12)]"
               onClick={onShowVersionModal}
             >
               <div className="relative flex-shrink-0">
@@ -36,10 +36,10 @@ export default function SidebarFooter({
                 <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
               </div>
               <div className="min-w-0 flex-1">
-                <span className="text-sm font-medium text-blue-600 dark:text-blue-300 truncate block">
+                <span className="text-sm font-semibold text-blue-600 dark:text-blue-300 truncate block tracking-tight">
                   {releaseInfo?.title || `v${latestVersion}`}
                 </span>
-                <span className="text-[10px] text-blue-500/70 dark:text-blue-400/60">
+                <span className="text-2xs text-blue-500/70 dark:text-blue-400/60">
                   {t('version.updateAvailable')}
                 </span>
               </div>
@@ -75,11 +75,11 @@ export default function SidebarFooter({
       {/* Desktop settings */}
       <div className="hidden md:block px-2 py-1.5">
         <button
-          className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
+          className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors border border-transparent hover:border-border/35"
           onClick={onShowSettings}
         >
           <Settings className="w-3.5 h-3.5" />
-          <span className="text-sm">{t('actions.settings')}</span>
+          <span className="text-sm font-medium">{t('actions.settings')}</span>
         </button>
       </div>
 

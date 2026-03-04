@@ -49,7 +49,7 @@ export default function SidebarContent({
 }: SidebarContentProps) {
   return (
     <div
-      className="h-full flex flex-col bg-background/80 backdrop-blur-sm md:select-none md:w-72"
+      className="h-full flex flex-col bg-background/72 backdrop-blur-xl md:select-none md:w-72 border-r border-border/40 shadow-[inset_-1px_0_0_hsl(var(--border)/0.35),0_22px_36px_hsl(224_42%_12%/0.06)]"
       style={{}}
     >
       <SidebarHeader
@@ -67,7 +67,7 @@ export default function SidebarContent({
         t={t}
       />
 
-      <ScrollArea className="flex-1 md:px-1.5 md:py-2 overflow-y-auto overscroll-contain">
+      <ScrollArea className="flex-1 md:px-2.5 md:py-2 overflow-y-auto overscroll-contain">
         <SidebarProjectList {...projectListProps} />
       </ScrollArea>
 

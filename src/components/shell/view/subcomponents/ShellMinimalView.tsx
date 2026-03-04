@@ -56,7 +56,7 @@ export default function ShellMinimalView({
               <button
                 type="button"
                 onClick={() => setIsAuthPanelHidden(true)}
-                className="rounded bg-gray-700 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-gray-100 hover:bg-gray-600"
+                className="rounded bg-gray-700 px-2 py-1 text-2xs font-medium uppercase tracking-wide text-gray-100 hover:bg-gray-600"
               >
                 Hide
               </button>

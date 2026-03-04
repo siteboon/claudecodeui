@@ -277,7 +277,7 @@ export default function ChatComposer({
 
         <div
           {...getRootProps()}
-          className={`relative bg-card/80 backdrop-blur-sm rounded-2xl shadow-sm border border-border/50 focus-within:shadow-md focus-within:border-primary/30 focus-within:ring-1 focus-within:ring-primary/15 transition-all duration-200 overflow-hidden ${
+          className={`relative bg-card/90 backdrop-blur-xl rounded-2xl shadow-[0_18px_48px_rgba(15,23,42,0.1)] border border-border/50 focus-within:shadow-[0_22px_58px_rgba(15,23,42,0.14)] focus-within:border-primary/35 focus-within:ring-1 focus-within:ring-primary/15 transition-all duration-200 overflow-hidden ${
             isTextareaExpanded ? 'chat-input-expanded' : ''
           }`}
         >
@@ -309,7 +309,7 @@ export default function ChatComposer({
             <button
               type="button"
               onClick={openImagePicker}
-              className="absolute left-2 top-1/2 transform -translate-y-1/2 p-2 hover:bg-accent/60 rounded-xl transition-colors"
+              className="absolute left-2 top-1/2 transform -translate-y-1/2 p-2 hover:bg-accent/70 rounded-xl transition-colors"
               title={t('input.attachImages')}
             >
               <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -337,7 +337,7 @@ export default function ChatComposer({
                 event.preventDefault();
                 onSubmit(event);
               }}
-              className="absolute right-2 top-1/2 transform -translate-y-1/2 w-10 h-10 sm:w-11 sm:h-11 bg-primary hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed rounded-xl flex items-center justify-center transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-1 focus:ring-offset-background"
+              className="absolute right-2 top-1/2 transform -translate-y-1/2 w-10 h-10 sm:w-11 sm:h-11 bg-primary hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed rounded-xl flex items-center justify-center transition-all duration-200 shadow-[0_10px_22px_hsl(var(--primary)/0.26)] focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-1 focus:ring-offset-background"
             >
               <svg className="w-4 h-4 sm:w-[18px] sm:h-[18px] text-primary-foreground transform rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />

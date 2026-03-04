@@ -56,7 +56,7 @@ export default function CodeEditorHeader({
           <div className="flex items-center gap-2 min-w-0">
             <h3 className="text-sm font-medium text-gray-900 dark:text-white truncate">{file.name}</h3>
             {file.diffInfo && (
-              <span className="text-[10px] bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 px-1.5 py-0.5 rounded whitespace-nowrap shrink-0">
+              <span className="text-2xs bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 px-1.5 py-0.5 rounded whitespace-nowrap shrink-0">
                 {labels.showingChanges}
               </span>
             )}

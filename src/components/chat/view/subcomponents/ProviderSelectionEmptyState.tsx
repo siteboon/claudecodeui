@@ -132,7 +132,7 @@ export default function ProviderSelectionEmptyState({
             <h2 className="text-lg sm:text-xl font-semibold text-foreground tracking-tight">
               {t('providerSelection.title')}
             </h2>
-            <p className="text-[13px] text-muted-foreground mt-1">
+            <p className="text-sm text-muted-foreground mt-1">
               {t('providerSelection.description')}
             </p>
           </div>
@@ -160,8 +160,8 @@ export default function ProviderSelectionEmptyState({
                     className={`w-9 h-9 transition-transform duration-150 ${active ? 'scale-110' : ''}`}
                   />
                   <div className="text-center">
-                    <p className="text-[13px] font-semibold text-foreground leading-none">{p.name}</p>
-                    <p className="text-[10px] text-muted-foreground mt-1 leading-tight">{t(p.infoKey)}</p>
+                    <p className="text-sm font-semibold text-foreground leading-none">{p.name}</p>
+                    <p className="text-2xs text-muted-foreground mt-1 leading-tight">{t(p.infoKey)}</p>
                   </div>
                   {/* Check badge */}
                   {active && (
