@@ -67,6 +67,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
         try {
           const data = JSON.parse(event.data);
           setLatestMessage(data);
+          console.log('--->Received WebSocket message:', data);
         } catch (error) {
           console.error('Error parsing WebSocket message:', error);
         }
