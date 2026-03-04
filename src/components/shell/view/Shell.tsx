@@ -98,29 +98,14 @@ export default function Shell({
       }
     }
 
-    let anchorIdx = footerIdx;
-    if (anchorIdx === -1) {
-      for (let i = lines.length - 1; i >= 0; i--) {
-        if (/^\s*[❯›>]\s*\d+\.\s+/.test(lines[i])) {
-          let lastOpt = i;
-          for (let j = i + 1; j < lines.length; j++) {
-            if (/^\s*\d+\.\s+/.test(lines[j])) lastOpt = j;
-            else break;
-          }
-          anchorIdx = lastOpt + 1;
-          break;
-        }
-      }
-    }
-
-    if (anchorIdx === -1) {
+    if (footerIdx === -1) {
       setCliPromptOptions(null);
       return;
     }
 
     const optMap = new Map<string, string>();
-    const optScanStart = Math.max(0, anchorIdx - PROMPT_OPTION_SCAN_LINES);
-    for (let i = anchorIdx - 1; i >= optScanStart; i--) {
+    const optScanStart = Math.max(0, footerIdx - PROMPT_OPTION_SCAN_LINES);
+    for (let i = footerIdx - 1; i >= optScanStart; i--) {
       const match = lines[i].match(/^\s*[❯›>]?\s*(\d+)\.\s+(.+)/);
       if (match) {
         const num = match[1];
@@ -158,9 +143,15 @@ export default function Shell({
     };
   }, []);
 
-  // Clear stale prompt options on disconnect
+  // Clear stale prompt options and cancel pending timer on disconnect
   useEffect(() => {
-    if (!isConnected) setCliPromptOptions(null);
+    if (!isConnected) {
+      if (promptCheckTimer.current) {
+        clearTimeout(promptCheckTimer.current);
+        promptCheckTimer.current = null;
+      }
+      setCliPromptOptions(null);
+    }
   }, [isConnected]);
 
   const sendInput = useCallback(
