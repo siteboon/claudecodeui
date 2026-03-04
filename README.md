@@ -280,6 +280,44 @@ session counts
 - **Mobile Navigation** - Bottom tab bar for easy thumb navigation
 - **Adaptive Layout** - Collapsible sidebar and smart content prioritization
 - **Add shortcut to Home Screen** - Add a shortcut to your home screen and the app will behave like a PWA
+## FAQ
+
+<details>
+<summary>How is this different from Claude Code Remote Control?</summary>
+
+Claude Code Remote Control lets you send messages to a session already running in your local terminal. Your machine has to stay on, your terminal has to stay open, and sessions time out after roughly 10 minutes without a network connection.
+
+CloudCLI UI and CloudCLI Cloud extend Claude Code rather than sit alongside it. Your MCP servers, permissions, settings, and sessions are the exact same ones Claude Code uses natively. Nothing is duplicated or managed separately.
+
+- **All your sessions, not just one** — CloudCLI UI auto-discovers every session from your `~/.claude` folder. Remote Control only exposes the single active session to make it available on the claude mobile app
+- **Your settings are your settings** — MCP servers, tool permissions, and project config you change in CloudCLI UI are written directly to your Claude Code config and take effect immediately, and vice versa.
+- **Works with more agents** — Claude Code, Cursor CLI, Codex, and Gemini CLI, not just Claude Code.
+- **Full UI, not just a chat window** — file explorer, Git integration, MCP management, and a shell terminal are all built in.
+- **CloudCLI Cloud runs in the cloud** — close your laptop, the agent keeps running. No terminal to babysit, no machine to keep awake.
+- **Omnichannel settings on claude code cli** - Your settings are the exact same settings you have on claude code cli and changing them from CloudCLI UI also changs them.
+
+</details>
+
+<details>
+<summary>Do I need to pay for an AI subscription separately?</summary>
+
+Yes. CloudCLI provides the environment, not the AI. You bring your own Claude, Cursor, openAI, or Gemini subscription. CloudCLI Cloud starts at 7/month for the hosted environment on top of that.
+
+</details>
+
+<details>
+<summary>Can I use CloudCLI UI on my phone?</summary>
+
+Yes. For self-hosted, run the server on your machine and open `[yourip]:port` in any browser on your network. For CloudCLI Cloud, open it from any device without any VPN, port forwarding, or setup plus you can work your projects on the cloud. A native app is also in the works.
+
+</details>
+
+<details>
+<summary>Will changes I make in the UI affect my local Claude Code setup?</summary>
+
+Yes, for self-hosted. CloudCLI UI reads from and writes to the same `~/.claude` config that Claude Code uses natively. MCP servers you add via the UI show up in Claude Code immediately and vice versa.
+
+</details>
 
 ## Architecture
 
