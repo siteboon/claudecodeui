@@ -4,7 +4,7 @@ import type { TFunction } from 'i18next';
 import { cn } from '../../../../lib/utils';
 import TaskIndicator from './TaskIndicator';
 import type { Project, ProjectSession, SessionProvider } from '../../../../types/app';
-import type { MCPServerStatus, SessionWithProvider, TouchHandlerFactory } from '../../types/types';
+import type { MCPServerStatus, SessionWithProvider } from '../../types/types';
 import { getTaskIndicatorStatus } from '../../utils/utils';
 import SidebarProjectSessions from './SidebarProjectSessions';
 
@@ -46,7 +46,6 @@ type SidebarProjectItemProps = {
   onStartEditingSession: (sessionId: string, initialName: string) => void;
   onCancelEditingSession: () => void;
   onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: SessionProvider) => void;
-  touchHandlerFactory: TouchHandlerFactory;
   t: TFunction;
 };
 
@@ -92,7 +91,6 @@ export default function SidebarProjectItem({
   onStartEditingSession,
   onCancelEditingSession,
   onSaveEditingSession,
-  touchHandlerFactory,
   t,
 }: SidebarProjectItemProps) {
   const isSelected = selectedProject?.name === project.name;
@@ -424,7 +422,6 @@ export default function SidebarProjectItem({
         onDeleteSession={onDeleteSession}
         onLoadMoreSessions={onLoadMoreSessions}
         onNewSession={onNewSession}
-        touchHandlerFactory={touchHandlerFactory}
         t={t}
       />
     </div>

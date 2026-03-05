@@ -247,7 +247,6 @@ export default function ChatMessagesPane({
               <MessageComponent
                 key={getMessageKey(message)}
                 message={message}
-                index={index}
                 prevMessage={prevMessage}
                 createDiff={createDiff}
                 onFileOpen={onFileOpen}

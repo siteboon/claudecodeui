@@ -4,7 +4,7 @@ import type { TFunction } from 'i18next';
 import { cn } from '../../../../lib/utils';
 import { formatTimeAgo } from '../../../../utils/dateUtils';
 import type { Project, ProjectSession, SessionProvider } from '../../../../types/app';
-import type { SessionWithProvider, TouchHandlerFactory } from '../../types/types';
+import type { SessionWithProvider } from '../../types/types';
 import { createSessionViewModel } from '../../utils/utils';
 import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
 
@@ -27,7 +27,6 @@ type SidebarSessionItemProps = {
     sessionTitle: string,
     provider: SessionProvider,
   ) => void;
-  touchHandlerFactory: TouchHandlerFactory;
   t: TFunction;
 };
 
@@ -45,7 +44,6 @@ export default function SidebarSessionItem({
   onProjectSelect,
   onSessionSelect,
   onDeleteSession,
-  touchHandlerFactory,
   t,
 }: SidebarSessionItemProps) {
   const sessionView = createSessionViewModel(session, currentTime, t);

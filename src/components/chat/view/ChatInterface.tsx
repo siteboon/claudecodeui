@@ -88,7 +88,6 @@ function ChatInterface({
     isLoadingMoreMessages,
     hasMoreMessages,
     totalMessages,
-    isSystemSessionChange,
     setIsSystemSessionChange,
     canAbortSession,
     setCanAbortSession,

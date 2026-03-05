@@ -2,7 +2,7 @@ import { ChevronDown, Plus } from 'lucide-react';
 import type { TFunction } from 'i18next';
 import { Button } from '../../../../shared/view/ui';
 import type { Project, ProjectSession, SessionProvider } from '../../../../types/app';
-import type { SessionWithProvider, TouchHandlerFactory } from '../../types/types';
+import type { SessionWithProvider } from '../../types/types';
 import SidebarSessionItem from './SidebarSessionItem';
 
 type SidebarProjectSessionsProps = {
@@ -29,7 +29,6 @@ type SidebarProjectSessionsProps = {
   ) => void;
   onLoadMoreSessions: (project: Project) => void;
   onNewSession: (project: Project) => void;
-  touchHandlerFactory: TouchHandlerFactory;
   t: TFunction;
 };
 
@@ -70,7 +69,6 @@ export default function SidebarProjectSessions({
   onDeleteSession,
   onLoadMoreSessions,
   onNewSession,
-  touchHandlerFactory,
   t,
 }: SidebarProjectSessionsProps) {
   if (!isExpanded) {
@@ -105,7 +103,6 @@ export default function SidebarProjectSessions({
             onProjectSelect={onProjectSelect}
             onSessionSelect={onSessionSelect}
             onDeleteSession={onDeleteSession}
-            touchHandlerFactory={touchHandlerFactory}
             t={t}
           />
         ))

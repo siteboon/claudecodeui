@@ -22,6 +22,7 @@ export const TextContent: React.FC<TextContentProps> = ({
       formattedJson = JSON.stringify(parsed, null, 2);
     } catch (e) {
       // If parsing fails, use original content
+      console.warn('Failed to parse JSON content:', e);
     }
 
     return (
