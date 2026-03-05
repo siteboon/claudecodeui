@@ -1,5 +1,6 @@
 import type { ChatMessage } from '../types/types';
 import { decodeHtmlEntities, unescapeWithMathProtection } from './chatFormatting';
+import { parseUiMessageContent } from './uiParser';
 
 export interface DiffLine {
   type: 'added' | 'removed';
@@ -391,38 +392,22 @@ export const convertSessionMessages = (rawMessages: any[]): ChatMessage[] => {
         content = decodeHtmlEntities(String(message.message.content));
       }
 
-      const shouldSkip =
-        !content ||
-        content.startsWith('<command-name>') ||
-        content.startsWith('<command-message>') ||
-        content.startsWith('<command-args>') ||
-        content.startsWith('<local-command-stdout>') ||
-        content.startsWith('<system-reminder>') ||
-        content.startsWith('Caveat:') ||
-        content.startsWith('This session is being continued from a previous') ||
-        content.startsWith('[Request interrupted');
+      const parsedContent = parseUiMessageContent(content);
 
-      if (!shouldSkip) {
-        // Parse <task-notification> blocks into compact system messages
-        const taskNotifRegex = /<task-notification>\s*<task-id>[^<]*<\/task-id>\s*<output-file>[^<]*<\/output-file>\s*<status>([^<]*)<\/status>\s*<summary>([^<]*)<\/summary>\s*<\/task-notification>/g;
-        const taskNotifMatch = taskNotifRegex.exec(content);
-        if (taskNotifMatch) {
-          const status = taskNotifMatch[1]?.trim() || 'completed';
-          const summary = taskNotifMatch[2]?.trim() || 'Background task finished';
-          converted.push({
-            type: 'assistant',
-            content: summary,
-            timestamp: message.timestamp || new Date().toISOString(),
-            isTaskNotification: true,
-            taskStatus: status,
-          });
-        } else {
-          converted.push({
-            type: 'user',
-            content: unescapeWithMathProtection(content),
-            timestamp: message.timestamp || new Date().toISOString(),
-          });
-        }
+      if (parsedContent.kind === 'taskNotification') {
+        converted.push({
+          type: 'assistant',
+          content: parsedContent.summary,
+          timestamp: message.timestamp || new Date().toISOString(),
+          isTaskNotification: true,
+          taskStatus: parsedContent.status,
+        });
+      } else if (parsedContent.kind === 'text') {
+        converted.push({
+          type: 'user',
+          content: unescapeWithMathProtection(parsedContent.content),
+          timestamp: message.timestamp || new Date().toISOString(),
+        });
       }
       return;
     }
