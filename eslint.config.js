@@ -1,6 +1,10 @@
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
+import react from "eslint-plugin-react";
 import reactHooks from "eslint-plugin-react-hooks";
+import reactRefresh from "eslint-plugin-react-refresh";
+import importX from "eslint-plugin-import-x";
+import tailwindcss from "eslint-plugin-tailwindcss";
 import unusedImports from "eslint-plugin-unused-imports";
 import globals from "globals";
 
@@ -12,19 +16,27 @@ export default tseslint.config(
     files: ["src/**/*.{ts,tsx,js,jsx}"],
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     plugins: {
+      react,
       "react-hooks": reactHooks,
+      "react-refresh": reactRefresh,
+      "import-x": importX,
+      tailwindcss,
       "unused-imports": unusedImports,
     },
     languageOptions: {
       globals: {
         ...globals.browser,
       },
+      parserOptions: {
+        ecmaFeatures: { jsx: true },
+      },
+    },
+    settings: {
+      react: { version: "detect" },
     },
     rules: {
-      // Remove unused imports automatically
+      // --- Unused imports/vars ---
       "unused-imports/no-unused-imports": "warn",
-
-      // Flag unused variables (ignoring those prefixed with _)
       "unused-imports/no-unused-vars": [
         "warn",
         {
@@ -34,12 +46,52 @@ export default tseslint.config(
           argsIgnorePattern: "^_",
         },
       ],
-
-      // Disable the base rules so they don't conflict
       "no-unused-vars": "off",
       "@typescript-eslint/no-unused-vars": "off",
 
-      // Disable rules the user didn't ask for
+      // --- React ---
+      "react/jsx-key": "warn",
+      "react/jsx-no-duplicate-props": "error",
+      "react/jsx-no-undef": "error",
+      "react/no-children-prop": "warn",
+      "react/no-danger-with-children": "error",
+      "react/no-direct-mutation-state": "error",
+      "react/no-unknown-property": "warn",
+      "react/react-in-jsx-scope": "off",
+
+      // --- React Hooks ---
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "warn",
+
+      // --- React Refresh (Vite HMR) ---
+      "react-refresh/only-export-components": [
+        "warn",
+        { allowConstantExport: true },
+      ],
+
+      // --- Import ordering & hygiene ---
+      "import-x/no-duplicates": "warn",
+      "import-x/order": [
+        "warn",
+        {
+          groups: [
+            "builtin",
+            "external",
+            "internal",
+            "parent",
+            "sibling",
+            "index",
+          ],
+          "newlines-between": "never",
+        },
+      ],
+
+      // --- Tailwind CSS ---
+      "tailwindcss/classnames-order": "warn",
+      "tailwindcss/no-contradicting-classname": "warn",
+      "tailwindcss/no-unnecessary-arbitrary-value": "warn",
+
+      // --- Disabled base rules ---
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-require-imports": "off",
       "no-case-declarations": "off",
