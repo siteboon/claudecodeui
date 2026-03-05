@@ -113,9 +113,9 @@ export default function GitPanelHeader({
         <div className="relative" ref={dropdownRef}>
           <button
             onClick={() => setShowBranchDropdown((previous) => !previous)}
-            className={`flex items-center hover:bg-accent rounded-lg transition-colors ${isMobile ? 'space-x-1 px-2 py-1' : 'space-x-2 px-3 py-1.5'}`}
+            className={`flex items-center rounded-lg transition-colors hover:bg-accent ${isMobile ? 'space-x-1 px-2 py-1' : 'space-x-2 px-3 py-1.5'}`}
           >
-            <GitBranch className={`text-muted-foreground ${isMobile ? 'w-3 h-3' : 'w-4 h-4'}`} />
+            <GitBranch className={`text-muted-foreground ${isMobile ? 'h-3 w-3' : 'h-4 w-4'}`} />
             <span className="flex items-center gap-1">
               <span className={`font-medium ${isMobile ? 'text-xs' : 'text-sm'}`}>{currentBranch}</span>
               {remoteStatus?.hasRemote && (
@@ -146,22 +146,22 @@ export default function GitPanelHeader({
                 </span>
               )}
             </span>
-            <ChevronDown className={`w-3 h-3 text-muted-foreground transition-transform ${showBranchDropdown ? 'rotate-180' : ''}`} />
+            <ChevronDown className={`h-3 w-3 text-muted-foreground transition-transform ${showBranchDropdown ? 'rotate-180' : ''}`} />
           </button>
 
           {showBranchDropdown && (
-            <div className="absolute top-full left-0 mt-1 w-64 bg-card rounded-xl shadow-lg border border-border z-50 overflow-hidden">
-              <div className="py-1 max-h-64 overflow-y-auto">
+            <div className="absolute left-0 top-full z-50 mt-1 w-64 overflow-hidden rounded-xl border border-border bg-card shadow-lg">
+              <div className="max-h-64 overflow-y-auto py-1">
                 {branches.map((branch) => (
                   <button
                     key={branch}
                     onClick={() => void handleSwitchBranch(branch)}
-                    className={`w-full text-left px-4 py-2 text-sm hover:bg-accent transition-colors ${
+                    className={`w-full px-4 py-2 text-left text-sm transition-colors hover:bg-accent ${
                       branch === currentBranch ? 'bg-accent/50 text-foreground' : 'text-muted-foreground'
                     }`}
                   >
                     <span className="flex items-center space-x-2">
-                      {branch === currentBranch && <Check className="w-3 h-3 text-primary" />}
+                      {branch === currentBranch && <Check className="h-3 w-3 text-primary" />}
                       <span className={branch === currentBranch ? 'font-medium' : ''}>{branch}</span>
                     </span>
                   </button>
@@ -173,9 +173,9 @@ export default function GitPanelHeader({
                     setShowNewBranchModal(true);
                     setShowBranchDropdown(false);
                   }}
-                  className="w-full text-left px-4 py-2 text-sm hover:bg-accent transition-colors flex items-center space-x-2"
+                  className="flex w-full items-center space-x-2 px-4 py-2 text-left text-sm transition-colors hover:bg-accent"
                 >
-                  <Plus className="w-3 h-3" />
+                  <Plus className="h-3 w-3" />
                   <span>Create new branch</span>
                 </button>
               </div>
@@ -190,10 +190,10 @@ export default function GitPanelHeader({
                 <button
                   onClick={requestPublishConfirmation}
                   disabled={isPublishing}
-                  className="px-2.5 py-1 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1 transition-colors"
+                  className="flex items-center gap-1 rounded-lg bg-purple-600 px-2.5 py-1 text-sm text-white transition-colors hover:bg-purple-700 disabled:opacity-50"
                   title={`Publish branch "${currentBranch}" to ${remoteName}`}
                 >
-                  <Upload className={`w-3 h-3 ${isPublishing ? 'animate-pulse' : ''}`} />
+                  <Upload className={`h-3 w-3 ${isPublishing ? 'animate-pulse' : ''}`} />
                   <span>{isPublishing ? 'Publishing...' : 'Publish'}</span>
                 </button>
               )}
@@ -204,10 +204,10 @@ export default function GitPanelHeader({
                     <button
                       onClick={requestPullConfirmation}
                       disabled={isPulling}
-                      className="px-2.5 py-1 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-1 transition-colors"
+                      className="flex items-center gap-1 rounded-lg bg-green-600 px-2.5 py-1 text-sm text-white transition-colors hover:bg-green-700 disabled:opacity-50"
                       title={`Pull ${behindCount} commit${behindCount !== 1 ? 's' : ''} from ${remoteName}`}
                     >
-                      <Download className={`w-3 h-3 ${isPulling ? 'animate-pulse' : ''}`} />
+                      <Download className={`h-3 w-3 ${isPulling ? 'animate-pulse' : ''}`} />
                       <span>{isPulling ? 'Pulling...' : `Pull ${behindCount}`}</span>
                     </button>
                   )}
@@ -216,10 +216,10 @@ export default function GitPanelHeader({
                     <button
                       onClick={requestPushConfirmation}
                       disabled={isPushing}
-                      className="px-2.5 py-1 text-sm bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 flex items-center gap-1 transition-colors"
+                      className="flex items-center gap-1 rounded-lg bg-orange-600 px-2.5 py-1 text-sm text-white transition-colors hover:bg-orange-700 disabled:opacity-50"
                       title={`Push ${aheadCount} commit${aheadCount !== 1 ? 's' : ''} to ${remoteName}`}
                     >
-                      <Upload className={`w-3 h-3 ${isPushing ? 'animate-pulse' : ''}`} />
+                      <Upload className={`h-3 w-3 ${isPushing ? 'animate-pulse' : ''}`} />
                       <span>{isPushing ? 'Pushing...' : `Push ${aheadCount}`}</span>
                     </button>
                   )}
@@ -228,10 +228,10 @@ export default function GitPanelHeader({
                     <button
                       onClick={() => void handleFetch()}
                       disabled={isFetching}
-                      className="px-2.5 py-1 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1 transition-colors"
+                      className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1 text-sm text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
                       title={`Fetch from ${remoteName}`}
                     >
-                      <RefreshCw className={`w-3 h-3 ${isFetching ? 'animate-spin' : ''}`} />
+                      <RefreshCw className={`h-3 w-3 ${isFetching ? 'animate-spin' : ''}`} />
                       <span>{isFetching ? 'Fetching...' : 'Fetch'}</span>
                     </button>
                   )}
@@ -243,10 +243,10 @@ export default function GitPanelHeader({
           <button
             onClick={onRefresh}
             disabled={isLoading}
-            className={`hover:bg-accent rounded-lg transition-colors ${isMobile ? 'p-1' : 'p-1.5'}`}
+            className={`rounded-lg transition-colors hover:bg-accent ${isMobile ? 'p-1' : 'p-1.5'}`}
             title="Refresh git status"
           >
-            <RefreshCw className={`text-muted-foreground ${isLoading ? 'animate-spin' : ''} ${isMobile ? 'w-3 h-3' : 'w-4 h-4'}`} />
+            <RefreshCw className={`text-muted-foreground ${isLoading ? 'animate-spin' : ''} ${isMobile ? 'h-3 w-3' : 'h-4 w-4'}`} />
           </button>
         </div>
       </div>

@@ -45,32 +45,32 @@ export default function MainContentTitle({
   const showChatNewSession = activeTab === 'chat' && !selectedSession;
 
   return (
-    <div className="min-w-0 flex items-center gap-2 flex-1 overflow-x-auto scrollbar-hide">
+    <div className="scrollbar-hide flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
       {showSessionIcon && (
-        <div className="w-5 h-5 flex-shrink-0 flex items-center justify-center">
-          <SessionProviderLogo provider={selectedSession?.__provider} className="w-4 h-4" />
+        <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center">
+          <SessionProviderLogo provider={selectedSession?.__provider} className="h-4 w-4" />
         </div>
       )}
 
       <div className="min-w-0 flex-1">
         {activeTab === 'chat' && selectedSession ? (
           <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-foreground whitespace-nowrap overflow-x-auto scrollbar-hide leading-tight">
+            <h2 className="scrollbar-hide overflow-x-auto whitespace-nowrap text-sm font-semibold leading-tight text-foreground">
               {getSessionTitle(selectedSession)}
             </h2>
-            <div className="text-[11px] text-muted-foreground truncate leading-tight">{selectedProject.displayName}</div>
+            <div className="truncate text-[11px] leading-tight text-muted-foreground">{selectedProject.displayName}</div>
           </div>
         ) : showChatNewSession ? (
           <div className="min-w-0">
-            <h2 className="text-base font-semibold text-foreground leading-tight">{t('mainContent.newSession')}</h2>
-            <div className="text-xs text-muted-foreground truncate leading-tight">{selectedProject.displayName}</div>
+            <h2 className="text-base font-semibold leading-tight text-foreground">{t('mainContent.newSession')}</h2>
+            <div className="truncate text-xs leading-tight text-muted-foreground">{selectedProject.displayName}</div>
           </div>
         ) : (
           <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-foreground leading-tight">
+            <h2 className="text-sm font-semibold leading-tight text-foreground">
               {getTabTitle(activeTab, shouldShowTasksTab, t)}
             </h2>
-            <div className="text-[11px] text-muted-foreground truncate leading-tight">{selectedProject.displayName}</div>
+            <div className="truncate text-[11px] leading-tight text-muted-foreground">{selectedProject.displayName}</div>
           </div>
         )}
       </div>

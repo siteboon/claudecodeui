@@ -1,15 +1,13 @@
 import { useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-
 import Sidebar from '../sidebar/view/Sidebar';
 import MainContent from '../main-content/view/MainContent';
-import MobileNav from '../MobileNav';
-
 import { useWebSocket } from '../../contexts/WebSocketContext';
 import { useDeviceSettings } from '../../hooks/useDeviceSettings';
 import { useSessionProtection } from '../../hooks/useSessionProtection';
 import { useProjectsState } from '../../hooks/useProjectsState';
+import MobileNav from './MobileNav';
 
 export default function AppContent() {
   const navigate = useNavigate();
@@ -98,7 +96,7 @@ export default function AppContent() {
         </div>
       ) : (
         <div
-          className={`fixed inset-0 z-50 flex transition-all duration-150 ease-out ${sidebarOpen ? 'opacity-100 visible' : 'opacity-0 invisible'
+          className={`fixed inset-0 z-50 flex transition-all duration-150 ease-out ${sidebarOpen ? 'visible opacity-100' : 'invisible opacity-0'
             }`}
         >
           <button
@@ -115,7 +113,7 @@ export default function AppContent() {
             aria-label={t('versionUpdate.ariaLabels.closeSidebar')}
           />
           <div
-            className={`relative w-[85vw] max-w-sm sm:w-80 h-full bg-card border-r border-border/40 transform transition-transform duration-150 ease-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+            className={`relative h-full w-[85vw] max-w-sm transform border-r border-border/40 bg-card transition-transform duration-150 ease-out sm:w-80 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'
               }`}
             onClick={(event) => event.stopPropagation()}
             onTouchStart={(event) => event.stopPropagation()}
@@ -125,7 +123,7 @@ export default function AppContent() {
         </div>
       )}
 
-      <div className={`flex-1 flex flex-col min-w-0 ${isMobile ? 'pb-mobile-nav' : ''}`}>
+      <div className={`flex min-w-0 flex-1 flex-col ${isMobile ? 'pb-mobile-nav' : ''}`}>
         <MainContent
           selectedProject={selectedProject}
           selectedSession={selectedSession}

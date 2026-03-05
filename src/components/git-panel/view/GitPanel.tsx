@@ -66,14 +66,14 @@ export default function GitPanel({ selectedProject, isMobile = false, onFileOpen
 
   if (!selectedProject) {
     return (
-      <div className="h-full flex items-center justify-center text-muted-foreground">
+      <div className="flex h-full items-center justify-center text-muted-foreground">
         <p>Select a project to view source control</p>
       </div>
     );
   }
 
   return (
-    <div className="h-full flex flex-col bg-background">
+    <div className="flex h-full flex-col bg-background">
       <GitPanelHeader
         isMobile={isMobile}
         currentBranch={currentBranch}

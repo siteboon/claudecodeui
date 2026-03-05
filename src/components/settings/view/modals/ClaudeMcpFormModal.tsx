@@ -2,8 +2,7 @@ import { FolderOpen, Globe, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Input } from '../../../ui/input';
-import { Button } from '../../../ui/button';
+import { Button, Input } from '../../../../shared/view/ui';
 import { DEFAULT_CLAUDE_MCP_FORM } from '../../constants/constants';
 import type { ClaudeMcpFormState, McpServer, McpScope, McpTransportType, SettingsProject } from '../../types/types';
 
@@ -148,27 +147,27 @@ export default function ClaudeMcpFormModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[110] p-4">
-      <div className="bg-background border border-border rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-4 border-b border-border">
+    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-border bg-background">
+        <div className="flex items-center justify-between border-b border-border p-4">
           <h3 className="text-lg font-medium text-foreground">
             {isEditing ? t('mcpForm.title.edit') : t('mcpForm.title.add')}
           </h3>
           <Button variant="ghost" size="sm" onClick={onClose}>
-            <X className="w-4 h-4" />
+            <X className="h-4 w-4" />
           </Button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 p-4">
           {!isEditing && (
-            <div className="flex gap-2 mb-4">
+            <div className="mb-4 flex gap-2">
               <button
                 type="button"
                 onClick={() => setFormData((prev) => ({ ...prev, importMode: 'form' }))}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                className={`rounded-lg px-4 py-2 font-medium transition-colors ${
                   formData.importMode === 'form'
                     ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
                 }`}
               >
                 {t('mcpForm.importMode.form')}
@@ -176,10 +175,10 @@ export default function ClaudeMcpFormModal({
               <button
                 type="button"
                 onClick={() => setFormData((prev) => ({ ...prev, importMode: 'json' }))}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                className={`rounded-lg px-4 py-2 font-medium transition-colors ${
                   formData.importMode === 'json'
                     ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
                 }`}
               >
                 {t('mcpForm.importMode.json')}
@@ -188,12 +187,12 @@ export default function ClaudeMcpFormModal({
           )}
 
           {formData.importMode === 'form' && isEditing && (
-            <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-3">
-              <label className="block text-sm font-medium text-foreground mb-2">
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900/50">
+              <label className="mb-2 block text-sm font-medium text-foreground">
                 {t('mcpForm.scope.label')}
               </label>
               <div className="flex items-center gap-2">
-                {formData.scope === 'user' ? <Globe className="w-4 h-4" /> : <FolderOpen className="w-4 h-4" />}
+                {formData.scope === 'user' ? <Globe className="h-4 w-4" /> : <FolderOpen className="h-4 w-4" />}
                 <span className="text-sm">
                   {formData.scope === 'user' ? t('mcpForm.scope.userGlobal') : t('mcpForm.scope.projectLocal')}
                 </span>
@@ -201,47 +200,47 @@ export default function ClaudeMcpFormModal({
                   <span className="text-xs text-muted-foreground">- {formData.projectPath}</span>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground mt-2">{t('mcpForm.scope.cannotChange')}</p>
+              <p className="mt-2 text-xs text-muted-foreground">{t('mcpForm.scope.cannotChange')}</p>
             </div>
           )}
 
           {formData.importMode === 'form' && !isEditing && (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
+                <label className="mb-2 block text-sm font-medium text-foreground">
                   {t('mcpForm.scope.label')} *
                 </label>
                 <div className="flex gap-2">
                   <button
                     type="button"
                     onClick={() => setFormData((prev) => ({ ...prev, scope: 'user', projectPath: '' }))}
-                    className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
+                    className={`flex-1 rounded-lg px-4 py-2 font-medium transition-colors ${
                       formData.scope === 'user'
                         ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
                     }`}
                   >
                     <div className="flex items-center justify-center gap-2">
-                      <Globe className="w-4 h-4" />
+                      <Globe className="h-4 w-4" />
                       <span>{t('mcpForm.scope.userGlobal')}</span>
                     </div>
                   </button>
                   <button
                     type="button"
                     onClick={() => setFormData((prev) => ({ ...prev, scope: 'local' }))}
-                    className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
+                    className={`flex-1 rounded-lg px-4 py-2 font-medium transition-colors ${
                       formData.scope === 'local'
                         ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
                     }`}
                   >
                     <div className="flex items-center justify-center gap-2">
-                      <FolderOpen className="w-4 h-4" />
+                      <FolderOpen className="h-4 w-4" />
                       <span>{t('mcpForm.scope.projectLocal')}</span>
                     </div>
                   </button>
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">
+                <p className="mt-2 text-xs text-muted-foreground">
                   {formData.scope === 'user'
                     ? t('mcpForm.scope.userDescription')
                     : t('mcpForm.scope.projectDescription')}
@@ -250,7 +249,7 @@ export default function ClaudeMcpFormModal({
 
               {formData.scope === 'local' && (
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">
+                  <label className="mb-2 block text-sm font-medium text-foreground">
                     {t('mcpForm.fields.selectProject')} *
                   </label>
                   <select
@@ -258,7 +257,7 @@ export default function ClaudeMcpFormModal({
                     onChange={(event) => {
                       setFormData((prev) => ({ ...prev, projectPath: event.target.value }));
                     }}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                     required
                   >
                     <option value="">{t('mcpForm.fields.selectProject')}...</option>
@@ -269,7 +268,7 @@ export default function ClaudeMcpFormModal({
                     ))}
                   </select>
                   {formData.projectPath && (
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       {t('mcpForm.projectPath', { path: formData.projectPath })}
                     </p>
                   )}
@@ -278,9 +277,9 @@ export default function ClaudeMcpFormModal({
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className={formData.importMode === 'json' ? 'md:col-span-2' : ''}>
-              <label className="block text-sm font-medium text-foreground mb-2">
+              <label className="mb-2 block text-sm font-medium text-foreground">
                 {t('mcpForm.fields.serverName')} *
               </label>
               <Input
@@ -293,7 +292,7 @@ export default function ClaudeMcpFormModal({
 
             {formData.importMode === 'form' && (
               <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
+                <label className="mb-2 block text-sm font-medium text-foreground">
                   {t('mcpForm.fields.transportType')} *
                 </label>
                 <select
@@ -304,7 +303,7 @@ export default function ClaudeMcpFormModal({
                       type: getSafeTransportType(event.target.value),
                     }));
                   }}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                 >
                   <option value="stdio">stdio</option>
                   <option value="sse">SSE</option>
@@ -315,13 +314,13 @@ export default function ClaudeMcpFormModal({
           </div>
 
           {isEditing && Boolean(formData.raw) && formData.importMode === 'form' && (
-            <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-              <h4 className="text-sm font-medium text-foreground mb-2">
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/50">
+              <h4 className="mb-2 text-sm font-medium text-foreground">
                 {t('mcpForm.configDetails', {
                   configFile: editingServer?.scope === 'global' ? '~/.claude.json' : 'project config',
                 })}
               </h4>
-              <pre className="text-xs bg-gray-100 dark:bg-gray-800 p-3 rounded overflow-x-auto">
+              <pre className="overflow-x-auto rounded bg-gray-100 p-3 text-xs dark:bg-gray-800">
                 {JSON.stringify(formData.raw, null, 2)}
               </pre>
             </div>
@@ -330,7 +329,7 @@ export default function ClaudeMcpFormModal({
           {formData.importMode === 'json' && (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
+                <label className="mb-2 block text-sm font-medium text-foreground">
                   {t('mcpForm.fields.jsonConfig')} *
                 </label>
                 <textarea
@@ -340,17 +339,17 @@ export default function ClaudeMcpFormModal({
                     setFormData((prev) => ({ ...prev, jsonInput: value }));
                     handleJsonValidation(value);
                   }}
-                  className={`w-full px-3 py-2 border ${
+                  className={`w-full border px-3 py-2 ${
                     jsonValidationError ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
-                  } bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500 font-mono text-sm`}
+                  } rounded-lg bg-gray-50 font-mono text-sm text-gray-900 focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100`}
                   rows={8}
                   placeholder={'{\n  "type": "stdio",\n  "command": "/path/to/server",\n  "args": ["--api-key", "abc123"],\n  "env": {\n    "CACHE_DIR": "/tmp"\n  }\n}'}
                   required
                 />
                 {jsonValidationError && (
-                  <p className="text-xs text-red-500 mt-1">{jsonValidationError}</p>
+                  <p className="mt-1 text-xs text-red-500">{jsonValidationError}</p>
                 )}
-                <p className="text-xs text-muted-foreground mt-2">
+                <p className="mt-2 text-xs text-muted-foreground">
                   {t('mcpForm.validation.jsonHelp')}
                   <br />
                   - stdio: {`{"type":"stdio","command":"npx","args":["@upstash/context7-mcp"]}`}
@@ -364,7 +363,7 @@ export default function ClaudeMcpFormModal({
           {formData.importMode === 'form' && formData.type === 'stdio' && (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
+                <label className="mb-2 block text-sm font-medium text-foreground">
                   {t('mcpForm.fields.command')} *
                 </label>
                 <Input
@@ -376,7 +375,7 @@ export default function ClaudeMcpFormModal({
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
+                <label className="mb-2 block text-sm font-medium text-foreground">
                   {t('mcpForm.fields.arguments')}
                 </label>
                 <textarea
@@ -385,7 +384,7 @@ export default function ClaudeMcpFormModal({
                     const args = event.target.value.split('\n').filter((arg) => arg.trim());
                     updateConfig('args', args);
                   }}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                   rows={3}
                   placeholder="--api-key&#10;abc123"
                 />
@@ -395,7 +394,7 @@ export default function ClaudeMcpFormModal({
 
           {formData.importMode === 'form' && (formData.type === 'sse' || formData.type === 'http') && (
             <div>
-              <label className="block text-sm font-medium text-foreground mb-2">
+              <label className="mb-2 block text-sm font-medium text-foreground">
                 {t('mcpForm.fields.url')} *
               </label>
               <Input
@@ -410,7 +409,7 @@ export default function ClaudeMcpFormModal({
 
           {formData.importMode === 'form' && (
             <div>
-              <label className="block text-sm font-medium text-foreground mb-2">
+              <label className="mb-2 block text-sm font-medium text-foreground">
                 {t('mcpForm.fields.envVars')}
               </label>
               <textarea
@@ -425,7 +424,7 @@ export default function ClaudeMcpFormModal({
                   });
                   updateConfig('env', env);
                 }}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                className="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                 rows={3}
                 placeholder="API_KEY=your-key&#10;DEBUG=true"
               />
@@ -434,7 +433,7 @@ export default function ClaudeMcpFormModal({
 
           {formData.importMode === 'form' && (formData.type === 'sse' || formData.type === 'http') && (
             <div>
-              <label className="block text-sm font-medium text-foreground mb-2">
+              <label className="mb-2 block text-sm font-medium text-foreground">
                 {t('mcpForm.fields.headers')}
               </label>
               <textarea
@@ -449,7 +448,7 @@ export default function ClaudeMcpFormModal({
                   });
                   updateConfig('headers', headers);
                 }}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                className="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                 rows={3}
                 placeholder="Authorization=Bearer token&#10;X-API-Key=your-key"
               />

@@ -220,7 +220,7 @@ export default function CodeEditor({
           />
 
           {saveError && (
-            <div className="px-3 py-1.5 text-xs text-red-700 bg-red-50 border-b border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-900/40">
+            <div className="border-b border-red-200 bg-red-50 px-3 py-1.5 text-xs text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">
               {saveError}
             </div>
           )}

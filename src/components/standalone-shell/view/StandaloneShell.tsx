@@ -53,12 +53,12 @@ export default function StandaloneShell({
   }
 
   return (
-    <div className={`h-full w-full flex flex-col ${className}`}>
+    <div className={`flex h-full w-full flex-col ${className}`}>
       {!minimal && showHeader && title && (
         <StandaloneShellHeader title={title} isCompleted={isCompleted} onClose={onClose} />
       )}
 
-      <div className="flex-1 w-full min-h-0">
+      <div className="min-h-0 w-full flex-1">
         <Shell
           selectedProject={project}
           selectedSession={session}

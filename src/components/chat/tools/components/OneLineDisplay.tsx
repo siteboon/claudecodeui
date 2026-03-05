@@ -68,16 +68,16 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
   const renderCopyButton = () => (
     <button
       onClick={handleAction}
-      className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-all ml-1 flex-shrink-0"
+      className="ml-1 flex-shrink-0 text-gray-400 opacity-0 transition-all hover:text-gray-600 group-hover:opacity-100 dark:hover:text-gray-200"
       title="Copy to clipboard"
       aria-label="Copy to clipboard"
     >
       {copied ? (
-        <svg className="w-3 h-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="h-3 w-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
         </svg>
       ) : (
-        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
         </svg>
       )}
@@ -89,15 +89,15 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
     return (
       <div className="group my-1">
         <div className="flex items-start gap-2">
-          <div className="flex items-center gap-1.5 flex-shrink-0 pt-0.5">
-            <svg className="w-3 h-3 text-green-500 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="flex flex-shrink-0 items-center gap-1.5 pt-0.5">
+            <svg className="h-3 w-3 text-green-500 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
           </div>
-          <div className="flex-1 min-w-0 flex items-start gap-2">
-            <div className="bg-gray-900 dark:bg-black rounded px-2.5 py-1 flex-1 min-w-0">
-              <code className={`text-xs text-green-400 font-mono ${wrapText ? 'whitespace-pre-wrap break-all' : 'block truncate'}`}>
-                <span className="text-green-600 dark:text-green-500 select-none">$ </span>{value}
+          <div className="flex min-w-0 flex-1 items-start gap-2">
+            <div className="min-w-0 flex-1 rounded bg-gray-900 px-2.5 py-1 dark:bg-black">
+              <code className={`font-mono text-xs text-green-400 ${wrapText ? 'whitespace-pre-wrap break-all' : 'block truncate'}`}>
+                <span className="select-none text-green-600 dark:text-green-500">$ </span>{value}
               </code>
             </div>
             {action === 'copy' && renderCopyButton()}
@@ -105,7 +105,7 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
         </div>
         {secondary && (
           <div className="ml-7 mt-1">
-            <span className="text-[11px] text-gray-400 dark:text-gray-500 italic">
+            <span className="text-[11px] italic text-gray-400 dark:text-gray-500">
               {secondary}
             </span>
           </div>
@@ -118,12 +118,12 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
   if (action === 'open-file') {
     const displayName = value.split('/').pop() || value;
     return (
-      <div className={`group flex items-center gap-1.5 border-l-2 ${colorScheme.border} pl-3 py-0.5 my-0.5`}>
-        <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">{label || toolName}</span>
-        <span className="text-gray-300 dark:text-gray-600 text-[10px]">/</span>
+      <div className={`group flex items-center gap-1.5 border-l-2 ${colorScheme.border} my-0.5 py-0.5 pl-3`}>
+        <span className="flex-shrink-0 text-xs text-gray-500 dark:text-gray-400">{label || toolName}</span>
+        <span className="text-[10px] text-gray-300 dark:text-gray-600">/</span>
         <button
           onClick={handleAction}
-          className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-mono hover:underline transition-colors truncate"
+          className="truncate font-mono text-xs text-blue-600 transition-colors hover:text-blue-700 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
           title={value}
         >
           {displayName}
@@ -135,23 +135,23 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
   // Search / jump-to-results style
   if (action === 'jump-to-results') {
     return (
-      <div className={`group flex items-center gap-1.5 border-l-2 ${colorScheme.border} pl-3 py-0.5 my-0.5`}>
-        <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">{label || toolName}</span>
-        <span className="text-gray-300 dark:text-gray-600 text-[10px]">/</span>
-        <span className={`text-xs font-mono truncate flex-1 min-w-0 ${colorScheme.primary}`}>
+      <div className={`group flex items-center gap-1.5 border-l-2 ${colorScheme.border} my-0.5 py-0.5 pl-3`}>
+        <span className="flex-shrink-0 text-xs text-gray-500 dark:text-gray-400">{label || toolName}</span>
+        <span className="text-[10px] text-gray-300 dark:text-gray-600">/</span>
+        <span className={`min-w-0 flex-1 truncate font-mono text-xs ${colorScheme.primary}`}>
           {value}
         </span>
         {secondary && (
-          <span className="text-[11px] text-gray-400 dark:text-gray-500 italic flex-shrink-0">
+          <span className="flex-shrink-0 text-[11px] italic text-gray-400 dark:text-gray-500">
             {secondary}
           </span>
         )}
         {toolResult && (
           <a
             href={`#tool-result-${toolId}`}
-            className="flex-shrink-0 text-[11px] text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors flex items-center gap-0.5"
+            className="flex flex-shrink-0 items-center gap-0.5 text-[11px] text-blue-600 transition-colors hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
           >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </a>
@@ -162,21 +162,21 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
 
   // Default one-line style
   return (
-    <div className={`group flex items-center gap-1.5 ${colorScheme.background || ''} border-l-2 ${colorScheme.border} pl-3 py-0.5 my-0.5`}>
+    <div className={`group flex items-center gap-1.5 ${colorScheme.background || ''} border-l-2 ${colorScheme.border} my-0.5 py-0.5 pl-3`}>
       {icon && icon !== 'terminal' && (
         <span className={`${colorScheme.icon} flex-shrink-0 text-xs`}>{icon}</span>
       )}
       {!icon && (label || toolName) && (
-        <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">{label || toolName}</span>
+        <span className="flex-shrink-0 text-xs text-gray-500 dark:text-gray-400">{label || toolName}</span>
       )}
       {(icon || label || toolName) && (
-        <span className="text-gray-300 dark:text-gray-600 text-[10px]">/</span>
+        <span className="text-[10px] text-gray-300 dark:text-gray-600">/</span>
       )}
-      <span className={`text-xs font-mono ${wrapText ? 'whitespace-pre-wrap break-all' : 'truncate'} flex-1 min-w-0 ${colorScheme.primary}`}>
+      <span className={`font-mono text-xs ${wrapText ? 'whitespace-pre-wrap break-all' : 'truncate'} min-w-0 flex-1 ${colorScheme.primary}`}>
         {value}
       </span>
       {secondary && (
-        <span className={`text-[11px] ${colorScheme.secondary} italic flex-shrink-0`}>
+        <span className={`text-[11px] ${colorScheme.secondary} flex-shrink-0 italic`}>
           {secondary}
         </span>
       )}

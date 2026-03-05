@@ -49,74 +49,74 @@ export default function CodeEditorHeader({
   const saveTitle = saveSuccess ? labels.saved : saving ? labels.saving : labels.save;
 
   return (
-    <div className="flex items-center justify-between px-3 py-1.5 border-b border-border flex-shrink-0 min-w-0 gap-2">
+    <div className="flex min-w-0 flex-shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
       {/* File info - can shrink */}
-      <div className="flex items-center gap-2 min-w-0 flex-1 shrink">
+      <div className="flex min-w-0 flex-1 shrink items-center gap-2">
         <div className="min-w-0 shrink">
-          <div className="flex items-center gap-2 min-w-0">
-            <h3 className="text-sm font-medium text-gray-900 dark:text-white truncate">{file.name}</h3>
+          <div className="flex min-w-0 items-center gap-2">
+            <h3 className="truncate text-sm font-medium text-gray-900 dark:text-white">{file.name}</h3>
             {file.diffInfo && (
-              <span className="text-[10px] bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 px-1.5 py-0.5 rounded whitespace-nowrap shrink-0">
+              <span className="shrink-0 whitespace-nowrap rounded bg-blue-100 px-1.5 py-0.5 text-[10px] text-blue-600 dark:bg-blue-900 dark:text-blue-300">
                 {labels.showingChanges}
               </span>
             )}
           </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{file.path}</p>
+          <p className="truncate text-xs text-gray-500 dark:text-gray-400">{file.path}</p>
         </div>
       </div>
 
       {/* Buttons - don't shrink, always visible */}
-      <div className="flex items-center gap-0.5 shrink-0">
+      <div className="flex shrink-0 items-center gap-0.5">
         {isMarkdownFile && (
           <button
             type="button"
             onClick={onToggleMarkdownPreview}
-            className={`p-1.5 rounded-md flex items-center justify-center transition-colors ${
+            className={`flex items-center justify-center rounded-md p-1.5 transition-colors ${
               markdownPreview
-                ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30'
-                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800'
+                ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
+                : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white'
             }`}
             title={markdownPreview ? labels.editMarkdown : labels.previewMarkdown}
           >
-            {markdownPreview ? <Code2 className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            {markdownPreview ? <Code2 className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
         )}
 
         <button
           type="button"
           onClick={onOpenSettings}
-          className="p-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center justify-center"
+          className="flex items-center justify-center rounded-md p-1.5 text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
           title={labels.settings}
         >
-          <SettingsIcon className="w-4 h-4" />
+          <SettingsIcon className="h-4 w-4" />
         </button>
 
         <button
           type="button"
           onClick={onDownload}
-          className="p-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center justify-center"
+          className="flex items-center justify-center rounded-md p-1.5 text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
           title={labels.download}
         >
-          <Download className="w-4 h-4" />
+          <Download className="h-4 w-4" />
         </button>
 
         <button
           type="button"
           onClick={onSave}
           disabled={saving}
-          className={`p-1.5 rounded-md disabled:opacity-50 flex items-center justify-center transition-colors ${
+          className={`flex items-center justify-center rounded-md p-1.5 transition-colors disabled:opacity-50 ${
             saveSuccess
-              ? 'text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30'
-              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800'
+              ? 'bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400'
+              : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white'
           }`}
           title={saveTitle}
         >
           {saveSuccess ? (
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           ) : (
-            <Save className="w-4 h-4" />
+            <Save className="h-4 w-4" />
           )}
         </button>
 
@@ -124,20 +124,20 @@ export default function CodeEditorHeader({
           <button
             type="button"
             onClick={onToggleFullscreen}
-            className="p-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center justify-center"
+            className="flex items-center justify-center rounded-md p-1.5 text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
             title={isFullscreen ? labels.exitFullscreen : labels.fullscreen}
           >
-            {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           </button>
         )}
 
         <button
           type="button"
           onClick={onClose}
-          className="p-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center justify-center"
+          className="flex items-center justify-center rounded-md p-1.5 text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
           title={labels.close}
         >
-          <X className="w-4 h-4" />
+          <X className="h-4 w-4" />
         </button>
       </div>
     </div>

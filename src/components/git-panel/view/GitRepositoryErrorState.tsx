@@ -7,18 +7,18 @@ type GitRepositoryErrorStateProps = {
 
 export default function GitRepositoryErrorState({ error, details }: GitRepositoryErrorStateProps) {
   return (
-    <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground px-6 py-12">
-      <div className="w-16 h-16 rounded-2xl bg-muted/50 flex items-center justify-center mb-6">
-        <GitBranch className="w-8 h-8 opacity-40" />
+    <div className="flex flex-1 flex-col items-center justify-center px-6 py-12 text-muted-foreground">
+      <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-muted/50">
+        <GitBranch className="h-8 w-8 opacity-40" />
       </div>
-      <h3 className="text-lg font-medium mb-3 text-center text-foreground">{error}</h3>
+      <h3 className="mb-3 text-center text-lg font-medium text-foreground">{error}</h3>
       {details && (
-        <p className="text-sm text-center leading-relaxed mb-6 max-w-md">{details}</p>
+        <p className="mb-6 max-w-md text-center text-sm leading-relaxed">{details}</p>
       )}
-      <div className="p-4 bg-primary/5 rounded-xl border border-primary/10 max-w-md">
-        <p className="text-sm text-primary text-center">
+      <div className="max-w-md rounded-xl border border-primary/10 bg-primary/5 p-4">
+        <p className="text-center text-sm text-primary">
           <strong>Tip:</strong> Run{' '}
-          <code className="bg-primary/10 px-2 py-1 rounded-md font-mono text-xs">git init</code>{' '}
+          <code className="rounded-md bg-primary/10 px-2 py-1 font-mono text-xs">git init</code>{' '}
           in your project directory to initialize git source control.
         </p>
       </div>

@@ -11,15 +11,15 @@ export default function AgentCategoryTabsSection({
   const { t } = useTranslation('settings');
 
   return (
-    <div className="border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-      <div role="tablist" className="flex px-2 md:px-4 overflow-x-auto">
+    <div className="flex-shrink-0 border-b border-gray-200 dark:border-gray-700">
+      <div role="tablist" className="flex overflow-x-auto px-2 md:px-4">
         {AGENT_CATEGORIES.map((category) => (
           <button
             key={category}
             role="tab"
             aria-selected={selectedCategory === category}
             onClick={() => onSelectCategory(category)}
-            className={`px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+            className={`whitespace-nowrap border-b-2 px-3 py-2 text-xs font-medium transition-colors md:px-4 md:py-3 md:text-sm ${
               selectedCategory === category
                 ? 'border-blue-600 text-blue-600 dark:text-blue-400'
                 : 'border-transparent text-muted-foreground hover:text-foreground'

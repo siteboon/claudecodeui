@@ -1,8 +1,7 @@
 import { Check, GitBranch } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useGitSettings } from '../../../hooks/useGitSettings';
-import { Button } from '../../../../ui/button';
-import { Input } from '../../../../ui/input';
+import { Button, Input } from '../../../../../shared/view/ui';
 
 export default function GitSettingsTab() {
   const { t } = useTranslation('settings');
@@ -20,16 +19,16 @@ export default function GitSettingsTab() {
   return (
     <div className="space-y-8">
       <div>
-        <div className="flex items-center gap-2 mb-4">
+        <div className="mb-4 flex items-center gap-2">
           <GitBranch className="h-5 w-5" />
           <h3 className="text-lg font-semibold">{t('git.title')}</h3>
         </div>
 
-        <p className="text-sm text-muted-foreground mb-4">{t('git.description')}</p>
+        <p className="mb-4 text-sm text-muted-foreground">{t('git.description')}</p>
 
-        <div className="p-4 border rounded-lg bg-card space-y-3">
+        <div className="space-y-3 rounded-lg border bg-card p-4">
           <div>
-            <label htmlFor="settings-git-name" className="block text-sm font-medium text-foreground mb-2">
+            <label htmlFor="settings-git-name" className="mb-2 block text-sm font-medium text-foreground">
               {t('git.name.label')}
             </label>
             <Input
@@ -45,7 +44,7 @@ export default function GitSettingsTab() {
           </div>
 
           <div>
-            <label htmlFor="settings-git-email" className="block text-sm font-medium text-foreground mb-2">
+            <label htmlFor="settings-git-email" className="mb-2 block text-sm font-medium text-foreground">
               {t('git.email.label')}
             </label>
             <Input
@@ -69,8 +68,8 @@ export default function GitSettingsTab() {
             </Button>
 
             {saveStatus === 'success' && (
-              <div className="text-sm text-green-600 dark:text-green-400 flex items-center gap-2">
-                <Check className="w-4 h-4" />
+              <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+                <Check className="h-4 w-4" />
                 {t('git.status.success')}
               </div>
             )}

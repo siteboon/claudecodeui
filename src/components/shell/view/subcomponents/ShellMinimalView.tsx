@@ -41,7 +41,7 @@ export default function ShellMinimalView({
   const showMobileAuthPanelToggle = hasAuthUrl && isAuthPanelHidden;
 
   return (
-    <div className="h-full w-full bg-gray-900 relative">
+    <div className="relative h-full w-full bg-gray-900">
       <div
         ref={terminalContainerRef}
         className="h-full w-full focus:outline-none"

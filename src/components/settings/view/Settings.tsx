@@ -1,7 +1,7 @@
 import { Settings as SettingsIcon, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import LoginModal from '../../LoginModal';
-import { Button } from '../../ui/button';
+import ProviderLoginModal from '../../provider-auth/view/ProviderLoginModal';
+import { Button } from '../../../shared/view/ui';
 import ClaudeMcpFormModal from '../view/modals/ClaudeMcpFormModal';
 import CodexMcpFormModal from '../view/modals/CodexMcpFormModal';
 import SettingsMainTabs from '../view/SettingsMainTabs';
@@ -11,18 +11,7 @@ import CredentialsSettingsTab from '../view/tabs/api-settings/CredentialsSetting
 import GitSettingsTab from '../view/tabs/git-settings/GitSettingsTab';
 import TasksSettingsTab from '../view/tabs/tasks-settings/TasksSettingsTab';
 import { useSettingsController } from '../hooks/useSettingsController';
-import type { AgentProvider, SettingsProject, SettingsProps } from '../types/types';
-
-type LoginModalProps = {
-  isOpen: boolean;
-  onClose: () => void;
-  provider: AgentProvider | '';
-  project: SettingsProject | null;
-  onComplete: (exitCode: number) => void;
-  isAuthenticated: boolean;
-};
-
-const LoginModalComponent = LoginModal as unknown as (props: LoginModalProps) => JSX.Element;
+import type { SettingsProps } from '../types/types';
 
 function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: SettingsProps) {
   const { t } = useTranslation('settings');
@@ -95,27 +84,27 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
         : false;
 
   return (
-    <div className="modal-backdrop fixed inset-0 flex items-center justify-center z-[9999] md:p-4 bg-background/95">
-      <div className="bg-background border border-border md:rounded-lg shadow-xl w-full md:max-w-4xl h-full md:h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between p-4 md:p-6 border-b border-border flex-shrink-0">
+    <div className="modal-backdrop fixed inset-0 z-[9999] flex items-center justify-center bg-background/95 md:p-4">
+      <div className="flex h-full w-full flex-col border border-border bg-background shadow-xl md:h-[90vh] md:max-w-4xl md:rounded-lg">
+        <div className="flex flex-shrink-0 items-center justify-between border-b border-border p-4 md:p-6">
           <div className="flex items-center gap-3">
-            <SettingsIcon className="w-5 h-5 md:w-6 md:h-6 text-blue-600" />
-            <h2 className="text-lg md:text-xl font-semibold text-foreground">{t('title')}</h2>
+            <SettingsIcon className="h-5 w-5 text-blue-600 md:h-6 md:w-6" />
+            <h2 className="text-lg font-semibold text-foreground md:text-xl">{t('title')}</h2>
           </div>
           <Button
             variant="ghost"
             size="sm"
             onClick={onClose}
-            className="text-muted-foreground hover:text-foreground touch-manipulation"
+            className="touch-manipulation text-muted-foreground hover:text-foreground"
           >
-            <X className="w-5 h-5" />
+            <X className="h-5 w-5" />
           </Button>
         </div>
 
         <div className="flex-1 overflow-y-auto">
           <SettingsMainTabs activeTab={activeTab} onChange={setActiveTab} />
 
-          <div className="p-4 md:p-6 space-y-6 md:space-y-8 pb-safe-area-inset-bottom">
+          <div className="space-y-6 p-4 pb-safe-area-inset-bottom md:space-y-8 md:p-6">
             {activeTab === 'appearance' && (
               <AppearanceSettingsTab
                 projectSortOrder={projectSortOrder}
@@ -179,42 +168,42 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 md:p-6 border-t border-border flex-shrink-0 gap-3 pb-safe-area-inset-bottom">
-          <div className="flex items-center justify-center sm:justify-start gap-2 order-2 sm:order-1">
+        <div className="flex flex-shrink-0 flex-col gap-3 border-t border-border p-4 pb-safe-area-inset-bottom sm:flex-row sm:items-center sm:justify-between md:p-6">
+          <div className="order-2 flex items-center justify-center gap-2 sm:order-1 sm:justify-start">
             {saveStatus === 'success' && (
-              <div className="text-green-600 dark:text-green-400 text-sm flex items-center gap-1">
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <div className="flex items-center gap-1 text-sm text-green-600 dark:text-green-400">
+                <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
                 {t('saveStatus.success')}
               </div>
             )}
             {saveStatus === 'error' && (
-              <div className="text-red-600 dark:text-red-400 text-sm flex items-center gap-1">
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <div className="flex items-center gap-1 text-sm text-red-600 dark:text-red-400">
+                <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                 </svg>
                 {t('saveStatus.error')}
               </div>
             )}
           </div>
-          <div className="flex items-center gap-3 order-1 sm:order-2">
+          <div className="order-1 flex items-center gap-3 sm:order-2">
             <Button
               variant="outline"
               onClick={onClose}
               disabled={isSaving}
-              className="flex-1 sm:flex-none h-10 touch-manipulation"
+              className="h-10 flex-1 touch-manipulation sm:flex-none"
             >
               {t('footerActions.cancel')}
             </Button>
             <Button
               onClick={saveSettings}
               disabled={isSaving}
-              className="flex-1 sm:flex-none h-10 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 touch-manipulation"
+              className="h-10 flex-1 touch-manipulation bg-blue-600 hover:bg-blue-700 disabled:opacity-50 sm:flex-none"
             >
               {isSaving ? (
                 <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
                   {t('saveStatus.saving')}
                 </div>
               ) : (
@@ -225,11 +214,11 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
         </div>
       </div>
 
-      <LoginModalComponent
-        key={loginProvider}
+      <ProviderLoginModal
+        key={loginProvider || 'claude'}
         isOpen={showLoginModal}
         onClose={() => setShowLoginModal(false)}
-        provider={loginProvider}
+        provider={loginProvider || 'claude'}
         project={selectedProject}
         onComplete={handleLoginComplete}
         isAuthenticated={isAuthenticated}

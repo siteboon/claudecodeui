@@ -49,12 +49,12 @@ export default function HistoryView({
   return (
     <div className={`flex-1 overflow-y-auto ${isMobile ? 'pb-mobile-nav' : ''}`}>
       {isLoading ? (
-        <div className="flex items-center justify-center h-32">
-          <RefreshCw className="w-5 h-5 animate-spin text-muted-foreground" />
+        <div className="flex h-32 items-center justify-center">
+          <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
       ) : recentCommits.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
-          <History className="w-10 h-10 mb-2 opacity-40" />
+        <div className="flex h-32 flex-col items-center justify-center text-muted-foreground">
+          <History className="mb-2 h-10 w-10 opacity-40" />
           <p className="text-sm">No commits found</p>
         </div>
       ) : (

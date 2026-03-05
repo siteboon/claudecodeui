@@ -1,15 +1,15 @@
 import React, { useCallback, useEffect, useRef } from 'react';
-import QuickSettingsPanel from '../../QuickSettingsPanel';
-import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import { useTranslation } from 'react-i18next';
-import ChatMessagesPane from './subcomponents/ChatMessagesPane';
-import ChatComposer from './subcomponents/ChatComposer';
-import type { ChatInterfaceProps } from '../types/types';
+import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
+import { QuickSettingsPanel } from '../../quick-settings-panel';
+import type { ChatInterfaceProps, Provider  } from '../types/types';
 import { useChatProviderState } from '../hooks/useChatProviderState';
 import { useChatSessionState } from '../hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '../hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '../hooks/useChatComposerState';
-import type { Provider } from '../types/types';
+import ChatMessagesPane from './subcomponents/ChatMessagesPane';
+import ChatComposer from './subcomponents/ChatComposer';
+
 
 type PendingViewSession = {
   sessionId: string | null;
@@ -87,7 +87,6 @@ function ChatInterface({
     isLoadingMoreMessages,
     hasMoreMessages,
     totalMessages,
-    isSystemSessionChange,
     setIsSystemSessionChange,
     canAbortSession,
     setCanAbortSession,
@@ -259,7 +258,7 @@ function ChatInterface({
             : t('messageTypes.claude');
 
     return (
-      <div className="flex items-center justify-center h-full">
+      <div className="flex h-full items-center justify-center">
         <div className="text-center text-muted-foreground">
           <p className="text-sm">
             {t('projectSelection.startChatWithProvider', {
@@ -274,7 +273,7 @@ function ChatInterface({
 
   return (
     <>
-      <div className="h-full flex flex-col">
+      <div className="flex h-full flex-col">
         <ChatMessagesPane
           scrollContainerRef={scrollContainerRef}
           onWheel={handleScroll}

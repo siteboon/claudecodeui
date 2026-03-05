@@ -11,7 +11,7 @@ export default function AgentSelectorSection({
 }: AgentSelectorSectionProps) {
   return (
     <>
-      <div className="md:hidden border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+      <div className="flex-shrink-0 border-b border-gray-200 dark:border-gray-700 md:hidden">
         <div className="flex">
           {AGENT_PROVIDERS.map((agent) => (
             <AgentListItem
@@ -26,7 +26,7 @@ export default function AgentSelectorSection({
         </div>
       </div>
 
-      <div className="hidden md:block w-48 border-r border-gray-200 dark:border-gray-700 flex-shrink-0">
+      <div className="hidden w-48 flex-shrink-0 border-r border-gray-200 dark:border-gray-700 md:block">
         <div className="p-2">
           {AGENT_PROVIDERS.map((agent) => (
             <AgentListItem

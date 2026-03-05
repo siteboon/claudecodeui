@@ -77,7 +77,7 @@ export default function TerminalShortcutsPanel({
         onClick={handleToggle}
         className={`fixed ${
           isOpen ? 'right-64' : 'right-0'
-        } z-50 transition-all duration-150 ease-out bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-l-md p-2 hover:bg-gray-100 dark:hover:bg-gray-700 shadow-lg cursor-pointer`}
+        } z-50 cursor-pointer rounded-l-md border border-gray-200 bg-white p-2 shadow-lg transition-all duration-150 ease-out hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700`}
         style={{ top: '50%', transform: 'translateY(-50%)' }}
         aria-label={
           isOpen
@@ -94,14 +94,14 @@ export default function TerminalShortcutsPanel({
 
       {/* Panel */}
       <div
-        className={`fixed top-0 right-0 h-full w-64 bg-background border-l border-border shadow-xl transform transition-transform duration-150 ease-out z-40 ${
+        className={`fixed right-0 top-0 z-40 h-full w-64 transform border-l border-border bg-background shadow-xl transition-transform duration-150 ease-out ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
-        <div className="h-full flex flex-col">
+        <div className="flex h-full flex-col">
           {/* Header */}
-          <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+          <div className="border-b border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900">
+            <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900 dark:text-white">
               <Keyboard className="h-5 w-5 text-gray-600 dark:text-gray-400" />
               {t('terminalShortcuts.title')}
             </h3>
@@ -109,10 +109,10 @@ export default function TerminalShortcutsPanel({
 
           {/* Content — conditionally rendered so buttons remount with clean CSS states */}
           {isOpen && (
-            <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-6 bg-background">
+            <div className="flex-1 space-y-6 overflow-y-auto overflow-x-hidden bg-background p-4">
               {/* Shortcut Keys */}
               <div className="space-y-2">
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
+                <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   {t('terminalShortcuts.sectionKeys')}
                 </h4>
                 {SHORTCUTS.map((shortcut) => (
@@ -122,12 +122,12 @@ export default function TerminalShortcutsPanel({
                     onPointerDown={preventFocusSteal}
                     onClick={() => handleShortcutAction(() => sendInput(shortcut.sequence))}
                     disabled={!isConnected}
-                    className="w-full flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors border border-transparent hover:border-gray-300 dark:hover:border-gray-600"
+                    className="flex w-full items-center justify-between rounded-lg border border-transparent bg-gray-50 p-3 transition-colors hover:border-gray-300 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-gray-800 dark:hover:border-gray-600 dark:hover:bg-gray-700"
                   >
                     <span className="text-sm text-gray-900 dark:text-white">
                       {t(`terminalShortcuts.${shortcut.labelKey}`)}
                     </span>
-                    <kbd className="px-2 py-0.5 text-xs font-mono bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded border border-gray-300 dark:border-gray-600">
+                    <kbd className="rounded border border-gray-300 bg-gray-200 px-2 py-0.5 font-mono text-xs text-gray-600 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300">
                       {shortcut.hint}
                     </kbd>
                   </button>
@@ -136,7 +136,7 @@ export default function TerminalShortcutsPanel({
 
               {/* Navigation */}
               <div className="space-y-2">
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
+                <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   {t('terminalShortcuts.sectionNavigation')}
                 </h4>
                 <button
@@ -144,7 +144,7 @@ export default function TerminalShortcutsPanel({
                   onPointerDown={preventFocusSteal}
                   onClick={() => handleShortcutAction(scrollToBottom)}
                   disabled={!isConnected}
-                  className="w-full flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors border border-transparent hover:border-gray-300 dark:hover:border-gray-600"
+                  className="flex w-full items-center justify-between rounded-lg border border-transparent bg-gray-50 p-3 transition-colors hover:border-gray-300 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-gray-800 dark:hover:border-gray-600 dark:hover:bg-gray-700"
                 >
                   <span className="text-sm text-gray-900 dark:text-white">
                     {t('terminalShortcuts.scrollDown')}
@@ -160,7 +160,7 @@ export default function TerminalShortcutsPanel({
       {/* Backdrop */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-background/80 backdrop-blur-sm z-30 transition-opacity duration-150 ease-out"
+          className="fixed inset-0 z-30 bg-background/80 backdrop-blur-sm transition-opacity duration-150 ease-out"
           onPointerDown={preventFocusSteal}
           onClick={handleToggle}
         />

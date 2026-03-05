@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
-import { Button } from '../../ui/button';
+import { Button } from '../../../shared/view/ui';
 import { authenticatedFetch } from '../../../utils/api';
 import type { FileTreeImageSelection } from '../types/types';
 
@@ -58,16 +58,16 @@ export default function ImageViewer({ file, onClose }: ImageViewerProps) {
   }, [imagePath]);
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl max-h-[90vh] w-full mx-4 overflow-hidden">
-        <div className="flex items-center justify-between p-4 border-b">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+      <div className="mx-4 max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-lg bg-white shadow-xl dark:bg-gray-800">
+        <div className="flex items-center justify-between border-b p-4">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{file.name}</h3>
           <Button variant="ghost" size="sm" onClick={onClose} className="h-8 w-8 p-0">
             <X className="h-4 w-4" />
           </Button>
         </div>
 
-        <div className="p-4 flex justify-center items-center bg-gray-50 dark:bg-gray-900 min-h-[400px]">
+        <div className="flex min-h-[400px] items-center justify-center bg-gray-50 p-4 dark:bg-gray-900">
           {loading && (
             <div className="text-center text-gray-500 dark:text-gray-400">
               <p>Loading image...</p>
@@ -77,18 +77,18 @@ export default function ImageViewer({ file, onClose }: ImageViewerProps) {
             <img
               src={imageUrl}
               alt={file.name}
-              className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-md"
+              className="max-h-[70vh] max-w-full rounded-lg object-contain shadow-md"
             />
           )}
           {!loading && !imageUrl && (
             <div className="text-center text-gray-500 dark:text-gray-400">
               <p>{error || 'Unable to load image'}</p>
-              <p className="text-sm mt-2 break-all">{file.path}</p>
+              <p className="mt-2 break-all text-sm">{file.path}</p>
             </div>
           )}
         </div>
 
-        <div className="p-4 border-t bg-gray-50 dark:bg-gray-800">
+        <div className="border-t bg-gray-50 p-4 dark:bg-gray-800">
           <p className="text-sm text-gray-600 dark:text-gray-400">{file.path}</p>
         </div>
       </div>

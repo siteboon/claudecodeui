@@ -30,10 +30,13 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
     "start": "npm run build && npm run server",
     "release": "./release.sh",
     "prepublishOnly": "npm run build",
-    "postinstall": "node scripts/fix-node-pty.js"
+    "postinstall": "node scripts/fix-node-pty.js",
+    "prepare": "husky"
   },
   "keywords": [
     "claude code",
@@ -103,6 +106,9 @@
     "ws": "^8.14.2"
   },
   "devDependencies": {
+    "@commitlint/cli": "^20.4.3",
+    "@commitlint/config-conventional": "^20.4.3",
+    "@eslint/js": "^9.39.3",
     "@release-it/conventional-changelog": "^10.0.5",
     "@types/node": "^22.19.7",
     "@types/react": "^18.2.43",
@@ -111,12 +117,26 @@
     "auto-changelog": "^2.5.0",
     "autoprefixer": "^10.4.16",
     "concurrently": "^8.2.2",
+    "eslint": "^9.39.3",
+    "eslint-plugin-import-x": "^4.16.1",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "eslint-plugin-tailwindcss": "^3.18.2",
+    "eslint-plugin-unused-imports": "^4.4.1",
+    "globals": "^17.4.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.3.2",
     "node-gyp": "^10.0.0",
     "postcss": "^8.4.32",
     "release-it": "^19.0.5",
     "sharp": "^0.34.2",
     "tailwindcss": "^3.4.0",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.56.1",
     "vite": "^7.0.4"
+  },
+  "lint-staged": {
+    "src/**/*.{ts,tsx,js,jsx}": "eslint"
   }
 }

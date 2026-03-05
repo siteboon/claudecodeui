@@ -17,7 +17,7 @@ tools/
 │   ├── CollapsibleDisplay.tsx      # Expandable tool display (uses children pattern)
 │   ├── CollapsibleSection.tsx      # <details>/<summary> wrapper
 │   ├── ContentRenderers/
-│   │   ├── DiffViewer.tsx          # File diff viewer (memoized)
+│   │   ├── ToolDiffViewer.tsx          # File diff viewer (memoized)
 │   │   ├── MarkdownContent.tsx     # Markdown renderer
 │   │   ├── FileListContent.tsx     # Comma-separated clickable file list
 │   │   ├── TodoListContent.tsx     # Todo items with status badges
@@ -82,7 +82,7 @@ Wraps `CollapsibleSection` (`<details>`/`<summary>`) with a `border-l-2` accent 
   rawContent="..."              // Raw JSON string
   toolCategory="edit"           // Drives border color
 >
-  <DiffViewer {...} />          // Content as children
+  <ToolDiffViewer {...} />          // Content as children
 </CollapsibleDisplay>
 ```
 
@@ -217,7 +217,7 @@ interface ToolDisplayConfig {
 
 - **ToolRenderer** is wrapped with `React.memo` — skips re-render when props haven't changed
 - **parsedData** is memoized with `useMemo` — JSON parsing only runs when input changes
-- **DiffViewer** memoizes `createDiff()` — expensive diff computation cached
+- **ToolDiffViewer** memoizes `createDiff()` — expensive diff computation cached
 - **MessageComponent** caches `localStorage` reads and timestamp formatting via `useMemo`
 - Tool results route through `ToolRenderer` (no duplicate rendering paths)
 - `CollapsibleDisplay` uses children pattern (no wasteful contentProps indirection)

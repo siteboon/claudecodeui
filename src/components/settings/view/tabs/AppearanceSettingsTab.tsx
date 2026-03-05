@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import DarkModeToggle from '../../../DarkModeToggle';
-import LanguageSelector from '../../../LanguageSelector';
+import { DarkModeToggle } from '../../../../shared/view/ui';
 import type { CodeEditorSettingsState, ProjectSortOrder } from '../../types/types';
+import LanguageSelector from '../../../../shared/view/ui/LanguageSelector';
 
 type AppearanceSettingsTabProps = {
   projectSortOrder: ProjectSortOrder;
@@ -35,7 +35,7 @@ function ToggleCard({
   ariaLabel,
 }: ToggleCardProps) {
   return (
-    <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+    <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/50">
       <div className="flex items-center justify-between">
         <div>
           <div className="font-medium text-foreground">{label}</div>
@@ -43,7 +43,7 @@ function ToggleCard({
         </div>
         <button
           onClick={() => onChange(!checked)}
-          className="relative inline-flex h-8 w-14 items-center rounded-full bg-gray-200 dark:bg-gray-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
+          className="relative inline-flex h-8 w-14 items-center rounded-full bg-gray-200 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:bg-gray-700 dark:focus:ring-offset-gray-900"
           role="switch"
           aria-checked={checked}
           aria-label={ariaLabel}
@@ -51,7 +51,7 @@ function ToggleCard({
           <span className="sr-only">{ariaLabel}</span>
           <span
             className={`${checked ? 'translate-x-7' : 'translate-x-1'
-              } h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-200 flex items-center justify-center`}
+              } flex h-6 w-6 transform items-center justify-center rounded-full bg-white shadow-lg transition-transform duration-200`}
           >
             {checked ? onIcon : offIcon}
           </span>
@@ -77,7 +77,7 @@ export default function AppearanceSettingsTab({
   return (
     <div className="space-y-6 md:space-y-8">
       <div className="space-y-4">
-        <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/50">
           <div className="flex items-center justify-between">
             <div>
               <div className="font-medium text-foreground">{t('appearanceSettings.darkMode.label')}</div>
@@ -95,7 +95,7 @@ export default function AppearanceSettingsTab({
       </div>
 
       <div className="space-y-4">
-        <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/50">
           <div className="flex items-center justify-between">
             <div>
               <div className="font-medium text-foreground">
@@ -108,7 +108,7 @@ export default function AppearanceSettingsTab({
             <select
               value={projectSortOrder}
               onChange={(event) => onProjectSortOrderChange(event.target.value as ProjectSortOrder)}
-              className="text-sm bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 w-32"
+              className="w-32 rounded-lg border border-gray-300 bg-gray-50 p-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
             >
               <option value="name">{t('appearanceSettings.projectSorting.alphabetical')}</option>
               <option value="date">{t('appearanceSettings.projectSorting.recentActivity')}</option>
@@ -120,7 +120,7 @@ export default function AppearanceSettingsTab({
       <div className="space-y-4">
         <h3 className="text-lg font-semibold text-foreground">{t('appearanceSettings.codeEditor.title')}</h3>
 
-        <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/50">
           <div className="flex items-center justify-between">
             <div>
               <div className="font-medium text-foreground">{codeEditorThemeLabel}</div>
@@ -160,7 +160,7 @@ export default function AppearanceSettingsTab({
           ariaLabel={t('appearanceSettings.codeEditor.lineNumbers.label')}
         />
 
-        <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/50">
           <div className="flex items-center justify-between">
             <div>
               <div className="font-medium text-foreground">
@@ -173,7 +173,7 @@ export default function AppearanceSettingsTab({
             <select
               value={codeEditorSettings.fontSize}
               onChange={(event) => onCodeEditorFontSizeChange(event.target.value)}
-              className="text-sm bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 w-24"
+              className="w-24 rounded-lg border border-gray-300 bg-gray-50 p-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
             >
               <option value="10">10px</option>
               <option value="11">11px</option>

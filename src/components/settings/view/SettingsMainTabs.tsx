@@ -37,13 +37,13 @@ export default function SettingsMainTabs({ activeTab, onChange }: SettingsMainTa
               role="tab"
               aria-selected={isActive}
               onClick={() => onChange(tab.id)}
-              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+              className={`border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
                 isActive
                   ? 'border-blue-600 text-blue-600 dark:text-blue-400'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
-              {Icon && <Icon className="w-4 h-4 inline mr-2" />}
+              {Icon && <Icon className="mr-2 inline h-4 w-4" />}
               {t(tab.labelKey)}
             </button>
           );
