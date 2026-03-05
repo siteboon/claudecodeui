@@ -2135,7 +2135,6 @@ async function searchCodexSessionsForProject(
 ) {
   const normalizedProjectPath = normalizeComparablePath(projectPath);
   if (!normalizedProjectPath) return;
-
   const codexSessionsDir = path.join(os.homedir(), '.codex', 'sessions');
   try {
     await fs.access(codexSessionsDir);
@@ -2152,20 +2151,36 @@ async function searchCodexSessionsForProject(
       const fileStream = fsSync.createReadStream(filePath);
       const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
 
+      // First pass: read session_meta to check project path match
       let sessionMeta = null;
+      for await (const line of rl) {
+        if (!line.trim()) continue;
+        try {
+          const entry = JSON.parse(line);
+          if (entry.type === 'session_meta' && entry.payload) {
+            sessionMeta = entry.payload;
+            break;
+          }
+        } catch { continue; }
+      }
+
+      // Skip sessions that don't belong to this project
+      if (!sessionMeta) continue;
+      const sessionProjectPath = normalizeComparablePath(sessionMeta.cwd);
+      if (sessionProjectPath !== normalizedProjectPath) continue;
+
+      // Second pass: re-read file to find matching messages
+      const fileStream2 = fsSync.createReadStream(filePath);
+      const rl2 = readline.createInterface({ input: fileStream2, crlfDelay: Infinity });
       let lastUserMessage = null;
       const matches = [];
 
-      for await (const line of rl) {
+      for await (const line of rl2) {
         if (getTotalMatches() >= limit || isAborted()) break;
         if (!line.trim()) continue;
 
         let entry;
         try { entry = JSON.parse(line); } catch { continue; }
-
-        if (entry.type === 'session_meta' && entry.payload) {
-          sessionMeta = entry.payload;
-        }
 
         let text = null;
         let role = null;
@@ -2174,13 +2189,22 @@ async function searchCodexSessionsForProject(
           text = entry.payload.message;
           role = 'user';
           lastUserMessage = text;
-        } else if (entry.type === 'response_item' && entry.payload?.type === 'message' && entry.payload.role === 'assistant') {
+        } else if (entry.type === 'response_item' && entry.payload?.type === 'message') {
           const contentParts = entry.payload.content || [];
-          text = contentParts
-            .filter(p => p.type === 'output_text' && p.text)
-            .map(p => p.text)
-            .join(' ');
-          role = 'assistant';
+          if (entry.payload.role === 'user') {
+            text = contentParts
+              .filter(p => p.type === 'input_text' && p.text)
+              .map(p => p.text)
+              .join(' ');
+            role = 'user';
+            if (text) lastUserMessage = text;
+          } else if (entry.payload.role === 'assistant') {
+            text = contentParts
+              .filter(p => p.type === 'output_text' && p.text)
+              .map(p => p.text)
+              .join(' ');
+            role = 'assistant';
+          }
         }
 
         if (!text || !role) continue;
@@ -2194,18 +2218,15 @@ async function searchCodexSessionsForProject(
         }
       }
 
-      if (matches.length > 0 && sessionMeta) {
-        const sessionProjectPath = normalizeComparablePath(sessionMeta.cwd);
-        if (sessionProjectPath === normalizedProjectPath) {
-          projectResult.sessions.push({
-            sessionId: sessionMeta.id,
-            provider: 'codex',
-            sessionSummary: lastUserMessage
-              ? (lastUserMessage.length > 50 ? lastUserMessage.substring(0, 50) + '...' : lastUserMessage)
-              : 'Codex Session',
-            matches
-          });
-        }
+      if (matches.length > 0) {
+        projectResult.sessions.push({
+          sessionId: sessionMeta.id,
+          provider: 'codex',
+          sessionSummary: lastUserMessage
+            ? (lastUserMessage.length > 50 ? lastUserMessage.substring(0, 50) + '...' : lastUserMessage)
+            : 'Codex Session',
+          matches
+        });
       }
     } catch {
       continue;
