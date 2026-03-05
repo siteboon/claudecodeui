@@ -1,0 +1,13 @@
+{
+  "name": "hello-world",
+  "displayName": "Project Stats",
+  "version": "2.0.0",
+  "description": "Scans the current project and shows file counts, lines of code, file-type breakdown, largest files, and recently modified files.",
+  "author": "Claude Code UI",
+  "icon": "icon.svg",
+  "type": "module",
+  "slot": "tab",
+  "entry": "index.js",
+  "server": "server.js",
+  "permissions": []
+}

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hello World Plugin</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      padding: 24px;
+      transition: background-color 0.2s, color 0.2s;
+    }
+    body.dark { background: #1a1a2e; color: #e0e0e0; }
+    body.light { background: #ffffff; color: #1a1a2e; }
+    h1 { font-size: 1.4rem; margin-bottom: 8px; }
+    h2 { font-size: 1.1rem; margin-top: 24px; margin-bottom: 8px; opacity: 0.8; }
+    .context { font-size: 0.85rem; opacity: 0.7; margin-top: 16px; }
+    .context dt { font-weight: 600; margin-top: 8px; }
+    .context dd { margin-left: 12px; }
+    button {
+      margin-top: 12px;
+      padding: 8px 16px;
+      border: 1px solid currentColor;
+      border-radius: 6px;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      font-size: 0.85rem;
+      opacity: 0.8;
+    }
+    button:hover { opacity: 1; }
+    pre {
+      margin-top: 8px;
+      padding: 12px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      overflow-x: auto;
+      white-space: pre-wrap;
+    }
+    body.dark pre { background: #2a2a3e; }
+    body.light pre { background: #f0f0f4; }
+  </style>
+</head>
+<body class="light">
+  <h1>Hello from a plugin!</h1>
+  <p>This tab is rendered inside a sandboxed iframe.</p>
+
+  <dl class="context" id="ctx">
+    <dt>Theme</dt><dd id="ctx-theme">—</dd>
+    <dt>Project</dt><dd id="ctx-project">—</dd>
+    <dt>Session</dt><dd id="ctx-session">—</dd>
+  </dl>
+
+  <h2>Server RPC</h2>
+  <p style="font-size: 0.85rem; opacity: 0.7;">This calls the plugin's own Node.js server subprocess via the postMessage RPC bridge.</p>
+  <button id="btn-hello">Call GET /hello</button>
+  <button id="btn-echo">Call POST /echo</button>
+  <pre id="rpc-result">Click a button to make an RPC call...</pre>
+
+  <script>
+    // ── RPC helper ──────────────────────────────────────────────────
+    // Sends a request through the host's postMessage bridge, which
+    // proxies it to this plugin's server subprocess.
+    function callBackend(method, path, body) {
+      return new Promise((resolve) => {
+        const requestId = Math.random().toString(36).slice(2);
+
+        function handler(event) {
+          if (event.data?.type === 'ccui:rpc-response' && event.data.requestId === requestId) {
+            window.removeEventListener('message', handler);
+            resolve(event.data);
+          }
+        }
+        window.addEventListener('message', handler);
+
+        window.parent.postMessage({
+          type: 'ccui:rpc',
+          requestId,
+          method,
+          path,
+          body: body || undefined,
+        }, '*');
+      });
+    }
+
+    // ── Context listener ────────────────────────────────────────────
+    window.addEventListener('message', (event) => {
+      if (!event.data || event.data.type !== 'ccui:context') return;
+
+      const { theme, project, session } = event.data;
+
+      document.body.className = theme || 'light';
+      document.getElementById('ctx-theme').textContent = theme || '—';
+      document.getElementById('ctx-project').textContent = project ? project.name : '(none)';
+      document.getElementById('ctx-session').textContent = session ? session.title || session.id : '(none)';
+    });
+
+    // Request context on load
+    window.parent.postMessage({ type: 'ccui:request-context' }, '*');
+
+    // ── RPC demo buttons ────────────────────────────────────────────
+    document.getElementById('btn-hello').addEventListener('click', async () => {
+      const result = await callBackend('GET', '/hello');
+      document.getElementById('rpc-result').textContent = JSON.stringify(result, null, 2);
+    });
+
+    document.getElementById('btn-echo').addEventListener('click', async () => {
+      const result = await callBackend('POST', '/echo', { greeting: 'Hello from the iframe!' });
+      document.getElementById('rpc-result').textContent = JSON.stringify(result, null, 2);
+    });
+  </script>
+</body>
+</html>
