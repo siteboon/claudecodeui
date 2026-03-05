@@ -17,11 +17,11 @@ export default tseslint.config(
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     plugins: {
       react,
-      "react-hooks": reactHooks,
-      "react-refresh": reactRefresh,
-      "import-x": importX,
-      tailwindcss,
-      "unused-imports": unusedImports,
+      "react-hooks": reactHooks, // for following React rules such as dependencies in hooks, keys in lists, etc.
+      "react-refresh": reactRefresh, // for Vite HMR compatibility
+      "import-x": importX, // for import order/sorting. It also detercts circular dependencies and duplicate imports.
+      tailwindcss, // for detecting invalid Tailwind classnames and enforcing classname order
+      "unused-imports": unusedImports, // for detecting unused imports
     },
     languageOptions: {
       globals: {
