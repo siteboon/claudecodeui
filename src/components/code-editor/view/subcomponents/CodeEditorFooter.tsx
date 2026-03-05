@@ -12,7 +12,7 @@ export default function CodeEditorFooter({
   shortcutsLabel,
 }: CodeEditorFooterProps) {
   return (
-    <div className="flex items-center justify-between px-3 py-1.5 border-t border-border bg-muted flex-shrink-0">
+    <div className="flex flex-shrink-0 items-center justify-between border-t border-border bg-muted px-3 py-1.5">
       <div className="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-400">
         <span>
           {linesLabel} {content.split('\n').length}

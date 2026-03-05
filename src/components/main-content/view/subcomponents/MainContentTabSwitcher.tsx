@@ -1,15 +1,8 @@
-import {
-  MessageSquare,
-  Terminal,
-  Folder,
-  GitBranch,
-  ClipboardCheck,
-  type LucideIcon,
-} from 'lucide-react';
-import Tooltip from '../../../Tooltip';
-import type { AppTab } from '../../../../types/app';
+import { MessageSquare, Terminal, Folder, GitBranch, ClipboardCheck, type LucideIcon } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Tooltip } from '../../../../shared/view/ui';
+import type { AppTab } from '../../../../types/app';
 import { usePlugins } from '../../../../contexts/PluginsContext';
 import PluginIcon from '../../../plugins/PluginIcon';
 
@@ -73,7 +66,7 @@ export default function MainContentTabSwitcher({
   const tabs: TabDefinition[] = [...builtInTabs, ...pluginTabs];
 
   return (
-    <div className="inline-flex items-center bg-muted/60 rounded-lg p-[3px] gap-[2px]">
+    <div className="inline-flex items-center gap-[2px] rounded-lg bg-muted/60 p-[3px]">
       {tabs.map((tab) => {
         const isActive = tab.id === activeTab;
         const displayLabel = tab.kind === 'builtin' ? t(tab.labelKey) : tab.label;
@@ -82,19 +75,19 @@ export default function MainContentTabSwitcher({
           <Tooltip key={tab.id} content={displayLabel} position="bottom">
             <button
               onClick={() => setActiveTab(tab.id)}
-              className={`relative flex items-center gap-1.5 px-2.5 py-[5px] text-sm font-medium rounded-md transition-all duration-150 ${
+              className={`relative flex items-center gap-1.5 rounded-md px-2.5 py-[5px] text-sm font-medium transition-all duration-150 ${
                 isActive
                   ? 'bg-background text-foreground shadow-sm'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               {tab.kind === 'builtin' ? (
-                <tab.icon className="w-3.5 h-3.5" strokeWidth={isActive ? 2.2 : 1.8} />
+                <tab.icon className="h-3.5 w-3.5" strokeWidth={isActive ? 2.2 : 1.8} />
               ) : (
                 <PluginIcon
                   pluginName={tab.pluginName}
                   iconFile={tab.iconFile}
-                  className="w-3.5 h-3.5 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full"
+                  className="flex h-3.5 w-3.5 items-center justify-center [&>svg]:h-full [&>svg]:w-full"
                 />
               )}
               <span className="hidden lg:inline">{displayLabel}</span>

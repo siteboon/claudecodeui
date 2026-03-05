@@ -153,39 +153,39 @@ export default function ChangesView({
 
       <div className={`flex-1 overflow-y-auto ${isMobile ? 'pb-mobile-nav' : ''}`}>
         {isLoading ? (
-          <div className="flex items-center justify-center h-32">
-            <RefreshCw className="w-5 h-5 animate-spin text-muted-foreground" />
+          <div className="flex h-32 items-center justify-center">
+            <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
         ) : gitStatus?.hasCommits === false ? (
           <div className="flex flex-col items-center justify-center p-8 text-center">
-            <div className="w-14 h-14 rounded-2xl bg-muted/50 flex items-center justify-center mb-4">
-              <GitBranch className="w-7 h-7 text-muted-foreground/50" />
+            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted/50">
+              <GitBranch className="h-7 w-7 text-muted-foreground/50" />
             </div>
-            <h3 className="text-lg font-medium mb-2 text-foreground">No commits yet</h3>
-            <p className="text-sm text-muted-foreground mb-6 max-w-md">
+            <h3 className="mb-2 text-lg font-medium text-foreground">No commits yet</h3>
+            <p className="mb-6 max-w-md text-sm text-muted-foreground">
               This repository doesn&apos;t have any commits yet. Create your first commit to start tracking changes.
             </p>
             <button
               onClick={() => void onCreateInitialCommit()}
               disabled={isCreatingInitialCommit}
-              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
+              className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isCreatingInitialCommit ? (
                 <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <RefreshCw className="h-4 w-4 animate-spin" />
                   <span>Creating Initial Commit...</span>
                 </>
               ) : (
                 <>
-                  <GitCommit className="w-4 h-4" />
+                  <GitCommit className="h-4 w-4" />
                   <span>Create Initial Commit</span>
                 </>
               )}
             </button>
           </div>
         ) : !gitStatus || !hasChangedFiles(gitStatus) ? (
-          <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
-            <GitCommit className="w-10 h-10 mb-2 opacity-40" />
+          <div className="flex h-32 flex-col items-center justify-center text-muted-foreground">
+            <GitCommit className="mb-2 h-10 w-10 opacity-40" />
             <p className="text-sm">No changes detected</p>
           </div>
         ) : (

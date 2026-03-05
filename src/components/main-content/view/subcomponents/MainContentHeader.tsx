@@ -1,7 +1,7 @@
+import type { MainContentHeaderProps } from '../../types/types';
 import MobileMenuButton from './MobileMenuButton';
 import MainContentTabSwitcher from './MainContentTabSwitcher';
 import MainContentTitle from './MainContentTitle';
-import type { MainContentHeaderProps } from '../../types/types';
 
 export default function MainContentHeader({
   activeTab,
@@ -13,9 +13,9 @@ export default function MainContentHeader({
   onMenuClick,
 }: MainContentHeaderProps) {
   return (
-    <div className="bg-background border-b border-border/60 px-3 py-1.5 sm:px-4 sm:py-2 pwa-header-safe flex-shrink-0">
+    <div className="pwa-header-safe flex-shrink-0 border-b border-border/60 bg-background px-3 py-1.5 sm:px-4 sm:py-2">
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 min-w-0 flex-1">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           {isMobile && <MobileMenuButton onMenuClick={onMenuClick} />}
           <MainContentTitle
             activeTab={activeTab}
@@ -25,7 +25,7 @@ export default function MainContentHeader({
           />
         </div>
 
-        <div className="flex-shrink-0 hidden sm:block">
+        <div className="hidden flex-shrink-0 sm:block">
           <MainContentTabSwitcher
             activeTab={activeTab}
             setActiveTab={setActiveTab}

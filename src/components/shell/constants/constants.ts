@@ -5,6 +5,13 @@ export const SHELL_RESTART_DELAY_MS = 200;
 export const TERMINAL_INIT_DELAY_MS = 100;
 export const TERMINAL_RESIZE_DELAY_MS = 50;
 
+// CLI prompt overlay detection
+export const PROMPT_DEBOUNCE_MS = 500;
+export const PROMPT_BUFFER_SCAN_LINES = 20;
+export const PROMPT_OPTION_SCAN_LINES = 15;
+export const PROMPT_MAX_OPTIONS = 5;
+export const PROMPT_MIN_OPTIONS = 2;
+
 export const TERMINAL_OPTIONS: ITerminalOptions = {
   cursorBlink: true,
   fontSize: 14,

@@ -19,16 +19,16 @@ export default function SidebarProjectsState({
 }: SidebarProjectsStateProps) {
   if (isLoading) {
     return (
-      <div className="text-center py-12 md:py-8 px-4">
-        <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-4 md:mb-3">
-          <div className="w-6 h-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+      <div className="px-4 py-12 text-center md:py-8">
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-muted md:mb-3">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
         </div>
-        <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">{t('projects.loadingProjects')}</h3>
+        <h3 className="mb-2 text-base font-medium text-foreground md:mb-1">{t('projects.loadingProjects')}</h3>
         {loadingProgress && loadingProgress.total > 0 ? (
           <div className="space-y-2">
-            <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
               <div
-                className="bg-primary h-full transition-all duration-300 ease-out"
+                className="h-full bg-primary transition-all duration-300 ease-out"
                 style={{ width: `${(loadingProgress.current / loadingProgress.total) * 100}%` }}
               />
             </div>
@@ -37,7 +37,7 @@ export default function SidebarProjectsState({
             </p>
             {loadingProgress.currentProject && (
               <p
-                className="text-xs text-muted-foreground/70 truncate max-w-[200px] mx-auto"
+                className="mx-auto max-w-[200px] truncate text-xs text-muted-foreground/70"
                 title={loadingProgress.currentProject}
               >
                 {loadingProgress.currentProject.split('-').slice(-2).join('/')}
@@ -53,11 +53,11 @@ export default function SidebarProjectsState({
 
   if (projectsCount === 0) {
     return (
-      <div className="text-center py-12 md:py-8 px-4">
-        <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-4 md:mb-3">
-          <Folder className="w-6 h-6 text-muted-foreground" />
+      <div className="px-4 py-12 text-center md:py-8">
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-muted md:mb-3">
+          <Folder className="h-6 w-6 text-muted-foreground" />
         </div>
-        <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">{t('projects.noProjects')}</h3>
+        <h3 className="mb-2 text-base font-medium text-foreground md:mb-1">{t('projects.noProjects')}</h3>
         <p className="text-sm text-muted-foreground">{t('projects.runClaudeCli')}</p>
       </div>
     );
@@ -65,11 +65,11 @@ export default function SidebarProjectsState({
 
   if (filteredProjectsCount === 0) {
     return (
-      <div className="text-center py-12 md:py-8 px-4">
-        <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-4 md:mb-3">
-          <Search className="w-6 h-6 text-muted-foreground" />
+      <div className="px-4 py-12 text-center md:py-8">
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-muted md:mb-3">
+          <Search className="h-6 w-6 text-muted-foreground" />
         </div>
-        <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">{t('projects.noMatchingProjects')}</h3>
+        <h3 className="mb-2 text-base font-medium text-foreground md:mb-1">{t('projects.noMatchingProjects')}</h3>
         <p className="text-sm text-muted-foreground">{t('projects.tryDifferentSearch')}</p>
       </div>
     );

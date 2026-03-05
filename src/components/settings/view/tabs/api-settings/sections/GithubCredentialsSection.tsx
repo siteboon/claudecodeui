@@ -1,7 +1,6 @@
 import { Eye, EyeOff, Github, Plus, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Button } from '../../../../../ui/button';
-import { Input } from '../../../../../ui/input';
+import { Button, Input } from '../../../../../../shared/view/ui';
 import type { GithubCredentialItem } from '../types';
 
 type GithubCredentialsSectionProps = {
@@ -43,21 +42,21 @@ export default function GithubCredentialsSection({
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Github className="h-5 w-5" />
           <h3 className="text-lg font-semibold">{t('apiKeys.github.title')}</h3>
         </div>
         <Button size="sm" onClick={() => onShowNewGithubFormChange(!showNewGithubForm)}>
-          <Plus className="h-4 w-4 mr-1" />
+          <Plus className="mr-1 h-4 w-4" />
           {t('apiKeys.github.addButton')}
         </Button>
       </div>
 
-      <p className="text-sm text-muted-foreground mb-4">{t('apiKeys.github.descriptionAlt')}</p>
+      <p className="mb-4 text-sm text-muted-foreground">{t('apiKeys.github.descriptionAlt')}</p>
 
       {showNewGithubForm && (
-        <div className="mb-4 p-4 border rounded-lg bg-card space-y-3">
+        <div className="mb-4 space-y-3 rounded-lg border bg-card p-4">
           <Input
             placeholder={t('apiKeys.github.form.namePlaceholder')}
             value={newGithubName}
@@ -99,7 +98,7 @@ export default function GithubCredentialsSection({
             href="https://github.com/settings/tokens"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs text-primary hover:underline block"
+            className="block text-xs text-primary hover:underline"
           >
             {t('apiKeys.github.form.howToCreate')}
           </a>
@@ -108,16 +107,16 @@ export default function GithubCredentialsSection({
 
       <div className="space-y-2">
         {githubCredentials.length === 0 ? (
-          <p className="text-sm text-muted-foreground italic">{t('apiKeys.github.empty')}</p>
+          <p className="text-sm italic text-muted-foreground">{t('apiKeys.github.empty')}</p>
         ) : (
           githubCredentials.map((credential) => (
-            <div key={credential.id} className="flex items-center justify-between p-3 border rounded-lg">
+            <div key={credential.id} className="flex items-center justify-between rounded-lg border p-3">
               <div className="flex-1">
                 <div className="font-medium">{credential.credential_name}</div>
                 {credential.description && (
                   <div className="text-xs text-muted-foreground">{credential.description}</div>
                 )}
-                <div className="text-xs text-muted-foreground mt-1">
+                <div className="mt-1 text-xs text-muted-foreground">
                   {t('apiKeys.github.added')} {new Date(credential.created_at).toLocaleDateString()}
                 </div>
               </div>

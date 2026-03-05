@@ -34,10 +34,10 @@ export default function ShellHeader({
   disableRestart,
 }: ShellHeaderProps) {
   return (
-    <div className="flex-shrink-0 bg-gray-800 border-b border-gray-700 px-4 py-2">
+    <div className="flex-shrink-0 border-b border-gray-700 bg-gray-800 px-4 py-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2">
-          <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+          <div className={`h-2 w-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
 
           {hasSession && sessionDisplayNameShort && (
             <span className="text-xs text-blue-300">({sessionDisplayNameShort}...)</span>
@@ -54,10 +54,10 @@ export default function ShellHeader({
           {isConnected && (
             <button
               onClick={onDisconnect}
-              className="px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 flex items-center space-x-1"
+              className="flex items-center space-x-1 rounded bg-red-600 px-3 py-1 text-xs text-white hover:bg-red-700"
               title={disconnectTitle}
             >
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
               <span>{disconnectLabel}</span>
@@ -67,10 +67,10 @@ export default function ShellHeader({
           <button
             onClick={onRestart}
             disabled={disableRestart}
-            className="text-xs text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
+            className="flex items-center space-x-1 text-xs text-gray-400 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
             title={restartTitle}
           >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"

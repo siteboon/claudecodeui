@@ -5,10 +5,10 @@ type ShellEmptyStateProps = {
 
 export default function ShellEmptyState({ title, description }: ShellEmptyStateProps) {
   return (
-    <div className="h-full flex items-center justify-center">
+    <div className="flex h-full items-center justify-center">
       <div className="text-center text-gray-500 dark:text-gray-400">
-        <div className="w-16 h-16 mx-auto mb-4 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center">
-          <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
+          <svg className="h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -17,7 +17,7 @@ export default function ShellEmptyState({ title, description }: ShellEmptyStateP
             />
           </svg>
         </div>
-        <h3 className="text-lg font-semibold mb-2">{title}</h3>
+        <h3 className="mb-2 text-lg font-semibold">{title}</h3>
         <p>{description}</p>
       </div>
     </div>

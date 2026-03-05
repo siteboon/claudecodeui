@@ -1,7 +1,7 @@
+import type { AgentCategoryContentSectionProps } from '../types';
 import AccountContent from './content/AccountContent';
 import McpServersContent from './content/McpServersContent';
 import PermissionsContent from './content/PermissionsContent';
-import type { AgentCategoryContentSectionProps } from '../types';
 
 export default function AgentCategoryContentSection({
   selectedAgent,
