@@ -234,19 +234,27 @@ function Sidebar({
             conversationResults={conversationResults}
             isSearching={isSearching}
             searchProgress={searchProgress}
-            onConversationResultClick={(projectName: string, sessionId: string) => {
+            onConversationResultClick={(projectName: string, sessionId: string, provider: string, messageTimestamp?: string | null, messageSnippet?: string | null) => {
+              const resolvedProvider = (provider || 'claude') as SessionProvider;
               const project = projects.find(p => p.name === projectName);
+              const searchTarget = { __searchTargetTimestamp: messageTimestamp || null, __searchTargetSnippet: messageSnippet || null };
+              const sessionObj = {
+                id: sessionId,
+                __provider: resolvedProvider,
+                __projectName: projectName,
+                ...searchTarget,
+              };
               if (project) {
                 handleProjectSelect(project);
                 const sessions = getProjectSessions(project);
-                const session = sessions.find(s => s.id === sessionId);
-                if (session) {
-                  handleSessionClick(session, projectName);
+                const existing = sessions.find(s => s.id === sessionId);
+                if (existing) {
+                  handleSessionClick({ ...existing, ...searchTarget }, projectName);
                 } else {
-                  handleSessionClick({ id: sessionId, __provider: 'claude' as SessionProvider, __projectName: projectName }, projectName);
+                  handleSessionClick(sessionObj, projectName);
                 }
               } else {
-                handleSessionClick({ id: sessionId, __provider: 'claude' as SessionProvider, __projectName: projectName }, projectName);
+                handleSessionClick(sessionObj, projectName);
               }
             }}
             onRefresh={() => {

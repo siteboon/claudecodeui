@@ -48,7 +48,7 @@ type SidebarContentProps = {
   conversationResults: ConversationSearchResults | null;
   isSearching: boolean;
   searchProgress: SearchProgress | null;
-  onConversationResultClick: (projectName: string, sessionId: string) => void;
+  onConversationResultClick: (projectName: string, sessionId: string, provider: string, messageTimestamp?: string | null, messageSnippet?: string | null) => void;
   onRefresh: () => void;
   isRefreshing: boolean;
   onCreateProject: () => void;
@@ -170,13 +170,24 @@ export default function SidebarContent({
                     <button
                       key={`${projectResult.projectName}-${session.sessionId}`}
                       className="w-full text-left rounded-md px-2 py-2 hover:bg-accent/50 transition-colors"
-                      onClick={() => onConversationResultClick(projectResult.projectName, session.sessionId)}
+                      onClick={() => onConversationResultClick(
+                        projectResult.projectName,
+                        session.sessionId,
+                        session.provider || session.matches[0]?.provider || 'claude',
+                        session.matches[0]?.timestamp,
+                        session.matches[0]?.snippet
+                      )}
                     >
                       <div className="flex items-center gap-1.5 mb-1">
                         <MessageSquare className="w-3 h-3 text-primary flex-shrink-0" />
                         <span className="text-xs font-medium text-foreground truncate">
                           {session.sessionSummary}
                         </span>
+                        {session.provider && session.provider !== 'claude' && (
+                          <span className="text-[9px] px-1 py-0.5 rounded bg-muted text-muted-foreground uppercase flex-shrink-0">
+                            {session.provider}
+                          </span>
+                        )}
                       </div>
                       <div className="space-y-1 pl-4">
                         {session.matches.map((match, idx) => (

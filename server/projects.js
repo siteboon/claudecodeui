@@ -2061,7 +2061,9 @@ async function searchConversations(query, limit = 50, onProjectResult = null, si
                 role: entry.message.role,
                 snippet,
                 highlights,
-                timestamp: entry.timestamp || null
+                timestamp: entry.timestamp || null,
+                provider: 'claude',
+                messageUuid: entry.uuid || null
               });
               totalMatches++;
             }
@@ -2073,6 +2075,7 @@ async function searchConversations(query, limit = 50, onProjectResult = null, si
         for (const [sessionId, matches] of sessionMatches) {
           projectResult.sessions.push({
             sessionId,
+            provider: 'claude',
             sessionSummary: sessionSummaries.get(sessionId) || (() => {
               const msgs = sessionLastMessages.get(sessionId);
               const lastMsg = msgs?.user || msgs?.assistant;
@@ -2081,6 +2084,32 @@ async function searchConversations(query, limit = 50, onProjectResult = null, si
             matches
           });
         }
+      }
+
+      // Search Codex sessions for this project
+      try {
+        const actualProjectDir = await extractProjectDirectory(projectName);
+        if (actualProjectDir && !isAborted() && totalMatches < safeLimit) {
+          await searchCodexSessionsForProject(
+            actualProjectDir, projectResult, words, allWordsMatch, extractText, isSystemMessage,
+            buildSnippet, safeLimit, () => totalMatches, (n) => { totalMatches += n; }, isAborted
+          );
+        }
+      } catch {
+        // Skip codex search errors
+      }
+
+      // Search Gemini sessions for this project
+      try {
+        const actualProjectDir = await extractProjectDirectory(projectName);
+        if (actualProjectDir && !isAborted() && totalMatches < safeLimit) {
+          searchGeminiSessionsForProject(
+            actualProjectDir, projectResult, words, allWordsMatch,
+            buildSnippet, safeLimit, () => totalMatches, (n) => { totalMatches += n; }
+          );
+        }
+      } catch {
+        // Skip gemini search errors
       }
 
       scannedProjects++;
@@ -2098,6 +2127,140 @@ async function searchConversations(query, limit = 50, onProjectResult = null, si
   }
 
   return { results, totalMatches, query: safeQuery };
+}
+
+async function searchCodexSessionsForProject(
+  projectPath, projectResult, words, allWordsMatch, extractText, isSystemMessage,
+  buildSnippet, limit, getTotalMatches, addMatches, isAborted
+) {
+  const normalizedProjectPath = normalizeComparablePath(projectPath);
+  if (!normalizedProjectPath) return;
+
+  const codexSessionsDir = path.join(os.homedir(), '.codex', 'sessions');
+  try {
+    await fs.access(codexSessionsDir);
+  } catch {
+    return;
+  }
+
+  const jsonlFiles = await findCodexJsonlFiles(codexSessionsDir);
+
+  for (const filePath of jsonlFiles) {
+    if (getTotalMatches() >= limit || isAborted()) break;
+
+    try {
+      const fileStream = fsSync.createReadStream(filePath);
+      const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
+
+      let sessionMeta = null;
+      let lastUserMessage = null;
+      const matches = [];
+
+      for await (const line of rl) {
+        if (getTotalMatches() >= limit || isAborted()) break;
+        if (!line.trim()) continue;
+
+        let entry;
+        try { entry = JSON.parse(line); } catch { continue; }
+
+        if (entry.type === 'session_meta' && entry.payload) {
+          sessionMeta = entry.payload;
+        }
+
+        let text = null;
+        let role = null;
+
+        if (entry.type === 'event_msg' && entry.payload?.type === 'user_message' && entry.payload.message) {
+          text = entry.payload.message;
+          role = 'user';
+          lastUserMessage = text;
+        } else if (entry.type === 'response_item' && entry.payload?.type === 'message' && entry.payload.role === 'assistant') {
+          const contentParts = entry.payload.content || [];
+          text = contentParts
+            .filter(p => p.type === 'output_text' && p.text)
+            .map(p => p.text)
+            .join(' ');
+          role = 'assistant';
+        }
+
+        if (!text || !role) continue;
+        const textLower = text.toLowerCase();
+        if (!allWordsMatch(textLower)) continue;
+
+        if (matches.length < 2) {
+          const { snippet, highlights } = buildSnippet(text, textLower);
+          matches.push({ role, snippet, highlights, timestamp: entry.timestamp || null, provider: 'codex' });
+          addMatches(1);
+        }
+      }
+
+      if (matches.length > 0 && sessionMeta) {
+        const sessionProjectPath = normalizeComparablePath(sessionMeta.cwd);
+        if (sessionProjectPath === normalizedProjectPath) {
+          projectResult.sessions.push({
+            sessionId: sessionMeta.id,
+            provider: 'codex',
+            sessionSummary: lastUserMessage
+              ? (lastUserMessage.length > 50 ? lastUserMessage.substring(0, 50) + '...' : lastUserMessage)
+              : 'Codex Session',
+            matches
+          });
+        }
+      }
+    } catch {
+      continue;
+    }
+  }
+}
+
+function searchGeminiSessionsForProject(
+  projectPath, projectResult, words, allWordsMatch,
+  buildSnippet, limit, getTotalMatches, addMatches
+) {
+  for (const [sessionId, session] of sessionManager.sessions) {
+    if (getTotalMatches() >= limit) break;
+    if (session.projectPath !== projectPath) continue;
+
+    const matches = [];
+    for (const msg of session.messages) {
+      if (getTotalMatches() >= limit) break;
+      if (msg.role !== 'user' && msg.role !== 'assistant') continue;
+
+      const text = typeof msg.content === 'string' ? msg.content
+        : Array.isArray(msg.content) ? msg.content.filter(p => p.type === 'text').map(p => p.text).join(' ')
+        : '';
+      if (!text) continue;
+
+      const textLower = text.toLowerCase();
+      if (!allWordsMatch(textLower)) continue;
+
+      if (matches.length < 2) {
+        const { snippet, highlights } = buildSnippet(text, textLower);
+        matches.push({
+          role: msg.role, snippet, highlights,
+          timestamp: msg.timestamp ? msg.timestamp.toISOString() : null,
+          provider: 'gemini'
+        });
+        addMatches(1);
+      }
+    }
+
+    if (matches.length > 0) {
+      const firstUserMsg = session.messages.find(m => m.role === 'user');
+      const summary = firstUserMsg?.content
+        ? (typeof firstUserMsg.content === 'string'
+          ? (firstUserMsg.content.length > 50 ? firstUserMsg.content.substring(0, 50) + '...' : firstUserMsg.content)
+          : 'Gemini Session')
+        : 'Gemini Session';
+
+      projectResult.sessions.push({
+        sessionId,
+        provider: 'gemini',
+        sessionSummary: summary,
+        matches
+      });
+    }
+  }
 }
 
 export {

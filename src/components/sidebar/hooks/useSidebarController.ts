@@ -30,11 +30,14 @@ type ConversationMatch = {
   snippet: string;
   highlights: SnippetHighlight[];
   timestamp: string | null;
+  provider?: string;
+  messageUuid?: string | null;
 };
 
 type ConversationSession = {
   sessionId: string;
   sessionSummary: string;
+  provider?: string;
   matches: ConversationMatch[];
 };
 
