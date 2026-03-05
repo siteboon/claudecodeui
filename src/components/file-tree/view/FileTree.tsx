@@ -17,8 +17,8 @@ import FileTreeDetailedColumns from './FileTreeDetailedColumns';
 import FileTreeHeader from './FileTreeHeader';
 import FileTreeLoadingState from './FileTreeLoadingState';
 import { Project } from '../../../types/app';
-import { Input } from '../../ui/input';
-import { ScrollArea } from '../../ui/scroll-area';
+import { ScrollArea, Input } from '../../../shared/view/ui';
+
 
 type FileTreeProps = {
   selectedProject: Project | null;
