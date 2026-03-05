@@ -31,12 +31,12 @@ export default function TaskMasterSetupModal({ isOpen, project, onClose, onAfter
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-16 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 w-full max-w-4xl h-[600px] flex flex-col">
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-4 pt-16 backdrop-blur-sm">
+      <div className="flex h-[600px] w-full max-w-4xl flex-col rounded-lg border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900">
+        <div className="flex items-center justify-between border-b border-gray-200 p-4 dark:border-gray-700">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/50 rounded-lg flex items-center justify-center">
-              <Terminal className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/50">
+              <Terminal className="h-4 w-4 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{t('setupModal.title')}</h2>
@@ -46,15 +46,15 @@ export default function TaskMasterSetupModal({ isOpen, project, onClose, onAfter
 
           <button
             onClick={closeModal}
-            className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="rounded-md p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
             title="Close"
           >
-            <Plus className="w-5 h-5 rotate-45" />
+            <Plus className="h-5 w-5 rotate-45" />
           </button>
         </div>
 
         <div className="flex-1 p-4">
-          <div className="h-full bg-black rounded-lg overflow-hidden">
+          <div className="h-full overflow-hidden rounded-lg bg-black">
             <Shell
               selectedProject={project}
               selectedSession={null}
@@ -70,12 +70,12 @@ export default function TaskMasterSetupModal({ isOpen, project, onClose, onAfter
           </div>
         </div>
 
-        <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+        <div className="border-t border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/50">
           <div className="flex items-center justify-between">
             <div className="text-sm text-gray-600 dark:text-gray-400">
               {isTaskMasterComplete ? (
                 <span className="flex items-center gap-2 text-green-600 dark:text-green-400">
-                  <span className="w-2 h-2 bg-green-500 rounded-full" />
+                  <span className="h-2 w-2 rounded-full bg-green-500" />
                   {t('setupModal.completed')}
                 </span>
               ) : (

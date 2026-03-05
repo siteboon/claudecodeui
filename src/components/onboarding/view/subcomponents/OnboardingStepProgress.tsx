@@ -20,17 +20,17 @@ export default function OnboardingStepProgress({ currentStep }: OnboardingStepPr
 
           return (
             <div key={step.title} className="contents">
-              <div className="flex flex-col items-center flex-1">
+              <div className="flex flex-1 flex-col items-center">
                 <div
-                  className={`w-12 h-12 rounded-full flex items-center justify-center border-2 transition-colors duration-200 ${
+                  className={`flex h-12 w-12 items-center justify-center rounded-full border-2 transition-colors duration-200 ${
                     isCompleted
-                      ? 'bg-green-500 border-green-500 text-white'
+                      ? 'border-green-500 bg-green-500 text-white'
                       : isActive
-                        ? 'bg-blue-600 border-blue-600 text-white'
-                        : 'bg-background border-border text-muted-foreground'
+                        ? 'border-blue-600 bg-blue-600 text-white'
+                        : 'border-border bg-background text-muted-foreground'
                   }`}
                 >
-                  {isCompleted ? <Check className="w-6 h-6" /> : <Icon className="w-6 h-6" />}
+                  {isCompleted ? <Check className="h-6 w-6" /> : <Icon className="h-6 w-6" />}
                 </div>
 
                 <div className="mt-2 text-center">
@@ -42,7 +42,7 @@ export default function OnboardingStepProgress({ currentStep }: OnboardingStepPr
               </div>
 
               {index < onboardingSteps.length - 1 && (
-                <div className={`flex-1 h-0.5 mx-2 transition-colors duration-200 ${isCompleted ? 'bg-green-500' : 'bg-border'}`} />
+                <div className={`mx-2 h-0.5 flex-1 transition-colors duration-200 ${isCompleted ? 'bg-green-500' : 'bg-border'}`} />
               )}
             </div>
           );

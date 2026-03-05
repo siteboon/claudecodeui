@@ -38,11 +38,11 @@ export default function GithubAuthenticationCard({
   const { t } = useTranslation();
 
   return (
-    <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-      <div className="flex items-start gap-3 mb-4">
-        <Key className="w-5 h-5 text-gray-600 dark:text-gray-400 flex-shrink-0 mt-0.5" />
+    <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/50">
+      <div className="mb-4 flex items-start gap-3">
+        <Key className="mt-0.5 h-5 w-5 flex-shrink-0 text-gray-600 dark:text-gray-400" />
         <div className="flex-1">
-          <h5 className="font-medium text-gray-900 dark:text-white mb-1">
+          <h5 className="mb-1 font-medium text-gray-900 dark:text-white">
             {t('projectWizard.step2.githubAuth')}
           </h5>
           <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -53,18 +53,18 @@ export default function GithubAuthenticationCard({
 
       {loadingTokens && (
         <div className="flex items-center gap-2 text-sm text-gray-500">
-          <Loader2 className="w-4 h-4 animate-spin" />
+          <Loader2 className="h-4 w-4 animate-spin" />
           {t('projectWizard.step2.loadingTokens')}
         </div>
       )}
 
       {!loadingTokens && tokenLoadError && (
-        <p className="text-sm text-red-600 dark:text-red-400 mb-3">{tokenLoadError}</p>
+        <p className="mb-3 text-sm text-red-600 dark:text-red-400">{tokenLoadError}</p>
       )}
 
       {!loadingTokens && availableTokens.length > 0 && (
         <>
-          <div className="grid grid-cols-3 gap-2 mb-4">
+          <div className="mb-4 grid grid-cols-3 gap-2">
             <button
               onClick={() => onTokenModeChange('stored')}
               className={getModeClassName(tokenMode, 'stored')}
@@ -91,13 +91,13 @@ export default function GithubAuthenticationCard({
 
           {tokenMode === 'stored' ? (
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
                 {t('projectWizard.step2.selectToken')}
               </label>
               <select
                 value={selectedGithubToken}
                 onChange={(event) => onSelectedGithubTokenChange(event.target.value)}
-                className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm"
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800"
               >
                 <option value="">{t('projectWizard.step2.selectTokenPlaceholder')}</option>
                 {availableTokens.map((token) => (
@@ -109,7 +109,7 @@ export default function GithubAuthenticationCard({
             </div>
           ) : tokenMode === 'new' ? (
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
                 {t('projectWizard.step2.newToken')}
               </label>
               <Input
@@ -129,14 +129,14 @@ export default function GithubAuthenticationCard({
 
       {!loadingTokens && availableTokens.length === 0 && (
         <div className="space-y-4">
-          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 border border-blue-200 dark:border-blue-800">
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/20">
             <p className="text-sm text-blue-800 dark:text-blue-200">
               {t('projectWizard.step2.publicRepoInfo')}
             </p>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
               {t('projectWizard.step2.optionalTokenPublic')}
             </label>
             <Input

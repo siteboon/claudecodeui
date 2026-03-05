@@ -36,8 +36,8 @@ export default function StepReview({
 
   return (
     <div className="space-y-4">
-      <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-        <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">
+      <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/50">
+        <h4 className="mb-3 text-sm font-semibold text-gray-900 dark:text-white">
           {t('projectWizard.step3.reviewConfig')}
         </h4>
 
@@ -55,7 +55,7 @@ export default function StepReview({
 
           <div className="flex justify-between text-sm">
             <span className="text-gray-600 dark:text-gray-400">{t('projectWizard.step3.path')}</span>
-            <span className="font-mono text-xs text-gray-900 dark:text-white break-all">
+            <span className="break-all font-mono text-xs text-gray-900 dark:text-white">
               {formState.workspacePath}
             </span>
           </div>
@@ -66,7 +66,7 @@ export default function StepReview({
                 <span className="text-gray-600 dark:text-gray-400">
                   {t('projectWizard.step3.cloneFrom')}
                 </span>
-                <span className="font-mono text-xs text-gray-900 dark:text-white break-all">
+                <span className="break-all font-mono text-xs text-gray-900 dark:text-white">
                   {formState.githubUrl}
                 </span>
               </div>
@@ -82,13 +82,13 @@ export default function StepReview({
         </div>
       </div>
 
-      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
+      <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
         {isCreating && cloneProgress ? (
           <div className="space-y-2">
             <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
               {t('projectWizard.step3.cloningRepository', { defaultValue: 'Cloning repository...' })}
             </p>
-            <code className="block text-xs font-mono text-blue-700 dark:text-blue-300 whitespace-pre-wrap break-all">
+            <code className="block whitespace-pre-wrap break-all font-mono text-xs text-blue-700 dark:text-blue-300">
               {cloneProgress}
             </code>
           </div>

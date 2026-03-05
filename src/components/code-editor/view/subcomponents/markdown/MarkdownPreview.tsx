@@ -13,26 +13,26 @@ type MarkdownPreviewProps = {
 const markdownPreviewComponents: Components = {
   code: MarkdownCodeBlock,
   blockquote: ({ children }) => (
-    <blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-4 italic text-gray-600 dark:text-gray-400 my-2">
+    <blockquote className="my-2 border-l-4 border-gray-300 pl-4 italic text-gray-600 dark:border-gray-600 dark:text-gray-400">
       {children}
     </blockquote>
   ),
   a: ({ href, children }) => (
-    <a href={href} className="text-blue-600 dark:text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">
+    <a href={href} className="text-blue-600 hover:underline dark:text-blue-400" target="_blank" rel="noopener noreferrer">
       {children}
     </a>
   ),
   table: ({ children }) => (
-    <div className="overflow-x-auto my-2">
+    <div className="my-2 overflow-x-auto">
       <table className="min-w-full border-collapse border border-gray-200 dark:border-gray-700">{children}</table>
     </div>
   ),
   thead: ({ children }) => <thead className="bg-gray-50 dark:bg-gray-800">{children}</thead>,
   th: ({ children }) => (
-    <th className="px-3 py-2 text-left text-sm font-semibold border border-gray-200 dark:border-gray-700">{children}</th>
+    <th className="border border-gray-200 px-3 py-2 text-left text-sm font-semibold dark:border-gray-700">{children}</th>
   ),
   td: ({ children }) => (
-    <td className="px-3 py-2 align-top text-sm border border-gray-200 dark:border-gray-700">{children}</td>
+    <td className="border border-gray-200 px-3 py-2 align-top text-sm dark:border-gray-700">{children}</td>
   ),
 };
 

@@ -194,11 +194,11 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
 
   return (
     <>
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="flex min-h-screen items-center justify-center bg-background p-4">
         <div className="w-full max-w-2xl">
           <OnboardingStepProgress currentStep={currentStep} />
 
-          <div className="bg-card rounded-lg shadow-lg border border-border p-8">
+          <div className="rounded-lg border border-border bg-card p-8 shadow-lg">
             {currentStep === 0 ? (
               <GitConfigurationStep
                 gitName={gitName}
@@ -215,18 +215,18 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
             )}
 
             {errorMessage && (
-              <div className="mt-6 p-4 bg-red-100 dark:bg-red-900/20 border border-red-300 dark:border-red-800 rounded-lg">
+              <div className="mt-6 rounded-lg border border-red-300 bg-red-100 p-4 dark:border-red-800 dark:bg-red-900/20">
                 <p className="text-sm text-red-700 dark:text-red-400">{errorMessage}</p>
               </div>
             )}
 
-            <div className="flex items-center justify-between mt-8 pt-6 border-t border-border">
+            <div className="mt-8 flex items-center justify-between border-t border-border pt-6">
               <button
                 onClick={handlePreviousStep}
                 disabled={currentStep === 0 || isSubmitting}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-muted-foreground transition-colors duration-200 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <ChevronLeft className="w-4 h-4" />
+                <ChevronLeft className="h-4 w-4" />
                 Previous
               </button>
 
@@ -235,17 +235,17 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                   <button
                     onClick={handleNextStep}
                     disabled={!isCurrentStepValid || isSubmitting}
-                    className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors duration-200"
+                    className="flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-3 font-medium text-white transition-colors duration-200 hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400"
                   >
                     {isSubmitting ? (
                       <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <Loader2 className="h-4 w-4 animate-spin" />
                         Saving...
                       </>
                     ) : (
                       <>
                         Next
-                        <ChevronRight className="w-4 h-4" />
+                        <ChevronRight className="h-4 w-4" />
                       </>
                     )}
                   </button>
@@ -253,16 +253,16 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                   <button
                     onClick={handleFinish}
                     disabled={isSubmitting}
-                    className="flex items-center gap-2 px-6 py-3 bg-green-600 hover:bg-green-700 disabled:bg-green-400 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors duration-200"
+                    className="flex items-center gap-2 rounded-lg bg-green-600 px-6 py-3 font-medium text-white transition-colors duration-200 hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-green-400"
                   >
                     {isSubmitting ? (
                       <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <Loader2 className="h-4 w-4 animate-spin" />
                         Completing...
                       </>
                     ) : (
                       <>
-                        <Check className="w-4 h-4" />
+                        <Check className="h-4 w-4" />
                         Complete Setup
                       </>
                     )}

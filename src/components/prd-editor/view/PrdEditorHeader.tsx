@@ -82,36 +82,36 @@ export default function PrdEditorHeader({
   const fileNameInputRef = useRef<HTMLInputElement | null>(null);
 
   return (
-    <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 min-w-0">
-      <div className="flex items-center gap-3 min-w-0 flex-1">
-        <div className="w-8 h-8 bg-purple-600 rounded flex items-center justify-center flex-shrink-0">
-          <FileText className="w-4 h-4 text-white" />
+    <div className="flex min-w-0 flex-shrink-0 items-center justify-between border-b border-gray-200 p-4 dark:border-gray-700">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded bg-purple-600">
+          <FileText className="h-4 w-4 text-white" />
         </div>
 
         <div className="min-w-0 flex-1">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0">
-            <div className="flex items-center gap-1 min-w-0 flex-1">
-              <div className="flex items-center min-w-0 flex-1 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-md px-3 py-2 focus-within:ring-2 focus-within:ring-purple-500 focus-within:border-purple-500 dark:focus-within:ring-purple-400 dark:focus-within:border-purple-400">
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="flex min-w-0 flex-1 items-center gap-1">
+              <div className="flex min-w-0 flex-1 items-center rounded-md border border-gray-200 bg-gray-50 px-3 py-2 focus-within:border-purple-500 focus-within:ring-2 focus-within:ring-purple-500 dark:border-gray-600 dark:bg-gray-700 dark:focus-within:border-purple-400 dark:focus-within:ring-purple-400">
                 <input
                   ref={fileNameInputRef}
                   type="text"
                   value={fileName}
                   onChange={(event) => onFileNameChange(event.target.value)}
-                  className="font-medium text-gray-900 dark:text-white bg-transparent border-none outline-none min-w-0 flex-1 text-base sm:text-sm placeholder-gray-400 dark:placeholder-gray-500"
+                  className="min-w-0 flex-1 border-none bg-transparent text-base font-medium text-gray-900 placeholder-gray-400 outline-none dark:text-white dark:placeholder-gray-500 sm:text-sm"
                   placeholder="Enter PRD filename"
                   maxLength={100}
                 />
-                <span className="text-sm sm:text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap ml-1">
+                <span className="ml-1 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 sm:text-xs">
                   .txt
                 </span>
               </div>
 
               <button
                 onClick={() => fileNameInputRef.current?.focus()}
-                className="p-1 text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
+                className="p-1 text-gray-400 transition-colors hover:text-purple-600 dark:hover:text-purple-400"
                 title="Focus filename input"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -122,36 +122,36 @@ export default function PrdEditorHeader({
               </button>
             </div>
 
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <span className="text-xs bg-purple-100 dark:bg-purple-900 text-purple-600 dark:text-purple-300 px-2 py-1 rounded whitespace-nowrap">
+            <div className="flex flex-shrink-0 items-center gap-2">
+              <span className="whitespace-nowrap rounded bg-purple-100 px-2 py-1 text-xs text-purple-600 dark:bg-purple-900 dark:text-purple-300">
                 PRD
               </span>
               {isNewFile && (
-                <span className="text-xs bg-green-100 dark:bg-green-900 text-green-600 dark:text-green-300 px-2 py-1 rounded whitespace-nowrap">
+                <span className="whitespace-nowrap rounded bg-green-100 px-2 py-1 text-xs text-green-600 dark:bg-green-900 dark:text-green-300">
                   New
                 </span>
               )}
             </div>
           </div>
 
-          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate mt-1">
+          <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400 sm:text-sm">
             Product Requirements Document
           </p>
         </div>
       </div>
 
-      <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
+      <div className="flex flex-shrink-0 items-center gap-1 md:gap-2">
         <HeaderIconButton
           title={previewMode ? 'Switch to edit mode' : 'Preview markdown'}
           onClick={onTogglePreview}
-          icon={<Eye className="w-5 h-5 md:w-4 md:h-4" />}
+          icon={<Eye className="h-5 w-5 md:h-4 md:w-4" />}
           active={previewMode}
         />
 
         <HeaderIconButton
           title={wordWrap ? 'Disable word wrap' : 'Enable word wrap'}
           onClick={onToggleWordWrap}
-          icon={<span className="text-sm md:text-xs font-mono font-bold">WRAP</span>}
+          icon={<span className="font-mono text-sm font-bold md:text-xs">WRAP</span>}
           active={wordWrap}
         />
 
@@ -160,9 +160,9 @@ export default function PrdEditorHeader({
           onClick={onToggleTheme}
           icon={
             isDarkMode ? (
-              <Sun className="w-5 h-5 md:w-4 md:h-4" />
+              <Sun className="h-5 w-5 md:h-4 md:w-4" />
             ) : (
-              <Moon className="w-5 h-5 md:w-4 md:h-4" />
+              <Moon className="h-5 w-5 md:h-4 md:w-4" />
             )
           }
         />
@@ -170,7 +170,7 @@ export default function PrdEditorHeader({
         <HeaderIconButton
           title="Download PRD"
           onClick={onDownload}
-          icon={<Download className="w-5 h-5 md:w-4 md:h-4" />}
+          icon={<Download className="h-5 w-5 md:h-4 md:w-4" />}
         />
 
         <button
@@ -182,7 +182,7 @@ export default function PrdEditorHeader({
           )}
           title="Generate tasks from PRD content"
         >
-          <Sparkles className="w-4 h-4" />
+          <Sparkles className="h-4 w-4" />
           <span className="hidden md:inline">Generate Tasks</span>
         </button>
 
@@ -196,14 +196,14 @@ export default function PrdEditorHeader({
         >
           {saveSuccess ? (
             <>
-              <svg className="w-5 h-5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="h-5 w-5 md:h-4 md:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
               <span className="hidden sm:inline">Saved!</span>
             </>
           ) : (
             <>
-              <Save className="w-5 h-5 md:w-4 md:h-4" />
+              <Save className="h-5 w-5 md:h-4 md:w-4" />
               <span className="hidden sm:inline">{saving ? 'Saving...' : 'Save PRD'}</span>
             </>
           )}
@@ -211,16 +211,16 @@ export default function PrdEditorHeader({
 
         <button
           onClick={onToggleFullscreen}
-          className="hidden md:flex p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 items-center justify-center"
+          className="hidden items-center justify-center rounded-md p-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white md:flex"
           title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
         >
-          {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+          {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
         </button>
 
         <HeaderIconButton
           title="Close"
           onClick={onClose}
-          icon={<X className="w-6 h-6 md:w-4 md:h-4" />}
+          icon={<X className="h-6 w-6 md:h-4 md:w-4" />}
         />
       </div>
     </div>

@@ -79,7 +79,7 @@ export default function TaskMasterPanel({ isVisible }: TaskMasterPanelProps) {
   return (
     <>
       <div className={`h-full ${isVisible ? 'block' : 'hidden'}`}>
-        <div className="h-full flex flex-col overflow-hidden">
+        <div className="flex h-full flex-col overflow-hidden">
           <TaskBoard
             tasks={tasks}
             onTaskClick={handleTaskClick}
@@ -136,9 +136,9 @@ export default function TaskMasterPanel({ isVisible }: TaskMasterPanelProps) {
       )}
 
       {prdNotification && (
-        <div className="fixed bottom-4 right-4 z-50 animate-in slide-in-from-bottom-2 duration-300">
-          <div className="bg-green-600 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-3">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="animate-in slide-in-from-bottom-2 fixed bottom-4 right-4 z-50 duration-300">
+          <div className="flex items-center gap-3 rounded-lg bg-green-600 px-4 py-3 text-white shadow-lg">
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
             <span className="font-medium">{prdNotification}</span>

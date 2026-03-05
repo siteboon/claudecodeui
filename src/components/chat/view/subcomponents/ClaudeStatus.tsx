@@ -109,8 +109,8 @@ export default function ClaudeStatus({
       : t('claudeStatus.elapsed.startingNow', { defaultValue: 'Starting now' });
 
   return (
-    <div className="w-full mb-3 sm:mb-6 animate-in slide-in-from-bottom duration-300">
-      <div className="relative max-w-4xl mx-auto overflow-hidden rounded-2xl border border-border/70 bg-card/90 shadow-md backdrop-blur-md">
+    <div className="animate-in slide-in-from-bottom mb-3 w-full duration-300 sm:mb-6">
+      <div className="relative mx-auto max-w-4xl overflow-hidden rounded-2xl border border-border/70 bg-card/90 shadow-md backdrop-blur-md">
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-primary/10 via-transparent to-sky-500/10 dark:from-primary/20 dark:to-sky-400/20" />
 
         <div className="relative px-3 py-3 sm:px-4 sm:py-3.5">
@@ -160,7 +160,7 @@ export default function ClaudeStatus({
                 <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground sm:text-xs">
                   <span
                     aria-hidden="true"
-                    className="inline-flex items-center -ml-2 rounded-full border border-border/70 bg-background/60 px-2 py-0.5"
+                    className="-ml-2 inline-flex items-center rounded-full border border-border/70 bg-background/60 px-2 py-0.5"
                   >
                     {elapsedLabel}
                   </span>
@@ -173,7 +173,7 @@ export default function ClaudeStatus({
                 <button
                   type="button"
                   onClick={onAbort}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-destructive px-3.5 py-2 text-sm font-semibold text-destructive-foreground shadow-sm ring-1 ring-destructive/40 transition-opacity hover:opacity-95 active:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/70 sm:w-auto"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-destructive px-3.5 py-2 text-sm font-semibold text-destructive-foreground shadow-sm ring-1 ring-destructive/40 transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/70 active:opacity-90 sm:w-auto"
                 >
                   <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

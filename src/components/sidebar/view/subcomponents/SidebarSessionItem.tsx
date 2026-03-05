@@ -1,6 +1,6 @@
-import { Badge, Button } from '../../../../shared/view/ui';
 import { Check, Clock, Edit2, Trash2, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
+import { Badge, Button } from '../../../../shared/view/ui';
 import { cn } from '../../../../lib/utils';
 import { formatTimeAgo } from '../../../../utils/dateUtils';
 import type { Project, ProjectSession, SessionProvider } from '../../../../types/app';
@@ -65,8 +65,8 @@ export default function SidebarSessionItem({
   return (
     <div className="group relative">
       {sessionView.isActive && (
-        <div className="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-1">
-          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+        <div className="absolute left-0 top-1/2 -translate-x-1 -translate-y-1/2 transform">
+          <div className="h-2 w-2 animate-pulse rounded-full bg-green-500" />
         </div>
       )}
 
@@ -88,36 +88,36 @@ export default function SidebarSessionItem({
                 isSelected ? 'bg-primary/10' : 'bg-muted/50',
               )}
             >
-              <SessionProviderLogo provider={session.__provider} className="w-3 h-3" />
+              <SessionProviderLogo provider={session.__provider} className="h-3 w-3" />
             </div>
 
             <div className="min-w-0 flex-1">
-              <div className="text-xs font-medium truncate text-foreground">{sessionView.sessionName}</div>
-              <div className="flex items-center gap-1 mt-0.5">
-                <Clock className="w-2.5 h-2.5 text-muted-foreground" />
+              <div className="truncate text-xs font-medium text-foreground">{sessionView.sessionName}</div>
+              <div className="mt-0.5 flex items-center gap-1">
+                <Clock className="h-2.5 w-2.5 text-muted-foreground" />
                 <span className="text-xs text-muted-foreground">
                   {formatTimeAgo(sessionView.sessionTime, currentTime, t)}
                 </span>
                 {sessionView.messageCount > 0 && (
-                  <Badge variant="secondary" className="text-xs px-1 py-0 ml-auto">
+                  <Badge variant="secondary" className="ml-auto px-1 py-0 text-xs">
                     {sessionView.messageCount}
                   </Badge>
                 )}
                 <span className="ml-1 opacity-70">
-                  <SessionProviderLogo provider={session.__provider} className="w-3 h-3" />
+                  <SessionProviderLogo provider={session.__provider} className="h-3 w-3" />
                 </span>
               </div>
             </div>
 
             {!sessionView.isCursorSession && (
               <button
-                className="w-5 h-5 rounded-md bg-red-50 dark:bg-red-900/20 flex items-center justify-center active:scale-95 transition-transform opacity-70 ml-1"
+                className="ml-1 flex h-5 w-5 items-center justify-center rounded-md bg-red-50 opacity-70 transition-transform active:scale-95 dark:bg-red-900/20"
                 onClick={(event) => {
                   event.stopPropagation();
                   requestDeleteSession();
                 }}
               >
-                <Trash2 className="w-2.5 h-2.5 text-red-600 dark:text-red-400" />
+                <Trash2 className="h-2.5 w-2.5 text-red-600 dark:text-red-400" />
               </button>
             )}
           </div>
@@ -133,32 +133,32 @@ export default function SidebarSessionItem({
           )}
           onClick={() => onSessionSelect(session, project.name)}
         >
-          <div className="flex items-start gap-2 min-w-0 w-full">
-            <SessionProviderLogo provider={session.__provider} className="w-3 h-3 mt-0.5 flex-shrink-0" />
+          <div className="flex w-full min-w-0 items-start gap-2">
+            <SessionProviderLogo provider={session.__provider} className="mt-0.5 h-3 w-3 flex-shrink-0" />
             <div className="min-w-0 flex-1">
-              <div className="text-xs font-medium truncate text-foreground">{sessionView.sessionName}</div>
-              <div className="flex items-center gap-1 mt-0.5">
-                <Clock className="w-2.5 h-2.5 text-muted-foreground" />
+              <div className="truncate text-xs font-medium text-foreground">{sessionView.sessionName}</div>
+              <div className="mt-0.5 flex items-center gap-1">
+                <Clock className="h-2.5 w-2.5 text-muted-foreground" />
                 <span className="text-xs text-muted-foreground">
                   {formatTimeAgo(sessionView.sessionTime, currentTime, t)}
                 </span>
                 {sessionView.messageCount > 0 && (
                   <Badge
                     variant="secondary"
-                    className="text-xs px-1 py-0 ml-auto group-hover:opacity-0 transition-opacity"
+                    className="ml-auto px-1 py-0 text-xs transition-opacity group-hover:opacity-0"
                   >
                     {sessionView.messageCount}
                   </Badge>
                 )}
-                <span className="ml-1 opacity-70 group-hover:opacity-0 transition-opacity">
-                  <SessionProviderLogo provider={session.__provider} className="w-3 h-3" />
+                <span className="ml-1 opacity-70 transition-opacity group-hover:opacity-0">
+                  <SessionProviderLogo provider={session.__provider} className="h-3 w-3" />
                 </span>
               </div>
             </div>
           </div>
         </Button>
 
-        <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200">
+        <div className="absolute right-2 top-1/2 flex -translate-y-1/2 transform items-center gap-1 opacity-0 transition-all duration-200 group-hover:opacity-100">
             {editingSession === session.id ? (
               <>
                 <input
@@ -174,52 +174,52 @@ export default function SidebarSessionItem({
                     }
                   }}
                   onClick={(event) => event.stopPropagation()}
-                  className="w-32 px-2 py-1 text-xs border border-border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-32 rounded border border-border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
                   autoFocus
                 />
                 <button
-                  className="w-6 h-6 bg-green-50 hover:bg-green-100 dark:bg-green-900/20 dark:hover:bg-green-900/40 rounded flex items-center justify-center"
+                  className="flex h-6 w-6 items-center justify-center rounded bg-green-50 hover:bg-green-100 dark:bg-green-900/20 dark:hover:bg-green-900/40"
                   onClick={(event) => {
                     event.stopPropagation();
                     saveEditedSession();
                   }}
                   title={t('tooltips.save')}
                 >
-                  <Check className="w-3 h-3 text-green-600 dark:text-green-400" />
+                  <Check className="h-3 w-3 text-green-600 dark:text-green-400" />
                 </button>
                 <button
-                  className="w-6 h-6 bg-gray-50 hover:bg-gray-100 dark:bg-gray-900/20 dark:hover:bg-gray-900/40 rounded flex items-center justify-center"
+                  className="flex h-6 w-6 items-center justify-center rounded bg-gray-50 hover:bg-gray-100 dark:bg-gray-900/20 dark:hover:bg-gray-900/40"
                   onClick={(event) => {
                     event.stopPropagation();
                     onCancelEditingSession();
                   }}
                   title={t('tooltips.cancel')}
                 >
-                  <X className="w-3 h-3 text-gray-600 dark:text-gray-400" />
+                  <X className="h-3 w-3 text-gray-600 dark:text-gray-400" />
                 </button>
               </>
             ) : (
               <>
                 <button
-                  className="w-6 h-6 bg-gray-50 hover:bg-gray-100 dark:bg-gray-900/20 dark:hover:bg-gray-900/40 rounded flex items-center justify-center"
+                  className="flex h-6 w-6 items-center justify-center rounded bg-gray-50 hover:bg-gray-100 dark:bg-gray-900/20 dark:hover:bg-gray-900/40"
                   onClick={(event) => {
                     event.stopPropagation();
                     onStartEditingSession(session.id, sessionView.sessionName);
                   }}
                   title={t('tooltips.editSessionName')}
                 >
-                  <Edit2 className="w-3 h-3 text-gray-600 dark:text-gray-400" />
+                  <Edit2 className="h-3 w-3 text-gray-600 dark:text-gray-400" />
                 </button>
                 {!sessionView.isCursorSession && (
                   <button
-                    className="w-6 h-6 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 rounded flex items-center justify-center"
+                    className="flex h-6 w-6 items-center justify-center rounded bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40"
                     onClick={(event) => {
                       event.stopPropagation();
                       requestDeleteSession();
                     }}
                     title={t('tooltips.deleteSession')}
                   >
-                    <Trash2 className="w-3 h-3 text-red-600 dark:text-red-400" />
+                    <Trash2 className="h-3 w-3 text-red-600 dark:text-red-400" />
                   </button>
                 )}
               </>

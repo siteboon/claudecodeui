@@ -38,44 +38,44 @@ export const ToolDiffViewer: React.FC<ToolDiffViewerProps> = ({
   );
 
   return (
-    <div className="border border-gray-200/60 dark:border-gray-700/50 rounded overflow-hidden">
+    <div className="overflow-hidden rounded border border-gray-200/60 dark:border-gray-700/50">
       {/* Header */}
-      <div className="flex items-center justify-between px-2.5 py-1 bg-gray-50/80 dark:bg-gray-800/40 border-b border-gray-200/60 dark:border-gray-700/50">
+      <div className="flex items-center justify-between border-b border-gray-200/60 bg-gray-50/80 px-2.5 py-1 dark:border-gray-700/50 dark:bg-gray-800/40">
         {onFileClick ? (
           <button
             onClick={onFileClick}
-            className="text-[11px] font-mono text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 truncate cursor-pointer transition-colors"
+            className="cursor-pointer truncate font-mono text-[11px] text-blue-600 transition-colors hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
           >
             {filePath}
           </button>
         ) : (
-          <span className="text-[11px] font-mono text-gray-600 dark:text-gray-400 truncate">
+          <span className="truncate font-mono text-[11px] text-gray-600 dark:text-gray-400">
             {filePath}
           </span>
         )}
-        <span className={`text-[10px] font-medium px-1.5 py-px rounded ${badgeClasses} flex-shrink-0 ml-2`}>
+        <span className={`rounded px-1.5 py-px text-[10px] font-medium ${badgeClasses} ml-2 flex-shrink-0`}>
           {badge}
         </span>
       </div>
 
       {/* Diff lines */}
-      <div className="text-[11px] font-mono leading-[18px]">
+      <div className="font-mono text-[11px] leading-[18px]">
         {diffLines.map((diffLine, i) => (
           <div key={i} className="flex">
             <span
-              className={`w-6 text-center select-none flex-shrink-0 ${
+              className={`w-6 flex-shrink-0 select-none text-center ${
                 diffLine.type === 'removed'
-                  ? 'bg-red-50 dark:bg-red-950/30 text-red-400 dark:text-red-500'
-                  : 'bg-green-50 dark:bg-green-950/30 text-green-400 dark:text-green-500'
+                  ? 'bg-red-50 text-red-400 dark:bg-red-950/30 dark:text-red-500'
+                  : 'bg-green-50 text-green-400 dark:bg-green-950/30 dark:text-green-500'
               }`}
             >
               {diffLine.type === 'removed' ? '-' : '+'}
             </span>
             <span
-              className={`px-2 flex-1 whitespace-pre-wrap ${
+              className={`flex-1 whitespace-pre-wrap px-2 ${
                 diffLine.type === 'removed'
-                  ? 'bg-red-50/50 dark:bg-red-950/20 text-red-800 dark:text-red-200'
-                  : 'bg-green-50/50 dark:bg-green-950/20 text-green-800 dark:text-green-200'
+                  ? 'bg-red-50/50 text-red-800 dark:bg-red-950/20 dark:text-red-200'
+                  : 'bg-green-50/50 text-green-800 dark:bg-green-950/20 dark:text-green-200'
               }`}
             >
               {diffLine.content}

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { FolderOpen } from 'lucide-react';
 import { Button, Input } from '../../../shared/view/ui';
-import FolderBrowserModal from './FolderBrowserModal';
 import { browseFilesystemFolders } from '../data/workspaceApi';
 import { getSuggestionRootPath } from '../utils/pathUtils';
 import type { FolderSuggestion, WorkspaceType } from '../types';
+import FolderBrowserModal from './FolderBrowserModal';
 
 type WorkspacePathFieldProps = {
   workspaceType: WorkspaceType;
@@ -83,7 +83,7 @@ export default function WorkspacePathField({
   return (
     <>
       <div className="relative flex gap-2">
-        <div className="flex-1 relative">
+        <div className="relative flex-1">
           <Input
             type="text"
             value={value}
@@ -98,12 +98,12 @@ export default function WorkspacePathField({
           />
 
           {showPathDropdown && pathSuggestions.length > 0 && (
-            <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+            <div className="absolute z-10 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
               {pathSuggestions.map((suggestion) => (
                 <button
                   key={suggestion.path}
                   onClick={() => handleSuggestionSelect(suggestion)}
-                  className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 text-sm"
+                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
                 >
                   <div className="font-medium text-gray-900 dark:text-white">{suggestion.name}</div>
                   <div className="text-xs text-gray-500 dark:text-gray-400">{suggestion.path}</div>
@@ -121,7 +121,7 @@ export default function WorkspacePathField({
           title="Browse folders"
           disabled={disabled}
         >
-          <FolderOpen className="w-4 h-4" />
+          <FolderOpen className="h-4 w-4" />
         </Button>
       </div>
 

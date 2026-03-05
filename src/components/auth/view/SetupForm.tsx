@@ -74,7 +74,7 @@ export default function SetupForm() {
       title="Welcome to Claude Code UI"
       description="Set up your account to get started"
       footerText="This is a single-user system. Only one account can be created."
-      logo={<img src="/logo.svg" alt="CloudCLI" className="w-16 h-16" />}
+      logo={<img src="/logo.svg" alt="CloudCLI" className="h-16 w-16" />}
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <AuthInputField
@@ -111,7 +111,7 @@ export default function SetupForm() {
         <button
           type="submit"
           disabled={isSubmitting}
-          className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium py-2 px-4 rounded-md transition-colors duration-200"
+          className="w-full rounded-md bg-blue-600 px-4 py-2 font-medium text-white transition-colors duration-200 hover:bg-blue-700 disabled:bg-blue-400"
         >
           {isSubmitting ? 'Setting up...' : 'Create Account'}
         </button>

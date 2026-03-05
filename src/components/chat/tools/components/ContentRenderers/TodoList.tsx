@@ -79,25 +79,25 @@ const TodoRow = memo(
     const StatusIcon = statusConfig.icon;
 
     return (
-      <div className="flex items-start gap-2 p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded transition-colors">
-        <div className="flex-shrink-0 mt-0.5">
+      <div className="flex items-start gap-2 rounded border border-gray-200 bg-white p-2 transition-colors dark:border-gray-700 dark:bg-gray-800">
+        <div className="mt-0.5 flex-shrink-0">
           <StatusIcon className={statusConfig.iconClassName} />
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2 mb-0.5">
+        <div className="min-w-0 flex-1">
+          <div className="mb-0.5 flex items-start justify-between gap-2">
             <p className={`text-xs font-medium ${statusConfig.textClassName}`}>
               {todo.content}
             </p>
-            <div className="flex gap-1 flex-shrink-0">
+            <div className="flex flex-shrink-0 gap-1">
               <Badge
                 variant="outline"
-                className={`text-[10px] px-1.5 py-px ${PRIORITY_BADGE_CLASS[todo.priority]}`}
+                className={`px-1.5 py-px text-[10px] ${PRIORITY_BADGE_CLASS[todo.priority]}`}
               >
                 {todo.priority}
               </Badge>
               <Badge
                 variant="outline"
-                className={`text-[10px] px-1.5 py-px ${statusConfig.badgeClassName}`}
+                className={`px-1.5 py-px text-[10px] ${statusConfig.badgeClassName}`}
               >
                 {todo.status.replace('_', ' ')}
               </Badge>
@@ -136,7 +136,7 @@ const TodoList = memo(
     return (
       <div className="space-y-1.5">
         {isResult && (
-          <div className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">
+          <div className="mb-1.5 text-xs font-medium text-gray-600 dark:text-gray-400">
             Todo List ({normalizedTodos.length}{' '}
             {normalizedTodos.length === 1 ? 'item' : 'items'})
           </div>

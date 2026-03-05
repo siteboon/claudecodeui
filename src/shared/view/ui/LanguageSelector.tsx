@@ -28,7 +28,7 @@ export default function LanguageSelector({ compact = false }: LanguageSelectorPr
   // Compact style for QuickSettingsPanel
   if (compact) {
     return (
-      <div className="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors border border-transparent hover:border-gray-300 dark:hover:border-gray-600">
+      <div className="flex items-center justify-between rounded-lg border border-transparent bg-gray-50 p-3 transition-colors hover:border-gray-300 hover:bg-gray-100 dark:bg-gray-800 dark:hover:border-gray-600 dark:hover:bg-gray-700">
         <span className="flex items-center gap-2 text-sm text-gray-900 dark:text-white">
           <Languages className="h-4 w-4 text-gray-600 dark:text-gray-400" />
           {t('account.language')}
@@ -36,7 +36,7 @@ export default function LanguageSelector({ compact = false }: LanguageSelectorPr
         <select
           value={i18n.language}
           onChange={handleLanguageChange}
-          className="w-[100px] text-sm bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
+          className="w-[100px] rounded-lg border border-gray-300 bg-gray-50 p-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:focus:ring-blue-400"
         >
           {languages.map((lang) => (
             <option key={lang.value} value={lang.value}>
@@ -50,10 +50,10 @@ export default function LanguageSelector({ compact = false }: LanguageSelectorPr
 
   // Full style for Settings page
   return (
-    <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+    <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/50">
       <div className="flex items-center justify-between">
         <div>
-          <div className="font-medium text-gray-900 dark:text-gray-100 mb-1">
+          <div className="mb-1 font-medium text-gray-900 dark:text-gray-100">
             {t('account.languageLabel')}
           </div>
           <div className="text-sm text-gray-600 dark:text-gray-400">
@@ -63,7 +63,7 @@ export default function LanguageSelector({ compact = false }: LanguageSelectorPr
         <select
           value={i18n.language}
           onChange={handleLanguageChange}
-          className="text-sm bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 w-36"
+          className="w-36 rounded-lg border border-gray-300 bg-gray-50 p-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
         >
           {languages.map((lang) => (
             <option key={lang.value} value={lang.value}>

@@ -45,7 +45,7 @@ export default function QuickSettingsContent({
   );
 
   return (
-    <div className={`flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-6 bg-background ${isMobile ? 'pb-mobile-nav' : ''}`}>
+    <div className={`flex-1 space-y-6 overflow-y-auto overflow-x-hidden bg-background p-4 ${isMobile ? 'pb-mobile-nav' : ''}`}>
       <QuickSettingsSection title={t('quickSettings.sections.appearance')}>
         <div className={SETTING_ROW_CLASS}>
           <span className="flex items-center gap-2 text-sm text-gray-900 dark:text-white">
@@ -71,7 +71,7 @@ export default function QuickSettingsContent({
 
       <QuickSettingsSection title={t('quickSettings.sections.inputSettings')}>
         {renderToggleRows(INPUT_SETTING_TOGGLES)}
-        <p className="text-xs text-gray-500 dark:text-gray-400 ml-3">
+        <p className="ml-3 text-xs text-gray-500 dark:text-gray-400">
           {t('quickSettings.sendByCtrlEnterDescription')}
         </p>
       </QuickSettingsSection>

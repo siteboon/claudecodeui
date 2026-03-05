@@ -17,11 +17,11 @@ export default function GitConfigurationStep({
 }: GitConfigurationStepProps) {
   return (
     <div className="space-y-6">
-      <div className="text-center mb-8">
-        <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
-          <GitBranch className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+      <div className="mb-8 text-center">
+        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/30">
+          <GitBranch className="h-8 w-8 text-blue-600 dark:text-blue-400" />
         </div>
-        <h2 className="text-2xl font-bold text-foreground mb-2">Git Configuration</h2>
+        <h2 className="mb-2 text-2xl font-bold text-foreground">Git Configuration</h2>
         <p className="text-muted-foreground">
           Configure your git identity to ensure proper attribution for commits.
         </p>
@@ -29,8 +29,8 @@ export default function GitConfigurationStep({
 
       <div className="space-y-4">
         <div>
-          <label htmlFor="gitName" className="flex items-center gap-2 text-sm font-medium text-foreground mb-2">
-            <User className="w-4 h-4" />
+          <label htmlFor="gitName" className="mb-2 flex items-center gap-2 text-sm font-medium text-foreground">
+            <User className="h-4 w-4" />
             Git Name <span className="text-red-500">*</span>
           </label>
           <input
@@ -38,7 +38,7 @@ export default function GitConfigurationStep({
             id="gitName"
             value={gitName}
             onChange={(event) => onGitNameChange(event.target.value)}
-            className="w-full px-4 py-3 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="John Doe"
             required
             disabled={isSubmitting}
@@ -47,8 +47,8 @@ export default function GitConfigurationStep({
         </div>
 
         <div>
-          <label htmlFor="gitEmail" className="flex items-center gap-2 text-sm font-medium text-foreground mb-2">
-            <Mail className="w-4 h-4" />
+          <label htmlFor="gitEmail" className="mb-2 flex items-center gap-2 text-sm font-medium text-foreground">
+            <Mail className="h-4 w-4" />
             Git Email <span className="text-red-500">*</span>
           </label>
           <input
@@ -56,7 +56,7 @@ export default function GitConfigurationStep({
             id="gitEmail"
             value={gitEmail}
             onChange={(event) => onGitEmailChange(event.target.value)}
-            className="w-full px-4 py-3 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="john@example.com"
             required
             disabled={isSubmitting}

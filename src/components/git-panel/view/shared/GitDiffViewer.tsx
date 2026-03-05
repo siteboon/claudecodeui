@@ -7,7 +7,7 @@ type GitDiffViewerProps = {
 export default function GitDiffViewer({ diff, isMobile, wrapText }: GitDiffViewerProps) {
   if (!diff) {
     return (
-      <div className="p-4 text-center text-muted-foreground text-sm">
+      <div className="p-4 text-center text-sm text-muted-foreground">
         No diff available
       </div>
     );
@@ -21,9 +21,9 @@ export default function GitDiffViewer({ diff, isMobile, wrapText }: GitDiffViewe
     return (
       <div
         key={index}
-        className={`font-mono text-xs px-3 py-0.5 ${isMobile && wrapText ? 'whitespace-pre-wrap break-all' : 'whitespace-pre overflow-x-auto'
-          } ${isAddition ? 'bg-green-50 dark:bg-green-950/50 text-green-700 dark:text-green-300' :
-            isDeletion ? 'bg-red-50 dark:bg-red-950/50 text-red-700 dark:text-red-300' :
+        className={`px-3 py-0.5 font-mono text-xs ${isMobile && wrapText ? 'whitespace-pre-wrap break-all' : 'overflow-x-auto whitespace-pre'
+          } ${isAddition ? 'bg-green-50 text-green-700 dark:bg-green-950/50 dark:text-green-300' :
+            isDeletion ? 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300' :
               isHeader ? 'bg-primary/5 text-primary' :
                 'text-muted-foreground/70'
           }`}

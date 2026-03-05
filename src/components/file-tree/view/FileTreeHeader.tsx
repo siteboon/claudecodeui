@@ -34,7 +34,7 @@ export default function FileTreeHeader({
   const { t } = useTranslation();
 
   return (
-    <div className="px-3 pt-3 pb-2 border-b border-border space-y-2">
+    <div className="space-y-2 border-b border-border px-3 pb-2 pt-3">
       {/* Title and Toolbar */}
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-medium text-foreground">{t('fileTree.files')}</h3>
@@ -50,7 +50,7 @@ export default function FileTreeHeader({
               aria-label={t('fileTree.newFile', 'New File (Cmd+N)')}
               disabled={operationLoading}
             >
-              <FileText className="w-3.5 h-3.5" />
+              <FileText className="h-3.5 w-3.5" />
             </Button>
           )}
           {onNewFolder && (
@@ -63,7 +63,7 @@ export default function FileTreeHeader({
               aria-label={t('fileTree.newFolder', 'New Folder (Cmd+Shift+N)')}
               disabled={operationLoading}
             >
-              <FolderPlus className="w-3.5 h-3.5" />
+              <FolderPlus className="h-3.5 w-3.5" />
             </Button>
           )}
           {onRefresh && (
@@ -88,11 +88,11 @@ export default function FileTreeHeader({
               title={t('fileTree.collapseAll', 'Collapse All')}
               aria-label={t('fileTree.collapseAll', 'Collapse All')}
             >
-              <ChevronDown className="w-3.5 h-3.5" />
+              <ChevronDown className="h-3.5 w-3.5" />
             </Button>
           )}
           {/* Divider */}
-          <div className="w-px h-4 bg-border mx-0.5" />
+          <div className="mx-0.5 h-4 w-px bg-border" />
           {/* View mode buttons */}
           <Button
             variant={viewMode === 'simple' ? 'default' : 'ghost'}
@@ -102,7 +102,7 @@ export default function FileTreeHeader({
             title={t('fileTree.simpleView')}
             aria-label={t('fileTree.simpleView')}
           >
-            <List className="w-3.5 h-3.5" />
+            <List className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant={viewMode === 'compact' ? 'default' : 'ghost'}
@@ -112,7 +112,7 @@ export default function FileTreeHeader({
             title={t('fileTree.compactView')}
             aria-label={t('fileTree.compactView')}
           >
-            <Eye className="w-3.5 h-3.5" />
+            <Eye className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant={viewMode === 'detailed' ? 'default' : 'ghost'}
@@ -122,31 +122,31 @@ export default function FileTreeHeader({
             title={t('fileTree.detailedView')}
             aria-label={t('fileTree.detailedView')}
           >
-            <TableProperties className="w-3.5 h-3.5" />
+            <TableProperties className="h-3.5 w-3.5" />
           </Button>
         </div>
       </div>
 
       {/* Search Bar */}
       <div className="relative">
-        <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+        <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
         <Input
           type="text"
           placeholder={t('fileTree.searchPlaceholder')}
           value={searchQuery}
           onChange={(event) => onSearchQueryChange(event.target.value)}
-          className="pl-8 pr-8 h-8 text-sm"
+          className="h-8 pl-8 pr-8 text-sm"
         />
         {searchQuery && (
           <Button
             variant="ghost"
             size="sm"
-            className="absolute right-0.5 top-1/2 -translate-y-1/2 h-5 w-5 p-0 hover:bg-accent"
+            className="absolute right-0.5 top-1/2 h-5 w-5 -translate-y-1/2 p-0 hover:bg-accent"
             onClick={() => onSearchQueryChange('')}
             title={t('fileTree.clearSearch')}
             aria-label={t('fileTree.clearSearch')}
           >
-            <X className="w-3 h-3" />
+            <X className="h-3 w-3" />
           </Button>
         )}
       </div>

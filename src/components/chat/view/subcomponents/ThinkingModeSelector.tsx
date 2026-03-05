@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Brain, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-
 import { thinkingModes } from '../../constants/thinkingModes';
 
 type ThinkingModeSelectorProps = {
@@ -53,18 +52,18 @@ function ThinkingModeSelector({ selectedMode, onModeChange, onClose, className =
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`w-10 h-10 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all duration-200 ${selectedMode === 'none'
+        className={`flex h-10 w-10 items-center justify-center rounded-full transition-all duration-200 sm:h-10 sm:w-10 ${selectedMode === 'none'
             ? 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600'
             : 'bg-blue-100 hover:bg-blue-200 dark:bg-blue-900 dark:hover:bg-blue-800'
           }`}
         title={t('thinkingMode.buttonTitle', { mode: currentMode.name })}
       >
-        <IconComponent className={`w-5 h-5 ${currentMode.color}`} />
+        <IconComponent className={`h-5 w-5 ${currentMode.color}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute bottom-full right-0 mb-2 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-          <div className="p-3 border-b border-gray-200 dark:border-gray-700">
+        <div className="absolute bottom-full right-0 mb-2 w-64 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800">
+          <div className="border-b border-gray-200 p-3 dark:border-gray-700">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
                 {t('thinkingMode.selector.title')}
@@ -74,12 +73,12 @@ function ThinkingModeSelector({ selectedMode, onModeChange, onClose, className =
                   setIsOpen(false);
                   if (onClose) onClose();
                 }}
-                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                className="rounded p-1 hover:bg-gray-100 dark:hover:bg-gray-700"
               >
-                <X className="w-4 h-4 text-gray-500" />
+                <X className="h-4 w-4 text-gray-500" />
               </button>
             </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               {t('thinkingMode.selector.description')}
             </p>
           </div>
@@ -97,30 +96,30 @@ function ThinkingModeSelector({ selectedMode, onModeChange, onClose, className =
                     setIsOpen(false);
                     if (onClose) onClose();
                   }}
-                  className={`w-full px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${isSelected ? 'bg-gray-50 dark:bg-gray-700' : ''
+                  className={`w-full px-4 py-3 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 ${isSelected ? 'bg-gray-50 dark:bg-gray-700' : ''
                     }`}
                 >
                   <div className="flex items-start gap-3">
                     <div className={`mt-0.5 ${mode.icon ? mode.color : 'text-gray-400'}`}>
-                      {ModeIcon ? <ModeIcon className="w-5 h-5" /> : <div className="w-5 h-5" />}
+                      {ModeIcon ? <ModeIcon className="h-5 w-5" /> : <div className="h-5 w-5" />}
                     </div>
-                    <div className="flex-1 min-w-0">
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className={`font-medium text-sm ${isSelected ? 'text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-300'
+                        <span className={`text-sm font-medium ${isSelected ? 'text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-300'
                           }`}>
                           {mode.name}
                         </span>
                         {isSelected && (
-                          <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded">
+                          <span className="rounded bg-blue-100 px-2 py-0.5 text-xs text-blue-700 dark:bg-blue-900 dark:text-blue-300">
                             {t('thinkingMode.selector.active')}
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                      <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
                         {mode.description}
                       </p>
                       {mode.prefix && (
-                        <code className="text-xs bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded mt-1 inline-block">
+                        <code className="mt-1 inline-block rounded bg-gray-100 px-1.5 py-0.5 text-xs dark:bg-gray-700">
                           {mode.prefix}
                         </code>
                       )}
@@ -131,7 +130,7 @@ function ThinkingModeSelector({ selectedMode, onModeChange, onClose, className =
             })}
           </div>
 
-          <div className="p-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+          <div className="border-t border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
             <p className="text-xs text-gray-600 dark:text-gray-400">
               <strong>Tip:</strong> {t('thinkingMode.selector.tip')}
             </p>

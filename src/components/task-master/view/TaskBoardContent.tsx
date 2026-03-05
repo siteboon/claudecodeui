@@ -40,21 +40,21 @@ function KanbanColumns({
         <div key={column.id} className={cn('rounded-xl border shadow-sm transition-shadow hover:shadow-md', column.color)}>
           <div className={cn('px-4 py-3 rounded-t-xl border-b', column.headerColor)}>
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-sm">{column.title}</h3>
-              <span className="text-xs font-medium px-2 py-1 bg-white/60 dark:bg-black/20 rounded-full">
+              <h3 className="text-sm font-semibold">{column.title}</h3>
+              <span className="rounded-full bg-white/60 px-2 py-1 text-xs font-medium dark:bg-black/20">
                 {column.tasks.length}
               </span>
             </div>
           </div>
 
-          <div className="p-3 space-y-3 min-h-[200px] max-h-[calc(100vh-300px)] overflow-y-auto">
+          <div className="max-h-[calc(100vh-300px)] min-h-[200px] space-y-3 overflow-y-auto p-3">
             {column.tasks.length === 0 ? (
-              <div className="text-center py-8 text-gray-400 dark:text-gray-500">
-                <div className="w-8 h-8 mx-auto mb-2 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
-                  <div className="w-3 h-3 rounded-full bg-gray-300 dark:bg-gray-600" />
+              <div className="py-8 text-center text-gray-400 dark:text-gray-500">
+                <div className="mx-auto mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 dark:bg-gray-700">
+                  <div className="h-3 w-3 rounded-full bg-gray-300 dark:bg-gray-600" />
                 </div>
                 <div className="text-xs font-medium text-gray-500 dark:text-gray-400">{t('kanban.noTasksYet')}</div>
-                <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                <div className="mt-1 text-xs text-gray-400 dark:text-gray-500">
                   {column.status === 'pending'
                     ? t('kanban.tasksWillAppear')
                     : column.status === 'in-progress'
@@ -94,10 +94,10 @@ export default function TaskBoardContent({
 
   if (filteredTaskCount === 0) {
     return (
-      <div className="text-center py-12">
+      <div className="py-12 text-center">
         <div className="text-gray-500 dark:text-gray-400">
-          <Search className="w-12 h-12 mx-auto mb-4 opacity-50" />
-          <h3 className="text-lg font-medium mb-2">{t('noMatchingTasks.title')}</h3>
+          <Search className="mx-auto mb-4 h-12 w-12 opacity-50" />
+          <h3 className="mb-2 text-lg font-medium">{t('noMatchingTasks.title')}</h3>
           <p className="text-sm">{t('noMatchingTasks.description')}</p>
         </div>
       </div>

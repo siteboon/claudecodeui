@@ -86,8 +86,8 @@ function renderPriorityIcon(priority?: string) {
   if (priority === 'high') {
     return (
       <Tooltip content="High priority">
-        <div className="w-4 h-4 bg-red-100 dark:bg-red-900/30 rounded flex items-center justify-center">
-          <ChevronUp className="w-2.5 h-2.5 text-red-600 dark:text-red-400" />
+        <div className="flex h-4 w-4 items-center justify-center rounded bg-red-100 dark:bg-red-900/30">
+          <ChevronUp className="h-2.5 w-2.5 text-red-600 dark:text-red-400" />
         </div>
       </Tooltip>
     );
@@ -96,8 +96,8 @@ function renderPriorityIcon(priority?: string) {
   if (priority === 'medium') {
     return (
       <Tooltip content="Medium priority">
-        <div className="w-4 h-4 bg-amber-100 dark:bg-amber-900/30 rounded flex items-center justify-center">
-          <Minus className="w-2.5 h-2.5 text-amber-600 dark:text-amber-400" />
+        <div className="flex h-4 w-4 items-center justify-center rounded bg-amber-100 dark:bg-amber-900/30">
+          <Minus className="h-2.5 w-2.5 text-amber-600 dark:text-amber-400" />
         </div>
       </Tooltip>
     );
@@ -106,8 +106,8 @@ function renderPriorityIcon(priority?: string) {
   if (priority === 'low') {
     return (
       <Tooltip content="Low priority">
-        <div className="w-4 h-4 bg-blue-100 dark:bg-blue-900/30 rounded flex items-center justify-center">
-          <Circle className="w-1.5 h-1.5 text-blue-600 dark:text-blue-400 fill-current" />
+        <div className="flex h-4 w-4 items-center justify-center rounded bg-blue-100 dark:bg-blue-900/30">
+          <Circle className="h-1.5 w-1.5 fill-current text-blue-600 dark:text-blue-400" />
         </div>
       </Tooltip>
     );
@@ -115,8 +115,8 @@ function renderPriorityIcon(priority?: string) {
 
   return (
     <Tooltip content="No priority set">
-      <div className="w-4 h-4 bg-gray-100 dark:bg-gray-800 rounded flex items-center justify-center">
-        <Circle className="w-1.5 h-1.5 text-gray-400 dark:text-gray-500" />
+      <div className="flex h-4 w-4 items-center justify-center rounded bg-gray-100 dark:bg-gray-800">
+        <Circle className="h-1.5 w-1.5 text-gray-400 dark:text-gray-500" />
       </div>
     </Tooltip>
   );
@@ -146,21 +146,21 @@ function TaskCard({ task, onClick = null, showParent = false, className = '' }: 
       onClick={onClick ?? undefined}
     >
       <div className="flex items-start justify-between gap-2">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
+        <div className="min-w-0 flex-1">
+          <div className="mb-1 flex items-center gap-2">
             <Tooltip content={`Task ID: ${task.id}`}>
-              <span className="text-xs font-mono text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded">
+              <span className="rounded bg-gray-100 px-2 py-0.5 font-mono text-xs text-gray-500 dark:bg-gray-700 dark:text-gray-400">
                 {task.id}
               </span>
             </Tooltip>
           </div>
 
-          <h3 className="font-medium text-sm text-gray-900 dark:text-white line-clamp-2 leading-tight">
+          <h3 className="line-clamp-2 text-sm font-medium leading-tight text-gray-900 dark:text-white">
             {task.title}
           </h3>
 
           {showParent && task.parentId && (
-            <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">Task {task.parentId}</span>
+            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Task {task.parentId}</span>
           )}
         </div>
 
@@ -172,7 +172,7 @@ function TaskCard({ task, onClick = null, showParent = false, className = '' }: 
           {Array.isArray(task.dependencies) && task.dependencies.length > 0 && (
             <Tooltip content={`Depends on: ${task.dependencies.map((dependency) => `Task ${dependency}`).join(', ')}`}>
               <div className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
-                <ArrowRight className="w-3 h-3" />
+                <ArrowRight className="h-3 w-3" />
                 <span>Depends on: {task.dependencies.join(', ')}</span>
               </div>
             </Tooltip>
@@ -189,9 +189,9 @@ function TaskCard({ task, onClick = null, showParent = false, className = '' }: 
 
       {progress.total > 0 && (
         <div className="ml-3">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="mb-1 flex items-center gap-2">
             <span className="text-xs text-gray-500 dark:text-gray-400">Progress:</span>
-            <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-1.5" title={`${progress.completed} of ${progress.total} subtasks completed`}>
+            <div className="h-1.5 flex-1 rounded-full bg-gray-200 dark:bg-gray-700" title={`${progress.completed} of ${progress.total} subtasks completed`}>
               <div
                 className={cn('h-full rounded-full transition-all duration-300', task.status === 'done' ? 'bg-green-500' : 'bg-blue-500')}
                 style={{ width: `${progress.percentage}%` }}

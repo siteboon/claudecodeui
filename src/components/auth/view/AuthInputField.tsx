@@ -19,7 +19,7 @@ export default function AuthInputField({
 }: AuthInputFieldProps) {
   return (
     <div>
-      <label htmlFor={id} className="block text-sm font-medium text-foreground mb-1">
+      <label htmlFor={id} className="mb-1 block text-sm font-medium text-foreground">
         {label}
       </label>
       <input
@@ -27,7 +27,7 @@ export default function AuthInputField({
         type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        className="w-full rounded-md border border-border bg-background px-3 py-2 text-foreground focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
         placeholder={placeholder}
         required
         disabled={isDisabled}

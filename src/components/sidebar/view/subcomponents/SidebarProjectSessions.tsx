@@ -36,12 +36,12 @@ function SessionListSkeleton() {
   return (
     <>
       {Array.from({ length: 3 }).map((_, index) => (
-        <div key={index} className="p-2 rounded-md">
+        <div key={index} className="rounded-md p-2">
           <div className="flex items-start gap-2">
-            <div className="w-3 h-3 bg-muted rounded-full animate-pulse mt-0.5" />
+            <div className="mt-0.5 h-3 w-3 animate-pulse rounded-full bg-muted" />
             <div className="flex-1 space-y-1">
-              <div className="h-3 bg-muted rounded animate-pulse" style={{ width: `${60 + index * 15}%` }} />
-              <div className="h-2 bg-muted rounded animate-pulse w-1/2" />
+              <div className="h-3 animate-pulse rounded bg-muted" style={{ width: `${60 + index * 15}%` }} />
+              <div className="h-2 w-1/2 animate-pulse rounded bg-muted" />
             </div>
           </div>
         </div>
@@ -83,7 +83,7 @@ export default function SidebarProjectSessions({
       {!initialSessionsLoaded ? (
         <SessionListSkeleton />
       ) : !hasSessions && !isLoadingSessions ? (
-        <div className="py-2 px-3 text-left">
+        <div className="px-3 py-2 text-left">
           <p className="text-xs text-muted-foreground">{t('sessions.noSessions')}</p>
         </div>
       ) : (
@@ -112,33 +112,33 @@ export default function SidebarProjectSessions({
         <Button
           variant="ghost"
           size="sm"
-          className="w-full justify-center gap-2 mt-2 text-muted-foreground"
+          className="mt-2 w-full justify-center gap-2 text-muted-foreground"
           onClick={() => onLoadMoreSessions(project)}
           disabled={isLoadingSessions}
         >
           {isLoadingSessions ? (
             <>
-              <div className="w-3 h-3 animate-spin rounded-full border border-muted-foreground border-t-transparent" />
+              <div className="h-3 w-3 animate-spin rounded-full border border-muted-foreground border-t-transparent" />
               {t('sessions.loading')}
             </>
           ) : (
             <>
-              <ChevronDown className="w-3 h-3" />
+              <ChevronDown className="h-3 w-3" />
               {t('sessions.showMore')}
             </>
           )}
         </Button>
       )}
 
-      <div className="md:hidden px-3 pb-2">
+      <div className="px-3 pb-2 md:hidden">
         <button
-          className="w-full h-8 bg-primary hover:bg-primary/90 text-primary-foreground rounded-md flex items-center justify-center gap-2 font-medium text-xs active:scale-[0.98] transition-all duration-150"
+          className="flex h-8 w-full items-center justify-center gap-2 rounded-md bg-primary text-xs font-medium text-primary-foreground transition-all duration-150 hover:bg-primary/90 active:scale-[0.98]"
           onClick={() => {
             onProjectSelect(project);
             onNewSession(project);
           }}
         >
-          <Plus className="w-3 h-3" />
+          <Plus className="h-3 w-3" />
           {t('sessions.newSession')}
         </button>
       </div>
@@ -146,10 +146,10 @@ export default function SidebarProjectSessions({
       <Button
         variant="default"
         size="sm"
-        className="hidden md:flex w-full justify-start gap-2 mt-1 h-8 text-xs font-medium bg-primary hover:bg-primary/90 text-primary-foreground transition-colors"
+        className="mt-1 hidden h-8 w-full justify-start gap-2 bg-primary text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 md:flex"
         onClick={() => onNewSession(project)}
       >
-        <Plus className="w-3 h-3" />
+        <Plus className="h-3 w-3" />
         {t('sessions.newSession')}
       </Button>
     </div>

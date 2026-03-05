@@ -11,10 +11,10 @@ type TaskQuickSortBarProps = {
 
 function getSortIcon(field: TaskBoardSortField, currentField: TaskBoardSortField, currentOrder: TaskBoardSortOrder) {
   if (field !== currentField) {
-    return <ArrowUpDown className="w-4 h-4" />;
+    return <ArrowUpDown className="h-4 w-4" />;
   }
 
-  return currentOrder === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />;
+  return currentOrder === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />;
 }
 
 export default function TaskQuickSortBar({ sortField, sortOrder, onSortChange }: TaskQuickSortBarProps) {

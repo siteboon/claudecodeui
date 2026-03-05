@@ -1,5 +1,5 @@
-import AgentConnectionCard from './AgentConnectionCard';
 import type { CliProvider, ProviderStatusMap } from '../types';
+import AgentConnectionCard from './AgentConnectionCard';
 
 type AgentConnectionsStepProps = {
   providerStatuses: ProviderStatusMap;
@@ -43,8 +43,8 @@ export default function AgentConnectionsStep({
 }: AgentConnectionsStepProps) {
   return (
     <div className="space-y-6">
-      <div className="text-center mb-6">
-        <h2 className="text-2xl font-bold text-foreground mb-2">Connect Your AI Agents</h2>
+      <div className="mb-6 text-center">
+        <h2 className="mb-2 text-2xl font-bold text-foreground">Connect Your AI Agents</h2>
         <p className="text-muted-foreground">
           Login to one or more AI coding assistants. All are optional.
         </p>
@@ -65,7 +65,7 @@ export default function AgentConnectionsStep({
         ))}
       </div>
 
-      <div className="text-center text-sm text-muted-foreground pt-2">
+      <div className="pt-2 text-center text-sm text-muted-foreground">
         <p>You can configure these later in Settings.</p>
       </div>
     </div>

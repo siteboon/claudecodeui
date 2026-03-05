@@ -224,7 +224,7 @@ export default function Shell({
   const overlayDescription = overlayMode === 'connecting' ? connectingDescription : readyDescription;
 
   return (
-    <div className="h-full flex flex-col bg-gray-900 w-full">
+    <div className="flex h-full w-full flex-col bg-gray-900">
       <ShellHeader
         isConnected={isConnected}
         isInitialized={isInitialized}
@@ -243,7 +243,7 @@ export default function Shell({
         disableRestart={isRestarting || isConnected}
       />
 
-      <div className="flex-1 p-2 overflow-hidden relative">
+      <div className="relative flex-1 overflow-hidden p-2">
         <div
           ref={terminalContainerRef}
           className="h-full w-full focus:outline-none"
@@ -276,7 +276,7 @@ export default function Shell({
                     sendInput(opt.number);
                     setCliPromptOptions(null);
                   }}
-                  className="px-3 py-1.5 text-xs font-medium rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors max-w-36 truncate"
+                  className="max-w-36 truncate rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700"
                   title={`${opt.number}. ${opt.label}`}
                 >
                   {opt.number}. {opt.label}
@@ -288,7 +288,7 @@ export default function Shell({
                   sendInput('\x1b');
                   setCliPromptOptions(null);
                 }}
-                className="px-3 py-1.5 text-xs font-medium rounded bg-gray-700 text-gray-200 hover:bg-gray-600 transition-colors"
+                className="rounded bg-gray-700 px-3 py-1.5 text-xs font-medium text-gray-200 transition-colors hover:bg-gray-600"
               >
                 Esc
               </button>

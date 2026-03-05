@@ -1,9 +1,9 @@
 import { useTranslation } from 'react-i18next';
 import { Input } from '../../../shared/view/ui';
-import GithubAuthenticationCard from './GithubAuthenticationCard';
-import WorkspacePathField from './WorkspacePathField';
 import { shouldShowGithubAuthentication } from '../utils/pathUtils';
 import type { GithubTokenCredential, TokenMode, WorkspaceType } from '../types';
+import GithubAuthenticationCard from './GithubAuthenticationCard';
+import WorkspacePathField from './WorkspacePathField';
 
 type StepConfigurationProps = {
   workspaceType: WorkspaceType;
@@ -48,7 +48,7 @@ export default function StepConfiguration({
   return (
     <div className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+        <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
           {workspaceType === 'existing'
             ? t('projectWizard.step2.existingPath')
             : t('projectWizard.step2.newPath')}
@@ -72,7 +72,7 @@ export default function StepConfiguration({
       {workspaceType === 'new' && (
         <>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
               {t('projectWizard.step2.githubUrl')}
             </label>
             <Input

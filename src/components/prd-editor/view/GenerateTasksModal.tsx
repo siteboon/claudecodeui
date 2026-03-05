@@ -17,12 +17,12 @@ export default function GenerateTasksModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[300] p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md border border-gray-200 dark:border-gray-700">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-lg border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800">
+        <div className="flex items-center justify-between border-b border-gray-200 p-6 dark:border-gray-700">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-purple-100 dark:bg-purple-900/50 rounded-lg flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-100 dark:bg-purple-900/50">
+              <Sparkles className="h-4 w-4 text-purple-600 dark:text-purple-400" />
             </div>
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
               Generate Tasks from PRD
@@ -30,35 +30,35 @@ export default function GenerateTasksModal({
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+            className="rounded-md p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
           >
-            <X className="w-5 h-5" />
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="p-6 space-y-4">
-          <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4 border border-purple-200 dark:border-purple-800">
-            <h4 className="font-semibold text-purple-900 dark:text-purple-100 mb-2">
+        <div className="space-y-4 p-6">
+          <div className="rounded-lg border border-purple-200 bg-purple-50 p-4 dark:border-purple-800 dark:bg-purple-900/20">
+            <h4 className="mb-2 font-semibold text-purple-900 dark:text-purple-100">
               Ask Claude Code directly
             </h4>
-            <p className="text-sm text-purple-800 dark:text-purple-200 mb-3">
+            <p className="mb-3 text-sm text-purple-800 dark:text-purple-200">
               Save this PRD, then ask Claude Code in chat to parse the file and create your initial tasks.
             </p>
 
-            <div className="bg-white dark:bg-gray-800 rounded border border-purple-200 dark:border-purple-700 p-3">
-              <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Example prompt</p>
-              <p className="text-xs text-gray-900 dark:text-white font-mono">
+            <div className="rounded border border-purple-200 bg-white p-3 dark:border-purple-700 dark:bg-gray-800">
+              <p className="mb-1 text-xs font-medium text-gray-600 dark:text-gray-400">Example prompt</p>
+              <p className="font-mono text-xs text-gray-900 dark:text-white">
                 I have a PRD at .taskmaster/docs/{fileName}. Parse it and create the initial tasks.
               </p>
             </div>
           </div>
 
-          <div className="text-center pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="border-t border-gray-200 pt-4 text-center dark:border-gray-700">
             <a
               href={PRD_DOCS_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-block text-sm text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 underline font-medium"
+              className="inline-block text-sm font-medium text-purple-600 underline hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300"
             >
               View TaskMaster documentation
             </a>
@@ -66,7 +66,7 @@ export default function GenerateTasksModal({
 
           <button
             onClick={onClose}
-            className="w-full px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+            className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
           >
             Got it
           </button>

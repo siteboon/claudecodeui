@@ -12,23 +12,23 @@ export default function WizardProgress({ step }: WizardProgressProps) {
   const steps: WizardStep[] = [1, 2, 3];
 
   return (
-    <div className="px-6 pt-4 pb-2">
+    <div className="px-6 pb-2 pt-4">
       <div className="flex items-center justify-between">
         {steps.map((currentStep) => (
           <Fragment key={currentStep}>
             <div className="flex items-center gap-2">
               <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center font-medium text-sm ${
+                className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium ${
                   currentStep < step
                     ? 'bg-green-500 text-white'
                     : currentStep === step
                       ? 'bg-blue-500 text-white'
-                      : 'bg-gray-200 dark:bg-gray-700 text-gray-500'
+                      : 'bg-gray-200 text-gray-500 dark:bg-gray-700'
                 }`}
               >
-                {currentStep < step ? <Check className="w-4 h-4" /> : currentStep}
+                {currentStep < step ? <Check className="h-4 w-4" /> : currentStep}
               </div>
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300 hidden sm:inline">
+              <span className="hidden text-sm font-medium text-gray-700 dark:text-gray-300 sm:inline">
                 {currentStep === 1
                   ? t('projectWizard.steps.type')
                   : currentStep === 2
@@ -39,7 +39,7 @@ export default function WizardProgress({ step }: WizardProgressProps) {
 
             {currentStep < 3 && (
               <div
-                className={`flex-1 h-1 mx-2 rounded ${
+                className={`mx-2 h-1 flex-1 rounded ${
                   currentStep < step ? 'bg-green-500' : 'bg-gray-200 dark:bg-gray-700'
                 }`}
               />

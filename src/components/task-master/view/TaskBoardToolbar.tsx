@@ -90,20 +90,20 @@ export default function TaskBoardToolbar({
 
   return (
     <>
-      <div className="flex flex-col lg:flex-row gap-3 lg:items-center lg:justify-between">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="relative max-w-md flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
             value={searchTerm}
             onChange={(event) => onSearchTermChange(event.target.value)}
             placeholder={t('search.placeholder')}
-            className="pl-10 pr-4 py-2 w-full border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+            className="w-full rounded-lg border border-gray-300 bg-white py-2 pl-10 pr-4 text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
           />
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+          <div className="flex rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
             <button
               onClick={() => onViewModeChange('kanban')}
               className={cn(
@@ -114,7 +114,7 @@ export default function TaskBoardToolbar({
               )}
               title={t('views.kanban')}
             >
-              <Columns className="w-4 h-4" />
+              <Columns className="h-4 w-4" />
             </button>
 
             <button
@@ -127,7 +127,7 @@ export default function TaskBoardToolbar({
               )}
               title={t('views.list')}
             >
-              <List className="w-4 h-4" />
+              <List className="h-4 w-4" />
             </button>
 
             <button
@@ -140,7 +140,7 @@ export default function TaskBoardToolbar({
               )}
               title={t('views.grid')}
             >
-              <Grid className="w-4 h-4" />
+              <Grid className="h-4 w-4" />
             </button>
           </div>
 
@@ -153,7 +153,7 @@ export default function TaskBoardToolbar({
                 : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700',
             )}
           >
-            <Filter className="w-4 h-4" />
+            <Filter className="h-4 w-4" />
             <span className="hidden sm:inline">{t('filters.button')}</span>
             <ChevronDown className={cn('w-4 h-4 transition-transform', showFilters && 'rotate-180')} />
           </button>
@@ -162,10 +162,10 @@ export default function TaskBoardToolbar({
             <>
               <button
                 onClick={onOpenHelp}
-                className="p-2 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg border border-gray-300 dark:border-gray-600"
+                className="rounded-lg border border-gray-300 p-2 text-gray-600 hover:bg-gray-100 hover:text-blue-600 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-blue-400"
                 title={t('buttons.help')}
               >
-                <HelpCircle className="w-4 h-4" />
+                <HelpCircle className="h-4 w-4" />
               </button>
 
               <div ref={dropdownRef} className="relative">
@@ -173,32 +173,32 @@ export default function TaskBoardToolbar({
                   <>
                     <button
                       onClick={() => setIsPrdDropdownOpen((current) => !current)}
-                      className="flex items-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium"
+                      className="flex items-center gap-2 rounded-lg bg-purple-600 px-3 py-2 font-medium text-white hover:bg-purple-700"
                       title={t('buttons.prdsAvailable', { count: existingPrds.length })}
                     >
-                      <FileText className="w-4 h-4" />
+                      <FileText className="h-4 w-4" />
                       <span className="hidden sm:inline">{t('buttons.prds')}</span>
-                      <span className="px-1.5 py-0.5 text-xs bg-purple-500 rounded-full min-w-[1.25rem] text-center">
+                      <span className="min-w-5 rounded-full bg-purple-500 px-1.5 py-0.5 text-center text-xs">
                         {existingPrds.length}
                       </span>
                       <ChevronDown className={cn('w-3 h-3 transition-transform hidden sm:block', isPrdDropdownOpen && 'rotate-180')} />
                     </button>
 
                     {isPrdDropdownOpen && (
-                      <div className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-30">
+                      <div className="absolute right-0 top-full z-30 mt-2 w-56 rounded-lg border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800">
                         <div className="p-2">
                           <button
                             onClick={() => {
                               onCreatePrd();
                               setIsPrdDropdownOpen(false);
                             }}
-                            className="w-full text-left px-3 py-2 text-sm font-medium text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded flex items-center gap-2"
+                            className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm font-medium text-purple-700 hover:bg-purple-50 dark:text-purple-300 dark:hover:bg-purple-900/30"
                           >
-                            <Plus className="w-4 h-4" />
+                            <Plus className="h-4 w-4" />
                             {t('buttons.createNewPRD')}
                           </button>
 
-                          <div className="border-t border-gray-200 dark:border-gray-700 my-1" />
+                          <div className="my-1 border-t border-gray-200 dark:border-gray-700" />
 
                           {existingPrds.map((prd) => (
                             <button
@@ -207,9 +207,9 @@ export default function TaskBoardToolbar({
                                 onOpenPrd(prd);
                                 setIsPrdDropdownOpen(false);
                               }}
-                              className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center gap-2"
+                              className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
                             >
-                              <FileText className="w-4 h-4" />
+                              <FileText className="h-4 w-4" />
                               <span className="truncate">{prd.name}</span>
                             </button>
                           ))}
@@ -220,10 +220,10 @@ export default function TaskBoardToolbar({
                 ) : (
                   <button
                     onClick={onCreatePrd}
-                    className="flex items-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium"
+                    className="flex items-center gap-2 rounded-lg bg-purple-600 px-3 py-2 font-medium text-white hover:bg-purple-700"
                     title={t('buttons.addPRD')}
                   >
-                    <FileText className="w-4 h-4" />
+                    <FileText className="h-4 w-4" />
                     <span className="hidden sm:inline">{t('buttons.addPRD')}</span>
                   </button>
                 )}
@@ -232,10 +232,10 @@ export default function TaskBoardToolbar({
               {(hasTaskMasterConfigured || totalTaskCount > 0) && (
                 <button
                   onClick={onOpenCreateTask}
-                  className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
+                  className="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 font-medium text-white hover:bg-blue-700"
                   title={t('buttons.addTask')}
                 >
-                  <Plus className="w-4 h-4" />
+                  <Plus className="h-4 w-4" />
                   <span className="hidden sm:inline">{t('buttons.addTask')}</span>
                 </button>
               )}

@@ -275,13 +275,13 @@ export default function FileContextMenu({
         >
           {isLoading ? (
             <div className="flex items-center justify-center py-4">
-              <RefreshCw className="w-4 h-4 animate-spin text-muted-foreground" />
+              <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
               <span className="ml-2 text-sm text-muted-foreground">{t('fileTree.context.loading', 'Loading...')}</span>
             </div>
           ) : (
             menuActions.map((action) => (
               <Fragment key={action.key}>
-                {action.showDividerBefore && <div className="h-px bg-border my-1 mx-2" />}
+                {action.showDividerBefore && <div className="mx-2 my-1 h-px bg-border" />}
                 <button
                   role="menuitem"
                   tabIndex={action.isDisabled ? -1 : 0}
@@ -298,9 +298,9 @@ export default function FileContextMenu({
                     isLoading && 'pointer-events-none',
                   )}
                 >
-                  {action.icon && <action.icon className="w-4 h-4 flex-shrink-0" />}
+                  {action.icon && <action.icon className="h-4 w-4 flex-shrink-0" />}
                   <span className="flex-1">{action.label}</span>
-                  {action.shortcut && <span className="text-xs text-muted-foreground font-mono">{action.shortcut}</span>}
+                  {action.shortcut && <span className="font-mono text-xs text-muted-foreground">{action.shortcut}</span>}
                 </button>
               </Fragment>
             ))

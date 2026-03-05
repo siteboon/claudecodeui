@@ -62,8 +62,8 @@ export default function AccountContent({ agent, authStatus, onLogin }: AccountCo
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3 mb-4">
-        <SessionProviderLogo provider={agent} className="w-6 h-6" />
+      <div className="mb-4 flex items-center gap-3">
+        <SessionProviderLogo provider={agent} className="h-6 w-6" />
         <div>
           <h3 className="text-lg font-medium text-foreground">{config.name}</h3>
           <p className="text-sm text-muted-foreground">{t(`agents.account.${agent}.description`)}</p>
@@ -107,7 +107,7 @@ export default function AccountContent({ agent, authStatus, onLogin }: AccountCo
           </div>
 
           {authStatus.method !== 'api_key' && (
-            <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+            <div className="border-t border-gray-200 pt-4 dark:border-gray-700">
               <div className="flex items-center justify-between">
                 <div>
                   <div className={`font-medium ${config.textClass}`}>
@@ -124,7 +124,7 @@ export default function AccountContent({ agent, authStatus, onLogin }: AccountCo
                   className={`${config.buttonClass} text-white`}
                   size="sm"
                 >
-                  <LogIn className="w-4 h-4 mr-2" />
+                  <LogIn className="mr-2 h-4 w-4" />
                   {authStatus.authenticated ? t('agents.login.reLoginButton') : t('agents.login.button')}
                 </Button>
               </div>
@@ -132,7 +132,7 @@ export default function AccountContent({ agent, authStatus, onLogin }: AccountCo
           )}
 
           {authStatus.error && (
-            <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+            <div className="border-t border-gray-200 pt-4 dark:border-gray-700">
               <div className="text-sm text-red-600 dark:text-red-400">
                 {t('agents.error', { error: authStatus.error })}
               </div>

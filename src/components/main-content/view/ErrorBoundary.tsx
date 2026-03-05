@@ -32,8 +32,8 @@ function ErrorFallback({
 }: ErrorFallbackProps) {
   return (
     <div className="flex flex-col items-center justify-center p-8 text-center">
-      <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md">
-        <div className="flex items-center mb-4">
+      <div className="max-w-md rounded-lg border border-red-200 bg-red-50 p-6">
+        <div className="mb-4 flex items-center">
           <div className="flex-shrink-0">
             <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
               <path
@@ -49,8 +49,8 @@ function ErrorFallback({
           <p className="mb-2">An error occurred while loading the chat interface.</p>
           {showDetails && (
             <details className="mt-4">
-              <summary className="cursor-pointer text-xs font-mono">Error Details</summary>
-              <pre className="mt-2 text-xs bg-red-100 p-2 rounded overflow-auto max-h-40">
+              <summary className="cursor-pointer font-mono text-xs">Error Details</summary>
+              <pre className="mt-2 max-h-40 overflow-auto rounded bg-red-100 p-2 text-xs">
                 {formatError(error)}
                 {componentStack}
               </pre>
@@ -60,7 +60,7 @@ function ErrorFallback({
         <div className="mt-4">
           <button
             onClick={resetErrorBoundary}
-            className="bg-red-600 text-white px-4 py-2 rounded text-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500"
+            className="rounded bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500"
           >
             Try Again
           </button>

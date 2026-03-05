@@ -2,7 +2,6 @@ import { useCallback, useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle, Check, X, Loader2, Folder, Upload } from 'lucide-react';
 import { cn } from '../../../lib/utils';
-import ImageViewer from './ImageViewer';
 import { ICON_SIZE_CLASS, getFileIconData } from '../constants/fileIcons';
 import { useExpandedDirectories } from '../hooks/useExpandedDirectories';
 import { useFileTreeData } from '../hooks/useFileTreeData';
@@ -12,12 +11,13 @@ import { useFileTreeViewMode } from '../hooks/useFileTreeViewMode';
 import { useFileTreeUpload } from '../hooks/useFileTreeUpload';
 import type { FileTreeImageSelection, FileTreeNode } from '../types/types';
 import { formatFileSize, formatRelativeTime, isImageFile } from '../utils/fileTreeUtils';
+import { Project } from '../../../types/app';
+import { ScrollArea, Input } from '../../../shared/view/ui';
 import FileTreeBody from './FileTreeBody';
 import FileTreeDetailedColumns from './FileTreeDetailedColumns';
 import FileTreeHeader from './FileTreeHeader';
 import FileTreeLoadingState from './FileTreeLoadingState';
-import { Project } from '../../../types/app';
-import { ScrollArea, Input } from '../../../shared/view/ui';
+import ImageViewer from './ImageViewer';
 
 
 type FileTreeProps = {
@@ -123,7 +123,7 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
   return (
     <div
       ref={upload.treeRef}
-      className="h-full flex flex-col bg-background relative"
+      className="relative flex h-full flex-col bg-background"
       onDragEnter={upload.handleDragEnter}
       onDragOver={upload.handleDragOver}
       onDragLeave={upload.handleDragLeave}
@@ -131,9 +131,9 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
     >
       {/* Drag overlay */}
       {upload.isDragOver && (
-        <div className="absolute inset-0 z-50 bg-blue-500/10 border-2 border-dashed border-blue-500 flex items-center justify-center">
-          <div className="bg-background/95 px-6 py-4 rounded-lg shadow-lg flex items-center gap-3">
-            <Upload className="w-6 h-6 text-blue-500" />
+        <div className="absolute inset-0 z-50 flex items-center justify-center border-2 border-dashed border-blue-500 bg-blue-500/10">
+          <div className="flex items-center gap-3 rounded-lg bg-background/95 px-6 py-4 shadow-lg">
+            <Upload className="h-6 w-6 text-blue-500" />
             <span className="text-sm font-medium">{t('fileTree.dropToUpload', 'Drop files to upload')}</span>
           </div>
         </div>
@@ -158,7 +158,7 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
         {/* New item input */}
         {operations.isCreating && (
           <div
-            className="flex items-center gap-1.5 py-[3px] pr-2 mb-1"
+            className="mb-1 flex items-center gap-1.5 py-[3px] pr-2"
             style={{ paddingLeft: `${(operations.newItemParent.split('/').length - 1) * 16 + 4}px` }}
           >
             {operations.newItemType === 'directory' ? (
@@ -181,7 +181,7 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
                   if (operations.isCreating) operations.handleConfirmCreate();
                 }, 100);
               }}
-              className="h-6 text-sm flex-1"
+              className="h-6 flex-1 text-sm"
               disabled={operations.operationLoading}
             />
           </div>
@@ -225,10 +225,10 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
       {/* Delete Confirmation Dialog */}
       {operations.deleteConfirmation.isOpen && operations.deleteConfirmation.item && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
-          <div className="bg-background border border-border rounded-lg shadow-lg p-4 max-w-sm mx-4">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 rounded-full bg-red-100 dark:bg-red-900/30">
-                <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />
+          <div className="mx-4 max-w-sm rounded-lg border border-border bg-background p-4 shadow-lg">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="rounded-full bg-red-100 p-2 dark:bg-red-900/30">
+                <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
               </div>
               <div>
                 <h3 className="font-medium text-foreground">
@@ -241,7 +241,7 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
                 </p>
               </div>
             </div>
-            <p className="text-sm text-muted-foreground mb-4">
+            <p className="mb-4 text-sm text-muted-foreground">
               {operations.deleteConfirmation.item.type === 'directory'
                 ? t('fileTree.delete.folderWarning', 'This folder and all its contents will be permanently deleted.')
                 : t('fileTree.delete.fileWarning', 'This file will be permanently deleted.')}
@@ -250,16 +250,16 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
               <button
                 onClick={operations.handleCancelDelete}
                 disabled={operations.operationLoading}
-                className="px-3 py-1.5 text-sm rounded-md hover:bg-accent transition-colors"
+                className="rounded-md px-3 py-1.5 text-sm transition-colors hover:bg-accent"
               >
                 {t('common.cancel', 'Cancel')}
               </button>
               <button
                 onClick={operations.handleConfirmDelete}
                 disabled={operations.operationLoading}
-                className="px-3 py-1.5 text-sm rounded-md bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                className="flex items-center gap-2 rounded-md bg-red-600 px-3 py-1.5 text-sm text-white transition-colors hover:bg-red-700 disabled:opacity-50"
               >
-                {operations.operationLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                {operations.operationLoading && <Loader2 className="h-4 w-4 animate-spin" />}
                 {t('fileTree.delete.confirm', 'Delete')}
               </button>
             </div>
@@ -278,9 +278,9 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
           )}
         >
           {toast.type === 'success' ? (
-            <Check className="w-4 h-4" />
+            <Check className="h-4 w-4" />
           ) : (
-            <X className="w-4 h-4" />
+            <X className="h-4 w-4" />
           )}
           <span className="text-sm">{toast.message}</span>
         </div>
