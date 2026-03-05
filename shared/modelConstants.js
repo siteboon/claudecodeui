@@ -28,6 +28,8 @@ export const CLAUDE_MODELS = {
  */
 export const CURSOR_MODELS = {
   OPTIONS: [
+    { value: 'opus-4.6-thinking', label: 'Claude 4.6 Opus (Thinking)' },
+    { value: 'gpt-5.3-codex', label: 'GPT-5.3' },
     { value: 'gpt-5.2-high', label: 'GPT-5.2 High' },
     { value: 'gemini-3-pro', label: 'Gemini 3 Pro' },
     { value: 'opus-4.5-thinking', label: 'Claude 4.5 Opus (Thinking)' },
@@ -47,7 +49,7 @@ export const CURSOR_MODELS = {
     { value: 'grok', label: 'Grok' }
   ],
 
-  DEFAULT: 'gpt-5'
+  DEFAULT: 'gpt-5-3-codex'
 };
 
 /**
@@ -55,6 +57,8 @@ export const CURSOR_MODELS = {
  */
 export const CODEX_MODELS = {
   OPTIONS: [
+    { value: 'gpt-5.4', label: 'GPT-5.4' },
+    { value: 'gpt-5.3-codex', label: 'GPT-5.3 Codex' },
     { value: 'gpt-5.3-codex', label: 'GPT-5.3 Codex' },
     { value: 'gpt-5.2-codex', label: 'GPT-5.2 Codex' },
     { value: 'gpt-5.2', label: 'GPT-5.2' },
@@ -63,7 +67,7 @@ export const CODEX_MODELS = {
     { value: 'o4-mini', label: 'O4-mini' }
   ],
 
-  DEFAULT: 'gpt-5.3-codex'
+  DEFAULT: 'gpt-5.4'
 };
 
 /**
