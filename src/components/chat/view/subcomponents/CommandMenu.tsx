@@ -202,13 +202,13 @@ export default function CommandMenu({
                     <span className="shrink-0 text-xs text-gray-500 dark:text-gray-300">{namespaceIcons[namespace] || namespaceIcons.other}</span>
                     <span className="font-mono text-sm font-semibold text-gray-900 dark:text-gray-100">{command.name}</span>
                     {command.metadata?.type && (
-                      <span className="command-metadata-badge rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-700 dark:text-gray-300">
+                      <span className="command-metadata-badge rounded bg-gray-100 px-1.5 py-0.5 text-2xs font-medium text-gray-500 dark:bg-gray-700 dark:text-gray-300">
                         {command.metadata.type}
                       </span>
                     )}
                   </div>
                   {command.description && (
-                    <div className="ml-6 truncate whitespace-nowrap text-[13px] text-gray-500 dark:text-gray-300">
+                    <div className="ml-6 truncate whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
                       {command.description}
                     </div>
                   )}

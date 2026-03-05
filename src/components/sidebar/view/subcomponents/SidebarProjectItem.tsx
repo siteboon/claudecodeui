@@ -123,8 +123,8 @@ export default function SidebarProjectItem({
         <div className="md:hidden">
           <div
             className={cn(
-              'p-3 mx-3 my-1 rounded-lg bg-card border border-border/50 active:scale-[0.98] transition-all duration-150',
-              isSelected && 'bg-primary/5 border-primary/20',
+              'p-3 mx-3 my-1 rounded-xl bg-card/86 backdrop-blur-sm border border-border/55 active:scale-[0.98] transition-all duration-150 shadow-[0_10px_24px_rgba(15,23,42,0.06)]',
+              isSelected && 'bg-primary/10 border-primary/30',
               isStarred &&
                 !isSelected &&
                 'bg-yellow-50/50 dark:bg-yellow-900/5 border-yellow-200/30 dark:border-yellow-800/30',
@@ -135,7 +135,7 @@ export default function SidebarProjectItem({
               <div className="flex items-center gap-3 min-w-0 flex-1">
                 <div
                   className={cn(
-                    'w-8 h-8 rounded-lg flex items-center justify-center transition-colors',
+                    'w-8 h-8 rounded-xl flex items-center justify-center transition-colors border border-border/35',
                     isExpanded ? 'bg-primary/10' : 'bg-muted',
                   )}
                 >
@@ -175,7 +175,7 @@ export default function SidebarProjectItem({
                   ) : (
                     <>
                       <div className="flex items-center justify-between min-w-0 flex-1">
-                        <h3 className="text-sm font-medium text-foreground truncate">{project.displayName}</h3>
+                        <h3 className="text-sm font-semibold text-foreground truncate">{project.displayName}</h3>
                         {tasksEnabled && (
                           <TaskIndicator
                             status={taskStatus}
@@ -184,7 +184,7 @@ export default function SidebarProjectItem({
                           />
                         )}
                       </div>
-                      <p className="text-xs text-muted-foreground">{sessionCountLabel}</p>
+                      <p className="text-2xs text-muted-foreground">{sessionCountLabel}</p>
                     </>
                   )}
                 </div>
@@ -274,11 +274,11 @@ export default function SidebarProjectItem({
         <Button
           variant="ghost"
           className={cn(
-            'hidden md:flex w-full justify-between p-2 h-auto font-normal hover:bg-accent/50',
-            isSelected && 'bg-accent text-accent-foreground',
+            'hidden md:flex w-full justify-between p-2.5 h-auto font-normal hover:bg-accent/50 rounded-xl border border-border/35 hover:border-border/55 shadow-[0_4px_12px_rgba(15,23,42,0.04)]',
+            isSelected && 'bg-primary/10 text-accent-foreground border-primary/30 shadow-[0_8px_18px_hsl(var(--primary)/0.14)]',
             isStarred &&
               !isSelected &&
-              'bg-yellow-50/50 dark:bg-yellow-900/10 hover:bg-yellow-100/50 dark:hover:bg-yellow-900/20',
+              'bg-yellow-50/50 dark:bg-yellow-900/10 hover:bg-yellow-100/50 dark:hover:bg-yellow-900/20 border-yellow-200/40 dark:border-yellow-800/30',
           )}
           onClick={selectAndToggleProject}
         >
@@ -313,10 +313,10 @@ export default function SidebarProjectItem({
                 </div>
               ) : (
                 <div>
-                  <div className="text-sm font-semibold truncate text-foreground" title={project.displayName}>
+                  <div className="text-sm font-semibold truncate text-foreground tracking-tight" title={project.displayName}>
                     {project.displayName}
                   </div>
-                  <div className="text-xs text-muted-foreground">
+                  <div className="text-2xs text-muted-foreground">
                     {sessionCountDisplay}
                     {project.fullPath !== project.displayName && (
                       <span className="ml-1 opacity-60" title={project.fullPath}>

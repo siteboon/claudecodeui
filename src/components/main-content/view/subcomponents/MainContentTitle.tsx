@@ -45,9 +45,9 @@ export default function MainContentTitle({
   const showChatNewSession = activeTab === 'chat' && !selectedSession;
 
   return (
-    <div className="min-w-0 flex items-center gap-2 flex-1 overflow-x-auto scrollbar-hide">
+    <div className="min-w-0 flex items-center gap-2.5 flex-1 overflow-x-auto scrollbar-hide">
       {showSessionIcon && (
-        <div className="w-5 h-5 flex-shrink-0 flex items-center justify-center">
+        <div className="w-7 h-7 rounded-lg bg-muted/60 border border-border/50 flex-shrink-0 flex items-center justify-center">
           <SessionProviderLogo provider={selectedSession?.__provider} className="w-4 h-4" />
         </div>
       )}
@@ -58,7 +58,7 @@ export default function MainContentTitle({
             <h2 className="text-sm font-semibold text-foreground whitespace-nowrap overflow-x-auto scrollbar-hide leading-tight">
               {getSessionTitle(selectedSession)}
             </h2>
-            <div className="text-[11px] text-muted-foreground truncate leading-tight">{selectedProject.displayName}</div>
+            <div className="text-xs text-muted-foreground truncate leading-tight">{selectedProject.displayName}</div>
           </div>
         ) : showChatNewSession ? (
           <div className="min-w-0">
@@ -70,7 +70,7 @@ export default function MainContentTitle({
             <h2 className="text-sm font-semibold text-foreground leading-tight">
               {getTabTitle(activeTab, shouldShowTasksTab, t)}
             </h2>
-            <div className="text-[11px] text-muted-foreground truncate leading-tight">{selectedProject.displayName}</div>
+            <div className="text-xs text-muted-foreground truncate leading-tight">{selectedProject.displayName}</div>
           </div>
         )}
       </div>

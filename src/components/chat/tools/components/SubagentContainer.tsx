@@ -100,7 +100,7 @@ export const SubagentContainer: React.FC<SubagentContainerProps> = ({
         {/* Tool history (collapsed) */}
         {childTools.length > 0 && (
           <details className="mt-2 group/history">
-            <summary className="cursor-pointer text-[11px] text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-1">
+            <summary className="cursor-pointer text-2xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-1">
               <svg
                 className="w-2.5 h-2.5 transition-transform duration-150 group-open/history:rotate-90 flex-shrink-0"
                 fill="none"
@@ -113,7 +113,7 @@ export const SubagentContainer: React.FC<SubagentContainerProps> = ({
             </summary>
             <div className="mt-1 pl-3 border-l border-gray-200 dark:border-gray-700 space-y-0.5">
               {childTools.map((child, index) => (
-                <div key={child.toolId} className="flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
+                <div key={child.toolId} className="flex items-center gap-1.5 text-2xs text-gray-500 dark:text-gray-400">
                   <span className="text-gray-400 dark:text-gray-500 w-4 text-right flex-shrink-0">{index + 1}.</span>
                   <span className="font-medium">{child.toolName}</span>
                   {getCompactToolDisplay(child.toolName, child.toolInput) && (
@@ -167,7 +167,7 @@ export const SubagentContainer: React.FC<SubagentContainerProps> = ({
                   {content}
                 </div>
               ) : content ? (
-                <pre className="whitespace-pre-wrap break-words line-clamp-6 font-mono text-[11px]">
+                <pre className="whitespace-pre-wrap break-words line-clamp-6 font-mono text-2xs">
                   {JSON.stringify(content, null, 2)}
                 </pre>
               ) : null;

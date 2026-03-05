@@ -44,22 +44,22 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
         {onFileClick ? (
           <button
             onClick={onFileClick}
-            className="text-[11px] font-mono text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 truncate cursor-pointer transition-colors"
+            className="text-2xs font-mono text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 truncate cursor-pointer transition-colors"
           >
             {filePath}
           </button>
         ) : (
-          <span className="text-[11px] font-mono text-gray-600 dark:text-gray-400 truncate">
+          <span className="text-2xs font-mono text-gray-600 dark:text-gray-400 truncate">
             {filePath}
           </span>
         )}
-        <span className={`text-[10px] font-medium px-1.5 py-px rounded ${badgeClasses} flex-shrink-0 ml-2`}>
+        <span className={`text-2xs font-medium px-1.5 py-px rounded ${badgeClasses} flex-shrink-0 ml-2`}>
           {badge}
         </span>
       </div>
 
       {/* Diff lines */}
-      <div className="text-[11px] font-mono leading-[18px]">
+      <div className="text-2xs font-mono leading-[18px]">
         {diffLines.map((diffLine, i) => (
           <div key={i} className="flex">
             <span

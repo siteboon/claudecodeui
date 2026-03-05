@@ -37,7 +37,7 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
           <span className="font-medium text-gray-500 dark:text-gray-400 flex-shrink-0">{toolName}</span>
         )}
         {toolName && (
-          <span className="text-gray-300 dark:text-gray-600 text-[10px] flex-shrink-0">/</span>
+          <span className="text-gray-300 dark:text-gray-600 text-2xs flex-shrink-0">/</span>
         )}
         {onTitleClick ? (
           <button

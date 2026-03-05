@@ -94,7 +94,7 @@ export default function FileChangeItem({
             )}
 
             <span
-              className={`inline-flex items-center justify-center w-5 h-5 rounded text-[10px] font-bold border ${badgeClass}`}
+              className={`inline-flex items-center justify-center w-5 h-5 rounded text-2xs font-bold border ${badgeClass}`}
               title={statusLabel}
             >
               {status}
@@ -110,7 +110,7 @@ export default function FileChangeItem({
       >
         <div className="flex items-center justify-between p-2 border-b border-border">
           <span className="flex items-center gap-2">
-            <span className={`inline-flex items-center justify-center w-5 h-5 rounded text-[10px] font-bold border ${badgeClass}`}>
+            <span className={`inline-flex items-center justify-center w-5 h-5 rounded text-2xs font-bold border ${badgeClass}`}>
               {status}
             </span>
             <span className="text-sm font-medium text-foreground">{statusLabel}</span>

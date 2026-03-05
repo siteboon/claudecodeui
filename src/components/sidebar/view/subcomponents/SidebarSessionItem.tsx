@@ -76,8 +76,8 @@ export default function SidebarSessionItem({
       <div className="md:hidden">
         <div
           className={cn(
-            'p-2 mx-3 my-0.5 rounded-md bg-card border active:scale-[0.98] transition-all duration-150 relative',
-            isSelected ? 'bg-primary/5 border-primary/20' : '',
+            'p-2.5 mx-3 my-0.5 rounded-lg bg-card/82 border active:scale-[0.98] transition-all duration-150 relative',
+            isSelected ? 'bg-primary/10 border-primary/30' : '',
             !isSelected && sessionView.isActive
               ? 'border-green-500/30 bg-green-50/5 dark:bg-green-900/5'
               : 'border-border/30',
@@ -87,7 +87,7 @@ export default function SidebarSessionItem({
           <div className="flex items-center gap-2">
             <div
               className={cn(
-                'w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0',
+                'w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 border border-border/35',
                 isSelected ? 'bg-primary/10' : 'bg-muted/50',
               )}
             >
@@ -95,14 +95,14 @@ export default function SidebarSessionItem({
             </div>
 
             <div className="min-w-0 flex-1">
-              <div className="text-xs font-medium truncate text-foreground">{sessionView.sessionName}</div>
+              <div className="text-xs font-semibold truncate text-foreground">{sessionView.sessionName}</div>
               <div className="flex items-center gap-1 mt-0.5">
                 <Clock className="w-2.5 h-2.5 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">
+                <span className="text-2xs text-muted-foreground">
                   {formatTimeAgo(sessionView.sessionTime, currentTime, t)}
                 </span>
                 {sessionView.messageCount > 0 && (
-                  <Badge variant="secondary" className="text-xs px-1 py-0 ml-auto">
+                  <Badge variant="secondary" className="text-2xs px-1.5 py-0 ml-auto">
                     {sessionView.messageCount}
                   </Badge>
                 )}
@@ -131,24 +131,24 @@ export default function SidebarSessionItem({
         <Button
           variant="ghost"
           className={cn(
-            'w-full justify-start p-2 h-auto font-normal text-left hover:bg-accent/50 transition-colors duration-200',
-            isSelected && 'bg-accent text-accent-foreground',
+            'w-full justify-start p-2.5 h-auto font-normal text-left hover:bg-accent/50 transition-colors duration-200 rounded-lg border border-transparent hover:border-border/35',
+            isSelected && 'bg-primary/10 text-accent-foreground border-primary/30 shadow-[0_6px_16px_hsl(var(--primary)/0.12)]',
           )}
           onClick={() => onSessionSelect(session, project.name)}
         >
           <div className="flex items-start gap-2 min-w-0 w-full">
             <SessionProviderLogo provider={session.__provider} className="w-3 h-3 mt-0.5 flex-shrink-0" />
             <div className="min-w-0 flex-1">
-              <div className="text-xs font-medium truncate text-foreground">{sessionView.sessionName}</div>
+              <div className="text-xs font-semibold truncate text-foreground">{sessionView.sessionName}</div>
               <div className="flex items-center gap-1 mt-0.5">
                 <Clock className="w-2.5 h-2.5 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">
+                <span className="text-2xs text-muted-foreground">
                   {formatTimeAgo(sessionView.sessionTime, currentTime, t)}
                 </span>
                 {sessionView.messageCount > 0 && (
                   <Badge
                     variant="secondary"
-                    className="text-xs px-1 py-0 ml-auto group-hover:opacity-0 transition-opacity"
+                    className="text-2xs px-1.5 py-0 ml-auto group-hover:opacity-0 transition-opacity"
                   >
                     {sessionView.messageCount}
                   </Badge>

@@ -75,7 +75,7 @@ function MobileNav({ activeTab, setActiveTab, isInputFocused }) {
                   className={`relative z-10 transition-all duration-200 ${isActive ? 'w-5 h-5' : 'w-[18px] h-[18px]'}`}
                   strokeWidth={isActive ? 2.4 : 1.8}
                 />
-                <span className={`relative z-10 text-[10px] font-medium transition-all duration-200 ${isActive ? 'opacity-100' : 'opacity-60'}`}>
+                <span className={`relative z-10 text-2xs font-medium transition-all duration-200 ${isActive ? 'opacity-100' : 'opacity-60'}`}>
                   {item.label}
                 </span>
               </button>

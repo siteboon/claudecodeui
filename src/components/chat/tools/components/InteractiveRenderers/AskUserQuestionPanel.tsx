@@ -169,11 +169,11 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
             </div>
 
             <div className="flex items-center gap-2 min-w-0 flex-1">
-              <span className="text-[10px] font-medium tracking-wide uppercase text-gray-400 dark:text-gray-500">
+              <span className="text-2xs font-medium tracking-wide uppercase text-gray-400 dark:text-gray-500">
                 Claude needs your input
               </span>
               {q.header && (
-                <span className="inline-flex items-center px-1.5 py-px rounded text-[9px] font-semibold uppercase tracking-wider bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-800/50">
+                <span className="inline-flex items-center px-1.5 py-px rounded text-2xs font-semibold uppercase tracking-wider bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-800/50">
                   {q.header}
                 </span>
               )}
@@ -181,7 +181,7 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
 
             {/* Step counter */}
             {!isSingle && (
-              <span className="text-[10px] tabular-nums text-gray-400 dark:text-gray-500 flex-shrink-0">
+              <span className="text-2xs tabular-nums text-gray-400 dark:text-gray-500 flex-shrink-0">
                 {currentStep + 1}/{total}
               </span>
             )}
@@ -208,11 +208,11 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
           )}
 
           {/* Question text */}
-          <p className="text-[14px] leading-snug font-medium text-gray-900 dark:text-gray-100">
+          <p className="text-sm leading-snug font-medium text-gray-900 dark:text-gray-100">
             {q.question}
           </p>
           {multi && (
-            <span className="text-[10px] text-gray-400 dark:text-gray-500">Select all that apply</span>
+            <span className="text-2xs text-gray-400 dark:text-gray-500">Select all that apply</span>
           )}
         </div>
 
@@ -233,7 +233,7 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
                   }`}
                 >
                   {/* Keyboard hint */}
-                  <kbd className={`flex-shrink-0 w-5 h-5 rounded text-[10px] font-mono flex items-center justify-center transition-all duration-150 ${
+                  <kbd className={`flex-shrink-0 w-5 h-5 rounded text-2xs font-mono flex items-center justify-center transition-all duration-150 ${
                     isSelected
                       ? 'bg-blue-500 dark:bg-blue-500 text-white font-semibold'
                       : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 border border-gray-200 dark:border-gray-700 group-hover:border-gray-300 dark:group-hover:border-gray-600'
@@ -242,7 +242,7 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
                   </kbd>
 
                   <div className="flex-1 min-w-0">
-                    <div className={`text-[13px] leading-tight transition-colors duration-150 ${
+                    <div className={`text-sm leading-tight transition-colors duration-150 ${
                       isSelected
                         ? 'text-gray-900 dark:text-gray-100 font-medium'
                         : 'text-gray-700 dark:text-gray-300'
@@ -250,7 +250,7 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
                       {opt.label}
                     </div>
                     {opt.description && (
-                      <div className={`text-[11px] leading-snug transition-colors duration-150 ${
+                      <div className={`text-2xs leading-snug transition-colors duration-150 ${
                         isSelected
                           ? 'text-blue-600/70 dark:text-blue-300/70'
                           : 'text-gray-400 dark:text-gray-500'
@@ -280,14 +280,14 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
                   : 'border-dashed border-gray-200 dark:border-gray-700/60 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50/60 dark:hover:bg-gray-750/50'
               }`}
             >
-              <kbd className={`flex-shrink-0 w-5 h-5 rounded text-[10px] font-mono flex items-center justify-center transition-all duration-150 ${
+              <kbd className={`flex-shrink-0 w-5 h-5 rounded text-2xs font-mono flex items-center justify-center transition-all duration-150 ${
                 isOtherOn
                   ? 'bg-blue-500 dark:bg-blue-500 text-white font-semibold'
                   : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 border border-gray-200 dark:border-gray-700 group-hover:border-gray-300 dark:group-hover:border-gray-600'
               }`}>
                 0
               </kbd>
-              <span className={`text-[13px] leading-tight transition-colors ${
+              <span className={`text-sm leading-tight transition-colors ${
                 isOtherOn
                   ? 'text-gray-900 dark:text-gray-100 font-medium'
                   : 'text-gray-500 dark:text-gray-400'
@@ -320,9 +320,9 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
                       e.stopPropagation();
                     }}
                     placeholder="Type your answer..."
-                    className="w-full text-[13px] rounded-lg border-0 bg-gray-50 dark:bg-gray-900/60 text-gray-900 dark:text-gray-100 px-3 py-1.5 outline-none ring-1 ring-gray-200 dark:ring-gray-700 focus:ring-2 focus:ring-blue-400 dark:focus:ring-blue-500 placeholder:text-gray-400 dark:placeholder:text-gray-600 transition-shadow duration-200"
+                    className="w-full text-sm rounded-lg border-0 bg-gray-50 dark:bg-gray-900/60 text-gray-900 dark:text-gray-100 px-3 py-1.5 outline-none ring-1 ring-gray-200 dark:ring-gray-700 focus:ring-2 focus:ring-blue-400 dark:focus:ring-blue-500 placeholder:text-gray-400 dark:placeholder:text-gray-600 transition-shadow duration-200"
                   />
-                  <kbd className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-mono text-gray-300 dark:text-gray-600 bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded border border-gray-200 dark:border-gray-700">
+                  <kbd className="absolute right-2 top-1/2 -translate-y-1/2 text-2xs font-mono text-gray-300 dark:text-gray-600 bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded border border-gray-200 dark:border-gray-700">
                     Enter
                   </kbd>
                 </div>
@@ -336,10 +336,10 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
           <button
             type="button"
             onClick={handleSkip}
-            className="text-[11px] text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            className="text-2xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
           >
             {isSingle ? 'Skip' : 'Skip all'}
-            <span className="ml-1 text-[9px] text-gray-300 dark:text-gray-600">Esc</span>
+            <span className="ml-1 text-2xs text-gray-300 dark:text-gray-600">Esc</span>
           </button>
 
           <div className="flex items-center gap-1.5">
@@ -347,7 +347,7 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
               <button
                 type="button"
                 onClick={() => setCurrentStep(s => s - 1)}
-                className="inline-flex items-center gap-0.5 text-[11px] font-medium px-2.5 py-1.5 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/60 transition-all duration-150"
+                className="inline-flex items-center gap-0.5 text-2xs font-medium px-2.5 py-1.5 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/60 transition-all duration-150"
               >
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -361,19 +361,19 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
                 type="button"
                 onClick={handleSubmit}
                 disabled={!hasCurrentSelection && !Object.keys(buildAnswers()).length}
-                className="inline-flex items-center gap-1 text-[11px] font-semibold px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-blue-500 dark:from-blue-500 dark:to-blue-600 text-white shadow-sm hover:shadow-md disabled:opacity-30 disabled:cursor-not-allowed disabled:shadow-none transition-all duration-200"
+                className="inline-flex items-center gap-1 text-2xs font-semibold px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-blue-500 dark:from-blue-500 dark:to-blue-600 text-white shadow-sm hover:shadow-md disabled:opacity-30 disabled:cursor-not-allowed disabled:shadow-none transition-all duration-200"
               >
                 Submit
-                <span className="text-[9px] opacity-70 font-mono ml-0.5">Enter</span>
+                <span className="text-2xs opacity-70 font-mono ml-0.5">Enter</span>
               </button>
             ) : (
               <button
                 type="button"
                 onClick={() => setCurrentStep(s => s + 1)}
-                className="inline-flex items-center gap-1 text-[11px] font-semibold px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-blue-500 dark:from-blue-500 dark:to-blue-600 text-white shadow-sm hover:shadow-md transition-all duration-200"
+                className="inline-flex items-center gap-1 text-2xs font-semibold px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-blue-500 dark:from-blue-500 dark:to-blue-600 text-white shadow-sm hover:shadow-md transition-all duration-200"
               >
                 Next
-                <span className="text-[9px] opacity-70 font-mono ml-0.5">Enter</span>
+                <span className="text-2xs opacity-70 font-mono ml-0.5">Enter</span>
               </button>
             )}
           </div>

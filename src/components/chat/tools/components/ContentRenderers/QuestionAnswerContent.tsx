@@ -57,12 +57,12 @@ export const QuestionAnswerContent: React.FC<QuestionAnswerContentProps> = ({
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   {q.header && (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wider bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-100/80 dark:border-blue-800/40">
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-2xs font-semibold uppercase tracking-wider bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-100/80 dark:border-blue-800/40">
                       {q.header}
                     </span>
                   )}
                   {total > 1 && (
-                    <span className="text-[10px] tabular-nums text-gray-400 dark:text-gray-500">
+                    <span className="text-2xs tabular-nums text-gray-400 dark:text-gray-500">
                       {idx + 1}/{total}
                     </span>
                   )}
@@ -78,11 +78,11 @@ export const QuestionAnswerContent: React.FC<QuestionAnswerContentProps> = ({
                       return (
                         <span
                           key={lbl}
-                          className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-md bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium"
+                          className="inline-flex items-center gap-1 text-2xs px-1.5 py-0.5 rounded-md bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium"
                         >
                           {lbl}
                           {isCustom && (
-                            <span className="text-[9px] text-blue-400 dark:text-blue-500 font-normal">(custom)</span>
+                            <span className="text-2xs text-blue-400 dark:text-blue-500 font-normal">(custom)</span>
                           )}
                         </span>
                       );
@@ -91,7 +91,7 @@ export const QuestionAnswerContent: React.FC<QuestionAnswerContentProps> = ({
                 )}
 
                 {!isExpanded && skipped && hasAnyAnswer && (
-                  <span className="inline-block mt-1 text-[10px] text-gray-400 dark:text-gray-500 italic">
+                  <span className="inline-block mt-1 text-2xs text-gray-400 dark:text-gray-500 italic">
                     Skipped
                   </span>
                 )}
@@ -115,7 +115,7 @@ export const QuestionAnswerContent: React.FC<QuestionAnswerContentProps> = ({
                     return (
                       <div
                         key={opt.label}
-                        className={`flex items-start gap-2 px-2.5 py-1.5 rounded-lg text-[12px] ${
+                        className={`flex items-start gap-2 px-2.5 py-1.5 rounded-lg text-xs ${
                           wasSelected
                             ? 'bg-blue-50/80 dark:bg-blue-900/20 border border-blue-200/60 dark:border-blue-800/40'
                             : 'text-gray-400 dark:text-gray-500'
@@ -137,7 +137,7 @@ export const QuestionAnswerContent: React.FC<QuestionAnswerContentProps> = ({
                             {opt.label}
                           </span>
                           {opt.description && (
-                            <span className={`block text-[11px] mt-0.5 ${
+                            <span className={`block text-2xs mt-0.5 ${
                               wasSelected ? 'text-blue-600/70 dark:text-blue-300/70' : 'text-gray-400 dark:text-gray-600'
                             }`}>
                               {opt.description}
@@ -151,7 +151,7 @@ export const QuestionAnswerContent: React.FC<QuestionAnswerContentProps> = ({
                   {answerLabels.filter(lbl => !q.options.some(o => o.label === lbl)).map(lbl => (
                     <div
                       key={lbl}
-                      className="flex items-start gap-2 px-2.5 py-1.5 rounded-lg text-[12px] bg-blue-50/80 dark:bg-blue-900/20 border border-blue-200/60 dark:border-blue-800/40"
+                      className="flex items-start gap-2 px-2.5 py-1.5 rounded-lg text-xs bg-blue-50/80 dark:bg-blue-900/20 border border-blue-200/60 dark:border-blue-800/40"
                     >
                       <div className={`mt-0.5 flex-shrink-0 w-3.5 h-3.5 ${q.multiSelect ? 'rounded-[3px]' : 'rounded-full'} border-[1.5px] border-blue-500 dark:border-blue-400 bg-blue-500 dark:bg-blue-500 flex items-center justify-center`}>
                         <svg className="w-2 h-2 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
@@ -160,13 +160,13 @@ export const QuestionAnswerContent: React.FC<QuestionAnswerContentProps> = ({
                       </div>
                       <div className="flex-1 min-w-0">
                         <span className="text-gray-900 dark:text-gray-100 font-medium">{lbl}</span>
-                        <span className="text-[10px] text-blue-500 dark:text-blue-400 ml-1">(custom)</span>
+                        <span className="text-2xs text-blue-500 dark:text-blue-400 ml-1">(custom)</span>
                       </div>
                     </div>
                   ))}
 
                   {skipped && hasAnyAnswer && (
-                    <div className="text-[11px] text-gray-400 dark:text-gray-500 italic px-2.5 py-1">
+                    <div className="text-2xs text-gray-400 dark:text-gray-500 italic px-2.5 py-1">
                       No answer provided
                     </div>
                   )}
@@ -178,7 +178,7 @@ export const QuestionAnswerContent: React.FC<QuestionAnswerContentProps> = ({
       })}
 
       {!hasAnyAnswer && total === 1 && (
-        <div className="text-[11px] text-gray-400 dark:text-gray-500 italic">
+        <div className="text-2xs text-gray-400 dark:text-gray-500 italic">
           Skipped
         </div>
       )}

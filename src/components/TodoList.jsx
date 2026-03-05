@@ -69,13 +69,13 @@ const TodoList = ({ todos, isResult = false }) => {
               <div className="flex gap-1 flex-shrink-0">
                 <Badge
                   variant="outline"
-                  className={`text-[10px] px-1.5 py-px ${getPriorityColor(todo.priority)}`}
+                  className={`text-2xs px-1.5 py-px ${getPriorityColor(todo.priority)}`}
                 >
                   {todo.priority}
                 </Badge>
                 <Badge
                   variant="outline"
-                  className={`text-[10px] px-1.5 py-px ${getStatusColor(todo.status)}`}
+                  className={`text-2xs px-1.5 py-px ${getStatusColor(todo.status)}`}
                 >
                   {todo.status.replace('_', ' ')}
                 </Badge>
