@@ -641,7 +641,7 @@ export function useChatSessionState({
         if (targetElement) {
           targetElement.scrollIntoView({ block: 'center', behavior: 'smooth' });
           targetElement.classList.add('search-highlight-flash');
-          setTimeout(() => targetElement?.classList.remove('search-highlight-flash'), 2000);
+          setTimeout(() => targetElement?.classList.remove('search-highlight-flash'), 4000);
           searchScrollActiveRef.current = false;
         } else if (retriesLeft > 0) {
           setTimeout(() => findAndScroll(retriesLeft - 1), 200);

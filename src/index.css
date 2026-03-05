@@ -907,18 +907,20 @@
 
   /* Search result highlight flash */
   .search-highlight-flash {
-    animation: search-flash 2s ease-out;
+    animation: search-flash 4s ease-out;
   }
 
   @keyframes search-flash {
-    0%, 15% {
-      outline: 2px solid hsl(var(--primary));
-      outline-offset: 2px;
+    0%, 50% {
+      outline: 3px solid hsl(var(--primary));
+      outline-offset: 4px;
       border-radius: 8px;
+      background-color: hsl(var(--primary) / 0.06);
     }
     100% {
-      outline: 2px solid transparent;
-      outline-offset: 2px;
+      outline: 3px solid transparent;
+      outline-offset: 4px;
+      background-color: transparent;
     }
   }
 }

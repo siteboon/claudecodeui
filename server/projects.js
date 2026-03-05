@@ -1908,17 +1908,20 @@ async function searchConversations(query, limit = 50, onProjectResult = null, si
     return '';
   };
 
+  const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const wordPatterns = words.map(w => new RegExp(`(?<!\\p{L})${escapeRegex(w)}(?!\\p{L})`, 'u'));
   const allWordsMatch = (textLower) => {
-    return words.every(w => textLower.includes(w));
+    return wordPatterns.every(p => p.test(textLower));
   };
 
   const buildSnippet = (text, textLower, snippetLen = 150) => {
     let firstIndex = -1;
     let firstWordLen = 0;
     for (const w of words) {
-      const idx = textLower.indexOf(w);
-      if (idx !== -1 && (firstIndex === -1 || idx < firstIndex)) {
-        firstIndex = idx;
+      const re = new RegExp(`(?<!\\p{L})${escapeRegex(w)}(?!\\p{L})`, 'u');
+      const m = re.exec(textLower);
+      if (m && (firstIndex === -1 || m.index < firstIndex)) {
+        firstIndex = m.index;
         firstWordLen = w.length;
       }
     }
@@ -1933,10 +1936,10 @@ async function searchConversations(query, limit = 50, onProjectResult = null, si
     const snippetLower = snippet.toLowerCase();
     const highlights = [];
     for (const word of words) {
-      let pos = 0;
-      while ((pos = snippetLower.indexOf(word, pos)) !== -1) {
-        highlights.push({ start: pos, end: pos + word.length });
-        pos += word.length;
+      const re = new RegExp(`(?<!\\p{L})${escapeRegex(word)}(?!\\p{L})`, 'gu');
+      let match;
+      while ((match = re.exec(snippetLower)) !== null) {
+        highlights.push({ start: match.index, end: match.index + word.length });
       }
     }
     highlights.sort((a, b) => a.start - b.start);
