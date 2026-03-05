@@ -1490,6 +1490,23 @@ async function getCodexSessions(projectPath, options = {}) {
   }
 }
 
+function isVisibleCodexUserMessage(payload) {
+  if (!payload || payload.type !== 'user_message') {
+    return false;
+  }
+
+  // Codex logs internal context (environment, instructions) as non-plain user_message kinds.
+  if (payload.kind && payload.kind !== 'plain') {
+    return false;
+  }
+
+  if (typeof payload.message !== 'string' || payload.message.trim().length === 0) {
+    return false;
+  }
+  
+  return true;
+}
+
 // Parse a Codex session JSONL file to extract metadata
 async function parseCodexSessionFile(filePath) {
   try {
@@ -1525,8 +1542,8 @@ async function parseCodexSessionFile(filePath) {
             };
           }
 
-          // Count messages and extract user messages for summary
-          if (entry.type === 'event_msg' && entry.payload?.type === 'user_message') {
+          // Count visible user messages and extract summary from the latest plain user input.
+          if (entry.type === 'event_msg' && isVisibleCodexUserMessage(entry.payload)) {
             messageCount++;
             if (entry.payload.message) {
               lastUserMessage = entry.payload.message;
@@ -1633,25 +1650,36 @@ async function getCodexSessionMessages(sessionId, limit = null, offset = 0) {
               };
             }
           }
+          
+          // Use event_msg.user_message for user-visible inputs.
+          if (entry.type === 'event_msg' && isVisibleCodexUserMessage(entry.payload)) {
+            messages.push({
+              type: 'user',
+              timestamp: entry.timestamp,
+              message: {
+                role: 'user',
+                content: entry.payload.message
+              }
+            });
+          }
 
-          // Extract messages from response_item
-          if (entry.type === 'response_item' && entry.payload?.type === 'message') {
+          // response_item.message may include internal prompts for non-assistant roles.
+          // Keep only assistant output from response_item.
+          if (
+            entry.type === 'response_item' &&
+            entry.payload?.type === 'message' &&
+            entry.payload.role === 'assistant'
+          ) {
             const content = entry.payload.content;
-            const role = entry.payload.role || 'assistant';
             const textContent = extractText(content);
-
-            // Skip system context messages (environment_context)
-            if (textContent?.includes('<environment_context>')) {
-              continue;
-            }
 
             // Only add if there's actual content
             if (textContent?.trim()) {
               messages.push({
-                type: role === 'user' ? 'user' : 'assistant',
+                type: 'assistant',
                 timestamp: entry.timestamp,
                 message: {
-                  role: role,
+                  role: 'assistant',
                   content: textContent
                 }
               });
