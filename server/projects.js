@@ -481,9 +481,13 @@ async function getProjects(progressCallback = null) {
       }
       applyCustomSessionNames(project.codexSessions, 'codex');
 
-      // Also fetch Gemini sessions for this project
+      // Also fetch Gemini sessions for this project (UI + CLI)
       try {
-        project.geminiSessions = sessionManager.getProjectSessions(actualProjectDir) || [];
+        const uiSessions = sessionManager.getProjectSessions(actualProjectDir) || [];
+        const cliSessions = await getGeminiCliSessions(actualProjectDir);
+        const uiIds = new Set(uiSessions.map(s => s.id));
+        const mergedGemini = [...uiSessions, ...cliSessions.filter(s => !uiIds.has(s.id))];
+        project.geminiSessions = mergedGemini;
       } catch (e) {
         console.warn(`Could not load Gemini sessions for project ${entry.name}:`, e.message);
         project.geminiSessions = [];
@@ -584,9 +588,12 @@ async function getProjects(progressCallback = null) {
       }
       applyCustomSessionNames(project.codexSessions, 'codex');
 
-      // Try to fetch Gemini sessions for manual projects too
+      // Try to fetch Gemini sessions for manual projects too (UI + CLI)
       try {
-        project.geminiSessions = sessionManager.getProjectSessions(actualProjectDir) || [];
+        const uiSessions = sessionManager.getProjectSessions(actualProjectDir) || [];
+        const cliSessions = await getGeminiCliSessions(actualProjectDir);
+        const uiIds = new Set(uiSessions.map(s => s.id));
+        project.geminiSessions = [...uiSessions, ...cliSessions.filter(s => !uiIds.has(s.id))];
       } catch (e) {
         console.warn(`Could not load Gemini sessions for manual project ${projectName}:`, e.message);
       }
@@ -2103,7 +2110,7 @@ async function searchConversations(query, limit = 50, onProjectResult = null, si
       try {
         const actualProjectDir = await extractProjectDirectory(projectName);
         if (actualProjectDir && !isAborted() && totalMatches < safeLimit) {
-          searchGeminiSessionsForProject(
+          await searchGeminiSessionsForProject(
             actualProjectDir, projectResult, words, allWordsMatch,
             buildSnippet, safeLimit, () => totalMatches, (n) => { totalMatches += n; }
           );
@@ -2234,10 +2241,11 @@ async function searchCodexSessionsForProject(
   }
 }
 
-function searchGeminiSessionsForProject(
+async function searchGeminiSessionsForProject(
   projectPath, projectResult, words, allWordsMatch,
   buildSnippet, limit, getTotalMatches, addMatches
 ) {
+  // 1) Search in-memory sessions (created via UI)
   for (const [sessionId, session] of sessionManager.sessions) {
     if (getTotalMatches() >= limit) break;
     if (session.projectPath !== projectPath) continue;
@@ -2282,6 +2290,249 @@ function searchGeminiSessionsForProject(
       });
     }
   }
+
+  // 2) Search Gemini CLI sessions on disk (~/.gemini/tmp/<project>/chats/*.json)
+  const normalizedProjectPath = normalizeComparablePath(projectPath);
+  if (!normalizedProjectPath) return;
+
+  const geminiTmpDir = path.join(os.homedir(), '.gemini', 'tmp');
+  try {
+    await fs.access(geminiTmpDir);
+  } catch {
+    return;
+  }
+
+  const trackedSessionIds = new Set();
+  for (const [sid] of sessionManager.sessions) {
+    trackedSessionIds.add(sid);
+  }
+
+  let projectDirs;
+  try {
+    projectDirs = await fs.readdir(geminiTmpDir);
+  } catch {
+    return;
+  }
+
+  for (const projectDir of projectDirs) {
+    if (getTotalMatches() >= limit) break;
+
+    const projectRootFile = path.join(geminiTmpDir, projectDir, '.project_root');
+    let projectRoot;
+    try {
+      projectRoot = (await fs.readFile(projectRootFile, 'utf8')).trim();
+    } catch {
+      continue;
+    }
+
+    if (normalizeComparablePath(projectRoot) !== normalizedProjectPath) continue;
+
+    const chatsDir = path.join(geminiTmpDir, projectDir, 'chats');
+    let chatFiles;
+    try {
+      chatFiles = await fs.readdir(chatsDir);
+    } catch {
+      continue;
+    }
+
+    for (const chatFile of chatFiles) {
+      if (getTotalMatches() >= limit) break;
+      if (!chatFile.endsWith('.json')) continue;
+
+      try {
+        const filePath = path.join(chatsDir, chatFile);
+        const data = await fs.readFile(filePath, 'utf8');
+        const session = JSON.parse(data);
+        if (!session.messages || !Array.isArray(session.messages)) continue;
+
+        const cliSessionId = session.sessionId || chatFile.replace('.json', '');
+        if (trackedSessionIds.has(cliSessionId)) continue;
+
+        const matches = [];
+        let firstUserText = null;
+
+        for (const msg of session.messages) {
+          if (getTotalMatches() >= limit) break;
+
+          const role = msg.type === 'user' ? 'user'
+            : (msg.type === 'gemini' || msg.type === 'assistant') ? 'assistant'
+            : null;
+          if (!role) continue;
+
+          let text = '';
+          if (typeof msg.content === 'string') {
+            text = msg.content;
+          } else if (Array.isArray(msg.content)) {
+            text = msg.content
+              .filter(p => p.text)
+              .map(p => p.text)
+              .join(' ');
+          }
+          if (!text) continue;
+
+          if (role === 'user' && !firstUserText) firstUserText = text;
+
+          const textLower = text.toLowerCase();
+          if (!allWordsMatch(textLower)) continue;
+
+          if (matches.length < 2) {
+            const { snippet, highlights } = buildSnippet(text, textLower);
+            matches.push({
+              role, snippet, highlights,
+              timestamp: msg.timestamp || null,
+              provider: 'gemini'
+            });
+            addMatches(1);
+          }
+        }
+
+        if (matches.length > 0) {
+          const summary = firstUserText
+            ? (firstUserText.length > 50 ? firstUserText.substring(0, 50) + '...' : firstUserText)
+            : 'Gemini CLI Session';
+
+          projectResult.sessions.push({
+            sessionId: cliSessionId,
+            provider: 'gemini',
+            sessionSummary: summary,
+            matches
+          });
+        }
+      } catch {
+        continue;
+      }
+    }
+  }
+}
+
+async function getGeminiCliSessions(projectPath) {
+  const normalizedProjectPath = normalizeComparablePath(projectPath);
+  if (!normalizedProjectPath) return [];
+
+  const geminiTmpDir = path.join(os.homedir(), '.gemini', 'tmp');
+  try {
+    await fs.access(geminiTmpDir);
+  } catch {
+    return [];
+  }
+
+  const sessions = [];
+  let projectDirs;
+  try {
+    projectDirs = await fs.readdir(geminiTmpDir);
+  } catch {
+    return [];
+  }
+
+  for (const projectDir of projectDirs) {
+    const projectRootFile = path.join(geminiTmpDir, projectDir, '.project_root');
+    let projectRoot;
+    try {
+      projectRoot = (await fs.readFile(projectRootFile, 'utf8')).trim();
+    } catch {
+      continue;
+    }
+
+    if (normalizeComparablePath(projectRoot) !== normalizedProjectPath) continue;
+
+    const chatsDir = path.join(geminiTmpDir, projectDir, 'chats');
+    let chatFiles;
+    try {
+      chatFiles = await fs.readdir(chatsDir);
+    } catch {
+      continue;
+    }
+
+    for (const chatFile of chatFiles) {
+      if (!chatFile.endsWith('.json')) continue;
+      try {
+        const filePath = path.join(chatsDir, chatFile);
+        const data = await fs.readFile(filePath, 'utf8');
+        const session = JSON.parse(data);
+        if (!session.messages || !Array.isArray(session.messages)) continue;
+
+        const sessionId = session.sessionId || chatFile.replace('.json', '');
+        const firstUserMsg = session.messages.find(m => m.type === 'user');
+        let summary = 'Gemini CLI Session';
+        if (firstUserMsg) {
+          const text = Array.isArray(firstUserMsg.content)
+            ? firstUserMsg.content.filter(p => p.text).map(p => p.text).join(' ')
+            : (typeof firstUserMsg.content === 'string' ? firstUserMsg.content : '');
+          if (text) {
+            summary = text.length > 50 ? text.substring(0, 50) + '...' : text;
+          }
+        }
+
+        sessions.push({
+          id: sessionId,
+          summary,
+          messageCount: session.messages.length,
+          lastActivity: session.lastUpdated || session.startTime || null,
+          provider: 'gemini'
+        });
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  return sessions.sort((a, b) =>
+    new Date(b.lastActivity || 0) - new Date(a.lastActivity || 0)
+  );
+}
+
+async function getGeminiCliSessionMessages(sessionId) {
+  const geminiTmpDir = path.join(os.homedir(), '.gemini', 'tmp');
+  let projectDirs;
+  try {
+    projectDirs = await fs.readdir(geminiTmpDir);
+  } catch {
+    return [];
+  }
+
+  for (const projectDir of projectDirs) {
+    const chatsDir = path.join(geminiTmpDir, projectDir, 'chats');
+    let chatFiles;
+    try {
+      chatFiles = await fs.readdir(chatsDir);
+    } catch {
+      continue;
+    }
+
+    for (const chatFile of chatFiles) {
+      if (!chatFile.endsWith('.json')) continue;
+      try {
+        const filePath = path.join(chatsDir, chatFile);
+        const data = await fs.readFile(filePath, 'utf8');
+        const session = JSON.parse(data);
+        const fileSessionId = session.sessionId || chatFile.replace('.json', '');
+        if (fileSessionId !== sessionId) continue;
+
+        return (session.messages || []).map(msg => {
+          const role = msg.type === 'user' ? 'user'
+            : (msg.type === 'gemini' || msg.type === 'assistant') ? 'assistant'
+            : msg.type;
+
+          let content = '';
+          if (typeof msg.content === 'string') {
+            content = msg.content;
+          } else if (Array.isArray(msg.content)) {
+            content = msg.content.filter(p => p.text).map(p => p.text).join('\n');
+          }
+
+          return {
+            type: 'message',
+            message: { role, content },
+            timestamp: msg.timestamp || null
+          };
+        });
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  return [];
 }
 
 export {
@@ -2301,5 +2552,7 @@ export {
   getCodexSessions,
   getCodexSessionMessages,
   deleteCodexSession,
+  getGeminiCliSessions,
+  getGeminiCliSessionMessages,
   searchConversations
 };
