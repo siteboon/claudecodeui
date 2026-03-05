@@ -24,6 +24,7 @@ type UseShellConnectionOptions = {
   closeSocket: () => void;
   clearTerminalScreen: () => void;
   setAuthUrl: (nextAuthUrl: string) => void;
+  onOutputRef?: MutableRefObject<(() => void) | null>;
 };
 
 type UseShellConnectionResult = {
@@ -48,6 +49,7 @@ export function useShellConnection({
   closeSocket,
   clearTerminalScreen,
   setAuthUrl,
+  onOutputRef,
 }: UseShellConnectionOptions): UseShellConnectionResult {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -91,6 +93,7 @@ export function useShellConnection({
         const output = typeof message.data === 'string' ? message.data : '';
         handleProcessCompletion(output);
         terminalRef.current?.write(output);
+        onOutputRef?.current?.();
         return;
       }
 
@@ -101,7 +104,7 @@ export function useShellConnection({
         }
       }
     },
-    [handleProcessCompletion, setAuthUrl, terminalRef],
+    [handleProcessCompletion, onOutputRef, setAuthUrl, terminalRef],
   );
 
   const connectWebSocket = useCallback(
