@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Trash2, RefreshCw, GitBranch, Loader2, ServerCrash, ChevronRight, ShieldAlert, ExternalLink, BookOpen, Download, BarChart3 } from 'lucide-react';
+import { Trash2, RefreshCw, GitBranch, Loader2, ServerCrash, ShieldAlert, ExternalLink, BookOpen, Download, BarChart3 } from 'lucide-react';
 import { usePlugins } from '../../contexts/PluginsContext';
 import PluginIcon from './PluginIcon';
 import type { Plugin } from '../../contexts/PluginsContext';
@@ -76,7 +76,7 @@ function PluginCard({
 
   return (
     <div
-      className="relative flex rounded-md border border-border bg-card overflow-hidden transition-opacity duration-200"
+      className="relative flex rounded-lg border border-border bg-card overflow-hidden transition-opacity duration-200"
       style={{
         opacity: plugin.enabled ? 1 : 0.65,
         animationDelay: `${index * 40}ms`,
@@ -85,15 +85,15 @@ function PluginCard({
       {/* Left accent bar */}
       <div className={`w-[3px] flex-shrink-0 ${accentColor} transition-colors duration-300`} />
 
-      <div className="flex-1 p-3.5 min-w-0">
+      <div className="flex-1 p-4 min-w-0">
         {/* Header row */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex-shrink-0 w-4 h-4 text-foreground/80">
+            <div className="flex-shrink-0 w-5 h-5 text-foreground/80">
               <PluginIcon
                 pluginName={plugin.name}
                 iconFile={plugin.icon}
-                className="w-4 h-4 [&>svg]:w-full [&>svg]:h-full"
+                className="w-5 h-5 [&>svg]:w-full [&>svg]:h-full"
               />
             </div>
             <div className="min-w-0">
@@ -101,24 +101,39 @@ function PluginCard({
                 <span className="font-semibold text-sm text-foreground leading-none">
                   {plugin.displayName}
                 </span>
-                <span className="font-mono text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
                   v{plugin.version}
                 </span>
-                <span className="font-mono text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                  {plugin.type}
+                <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                  {plugin.slot}
                 </span>
                 <ServerDot running={!!plugin.serverRunning} />
               </div>
               {plugin.description && (
-                <p className="text-xs text-muted-foreground mt-1 leading-snug">
+                <p className="text-sm text-muted-foreground mt-1 leading-snug">
                   {plugin.description}
                 </p>
               )}
-              {plugin.author && (
-                <p className="text-[10px] font-mono text-muted-foreground/60 mt-0.5">
-                  {plugin.author}
-                </p>
-              )}
+              <div className="flex items-center gap-3 mt-1">
+                {plugin.author && (
+                  <span className="text-xs text-muted-foreground/60">
+                    {plugin.author}
+                  </span>
+                )}
+                {plugin.repoUrl && (
+                  <a
+                    href={plugin.repoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-muted-foreground/60 hover:text-foreground transition-colors"
+                  >
+                    <GitBranch className="w-3 h-3" />
+                    <span className="truncate max-w-[200px]">
+                      {plugin.repoUrl.replace(/^https?:\/\/(www\.)?github\.com\//, '')}
+                    </span>
+                  </a>
+                )}
+              </div>
             </div>
           </div>
 
@@ -156,19 +171,19 @@ function PluginCard({
         {/* Confirm uninstall banner */}
         {confirmingUninstall && (
           <div className="mt-3 flex items-center justify-between gap-3 px-3 py-2 rounded bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/50">
-            <span className="text-xs text-red-600 dark:text-red-400">
+            <span className="text-sm text-red-600 dark:text-red-400">
               Remove <span className="font-semibold">{plugin.displayName}</span>? This cannot be undone.
             </span>
             <div className="flex gap-1.5">
               <button
                 onClick={onCancelUninstall}
-                className="text-xs px-2.5 py-1 rounded border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                className="text-sm px-2.5 py-1 rounded border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={onUninstall}
-                className="text-xs px-2.5 py-1 rounded border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 font-medium transition-colors"
+                className="text-sm px-2.5 py-1 rounded border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 font-medium transition-colors"
               >
                 Remove
               </button>
@@ -178,8 +193,8 @@ function PluginCard({
 
         {/* Update error */}
         {updateError && (
-          <div className="mt-2 flex items-center gap-1.5 text-xs text-red-500">
-            <ServerCrash className="w-3 h-3 flex-shrink-0" />
+          <div className="mt-2 flex items-center gap-1.5 text-sm text-red-500">
+            <ServerCrash className="w-3.5 h-3.5 flex-shrink-0" />
             <span>{updateError}</span>
           </div>
         )}
@@ -191,61 +206,54 @@ function PluginCard({
 /* ─── Starter Plugin Card ───────────────────────────────────────────────── */
 function StarterPluginCard({ onInstall, installing }: { onInstall: () => void; installing: boolean }) {
   return (
-    <div className="relative flex rounded-md border border-dashed border-border/60 bg-card/50 overflow-hidden opacity-65 hover:opacity-80 transition-opacity duration-200">
-      <div className="w-[3px] flex-shrink-0 bg-muted-foreground/10" />
-      <div className="flex-1 p-3.5 min-w-0">
+    <div className="relative flex rounded-lg border border-dashed border-border bg-card overflow-hidden transition-all duration-200 hover:border-blue-400 dark:hover:border-blue-500">
+      <div className="w-[3px] flex-shrink-0 bg-blue-500/30" />
+      <div className="flex-1 p-4 min-w-0">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex-shrink-0 w-4 h-4 text-muted-foreground/60">
-              <BarChart3 className="w-4 h-4" />
+            <div className="flex-shrink-0 w-5 h-5 text-blue-500">
+              <BarChart3 className="w-5 h-5" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-semibold text-sm text-foreground/70 leading-none">
+                <span className="font-semibold text-sm text-foreground leading-none">
                   Project Stats
                 </span>
-                <span className="font-mono text-[10px] text-muted-foreground/50 bg-muted/50 px-1.5 py-0.5 rounded">
+                <span className="text-[10px] text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 px-1.5 py-0.5 rounded font-medium">
                   starter
                 </span>
+                <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                  tab
+                </span>
               </div>
-              <p className="text-xs text-muted-foreground/60 mt-1 leading-snug">
+              <p className="text-sm text-muted-foreground mt-1 leading-snug">
                 File counts, lines of code, file-type breakdown, and recent activity for your project.
               </p>
+              <a
+                href={STARTER_PLUGIN_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-muted-foreground/60 hover:text-foreground transition-colors mt-1"
+              >
+                <GitBranch className="w-3 h-3" />
+                cloudcli-ai/cloudcli-plugin-starter
+              </a>
             </div>
           </div>
           <button
             onClick={onInstall}
             disabled={installing}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40 flex-shrink-0"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50 flex-shrink-0"
           >
             {installing ? (
-              <Loader2 className="w-3 h-3 animate-spin" />
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
             ) : (
-              <Download className="w-3 h-3" />
+              <Download className="w-3.5 h-3.5" />
             )}
             {installing ? 'Installing…' : 'Install'}
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-/* ─── Empty State ───────────────────────────────────────────────────────── */
-function EmptyState() {
-  return (
-    <div className="flex flex-col items-center justify-center py-12 text-center">
-      <div className="font-mono text-muted-foreground/30 text-xs leading-relaxed mb-4 select-none">
-        <div>~/.claude-code-ui/plugins/</div>
-        <div className="flex items-center justify-center gap-1 mt-1">
-          <ChevronRight className="w-3 h-3" />
-          <span>(empty)</span>
-        </div>
-      </div>
-      <p className="text-sm text-muted-foreground">No plugins installed</p>
-      <p className="text-xs text-muted-foreground/60 mt-1">
-        Install from git or drop a folder in the plugins directory
-      </p>
     </div>
   );
 }
@@ -308,35 +316,28 @@ export default function PluginSettingsTab() {
   const hasStarterInstalled = plugins.some((p) => p.name === 'project-stats');
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-baseline justify-between">
-        <div>
-          <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground/60 mb-1">
-            Plugins
-          </h3>
-          <p className="text-xs text-muted-foreground">
-            Extend the interface with custom plugins. Install from{' '}
-            <code className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded font-semibold">
-              git
-            </code>{' '}
-            or drop a folder in{' '}
-            <code className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded font-semibold">
-              ~/.claude-code-ui/plugins/
-            </code>
-          </p>
-        </div>
-        {!loading && plugins.length > 0 && (
-          <span className="font-mono text-xs text-muted-foreground/50 tabular-nums">
-            {plugins.filter((p) => p.enabled).length}/{plugins.length}
-          </span>
-        )}
+      <div>
+        <h3 className="text-base font-semibold text-foreground mb-1">
+          Plugins
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          Extend the interface with custom plugins. Install from{' '}
+          <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-semibold">
+            git
+          </code>{' '}
+          or drop a folder in{' '}
+          <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-semibold">
+            ~/.claude-code-ui/plugins/
+          </code>
+        </p>
       </div>
 
       {/* Install from Git — compact */}
-      <div className="flex items-center gap-0 rounded-md border border-border bg-card overflow-hidden">
+      <div className="flex items-center gap-0 rounded-lg border border-border bg-card overflow-hidden">
         <span className="flex-shrink-0 pl-3 pr-1 text-muted-foreground/40">
-          <GitBranch className="w-3 h-3" />
+          <GitBranch className="w-3.5 h-3.5" />
         </span>
         <input
           type="text"
@@ -346,7 +347,7 @@ export default function PluginSettingsTab() {
             setInstallError(null);
           }}
           placeholder="https://github.com/user/my-plugin"
-          className="flex-1 px-2 py-2 text-xs font-mono bg-transparent text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
+          className="flex-1 px-2 py-2.5 text-sm bg-transparent text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
           onKeyDown={(e) => {
             if (e.key === 'Enter') void handleInstall();
           }}
@@ -354,10 +355,10 @@ export default function PluginSettingsTab() {
         <button
           onClick={handleInstall}
           disabled={installing || !gitUrl.trim()}
-          className="flex-shrink-0 px-3.5 py-2 text-xs font-medium bg-foreground text-background hover:opacity-90 disabled:opacity-30 transition-opacity border-l border-border"
+          className="flex-shrink-0 px-4 py-2.5 text-sm font-medium bg-foreground text-background hover:opacity-90 disabled:opacity-30 transition-opacity border-l border-border"
         >
           {installing ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            <Loader2 className="w-4 h-4 animate-spin" />
           ) : (
             'Install'
           )}
@@ -365,27 +366,34 @@ export default function PluginSettingsTab() {
       </div>
 
       {installError && (
-        <p className="text-xs font-mono text-red-500 -mt-3">{installError}</p>
+        <p className="text-sm text-red-500 -mt-4">{installError}</p>
       )}
 
-      <p className="flex items-start gap-1.5 text-[11px] text-muted-foreground/50 leading-snug -mt-3">
+      <p className="flex items-start gap-1.5 text-xs text-muted-foreground/50 leading-snug -mt-4">
         <ShieldAlert className="w-3 h-3 mt-px flex-shrink-0" />
         <span>
           Only install plugins whose source code you have reviewed or from authors you trust.
         </span>
       </p>
 
+      {/* Starter plugin suggestion — above the list */}
+      {!loading && !hasStarterInstalled && (
+        <StarterPluginCard onInstall={handleInstallStarter} installing={installingStarter} />
+      )}
+
       {/* Plugin List */}
-      <div className="space-y-2">
-        {loading ? (
-          <div className="flex items-center gap-2 justify-center py-10 text-xs text-muted-foreground font-mono">
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            scanning plugins…
-          </div>
-        ) : plugins.length === 0 ? (
-          <EmptyState />
-        ) : (
-          plugins.map((plugin, index) => (
+      {loading ? (
+        <div className="flex items-center gap-2 justify-center py-10 text-sm text-muted-foreground">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          Scanning plugins…
+        </div>
+      ) : plugins.length === 0 && hasStarterInstalled ? (
+        <p className="text-sm text-muted-foreground text-center py-8">No plugins installed</p>
+      ) : plugins.length === 0 ? (
+        <p className="text-sm text-muted-foreground text-center py-8">No plugins installed</p>
+      ) : (
+        <div className="space-y-2">
+          {plugins.map((plugin, index) => (
             <PluginCard
               key={plugin.name}
               plugin={plugin}
@@ -398,29 +406,24 @@ export default function PluginSettingsTab() {
               onCancelUninstall={() => setConfirmUninstall(null)}
               updateError={updateErrors[plugin.name] ?? null}
             />
-          ))
-        )}
-
-        {/* Starter plugin suggestion */}
-        {!loading && !hasStarterInstalled && (
-          <StarterPluginCard onInstall={handleInstallStarter} installing={installingStarter} />
-        )}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Build your own */}
-      <div className="flex items-center justify-between gap-4 pt-1">
+      <div className="flex items-center justify-between gap-4 pt-2 border-t border-border/50">
         <div className="flex items-center gap-2 min-w-0">
           <BookOpen className="w-3.5 h-3.5 text-muted-foreground/40 flex-shrink-0" />
-          <span className="text-[11px] text-muted-foreground/60">
+          <span className="text-xs text-muted-foreground/60">
             Build your own plugin
           </span>
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
           <a
-            href="https://github.com/cloudcli-ai/cloudcli-plugin-starter"
+            href={STARTER_PLUGIN_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-[11px] text-muted-foreground/60 hover:text-foreground transition-colors"
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground/60 hover:text-foreground transition-colors"
           >
             Starter <ExternalLink className="w-2.5 h-2.5" />
           </a>
@@ -429,7 +432,7 @@ export default function PluginSettingsTab() {
             href="https://cloudcli.ai/docs/plugin-overview"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-[11px] text-muted-foreground/60 hover:text-foreground transition-colors"
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground/60 hover:text-foreground transition-colors"
           >
             Docs <ExternalLink className="w-2.5 h-2.5" />
           </a>

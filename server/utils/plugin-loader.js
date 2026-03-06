@@ -89,6 +89,23 @@ export function scanPlugins() {
         continue;
       }
 
+      // Try to read git remote URL
+      let repoUrl = null;
+      try {
+        const gitConfigPath = path.join(pluginsDir, entry.name, '.git', 'config');
+        if (fs.existsSync(gitConfigPath)) {
+          const gitConfig = fs.readFileSync(gitConfigPath, 'utf-8');
+          const match = gitConfig.match(/url\s*=\s*(.+)/);
+          if (match) {
+            repoUrl = match[1].trim().replace(/\.git$/, '');
+            // Convert SSH URLs to HTTPS
+            if (repoUrl.startsWith('git@')) {
+              repoUrl = repoUrl.replace(/^git@([^:]+):/, 'https://$1/');
+            }
+          }
+        }
+      } catch { /* ignore */ }
+
       plugins.push({
         name: manifest.name,
         displayName: manifest.displayName,
@@ -103,6 +120,7 @@ export function scanPlugins() {
         permissions: manifest.permissions || [],
         enabled: config[manifest.name]?.enabled !== false, // enabled by default
         dirName: entry.name,
+        repoUrl,
       });
     } catch (err) {
       console.warn(`[Plugins] Failed to read manifest for ${entry.name}:`, err.message);
@@ -137,6 +155,13 @@ export function resolvePluginAssetPath(name, assetPath) {
 
 export function installPluginFromGit(url) {
   return new Promise((resolve, reject) => {
+    if (typeof url !== 'string' || !url.trim()) {
+      return reject(new Error('Invalid URL: must be a non-empty string'));
+    }
+    if (url.startsWith('-')) {
+      return reject(new Error('Invalid URL: must not start with "-"'));
+    }
+
     // Extract repo name from URL for directory name
     const urlClean = url.replace(/\.git$/, '').replace(/\/$/, '');
     const repoName = urlClean.split('/').pop();
@@ -174,7 +199,7 @@ export function installPluginFromGit(url) {
       resolve(manifest);
     };
 
-    const gitProcess = spawn('git', ['clone', '--depth', '1', url, tempDir], {
+    const gitProcess = spawn('git', ['clone', '--depth', '1', '--', url, tempDir], {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -249,7 +274,7 @@ export function updatePluginFromGit(name) {
     }
 
     // Only fast-forward to avoid silent divergence
-    const gitProcess = spawn('git', ['pull', '--ff-only'], {
+    const gitProcess = spawn('git', ['pull', '--ff-only', '--'], {
       cwd: pluginDir,
       stdio: ['ignore', 'pipe', 'pipe'],
     });

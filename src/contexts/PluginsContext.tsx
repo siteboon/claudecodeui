@@ -17,6 +17,7 @@ export type Plugin = {
   enabled: boolean;
   serverRunning: boolean;
   dirName: string;
+  repoUrl: string | null;
 };
 
 type PluginsContextValue = {
