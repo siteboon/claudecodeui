@@ -7,7 +7,7 @@ const PLUGINS_DIR = path.join(os.homedir(), '.claude-code-ui', 'plugins');
 const PLUGINS_CONFIG_PATH = path.join(os.homedir(), '.claude-code-ui', 'plugins.json');
 
 const REQUIRED_MANIFEST_FIELDS = ['name', 'displayName', 'entry'];
-const ALLOWED_TYPES = ['iframe', 'react', 'module'];
+const ALLOWED_TYPES = ['react', 'module'];
 const ALLOWED_SLOTS = ['tab'];
 
 export function getPluginsDir() {
@@ -96,7 +96,7 @@ export function scanPlugins() {
         description: manifest.description || '',
         author: manifest.author || '',
         icon: manifest.icon || 'Puzzle',
-        type: manifest.type || 'iframe',
+        type: manifest.type || 'module',
         slot: manifest.slot || 'tab',
         entry: manifest.entry,
         server: manifest.server || null,
@@ -157,7 +157,24 @@ export function installPluginFromGit(url) {
       return reject(new Error(`Plugin directory "${repoName}" already exists`));
     }
 
-    const gitProcess = spawn('git', ['clone', '--depth', '1', url, targetDir], {
+    // Clone into a temp directory so scanPlugins() never sees a partially-installed plugin
+    const tempDir = fs.mkdtempSync(path.join(pluginsDir, `.tmp-${repoName}-`));
+
+    const cleanupTemp = () => {
+      try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch {}
+    };
+
+    const finalize = (manifest) => {
+      try {
+        fs.renameSync(tempDir, targetDir);
+      } catch (err) {
+        cleanupTemp();
+        return reject(new Error(`Failed to move plugin into place: ${err.message}`));
+      }
+      resolve(manifest);
+    };
+
+    const gitProcess = spawn('git', ['clone', '--depth', '1', url, tempDir], {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -166,15 +183,14 @@ export function installPluginFromGit(url) {
 
     gitProcess.on('close', (code) => {
       if (code !== 0) {
-        // Clean up failed clone
-        try { fs.rmSync(targetDir, { recursive: true, force: true }); } catch {}
+        cleanupTemp();
         return reject(new Error(`git clone failed (exit code ${code}): ${stderr.trim()}`));
       }
 
       // Validate manifest exists
-      const manifestPath = path.join(targetDir, 'manifest.json');
+      const manifestPath = path.join(tempDir, 'manifest.json');
       if (!fs.existsSync(manifestPath)) {
-        fs.rmSync(targetDir, { recursive: true, force: true });
+        cleanupTemp();
         return reject(new Error('Cloned repository does not contain a manifest.json'));
       }
 
@@ -182,42 +198,44 @@ export function installPluginFromGit(url) {
       try {
         manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
       } catch {
-        fs.rmSync(targetDir, { recursive: true, force: true });
+        cleanupTemp();
         return reject(new Error('manifest.json is not valid JSON'));
       }
 
       const validation = validateManifest(manifest);
       if (!validation.valid) {
-        fs.rmSync(targetDir, { recursive: true, force: true });
+        cleanupTemp();
         return reject(new Error(`Invalid manifest: ${validation.error}`));
       }
 
       // Run npm install if package.json exists.
       // --ignore-scripts prevents postinstall hooks from executing arbitrary code.
-      const packageJsonPath = path.join(targetDir, 'package.json');
+      const packageJsonPath = path.join(tempDir, 'package.json');
       if (fs.existsSync(packageJsonPath)) {
         const npmProcess = spawn('npm', ['install', '--production', '--ignore-scripts'], {
-          cwd: targetDir,
+          cwd: tempDir,
           stdio: ['ignore', 'pipe', 'pipe'],
         });
 
         npmProcess.on('close', (npmCode) => {
           if (npmCode !== 0) {
-            console.warn(`[Plugins] npm install for ${repoName} exited with code ${npmCode}`);
+            cleanupTemp();
+            return reject(new Error(`npm install for ${repoName} failed (exit code ${npmCode})`));
           }
-          resolve(manifest);
+          finalize(manifest);
         });
 
-        npmProcess.on('error', () => {
-          // npm not available, continue anyway
-          resolve(manifest);
+        npmProcess.on('error', (err) => {
+          cleanupTemp();
+          reject(err);
         });
       } else {
-        resolve(manifest);
+        finalize(manifest);
       }
     });
 
     gitProcess.on('error', (err) => {
+      cleanupTemp();
       reject(new Error(`Failed to spawn git: ${err.message}`));
     });
   });
@@ -265,8 +283,13 @@ export function updatePluginFromGit(name) {
           cwd: pluginDir,
           stdio: ['ignore', 'pipe', 'pipe'],
         });
-        npmProcess.on('close', () => resolve(manifest));
-        npmProcess.on('error', () => resolve(manifest));
+        npmProcess.on('close', (npmCode) => {
+          if (npmCode !== 0) {
+            return reject(new Error(`npm install for ${name} failed (exit code ${npmCode})`));
+          }
+          resolve(manifest);
+        });
+        npmProcess.on('error', (err) => reject(err));
       } else {
         resolve(manifest);
       }

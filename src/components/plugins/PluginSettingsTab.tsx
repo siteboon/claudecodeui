@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Trash2, RefreshCw, GitBranch, Loader2, ServerCrash, ChevronRight } from 'lucide-react';
+import { Trash2, RefreshCw, GitBranch, Loader2, ServerCrash, ChevronRight, ShieldAlert, ExternalLink, BookOpen } from 'lucide-react';
 import { usePlugins } from '../../contexts/PluginsContext';
 import PluginIcon from './PluginIcon';
 import type { Plugin } from '../../contexts/PluginsContext';
@@ -314,6 +314,43 @@ export default function PluginSettingsTab() {
         {installError && (
           <p className="mt-2 text-xs font-mono text-red-500">{installError}</p>
         )}
+
+        <p className="mt-2.5 flex items-start gap-1.5 text-[11px] text-muted-foreground/60 leading-snug">
+          <ShieldAlert className="w-3 h-3 mt-px flex-shrink-0" />
+          <span>
+            Plugins run with full access to the host page. Only install plugins
+            whose source code you have reviewed or from authors you trust.
+          </span>
+        </p>
+      </div>
+
+      {/* Build your own */}
+      <div className="flex items-center gap-4 rounded-md border border-dashed border-border/60 px-4 py-3">
+        <BookOpen className="w-4 h-4 text-muted-foreground/50 flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-xs text-muted-foreground">
+            Build your own plugin or start from an example.
+          </p>
+        </div>
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <a
+            href="https://github.com/cloudcli-ai/cloudcli-plugin-starter"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Starter plugin <ExternalLink className="w-3 h-3" />
+          </a>
+          <span className="text-border">|</span>
+          <a
+            href="https://cloudcli.ai/docs/plugin-overview"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Docs <ExternalLink className="w-3 h-3" />
+          </a>
+        </div>
       </div>
 
       {/* Plugin List */}

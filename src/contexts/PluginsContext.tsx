@@ -9,7 +9,7 @@ export type Plugin = {
   description: string;
   author: string;
   icon: string;
-  type: 'iframe' | 'react' | 'module';
+  type: 'react' | 'module';
   slot: 'tab';
   entry: string;
   server: string | null;
@@ -22,11 +22,12 @@ export type Plugin = {
 type PluginsContextValue = {
   plugins: Plugin[];
   loading: boolean;
+  pluginsError: string | null;
   refreshPlugins: () => Promise<void>;
   installPlugin: (url: string) => Promise<{ success: boolean; error?: string }>;
   uninstallPlugin: (name: string) => Promise<{ success: boolean; error?: string }>;
   updatePlugin: (name: string) => Promise<{ success: boolean; error?: string }>;
-  togglePlugin: (name: string, enabled: boolean) => Promise<void>;
+  togglePlugin: (name: string, enabled: boolean) => Promise<{ success: boolean; error: string | null }>;
 };
 
 const PluginsContext = createContext<PluginsContextValue | null>(null);
@@ -42,6 +43,7 @@ export function usePlugins() {
 export function PluginsProvider({ children }: { children: ReactNode }) {
   const [plugins, setPlugins] = useState<Plugin[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pluginsError, setPluginsError] = useState<string | null>(null);
 
   const refreshPlugins = useCallback(async () => {
     try {
@@ -49,8 +51,20 @@ export function PluginsProvider({ children }: { children: ReactNode }) {
       if (res.ok) {
         const data = await res.json();
         setPlugins(data.plugins || []);
+        setPluginsError(null);
+      } else {
+        let errorMessage = `Failed to fetch plugins (${res.status})`;
+        try {
+          const data = await res.json();
+          errorMessage = data.details || data.error || errorMessage;
+        } catch {
+          errorMessage = res.statusText || errorMessage;
+        }
+        setPluginsError(errorMessage);
       }
     } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to fetch plugins';
+      setPluginsError(message);
       console.error('[Plugins] Failed to fetch plugins:', err);
     } finally {
       setLoading(false);
@@ -110,20 +124,32 @@ export function PluginsProvider({ children }: { children: ReactNode }) {
     }
   }, [refreshPlugins]);
 
-  const togglePlugin = useCallback(async (name: string, enabled: boolean) => {
+  const togglePlugin = useCallback(async (name: string, enabled: boolean): Promise<{ success: boolean; error: string | null }> => {
     try {
-      await authenticatedFetch(`/api/plugins/${encodeURIComponent(name)}/enable`, {
+      const res = await authenticatedFetch(`/api/plugins/${encodeURIComponent(name)}/enable`, {
         method: 'PUT',
         body: JSON.stringify({ enabled }),
       });
+      if (!res.ok) {
+        let errorMessage = `Toggle failed (${res.status})`;
+        try {
+          const data = await res.json();
+          errorMessage = data.details || data.error || errorMessage;
+        } catch {
+          // response body wasn't JSON, use status text
+          errorMessage = res.statusText || errorMessage;
+        }
+        return { success: false, error: errorMessage };
+      }
       await refreshPlugins();
+      return { success: true, error: null };
     } catch (err) {
-      console.error('[Plugins] Failed to toggle plugin:', err);
+      return { success: false, error: err instanceof Error ? err.message : 'Toggle failed' };
     }
   }, [refreshPlugins]);
 
   return (
-    <PluginsContext.Provider value={{ plugins, loading, refreshPlugins, installPlugin, uninstallPlugin, updatePlugin, togglePlugin }}>
+    <PluginsContext.Provider value={{ plugins, loading, pluginsError, refreshPlugins, installPlugin, uninstallPlugin, updatePlugin, togglePlugin }}>
       {children}
     </PluginsContext.Provider>
   );
