@@ -46,7 +46,8 @@
     "editSessionName": "手动编辑会话名称",
     "deleteSession": "永久删除此会话",
     "save": "保存",
-    "cancel": "取消"
+    "cancel": "取消",
+    "clearSearch": "清除搜索"
   },
   "navigation": {
     "chat": "聊天",
@@ -102,6 +103,18 @@
   },
   "version": {
     "updateAvailable": "有可用更新"
+  },
+  "search": {
+    "modeProjects": "项目",
+    "modeConversations": "对话",
+    "conversationsPlaceholder": "搜索对话内容...",
+    "searching": "搜索中...",
+    "noResults": "未找到结果",
+    "tryDifferentQuery": "尝试不同的搜索词",
+    "matches_one": "{{count}} 个匹配",
+    "matches_other": "{{count}} 个匹配",
+    "projectsScanned_one": "{{count}} 个项目已扫描",
+    "projectsScanned_other": "{{count}} 个项目已扫描"
   },
   "deleteConfirmation": {
     "deleteProject": "删除项目",
