@@ -11,6 +11,7 @@
 
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
+// eslint-disable-next-line import-x/order
 import LanguageDetector from 'i18next-browser-languagedetector';
 
 // Import translation resources
@@ -20,6 +21,7 @@ import enAuth from './locales/en/auth.json';
 import enSidebar from './locales/en/sidebar.json';
 import enChat from './locales/en/chat.json';
 import enCodeEditor from './locales/en/codeEditor.json';
+// eslint-disable-next-line import-x/order
 import enTasks from './locales/en/tasks.json';
 
 import koCommon from './locales/ko/common.json';
@@ -27,6 +29,7 @@ import koSettings from './locales/ko/settings.json';
 import koAuth from './locales/ko/auth.json';
 import koSidebar from './locales/ko/sidebar.json';
 import koChat from './locales/ko/chat.json';
+// eslint-disable-next-line import-x/order
 import koCodeEditor from './locales/ko/codeEditor.json';
 
 import zhCommon from './locales/zh-CN/common.json';
@@ -34,6 +37,7 @@ import zhSettings from './locales/zh-CN/settings.json';
 import zhAuth from './locales/zh-CN/auth.json';
 import zhSidebar from './locales/zh-CN/sidebar.json';
 import zhChat from './locales/zh-CN/chat.json';
+// eslint-disable-next-line import-x/order
 import zhCodeEditor from './locales/zh-CN/codeEditor.json';
 
 import jaCommon from './locales/ja/common.json';
@@ -42,6 +46,7 @@ import jaAuth from './locales/ja/auth.json';
 import jaSidebar from './locales/ja/sidebar.json';
 import jaChat from './locales/ja/chat.json';
 import jaCodeEditor from './locales/ja/codeEditor.json';
+// eslint-disable-next-line import-x/order
 import jaTasks from './locales/ja/tasks.json';
 
 // Import supported languages configuration

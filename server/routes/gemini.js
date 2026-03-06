@@ -1,5 +1,7 @@
 import express from 'express';
 import sessionManager from '../sessionManager.js';
+import { sessionNamesDb } from '../database/db.js';
+import { getGeminiCliSessionMessages } from '../projects.js';
 
 const router = express.Router();
 
@@ -11,7 +13,12 @@ router.get('/sessions/:sessionId/messages', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Invalid session ID format' });
         }
 
-        const messages = sessionManager.getSessionMessages(sessionId);
+        let messages = sessionManager.getSessionMessages(sessionId);
+
+        // Fallback to Gemini CLI sessions on disk
+        if (messages.length === 0) {
+            messages = await getGeminiCliSessionMessages(sessionId);
+        }
 
         res.json({
             success: true,
@@ -36,6 +43,7 @@ router.delete('/sessions/:sessionId', async (req, res) => {
         }
 
         await sessionManager.deleteSession(sessionId);
+        sessionNamesDb.deleteName(sessionId, 'gemini');
         res.json({ success: true });
     } catch (error) {
         console.error(`Error deleting Gemini session ${req.params.sessionId}:`, error);

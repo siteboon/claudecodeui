@@ -23,6 +23,7 @@ export type AuthStatus = {
   email: string | null;
   loading: boolean;
   error: string | null;
+  method?: string;
 };
 
 export type KeyValueMap = Record<string, string>;

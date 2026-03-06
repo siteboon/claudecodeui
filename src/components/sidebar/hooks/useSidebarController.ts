@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type React from 'react';
 import type { TFunction } from 'i18next';
 import { api } from '../../../utils/api';
-import type { Project, ProjectSession } from '../../../types/app';
+import type { Project, ProjectSession, SessionProvider } from '../../../types/app';
 import type {
   AdditionalSessionsByProject,
   DeleteProjectConfirmation,
@@ -19,6 +19,44 @@ import {
   readProjectSortOrder,
   sortProjects,
 } from '../utils/utils';
+
+type SnippetHighlight = {
+  start: number;
+  end: number;
+};
+
+type ConversationMatch = {
+  role: string;
+  snippet: string;
+  highlights: SnippetHighlight[];
+  timestamp: string | null;
+  provider?: string;
+  messageUuid?: string | null;
+};
+
+type ConversationSession = {
+  sessionId: string;
+  sessionSummary: string;
+  provider?: string;
+  matches: ConversationMatch[];
+};
+
+type ConversationProjectResult = {
+  projectName: string;
+  projectDisplayName: string;
+  sessions: ConversationSession[];
+};
+
+export type ConversationSearchResults = {
+  results: ConversationProjectResult[];
+  totalMatches: number;
+  query: string;
+};
+
+export type SearchProgress = {
+  scannedProjects: number;
+  totalProjects: number;
+};
 
 type UseSidebarControllerArgs = {
   projects: Project[];
@@ -72,6 +110,13 @@ export function useSidebarController({
   const [sessionDeleteConfirmation, setSessionDeleteConfirmation] = useState<SessionDeleteConfirmation | null>(null);
   const [showVersionModal, setShowVersionModal] = useState(false);
   const [starredProjects, setStarredProjects] = useState<Set<string>>(() => loadStarredProjects());
+  const [searchMode, setSearchMode] = useState<'projects' | 'conversations'>('projects');
+  const [conversationResults, setConversationResults] = useState<ConversationSearchResults | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchProgress, setSearchProgress] = useState<SearchProgress | null>(null);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchSeqRef = useRef(0);
+  const eventSourceRef = useRef<EventSource | null>(null);
 
   const isSidebarCollapsed = !isMobile && !sidebarVisible;
 
@@ -140,6 +185,101 @@ export function useSidebarController({
       clearInterval(interval);
     };
   }, []);
+
+  // Debounced conversation search with SSE streaming
+  useEffect(() => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+
+    const query = searchFilter.trim();
+    if (searchMode !== 'conversations' || query.length < 2) {
+      searchSeqRef.current += 1;
+      setConversationResults(null);
+      setSearchProgress(null);
+      setIsSearching(false);
+      return;
+    }
+
+    setIsSearching(true);
+    const seq = ++searchSeqRef.current;
+
+    searchTimeoutRef.current = setTimeout(() => {
+      if (seq !== searchSeqRef.current) return;
+
+      const url = api.searchConversationsUrl(query);
+      const es = new EventSource(url);
+      eventSourceRef.current = es;
+
+      const accumulated: ConversationProjectResult[] = [];
+      let totalMatches = 0;
+
+      es.addEventListener('result', (evt) => {
+        if (seq !== searchSeqRef.current) { es.close(); return; }
+        try {
+          const data = JSON.parse(evt.data) as {
+            projectResult: ConversationProjectResult;
+            totalMatches: number;
+            scannedProjects: number;
+            totalProjects: number;
+          };
+          accumulated.push(data.projectResult);
+          totalMatches = data.totalMatches;
+          setConversationResults({ results: [...accumulated], totalMatches, query });
+          setSearchProgress({ scannedProjects: data.scannedProjects, totalProjects: data.totalProjects });
+        } catch {
+          // Ignore malformed SSE data
+        }
+      });
+
+      es.addEventListener('progress', (evt) => {
+        if (seq !== searchSeqRef.current) { es.close(); return; }
+        try {
+          const data = JSON.parse(evt.data) as { totalMatches: number; scannedProjects: number; totalProjects: number };
+          totalMatches = data.totalMatches;
+          setSearchProgress({ scannedProjects: data.scannedProjects, totalProjects: data.totalProjects });
+        } catch {
+          // Ignore malformed SSE data
+        }
+      });
+
+      es.addEventListener('done', () => {
+        if (seq !== searchSeqRef.current) { es.close(); return; }
+        es.close();
+        eventSourceRef.current = null;
+        setIsSearching(false);
+        setSearchProgress(null);
+        if (accumulated.length === 0) {
+          setConversationResults({ results: [], totalMatches: 0, query });
+        }
+      });
+
+      es.addEventListener('error', () => {
+        if (seq !== searchSeqRef.current) { es.close(); return; }
+        es.close();
+        eventSourceRef.current = null;
+        setIsSearching(false);
+        setSearchProgress(null);
+        if (accumulated.length === 0) {
+          setConversationResults({ results: [], totalMatches: 0, query });
+        }
+      });
+    }, 400);
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+    };
+  }, [searchFilter, searchMode]);
 
   const handleTouchClick = useCallback(
     (callback: () => void) =>
@@ -405,12 +545,30 @@ export function useSidebarController({
   }, [onRefresh]);
 
   const updateSessionSummary = useCallback(
-    async (_projectName: string, _sessionId: string, _summary: string) => {
-      // Session rename endpoint is not currently exposed on the API.
-      setEditingSession(null);
-      setEditingSessionName('');
+    async (_projectName: string, sessionId: string, summary: string, provider: SessionProvider) => {
+      const trimmed = summary.trim();
+      if (!trimmed) {
+        setEditingSession(null);
+        setEditingSessionName('');
+        return;
+      }
+      try {
+        const response = await api.renameSession(sessionId, trimmed, provider);
+        if (response.ok) {
+          await onRefresh();
+        } else {
+          console.error('[Sidebar] Failed to rename session:', response.status);
+          alert(t('messages.renameSessionFailed'));
+        }
+      } catch (error) {
+        console.error('[Sidebar] Error renaming session:', error);
+        alert(t('messages.renameSessionError'));
+      } finally {
+        setEditingSession(null);
+        setEditingSessionName('');
+      }
     },
-    [],
+    [onRefresh, t],
   );
 
   const collapseSidebar = useCallback(() => {
@@ -442,7 +600,6 @@ export function useSidebarController({
     showVersionModal,
     starredProjects,
     filteredProjects,
-    handleTouchClick,
     toggleProject,
     handleSessionClick,
     toggleStarProject,
@@ -465,6 +622,21 @@ export function useSidebarController({
     setEditingName,
     setEditingSession,
     setEditingSessionName,
+    searchMode,
+    setSearchMode,
+    conversationResults,
+    isSearching,
+    searchProgress,
+    clearConversationResults: useCallback(() => {
+      searchSeqRef.current += 1;
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      setIsSearching(false);
+      setSearchProgress(null);
+      setConversationResults(null);
+    }, []),
     setSearchFilter,
     setDeleteConfirmation,
     setSessionDeleteConfirmation,

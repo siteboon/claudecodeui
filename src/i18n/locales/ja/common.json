@@ -118,7 +118,18 @@
     "newFile": "新規ファイル (Cmd+N)",
     "newFolder": "新規フォルダ (Cmd+Shift+N)",
     "refresh": "更新",
-    "collapseAll": "すべて折りたたむ"
+    "collapseAll": "すべて折りたたむ",
+    "context": {
+      "rename": "名前を変更",
+      "delete": "削除",
+      "copyPath": "パスをコピー",
+      "download": "ダウンロード",
+      "newFile": "新しいファイル",
+      "newFolder": "新しいフォルダ",
+      "refresh": "更新",
+      "menuLabel": "ファイルのコンテキストメニュー",
+      "loading": "読み込み中..."
+    }
   },
   "projectWizard": {
     "title": "新規プロジェクトを作成",

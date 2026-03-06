@@ -1,0 +1,1 @@
+export { VersionUpgradeModal as default } from "./VersionUpgradeModal";

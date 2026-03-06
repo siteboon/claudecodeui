@@ -161,7 +161,7 @@ export function useFileMentions({ selectedProject, input, setInput, textareaRef 
         fileMentionSet.has(part) ? (
           <span
             key={`mention-${index}`}
-            className="bg-blue-200/70 -ml-0.5 dark:bg-blue-300/40 px-0.5 rounded-md box-decoration-clone text-transparent"
+            className="-ml-0.5 rounded-md bg-blue-200/70 box-decoration-clone px-0.5 text-transparent dark:bg-blue-300/40"
           >
             {part}
           </span>

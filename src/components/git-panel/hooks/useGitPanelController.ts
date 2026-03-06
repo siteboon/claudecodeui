@@ -154,13 +154,6 @@ export function useGitPanelController({
       setGitStatus({ error: 'Git operation failed', details: String(error) });
       setCurrentBranch('');
     } finally {
-      if (
-        signal?.aborted ||
-        selectedProjectNameRef.current !== projectName
-      ) {
-        return;
-      }
-
       setIsLoading(false);
     }
   }, [fetchFileDiff, selectedProject]);

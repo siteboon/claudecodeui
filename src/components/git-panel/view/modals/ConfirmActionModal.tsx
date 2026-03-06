@@ -16,18 +16,18 @@ type ConfirmActionModalProps = {
 
 function renderConfirmActionIcon(actionType: ConfirmationRequest['type']) {
   if (actionType === 'discard' || actionType === 'delete') {
-    return <Trash2 className="w-4 h-4" />;
+    return <Trash2 className="h-4 w-4" />;
   }
 
   if (actionType === 'commit') {
-    return <Check className="w-4 h-4" />;
+    return <Check className="h-4 w-4" />;
   }
 
   if (actionType === 'pull') {
-    return <Download className="w-4 h-4" />;
+    return <Download className="h-4 w-4" />;
   }
 
-  return <Upload className="w-4 h-4" />;
+  return <Upload className="h-4 w-4" />;
 }
 
 export default function ConfirmActionModal({ action, onCancel, onConfirm }: ConfirmActionModalProps) {
@@ -58,14 +58,14 @@ export default function ConfirmActionModal({ action, onCancel, onConfirm }: Conf
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel} />
       <div
-        className="relative bg-card border border-border rounded-xl shadow-2xl max-w-md w-full overflow-hidden"
+        className="relative w-full max-w-md overflow-hidden rounded-xl border border-border bg-card shadow-2xl"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
       >
         <div className="p-6">
-          <div className="flex items-center mb-4">
-            <div className={`p-2 rounded-full mr-3 ${CONFIRMATION_ICON_CONTAINER_CLASSES[action.type]}`}>
+          <div className="mb-4 flex items-center">
+            <div className={`mr-3 rounded-full p-2 ${CONFIRMATION_ICON_CONTAINER_CLASSES[action.type]}`}>
               {renderConfirmActionIcon(action.type)}
             </div>
             <h3 id={titleId} className="text-lg font-semibold text-foreground">
@@ -73,18 +73,18 @@ export default function ConfirmActionModal({ action, onCancel, onConfirm }: Conf
             </h3>
           </div>
 
-          <p className="text-sm text-muted-foreground mb-6">{action.message}</p>
+          <p className="mb-6 text-sm text-muted-foreground">{action.message}</p>
 
           <div className="flex justify-end space-x-3">
             <button
               onClick={onCancel}
-              className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
+              className="rounded-lg px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               Cancel
             </button>
             <button
               onClick={onConfirm}
-              className={`px-4 py-2 text-sm text-white rounded-lg transition-colors flex items-center space-x-2 ${CONFIRMATION_BUTTON_CLASSES[action.type]}`}
+              className={`flex items-center space-x-2 rounded-lg px-4 py-2 text-sm text-white transition-colors ${CONFIRMATION_BUTTON_CLASSES[action.type]}`}
             >
               {renderConfirmActionIcon(action.type)}
               <span>{CONFIRMATION_ACTION_LABELS[action.type]}</span>

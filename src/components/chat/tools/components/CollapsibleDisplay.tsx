@@ -43,7 +43,7 @@ export const CollapsibleDisplay: React.FC<CollapsibleDisplayProps> = ({
   const borderColor = borderColorMap[toolCategory || 'default'] || borderColorMap.default;
 
   return (
-    <div className={`border-l-2 ${borderColor} pl-3 py-0.5 my-1 ${className}`}>
+    <div className={`border-l-2 ${borderColor} my-1 py-0.5 pl-3 ${className}`}>
       <CollapsibleSection
         title={title}
         toolName={toolName}
@@ -54,10 +54,10 @@ export const CollapsibleDisplay: React.FC<CollapsibleDisplayProps> = ({
         {children}
 
         {showRawParameters && rawContent && (
-          <details className="relative mt-2 group/raw">
-            <summary className="flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-gray-500 cursor-pointer hover:text-gray-600 dark:hover:text-gray-300 py-0.5">
+          <details className="group/raw relative mt-2">
+            <summary className="flex cursor-pointer items-center gap-1.5 py-0.5 text-[11px] text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300">
               <svg
-                className="w-2.5 h-2.5 transition-transform duration-150 group-open/raw:rotate-90"
+                className="h-2.5 w-2.5 transition-transform duration-150 group-open/raw:rotate-90"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -66,7 +66,7 @@ export const CollapsibleDisplay: React.FC<CollapsibleDisplayProps> = ({
               </svg>
               raw params
             </summary>
-            <pre className="mt-1 text-[11px] bg-gray-50 dark:bg-gray-900/50 border border-gray-200/40 dark:border-gray-700/40 p-2 rounded whitespace-pre-wrap break-words overflow-hidden text-gray-600 dark:text-gray-400 font-mono">
+            <pre className="mt-1 overflow-hidden whitespace-pre-wrap break-words rounded border border-gray-200/40 bg-gray-50 p-2 font-mono text-[11px] text-gray-600 dark:border-gray-700/40 dark:bg-gray-900/50 dark:text-gray-400">
               {rawContent}
             </pre>
           </details>

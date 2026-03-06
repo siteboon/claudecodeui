@@ -66,6 +66,7 @@ import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 import os from 'os';
 import sessionManager from './sessionManager.js';
+import { applyCustomSessionNames } from './database/db.js';
 
 // Import TaskMaster detection functions
 async function detectTaskMasterFolder(projectPath) {
@@ -458,6 +459,7 @@ async function getProjects(progressCallback = null) {
           total: 0
         };
       }
+      applyCustomSessionNames(project.sessions, 'claude');
 
       // Also fetch Cursor sessions for this project
       try {
@@ -466,6 +468,7 @@ async function getProjects(progressCallback = null) {
         console.warn(`Could not load Cursor sessions for project ${entry.name}:`, e.message);
         project.cursorSessions = [];
       }
+      applyCustomSessionNames(project.cursorSessions, 'cursor');
 
       // Also fetch Codex sessions for this project
       try {
@@ -476,14 +479,20 @@ async function getProjects(progressCallback = null) {
         console.warn(`Could not load Codex sessions for project ${entry.name}:`, e.message);
         project.codexSessions = [];
       }
+      applyCustomSessionNames(project.codexSessions, 'codex');
 
-      // Also fetch Gemini sessions for this project
+      // Also fetch Gemini sessions for this project (UI + CLI)
       try {
-        project.geminiSessions = sessionManager.getProjectSessions(actualProjectDir) || [];
+        const uiSessions = sessionManager.getProjectSessions(actualProjectDir) || [];
+        const cliSessions = await getGeminiCliSessions(actualProjectDir);
+        const uiIds = new Set(uiSessions.map(s => s.id));
+        const mergedGemini = [...uiSessions, ...cliSessions.filter(s => !uiIds.has(s.id))];
+        project.geminiSessions = mergedGemini;
       } catch (e) {
         console.warn(`Could not load Gemini sessions for project ${entry.name}:`, e.message);
         project.geminiSessions = [];
       }
+      applyCustomSessionNames(project.geminiSessions, 'gemini');
 
       // Add TaskMaster detection
       try {
@@ -567,6 +576,7 @@ async function getProjects(progressCallback = null) {
       } catch (e) {
         console.warn(`Could not load Cursor sessions for manual project ${projectName}:`, e.message);
       }
+      applyCustomSessionNames(project.cursorSessions, 'cursor');
 
       // Try to fetch Codex sessions for manual projects too
       try {
@@ -576,13 +586,18 @@ async function getProjects(progressCallback = null) {
       } catch (e) {
         console.warn(`Could not load Codex sessions for manual project ${projectName}:`, e.message);
       }
+      applyCustomSessionNames(project.codexSessions, 'codex');
 
-      // Try to fetch Gemini sessions for manual projects too
+      // Try to fetch Gemini sessions for manual projects too (UI + CLI)
       try {
-        project.geminiSessions = sessionManager.getProjectSessions(actualProjectDir) || [];
+        const uiSessions = sessionManager.getProjectSessions(actualProjectDir) || [];
+        const cliSessions = await getGeminiCliSessions(actualProjectDir);
+        const uiIds = new Set(uiSessions.map(s => s.id));
+        project.geminiSessions = [...uiSessions, ...cliSessions.filter(s => !uiIds.has(s.id))];
       } catch (e) {
         console.warn(`Could not load Gemini sessions for manual project ${projectName}:`, e.message);
       }
+      applyCustomSessionNames(project.geminiSessions, 'gemini');
 
       // Add TaskMaster detection for manual projects
       try {
@@ -1071,10 +1086,13 @@ async function renameProject(projectName, newDisplayName) {
 
   if (!newDisplayName || newDisplayName.trim() === '') {
     // Remove custom name if empty, will fall back to auto-generated
-    delete config[projectName];
+    if (config[projectName]) {
+      delete config[projectName].displayName;
+    }
   } else {
-    // Set custom display name
+    // Set custom display name, preserving other properties (manuallyAdded, originalPath)
     config[projectName] = {
+      ...config[projectName],
       displayName: newDisplayName.trim()
     };
   }
@@ -1479,6 +1497,23 @@ async function getCodexSessions(projectPath, options = {}) {
   }
 }
 
+function isVisibleCodexUserMessage(payload) {
+  if (!payload || payload.type !== 'user_message') {
+    return false;
+  }
+
+  // Codex logs internal context (environment, instructions) as non-plain user_message kinds.
+  if (payload.kind && payload.kind !== 'plain') {
+    return false;
+  }
+
+  if (typeof payload.message !== 'string' || payload.message.trim().length === 0) {
+    return false;
+  }
+  
+  return true;
+}
+
 // Parse a Codex session JSONL file to extract metadata
 async function parseCodexSessionFile(filePath) {
   try {
@@ -1514,8 +1549,8 @@ async function parseCodexSessionFile(filePath) {
             };
           }
 
-          // Count messages and extract user messages for summary
-          if (entry.type === 'event_msg' && entry.payload?.type === 'user_message') {
+          // Count visible user messages and extract summary from the latest plain user input.
+          if (entry.type === 'event_msg' && isVisibleCodexUserMessage(entry.payload)) {
             messageCount++;
             if (entry.payload.message) {
               lastUserMessage = entry.payload.message;
@@ -1622,25 +1657,36 @@ async function getCodexSessionMessages(sessionId, limit = null, offset = 0) {
               };
             }
           }
+          
+          // Use event_msg.user_message for user-visible inputs.
+          if (entry.type === 'event_msg' && isVisibleCodexUserMessage(entry.payload)) {
+            messages.push({
+              type: 'user',
+              timestamp: entry.timestamp,
+              message: {
+                role: 'user',
+                content: entry.payload.message
+              }
+            });
+          }
 
-          // Extract messages from response_item
-          if (entry.type === 'response_item' && entry.payload?.type === 'message') {
+          // response_item.message may include internal prompts for non-assistant roles.
+          // Keep only assistant output from response_item.
+          if (
+            entry.type === 'response_item' &&
+            entry.payload?.type === 'message' &&
+            entry.payload.role === 'assistant'
+          ) {
             const content = entry.payload.content;
-            const role = entry.payload.role || 'assistant';
             const textContent = extractText(content);
-
-            // Skip system context messages (environment_context)
-            if (textContent?.includes('<environment_context>')) {
-              continue;
-            }
 
             // Only add if there's actual content
             if (textContent?.trim()) {
               messages.push({
-                type: role === 'user' ? 'user' : 'assistant',
+                type: 'assistant',
                 timestamp: entry.timestamp,
                 message: {
-                  role: role,
+                  role: 'assistant',
                   content: textContent
                 }
               });
@@ -1823,6 +1869,675 @@ async function deleteCodexSession(sessionId) {
   }
 }
 
+async function searchConversations(query, limit = 50, onProjectResult = null, signal = null) {
+  const safeQuery = typeof query === 'string' ? query.trim() : '';
+  const safeLimit = Math.max(1, Math.min(Number.isFinite(limit) ? limit : 50, 200));
+  const claudeDir = path.join(os.homedir(), '.claude', 'projects');
+  const config = await loadProjectConfig();
+  const results = [];
+  let totalMatches = 0;
+  const words = safeQuery.toLowerCase().split(/\s+/).filter(w => w.length > 0);
+  if (words.length === 0) return { results: [], totalMatches: 0, query: safeQuery };
+
+  const isAborted = () => signal?.aborted === true;
+
+  const isSystemMessage = (textContent) => {
+    return typeof textContent === 'string' && (
+      textContent.startsWith('<command-name>') ||
+      textContent.startsWith('<command-message>') ||
+      textContent.startsWith('<command-args>') ||
+      textContent.startsWith('<local-command-stdout>') ||
+      textContent.startsWith('<system-reminder>') ||
+      textContent.startsWith('Caveat:') ||
+      textContent.startsWith('This session is being continued from a previous') ||
+      textContent.startsWith('Invalid API key') ||
+      textContent.includes('{"subtasks":') ||
+      textContent.includes('CRITICAL: You MUST respond with ONLY a JSON') ||
+      textContent === 'Warmup'
+    );
+  };
+
+  const extractText = (content) => {
+    if (typeof content === 'string') return content;
+    if (Array.isArray(content)) {
+      return content
+        .filter(part => part.type === 'text' && part.text)
+        .map(part => part.text)
+        .join(' ');
+    }
+    return '';
+  };
+
+  const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const wordPatterns = words.map(w => new RegExp(`(?<!\\p{L})${escapeRegex(w)}(?!\\p{L})`, 'u'));
+  const allWordsMatch = (textLower) => {
+    return wordPatterns.every(p => p.test(textLower));
+  };
+
+  const buildSnippet = (text, textLower, snippetLen = 150) => {
+    let firstIndex = -1;
+    let firstWordLen = 0;
+    for (const w of words) {
+      const re = new RegExp(`(?<!\\p{L})${escapeRegex(w)}(?!\\p{L})`, 'u');
+      const m = re.exec(textLower);
+      if (m && (firstIndex === -1 || m.index < firstIndex)) {
+        firstIndex = m.index;
+        firstWordLen = w.length;
+      }
+    }
+    if (firstIndex === -1) firstIndex = 0;
+    const halfLen = Math.floor(snippetLen / 2);
+    let start = Math.max(0, firstIndex - halfLen);
+    let end = Math.min(text.length, firstIndex + halfLen + firstWordLen);
+    let snippet = text.slice(start, end).replace(/\n/g, ' ');
+    const prefix = start > 0 ? '...' : '';
+    const suffix = end < text.length ? '...' : '';
+    snippet = prefix + snippet + suffix;
+    const snippetLower = snippet.toLowerCase();
+    const highlights = [];
+    for (const word of words) {
+      const re = new RegExp(`(?<!\\p{L})${escapeRegex(word)}(?!\\p{L})`, 'gu');
+      let match;
+      while ((match = re.exec(snippetLower)) !== null) {
+        highlights.push({ start: match.index, end: match.index + word.length });
+      }
+    }
+    highlights.sort((a, b) => a.start - b.start);
+    const merged = [];
+    for (const h of highlights) {
+      const last = merged[merged.length - 1];
+      if (last && h.start <= last.end) {
+        last.end = Math.max(last.end, h.end);
+      } else {
+        merged.push({ ...h });
+      }
+    }
+    return { snippet, highlights: merged };
+  };
+
+  try {
+    await fs.access(claudeDir);
+    const entries = await fs.readdir(claudeDir, { withFileTypes: true });
+    const projectDirs = entries.filter(e => e.isDirectory());
+    let scannedProjects = 0;
+    const totalProjects = projectDirs.length;
+
+    for (const projectEntry of projectDirs) {
+      if (totalMatches >= safeLimit || isAborted()) break;
+
+      const projectName = projectEntry.name;
+      const projectDir = path.join(claudeDir, projectName);
+      const displayName = config[projectName]?.displayName
+        || await generateDisplayName(projectName);
+
+      let files;
+      try {
+        files = await fs.readdir(projectDir);
+      } catch {
+        continue;
+      }
+
+      const jsonlFiles = files.filter(
+        file => file.endsWith('.jsonl') && !file.startsWith('agent-')
+      );
+
+      const projectResult = {
+        projectName,
+        projectDisplayName: displayName,
+        sessions: []
+      };
+
+      for (const file of jsonlFiles) {
+        if (totalMatches >= safeLimit || isAborted()) break;
+
+        const filePath = path.join(projectDir, file);
+        const sessionMatches = new Map();
+        const sessionSummaries = new Map();
+        const pendingSummaries = new Map();
+        const sessionLastMessages = new Map();
+        let currentSessionId = null;
+
+        try {
+          const fileStream = fsSync.createReadStream(filePath);
+          const rl = readline.createInterface({
+            input: fileStream,
+            crlfDelay: Infinity
+          });
+
+          for await (const line of rl) {
+            if (totalMatches >= safeLimit || isAborted()) break;
+            if (!line.trim()) continue;
+
+            let entry;
+            try {
+              entry = JSON.parse(line);
+            } catch {
+              continue;
+            }
+
+            if (entry.sessionId) {
+              currentSessionId = entry.sessionId;
+            }
+            if (entry.type === 'summary' && entry.summary) {
+              const sid = entry.sessionId || currentSessionId;
+              if (sid) {
+                sessionSummaries.set(sid, entry.summary);
+              } else if (entry.leafUuid) {
+                pendingSummaries.set(entry.leafUuid, entry.summary);
+              }
+            }
+
+            // Apply pending summary via parentUuid
+            if (entry.parentUuid && currentSessionId && !sessionSummaries.has(currentSessionId)) {
+              const pending = pendingSummaries.get(entry.parentUuid);
+              if (pending) sessionSummaries.set(currentSessionId, pending);
+            }
+
+            // Track last user/assistant message for fallback title
+            if (entry.message?.content && currentSessionId && !entry.isApiErrorMessage) {
+              const role = entry.message.role;
+              if (role === 'user' || role === 'assistant') {
+                const text = extractText(entry.message.content);
+                if (text && !isSystemMessage(text)) {
+                  if (!sessionLastMessages.has(currentSessionId)) {
+                    sessionLastMessages.set(currentSessionId, {});
+                  }
+                  const msgs = sessionLastMessages.get(currentSessionId);
+                  if (role === 'user') msgs.user = text;
+                  else msgs.assistant = text;
+                }
+              }
+            }
+
+            if (!entry.message?.content) continue;
+            if (entry.message.role !== 'user' && entry.message.role !== 'assistant') continue;
+            if (entry.isApiErrorMessage) continue;
+
+            const text = extractText(entry.message.content);
+            if (!text || isSystemMessage(text)) continue;
+
+            const textLower = text.toLowerCase();
+            if (!allWordsMatch(textLower)) continue;
+
+            const sessionId = entry.sessionId || currentSessionId || file.replace('.jsonl', '');
+            if (!sessionMatches.has(sessionId)) {
+              sessionMatches.set(sessionId, []);
+            }
+
+            const matches = sessionMatches.get(sessionId);
+            if (matches.length < 2) {
+              const { snippet, highlights } = buildSnippet(text, textLower);
+              matches.push({
+                role: entry.message.role,
+                snippet,
+                highlights,
+                timestamp: entry.timestamp || null,
+                provider: 'claude',
+                messageUuid: entry.uuid || null
+              });
+              totalMatches++;
+            }
+          }
+        } catch {
+          continue;
+        }
+
+        for (const [sessionId, matches] of sessionMatches) {
+          projectResult.sessions.push({
+            sessionId,
+            provider: 'claude',
+            sessionSummary: sessionSummaries.get(sessionId) || (() => {
+              const msgs = sessionLastMessages.get(sessionId);
+              const lastMsg = msgs?.user || msgs?.assistant;
+              return lastMsg ? (lastMsg.length > 50 ? lastMsg.substring(0, 50) + '...' : lastMsg) : 'New Session';
+            })(),
+            matches
+          });
+        }
+      }
+
+      // Search Codex sessions for this project
+      try {
+        const actualProjectDir = await extractProjectDirectory(projectName);
+        if (actualProjectDir && !isAborted() && totalMatches < safeLimit) {
+          await searchCodexSessionsForProject(
+            actualProjectDir, projectResult, words, allWordsMatch, extractText, isSystemMessage,
+            buildSnippet, safeLimit, () => totalMatches, (n) => { totalMatches += n; }, isAborted
+          );
+        }
+      } catch {
+        // Skip codex search errors
+      }
+
+      // Search Gemini sessions for this project
+      try {
+        const actualProjectDir = await extractProjectDirectory(projectName);
+        if (actualProjectDir && !isAborted() && totalMatches < safeLimit) {
+          await searchGeminiSessionsForProject(
+            actualProjectDir, projectResult, words, allWordsMatch,
+            buildSnippet, safeLimit, () => totalMatches, (n) => { totalMatches += n; }
+          );
+        }
+      } catch {
+        // Skip gemini search errors
+      }
+
+      scannedProjects++;
+      if (projectResult.sessions.length > 0) {
+        results.push(projectResult);
+        if (onProjectResult) {
+          onProjectResult({ projectResult, totalMatches, scannedProjects, totalProjects });
+        }
+      } else if (onProjectResult && scannedProjects % 10 === 0) {
+        onProjectResult({ projectResult: null, totalMatches, scannedProjects, totalProjects });
+      }
+    }
+  } catch {
+    // claudeDir doesn't exist
+  }
+
+  return { results, totalMatches, query: safeQuery };
+}
+
+async function searchCodexSessionsForProject(
+  projectPath, projectResult, words, allWordsMatch, extractText, isSystemMessage,
+  buildSnippet, limit, getTotalMatches, addMatches, isAborted
+) {
+  const normalizedProjectPath = normalizeComparablePath(projectPath);
+  if (!normalizedProjectPath) return;
+  const codexSessionsDir = path.join(os.homedir(), '.codex', 'sessions');
+  try {
+    await fs.access(codexSessionsDir);
+  } catch {
+    return;
+  }
+
+  const jsonlFiles = await findCodexJsonlFiles(codexSessionsDir);
+
+  for (const filePath of jsonlFiles) {
+    if (getTotalMatches() >= limit || isAborted()) break;
+
+    try {
+      const fileStream = fsSync.createReadStream(filePath);
+      const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
+
+      // First pass: read session_meta to check project path match
+      let sessionMeta = null;
+      for await (const line of rl) {
+        if (!line.trim()) continue;
+        try {
+          const entry = JSON.parse(line);
+          if (entry.type === 'session_meta' && entry.payload) {
+            sessionMeta = entry.payload;
+            break;
+          }
+        } catch { continue; }
+      }
+
+      // Skip sessions that don't belong to this project
+      if (!sessionMeta) continue;
+      const sessionProjectPath = normalizeComparablePath(sessionMeta.cwd);
+      if (sessionProjectPath !== normalizedProjectPath) continue;
+
+      // Second pass: re-read file to find matching messages
+      const fileStream2 = fsSync.createReadStream(filePath);
+      const rl2 = readline.createInterface({ input: fileStream2, crlfDelay: Infinity });
+      let lastUserMessage = null;
+      const matches = [];
+
+      for await (const line of rl2) {
+        if (getTotalMatches() >= limit || isAborted()) break;
+        if (!line.trim()) continue;
+
+        let entry;
+        try { entry = JSON.parse(line); } catch { continue; }
+
+        let text = null;
+        let role = null;
+
+        if (entry.type === 'event_msg' && entry.payload?.type === 'user_message' && entry.payload.message) {
+          text = entry.payload.message;
+          role = 'user';
+          lastUserMessage = text;
+        } else if (entry.type === 'response_item' && entry.payload?.type === 'message') {
+          const contentParts = entry.payload.content || [];
+          if (entry.payload.role === 'user') {
+            text = contentParts
+              .filter(p => p.type === 'input_text' && p.text)
+              .map(p => p.text)
+              .join(' ');
+            role = 'user';
+            if (text) lastUserMessage = text;
+          } else if (entry.payload.role === 'assistant') {
+            text = contentParts
+              .filter(p => p.type === 'output_text' && p.text)
+              .map(p => p.text)
+              .join(' ');
+            role = 'assistant';
+          }
+        }
+
+        if (!text || !role) continue;
+        const textLower = text.toLowerCase();
+        if (!allWordsMatch(textLower)) continue;
+
+        if (matches.length < 2) {
+          const { snippet, highlights } = buildSnippet(text, textLower);
+          matches.push({ role, snippet, highlights, timestamp: entry.timestamp || null, provider: 'codex' });
+          addMatches(1);
+        }
+      }
+
+      if (matches.length > 0) {
+        projectResult.sessions.push({
+          sessionId: sessionMeta.id,
+          provider: 'codex',
+          sessionSummary: lastUserMessage
+            ? (lastUserMessage.length > 50 ? lastUserMessage.substring(0, 50) + '...' : lastUserMessage)
+            : 'Codex Session',
+          matches
+        });
+      }
+    } catch {
+      continue;
+    }
+  }
+}
+
+async function searchGeminiSessionsForProject(
+  projectPath, projectResult, words, allWordsMatch,
+  buildSnippet, limit, getTotalMatches, addMatches
+) {
+  // 1) Search in-memory sessions (created via UI)
+  for (const [sessionId, session] of sessionManager.sessions) {
+    if (getTotalMatches() >= limit) break;
+    if (session.projectPath !== projectPath) continue;
+
+    const matches = [];
+    for (const msg of session.messages) {
+      if (getTotalMatches() >= limit) break;
+      if (msg.role !== 'user' && msg.role !== 'assistant') continue;
+
+      const text = typeof msg.content === 'string' ? msg.content
+        : Array.isArray(msg.content) ? msg.content.filter(p => p.type === 'text').map(p => p.text).join(' ')
+        : '';
+      if (!text) continue;
+
+      const textLower = text.toLowerCase();
+      if (!allWordsMatch(textLower)) continue;
+
+      if (matches.length < 2) {
+        const { snippet, highlights } = buildSnippet(text, textLower);
+        matches.push({
+          role: msg.role, snippet, highlights,
+          timestamp: msg.timestamp ? msg.timestamp.toISOString() : null,
+          provider: 'gemini'
+        });
+        addMatches(1);
+      }
+    }
+
+    if (matches.length > 0) {
+      const firstUserMsg = session.messages.find(m => m.role === 'user');
+      const summary = firstUserMsg?.content
+        ? (typeof firstUserMsg.content === 'string'
+          ? (firstUserMsg.content.length > 50 ? firstUserMsg.content.substring(0, 50) + '...' : firstUserMsg.content)
+          : 'Gemini Session')
+        : 'Gemini Session';
+
+      projectResult.sessions.push({
+        sessionId,
+        provider: 'gemini',
+        sessionSummary: summary,
+        matches
+      });
+    }
+  }
+
+  // 2) Search Gemini CLI sessions on disk (~/.gemini/tmp/<project>/chats/*.json)
+  const normalizedProjectPath = normalizeComparablePath(projectPath);
+  if (!normalizedProjectPath) return;
+
+  const geminiTmpDir = path.join(os.homedir(), '.gemini', 'tmp');
+  try {
+    await fs.access(geminiTmpDir);
+  } catch {
+    return;
+  }
+
+  const trackedSessionIds = new Set();
+  for (const [sid] of sessionManager.sessions) {
+    trackedSessionIds.add(sid);
+  }
+
+  let projectDirs;
+  try {
+    projectDirs = await fs.readdir(geminiTmpDir);
+  } catch {
+    return;
+  }
+
+  for (const projectDir of projectDirs) {
+    if (getTotalMatches() >= limit) break;
+
+    const projectRootFile = path.join(geminiTmpDir, projectDir, '.project_root');
+    let projectRoot;
+    try {
+      projectRoot = (await fs.readFile(projectRootFile, 'utf8')).trim();
+    } catch {
+      continue;
+    }
+
+    if (normalizeComparablePath(projectRoot) !== normalizedProjectPath) continue;
+
+    const chatsDir = path.join(geminiTmpDir, projectDir, 'chats');
+    let chatFiles;
+    try {
+      chatFiles = await fs.readdir(chatsDir);
+    } catch {
+      continue;
+    }
+
+    for (const chatFile of chatFiles) {
+      if (getTotalMatches() >= limit) break;
+      if (!chatFile.endsWith('.json')) continue;
+
+      try {
+        const filePath = path.join(chatsDir, chatFile);
+        const data = await fs.readFile(filePath, 'utf8');
+        const session = JSON.parse(data);
+        if (!session.messages || !Array.isArray(session.messages)) continue;
+
+        const cliSessionId = session.sessionId || chatFile.replace('.json', '');
+        if (trackedSessionIds.has(cliSessionId)) continue;
+
+        const matches = [];
+        let firstUserText = null;
+
+        for (const msg of session.messages) {
+          if (getTotalMatches() >= limit) break;
+
+          const role = msg.type === 'user' ? 'user'
+            : (msg.type === 'gemini' || msg.type === 'assistant') ? 'assistant'
+            : null;
+          if (!role) continue;
+
+          let text = '';
+          if (typeof msg.content === 'string') {
+            text = msg.content;
+          } else if (Array.isArray(msg.content)) {
+            text = msg.content
+              .filter(p => p.text)
+              .map(p => p.text)
+              .join(' ');
+          }
+          if (!text) continue;
+
+          if (role === 'user' && !firstUserText) firstUserText = text;
+
+          const textLower = text.toLowerCase();
+          if (!allWordsMatch(textLower)) continue;
+
+          if (matches.length < 2) {
+            const { snippet, highlights } = buildSnippet(text, textLower);
+            matches.push({
+              role, snippet, highlights,
+              timestamp: msg.timestamp || null,
+              provider: 'gemini'
+            });
+            addMatches(1);
+          }
+        }
+
+        if (matches.length > 0) {
+          const summary = firstUserText
+            ? (firstUserText.length > 50 ? firstUserText.substring(0, 50) + '...' : firstUserText)
+            : 'Gemini CLI Session';
+
+          projectResult.sessions.push({
+            sessionId: cliSessionId,
+            provider: 'gemini',
+            sessionSummary: summary,
+            matches
+          });
+        }
+      } catch {
+        continue;
+      }
+    }
+  }
+}
+
+async function getGeminiCliSessions(projectPath) {
+  const normalizedProjectPath = normalizeComparablePath(projectPath);
+  if (!normalizedProjectPath) return [];
+
+  const geminiTmpDir = path.join(os.homedir(), '.gemini', 'tmp');
+  try {
+    await fs.access(geminiTmpDir);
+  } catch {
+    return [];
+  }
+
+  const sessions = [];
+  let projectDirs;
+  try {
+    projectDirs = await fs.readdir(geminiTmpDir);
+  } catch {
+    return [];
+  }
+
+  for (const projectDir of projectDirs) {
+    const projectRootFile = path.join(geminiTmpDir, projectDir, '.project_root');
+    let projectRoot;
+    try {
+      projectRoot = (await fs.readFile(projectRootFile, 'utf8')).trim();
+    } catch {
+      continue;
+    }
+
+    if (normalizeComparablePath(projectRoot) !== normalizedProjectPath) continue;
+
+    const chatsDir = path.join(geminiTmpDir, projectDir, 'chats');
+    let chatFiles;
+    try {
+      chatFiles = await fs.readdir(chatsDir);
+    } catch {
+      continue;
+    }
+
+    for (const chatFile of chatFiles) {
+      if (!chatFile.endsWith('.json')) continue;
+      try {
+        const filePath = path.join(chatsDir, chatFile);
+        const data = await fs.readFile(filePath, 'utf8');
+        const session = JSON.parse(data);
+        if (!session.messages || !Array.isArray(session.messages)) continue;
+
+        const sessionId = session.sessionId || chatFile.replace('.json', '');
+        const firstUserMsg = session.messages.find(m => m.type === 'user');
+        let summary = 'Gemini CLI Session';
+        if (firstUserMsg) {
+          const text = Array.isArray(firstUserMsg.content)
+            ? firstUserMsg.content.filter(p => p.text).map(p => p.text).join(' ')
+            : (typeof firstUserMsg.content === 'string' ? firstUserMsg.content : '');
+          if (text) {
+            summary = text.length > 50 ? text.substring(0, 50) + '...' : text;
+          }
+        }
+
+        sessions.push({
+          id: sessionId,
+          summary,
+          messageCount: session.messages.length,
+          lastActivity: session.lastUpdated || session.startTime || null,
+          provider: 'gemini'
+        });
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  return sessions.sort((a, b) =>
+    new Date(b.lastActivity || 0) - new Date(a.lastActivity || 0)
+  );
+}
+
+async function getGeminiCliSessionMessages(sessionId) {
+  const geminiTmpDir = path.join(os.homedir(), '.gemini', 'tmp');
+  let projectDirs;
+  try {
+    projectDirs = await fs.readdir(geminiTmpDir);
+  } catch {
+    return [];
+  }
+
+  for (const projectDir of projectDirs) {
+    const chatsDir = path.join(geminiTmpDir, projectDir, 'chats');
+    let chatFiles;
+    try {
+      chatFiles = await fs.readdir(chatsDir);
+    } catch {
+      continue;
+    }
+
+    for (const chatFile of chatFiles) {
+      if (!chatFile.endsWith('.json')) continue;
+      try {
+        const filePath = path.join(chatsDir, chatFile);
+        const data = await fs.readFile(filePath, 'utf8');
+        const session = JSON.parse(data);
+        const fileSessionId = session.sessionId || chatFile.replace('.json', '');
+        if (fileSessionId !== sessionId) continue;
+
+        return (session.messages || []).map(msg => {
+          const role = msg.type === 'user' ? 'user'
+            : (msg.type === 'gemini' || msg.type === 'assistant') ? 'assistant'
+            : msg.type;
+
+          let content = '';
+          if (typeof msg.content === 'string') {
+            content = msg.content;
+          } else if (Array.isArray(msg.content)) {
+            content = msg.content.filter(p => p.text).map(p => p.text).join('\n');
+          }
+
+          return {
+            type: 'message',
+            message: { role, content },
+            timestamp: msg.timestamp || null
+          };
+        });
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  return [];
+}
+
 export {
   getProjects,
   getSessions,
@@ -1839,5 +2554,8 @@ export {
   clearProjectDirectoryCache,
   getCodexSessions,
   getCodexSessionMessages,
-  deleteCodexSession
+  deleteCodexSession,
+  getGeminiCliSessions,
+  getGeminiCliSessionMessages,
+  searchConversations
 };

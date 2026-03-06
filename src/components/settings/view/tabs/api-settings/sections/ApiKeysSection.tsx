@@ -1,7 +1,6 @@
 import { ExternalLink, Key, Plus, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Button } from '../../../../../ui/button';
-import { Input } from '../../../../../ui/input';
+import { Button, Input } from '../../../../../../shared/view/ui';
 import type { ApiKeyItem } from '../types';
 
 type ApiKeysSectionProps = {
@@ -31,24 +30,24 @@ export default function ApiKeysSection({
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Key className="h-5 w-5" />
           <h3 className="text-lg font-semibold">{t('apiKeys.title')}</h3>
         </div>
         <Button size="sm" onClick={() => onShowNewKeyFormChange(!showNewKeyForm)}>
-          <Plus className="h-4 w-4 mr-1" />
+          <Plus className="mr-1 h-4 w-4" />
           {t('apiKeys.newButton')}
         </Button>
       </div>
 
       <div className="mb-4">
-        <p className="text-sm text-muted-foreground mb-2">{t('apiKeys.description')}</p>
+        <p className="mb-2 text-sm text-muted-foreground">{t('apiKeys.description')}</p>
         <a
           href="/api-docs.html"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-sm text-primary hover:underline inline-flex items-center gap-1"
+          className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
         >
           {t('apiKeys.apiDocsLink')}
           <ExternalLink className="h-3 w-3" />
@@ -56,7 +55,7 @@ export default function ApiKeysSection({
       </div>
 
       {showNewKeyForm && (
-        <div className="mb-4 p-4 border rounded-lg bg-card">
+        <div className="mb-4 rounded-lg border bg-card p-4">
           <Input
             placeholder={t('apiKeys.form.placeholder')}
             value={newKeyName}
@@ -74,14 +73,14 @@ export default function ApiKeysSection({
 
       <div className="space-y-2">
         {apiKeys.length === 0 ? (
-          <p className="text-sm text-muted-foreground italic">{t('apiKeys.empty')}</p>
+          <p className="text-sm italic text-muted-foreground">{t('apiKeys.empty')}</p>
         ) : (
           apiKeys.map((key) => (
-            <div key={key.id} className="flex items-center justify-between p-3 border rounded-lg">
+            <div key={key.id} className="flex items-center justify-between rounded-lg border p-3">
               <div className="flex-1">
                 <div className="font-medium">{key.key_name}</div>
                 <code className="text-xs text-muted-foreground">{key.api_key}</code>
-                <div className="text-xs text-muted-foreground mt-1">
+                <div className="mt-1 text-xs text-muted-foreground">
                   {t('apiKeys.list.created')} {new Date(key.created_at).toLocaleDateString()}
                   {key.last_used
                     ? ` - ${t('apiKeys.list.lastUsed')} ${new Date(key.last_used).toLocaleDateString()}`

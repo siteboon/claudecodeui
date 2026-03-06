@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Button } from '../../../ui/button';
-import { Input } from '../../../ui/input';
+import { Button, Input } from '../../../../shared/view/ui';
 import { DEFAULT_CODEX_MCP_FORM } from '../../constants/constants';
 import type { CodexMcpFormState, McpServer } from '../../types/types';
 
@@ -69,20 +68,20 @@ export default function CodexMcpFormModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[110] p-4">
-      <div className="bg-background border border-border rounded-lg w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-4 border-b border-border">
+    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-background">
+        <div className="flex items-center justify-between border-b border-border p-4">
           <h3 className="text-lg font-medium text-foreground">
             {editingServer ? t('mcpForm.title.edit') : t('mcpForm.title.add')}
           </h3>
           <Button variant="ghost" size="sm" onClick={onClose}>
-            <X className="w-4 h-4" />
+            <X className="h-4 w-4" />
           </Button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 p-4">
           <div>
-            <label className="block text-sm font-medium text-foreground mb-2">
+            <label className="mb-2 block text-sm font-medium text-foreground">
               {t('mcpForm.fields.serverName')} *
             </label>
             <Input
@@ -94,7 +93,7 @@ export default function CodexMcpFormModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-foreground mb-2">
+            <label className="mb-2 block text-sm font-medium text-foreground">
               {t('mcpForm.fields.command')} *
             </label>
             <Input
@@ -112,7 +111,7 @@ export default function CodexMcpFormModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-foreground mb-2">
+            <label className="mb-2 block text-sm font-medium text-foreground">
               {t('mcpForm.fields.arguments')}
             </label>
             <textarea
@@ -126,12 +125,12 @@ export default function CodexMcpFormModal({
               }}
               placeholder="--port&#10;3000"
               rows={3}
-              className="w-full px-3 py-2 text-sm bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-foreground mb-2">
+            <label className="mb-2 block text-sm font-medium text-foreground">
               {t('mcpForm.fields.envVars')}
             </label>
             <textarea
@@ -151,18 +150,18 @@ export default function CodexMcpFormModal({
               }}
               placeholder="API_KEY=xxx&#10;DEBUG=true"
               rows={3}
-              className="w-full px-3 py-2 text-sm bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
 
-          <div className="flex justify-end gap-2 pt-4 border-t border-border">
+          <div className="flex justify-end gap-2 border-t border-border pt-4">
             <Button type="button" variant="outline" onClick={onClose}>
               {t('mcpForm.actions.cancel')}
             </Button>
             <Button
               type="submit"
               disabled={isSubmitting || !formData.name.trim() || !formData.config.command.trim()}
-              className="bg-green-600 hover:bg-green-700 text-white"
+              className="bg-green-600 text-white hover:bg-green-700"
             >
               {isSubmitting
                 ? t('mcpForm.actions.saving')

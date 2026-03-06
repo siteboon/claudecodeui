@@ -2,9 +2,9 @@ import React from 'react';
 import { Check, ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
-import NextTaskBanner from '../../../NextTaskBanner.jsx';
 import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS, GEMINI_MODELS } from '../../../../../shared/modelConstants';
 import type { ProjectSession, SessionProvider } from '../../../../types/app';
+import { NextTaskBanner } from '../../../task-master';
 
 interface ProviderSelectionEmptyStateProps {
   selectedSession: ProjectSession | null;
@@ -125,20 +125,20 @@ export default function ProviderSelectionEmptyState({
   /* ── New session — provider picker ── */
   if (!selectedSession && !currentSessionId) {
     return (
-      <div className="flex items-center justify-center h-full px-4">
+      <div className="flex h-full items-center justify-center px-4">
         <div className="w-full max-w-md">
           {/* Heading */}
-          <div className="text-center mb-8">
-            <h2 className="text-lg sm:text-xl font-semibold text-foreground tracking-tight">
+          <div className="mb-8 text-center">
+            <h2 className="text-lg font-semibold tracking-tight text-foreground sm:text-xl">
               {t('providerSelection.title')}
             </h2>
-            <p className="text-[13px] text-muted-foreground mt-1">
+            <p className="mt-1 text-[13px] text-muted-foreground">
               {t('providerSelection.description')}
             </p>
           </div>
 
           {/* Provider cards — horizontal row, equal width */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-2.5 mb-6">
+          <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-2.5">
             {PROVIDERS.map((p) => {
               const active = provider === p.id;
               return (
@@ -146,27 +146,27 @@ export default function ProviderSelectionEmptyState({
                   key={p.id}
                   onClick={() => selectProvider(p.id)}
                   className={`
-                    relative flex flex-col items-center gap-2.5 pt-5 pb-4 px-2
-                    rounded-xl border-[1.5px] transition-all duration-150
+                    relative flex flex-col items-center gap-2.5 rounded-xl border-[1.5px] px-2
+                    pb-4 pt-5 transition-all duration-150
                     active:scale-[0.97]
                     ${active
-                      ? `${p.accent} ${p.ring} ring-2 bg-card shadow-sm`
-                      : 'border-border bg-card/60 hover:bg-card hover:border-border/80'
+                      ? `${p.accent} ${p.ring} bg-card shadow-sm ring-2`
+                      : 'border-border bg-card/60 hover:border-border/80 hover:bg-card'
                     }
                   `}
                 >
                   <SessionProviderLogo
                     provider={p.id}
-                    className={`w-9 h-9 transition-transform duration-150 ${active ? 'scale-110' : ''}`}
+                    className={`h-9 w-9 transition-transform duration-150 ${active ? 'scale-110' : ''}`}
                   />
                   <div className="text-center">
-                    <p className="text-[13px] font-semibold text-foreground leading-none">{p.name}</p>
-                    <p className="text-[10px] text-muted-foreground mt-1 leading-tight">{t(p.infoKey)}</p>
+                    <p className="text-[13px] font-semibold leading-none text-foreground">{p.name}</p>
+                    <p className="mt-1 text-[10px] leading-tight text-muted-foreground">{t(p.infoKey)}</p>
                   </div>
                   {/* Check badge */}
                   {active && (
-                    <div className={`absolute -top-1 -right-1 w-[18px] h-[18px] rounded-full ${p.check} flex items-center justify-center shadow-sm`}>
-                      <Check className="w-2.5 h-2.5" strokeWidth={3} />
+                    <div className={`absolute -right-1 -top-1 h-[18px] w-[18px] rounded-full ${p.check} flex items-center justify-center shadow-sm`}>
+                      <Check className="h-2.5 w-2.5" strokeWidth={3} />
                     </div>
                   )}
                 </button>
@@ -175,21 +175,21 @@ export default function ProviderSelectionEmptyState({
           </div>
 
           {/* Model picker — appears after provider is chosen */}
-          <div className={`transition-all duration-200 ${provider ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1 pointer-events-none'}`}>
-            <div className="flex items-center justify-center gap-2 mb-5">
+          <div className={`transition-all duration-200 ${provider ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-1 opacity-0'}`}>
+            <div className="mb-5 flex items-center justify-center gap-2">
               <span className="text-sm text-muted-foreground">{t('providerSelection.selectModel')}</span>
               <div className="relative">
                 <select
                   value={currentModel}
                   onChange={(e) => handleModelChange(e.target.value)}
                   tabIndex={-1}
-                  className="appearance-none pl-3 pr-7 py-1.5 text-sm font-medium bg-muted/50 border border-border/60 rounded-lg text-foreground cursor-pointer hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className="cursor-pointer appearance-none rounded-lg border border-border/60 bg-muted/50 py-1.5 pl-3 pr-7 text-sm font-medium text-foreground transition-colors hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20"
                 >
                   {modelConfig.OPTIONS.map(({ value, label }: { value: string; label: string }) => (
                     <option key={value} value={value}>{label}</option>
                   ))}
                 </select>
-                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
+                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
               </div>
             </div>
 
@@ -219,10 +219,10 @@ export default function ProviderSelectionEmptyState({
   /* ── Existing session — continue prompt ── */
   if (selectedSession) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center px-6 max-w-md">
-          <p className="text-lg font-semibold text-foreground mb-1.5">{t('session.continue.title')}</p>
-          <p className="text-sm text-muted-foreground leading-relaxed">{t('session.continue.description')}</p>
+      <div className="flex h-full items-center justify-center">
+        <div className="max-w-md px-6 text-center">
+          <p className="mb-1.5 text-lg font-semibold text-foreground">{t('session.continue.title')}</p>
+          <p className="text-sm leading-relaxed text-muted-foreground">{t('session.continue.description')}</p>
 
           {tasksEnabled && isTaskMasterInstalled && (
             <div className="mt-5">

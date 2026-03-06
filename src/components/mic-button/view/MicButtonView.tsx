@@ -13,22 +13,22 @@ type MicButtonViewProps = {
 
 const getButtonIcon = (state: MicButtonState, isSupported: boolean): ReactElement => {
   if (!isSupported) {
-    return <Mic className="w-5 h-5" />;
+    return <Mic className="h-5 w-5" />;
   }
 
   if (state === MIC_BUTTON_STATES.TRANSCRIBING) {
-    return <Loader2 className="w-5 h-5 animate-spin" />;
+    return <Loader2 className="h-5 w-5 animate-spin" />;
   }
 
   if (state === MIC_BUTTON_STATES.PROCESSING) {
-    return <Brain className="w-5 h-5 animate-pulse" />;
+    return <Brain className="h-5 w-5 animate-pulse" />;
   }
 
   if (state === MIC_BUTTON_STATES.RECORDING) {
-    return <Mic className="w-5 h-5 text-white" />;
+    return <Mic className="h-5 w-5 text-white" />;
   }
 
-  return <Mic className="w-5 h-5" />;
+  return <Mic className="h-5 w-5" />;
 };
 
 export default function MicButtonView({
@@ -47,12 +47,12 @@ export default function MicButtonView({
         type="button"
         style={{ backgroundColor: BUTTON_BACKGROUND_BY_STATE[state] }}
         className={`
-          flex items-center justify-center
-          w-12 h-12 rounded-full
-          text-white transition-all duration-200
-          focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500
+          touch-action-manipulation flex h-12
+          w-12 items-center justify-center
+          rounded-full text-white transition-all
+          duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500
+          focus:ring-offset-2
           dark:ring-offset-gray-800
-          touch-action-manipulation
           ${isDisabled ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'}
           ${state === MIC_BUTTON_STATES.RECORDING ? 'animate-pulse' : ''}
           hover:opacity-90
@@ -66,20 +66,20 @@ export default function MicButtonView({
 
       {error && (
         <div
-          className="absolute top-full mt-2 left-1/2 transform -translate-x-1/2
-                        bg-red-500 text-white text-xs px-2 py-1 rounded whitespace-nowrap z-10
-                        animate-fade-in"
+          className="animate-fade-in absolute left-1/2 top-full z-10 mt-2
+                        -translate-x-1/2 transform whitespace-nowrap rounded bg-red-500 px-2 py-1 text-xs
+                        text-white"
         >
           {error}
         </div>
       )}
 
       {state === MIC_BUTTON_STATES.RECORDING && (
-        <div className="absolute -inset-1 rounded-full border-2 border-red-500 animate-ping pointer-events-none" />
+        <div className="pointer-events-none absolute -inset-1 animate-ping rounded-full border-2 border-red-500" />
       )}
 
       {state === MIC_BUTTON_STATES.PROCESSING && (
-        <div className="absolute -inset-1 rounded-full border-2 border-purple-500 animate-ping pointer-events-none" />
+        <div className="pointer-events-none absolute -inset-1 animate-ping rounded-full border-2 border-purple-500" />
       )}
     </div>
   );

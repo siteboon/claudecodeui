@@ -118,7 +118,18 @@
     "newFile": "New File (Cmd+N)",
     "newFolder": "New Folder (Cmd+Shift+N)",
     "refresh": "Refresh",
-    "collapseAll": "Collapse All"
+    "collapseAll": "Collapse All",
+    "context": {
+      "rename": "Rename",
+      "delete": "Delete",
+      "copyPath": "Copy Path",
+      "download": "Download",
+      "newFile": "New File",
+      "newFolder": "New Folder",
+      "refresh": "Refresh",
+      "menuLabel": "File context menu",
+      "loading": "Loading..."
+    }
   },
   "projectWizard": {
     "title": "Create New Project",

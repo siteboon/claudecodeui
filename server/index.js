@@ -44,8 +44,8 @@ import pty from 'node-pty';
 import fetch from 'node-fetch';
 import mime from 'mime-types';
 
-import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
-import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions, resolveToolApproval } from './claude-sdk.js';
+import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache, searchConversations } from './projects.js';
+import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions, resolveToolApproval, getPendingApprovalsForSession, reconnectSessionWriter } from './claude-sdk.js';
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
 import { queryCodex, abortCodexSession, isCodexSessionActive, getActiveCodexSessions } from './openai-codex.js';
 import { spawnGemini, abortGeminiSession, isGeminiSessionActive, getActiveGeminiSessions } from './gemini-cli.js';
@@ -64,10 +64,12 @@ import cliAuthRoutes from './routes/cli-auth.js';
 import userRoutes from './routes/user.js';
 import codexRoutes from './routes/codex.js';
 import geminiRoutes from './routes/gemini.js';
-import { initializeDatabase } from './database/db.js';
+import { initializeDatabase, sessionNamesDb, applyCustomSessionNames } from './database/db.js';
 import { configureWebPush } from './services/vapid-keys.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { IS_PLATFORM } from './constants/config.js';
+
+const VALID_PROVIDERS = ['claude', 'codex', 'cursor', 'gemini'];
 
 // File system watchers for provider project/session folders
 const PROVIDER_WATCH_PATHS = [
@@ -494,6 +496,7 @@ app.get('/api/projects/:projectName/sessions', authenticateToken, async (req, re
     try {
         const { limit = 5, offset = 0 } = req.query;
         const result = await getSessions(req.params.projectName, parseInt(limit), parseInt(offset));
+        applyCustomSessionNames(result.sessions, 'claude');
         res.json(result);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -542,10 +545,37 @@ app.delete('/api/projects/:projectName/sessions/:sessionId', authenticateToken, 
         const { projectName, sessionId } = req.params;
         console.log(`[API] Deleting session: ${sessionId} from project: ${projectName}`);
         await deleteSession(projectName, sessionId);
+        sessionNamesDb.deleteName(sessionId, 'claude');
         console.log(`[API] Session ${sessionId} deleted successfully`);
         res.json({ success: true });
     } catch (error) {
         console.error(`[API] Error deleting session ${req.params.sessionId}:`, error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Rename session endpoint
+app.put('/api/sessions/:sessionId/rename', authenticateToken, async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+        const safeSessionId = String(sessionId).replace(/[^a-zA-Z0-9._-]/g, '');
+        if (!safeSessionId || safeSessionId !== String(sessionId)) {
+            return res.status(400).json({ error: 'Invalid sessionId' });
+        }
+        const { summary, provider } = req.body;
+        if (!summary || typeof summary !== 'string' || summary.trim() === '') {
+            return res.status(400).json({ error: 'Summary is required' });
+        }
+        if (summary.trim().length > 500) {
+            return res.status(400).json({ error: 'Summary must not exceed 500 characters' });
+        }
+        if (!provider || !VALID_PROVIDERS.includes(provider)) {
+            return res.status(400).json({ error: `Provider must be one of: ${VALID_PROVIDERS.join(', ')}` });
+        }
+        sessionNamesDb.setName(safeSessionId, provider, summary.trim());
+        res.json({ success: true });
+    } catch (error) {
+        console.error(`[API] Error renaming session ${req.params.sessionId}:`, error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -576,6 +606,51 @@ app.post('/api/projects/create', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('Error creating project:', error);
         res.status(500).json({ error: error.message });
+    }
+});
+
+// Search conversations content (SSE streaming)
+app.get('/api/search/conversations', authenticateToken, async (req, res) => {
+    const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    const parsedLimit = Number.parseInt(String(req.query.limit), 10);
+    const limit = Number.isNaN(parsedLimit) ? 50 : Math.max(1, Math.min(parsedLimit, 100));
+
+    if (query.length < 2) {
+        return res.status(400).json({ error: 'Query must be at least 2 characters' });
+    }
+
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+    });
+
+    let closed = false;
+    const abortController = new AbortController();
+    req.on('close', () => { closed = true; abortController.abort(); });
+
+    try {
+        await searchConversations(query, limit, ({ projectResult, totalMatches, scannedProjects, totalProjects }) => {
+            if (closed) return;
+            if (projectResult) {
+                res.write(`event: result\ndata: ${JSON.stringify({ projectResult, totalMatches, scannedProjects, totalProjects })}\n\n`);
+            } else {
+                res.write(`event: progress\ndata: ${JSON.stringify({ totalMatches, scannedProjects, totalProjects })}\n\n`);
+            }
+        }, abortController.signal);
+        if (!closed) {
+            res.write(`event: done\ndata: {}\n\n`);
+        }
+    } catch (error) {
+        console.error('Error searching conversations:', error);
+        if (!closed) {
+            res.write(`event: error\ndata: ${JSON.stringify({ error: 'Search failed' })}\n\n`);
+        }
+    } finally {
+        if (!closed) {
+            res.end();
+        }
     }
 });
 
@@ -1352,6 +1427,10 @@ class WebSocketWriter {
         }
     }
 
+    updateWebSocket(newRawWs) {
+        this.ws = newRawWs;
+    }
+
     setSessionId(sessionId) {
         this.sessionId = sessionId;
     }
@@ -1466,6 +1545,11 @@ function handleChatConnection(ws, request) {
                 } else {
                     // Use Claude Agents SDK
                     isActive = isClaudeSDKSessionActive(sessionId);
+                    if (isActive) {
+                        // Reconnect the session's writer to the new WebSocket so
+                        // subsequent SDK output flows to the refreshed client.
+                        reconnectSessionWriter(sessionId, ws);
+                    }
                 }
 
                 writer.send({
@@ -1474,6 +1558,17 @@ function handleChatConnection(ws, request) {
                     provider,
                     isProcessing: isActive
                 });
+            } else if (data.type === 'get-pending-permissions') {
+                // Return pending permission requests for a session
+                const sessionId = data.sessionId;
+                if (sessionId && isClaudeSDKSessionActive(sessionId)) {
+                    const pending = getPendingApprovalsForSession(sessionId);
+                    writer.send({
+                        type: 'pending-permissions-response',
+                        sessionId,
+                        data: pending
+                    });
+                }
             } else if (data.type === 'get-active-sessions') {
                 // Get all currently active sessions
                 const activeSessions = {
@@ -2114,7 +2209,7 @@ app.get('/api/projects/:projectName/sessions/:sessionId/token-usage', authentica
 
         // Allow only safe characters in sessionId
         const safeSessionId = String(sessionId).replace(/[^a-zA-Z0-9._-]/g, '');
-        if (!safeSessionId) {
+        if (!safeSessionId || safeSessionId !== String(sessionId)) {
             return res.status(400).json({ error: 'Invalid sessionId' });
         }
 

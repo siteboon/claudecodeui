@@ -70,137 +70,53 @@ The fastest way to get started — no local setup required. Get a fully managed,
 
 **[Get started with CloudCLI Cloud](https://cloudcli.ai)**
 
-### Self-Hosted (Open Source)
 
-#### Prerequisites
+### Self-Hosted (Open source)
 
-- [Node.js](https://nodejs.org/) v22 or higher
-- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and configured, and/or
-- [Cursor CLI](https://docs.cursor.com/en/cli/overview) installed and configured, and/or
-- [Codex](https://developers.openai.com/codex) installed and configured, and/or
-- [Gemini-CLI](https://geminicli.com/) installed and configured
+Try CloudCLI UI instantly with **npx** (requires **Node.js** v22+):
 
-#### One-click Operation
-
-No installation required, direct operation:
-
-```bash
+```
 npx @siteboon/claude-code-ui
 ```
 
-The server will start and be accessible at `http://localhost:3001` (or your configured PORT).
+Or install **globally** for regular use:
 
-**To restart**: Simply run the same `npx` command again after stopping the server
-### Global Installation (For Regular Use)
-
-For frequent use, install globally once:
-
-```bash
+```
 npm install -g @siteboon/claude-code-ui
+cloudcli
 ```
 
-Then start with a simple command:
+Open `http://localhost:3001` — all your existing sessions are discovered automatically.
 
-```bash
-claude-code-ui
-```
+Visit the **[documentation →](https://cloudcli.ai/docs)** for more full configuration options, PM2, remote server setup and more
 
 
-**To restart**: Stop with Ctrl+C and run `claude-code-ui` again.
+---
 
-**To update**:
-```bash
-cloudcli update
-```
+## Which option is right for you?
 
-### CLI Usage
+CloudCLI UI is the open source UI layer that powers CloudCLI Cloud. You can self-host it on your own machine, or use CloudCLI Cloud which builds on top of it with a full managed cloud environment, team features, and deeper integrations.
 
-After global installation, you have access to both `claude-code-ui` and `cloudcli` commands:
+| | CloudCLI UI (Self-hosted) | CloudCLI Cloud |
+|---|---|---|
+| **Best for** | Developers who want a full UI for local agent sessions on their own machine | Teams and developers who want agents running in the cloud, accessible from anywhere |
+| **How you access it** | Browser via `[yourip]:port` | Browser, any IDE, REST API, n8n |
+| **Setup** | `npx @siteboon/claude-code-ui` | No setup required |
+| **Machine needs to stay on** | Yes | No |
+| **Mobile access** | Any browser on your network | Any device, native app coming |
+| **Sessions available** | All sessions auto-discovered from `~/.claude` | All sessions within your cloud environment |
+| **Agents supported** | Claude Code, Cursor CLI, Codex, Gemini CLI | Claude Code, Cursor CLI, Codex, Gemini CLI |
+| **File explorer and Git** | Yes, built into the UI | Yes, built into the UI |
+| **MCP configuration** | Managed via UI, synced with your local `~/.claude` config | Managed via UI |
+| **IDE access** | Your local IDE | Any IDE connected to your cloud environment |
+| **REST API** | Yes | Yes |
+| **n8n node** | No | Yes |
+| **Team sharing** | No | Yes |
+| **Platform cost** | Free, open source | Starts at $7/month |
 
-| Command / Option | Short | Description |
-|------------------|-------|-------------|
-| `cloudcli` or `claude-code-ui` | | Start the server (default) |
-| `cloudcli start` | | Start the server explicitly |
-| `cloudcli status` | | Show configuration and data locations |
-| `cloudcli update` | | Update to the latest version |
-| `cloudcli help` | | Show help information |
-| `cloudcli version` | | Show version information |
-| `--port <port>` | `-p` | Set server port (default: 3001) |
-| `--database-path <path>` | | Set custom database location |
+> Both options use your own AI subscriptions (Claude, Cursor, etc.) — CloudCLI provides the environment, not the AI.
 
-**Examples:**
-```bash
-cloudcli                          # Start with defaults
-cloudcli -p 8080              # Start on custom port
-cloudcli status                   # Show current configuration
-```
-
-### Run as Background Service (Recommended for Production)
-
-For production use, run CloudCLI as a background service using PM2 (Process Manager 2):
-
-#### Install PM2
-
-```bash
-npm install -g pm2
-```
-
-#### Start as Background Service
-
-```bash
-# Start the server in background
-pm2 start claude-code-ui --name "claude-code-ui"
-
-# Or using the shorter alias
-pm2 start cloudcli --name "claude-code-ui"
-
-# Start on a custom port
-pm2 start cloudcli --name "claude-code-ui" -- --port 8080
-```
-
-
-#### Auto-Start on System Boot
-
-To make CloudCLI UI start automatically when your system boots:
-
-```bash
-# Generate startup script for your platform
-pm2 startup
-
-# Save current process list
-pm2 save
-```
-
-
-### Local Development Installation
-
-1. **Clone the repository:**
-```bash
-git clone https://github.com/siteboon/claudecodeui.git
-cd claudecodeui
-```
-
-2. **Install dependencies:**
-```bash
-npm install
-```
-
-3. **Configure environment:**
-```bash
-cp .env.example .env
-# Edit .env with your preferred settings
-```
-
-4. **Start the application:**
-```bash
-# Development mode (with hot reload)
-npm run dev
-
-```
-The application will start at the port you specified in your .env
-
-5. **Open your browser:**
-   - Development: `http://localhost:3001`
+---
 
 ## Security & Tools Configuration
 
@@ -223,114 +139,55 @@ To use Claude Code's full functionality, you'll need to manually enable tools:
 
 **Recommended approach**: Start with basic tools enabled and add more as needed. You can always adjust these settings later.
 
-## TaskMaster AI Integration *(Optional)*
+---
+## FAQ
 
-CloudCLI UI supports **[TaskMaster AI](https://github.com/eyaltoledano/claude-task-master)** (aka claude-task-master) integration for advanced project management and AI-powered task planning.
+<details>
+<summary>How is this different from Claude Code Remote Control?</summary>
 
-It provides
-- AI-powered task generation from PRDs (Product Requirements Documents)
-- Smart task breakdown and dependency management  
-- Visual task boards and progress tracking
+Claude Code Remote Control lets you send messages to a session already running in your local terminal. Your machine has to stay on, your terminal has to stay open, and sessions time out after roughly 10 minutes without a network connection.
 
-**Setup & Documentation**: Visit the [TaskMaster AI GitHub repository](https://github.com/eyaltoledano/claude-task-master) for installation instructions, configuration guides, and usage examples.
-After installing it you should be able to enable it from the Settings
+CloudCLI UI and CloudCLI Cloud extend Claude Code rather than sit alongside it — your MCP servers, permissions, settings, and sessions are the exact same ones Claude Code uses natively. Nothing is duplicated or managed separately.
 
+Here's what that means in practice:
 
-## Usage Guide
+- **All your sessions, not just one** — CloudCLI UI auto-discovers every session from your `~/.claude` folder. Remote Control only exposes the single active session to make it available in the Claude mobile app.
+- **Your settings are your settings** — MCP servers, tool permissions, and project config you change in CloudCLI UI are written directly to your Claude Code config and take effect immediately, and vice versa.
+- **Works with more agents** — Claude Code, Cursor CLI, Codex, and Gemini CLI, not just Claude Code.
+- **Full UI, not just a chat window** — file explorer, Git integration, MCP management, and a shell terminal are all built in.
+- **CloudCLI Cloud runs in the cloud** — close your laptop, the agent keeps running. No terminal to babysit, no machine to keep awake.
 
-### Core Features
+</details>
 
-#### Project Management
-It automatically discovers Claude Code, Cursor or Codex sessions when available and groups them together into projects
-session counts
-- **Project Actions** - Rename, delete, and organize projects
-- **Smart Navigation** - Quick access to recent projects and sessions
-- **MCP support** - Add your own MCP servers through the UI 
+<details>
+<summary>Do I need to pay for an AI subscription separately?</summary>
 
-#### Chat Interface
-- **Use responsive chat or Claude Code/Cursor CLI/Codex CLI** - You can either use the adapted chat interface or use the shell button to connect to your selected CLI. 
-- **Real-time Communication** - Stream responses from your selected CLI (Claude Code/Cursor/Codex) with WebSocket connection
-- **Session Management** - Resume previous conversations or start fresh sessions
-- **Message History** - Complete conversation history with timestamps and metadata
-- **Multi-format Support** - Text, code blocks, and file references
+Yes. CloudCLI provides the environment, not the AI. You bring your own Claude, Cursor, Codex, or Gemini subscription. CloudCLI Cloud starts at $7/month for the hosted environment on top of that.
 
-#### File Explorer & Editor
-- **Interactive File Tree** - Browse project structure with expand/collapse navigation
-- **Live File Editing** - Read, modify, and save files directly in the interface
-- **Syntax Highlighting** - Support for multiple programming languages
-- **File Operations** - Create, rename, delete files and directories
+</details>
 
-#### Git Explorer
+<details>
+<summary>Can I use CloudCLI UI on my phone?</summary>
 
+Yes. For self-hosted, run the server on your machine and open `[yourip]:port` in any browser on your network. For CloudCLI Cloud, open it from any device — no VPN, no port forwarding, no setup. A native app is also in the works.
 
-#### TaskMaster AI Integration *(Optional)*
-- **Visual Task Board** - Kanban-style interface for managing development tasks
-- **PRD Parser** - Create Product Requirements Documents and parse them into structured tasks
-- **Progress Tracking** - Real-time status updates and completion tracking
+</details>
 
-#### Session Management
-- **Session Persistence** - All conversations automatically saved
-- **Session Organization** - Group sessions by project and timestamp
-- **Session Actions** - Rename, delete, and export conversation history
-- **Cross-device Sync** - Access sessions from any device
+<details>
+<summary>Will changes I make in the UI affect my local Claude Code setup?</summary>
 
-### Mobile App
-- **Responsive Design** - Optimized for all screen sizes
-- **Touch-friendly Interface** - Swipe gestures and touch navigation
-- **Mobile Navigation** - Bottom tab bar for easy thumb navigation
-- **Adaptive Layout** - Collapsible sidebar and smart content prioritization
-- **Add shortcut to Home Screen** - Add a shortcut to your home screen and the app will behave like a PWA
+Yes, for self-hosted. CloudCLI UI reads from and writes to the same `~/.claude` config that Claude Code uses natively. MCP servers you add via the UI show up in Claude Code immediately and vice versa.
 
-## Architecture
+</details>
 
-### System Overview
+---
 
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Frontend      │    │   Backend       │    │  Agent     │
-│   (React/Vite)  │◄──►│ (Express/WS)    │◄──►│  Integration    │
-│                 │    │                 │    │                │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-```
+## Community & Support
 
-### Backend (Node.js + Express)
-- **Express Server** - RESTful API with static file serving
-- **WebSocket Server** - Communication for chats and project refresh
-- **Agent Integration (Claude Code / Cursor CLI / Codex / Gemini CLI)** - Process spawning and management
-- **File System API** - Exposing file browser for projects
-
-### Frontend (React + Vite)
-- **React 18** - Modern component architecture with hooks
-- **CodeMirror** - Advanced code editor with syntax highlighting
-
-
-
-
-
-### Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details on commit conventions, development workflow, and release process.
-
-## Troubleshooting
-
-### Common Issues & Solutions
-
-
-#### "No Claude projects found"
-**Problem**: The UI shows no projects or empty project list
-**Solutions**:
-- Ensure [Claude Code](https://docs.anthropic.com/en/docs/claude-code) is properly installed
-- Run `claude` command in at least one project directory to initialize
-- Verify `~/.claude/projects/` directory exists and has proper permissions
-
-#### File Explorer Issues
-**Problem**: Files not loading, permission errors, empty directories
-**Solutions**:
-- Check project directory permissions (`ls -la` in terminal)
-- Verify the project path exists and is accessible
-- Review server console logs for detailed error messages
-- Ensure you're not trying to access system directories outside project scope
-
+- **[Documentation](https://cloudcli.ai/docs)** — installation, configuration, features, and troubleshooting
+- **[Discord](https://discord.gg/buxwujPNRE)** — get help and connect with other users
+- **[GitHub Issues](https://github.com/siteboon/claudecodeui/issues)** — bug reports and feature requests
+- **[Contributing Guide](CONTRIBUTING.md)** — how to contribute to the project
 
 ## License
 
@@ -351,14 +208,6 @@ This project is open source and free to use, modify, and distribute under the GP
 - **[CodeMirror](https://codemirror.net/)** - Advanced code editor
 - **[TaskMaster AI](https://github.com/eyaltoledano/claude-task-master)** *(Optional)* - AI-powered project management and task planning
 
-## Support & Community
-
-### Stay Updated
-- **[Join our Discord](https://discord.gg/buxwujPNRE)** - Get help, share feedback, and connect with the community
-- **[CloudCLI Cloud](https://cloudcli.ai)** - Try the hosted cloud version
-- **Star** this repository to show support
-- **Watch** for updates and new releases
-- **Follow** the project for announcements
 
 ### Sponsors
 - [Siteboon - AI powered website builder](https://siteboon.ai)
