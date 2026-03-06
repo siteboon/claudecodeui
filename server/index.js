@@ -2454,44 +2454,62 @@ const HOST = process.env.HOST || '0.0.0.0';
 // Show localhost in URL when binding to all interfaces (0.0.0.0 isn't a connectable address)
 const DISPLAY_HOST = HOST === '0.0.0.0' ? 'localhost' : HOST;
 
-// Initialize database and start server
+// Initialize database and start server.
+// Returns a Promise that resolves with the port number once the server is listening.
+// Can be imported and called programmatically (e.g., from Electron main process).
 async function startServer() {
-    try {
-        // Initialize authentication database
-        await initializeDatabase();
+    return new Promise(async (resolve, reject) => {
+        try {
+            // Initialize authentication database
+            await initializeDatabase();
 
-        // Check if running in production mode (dist folder exists)
-        const distIndexPath = path.join(__dirname, '../dist/index.html');
-        const isProduction = fs.existsSync(distIndexPath);
+            // Check if running in production mode (dist folder exists)
+            const distIndexPath = path.join(__dirname, '../dist/index.html');
+            const isProduction = fs.existsSync(distIndexPath);
 
-        // Log Claude implementation mode
-        console.log(`${c.info('[INFO]')} Using Claude Agents SDK for Claude integration`);
-        console.log(`${c.info('[INFO]')} Running in ${c.bright(isProduction ? 'PRODUCTION' : 'DEVELOPMENT')} mode`);
+            // Log Claude implementation mode
+            console.log(`${c.info('[INFO]')} Using Claude Agents SDK for Claude integration`);
+            console.log(`${c.info('[INFO]')} Running in ${c.bright(isProduction ? 'PRODUCTION' : 'DEVELOPMENT')} mode`);
 
-        if (!isProduction) {
-            console.log(`${c.warn('[WARN]')} Note: Requests will be proxied to Vite dev server at ${c.dim('http://localhost:' + (process.env.VITE_PORT || 5173))}`);
+            if (!isProduction) {
+                console.log(`${c.warn('[WARN]')} Note: Requests will be proxied to Vite dev server at ${c.dim('http://localhost:' + (process.env.VITE_PORT || 5173))}`);
+            }
+
+            server.on('error', reject);
+
+            server.listen(PORT, HOST, async () => {
+                const appInstallPath = path.join(__dirname, '..');
+
+                console.log('');
+                console.log(c.dim('═'.repeat(63)));
+                console.log(`  ${c.bright('Claude Code UI Server - Ready')}`);
+                console.log(c.dim('═'.repeat(63)));
+                console.log('');
+                console.log(`${c.info('[INFO]')} Server URL:  ${c.bright('http://' + DISPLAY_HOST + ':' + PORT)}`);
+                console.log(`${c.info('[INFO]')} Installed at: ${c.dim(appInstallPath)}`);
+                console.log(`${c.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
+                console.log('');
+
+                // Start watching the projects folder for changes
+                await setupProjectsWatcher();
+
+                resolve(parseInt(PORT));
+            });
+        } catch (error) {
+            reject(error);
         }
-
-        server.listen(PORT, HOST, async () => {
-            const appInstallPath = path.join(__dirname, '..');
-
-            console.log('');
-            console.log(c.dim('═'.repeat(63)));
-            console.log(`  ${c.bright('Claude Code UI Server - Ready')}`);
-            console.log(c.dim('═'.repeat(63)));
-            console.log('');
-            console.log(`${c.info('[INFO]')} Server URL:  ${c.bright('http://' + DISPLAY_HOST + ':' + PORT)}`);
-            console.log(`${c.info('[INFO]')} Installed at: ${c.dim(appInstallPath)}`);
-            console.log(`${c.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
-            console.log('');
-
-            // Start watching the projects folder for changes
-            await setupProjectsWatcher();
-        });
-    } catch (error) {
-        console.error('[ERROR] Failed to start server:', error);
-        process.exit(1);
-    }
+    });
 }
 
-startServer();
+export { startServer };
+
+// Auto-start when this file is run directly (e.g., `node server/index.js`).
+// When imported as a module by Electron, startServer() is NOT called automatically.
+const isDirectRun = process.argv[1] &&
+    path.resolve(process.argv[1]) === path.resolve(__filename);
+if (isDirectRun) {
+    startServer().catch((error) => {
+        console.error('[ERROR] Failed to start server:', error);
+        process.exit(1);
+    });
+}
