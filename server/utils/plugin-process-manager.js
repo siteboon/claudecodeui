@@ -93,26 +93,33 @@ export function startPluginServer(name, pluginDir, serverEntry) {
 
 /**
  * Stop a plugin's server subprocess.
+ * Returns a Promise that resolves when the process has fully exited.
  */
 export function stopPluginServer(name) {
   const entry = runningPlugins.get(name);
-  if (!entry) return;
+  if (!entry) return Promise.resolve();
 
-  entry.process.kill('SIGTERM');
-
-  // Force kill after 5 seconds if still running
-  const forceKillTimer = setTimeout(() => {
-    if (runningPlugins.has(name)) {
-      entry.process.kill('SIGKILL');
+  return new Promise((resolve) => {
+    const cleanup = () => {
+      clearTimeout(forceKillTimer);
       runningPlugins.delete(name);
-    }
-  }, 5000);
+      resolve();
+    };
 
-  entry.process.on('exit', () => {
-    clearTimeout(forceKillTimer);
+    entry.process.once('exit', cleanup);
+
+    entry.process.kill('SIGTERM');
+
+    // Force kill after 5 seconds if still running
+    const forceKillTimer = setTimeout(() => {
+      if (runningPlugins.has(name)) {
+        entry.process.kill('SIGKILL');
+        cleanup();
+      }
+    }, 5000);
+
+    console.log(`[Plugins] Server stopped for "${name}"`);
   });
-
-  console.log(`[Plugins] Server stopped for "${name}"`);
 }
 
 /**
@@ -133,9 +140,11 @@ export function isPluginRunning(name) {
  * Stop all running plugin servers (called on host shutdown).
  */
 export function stopAllPlugins() {
+  const stops = [];
   for (const [name] of runningPlugins) {
-    stopPluginServer(name);
+    stops.push(stopPluginServer(name));
   }
+  return Promise.all(stops);
 }
 
 /**

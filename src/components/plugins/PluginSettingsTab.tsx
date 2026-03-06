@@ -1,28 +1,28 @@
 import { useState } from 'react';
 import { Trash2, RefreshCw, GitBranch, Loader2, ServerCrash, ShieldAlert, ExternalLink, BookOpen, Download, BarChart3 } from 'lucide-react';
 import { usePlugins } from '../../contexts/PluginsContext';
-import PluginIcon from './PluginIcon';
 import type { Plugin } from '../../contexts/PluginsContext';
+import PluginIcon from './PluginIcon';
 
 const STARTER_PLUGIN_URL = 'https://github.com/cloudcli-ai/cloudcli-plugin-starter';
 
 /* ─── Toggle Switch ─────────────────────────────────────────────────────── */
 function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
-    <label className="relative inline-flex items-center cursor-pointer select-none">
+    <label className="relative inline-flex cursor-pointer select-none items-center">
       <input
         type="checkbox"
-        className="sr-only peer"
+        className="peer sr-only"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
       />
       <div
         className={`
-          relative w-9 h-5 rounded-full transition-colors duration-200
-          bg-muted peer-checked:bg-emerald-500
-          after:absolute after:content-[''] after:top-[2px] after:left-[2px]
-          after:w-4 after:h-4 after:rounded-full after:bg-white after:shadow-sm
-          after:transition-transform after:duration-200
+          relative h-5 w-9 rounded-full bg-muted transition-colors
+          duration-200 after:absolute
+          after:left-[2px] after:top-[2px] after:h-4 after:w-4
+          after:rounded-full after:bg-white after:shadow-sm after:transition-transform after:duration-200
+          after:content-[''] peer-checked:bg-emerald-500
           peer-checked:after:translate-x-4
         `}
       />
@@ -36,10 +36,10 @@ function ServerDot({ running }: { running: boolean }) {
   return (
     <span className="relative flex items-center gap-1.5">
       <span className="relative flex h-1.5 w-1.5">
-        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+        <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
       </span>
-      <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 tracking-wide uppercase">
+      <span className="font-mono text-[10px] uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
         running
       </span>
     </span>
@@ -76,7 +76,7 @@ function PluginCard({
 
   return (
     <div
-      className="relative flex rounded-lg border border-border bg-card overflow-hidden transition-opacity duration-200"
+      className="relative flex overflow-hidden rounded-lg border border-border bg-card transition-opacity duration-200"
       style={{
         opacity: plugin.enabled ? 1 : 0.65,
         animationDelay: `${index * 40}ms`,
@@ -85,36 +85,36 @@ function PluginCard({
       {/* Left accent bar */}
       <div className={`w-[3px] flex-shrink-0 ${accentColor} transition-colors duration-300`} />
 
-      <div className="flex-1 p-4 min-w-0">
+      <div className="min-w-0 flex-1 p-4">
         {/* Header row */}
         <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex-shrink-0 w-5 h-5 text-foreground/80">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="h-5 w-5 flex-shrink-0 text-foreground/80">
               <PluginIcon
                 pluginName={plugin.name}
                 iconFile={plugin.icon}
-                className="w-5 h-5 [&>svg]:w-full [&>svg]:h-full"
+                className="h-5 w-5 [&>svg]:h-full [&>svg]:w-full"
               />
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-semibold text-sm text-foreground leading-none">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-semibold leading-none text-foreground">
                   {plugin.displayName}
                 </span>
-                <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
                   v{plugin.version}
                 </span>
-                <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
                   {plugin.slot}
                 </span>
                 <ServerDot running={!!plugin.serverRunning} />
               </div>
               {plugin.description && (
-                <p className="text-sm text-muted-foreground mt-1 leading-snug">
+                <p className="mt-1 text-sm leading-snug text-muted-foreground">
                   {plugin.description}
                 </p>
               )}
-              <div className="flex items-center gap-3 mt-1">
+              <div className="mt-1 flex items-center gap-3">
                 {plugin.author && (
                   <span className="text-xs text-muted-foreground/60">
                     {plugin.author}
@@ -125,10 +125,10 @@ function PluginCard({
                     href={plugin.repoUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-muted-foreground/60 hover:text-foreground transition-colors"
+                    className="inline-flex items-center gap-1 text-xs text-muted-foreground/60 transition-colors hover:text-foreground"
                   >
-                    <GitBranch className="w-3 h-3" />
-                    <span className="truncate max-w-[200px]">
+                    <GitBranch className="h-3 w-3" />
+                    <span className="max-w-[200px] truncate">
                       {plugin.repoUrl.replace(/^https?:\/\/(www\.)?github\.com\//, '')}
                     </span>
                   </a>
@@ -138,30 +138,30 @@ function PluginCard({
           </div>
 
           {/* Controls */}
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="flex flex-shrink-0 items-center gap-2">
             <button
               onClick={onUpdate}
               disabled={updating}
               title="Pull latest from git"
-              className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40"
+              className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
             >
               {updating ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
-                <RefreshCw className="w-3.5 h-3.5" />
+                <RefreshCw className="h-3.5 w-3.5" />
               )}
             </button>
 
             <button
               onClick={onUninstall}
               title={confirmingUninstall ? 'Click again to confirm' : 'Uninstall plugin'}
-              className={`p-1.5 rounded transition-colors ${
+              className={`rounded p-1.5 transition-colors ${
                 confirmingUninstall
-                  ? 'text-red-500 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30'
-                  : 'text-muted-foreground hover:text-red-500 hover:bg-muted'
+                  ? 'bg-red-50 text-red-500 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/30'
+                  : 'text-muted-foreground hover:bg-muted hover:text-red-500'
               }`}
             >
-              <Trash2 className="w-3.5 h-3.5" />
+              <Trash2 className="h-3.5 w-3.5" />
             </button>
 
             <ToggleSwitch checked={plugin.enabled} onChange={onToggle} />
@@ -170,20 +170,20 @@ function PluginCard({
 
         {/* Confirm uninstall banner */}
         {confirmingUninstall && (
-          <div className="mt-3 flex items-center justify-between gap-3 px-3 py-2 rounded bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/50">
+          <div className="mt-3 flex items-center justify-between gap-3 rounded border border-red-200 bg-red-50 px-3 py-2 dark:border-red-800/50 dark:bg-red-950/30">
             <span className="text-sm text-red-600 dark:text-red-400">
               Remove <span className="font-semibold">{plugin.displayName}</span>? This cannot be undone.
             </span>
             <div className="flex gap-1.5">
               <button
                 onClick={onCancelUninstall}
-                className="text-sm px-2.5 py-1 rounded border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                className="rounded border border-border px-2.5 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
                 Cancel
               </button>
               <button
                 onClick={onUninstall}
-                className="text-sm px-2.5 py-1 rounded border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 font-medium transition-colors"
+                className="rounded border border-red-300 px-2.5 py-1 text-sm font-medium text-red-600 transition-colors hover:bg-red-100 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/30"
               >
                 Remove
               </button>
@@ -194,7 +194,7 @@ function PluginCard({
         {/* Update error */}
         {updateError && (
           <div className="mt-2 flex items-center gap-1.5 text-sm text-red-500">
-            <ServerCrash className="w-3.5 h-3.5 flex-shrink-0" />
+            <ServerCrash className="h-3.5 w-3.5 flex-shrink-0" />
             <span>{updateError}</span>
           </div>
         )}
@@ -206,36 +206,36 @@ function PluginCard({
 /* ─── Starter Plugin Card ───────────────────────────────────────────────── */
 function StarterPluginCard({ onInstall, installing }: { onInstall: () => void; installing: boolean }) {
   return (
-    <div className="relative flex rounded-lg border border-dashed border-border bg-card overflow-hidden transition-all duration-200 hover:border-blue-400 dark:hover:border-blue-500">
+    <div className="relative flex overflow-hidden rounded-lg border border-dashed border-border bg-card transition-all duration-200 hover:border-blue-400 dark:hover:border-blue-500">
       <div className="w-[3px] flex-shrink-0 bg-blue-500/30" />
-      <div className="flex-1 p-4 min-w-0">
+      <div className="min-w-0 flex-1 p-4">
         <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex-shrink-0 w-5 h-5 text-blue-500">
-              <BarChart3 className="w-5 h-5" />
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="h-5 w-5 flex-shrink-0 text-blue-500">
+              <BarChart3 className="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-semibold text-sm text-foreground leading-none">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-semibold leading-none text-foreground">
                   Project Stats
                 </span>
-                <span className="text-[10px] text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 px-1.5 py-0.5 rounded font-medium">
+                <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-600 dark:bg-blue-950/50 dark:text-blue-400">
                   starter
                 </span>
-                <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
                   tab
                 </span>
               </div>
-              <p className="text-sm text-muted-foreground mt-1 leading-snug">
+              <p className="mt-1 text-sm leading-snug text-muted-foreground">
                 File counts, lines of code, file-type breakdown, and recent activity for your project.
               </p>
               <a
                 href={STARTER_PLUGIN_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-xs text-muted-foreground/60 hover:text-foreground transition-colors mt-1"
+                className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground/60 transition-colors hover:text-foreground"
               >
-                <GitBranch className="w-3 h-3" />
+                <GitBranch className="h-3 w-3" />
                 cloudcli-ai/cloudcli-plugin-starter
               </a>
             </div>
@@ -243,12 +243,12 @@ function StarterPluginCard({ onInstall, installing }: { onInstall: () => void; i
           <button
             onClick={onInstall}
             disabled={installing}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50 flex-shrink-0"
+            className="flex flex-shrink-0 items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
           >
             {installing ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
-              <Download className="w-3.5 h-3.5" />
+              <Download className="h-3.5 w-3.5" />
             )}
             {installing ? 'Installing…' : 'Install'}
           </button>
@@ -319,25 +319,25 @@ export default function PluginSettingsTab() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h3 className="text-base font-semibold text-foreground mb-1">
+        <h3 className="mb-1 text-base font-semibold text-foreground">
           Plugins
         </h3>
         <p className="text-sm text-muted-foreground">
           Extend the interface with custom plugins. Install from{' '}
-          <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-semibold">
+          <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-semibold">
             git
           </code>{' '}
           or drop a folder in{' '}
-          <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-semibold">
+          <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-semibold">
             ~/.claude-code-ui/plugins/
           </code>
         </p>
       </div>
 
       {/* Install from Git — compact */}
-      <div className="flex items-center gap-0 rounded-lg border border-border bg-card overflow-hidden">
+      <div className="flex items-center gap-0 overflow-hidden rounded-lg border border-border bg-card">
         <span className="flex-shrink-0 pl-3 pr-1 text-muted-foreground/40">
-          <GitBranch className="w-3.5 h-3.5" />
+          <GitBranch className="h-3.5 w-3.5" />
         </span>
         <input
           type="text"
@@ -347,7 +347,7 @@ export default function PluginSettingsTab() {
             setInstallError(null);
           }}
           placeholder="https://github.com/user/my-plugin"
-          className="flex-1 px-2 py-2.5 text-sm bg-transparent text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
+          className="flex-1 bg-transparent px-2 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
           onKeyDown={(e) => {
             if (e.key === 'Enter') void handleInstall();
           }}
@@ -355,10 +355,10 @@ export default function PluginSettingsTab() {
         <button
           onClick={handleInstall}
           disabled={installing || !gitUrl.trim()}
-          className="flex-shrink-0 px-4 py-2.5 text-sm font-medium bg-foreground text-background hover:opacity-90 disabled:opacity-30 transition-opacity border-l border-border"
+          className="flex-shrink-0 border-l border-border bg-foreground px-4 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-30"
         >
           {installing ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
+            <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
             'Install'
           )}
@@ -366,11 +366,11 @@ export default function PluginSettingsTab() {
       </div>
 
       {installError && (
-        <p className="text-sm text-red-500 -mt-4">{installError}</p>
+        <p className="-mt-4 text-sm text-red-500">{installError}</p>
       )}
 
-      <p className="flex items-start gap-1.5 text-xs text-muted-foreground/50 leading-snug -mt-4">
-        <ShieldAlert className="w-3 h-3 mt-px flex-shrink-0" />
+      <p className="-mt-4 flex items-start gap-1.5 text-xs leading-snug text-muted-foreground/50">
+        <ShieldAlert className="mt-px h-3 w-3 flex-shrink-0" />
         <span>
           Only install plugins whose source code you have reviewed or from authors you trust.
         </span>
@@ -383,14 +383,14 @@ export default function PluginSettingsTab() {
 
       {/* Plugin List */}
       {loading ? (
-        <div className="flex items-center gap-2 justify-center py-10 text-sm text-muted-foreground">
-          <Loader2 className="w-4 h-4 animate-spin" />
+        <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
           Scanning plugins…
         </div>
       ) : plugins.length === 0 && hasStarterInstalled ? (
-        <p className="text-sm text-muted-foreground text-center py-8">No plugins installed</p>
+        <p className="py-8 text-center text-sm text-muted-foreground">No plugins installed</p>
       ) : plugins.length === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-8">No plugins installed</p>
+        <p className="py-8 text-center text-sm text-muted-foreground">No plugins installed</p>
       ) : (
         <div className="space-y-2">
           {plugins.map((plugin, index) => (
@@ -411,30 +411,30 @@ export default function PluginSettingsTab() {
       )}
 
       {/* Build your own */}
-      <div className="flex items-center justify-between gap-4 pt-2 border-t border-border/50">
-        <div className="flex items-center gap-2 min-w-0">
-          <BookOpen className="w-3.5 h-3.5 text-muted-foreground/40 flex-shrink-0" />
+      <div className="flex items-center justify-between gap-4 border-t border-border/50 pt-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <BookOpen className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground/40" />
           <span className="text-xs text-muted-foreground/60">
             Build your own plugin
           </span>
         </div>
-        <div className="flex items-center gap-3 flex-shrink-0">
+        <div className="flex flex-shrink-0 items-center gap-3">
           <a
             href={STARTER_PLUGIN_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground/60 hover:text-foreground transition-colors"
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground/60 transition-colors hover:text-foreground"
           >
-            Starter <ExternalLink className="w-2.5 h-2.5" />
+            Starter <ExternalLink className="h-2.5 w-2.5" />
           </a>
           <span className="text-muted-foreground/20">·</span>
           <a
             href="https://cloudcli.ai/docs/plugin-overview"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground/60 hover:text-foreground transition-colors"
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground/60 transition-colors hover:text-foreground"
           >
-            Docs <ExternalLink className="w-2.5 h-2.5" />
+            Docs <ExternalLink className="h-2.5 w-2.5" />
           </a>
         </div>
       </div>

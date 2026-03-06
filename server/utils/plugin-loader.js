@@ -326,13 +326,28 @@ export function updatePluginFromGit(name) {
   });
 }
 
-export function uninstallPlugin(name) {
+export async function uninstallPlugin(name) {
   const pluginDir = getPluginDir(name);
   if (!pluginDir) {
     throw new Error(`Plugin "${name}" not found`);
   }
 
-  fs.rmSync(pluginDir, { recursive: true, force: true });
+  // On Windows, file handles may be released slightly after process exit.
+  // Retry a few times with a short delay before giving up.
+  const MAX_RETRIES = 5;
+  const RETRY_DELAY_MS = 500;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      fs.rmSync(pluginDir, { recursive: true, force: true });
+      break;
+    } catch (err) {
+      if (err.code === 'EBUSY' && attempt < MAX_RETRIES) {
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+      } else {
+        throw err;
+      }
+    }
+  }
 
   // Remove from config
   const config = getPluginsConfig();

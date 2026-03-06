@@ -249,7 +249,7 @@ router.all('/:name/rpc/*', async (req, res) => {
 });
 
 // DELETE /:name — Uninstall plugin (stops server first)
-router.delete('/:name', (req, res) => {
+router.delete('/:name', async (req, res) => {
   try {
     const pluginName = req.params.name;
 
@@ -258,12 +258,12 @@ router.delete('/:name', (req, res) => {
       return res.status(400).json({ error: 'Invalid plugin name' });
     }
 
-    // Stop server if running
+    // Stop server and wait for the process to fully exit before deleting files
     if (isPluginRunning(pluginName)) {
-      stopPluginServer(pluginName);
+      await stopPluginServer(pluginName);
     }
 
-    uninstallPlugin(pluginName);
+    await uninstallPlugin(pluginName);
     res.json({ success: true, name: pluginName });
   } catch (err) {
     res.status(400).json({ error: 'Failed to uninstall plugin', details: err.message });

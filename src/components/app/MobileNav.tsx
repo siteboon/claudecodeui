@@ -1,6 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, Dispatch, SetStateAction  } from 'react';
 import { MessageSquare, Folder, Terminal, GitBranch, ClipboardCheck, Ellipsis, Puzzle, Box, Database, Globe, Wrench, Zap, BarChart3 } from 'lucide-react';
-import { Dispatch, SetStateAction } from 'react';
 import { useTasksSettings } from '../../contexts/TasksSettingsContext';
 import { usePlugins } from '../../contexts/PluginsContext';
 import { AppTab } from '../../types/app';
@@ -101,7 +100,7 @@ export default function MobileNav({ activeTab, setActiveTab, isInputFocused }: M
                   e.preventDefault();
                   setMoreOpen((v) => !v);
                 }}
-                className={`flex flex-col items-center justify-center gap-0.5 px-3 py-2 rounded-xl w-full relative touch-manipulation transition-all duration-200 active:scale-95 ${
+                className={`relative flex w-full touch-manipulation flex-col items-center justify-center gap-0.5 rounded-xl px-3 py-2 transition-all duration-200 active:scale-95 ${
                   isPluginActive || moreOpen
                     ? 'text-primary'
                     : 'text-muted-foreground hover:text-foreground'
@@ -110,10 +109,10 @@ export default function MobileNav({ activeTab, setActiveTab, isInputFocused }: M
                 aria-expanded={moreOpen}
               >
                 {(isPluginActive && !moreOpen) && (
-                  <div className="absolute inset-0 bg-primary/8 dark:bg-primary/12 rounded-xl" />
+                  <div className="bg-primary/8 dark:bg-primary/12 absolute inset-0 rounded-xl" />
                 )}
                 <Ellipsis
-                  className={`relative z-10 transition-all duration-200 ${isPluginActive ? 'w-5 h-5' : 'w-[18px] h-[18px]'}`}
+                  className={`relative z-10 transition-all duration-200 ${isPluginActive ? 'h-5 w-5' : 'h-[18px] w-[18px]'}`}
                   strokeWidth={isPluginActive ? 2.4 : 1.8}
                 />
                 <span className={`relative z-10 text-[10px] font-medium transition-all duration-200 ${isPluginActive || moreOpen ? 'opacity-100' : 'opacity-60'}`}>
@@ -123,7 +122,7 @@ export default function MobileNav({ activeTab, setActiveTab, isInputFocused }: M
 
               {/* Popover menu */}
               {moreOpen && (
-                <div className="absolute bottom-full mb-2 right-0 min-w-[180px] py-1.5 rounded-xl border border-border/40 bg-popover shadow-lg z-[60] animate-in fade-in slide-in-from-bottom-2 duration-150">
+                <div className="animate-in fade-in slide-in-from-bottom-2 absolute bottom-full right-0 z-[60] mb-2 min-w-[180px] rounded-xl border border-border/40 bg-popover py-1.5 shadow-lg duration-150">
                   {enabledPlugins.map((p) => {
                     const Icon = PLUGIN_ICON_MAP[p.icon] || Puzzle;
                     const isActive = activeTab === `plugin:${p.name}`;
@@ -132,13 +131,13 @@ export default function MobileNav({ activeTab, setActiveTab, isInputFocused }: M
                       <button
                         key={p.name}
                         onClick={() => selectPlugin(p.name)}
-                        className={`flex items-center gap-2.5 w-full px-3.5 py-2.5 text-sm transition-colors ${
+                        className={`flex w-full items-center gap-2.5 px-3.5 py-2.5 text-sm transition-colors ${
                           isActive
-                            ? 'text-primary bg-primary/8'
+                            ? 'bg-primary/8 text-primary'
                             : 'text-foreground hover:bg-muted/60'
                         }`}
                       >
-                        <Icon className="w-4 h-4 flex-shrink-0" strokeWidth={isActive ? 2.2 : 1.8} />
+                        <Icon className="h-4 w-4 flex-shrink-0" strokeWidth={isActive ? 2.2 : 1.8} />
                         <span className="truncate">{p.displayName}</span>
                       </button>
                     );

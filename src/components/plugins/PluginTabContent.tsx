@@ -44,7 +44,7 @@ export default function PluginTabContent({
   // Stable refs so effects don't need context values in their dep arrays
   const contextRef = useRef<PluginContext>(buildContext(isDarkMode, selectedProject, selectedSession));
   const contextCallbacksRef = useRef<Set<(ctx: PluginContext) => void>>(new Set());
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const moduleRef = useRef<any>(null);
 
   const plugin = plugins.find(p => p.name === pluginName);
