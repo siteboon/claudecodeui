@@ -520,7 +520,12 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                   </svg>
                 )}
               </button>
-              {!isGrouped && <span>{formattedTime}</span>}
+               {
+               !isGrouped && (
+                <div className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
+                  {formattedTime}
+                </div>
+              )}
             </div>
           </div>
         </div>
