@@ -1,13 +1,9 @@
 import { contextBridge } from 'electron';
 
-// Expose a minimal, safe API to the renderer process
-// The renderer can detect it's running in Electron and get the server port
-contextBridge.exposeInMainWorld('electronAPI', {
-  // Returns true when running inside Electron desktop app
-  isElectron: () => true,
+const serverPortArg = process.argv.find((arg) => arg.startsWith('--cloudcli-server-port='));
+const serverPort = serverPortArg ? Number.parseInt(serverPortArg.split('=')[1], 10) : Number.parseInt(window.location.port, 10);
 
-  // Returns the backend server port by reading from the current URL
-  // The Electron window is loaded from http://127.0.0.1:<port>, so window.location.port
-  // always reflects the embedded server port.
-  getServerPort: () => parseInt(window.location.port, 10),
+contextBridge.exposeInMainWorld('electronAPI', {
+  isElectron: () => true,
+  getServerPort: () => serverPort,
 });

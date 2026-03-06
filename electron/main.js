@@ -8,6 +8,7 @@ const __dirname = path.dirname(__filename);
 
 let mainWindow = null;
 let serverPort = null;
+const isElectronDev = process.env.CLAUDE_CODE_UI_ELECTRON_DEV === 'true';
 
 // Find an available TCP port starting from the given port
 function isPortAvailable(port) {
@@ -29,6 +30,20 @@ async function findAvailablePort(startPort = 3001) {
   throw new Error('No available port found in range ' + startPort + '-' + (startPort + 99));
 }
 
+async function resolveServerPort(startPort = 3001) {
+  const requestedPort = Number.parseInt(process.env.PORT || '', 10);
+
+  if (Number.isInteger(requestedPort)) {
+    const available = await isPortAvailable(requestedPort);
+    if (!available) {
+      throw new Error(`Requested backend port ${requestedPort} is unavailable`);
+    }
+    return requestedPort;
+  }
+
+  return findAvailablePort(startPort);
+}
+
 async function startEmbeddedServer(port) {
   // Set env vars before importing the server module (they are read at module level)
   process.env.PORT = String(port);
@@ -41,6 +56,9 @@ async function startEmbeddedServer(port) {
 
 function createWindow(port) {
   const iconPath = path.join(__dirname, '../build/icons/icon.png');
+  const rendererUrl = isElectronDev
+    ? (process.env.CLAUDE_CODE_UI_VITE_URL || `http://127.0.0.1:${process.env.VITE_PORT || 5173}`)
+    : `http://127.0.0.1:${port}`;
 
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -52,6 +70,7 @@ function createWindow(port) {
       contextIsolation: true,
       nodeIntegration: false,
       webSecurity: true,
+      additionalArguments: [`--cloudcli-server-port=${port}`],
     },
     icon: iconPath,
     show: false,
@@ -59,7 +78,7 @@ function createWindow(port) {
     backgroundColor: '#0f0f0f',
   });
 
-  mainWindow.loadURL(`http://127.0.0.1:${port}`);
+  mainWindow.loadURL(rendererUrl);
 
   // Show window once the page is ready to prevent white flash
   mainWindow.once('ready-to-show', () => {
@@ -82,7 +101,7 @@ function createWindow(port) {
 
 app.whenReady().then(async () => {
   try {
-    serverPort = await findAvailablePort(3001);
+    serverPort = await resolveServerPort(3001);
     await startEmbeddedServer(serverPort);
     createWindow(serverPort);
   } catch (error) {

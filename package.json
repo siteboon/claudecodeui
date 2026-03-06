@@ -37,7 +37,7 @@
     "prepublishOnly": "npm run build",
     "postinstall": "node scripts/fix-node-pty.js",
     "prepare": "husky",
-    "electron:dev": "concurrently --kill-others \"npm run client\" \"wait-on http://localhost:5173 && electron electron/main.js\"",
+    "electron:dev": "node scripts/electron-dev.js",
     "electron:build": "npm run build && electron-builder",
     "dist:win": "npm run build && electron-builder --win",
     "dist:mac": "npm run build && electron-builder --mac",
@@ -53,6 +53,9 @@
     "directories": {
       "output": "release",
       "buildResources": "build"
+    },
+    "electronDownload": {
+      "mirror": "https://npmmirror.com/mirrors/electron/"
     },
     "files": [
       "electron/",
@@ -77,8 +80,10 @@
       "node_modules/bcrypt/**",
       "node_modules/sqlite3/**"
     ],
-    "npmRebuild": true,
+    "npmRebuild": false,
+    "nodeGypRebuild": false,
     "win": {
+      "signAndEditExecutable": false,
       "target": [
         { "target": "nsis", "arch": ["x64"] },
         { "target": "portable", "arch": ["x64"] }

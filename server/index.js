@@ -1571,6 +1571,7 @@ function handleShellConnection(ws) {
                 const provider = data.provider || 'claude';
                 const initialCommand = data.initialCommand;
                 const isPlainShell = data.isPlainShell || (!!initialCommand && !hasSession) || provider === 'plain-shell';
+                const isWindows = os.platform() === 'win32';
                 urlDetectionBuffer = '';
                 announcedAuthUrls.clear();
 
@@ -1653,14 +1654,14 @@ function handleShellConnection(ws) {
                     let shellCommand;
                     if (isPlainShell) {
                         // Plain shell mode - just run the initial command in the project directory
-                        if (os.platform() === 'win32') {
+                        if (isWindows) {
                             shellCommand = `Set-Location -Path "${projectPath}"; ${initialCommand}`;
                         } else {
                             shellCommand = `cd "${projectPath}" && ${initialCommand}`;
                         }
                     } else if (provider === 'cursor') {
                         // Use cursor-agent command
-                        if (os.platform() === 'win32') {
+                        if (isWindows) {
                             if (hasSession && sessionId) {
                                 shellCommand = `Set-Location -Path "${projectPath}"; cursor-agent --resume="${sessionId}"`;
                             } else {
@@ -1676,19 +1677,20 @@ function handleShellConnection(ws) {
 
                     } else if (provider === 'codex') {
                         // Use codex command
-                        if (os.platform() === 'win32') {
+                        const codexCommand = isWindows ? 'codex.cmd' : 'codex';
+                        if (isWindows) {
                             if (hasSession && sessionId) {
                                 // Try to resume session, but with fallback to a new session if it fails
-                                shellCommand = `Set-Location -Path "${projectPath}"; codex resume "${sessionId}"; if ($LASTEXITCODE -ne 0) { codex }`;
+                                shellCommand = `Set-Location -Path "${projectPath}"; ${codexCommand} resume "${sessionId}"; if ($LASTEXITCODE -ne 0) { ${codexCommand} }`;
                             } else {
-                                shellCommand = `Set-Location -Path "${projectPath}"; codex`;
+                                shellCommand = `Set-Location -Path "${projectPath}"; ${codexCommand}`;
                             }
                         } else {
                             if (hasSession && sessionId) {
                                 // Try to resume session, but with fallback to a new session if it fails
-                                shellCommand = `cd "${projectPath}" && codex resume "${sessionId}" || codex`;
+                                shellCommand = `cd "${projectPath}" && ${codexCommand} resume "${sessionId}" || ${codexCommand}`;
                             } else {
-                                shellCommand = `cd "${projectPath}" && codex`;
+                                shellCommand = `cd "${projectPath}" && ${codexCommand}`;
                             }
                         }
                     } else if (provider === 'gemini') {
@@ -1709,7 +1711,7 @@ function handleShellConnection(ws) {
                             }
                         }
 
-                        if (os.platform() === 'win32') {
+                        if (isWindows) {
                             if (hasSession && resumeId) {
                                 shellCommand = `Set-Location -Path "${projectPath}"; ${command} --resume "${resumeId}"`;
                             } else {
@@ -1724,11 +1726,12 @@ function handleShellConnection(ws) {
                         }
                     } else {
                         // Use claude command (default) or initialCommand if provided
-                        const command = initialCommand || 'claude';
-                        if (os.platform() === 'win32') {
+                        const claudeCommand = isWindows ? 'claude.cmd' : 'claude';
+                        const command = initialCommand || claudeCommand;
+                        if (isWindows) {
                             if (hasSession && sessionId) {
                                 // Try to resume session, but with fallback to new session if it fails
-                                shellCommand = `Set-Location -Path "${projectPath}"; claude --resume ${sessionId}; if ($LASTEXITCODE -ne 0) { claude }`;
+                                shellCommand = `Set-Location -Path "${projectPath}"; ${claudeCommand} --resume ${sessionId}; if ($LASTEXITCODE -ne 0) { ${claudeCommand} }`;
                             } else {
                                 shellCommand = `Set-Location -Path "${projectPath}"; ${command}`;
                             }
@@ -1744,8 +1747,8 @@ function handleShellConnection(ws) {
                     console.log('🔧 Executing shell command:', shellCommand);
 
                     // Use appropriate shell based on platform
-                    const shell = os.platform() === 'win32' ? 'powershell.exe' : 'bash';
-                    const shellArgs = os.platform() === 'win32' ? ['-Command', shellCommand] : ['-c', shellCommand];
+                    const shell = isWindows ? 'powershell.exe' : 'bash';
+                    const shellArgs = isWindows ? ['-NoProfile', '-Command', shellCommand] : ['-c', shellCommand];
 
                     // Use terminal dimensions from client if provided, otherwise use defaults
                     const termCols = data.cols || 80;
