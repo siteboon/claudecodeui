@@ -56,6 +56,14 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
   const [messageCopied, setMessageCopied] = React.useState(false);
   const copyTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  React.useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
+
 
   React.useEffect(() => {
     setPermissionGrantState('idle');
