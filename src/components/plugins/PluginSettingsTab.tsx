@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { Trash2, RefreshCw, GitBranch, Loader2, ServerCrash, ChevronRight, ShieldAlert, ExternalLink, BookOpen } from 'lucide-react';
+import { Trash2, RefreshCw, GitBranch, Loader2, ServerCrash, ChevronRight, ShieldAlert, ExternalLink, BookOpen, Download, BarChart3 } from 'lucide-react';
 import { usePlugins } from '../../contexts/PluginsContext';
 import PluginIcon from './PluginIcon';
 import type { Plugin } from '../../contexts/PluginsContext';
+
+const STARTER_PLUGIN_URL = 'https://github.com/cloudcli-ai/cloudcli-plugin-starter';
 
 /* ─── Toggle Switch ─────────────────────────────────────────────────────── */
 function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
@@ -186,6 +188,49 @@ function PluginCard({
   );
 }
 
+/* ─── Starter Plugin Card ───────────────────────────────────────────────── */
+function StarterPluginCard({ onInstall, installing }: { onInstall: () => void; installing: boolean }) {
+  return (
+    <div className="relative flex rounded-md border border-dashed border-border/60 bg-card/50 overflow-hidden opacity-65 hover:opacity-80 transition-opacity duration-200">
+      <div className="w-[3px] flex-shrink-0 bg-muted-foreground/10" />
+      <div className="flex-1 p-3.5 min-w-0">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex-shrink-0 w-4 h-4 text-muted-foreground/60">
+              <BarChart3 className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-semibold text-sm text-foreground/70 leading-none">
+                  Project Stats
+                </span>
+                <span className="font-mono text-[10px] text-muted-foreground/50 bg-muted/50 px-1.5 py-0.5 rounded">
+                  starter
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground/60 mt-1 leading-snug">
+                File counts, lines of code, file-type breakdown, and recent activity for your project.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onInstall}
+            disabled={installing}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40 flex-shrink-0"
+          >
+            {installing ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <Download className="w-3 h-3" />
+            )}
+            {installing ? 'Installing…' : 'Install'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Empty State ───────────────────────────────────────────────────────── */
 function EmptyState() {
   return (
@@ -212,6 +257,7 @@ export default function PluginSettingsTab() {
 
   const [gitUrl, setGitUrl] = useState('');
   const [installing, setInstalling] = useState(false);
+  const [installingStarter, setInstallingStarter] = useState(false);
   const [installError, setInstallError] = useState<string | null>(null);
   const [confirmUninstall, setConfirmUninstall] = useState<string | null>(null);
   const [updatingPlugin, setUpdatingPlugin] = useState<string | null>(null);
@@ -240,6 +286,16 @@ export default function PluginSettingsTab() {
     setInstalling(false);
   };
 
+  const handleInstallStarter = async () => {
+    setInstallingStarter(true);
+    setInstallError(null);
+    const result = await installPlugin(STARTER_PLUGIN_URL);
+    if (!result.success) {
+      setInstallError(result.error || 'Installation failed');
+    }
+    setInstallingStarter(false);
+  };
+
   const handleUninstall = async (name: string) => {
     if (confirmUninstall !== name) {
       setConfirmUninstall(name);
@@ -248,6 +304,8 @@ export default function PluginSettingsTab() {
     await uninstallPlugin(name);
     setConfirmUninstall(null);
   };
+
+  const hasStarterInstalled = plugins.some((p) => p.name === 'project-stats');
 
   return (
     <div className="space-y-5">
@@ -258,11 +316,14 @@ export default function PluginSettingsTab() {
             Plugins
           </h3>
           <p className="text-xs text-muted-foreground">
-            Extend the interface with custom tabs. Drop a folder in{' '}
-            <code className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded">
-              ~/.claude-code-ui/plugins/
+            Extend the interface with custom plugins. Install from{' '}
+            <code className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded font-semibold">
+              git
             </code>{' '}
-            or install from git.
+            or drop a folder in{' '}
+            <code className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded font-semibold">
+              ~/.claude-code-ui/plugins/
+            </code>
           </p>
         </div>
         {!loading && plugins.length > 0 && (
@@ -272,86 +333,47 @@ export default function PluginSettingsTab() {
         )}
       </div>
 
-      {/* Install from Git */}
-      <div className="rounded-md border border-border bg-card p-3.5">
-        <div className="flex items-center gap-2 mb-3">
-          <GitBranch className="w-3.5 h-3.5 text-muted-foreground/60" />
-          <span className="text-xs font-mono text-muted-foreground uppercase tracking-widest">
-            Install from git
-          </span>
-        </div>
-
-        <div className="flex items-center gap-0 rounded-md border border-border bg-background focus-within:ring-1 focus-within:ring-ring overflow-hidden">
-          <span className="flex-shrink-0 pl-3 pr-1.5 font-mono text-xs text-muted-foreground/50 select-none">
-            $
-          </span>
-          <input
-            type="text"
-            value={gitUrl}
-            onChange={(e) => {
-              setGitUrl(e.target.value);
-              setInstallError(null);
-            }}
-            placeholder="git clone https://github.com/user/my-plugin"
-            className="flex-1 px-1.5 py-2.5 text-xs font-mono bg-transparent text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') void handleInstall();
-            }}
-          />
-          <button
-            onClick={handleInstall}
-            disabled={installing || !gitUrl.trim()}
-            className="flex-shrink-0 px-4 py-2.5 text-xs font-medium bg-foreground text-background hover:opacity-90 disabled:opacity-30 transition-opacity border-l border-border"
-          >
-            {installing ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              'Install'
-            )}
-          </button>
-        </div>
-
-        {installError && (
-          <p className="mt-2 text-xs font-mono text-red-500">{installError}</p>
-        )}
-
-        <p className="mt-2.5 flex items-start gap-1.5 text-[11px] text-muted-foreground/60 leading-snug">
-          <ShieldAlert className="w-3 h-3 mt-px flex-shrink-0" />
-          <span>
-            Plugins run with full access to the host page. Only install plugins
-            whose source code you have reviewed or from authors you trust.
-          </span>
-        </p>
+      {/* Install from Git — compact */}
+      <div className="flex items-center gap-0 rounded-md border border-border bg-card overflow-hidden">
+        <span className="flex-shrink-0 pl-3 pr-1 text-muted-foreground/40">
+          <GitBranch className="w-3 h-3" />
+        </span>
+        <input
+          type="text"
+          value={gitUrl}
+          onChange={(e) => {
+            setGitUrl(e.target.value);
+            setInstallError(null);
+          }}
+          placeholder="https://github.com/user/my-plugin"
+          className="flex-1 px-2 py-2 text-xs font-mono bg-transparent text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void handleInstall();
+          }}
+        />
+        <button
+          onClick={handleInstall}
+          disabled={installing || !gitUrl.trim()}
+          className="flex-shrink-0 px-3.5 py-2 text-xs font-medium bg-foreground text-background hover:opacity-90 disabled:opacity-30 transition-opacity border-l border-border"
+        >
+          {installing ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            'Install'
+          )}
+        </button>
       </div>
 
-      {/* Build your own */}
-      <div className="flex items-center gap-4 rounded-md border border-dashed border-border/60 px-4 py-3">
-        <BookOpen className="w-4 h-4 text-muted-foreground/50 flex-shrink-0" />
-        <div className="flex-1 min-w-0">
-          <p className="text-xs text-muted-foreground">
-            Build your own plugin or start from an example.
-          </p>
-        </div>
-        <div className="flex items-center gap-3 flex-shrink-0">
-          <a
-            href="https://github.com/cloudcli-ai/cloudcli-plugin-starter"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Starter plugin <ExternalLink className="w-3 h-3" />
-          </a>
-          <span className="text-border">|</span>
-          <a
-            href="https://cloudcli.ai/docs/plugin-overview"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Docs <ExternalLink className="w-3 h-3" />
-          </a>
-        </div>
-      </div>
+      {installError && (
+        <p className="text-xs font-mono text-red-500 -mt-3">{installError}</p>
+      )}
+
+      <p className="flex items-start gap-1.5 text-[11px] text-muted-foreground/50 leading-snug -mt-3">
+        <ShieldAlert className="w-3 h-3 mt-px flex-shrink-0" />
+        <span>
+          Only install plugins whose source code you have reviewed or from authors you trust.
+        </span>
+      </p>
 
       {/* Plugin List */}
       <div className="space-y-2">
@@ -378,6 +400,40 @@ export default function PluginSettingsTab() {
             />
           ))
         )}
+
+        {/* Starter plugin suggestion */}
+        {!loading && !hasStarterInstalled && (
+          <StarterPluginCard onInstall={handleInstallStarter} installing={installingStarter} />
+        )}
+      </div>
+
+      {/* Build your own */}
+      <div className="flex items-center justify-between gap-4 pt-1">
+        <div className="flex items-center gap-2 min-w-0">
+          <BookOpen className="w-3.5 h-3.5 text-muted-foreground/40 flex-shrink-0" />
+          <span className="text-[11px] text-muted-foreground/60">
+            Build your own plugin
+          </span>
+        </div>
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <a
+            href="https://github.com/cloudcli-ai/cloudcli-plugin-starter"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-[11px] text-muted-foreground/60 hover:text-foreground transition-colors"
+          >
+            Starter <ExternalLink className="w-2.5 h-2.5" />
+          </a>
+          <span className="text-muted-foreground/20">·</span>
+          <a
+            href="https://cloudcli.ai/docs/plugin-overview"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-[11px] text-muted-foreground/60 hover:text-foreground transition-colors"
+          >
+            Docs <ExternalLink className="w-2.5 h-2.5" />
+          </a>
+        </div>
       </div>
     </div>
   );
