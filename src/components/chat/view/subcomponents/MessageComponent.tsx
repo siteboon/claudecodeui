@@ -486,7 +486,9 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                 <button
                   type="button"
                   onClick={() => {
-                    const text = String(message.content || '');
+                    const text = message.isToolUse
+                      ? String(message.displayText || message.toolResult?.content || message.content || '')
+                      : String(message.content || '');
                     if (!text) return;
                     copyTextToClipboard(text).then((success) => {
                       if (!success) return;
