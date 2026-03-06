@@ -76,6 +76,56 @@ async function scanCommandsDirectory(dir, baseDir, namespace) {
 }
 
 /**
+ * Read installed plugin paths from ~/.claude/plugins/installed_plugins.json
+ * @returns {Promise<Array<{pluginName: string, commandsDir: string}>>}
+ */
+async function getInstalledPluginCommandDirs() {
+  const pluginsJsonPath = path.join(os.homedir(), '.claude', 'plugins', 'installed_plugins.json');
+  const dirs = [];
+
+  try {
+    const raw = await fs.readFile(pluginsJsonPath, 'utf8');
+    const { plugins } = JSON.parse(raw);
+
+    for (const [pluginKey, installs] of Object.entries(plugins)) {
+      const pluginName = pluginKey.split('@')[0];
+      for (const install of installs) {
+        dirs.push({
+          pluginName,
+          commandsDir: path.join(install.installPath, 'commands')
+        });
+      }
+    }
+  } catch (err) {
+    if (err.code !== 'ENOENT') {
+      console.error('Error reading installed plugins:', err.message);
+    }
+  }
+
+  return dirs;
+}
+
+/**
+ * Scan all installed plugin command directories
+ * @returns {Promise<Array>} Array of command objects with namespace 'plugin:<name>'
+ */
+async function scanPluginCommands() {
+  const pluginDirs = await getInstalledPluginCommandDirs();
+  const commands = [];
+
+  for (const { pluginName, commandsDir } of pluginDirs) {
+    const pluginCommands = await scanCommandsDirectory(
+      commandsDir,
+      commandsDir,
+      `plugin:${pluginName}`
+    );
+    commands.push(...pluginCommands);
+  }
+
+  return commands;
+}
+
+/**
  * Built-in commands that are always available
  */
 const builtInCommands = [
@@ -429,6 +479,10 @@ router.post('/list', async (req, res) => {
     );
     allCommands.push(...userCommands);
 
+    // Scan installed plugin commands (~/.claude/plugins/...)
+    const pluginCommands = await scanPluginCommands();
+    allCommands.push(...pluginCommands);
+
     // Separate built-in and custom commands
     const customCommands = allCommands.filter(cmd => cmd.namespace !== 'builtin');
 
@@ -545,6 +599,7 @@ router.post('/execute', async (req, res) => {
     {
       const resolvedPath = path.resolve(commandPath);
       const userBase = path.resolve(path.join(os.homedir(), '.claude', 'commands'));
+      const pluginCacheBase = path.resolve(path.join(os.homedir(), '.claude', 'plugins', 'cache'));
       const projectBase = context?.projectPath
         ? path.resolve(path.join(context.projectPath, '.claude', 'commands'))
         : null;
@@ -552,7 +607,7 @@ router.post('/execute', async (req, res) => {
         const rel = path.relative(base, resolvedPath);
         return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
       };
-      if (!(isUnder(userBase) || (projectBase && isUnder(projectBase)))) {
+      if (!(isUnder(userBase) || isUnder(pluginCacheBase) || (projectBase && isUnder(projectBase)))) {
         return res.status(403).json({
           error: 'Access denied',
           message: 'Command must be in .claude/commands directory'
