@@ -44,7 +44,7 @@ import pty from 'node-pty';
 import fetch from 'node-fetch';
 import mime from 'mime-types';
 
-import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
+import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache, searchConversations } from './projects.js';
 import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions, resolveToolApproval, getPendingApprovalsForSession, reconnectSessionWriter } from './claude-sdk.js';
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
 import { queryCodex, abortCodexSession, isCodexSessionActive, getActiveCodexSessions } from './openai-codex.js';
@@ -610,6 +610,51 @@ app.post('/api/projects/create', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('Error creating project:', error);
         res.status(500).json({ error: error.message });
+    }
+});
+
+// Search conversations content (SSE streaming)
+app.get('/api/search/conversations', authenticateToken, async (req, res) => {
+    const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    const parsedLimit = Number.parseInt(String(req.query.limit), 10);
+    const limit = Number.isNaN(parsedLimit) ? 50 : Math.max(1, Math.min(parsedLimit, 100));
+
+    if (query.length < 2) {
+        return res.status(400).json({ error: 'Query must be at least 2 characters' });
+    }
+
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+    });
+
+    let closed = false;
+    const abortController = new AbortController();
+    req.on('close', () => { closed = true; abortController.abort(); });
+
+    try {
+        await searchConversations(query, limit, ({ projectResult, totalMatches, scannedProjects, totalProjects }) => {
+            if (closed) return;
+            if (projectResult) {
+                res.write(`event: result\ndata: ${JSON.stringify({ projectResult, totalMatches, scannedProjects, totalProjects })}\n\n`);
+            } else {
+                res.write(`event: progress\ndata: ${JSON.stringify({ totalMatches, scannedProjects, totalProjects })}\n\n`);
+            }
+        }, abortController.signal);
+        if (!closed) {
+            res.write(`event: done\ndata: {}\n\n`);
+        }
+    } catch (error) {
+        console.error('Error searching conversations:', error);
+        if (!closed) {
+            res.write(`event: error\ndata: ${JSON.stringify({ error: 'Search failed' })}\n\n`);
+        }
+    } finally {
+        if (!closed) {
+            res.end();
+        }
     }
 });
 
