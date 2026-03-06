@@ -146,7 +146,12 @@ export function installPluginFromGit(url) {
     }
 
     const pluginsDir = getPluginsDir();
-    const targetDir = path.join(pluginsDir, repoName);
+    const targetDir = path.resolve(pluginsDir, repoName);
+
+    // Ensure the resolved target directory stays within the plugins directory
+    if (!targetDir.startsWith(pluginsDir + path.sep)) {
+      return reject(new Error('Invalid plugin directory path'));
+    }
 
     if (fs.existsSync(targetDir)) {
       return reject(new Error(`Plugin directory "${repoName}" already exists`));
