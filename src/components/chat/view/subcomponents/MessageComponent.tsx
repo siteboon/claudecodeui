@@ -478,52 +478,50 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
               </div>
             )}
 
-            {!isGrouped && (
-              <div className="mt-1 flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-gray-500">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const text = message.isToolUse
-                      ? String(message.displayText || message.toolResult?.content || message.content || '')
-                      : String(message.content || '');
-                    if (!text) return;
-                    copyTextToClipboard(text).then((success) => {
-                      if (!success) return;
-                      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
-                      setMessageCopied(true);
-                      copyTimeoutRef.current = setTimeout(() => setMessageCopied(false), 2000);
-                    });
-                  }}
-                  title={messageCopied ? t('copyMessage.copied') : t('copyMessage.copy')}
-                  aria-label={messageCopied ? t('copyMessage.copied') : t('copyMessage.copy')}
-                  className="opacity-100 transition-opacity focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                >
-                  {messageCopied ? (
-                    <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
-                      <path
-                        fillRule="evenodd"
-                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                  ) : (
-                    <svg
-                      className="h-3.5 w-3.5"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                      <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
-                    </svg>
-                  )}
-                </button>
-                <span>{formattedTime}</span>
-              </div>
-            )}
+            <div className="mt-1 flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-gray-500">
+              <button
+                type="button"
+                onClick={() => {
+                  const text = message.isToolUse
+                    ? String(message.displayText || message.toolResult?.content || message.content || '')
+                    : String(message.content || '');
+                  if (!text) return;
+                  copyTextToClipboard(text).then((success) => {
+                    if (!success) return;
+                    if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+                    setMessageCopied(true);
+                    copyTimeoutRef.current = setTimeout(() => setMessageCopied(false), 2000);
+                  });
+                }}
+                title={messageCopied ? t('copyMessage.copied') : t('copyMessage.copy')}
+                aria-label={messageCopied ? t('copyMessage.copied') : t('copyMessage.copy')}
+                className="opacity-100 transition-opacity focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+              >
+                {messageCopied ? (
+                  <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                    <path
+                      fillRule="evenodd"
+                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                ) : (
+                  <svg
+                    className="h-3.5 w-3.5"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
+                  </svg>
+                )}
+              </button>
+              {!isGrouped && <span>{formattedTime}</span>}
+            </div>
           </div>
         </div>
       )}
@@ -532,4 +530,3 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
 });
 
 export default MessageComponent;
-
