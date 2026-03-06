@@ -1,0 +1,126 @@
+import { useEffect, useRef } from 'react';
+import { useTheme } from '../../contexts/ThemeContext';
+import { authenticatedFetch } from '../../utils/api';
+import { usePlugins } from '../../contexts/PluginsContext';
+import type { Project, ProjectSession } from '../../types/app';
+
+type PluginTabContentProps = {
+  pluginName: string;
+  selectedProject: Project | null;
+  selectedSession: ProjectSession | null;
+};
+
+type PluginContext = {
+  theme: 'dark' | 'light';
+  project: { name: string; path: string } | null;
+  session: { id: string; title: string } | null;
+};
+
+function buildContext(
+  isDarkMode: boolean,
+  selectedProject: Project | null,
+  selectedSession: ProjectSession | null,
+): PluginContext {
+  return {
+    theme: isDarkMode ? 'dark' : 'light',
+    project: selectedProject
+      ? { name: selectedProject.name, path: selectedProject.fullPath || selectedProject.path }
+      : null,
+    session: selectedSession
+      ? { id: selectedSession.id, title: selectedSession.title }
+      : null,
+  };
+}
+
+export default function PluginTabContent({
+  pluginName,
+  selectedProject,
+  selectedSession,
+}: PluginTabContentProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const { isDarkMode } = useTheme();
+  const { plugins } = usePlugins();
+
+  // Stable refs so effects don't need context values in their dep arrays
+  const contextRef = useRef<PluginContext>(buildContext(isDarkMode, selectedProject, selectedSession));
+  const contextCallbacksRef = useRef<Set<(ctx: PluginContext) => void>>(new Set());
+   
+  const moduleRef = useRef<any>(null);
+
+  const plugin = plugins.find(p => p.name === pluginName);
+
+  // Keep contextRef current and notify the mounted plugin on every context change
+  useEffect(() => {
+    const ctx = buildContext(isDarkMode, selectedProject, selectedSession);
+    contextRef.current = ctx;
+
+    for (const cb of contextCallbacksRef.current) {
+      try { cb(ctx); } catch { /* plugin error — ignore */ }
+    }
+  }, [isDarkMode, selectedProject, selectedSession]);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    let active = true;
+    const container = containerRef.current;
+    const entryFile = plugin?.entry ?? 'index.js';
+
+    (async () => {
+      try {
+        // Fetch the plugin JS with auth headers (Cloudflare Worker requires auth on all routes).
+        // Then import it via a Blob URL so the browser never makes an unauthenticated request.
+        const assetUrl = `/api/plugins/${encodeURIComponent(pluginName)}/assets/${entryFile}`;
+        const res = await authenticatedFetch(assetUrl);
+        if (!res.ok) throw new Error(`Failed to fetch plugin (HTTP ${res.status})`);
+        const jsText = await res.text();
+        const blob = new Blob([jsText], { type: 'application/javascript' });
+        const blobUrl = URL.createObjectURL(blob);
+        // @vite-ignore
+        const mod = await import(/* @vite-ignore */ blobUrl).finally(() => URL.revokeObjectURL(blobUrl));
+        if (!active || !containerRef.current) return;
+
+        moduleRef.current = mod;
+
+        const api = {
+          get context(): PluginContext { return contextRef.current; },
+
+          onContextChange(cb: (ctx: PluginContext) => void): () => void {
+            contextCallbacksRef.current.add(cb);
+            return () => contextCallbacksRef.current.delete(cb);
+          },
+
+          async rpc(method: string, path: string, body?: unknown): Promise<unknown> {
+            const cleanPath = String(path).replace(/^\//, '');
+            const res = await authenticatedFetch(
+              `/api/plugins/${encodeURIComponent(pluginName)}/rpc/${cleanPath}`,
+              {
+                method: method || 'GET',
+                ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+              },
+            );
+            if (!res.ok) throw new Error(`RPC error ${res.status}`);
+            return res.json();
+          },
+        };
+
+        await mod.mount?.(container, api);
+      } catch (err) {
+        if (!active) return;
+        console.error(`[Plugin:${pluginName}] Failed to load:`, err);
+        if (containerRef.current) {
+          containerRef.current.innerHTML = `<div style="padding:16px;font-size:13px;color:#dc2626">Plugin failed to load: ${String(err)}</div>`;
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+      try { moduleRef.current?.unmount?.(container); } catch { /* ignore */ }
+      contextCallbacksRef.current.clear();
+      moduleRef.current = null;
+    };
+  }, [pluginName, plugin?.entry]); // re-mount only when the plugin itself changes
+
+  return <div ref={containerRef} className="h-full w-full overflow-auto" />;
+}

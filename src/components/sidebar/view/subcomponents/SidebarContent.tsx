@@ -4,10 +4,10 @@ import type { TFunction } from 'i18next';
 import { ScrollArea } from '../../../../shared/view/ui';
 import type { Project } from '../../../../types/app';
 import type { ReleaseInfo } from '../../../../types/sharedTypes';
+import type { ConversationSearchResults, SearchProgress } from '../../hooks/useSidebarController';
 import SidebarFooter from './SidebarFooter';
 import SidebarHeader from './SidebarHeader';
 import SidebarProjectList, { type SidebarProjectListProps } from './SidebarProjectList';
-import type { ConversationSearchResults, SearchProgress } from '../../hooks/useSidebarController';
 
 type SearchMode = 'projects' | 'conversations';
 
@@ -19,7 +19,7 @@ function HighlightedSnippet({ snippet, highlights }: { snippet: string; highligh
       parts.push(snippet.slice(cursor, h.start));
     }
     parts.push(
-      <mark key={h.start} className="bg-yellow-200 dark:bg-yellow-800 text-foreground rounded-sm px-0.5">
+      <mark key={h.start} className="rounded-sm bg-yellow-200 px-0.5 text-foreground dark:bg-yellow-800">
         {snippet.slice(h.start, h.end)}
       </mark>
     );
@@ -29,7 +29,7 @@ function HighlightedSnippet({ snippet, highlights }: { snippet: string; highligh
     parts.push(snippet.slice(cursor));
   }
   return (
-    <span className="text-xs text-muted-foreground leading-relaxed">
+    <span className="text-xs leading-relaxed text-muted-foreground">
       {parts}
     </span>
   );
@@ -116,23 +116,23 @@ export default function SidebarContent({
       <ScrollArea className="flex-1 overflow-y-auto overscroll-contain md:px-1.5 md:py-2">
         {showConversationSearch ? (
           isSearching && !hasPartialResults ? (
-            <div className="text-center py-12 md:py-8 px-4">
-              <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-4 md:mb-3">
-                <div className="w-6 h-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+            <div className="px-4 py-12 text-center md:py-8">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-muted md:mb-3">
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
               </div>
               <p className="text-sm text-muted-foreground">{t('search.searching')}</p>
               {searchProgress && (
-                <p className="text-xs text-muted-foreground/60 mt-1">
+                <p className="mt-1 text-xs text-muted-foreground/60">
                   {t('search.projectsScanned', { count: searchProgress.scannedProjects })}/{searchProgress.totalProjects}
                 </p>
               )}
             </div>
           ) : !isSearching && conversationResults && conversationResults.results.length === 0 ? (
-            <div className="text-center py-12 md:py-8 px-4">
-              <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-4 md:mb-3">
-                <Search className="w-6 h-6 text-muted-foreground" />
+            <div className="px-4 py-12 text-center md:py-8">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-muted md:mb-3">
+                <Search className="h-6 w-6 text-muted-foreground" />
               </div>
-              <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">{t('search.noResults')}</h3>
+              <h3 className="mb-2 text-base font-medium text-foreground md:mb-1">{t('search.noResults')}</h3>
               <p className="text-sm text-muted-foreground">{t('search.tryDifferentQuery')}</p>
             </div>
           ) : hasPartialResults ? (
@@ -143,7 +143,7 @@ export default function SidebarContent({
                 </p>
                 {isSearching && searchProgress && (
                   <div className="flex items-center gap-1.5">
-                    <div className="w-3 h-3 animate-spin rounded-full border-[1.5px] border-muted-foreground/40 border-t-primary" />
+                    <div className="h-3 w-3 animate-spin rounded-full border-[1.5px] border-muted-foreground/40 border-t-primary" />
                     <p className="text-[10px] text-muted-foreground/60">
                       {searchProgress.scannedProjects}/{searchProgress.totalProjects}
                     </p>
@@ -151,9 +151,9 @@ export default function SidebarContent({
                 )}
               </div>
               {isSearching && searchProgress && (
-                <div className="mx-1 h-0.5 bg-muted rounded-full overflow-hidden">
+                <div className="mx-1 h-0.5 overflow-hidden rounded-full bg-muted">
                   <div
-                    className="h-full bg-primary/60 rounded-full transition-all duration-300"
+                    className="h-full rounded-full bg-primary/60 transition-all duration-300"
                     style={{ width: `${Math.round((searchProgress.scannedProjects / searchProgress.totalProjects) * 100)}%` }}
                   />
                 </div>
@@ -161,15 +161,15 @@ export default function SidebarContent({
               {conversationResults.results.map((projectResult) => (
                 <div key={projectResult.projectName} className="space-y-1">
                   <div className="flex items-center gap-1.5 px-1 py-1">
-                    <Folder className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-                    <span className="text-xs font-medium text-foreground truncate">
+                    <Folder className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                    <span className="truncate text-xs font-medium text-foreground">
                       {projectResult.projectDisplayName}
                     </span>
                   </div>
                   {projectResult.sessions.map((session) => (
                     <button
                       key={`${projectResult.projectName}-${session.sessionId}`}
-                      className="w-full text-left rounded-md px-2 py-2 hover:bg-accent/50 transition-colors"
+                      className="w-full rounded-md px-2 py-2 text-left transition-colors hover:bg-accent/50"
                       onClick={() => onConversationResultClick(
                         projectResult.projectName,
                         session.sessionId,
@@ -178,13 +178,13 @@ export default function SidebarContent({
                         session.matches[0]?.snippet
                       )}
                     >
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <MessageSquare className="w-3 h-3 text-primary flex-shrink-0" />
-                        <span className="text-xs font-medium text-foreground truncate">
+                      <div className="mb-1 flex items-center gap-1.5">
+                        <MessageSquare className="h-3 w-3 flex-shrink-0 text-primary" />
+                        <span className="truncate text-xs font-medium text-foreground">
                           {session.sessionSummary}
                         </span>
                         {session.provider && session.provider !== 'claude' && (
-                          <span className="text-[9px] px-1 py-0.5 rounded bg-muted text-muted-foreground uppercase flex-shrink-0">
+                          <span className="flex-shrink-0 rounded bg-muted px-1 py-0.5 text-[9px] uppercase text-muted-foreground">
                             {session.provider}
                           </span>
                         )}
@@ -192,7 +192,7 @@ export default function SidebarContent({
                       <div className="space-y-1 pl-4">
                         {session.matches.map((match, idx) => (
                           <div key={idx} className="flex items-start gap-1">
-                            <span className="text-[10px] text-muted-foreground/60 font-medium uppercase flex-shrink-0 mt-0.5">
+                            <span className="mt-0.5 flex-shrink-0 text-[10px] font-medium uppercase text-muted-foreground/60">
                               {match.role === 'user' ? 'U' : 'A'}
                             </span>
                             <HighlightedSnippet

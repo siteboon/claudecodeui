@@ -61,20 +61,6 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
   isSubagentContainer,
   subagentState
 }) => {
-  // Route subagent containers to dedicated component
-  if (isSubagentContainer && subagentState) {
-    if (mode === 'result') {
-      return null;
-    }
-    return (
-      <SubagentContainer
-        toolInput={toolInput}
-        toolResult={toolResult}
-        subagentState={subagentState}
-      />
-    );
-  }
-
   const config = getToolConfig(toolName);
   const displayConfig: any = mode === 'input' ? config.input : config.result;
 
@@ -94,7 +80,20 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
     }
   }, [displayConfig, parsedData, onFileOpen]);
 
-  // Keep hooks above this guard so hook call order stays stable across renders.
+  // Route subagent containers to dedicated component (after hooks to keep call order stable)
+  if (isSubagentContainer && subagentState) {
+    if (mode === 'result') {
+      return null;
+    }
+    return (
+      <SubagentContainer
+        toolInput={toolInput}
+        toolResult={toolResult}
+        subagentState={subagentState}
+      />
+    );
+  }
+
   if (!displayConfig) return null;
 
   if (displayConfig.type === 'one-line') {

@@ -64,6 +64,8 @@ import cliAuthRoutes from './routes/cli-auth.js';
 import userRoutes from './routes/user.js';
 import codexRoutes from './routes/codex.js';
 import geminiRoutes from './routes/gemini.js';
+import pluginsRoutes from './routes/plugins.js';
+import { startEnabledPluginServers, stopAllPlugins } from './utils/plugin-process-manager.js';
 import { initializeDatabase, sessionNamesDb, applyCustomSessionNames } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { IS_PLATFORM } from './constants/config.js';
@@ -388,6 +390,9 @@ app.use('/api/codex', authenticateToken, codexRoutes);
 
 // Gemini API Routes (protected)
 app.use('/api/gemini', authenticateToken, geminiRoutes);
+
+// Plugins API Routes (protected)
+app.use('/api/plugins', authenticateToken, pluginsRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
@@ -2532,7 +2537,20 @@ async function startServer() {
 
             // Start watching the projects folder for changes
             await setupProjectsWatcher();
+
+            // Start server-side plugin processes for enabled plugins
+            startEnabledPluginServers().catch(err => {
+                console.error('[Plugins] Error during startup:', err.message);
+            });
         });
+
+        // Clean up plugin processes on shutdown
+        const shutdownPlugins = () => {
+            stopAllPlugins();
+            process.exit(0);
+        };
+        process.on('SIGTERM', shutdownPlugins);
+        process.on('SIGINT', shutdownPlugins);
     } catch (error) {
         console.error('[ERROR] Failed to start server:', error);
         process.exit(1);
