@@ -387,8 +387,6 @@ export default function PluginSettingsTab() {
           <Loader2 className="h-4 w-4 animate-spin" />
           Scanning plugins…
         </div>
-      ) : plugins.length === 0 && hasStarterInstalled ? (
-        <p className="py-8 text-center text-sm text-muted-foreground">No plugins installed</p>
       ) : plugins.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted-foreground">No plugins installed</p>
       ) : (
