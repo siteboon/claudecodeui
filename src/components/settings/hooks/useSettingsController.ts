@@ -20,6 +20,7 @@ import type {
   McpServer,
   McpToolsResult,
   McpTestResult,
+  NotificationPreferencesState,
   ProjectSortOrder,
   SettingsMainTab,
   SettingsProject,
@@ -96,9 +97,14 @@ type CodexSettingsStorage = {
   permissionMode?: CodexPermissionMode;
 };
 
+type NotificationPreferencesResponse = {
+  success?: boolean;
+  preferences?: NotificationPreferencesState;
+};
+
 type ActiveLoginProvider = AgentProvider | '';
 
-const KNOWN_MAIN_TABS: SettingsMainTab[] = ['agents', 'appearance', 'git', 'api', 'tasks'];
+const KNOWN_MAIN_TABS: SettingsMainTab[] = ['agents', 'appearance', 'git', 'api', 'tasks', 'notifications'];
 
 const normalizeMainTab = (tab: string): SettingsMainTab => {
   // Keep backwards compatibility with older callers that still pass "tools".
@@ -186,6 +192,18 @@ const createEmptyCursorPermissions = (): CursorPermissionsState => ({
   ...DEFAULT_CURSOR_PERMISSIONS,
 });
 
+const createDefaultNotificationPreferences = (): NotificationPreferencesState => ({
+  channels: {
+    inApp: true,
+    webPush: false,
+  },
+  events: {
+    actionRequired: true,
+    stop: true,
+    error: true,
+  },
+});
+
 export function useSettingsController({ isOpen, initialTab, projects, onClose }: UseSettingsControllerArgs) {
   const { isDarkMode, toggleDarkMode } = useTheme() as ThemeContextValue;
   const closeTimerRef = useRef<number | null>(null);
@@ -204,6 +222,9 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
   ));
   const [cursorPermissions, setCursorPermissions] = useState<CursorPermissionsState>(() => (
     createEmptyCursorPermissions()
+  ));
+  const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreferencesState>(() => (
+    createDefaultNotificationPreferences()
   ));
   const [codexPermissionMode, setCodexPermissionMode] = useState<CodexPermissionMode>('default');
   const [geminiPermissionMode, setGeminiPermissionMode] = useState<GeminiPermissionMode>('default');
@@ -671,6 +692,22 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
       );
       setGeminiPermissionMode(savedGeminiSettings.permissionMode || 'default');
 
+      try {
+        const notificationResponse = await authenticatedFetch('/api/settings/notification-preferences');
+        if (notificationResponse.ok) {
+          const notificationData = await toResponseJson<NotificationPreferencesResponse>(notificationResponse);
+          if (notificationData.success && notificationData.preferences) {
+            setNotificationPreferences(notificationData.preferences);
+          } else {
+            setNotificationPreferences(createDefaultNotificationPreferences());
+          }
+        } else {
+          setNotificationPreferences(createDefaultNotificationPreferences());
+        }
+      } catch {
+        setNotificationPreferences(createDefaultNotificationPreferences());
+      }
+
       await Promise.all([
         fetchMcpServers(),
         fetchCursorMcpServers(),
@@ -680,6 +717,7 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
       console.error('Error loading settings:', error);
       setClaudePermissions(createEmptyClaudePermissions());
       setCursorPermissions(createEmptyCursorPermissions());
+      setNotificationPreferences(createDefaultNotificationPreferences());
       setCodexPermissionMode('default');
       setProjectSortOrder('name');
     }
@@ -700,7 +738,7 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
     void checkAuthStatus(loginProvider);
   }, [checkAuthStatus, loginProvider]);
 
-  const saveSettings = useCallback(() => {
+  const saveSettings = useCallback(async () => {
     setIsSaving(true);
     setSaveStatus(null);
 
@@ -731,6 +769,14 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
         lastUpdated: now,
       }));
 
+      const notificationResponse = await authenticatedFetch('/api/settings/notification-preferences', {
+        method: 'PUT',
+        body: JSON.stringify(notificationPreferences),
+      });
+      if (!notificationResponse.ok) {
+        throw new Error('Failed to save notification preferences');
+      }
+
       setSaveStatus('success');
       if (closeTimerRef.current !== null) {
         window.clearTimeout(closeTimerRef.current);
@@ -751,6 +797,7 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
     cursorPermissions.allowedCommands,
     cursorPermissions.disallowedCommands,
     cursorPermissions.skipPermissions,
+    notificationPreferences,
     onClose,
     projectSortOrder,
   ]);
@@ -827,6 +874,8 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
     setClaudePermissions,
     cursorPermissions,
     setCursorPermissions,
+    notificationPreferences,
+    setNotificationPreferences,
     codexPermissionMode,
     setCodexPermissionMode,
     mcpServers,

@@ -65,6 +65,7 @@ import userRoutes from './routes/user.js';
 import codexRoutes from './routes/codex.js';
 import geminiRoutes from './routes/gemini.js';
 import { initializeDatabase, sessionNamesDb, applyCustomSessionNames } from './database/db.js';
+import { configureWebPush } from './services/vapid-keys.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { IS_PLATFORM } from './constants/config.js';
 
@@ -1401,7 +1402,7 @@ wss.on('connection', (ws, request) => {
     if (pathname === '/shell') {
         handleShellConnection(ws);
     } else if (pathname === '/ws') {
-        handleChatConnection(ws);
+        handleChatConnection(ws, request);
     } else {
         console.log('[WARN] Unknown WebSocket path:', pathname);
         ws.close();
@@ -1412,9 +1413,10 @@ wss.on('connection', (ws, request) => {
  * WebSocket Writer - Wrapper for WebSocket to match SSEStreamWriter interface
  */
 class WebSocketWriter {
-    constructor(ws) {
+    constructor(ws, userId = null) {
         this.ws = ws;
         this.sessionId = null;
+        this.userId = userId;
         this.isWebSocketWriter = true;  // Marker for transport detection
     }
 
@@ -1439,14 +1441,14 @@ class WebSocketWriter {
 }
 
 // Handle chat WebSocket connections
-function handleChatConnection(ws) {
+function handleChatConnection(ws, request) {
     console.log('[INFO] Chat WebSocket connected');
 
     // Add to connected clients for project updates
     connectedClients.add(ws);
 
     // Wrap WebSocket with writer for consistent interface with SSEStreamWriter
-    const writer = new WebSocketWriter(ws);
+    const writer = new WebSocketWriter(ws, request?.user?.id ?? request?.user?.userId ?? null);
 
     ws.on('message', async (message) => {
         try {
@@ -2504,6 +2506,9 @@ async function startServer() {
     try {
         // Initialize authentication database
         await initializeDatabase();
+
+        // Configure Web Push (VAPID keys)
+        configureWebPush();
 
         // Check if running in production mode (dist folder exists)
         const distIndexPath = path.join(__dirname, '../dist/index.html');

@@ -85,7 +85,7 @@ const authenticateWebSocket = (token) => {
     try {
       const user = userDb.getFirstUser();
       if (user) {
-        return { userId: user.id, username: user.username };
+        return { id: user.id, userId: user.id, username: user.username };
       }
       return null;
     } catch (error) {
@@ -101,7 +101,10 @@ const authenticateWebSocket = (token) => {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    return decoded;
+    return {
+      ...decoded,
+      id: decoded.userId
+    };
   } catch (error) {
     console.error('WebSocket token verification error:', error);
     return null;
