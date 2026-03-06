@@ -497,7 +497,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                   }}
                   title={messageCopied ? t('copyMessage.copied') : t('copyMessage.copy')}
                   aria-label={messageCopied ? t('copyMessage.copied') : t('copyMessage.copy')}
-                  className="opacity-0 transition-opacity group-hover:opacity-100"
+                  className="opacity-100 transition-opacity focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                 >
                   {messageCopied ? (
                     <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
