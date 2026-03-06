@@ -178,7 +178,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
         </div>
       ) : (
         /* Claude/Error/Tool messages on the left */
-        <div className="group w-full">
+        <div className="w-full">
           {!isGrouped && (
             <div className="mb-2 flex items-center space-x-3">
               {message.type === 'error' ? (
@@ -520,13 +520,14 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                   </svg>
                 )}
               </button>
-               {
-               !isGrouped && (
+            </div>
+            {
+              !isGrouped && (
                 <div className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
                   {formattedTime}
                 </div>
-              )}
-            </div>
+              )
+            }
           </div>
         </div>
       )}
