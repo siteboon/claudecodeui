@@ -242,11 +242,25 @@ export default function ChatMessagesPane({
 
           {visibleMessages.map((message, index) => {
             const prevMessage = index > 0 ? visibleMessages[index - 1] : null;
+            const nextMessage = index < visibleMessages.length - 1 ? visibleMessages[index + 1] : null;
+            // Collect all assistant messages in the same reply group for full-reply copy
+            const groupMessages = (() => {
+              if (message.type !== 'assistant') return null;
+              // Find the start of this assistant group
+              let start = index;
+              while (start > 0 && visibleMessages[start - 1].type === 'assistant') start--;
+              // Find the end of this assistant group
+              let end = index;
+              while (end < visibleMessages.length - 1 && visibleMessages[end + 1].type === 'assistant') end++;
+              return visibleMessages.slice(start, end + 1);
+            })();
             return (
               <MessageComponent
                 key={getMessageKey(message)}
                 message={message}
                 prevMessage={prevMessage}
+                nextMessage={nextMessage}
+                groupMessages={groupMessages}
                 createDiff={createDiff}
                 onFileOpen={onFileOpen}
                 onShowSettings={onShowSettings}

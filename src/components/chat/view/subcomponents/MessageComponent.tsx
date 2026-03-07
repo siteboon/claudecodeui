@@ -12,6 +12,7 @@ import { getClaudePermissionSuggestion } from '../../utils/chatPermissions';
 import { copyTextToClipboard } from '../../../../utils/clipboard';
 import type { Project } from '../../../../types/app';
 import { ToolRenderer, shouldHideToolResult } from '../../tools';
+import { TOOL_CONFIGS } from '../../tools/configs/toolConfigs';
 import { Markdown } from './Markdown';
 
 type DiffLine = {
@@ -23,6 +24,8 @@ type DiffLine = {
 interface MessageComponentProps {
   message: ChatMessage;
   prevMessage: ChatMessage | null;
+  nextMessage: ChatMessage | null;
+  groupMessages: ChatMessage[] | null;
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onShowSettings?: () => void;
@@ -42,7 +45,7 @@ type InteractiveOption = {
 
 type PermissionGrantState = 'idle' | 'granted' | 'error';
 
-const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, onShowSettings, onGrantToolPermission, autoExpandTools, showRawParameters, showThinking, selectedProject, provider }: MessageComponentProps) => {
+const MessageComponent = memo(({ message, prevMessage, nextMessage, groupMessages, createDiff, onFileOpen, onShowSettings, onGrantToolPermission, autoExpandTools, showRawParameters, showThinking, selectedProject, provider }: MessageComponentProps) => {
   const { t } = useTranslation('chat');
   const isGrouped = prevMessage && prevMessage.type === message.type &&
     ((prevMessage.type === 'assistant') ||
@@ -186,7 +189,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
         </div>
       ) : (
         /* Claude/Error/Tool messages on the left */
-        <div className="w-full">
+        <div className="group w-full">
           {!isGrouped && (
             <div className="mb-2 flex items-center space-x-3">
               {message.type === 'error' ? (
@@ -487,12 +490,30 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
             )}
 
             <div className="mt-1 flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-gray-500">
-              <button
+              {!isGrouped && <span>{formattedTime}</span>}
+              {message.type === 'assistant' && !message.isToolUse && nextMessage?.type !== 'assistant' && <button
                 type="button"
                 onClick={() => {
-                  const text = message.isToolUse
-                    ? String(message.displayText || message.toolResult?.content || message.content || '')
-                    : String(message.content || '');
+                  const text = (groupMessages || [message])
+                    .map(m => {
+                      if (m.isToolUse) {
+                        const toolName = String(m.toolName || 'Tool');
+                        const config = TOOL_CONFIGS[toolName]?.input;
+                        const rawInput = m.toolInput;
+                        const input: Record<string, unknown> | null = (() => {
+                          if (!rawInput) return null;
+                          if (typeof rawInput === 'object') return rawInput as Record<string, unknown>;
+                          try { return JSON.parse(String(rawInput)); } catch { return null; }
+                        })();
+                        const primary = config && 'getValue' in config && config.getValue && input ? String(config.getValue(input) || '') : '';
+                        const secondary = config && 'getSecondary' in config && config.getSecondary && input ? String(config.getSecondary(input) || '') : '';
+                        const detail = [primary, secondary].filter(Boolean).join('  ');
+                        return detail ? `${toolName} / ${detail}` : toolName;
+                      }
+                      return String(m.content || '');
+                    })
+                    .filter(Boolean)
+                    .join('\n\n');
                   if (!text) return;
                   copyTextToClipboard(text).then((success) => {
                     if (!success) return;
@@ -503,7 +524,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                 }}
                 title={messageCopied ? t('copyMessage.copied') : t('copyMessage.copy')}
                 aria-label={messageCopied ? t('copyMessage.copied') : t('copyMessage.copy')}
-                className="opacity-100 transition-opacity focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                className="opacity-100"
               >
                 {messageCopied ? (
                   <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
@@ -527,15 +548,8 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                     <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
                   </svg>
                 )}
-              </button>
+              </button>}
             </div>
-            {
-              !isGrouped && (
-                <div className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
-                  {formattedTime}
-                </div>
-              )
-            }
           </div>
         </div>
       )}
