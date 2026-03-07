@@ -108,6 +108,7 @@ const MessageComponent = memo(({ message, prevMessage, nextMessage, groupMessage
   return (
     <div
       ref={messageRef}
+      data-message-timestamp={message.timestamp || undefined}
       className={`chat-message ${message.type} ${isGrouped ? 'grouped' : ''} ${message.type === 'user' ? 'flex justify-end px-3 sm:px-0' : 'px-3 sm:px-0'}`}
     >
       {message.type === 'user' ? (
