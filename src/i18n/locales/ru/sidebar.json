@@ -112,8 +112,12 @@
     "noResults": "Результаты не найдены",
     "tryDifferentQuery": "Попробуйте другой поисковый запрос",
     "matches_one": "{{count}} совпадение",
+    "matches_few": "{{count}} совпадения",
+    "matches_many": "{{count}} совпадений",
     "matches_other": "{{count}} совпадений",
     "projectsScanned_one": "{{count}} проект просканирован",
+    "projectsScanned_few": "{{count}} проекта просканировано",
+    "projectsScanned_many": "{{count}} проектов просканировано",
     "projectsScanned_other": "{{count}} проектов просканировано"
   },
   "deleteConfirmation": {
@@ -121,6 +125,8 @@
     "deleteSession": "Удалить сеанс",
     "confirmDelete": "Вы уверены, что хотите удалить",
     "sessionCount_one": "Этот проект содержит {{count}} разговор.",
+    "sessionCount_few": "Этот проект содержит {{count}} разговора.",
+    "sessionCount_many": "Этот проект содержит {{count}} разговоров.",
     "sessionCount_other": "Этот проект содержит {{count}} разговоров.",
     "allConversationsDeleted": "Все разговоры будут удалены навсегда.",
     "cannotUndo": "Это действие нельзя отменить."
