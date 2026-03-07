@@ -108,7 +108,7 @@ temp/
 .serena/
 CLAUDE.md
 .mcp.json
-
+.gemini/
 
 # Database files
 *.db
