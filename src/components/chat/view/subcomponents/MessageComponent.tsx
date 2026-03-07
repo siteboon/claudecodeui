@@ -12,6 +12,7 @@ import { getClaudePermissionSuggestion } from '../../utils/chatPermissions';
 import { copyTextToClipboard } from '../../../../utils/clipboard';
 import type { Project } from '../../../../types/app';
 import { ToolRenderer, shouldHideToolResult } from '../../tools';
+import { TOOL_CONFIGS } from '../../tools/configs/toolConfigs';
 import { Markdown } from './Markdown';
 
 type DiffLine = {
@@ -23,6 +24,8 @@ type DiffLine = {
 interface MessageComponentProps {
   message: ChatMessage;
   prevMessage: ChatMessage | null;
+  nextMessage: ChatMessage | null;
+  groupMessages: ChatMessage[] | null;
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onShowSettings?: () => void;
@@ -42,7 +45,7 @@ type InteractiveOption = {
 
 type PermissionGrantState = 'idle' | 'granted' | 'error';
 
-const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, onShowSettings, onGrantToolPermission, autoExpandTools, showRawParameters, showThinking, selectedProject, provider }: MessageComponentProps) => {
+const MessageComponent = memo(({ message, prevMessage, nextMessage, groupMessages, createDiff, onFileOpen, onShowSettings, onGrantToolPermission, autoExpandTools, showRawParameters, showThinking, selectedProject, provider }: MessageComponentProps) => {
   const { t } = useTranslation('chat');
   const isGrouped = prevMessage && prevMessage.type === message.type &&
     ((prevMessage.type === 'assistant') ||
@@ -54,6 +57,15 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
   const permissionSuggestion = getClaudePermissionSuggestion(message, provider);
   const [permissionGrantState, setPermissionGrantState] = React.useState<PermissionGrantState>('idle');
   const [messageCopied, setMessageCopied] = React.useState(false);
+  const copyTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
 
 
   React.useEffect(() => {
@@ -128,7 +140,9 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
 
                   copyTextToClipboard(text).then((success) => {
                     if (!success) return;
+                    if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
                     setMessageCopied(true);
+                    copyTimeoutRef.current = setTimeout(() => setMessageCopied(false), 2000);
                   });
                 }}
                 title={messageCopied ? t('copyMessage.copied') : t('copyMessage.copy')}
@@ -176,7 +190,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
         </div>
       ) : (
         /* Claude/Error/Tool messages on the left */
-        <div className="w-full">
+        <div className="group w-full">
           {!isGrouped && (
             <div className="mb-2 flex items-center space-x-3">
               {message.type === 'error' ? (
@@ -476,11 +490,67 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
               </div>
             )}
 
-            {!isGrouped && (
-              <div className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
-                {formattedTime}
-              </div>
-            )}
+            <div className="mt-1 flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-gray-500">
+              {!isGrouped && <span>{formattedTime}</span>}
+              {message.type === 'assistant' && !message.isToolUse && nextMessage?.type !== 'assistant' && <button
+                type="button"
+                onClick={() => {
+                  const text = (groupMessages || [message])
+                    .map(m => {
+                      if (m.isToolUse) {
+                        const toolName = String(m.toolName || 'Tool');
+                        const config = TOOL_CONFIGS[toolName]?.input;
+                        const rawInput = m.toolInput;
+                        const input: Record<string, unknown> | null = (() => {
+                          if (!rawInput) return null;
+                          if (typeof rawInput === 'object') return rawInput as Record<string, unknown>;
+                          try { return JSON.parse(String(rawInput)); } catch { return null; }
+                        })();
+                        const primary = config && 'getValue' in config && config.getValue && input ? String(config.getValue(input) || '') : '';
+                        const secondary = config && 'getSecondary' in config && config.getSecondary && input ? String(config.getSecondary(input) || '') : '';
+                        const detail = [primary, secondary].filter(Boolean).join('  ');
+                        return detail ? `${toolName} / ${detail}` : toolName;
+                      }
+                      return String(m.content || '');
+                    })
+                    .filter(Boolean)
+                    .join('\n\n');
+                  if (!text) return;
+                  copyTextToClipboard(text).then((success) => {
+                    if (!success) return;
+                    if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+                    setMessageCopied(true);
+                    copyTimeoutRef.current = setTimeout(() => setMessageCopied(false), 2000);
+                  });
+                }}
+                title={messageCopied ? t('copyMessage.copied') : t('copyMessage.copy')}
+                aria-label={messageCopied ? t('copyMessage.copied') : t('copyMessage.copy')}
+                className="opacity-100"
+              >
+                {messageCopied ? (
+                  <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                    <path
+                      fillRule="evenodd"
+                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                ) : (
+                  <svg
+                    className="h-3.5 w-3.5"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
+                  </svg>
+                )}
+              </button>}
+            </div>
           </div>
         </div>
       )}
@@ -489,4 +559,3 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
 });
 
 export default MessageComponent;
-
