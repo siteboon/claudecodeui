@@ -1616,6 +1616,7 @@ function handleShellConnection(ws) {
                 const provider = data.provider || 'claude';
                 const initialCommand = data.initialCommand;
                 const isPlainShell = data.isPlainShell || (!!initialCommand && !hasSession) || provider === 'plain-shell';
+                const isWindows = os.platform() === 'win32';
                 urlDetectionBuffer = '';
                 announcedAuthUrls.clear();
 
@@ -1698,14 +1699,14 @@ function handleShellConnection(ws) {
                     let shellCommand;
                     if (isPlainShell) {
                         // Plain shell mode - just run the initial command in the project directory
-                        if (os.platform() === 'win32') {
+                        if (isWindows) {
                             shellCommand = `Set-Location -Path "${projectPath}"; ${initialCommand}`;
                         } else {
                             shellCommand = `cd "${projectPath}" && ${initialCommand}`;
                         }
                     } else if (provider === 'cursor') {
                         // Use cursor-agent command
-                        if (os.platform() === 'win32') {
+                        if (isWindows) {
                             if (hasSession && sessionId) {
                                 shellCommand = `Set-Location -Path "${projectPath}"; cursor-agent --resume="${sessionId}"`;
                             } else {
@@ -1721,19 +1722,20 @@ function handleShellConnection(ws) {
 
                     } else if (provider === 'codex') {
                         // Use codex command
-                        if (os.platform() === 'win32') {
+                        const codexCommand = isWindows ? 'codex.cmd' : 'codex';
+                        if (isWindows) {
                             if (hasSession && sessionId) {
                                 // Try to resume session, but with fallback to a new session if it fails
-                                shellCommand = `Set-Location -Path "${projectPath}"; codex resume "${sessionId}"; if ($LASTEXITCODE -ne 0) { codex }`;
+                                shellCommand = `Set-Location -Path "${projectPath}"; ${codexCommand} resume "${sessionId}"; if ($LASTEXITCODE -ne 0) { ${codexCommand} }`;
                             } else {
-                                shellCommand = `Set-Location -Path "${projectPath}"; codex`;
+                                shellCommand = `Set-Location -Path "${projectPath}"; ${codexCommand}`;
                             }
                         } else {
                             if (hasSession && sessionId) {
                                 // Try to resume session, but with fallback to a new session if it fails
-                                shellCommand = `cd "${projectPath}" && codex resume "${sessionId}" || codex`;
+                                shellCommand = `cd "${projectPath}" && ${codexCommand} resume "${sessionId}" || ${codexCommand}`;
                             } else {
-                                shellCommand = `cd "${projectPath}" && codex`;
+                                shellCommand = `cd "${projectPath}" && ${codexCommand}`;
                             }
                         }
                     } else if (provider === 'gemini') {
@@ -1754,7 +1756,7 @@ function handleShellConnection(ws) {
                             }
                         }
 
-                        if (os.platform() === 'win32') {
+                        if (isWindows) {
                             if (hasSession && resumeId) {
                                 shellCommand = `Set-Location -Path "${projectPath}"; ${command} --resume "${resumeId}"`;
                             } else {
@@ -1769,11 +1771,12 @@ function handleShellConnection(ws) {
                         }
                     } else {
                         // Use claude command (default) or initialCommand if provided
-                        const command = initialCommand || 'claude';
-                        if (os.platform() === 'win32') {
+                        const claudeCommand = isWindows ? 'claude.cmd' : 'claude';
+                        const command = initialCommand || claudeCommand;
+                        if (isWindows) {
                             if (hasSession && sessionId) {
                                 // Try to resume session, but with fallback to new session if it fails
-                                shellCommand = `Set-Location -Path "${projectPath}"; claude --resume ${sessionId}; if ($LASTEXITCODE -ne 0) { claude }`;
+                                shellCommand = `Set-Location -Path "${projectPath}"; ${claudeCommand} --resume ${sessionId}; if ($LASTEXITCODE -ne 0) { ${claudeCommand} }`;
                             } else {
                                 shellCommand = `Set-Location -Path "${projectPath}"; ${command}`;
                             }
@@ -1789,8 +1792,8 @@ function handleShellConnection(ws) {
                     console.log('🔧 Executing shell command:', shellCommand);
 
                     // Use appropriate shell based on platform
-                    const shell = os.platform() === 'win32' ? 'powershell.exe' : 'bash';
-                    const shellArgs = os.platform() === 'win32' ? ['-Command', shellCommand] : ['-c', shellCommand];
+                    const shell = isWindows ? 'powershell.exe' : 'bash';
+                    const shellArgs = isWindows ? ['-NoProfile', '-Command', shellCommand] : ['-c', shellCommand];
 
                     // Use terminal dimensions from client if provided, otherwise use defaults
                     const termCols = data.cols || 80;
@@ -2499,44 +2502,62 @@ const HOST = process.env.HOST || '0.0.0.0';
 // Show localhost in URL when binding to all interfaces (0.0.0.0 isn't a connectable address)
 const DISPLAY_HOST = HOST === '0.0.0.0' ? 'localhost' : HOST;
 
-// Initialize database and start server
+// Initialize database and start server.
+// Returns a Promise that resolves with the port number once the server is listening.
+// Can be imported and called programmatically (e.g., from Electron main process).
 async function startServer() {
-    try {
-        // Initialize authentication database
-        await initializeDatabase();
+    return new Promise(async (resolve, reject) => {
+        try {
+            // Initialize authentication database
+            await initializeDatabase();
 
-        // Check if running in production mode (dist folder exists)
-        const distIndexPath = path.join(__dirname, '../dist/index.html');
-        const isProduction = fs.existsSync(distIndexPath);
+            // Check if running in production mode (dist folder exists)
+            const distIndexPath = path.join(__dirname, '../dist/index.html');
+            const isProduction = fs.existsSync(distIndexPath);
 
-        // Log Claude implementation mode
-        console.log(`${c.info('[INFO]')} Using Claude Agents SDK for Claude integration`);
-        console.log(`${c.info('[INFO]')} Running in ${c.bright(isProduction ? 'PRODUCTION' : 'DEVELOPMENT')} mode`);
+            // Log Claude implementation mode
+            console.log(`${c.info('[INFO]')} Using Claude Agents SDK for Claude integration`);
+            console.log(`${c.info('[INFO]')} Running in ${c.bright(isProduction ? 'PRODUCTION' : 'DEVELOPMENT')} mode`);
 
-        if (!isProduction) {
-            console.log(`${c.warn('[WARN]')} Note: Requests will be proxied to Vite dev server at ${c.dim('http://localhost:' + (process.env.VITE_PORT || 5173))}`);
+            if (!isProduction) {
+                console.log(`${c.warn('[WARN]')} Note: Requests will be proxied to Vite dev server at ${c.dim('http://localhost:' + (process.env.VITE_PORT || 5173))}`);
+            }
+
+            server.on('error', reject);
+
+            server.listen(PORT, HOST, async () => {
+                const appInstallPath = path.join(__dirname, '..');
+
+                console.log('');
+                console.log(c.dim('═'.repeat(63)));
+                console.log(`  ${c.bright('Claude Code UI Server - Ready')}`);
+                console.log(c.dim('═'.repeat(63)));
+                console.log('');
+                console.log(`${c.info('[INFO]')} Server URL:  ${c.bright('http://' + DISPLAY_HOST + ':' + PORT)}`);
+                console.log(`${c.info('[INFO]')} Installed at: ${c.dim(appInstallPath)}`);
+                console.log(`${c.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
+                console.log('');
+
+                // Start watching the projects folder for changes
+                await setupProjectsWatcher();
+
+                resolve(parseInt(PORT));
+            });
+        } catch (error) {
+            reject(error);
         }
-
-        server.listen(PORT, HOST, async () => {
-            const appInstallPath = path.join(__dirname, '..');
-
-            console.log('');
-            console.log(c.dim('═'.repeat(63)));
-            console.log(`  ${c.bright('Claude Code UI Server - Ready')}`);
-            console.log(c.dim('═'.repeat(63)));
-            console.log('');
-            console.log(`${c.info('[INFO]')} Server URL:  ${c.bright('http://' + DISPLAY_HOST + ':' + PORT)}`);
-            console.log(`${c.info('[INFO]')} Installed at: ${c.dim(appInstallPath)}`);
-            console.log(`${c.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
-            console.log('');
-
-            // Start watching the projects folder for changes
-            await setupProjectsWatcher();
-        });
-    } catch (error) {
-        console.error('[ERROR] Failed to start server:', error);
-        process.exit(1);
-    }
+    });
 }
 
-startServer();
+export { startServer };
+
+// Auto-start when this file is run directly (e.g., `node server/index.js`).
+// When imported as a module by Electron, startServer() is NOT called automatically.
+const isDirectRun = process.argv[1] &&
+    path.resolve(process.argv[1]) === path.resolve(__filename);
+if (isDirectRun) {
+    startServer().catch((error) => {
+        console.error('[ERROR] Failed to start server:', error);
+        process.exit(1);
+    });
+}
