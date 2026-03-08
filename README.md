@@ -15,7 +15,7 @@ A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/cla
   <a href="https://trendshift.io/repositories/15586" target="_blank"><img src="https://trendshift.io/api/badge/repositories/15586" alt="siteboon%2Fclaudecodeui | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 </p>
 
-<div align="right"><i><b>English</b> · <a href="./README.ko.md">한국어</a> · <a href="./README.zh-CN.md">中文</a> · <a href="./README.ja.md">日本語</a> · <a href="./README.ru.md">Русский</a></i></div>
+<div align="right"><i><b>English</b> · <a href="./README.ru.md">Русский</a> · <a href="./README.ko.md">한국어</a> · <a href="./README.zh-CN.md">中文</a> · <a href="./README.ja.md">日本語</a></i></div>
 
 ## Screenshots
 
