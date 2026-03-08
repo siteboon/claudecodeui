@@ -15,7 +15,35 @@ import type {
 } from '../types';
 import QuickSettingsSection from './QuickSettingsSection';
 import QuickSettingsToggleRow from './QuickSettingsToggleRow';
+import QuickSettingsTtsSection from './QuickSettingsTtsSection';
 import QuickSettingsWhisperSection from './QuickSettingsWhisperSection';
+import { useTts } from '../../../contexts/TtsContext';
+
+function QuickSettingsTtsWrapper() {
+  const tts = useTts();
+  if (!tts) return null;
+  if (tts.availableVoices.length === 0) return null;
+
+  return (
+    <QuickSettingsTtsSection
+      enabled={tts.enabled}
+      onToggle={tts.toggle}
+      rate={tts.rate}
+      onRateChange={tts.setRate}
+      pitch={tts.pitch}
+      onPitchChange={tts.setPitch}
+      voiceURI={tts.voiceURI}
+      onVoiceChange={tts.setVoiceURI}
+      lang={tts.lang}
+      onLangChange={tts.setLang}
+      filteredVoices={tts.filteredVoices}
+      availableLanguages={tts.availableLanguages}
+      onTestVoice={tts.testVoice}
+      isSpeaking={tts.isSpeaking}
+      onStop={tts.stop}
+    />
+  );
+}
 
 type QuickSettingsContentProps = {
   isDarkMode: boolean;
@@ -75,6 +103,8 @@ export default function QuickSettingsContent({
           {t('quickSettings.sendByCtrlEnterDescription')}
         </p>
       </QuickSettingsSection>
+
+      <QuickSettingsTtsWrapper />
 
       <QuickSettingsWhisperSection />
     </div>

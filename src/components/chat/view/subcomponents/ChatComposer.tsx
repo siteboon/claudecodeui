@@ -11,7 +11,9 @@ import type {
   SetStateAction,
   TouchEvent,
 } from 'react';
+import { Volume2, VolumeX, StopCircle } from 'lucide-react';
 import MicButton from '../../../mic-button/view/MicButton';
+import { useTts } from '../../../../contexts/TtsContext';
 import type { PendingPermissionRequest, PermissionMode, Provider } from '../../types/types';
 import CommandMenu from './CommandMenu';
 import ClaudeStatus from './ClaudeStatus';
@@ -150,6 +152,7 @@ export default function ChatComposer({
   sendByCtrlEnter,
   onTranscript,
 }: ChatComposerProps) {
+  const tts = useTts();
   const { t } = useTranslation('chat');
   const textareaRect = textareaRef.current?.getBoundingClientRect();
   const commandMenuPosition = {
@@ -325,6 +328,29 @@ export default function ChatComposer({
             <div className="absolute right-16 top-1/2 -translate-y-1/2 transform sm:right-16" style={{ display: 'none' }}>
               <MicButton onTranscript={onTranscript} className="h-10 w-10 sm:h-10 sm:w-10" />
             </div>
+
+            {tts && tts.availableVoices.length > 0 && (
+              <button
+                type="button"
+                onClick={tts.isSpeaking ? tts.stop : tts.toggle}
+                className={`absolute right-14 top-1/2 -translate-y-1/2 transform rounded-xl p-2 transition-colors sm:right-[60px] ${
+                  tts.enabled
+                    ? tts.isSpeaking
+                      ? 'bg-primary/20 text-primary'
+                      : 'text-primary hover:bg-accent/60'
+                    : 'text-muted-foreground hover:bg-accent/60'
+                }`}
+                title={tts.isSpeaking ? 'Stop speaking' : tts.enabled ? 'TTS ON (click to disable)' : 'TTS OFF (click to enable)'}
+              >
+                {tts.isSpeaking ? (
+                  <StopCircle className="h-5 w-5" />
+                ) : tts.enabled ? (
+                  <Volume2 className="h-5 w-5" />
+                ) : (
+                  <VolumeX className="h-5 w-5" />
+                )}
+              </button>
+            )}
 
             <button
               type="submit"
