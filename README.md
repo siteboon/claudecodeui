@@ -127,8 +127,8 @@ CloudCLI UI is the open source UI layer that powers CloudCLI Cloud. You can self
 To use Claude Code's full functionality, you'll need to manually enable tools:
 
 1. **Open Tools Settings** - Click the gear icon in the sidebar
-3. **Enable Selectively** - Turn on only the tools you need
-4. **Apply Settings** - Your preferences are saved locally
+2. **Enable Selectively** - Turn on only the tools you need
+3. **Apply Settings** - Your preferences are saved locally
 
 <div align="center">
 
