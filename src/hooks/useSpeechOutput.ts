@@ -86,6 +86,8 @@ export function useSpeechOutput(chatMessages: ChatMessage[]) {
   // Seed to current tail so we don't replay historical messages on mount
   const lastSpokenIndexRef = useRef(chatMessages.length - 1);
   const lastStreamingContentRef = useRef<string | null>(null);
+  const chatMessagesLengthRef = useRef(chatMessages.length);
+  chatMessagesLengthRef.current = chatMessages.length;
 
   // Load available voices
   useEffect(() => {
@@ -195,7 +197,7 @@ export function useSpeechOutput(chatMessages: ChatMessage[]) {
       const next = !prev;
       if (next) {
         // Seed so we only speak messages appended after enabling
-        lastSpokenIndexRef.current = chatMessages.length - 1;
+        lastSpokenIndexRef.current = chatMessagesLengthRef.current - 1;
         lastStreamingContentRef.current = null;
       } else if (typeof window !== 'undefined' && window.speechSynthesis) {
         window.speechSynthesis.cancel();
@@ -203,7 +205,7 @@ export function useSpeechOutput(chatMessages: ChatMessage[]) {
       }
       return next;
     });
-  }, [chatMessages.length]);
+  }, []);
 
   // Cancel active speech when provider unmounts
   useEffect(() => {
