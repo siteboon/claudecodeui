@@ -72,6 +72,27 @@
       "draggingStatus": "正在拖拽...",
       "toggleAndMove": "点击切换，拖拽移动"
     },
+    "tts": {
+      "sectionTitle": "文字转语音",
+      "enabled": "TTS 已启用",
+      "language": "语言",
+      "allLanguages": "所有语言",
+      "voice": "语音（{{count}}个可用）",
+      "voiceAuto": "自动（第一个匹配）",
+      "speed": "速度",
+      "pitch": "音调",
+      "pitchLow": "低",
+      "pitchNormal": "正常",
+      "pitchHigh": "高",
+      "testVoice": "测试语音",
+      "stop": "停止",
+      "network": "网络",
+      "button": {
+        "stopSpeaking": "停止朗读",
+        "ttsOn": "文字转语音已启用（点击禁用）",
+        "ttsOff": "文字转语音已禁用（点击启用）"
+      }
+    },
     "whisper": {
       "modes": {
         "default": "默认模式",

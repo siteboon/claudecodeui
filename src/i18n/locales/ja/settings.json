@@ -72,6 +72,27 @@
       "draggingStatus": "ドラッグ中...",
       "toggleAndMove": "クリックで切替、ドラッグで移動"
     },
+    "tts": {
+      "sectionTitle": "テキスト読み上げ",
+      "enabled": "TTS有効",
+      "language": "言語",
+      "allLanguages": "すべての言語",
+      "voice": "音声（{{count}}件利用可能）",
+      "voiceAuto": "自動（最初に一致）",
+      "speed": "速度",
+      "pitch": "ピッチ",
+      "pitchLow": "低",
+      "pitchNormal": "標準",
+      "pitchHigh": "高",
+      "testVoice": "音声テスト",
+      "stop": "停止",
+      "network": "ネットワーク",
+      "button": {
+        "stopSpeaking": "読み上げを停止",
+        "ttsOn": "テキスト読み上げ有効（クリックで無効化）",
+        "ttsOff": "テキスト読み上げ無効（クリックで有効化）"
+      }
+    },
     "whisper": {
       "modes": {
         "default": "標準モード",

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Volume2, VolumeX, Play } from 'lucide-react';
 import type { VoiceInfo } from '../../../hooks/useSpeechOutput';
 import { SETTING_ROW_CLASS } from '../constants';
@@ -38,22 +39,25 @@ export default function QuickSettingsTtsSection({
   isSpeaking,
   onStop,
 }: QuickSettingsTtsSectionProps) {
+  const { t } = useTranslation('settings');
+
   return (
-    <QuickSettingsSection title="Text-to-Speech">
+    <QuickSettingsSection title={t('quickSettings.tts.sectionTitle')}>
       {/* Enable/Disable toggle */}
       <div className={SETTING_ROW_CLASS}>
-        <span className="flex items-center gap-2 text-sm text-gray-900 dark:text-white">
+        <span id="tts-enabled-label" className="flex items-center gap-2 text-sm text-gray-900 dark:text-white">
           {enabled ? (
             <Volume2 className="h-4 w-4 text-gray-600 dark:text-gray-400" />
           ) : (
             <VolumeX className="h-4 w-4 text-gray-600 dark:text-gray-400" />
           )}
-          TTS Enabled
+          {t('quickSettings.tts.enabled')}
         </span>
         <button
           type="button"
           role="switch"
           aria-checked={enabled}
+          aria-labelledby="tts-enabled-label"
           onClick={onToggle}
           className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
             enabled ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'
@@ -71,8 +75,11 @@ export default function QuickSettingsTtsSection({
         <>
           {/* Language filter */}
           <div className="space-y-1 px-1">
-            <label className="text-xs text-gray-500 dark:text-gray-400">Language</label>
+            <label htmlFor="tts-lang-select" className="text-xs text-gray-500 dark:text-gray-400">
+              {t('quickSettings.tts.language')}
+            </label>
             <select
+              id="tts-lang-select"
               value={lang}
               onChange={(e) => {
                 onLangChange(e.target.value);
@@ -80,7 +87,7 @@ export default function QuickSettingsTtsSection({
               }}
               className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
             >
-              <option value="">All Languages</option>
+              <option value="">{t('quickSettings.tts.allLanguages')}</option>
               {availableLanguages.map((l) => (
                 <option key={l} value={l}>
                   {l}
@@ -91,18 +98,19 @@ export default function QuickSettingsTtsSection({
 
           {/* Voice selection */}
           <div className="space-y-1 px-1">
-            <label className="text-xs text-gray-500 dark:text-gray-400">
-              Voice ({filteredVoices.length} available)
+            <label htmlFor="tts-voice-select" className="text-xs text-gray-500 dark:text-gray-400">
+              {t('quickSettings.tts.voice', { count: filteredVoices.length })}
             </label>
             <select
+              id="tts-voice-select"
               value={voiceURI}
               onChange={(e) => onVoiceChange(e.target.value)}
               className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
             >
-              <option value="">Auto (first match)</option>
+              <option value="">{t('quickSettings.tts.voiceAuto')}</option>
               {filteredVoices.map((v) => (
                 <option key={v.voiceURI} value={v.voiceURI}>
-                  {v.name} ({v.lang}){v.localService ? '' : ' [Network]'}
+                  {v.name} ({v.lang}){v.localService ? '' : ` [${t('quickSettings.tts.network')}]`}
                 </option>
               ))}
             </select>
@@ -111,12 +119,15 @@ export default function QuickSettingsTtsSection({
           {/* Rate slider */}
           <div className="space-y-1 px-1">
             <div className="flex items-center justify-between">
-              <label className="text-xs text-gray-500 dark:text-gray-400">Speed</label>
+              <label htmlFor="tts-rate-input" className="text-xs text-gray-500 dark:text-gray-400">
+                {t('quickSettings.tts.speed')}
+              </label>
               <span className="text-xs font-mono text-gray-500 dark:text-gray-400">
                 {rate.toFixed(1)}x
               </span>
             </div>
             <input
+              id="tts-rate-input"
               type="range"
               min="0.5"
               max="3.0"
@@ -136,12 +147,15 @@ export default function QuickSettingsTtsSection({
           {/* Pitch slider */}
           <div className="space-y-1 px-1">
             <div className="flex items-center justify-between">
-              <label className="text-xs text-gray-500 dark:text-gray-400">Pitch</label>
+              <label htmlFor="tts-pitch-input" className="text-xs text-gray-500 dark:text-gray-400">
+                {t('quickSettings.tts.pitch')}
+              </label>
               <span className="text-xs font-mono text-gray-500 dark:text-gray-400">
                 {pitch.toFixed(1)}
               </span>
             </div>
             <input
+              id="tts-pitch-input"
               type="range"
               min="0.5"
               max="2.0"
@@ -151,9 +165,9 @@ export default function QuickSettingsTtsSection({
               className="w-full accent-blue-600"
             />
             <div className="flex justify-between text-[10px] text-gray-400">
-              <span>Low</span>
-              <span>Normal</span>
-              <span>High</span>
+              <span>{t('quickSettings.tts.pitchLow')}</span>
+              <span>{t('quickSettings.tts.pitchNormal')}</span>
+              <span>{t('quickSettings.tts.pitchHigh')}</span>
             </div>
           </div>
 
@@ -171,12 +185,12 @@ export default function QuickSettingsTtsSection({
               {isSpeaking ? (
                 <>
                   <VolumeX className="h-4 w-4" />
-                  Stop
+                  {t('quickSettings.tts.stop')}
                 </>
               ) : (
                 <>
                   <Play className="h-4 w-4" />
-                  Test Voice
+                  {t('quickSettings.tts.testVoice')}
                 </>
               )}
             </button>

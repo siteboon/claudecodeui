@@ -154,6 +154,7 @@ export default function ChatComposer({
 }: ChatComposerProps) {
   const tts = useTts();
   const { t } = useTranslation('chat');
+  const { t: tSettings } = useTranslation('settings');
   const textareaRect = textareaRef.current?.getBoundingClientRect();
   const commandMenuPosition = {
     top: textareaRect ? Math.max(16, textareaRect.top - 316) : 0,
@@ -340,7 +341,8 @@ export default function ChatComposer({
                       : 'text-primary hover:bg-accent/60'
                     : 'text-muted-foreground hover:bg-accent/60'
                 }`}
-                title={tts.isSpeaking ? 'Stop speaking' : tts.enabled ? 'TTS ON (click to disable)' : 'TTS OFF (click to enable)'}
+                aria-label={tts.isSpeaking ? tSettings('quickSettings.tts.button.stopSpeaking') : tts.enabled ? tSettings('quickSettings.tts.button.ttsOn') : tSettings('quickSettings.tts.button.ttsOff')}
+                title={tts.isSpeaking ? tSettings('quickSettings.tts.button.stopSpeaking') : tts.enabled ? tSettings('quickSettings.tts.button.ttsOn') : tSettings('quickSettings.tts.button.ttsOff')}
               >
                 {tts.isSpeaking ? (
                   <StopCircle className="h-5 w-5" />

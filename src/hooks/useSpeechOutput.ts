@@ -198,6 +198,15 @@ export function useSpeechOutput(chatMessages: ChatMessage[]) {
     });
   }, []);
 
+  // Cancel active speech when provider unmounts
+  useEffect(() => {
+    return () => {
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
   // Test current voice settings
   const testVoice = useCallback(() => {
     speak('テスト音声です。Hello, this is a test.');
