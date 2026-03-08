@@ -37,7 +37,12 @@ function detectRouterBasename() {
   let detectedBasename = '';
   for (const candidate of candidatePaths) {
     try {
-      const pathname = new URL(candidate.value, document.baseURI || window.location.href).pathname;
+      const candidateUrl = new URL(candidate.value, document.baseURI || window.location.href);
+      if (candidateUrl.origin !== window.location.origin) {
+        continue;
+      }
+
+      const pathname = candidateUrl.pathname;
       const normalizedPathname = pathname.replace(/\/+$/, '');
 
       let normalized = '';
@@ -52,7 +57,7 @@ function detectRouterBasename() {
         const match = candidate.kind === 'manifest' ? manifestMatch : iconMatch;
         if (match?.[1]) {
           const segments = match[1].split('/').filter(Boolean);
-          while (segments.length > 0 && ['assets', 'static', 'icons', 'images'].includes(segments[segments.length - 1])) {
+          while (segments.length > 1 && ['assets', 'static', 'icons', 'images'].includes(segments[segments.length - 1])) {
             segments.pop();
           }
           normalized = segments.length > 0 ? `/${segments.join('/')}` : '';
