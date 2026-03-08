@@ -9,6 +9,9 @@ import { PluginsProvider } from './contexts/PluginsContext';
 import AppContent from './components/app/AppContent';
 import i18n from './i18n/config.js';
 
+/**
+ * Detect the router basename from explicit runtime config or deployment hints.
+ */
 function detectRouterBasename() {
   const explicitBasename = typeof window !== 'undefined' ? window.__ROUTER_BASENAME__ || '' : '';
   if (explicitBasename) {
@@ -20,21 +23,45 @@ function detectRouterBasename() {
   }
 
   const candidatePaths = [
-    document.querySelector('link[rel="manifest"]')?.getAttribute('href'),
-    document.querySelector('script[type="module"][src]')?.getAttribute('src'),
-    document.querySelector('link[rel="icon"][href]')?.getAttribute('href'),
-  ].filter((value): value is string => Boolean(value));
+    { kind: 'manifest' as const, value: document.querySelector('link[rel="manifest"]')?.getAttribute('href') },
+    { kind: 'script' as const, value: document.querySelector('script[type="module"][src]')?.getAttribute('src') },
+    ...Array.from(
+      document.querySelectorAll(
+        'link[rel~="icon"][href], link[rel="apple-touch-icon"][href], link[rel="apple-touch-icon-precomposed"][href], link[rel="mask-icon"][href]'
+      )
+    ).map((node) => ({
+      kind: 'icon' as const,
+      value: node.getAttribute('href'),
+    })),
+  ].filter((candidate): candidate is { kind: 'manifest' | 'script' | 'icon'; value: string } => Boolean(candidate.value));
 
   let detectedBasename = '';
   for (const candidate of candidatePaths) {
     try {
-      const pathname = new URL(candidate, document.baseURI || window.location.href).pathname;
-      const match = pathname.match(/^(.*)\/(?:assets\/|manifest\.json$|favicon\.(?:svg|png)$)/);
-      if (match) {
-        const normalized = match[1] ? match[1].replace(/\/+$/, '') : '';
-        if (normalized.length > detectedBasename.length) {
-          detectedBasename = normalized;
+      const pathname = new URL(candidate.value, document.baseURI || window.location.href).pathname;
+      const normalizedPathname = pathname.replace(/\/+$/, '');
+
+      let normalized = '';
+      if (candidate.kind === 'script') {
+        const match = normalizedPathname.match(/^(.*)\/assets\//);
+        normalized = match?.[1] ? match[1].replace(/\/+$/, '') : '';
+      } else {
+        const manifestMatch = normalizedPathname.match(/^(.*)\/(?:manifest\.json|site\.webmanifest)$/);
+        const iconMatch = normalizedPathname.match(
+          /^(.*)\/(?:favicon(?:\.[^/]+)?|apple-touch-icon(?:-[^/]+)?(?:\.[^/]+)?|mask-icon(?:\.[^/]+)?|[^/]*icon[^/]*)$/
+        );
+        const match = candidate.kind === 'manifest' ? manifestMatch : iconMatch;
+        if (match?.[1]) {
+          const segments = match[1].split('/').filter(Boolean);
+          while (segments.length > 0 && ['assets', 'static', 'icons', 'images'].includes(segments[segments.length - 1])) {
+            segments.pop();
+          }
+          normalized = segments.length > 0 ? `/${segments.join('/')}` : '';
         }
+      }
+
+      if (normalized.length > detectedBasename.length) {
+        detectedBasename = normalized;
       }
     } catch {
       // Ignore invalid candidate URLs and continue checking other hints.
