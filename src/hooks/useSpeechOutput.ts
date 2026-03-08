@@ -54,7 +54,9 @@ function readStorage(key: string, fallback: string): string {
 function readStorageFloat(key: string, fallback: number): number {
   try {
     const v = localStorage.getItem(key);
-    return v ? parseFloat(v) : fallback;
+    if (!v) return fallback;
+    const parsed = parseFloat(v);
+    return Number.isNaN(parsed) ? fallback : parsed;
   } catch {
     return fallback;
   }
