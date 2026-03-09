@@ -106,10 +106,14 @@ const isUpdateAdditive = (
 
 const VALID_TABS: Set<string> = new Set(['chat', 'files', 'shell', 'git', 'tasks', 'preview']);
 
+const isValidTab = (tab: string): tab is AppTab => {
+  return VALID_TABS.has(tab) || tab.startsWith('plugin:');
+};
+
 const readPersistedTab = (): AppTab => {
   try {
     const stored = localStorage.getItem('activeTab');
-    if (stored && VALID_TABS.has(stored)) {
+    if (stored && isValidTab(stored)) {
       return stored as AppTab;
     }
   } catch {

@@ -9,6 +9,7 @@ import FileStatusLegend from './FileStatusLegend';
 
 type ChangesViewProps = {
   isMobile: boolean;
+  projectPath: string;
   gitStatus: GitStatusResponse | null;
   gitDiff: GitDiffMap;
   isLoading: boolean;
@@ -27,6 +28,7 @@ type ChangesViewProps = {
 
 export default function ChangesView({
   isMobile,
+  projectPath,
   gitStatus,
   gitDiff,
   isLoading,
@@ -131,6 +133,7 @@ export default function ChangesView({
     <>
       <CommitComposer
         isMobile={isMobile}
+        projectPath={projectPath}
         selectedFileCount={selectedFiles.size}
         isHidden={hasExpandedFiles}
         onCommit={commitSelectedFiles}
