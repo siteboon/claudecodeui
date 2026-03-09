@@ -135,5 +135,3 @@ tasks/
 !src/i18n/locales/en/tasks.json
 !src/i18n/locales/ja/tasks.json
 !src/i18n/locales/ru/tasks.json
-!src/i18n/locales/ko/tasks.json
-!src/i18n/locales/zh-CN/tasks.json
