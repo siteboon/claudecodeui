@@ -397,20 +397,29 @@ export default function PluginSettingsTab() {
         <p className="py-8 text-center text-sm text-muted-foreground">{t('pluginSettings.noPluginsInstalled')}</p>
       ) : (
         <div className="space-y-2">
-          {plugins.map((plugin, index) => (
-            <PluginCard
-              key={plugin.name}
-              plugin={plugin}
-              index={index}
-              onToggle={(enabled) => void togglePlugin(plugin.name, enabled).then(r => { if (!r.success) setInstallError(r.error || t('pluginSettings.toggleFailed')); })}
-              onUpdate={() => void handleUpdate(plugin.name)}
-              onUninstall={() => void handleUninstall(plugin.name)}
-              updating={updatingPlugins.has(plugin.name)}
-              confirmingUninstall={confirmUninstall === plugin.name}
-              onCancelUninstall={() => setConfirmUninstall(null)}
-              updateError={updateErrors[plugin.name] ?? null}
-            />
-          ))}
+          {plugins.map((plugin, index) => {
+            const handleToggle = async (enabled: boolean) => {
+              const r = await togglePlugin(plugin.name, enabled);
+              if (!r.success) {
+                setInstallError(r.error || t('pluginSettings.toggleFailed'));
+              }
+            };
+
+            return (
+              <PluginCard
+                key={plugin.name}
+                plugin={plugin}
+                index={index}
+                onToggle={(enabled) => void handleToggle(enabled)}
+                onUpdate={() => void handleUpdate(plugin.name)}
+                onUninstall={() => void handleUninstall(plugin.name)}
+                updating={updatingPlugins.has(plugin.name)}
+                confirmingUninstall={confirmUninstall === plugin.name}
+                onCancelUninstall={() => setConfirmUninstall(null)}
+                updateError={updateErrors[plugin.name] ?? null}
+              />
+            );
+          })}
         </div>
       )}
 
