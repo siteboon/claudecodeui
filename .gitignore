@@ -137,4 +137,4 @@ tasks/
 !src/i18n/locales/ru/tasks.json
 
 # Git worktrees
-.git/worktrees
+.worktrees/
