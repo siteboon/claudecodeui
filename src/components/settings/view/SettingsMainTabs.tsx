@@ -20,7 +20,7 @@ const TAB_CONFIG: MainTabConfig[] = [
   { id: 'git', labelKey: 'mainTabs.git', icon: GitBranch },
   { id: 'api', labelKey: 'mainTabs.apiTokens', icon: Key },
   { id: 'tasks', labelKey: 'mainTabs.tasks' },
-  { id: 'plugins', label: 'Plugins', icon: Puzzle },
+  { id: 'plugins', labelKey: 'mainTabs.plugins', icon: Puzzle },
 ];
 
 export default function SettingsMainTabs({ activeTab, onChange }: SettingsMainTabsProps) {

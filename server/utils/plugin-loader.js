@@ -143,14 +143,16 @@ export function resolvePluginAssetPath(name, assetPath) {
 
   const resolved = path.resolve(pluginDir, assetPath);
 
-  // Prevent path traversal — resolved path must be within plugin directory
-  if (!resolved.startsWith(pluginDir + path.sep) && resolved !== pluginDir) {
+  // Prevent path traversal — canonicalize via realpath to defeat symlink bypasses
+  if (!fs.existsSync(resolved)) return null;
+
+  const realResolved = fs.realpathSync(resolved);
+  const realPluginDir = fs.realpathSync(pluginDir);
+  if (!realResolved.startsWith(realPluginDir + path.sep) && realResolved !== realPluginDir) {
     return null;
   }
 
-  if (!fs.existsSync(resolved)) return null;
-
-  return resolved;
+  return realResolved;
 }
 
 export function installPluginFromGit(url) {

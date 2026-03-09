@@ -60,7 +60,7 @@ export default function PluginTabContent({
   }, [isDarkMode, selectedProject, selectedSession]);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || !plugin?.enabled) return;
 
     let active = true;
     const container = containerRef.current;
@@ -120,7 +120,7 @@ export default function PluginTabContent({
       contextCallbacksRef.current.clear();
       moduleRef.current = null;
     };
-  }, [pluginName, plugin?.entry]); // re-mount only when the plugin itself changes
+  }, [pluginName, plugin?.entry, plugin?.enabled]); // re-mount when plugin or enabled state changes
 
   return <div ref={containerRef} className="h-full w-full overflow-auto" />;
 }

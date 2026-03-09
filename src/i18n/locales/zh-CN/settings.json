@@ -104,7 +104,8 @@
     "appearance": "外观",
     "git": "Git",
     "apiTokens": "API 和令牌",
-    "tasks": "任务"
+    "tasks": "任务",
+    "plugins": "插件"
   },
   "appearanceSettings": {
     "darkMode": {
