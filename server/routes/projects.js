@@ -311,13 +311,11 @@ router.post('/create-workspace', async (req, res) => {
  * Helper function to get GitHub token from database
  */
 async function getGithubTokenById(tokenId, userId) {
-  const { getDatabase } = await import('../database/db.js');
-  const db = await getDatabase();
+  const { db } = await import('../database/db.js');
 
-  const credential = await db.get(
-    'SELECT * FROM user_credentials WHERE id = ? AND user_id = ? AND credential_type = ? AND is_active = 1',
-    [tokenId, userId, 'github_token']
-  );
+  const credential = db.prepare(
+    'SELECT * FROM user_credentials WHERE id = ? AND user_id = ? AND credential_type = ? AND is_active = 1'
+  ).get(tokenId, userId, 'github_token');
 
   // Return in the expected format (github_token field for compatibility)
   if (credential) {
