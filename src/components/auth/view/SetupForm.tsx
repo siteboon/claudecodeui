@@ -84,6 +84,7 @@ export default function SetupForm() {
           onChange={(value) => updateField('username', value)}
           placeholder="Enter your username"
           isDisabled={isSubmitting}
+          autoComplete="username"
         />
 
         <AuthInputField
@@ -94,6 +95,7 @@ export default function SetupForm() {
           placeholder="Enter your password"
           isDisabled={isSubmitting}
           type="password"
+          autoComplete="new-password"
         />
 
         <AuthInputField
@@ -104,6 +106,7 @@ export default function SetupForm() {
           placeholder="Confirm your password"
           isDisabled={isSubmitting}
           type="password"
+          autoComplete="new-password"
         />
 
         <AuthErrorAlert errorMessage={errorMessage} />

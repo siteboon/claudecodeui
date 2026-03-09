@@ -6,6 +6,8 @@ type AuthInputFieldProps = {
   placeholder: string;
   isDisabled: boolean;
   type?: 'text' | 'password' | 'email';
+  name?: string;
+  autoComplete?: string;
 };
 
 export default function AuthInputField({
@@ -16,6 +18,8 @@ export default function AuthInputField({
   placeholder,
   isDisabled,
   type = 'text',
+  name,
+  autoComplete,
 }: AuthInputFieldProps) {
   return (
     <div>
@@ -25,6 +29,8 @@ export default function AuthInputField({
       <input
         id={id}
         type={type}
+        name={name ?? id}
+        autoComplete={autoComplete}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className="w-full rounded-md border border-border bg-background px-3 py-2 text-foreground focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"

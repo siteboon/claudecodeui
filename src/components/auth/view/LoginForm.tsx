@@ -63,6 +63,7 @@ export default function LoginForm() {
           onChange={(value) => updateField('username', value)}
           placeholder={t('login.placeholders.username')}
           isDisabled={isSubmitting}
+          autoComplete="username"
         />
 
         <AuthInputField
@@ -73,6 +74,7 @@ export default function LoginForm() {
           placeholder={t('login.placeholders.password')}
           isDisabled={isSubmitting}
           type="password"
+          autoComplete="current-password"
         />
 
         <AuthErrorAlert errorMessage={errorMessage} />
