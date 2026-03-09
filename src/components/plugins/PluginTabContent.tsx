@@ -105,6 +105,11 @@ export default function PluginTabContent({
         };
 
         await mod.mount?.(container, api);
+        if (!active) {
+          try { mod.unmount?.(container); } catch { /* ignore */ }
+          moduleRef.current = null;
+          return;
+        }
       } catch (err) {
         if (!active) return;
         console.error(`[Plugin:${pluginName}] Failed to load:`, err);

@@ -7,7 +7,7 @@ import PluginIcon from './PluginIcon';
 const STARTER_PLUGIN_URL = 'https://github.com/cloudcli-ai/cloudcli-plugin-starter';
 
 /* ─── Toggle Switch ─────────────────────────────────────────────────────── */
-function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+function ToggleSwitch({ checked, onChange, ariaLabel }: { checked: boolean; onChange: (v: boolean) => void; ariaLabel: string }) {
   return (
     <label className="relative inline-flex cursor-pointer select-none items-center">
       <input
@@ -15,6 +15,7 @@ function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (v: b
         className="peer sr-only"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
+        aria-label={ariaLabel}
       />
       <div
         className={`
@@ -141,8 +142,9 @@ function PluginCard({
           <div className="flex flex-shrink-0 items-center gap-2">
             <button
               onClick={onUpdate}
-              disabled={updating}
-              title="Pull latest from git"
+              disabled={updating || !plugin.repoUrl}
+              title={plugin.repoUrl ? 'Pull latest from git' : 'No git remote — update not available'}
+              aria-label={`Update ${plugin.displayName}`}
               className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
             >
               {updating ? (
@@ -155,6 +157,7 @@ function PluginCard({
             <button
               onClick={onUninstall}
               title={confirmingUninstall ? 'Click again to confirm' : 'Uninstall plugin'}
+              aria-label={`Uninstall ${plugin.displayName}`}
               className={`rounded p-1.5 transition-colors ${
                 confirmingUninstall
                   ? 'bg-red-50 text-red-500 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/30'
@@ -164,7 +167,7 @@ function PluginCard({
               <Trash2 className="h-3.5 w-3.5" />
             </button>
 
-            <ToggleSwitch checked={plugin.enabled} onChange={onToggle} />
+            <ToggleSwitch checked={plugin.enabled} onChange={onToggle} ariaLabel={`${plugin.enabled ? 'Disable' : 'Enable'} ${plugin.displayName}`} />
           </div>
         </div>
 
@@ -268,17 +271,17 @@ export default function PluginSettingsTab() {
   const [installingStarter, setInstallingStarter] = useState(false);
   const [installError, setInstallError] = useState<string | null>(null);
   const [confirmUninstall, setConfirmUninstall] = useState<string | null>(null);
-  const [updatingPlugin, setUpdatingPlugin] = useState<string | null>(null);
+  const [updatingPlugins, setUpdatingPlugins] = useState<Set<string>>(new Set());
   const [updateErrors, setUpdateErrors] = useState<Record<string, string>>({});
 
   const handleUpdate = async (name: string) => {
-    setUpdatingPlugin(name);
+    setUpdatingPlugins((prev) => new Set(prev).add(name));
     setUpdateErrors((prev) => { const next = { ...prev }; delete next[name]; return next; });
     const result = await updatePlugin(name);
     if (!result.success) {
       setUpdateErrors((prev) => ({ ...prev, [name]: result.error || 'Update failed' }));
     }
-    setUpdatingPlugin(null);
+    setUpdatingPlugins((prev) => { const next = new Set(prev); next.delete(name); return next; });
   };
 
   const handleInstall = async () => {
@@ -399,7 +402,7 @@ export default function PluginSettingsTab() {
               onToggle={(enabled) => void togglePlugin(plugin.name, enabled)}
               onUpdate={() => void handleUpdate(plugin.name)}
               onUninstall={() => void handleUninstall(plugin.name)}
-              updating={updatingPlugin === plugin.name}
+              updating={updatingPlugins.has(plugin.name)}
               confirmingUninstall={confirmUninstall === plugin.name}
               onCancelUninstall={() => setConfirmUninstall(null)}
               updateError={updateErrors[plugin.name] ?? null}

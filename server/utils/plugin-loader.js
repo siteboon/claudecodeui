@@ -31,9 +31,9 @@ export function getPluginsConfig() {
 export function savePluginsConfig(config) {
   const dir = path.dirname(PLUGINS_CONFIG_PATH);
   if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
-  fs.writeFileSync(PLUGINS_CONFIG_PATH, JSON.stringify(config, null, 2));
+  fs.writeFileSync(PLUGINS_CONFIG_PATH, JSON.stringify(config, null, 2), { mode: 0o600 });
 }
 
 export function validateManifest(manifest) {
@@ -58,6 +58,23 @@ export function validateManifest(manifest) {
 
   if (manifest.slot && !ALLOWED_SLOTS.includes(manifest.slot)) {
     return { valid: false, error: `Invalid plugin slot: ${manifest.slot}. Must be one of: ${ALLOWED_SLOTS.join(', ')}` };
+  }
+
+  // Validate entry is a relative path without traversal
+  if (manifest.entry.includes('..') || path.isAbsolute(manifest.entry)) {
+    return { valid: false, error: 'Entry must be a relative path without ".."' };
+  }
+
+  if (manifest.server !== undefined && manifest.server !== null) {
+    if (typeof manifest.server !== 'string' || manifest.server.includes('..') || path.isAbsolute(manifest.server)) {
+      return { valid: false, error: 'Server entry must be a relative path string without ".."' };
+    }
+  }
+
+  if (manifest.permissions !== undefined) {
+    if (!Array.isArray(manifest.permissions) || !manifest.permissions.every(p => typeof p === 'string')) {
+      return { valid: false, error: 'Permissions must be an array of strings' };
+    }
   }
 
   return { valid: true };
@@ -233,6 +250,13 @@ export function installPluginFromGit(url) {
       if (!validation.valid) {
         cleanupTemp();
         return reject(new Error(`Invalid manifest: ${validation.error}`));
+      }
+
+      // Reject if another installed plugin already uses this name
+      const existing = scanPlugins().find(p => p.name === manifest.name);
+      if (existing) {
+        cleanupTemp();
+        return reject(new Error(`A plugin named "${manifest.name}" is already installed (in "${existing.dirName}")`));
       }
 
       // Run npm install if package.json exists.
