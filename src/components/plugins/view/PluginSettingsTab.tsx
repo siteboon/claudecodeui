@@ -306,7 +306,7 @@ export default function PluginSettingsTab() {
     setInstallError(null);
     const result = await installPlugin(STARTER_PLUGIN_URL);
     if (!result.success) {
-      setInstallError(result.error || 'Installation failed');
+      setInstallError(result.error || t('pluginSettings.installFailed'));
     }
     setInstallingStarter(false);
   };
