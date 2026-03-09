@@ -6,7 +6,7 @@
 
 [Claude Code](https://docs.anthropic.com/en/docs/claude-code)、[Cursor CLI](https://docs.cursor.com/en/cli/overview)、[Codex](https://developers.openai.com/codex) 向けのデスクトップ・モバイル UI です。ローカルまたはリモートで使用して、Claude Code、Cursor、Codex のアクティブなプロジェクトやセッションを確認し、どこからでも（モバイルやデスクトップから）変更を加えることができます。どこでも使える適切なインターフェースを提供します。
 
-<div align="right"><i><a href="./README.md">English</a> · <a href="./README.ko.md">한국어</a> · <a href="./README.zh-CN.md">中文</a></i></div>
+<div align="right"><i><a href="./README.md">English</a> · <a href="./README.ru.md">Русский</a> · <a href="./README.ko.md">한국어</a> · <a href="./README.zh-CN.md">中文</a> · <b>日本語</b></i></div>
 
 ## スクリーンショット
 
@@ -193,8 +193,8 @@ npm run dev
 Claude Code の全機能を使用するには、手動でツールを有効にする必要があります：
 
 1. **ツール設定を開く** - サイドバーの歯車アイコンをクリック
-3. **選択的に有効化** - 必要なツールのみを有効にする
-4. **設定を適用** - 環境設定はローカルに保存されます
+2. **選択的に有効化** - 必要なツールのみを有効にする
+3. **設定を適用** - 環境設定はローカルに保存されます
 
 <div align="center">
 
