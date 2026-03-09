@@ -70,7 +70,7 @@ export default function PluginTabContent({
       try {
         // Fetch the plugin JS with auth headers (Cloudflare Worker requires auth on all routes).
         // Then import it via a Blob URL so the browser never makes an unauthenticated request.
-        const assetUrl = `/api/plugins/${encodeURIComponent(pluginName)}/assets/${entryFile}`;
+        const assetUrl = `/api/plugins/${encodeURIComponent(pluginName)}/assets/${encodeURIComponent(entryFile)}`;
         const res = await authenticatedFetch(assetUrl);
         if (!res.ok) throw new Error(`Failed to fetch plugin (HTTP ${res.status})`);
         const jsText = await res.text();
@@ -114,7 +114,10 @@ export default function PluginTabContent({
         if (!active) return;
         console.error(`[Plugin:${pluginName}] Failed to load:`, err);
         if (containerRef.current) {
-          containerRef.current.innerHTML = `<div style="padding:16px;font-size:13px;color:#dc2626">Plugin failed to load: ${String(err)}</div>`;
+          const errDiv = document.createElement('div');
+          errDiv.style.cssText = 'padding:16px;font-size:13px;color:#dc2626';
+          errDiv.textContent = `Plugin failed to load: ${String(err)}`;
+          containerRef.current.replaceChildren(errDiv);
         }
       }
     })();

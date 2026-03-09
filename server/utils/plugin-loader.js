@@ -7,6 +7,19 @@ const PLUGINS_DIR = path.join(os.homedir(), '.claude-code-ui', 'plugins');
 const PLUGINS_CONFIG_PATH = path.join(os.homedir(), '.claude-code-ui', 'plugins.json');
 
 const REQUIRED_MANIFEST_FIELDS = ['name', 'displayName', 'entry'];
+
+/** Strip embedded credentials from a repo URL before exposing it to the client. */
+function sanitizeRepoUrl(raw) {
+  try {
+    const u = new URL(raw);
+    u.username = '';
+    u.password = '';
+    return u.toString().replace(/\/$/, '');
+  } catch {
+    // Not a parseable URL (e.g. SSH shorthand) — strip user:pass@ segment
+    return raw.replace(/\/\/[^@/]+@/, '//');
+  }
+}
 const ALLOWED_TYPES = ['react', 'module'];
 const ALLOWED_SLOTS = ['tab'];
 
@@ -92,8 +105,12 @@ export function scanPlugins() {
     return plugins;
   }
 
+  const seenNames = new Set();
+
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
+    // Skip transient temp directories from in-progress installs
+    if (entry.name.startsWith('.tmp-')) continue;
 
     const manifestPath = path.join(pluginsDir, entry.name, 'manifest.json');
     if (!fs.existsSync(manifestPath)) continue;
@@ -105,6 +122,13 @@ export function scanPlugins() {
         console.warn(`[Plugins] Skipping ${entry.name}: ${validation.error}`);
         continue;
       }
+
+      // Skip duplicate manifest names
+      if (seenNames.has(manifest.name)) {
+        console.warn(`[Plugins] Skipping ${entry.name}: duplicate plugin name "${manifest.name}"`);
+        continue;
+      }
+      seenNames.add(manifest.name);
 
       // Try to read git remote URL
       let repoUrl = null;
@@ -119,6 +143,8 @@ export function scanPlugins() {
             if (repoUrl.startsWith('git@')) {
               repoUrl = repoUrl.replace(/^git@([^:]+):/, 'https://$1/');
             }
+            // Strip embedded credentials (e.g. https://user:pass@host/...)
+            repoUrl = sanitizeRepoUrl(repoUrl);
           }
         }
       } catch { /* ignore */ }

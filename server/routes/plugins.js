@@ -39,6 +39,9 @@ router.get('/', (req, res) => {
 // GET /:name/manifest — Get single plugin manifest
 router.get('/:name/manifest', (req, res) => {
   try {
+    if (!/^[a-zA-Z0-9_-]+$/.test(req.params.name)) {
+      return res.status(400).json({ error: 'Invalid plugin name' });
+    }
     const plugins = scanPlugins();
     const plugin = plugins.find(p => p.name === req.params.name);
     if (!plugin) {
@@ -53,6 +56,9 @@ router.get('/:name/manifest', (req, res) => {
 // GET /:name/assets/* — Serve plugin static files
 router.get('/:name/assets/*', (req, res) => {
   const pluginName = req.params.name;
+  if (!/^[a-zA-Z0-9_-]+$/.test(pluginName)) {
+    return res.status(400).json({ error: 'Invalid plugin name' });
+  }
   const assetPath = req.params[0];
 
   if (!assetPath) {
@@ -252,7 +258,11 @@ router.all('/:name/rpc/*', async (req, res) => {
   });
 
   proxyReq.on('error', (err) => {
-    res.status(502).json({ error: 'Plugin server error', details: err.message });
+    if (!res.headersSent) {
+      res.status(502).json({ error: 'Plugin server error', details: err.message });
+    } else {
+      res.end();
+    }
   });
 
   // Forward body (already parsed by express JSON middleware, so re-stringify).

@@ -312,8 +312,13 @@ export default function PluginSettingsTab() {
       setConfirmUninstall(name);
       return;
     }
-    await uninstallPlugin(name);
-    setConfirmUninstall(null);
+    const result = await uninstallPlugin(name);
+    if (result.success) {
+      setConfirmUninstall(null);
+    } else {
+      setInstallError(result.error || 'Uninstall failed');
+      setConfirmUninstall(null);
+    }
   };
 
   const hasStarterInstalled = plugins.some((p) => p.name === 'project-stats');
@@ -350,6 +355,7 @@ export default function PluginSettingsTab() {
             setInstallError(null);
           }}
           placeholder="https://github.com/user/my-plugin"
+          aria-label="Plugin git repository URL"
           className="flex-1 bg-transparent px-2 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
           onKeyDown={(e) => {
             if (e.key === 'Enter') void handleInstall();
@@ -399,7 +405,7 @@ export default function PluginSettingsTab() {
               key={plugin.name}
               plugin={plugin}
               index={index}
-              onToggle={(enabled) => void togglePlugin(plugin.name, enabled)}
+              onToggle={(enabled) => void togglePlugin(plugin.name, enabled).then(r => { if (!r.success) setInstallError(r.error || 'Toggle failed'); })}
               onUpdate={() => void handleUpdate(plugin.name)}
               onUninstall={() => void handleUninstall(plugin.name)}
               updating={updatingPlugins.has(plugin.name)}
