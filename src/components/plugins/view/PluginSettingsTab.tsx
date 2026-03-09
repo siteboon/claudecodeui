@@ -33,7 +33,7 @@ function ToggleSwitch({ checked, onChange, ariaLabel }: { checked: boolean; onCh
 }
 
 /* ─── Server Dot ────────────────────────────────────────────────────────── */
-function ServerDot({ running }: { running: boolean }) {
+function ServerDot({ running, t }: { running: boolean; t: any }) {
   if (!running) return null;
   return (
     <span className="relative flex items-center gap-1.5">
@@ -42,7 +42,7 @@ function ServerDot({ running }: { running: boolean }) {
         <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
       </span>
       <span className="font-mono text-[10px] uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
-        running
+        {t('pluginSettings.runningStatus')}
       </span>
     </span>
   );
@@ -110,7 +110,7 @@ function PluginCard({
                 <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
                   {plugin.slot}
                 </span>
-                <ServerDot running={!!plugin.serverRunning} />
+                <ServerDot running={!!plugin.serverRunning} t={t} />
               </div>
               {plugin.description && (
                 <p className="mt-1 text-sm leading-snug text-muted-foreground">

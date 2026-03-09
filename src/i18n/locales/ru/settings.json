@@ -465,6 +465,7 @@
     "enable": "Включить",
     "disable": "Выключить",
     "installAriaLabel": "URL git-репозитория плагина",
-    "tab": "вкладка"
+    "tab": "вкладка",
+    "runningStatus": "запущен"
   }
 }

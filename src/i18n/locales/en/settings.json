@@ -465,6 +465,7 @@
     "enable": "Enable",
     "disable": "Disable",
     "installAriaLabel": "Plugin git repository URL",
-    "tab": "tab"
+    "tab": "tab",
+    "runningStatus": "running"
   }
 }

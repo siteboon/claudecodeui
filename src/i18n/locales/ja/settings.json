@@ -465,6 +465,7 @@
     "enable": "有効にする",
     "disable": "無効にする",
     "installAriaLabel": "プラグインのgitリポジトリURL",
-    "tab": "タブ"
+    "tab": "タブ",
+    "runningStatus": "実行中"
   }
 }

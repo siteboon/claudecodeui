@@ -465,6 +465,7 @@
     "enable": "启用",
     "disable": "禁用",
     "installAriaLabel": "插件 git 仓库 URL",
-    "tab": "标签"
+    "tab": "标签",
+    "runningStatus": "运行中"
   }
 }

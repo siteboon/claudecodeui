@@ -465,6 +465,7 @@
     "enable": "활성화",
     "disable": "비활성화",
     "installAriaLabel": "플러그인 git 저장소 URL",
-    "tab": "탭"
+    "tab": "탭",
+    "runningStatus": "실행 중"
   }
 }
