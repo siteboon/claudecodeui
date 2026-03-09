@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Trash2, RefreshCw, GitBranch, Loader2, ServerCrash, ShieldAlert, ExternalLink, BookOpen, Download, BarChart3 } from 'lucide-react';
-import { usePlugins } from '../../contexts/PluginsContext';
-import type { Plugin } from '../../contexts/PluginsContext';
+import { usePlugins } from '../../../contexts/PluginsContext';
+import type { Plugin } from '../../../contexts/PluginsContext';
 import PluginIcon from './PluginIcon';
 
 const STARTER_PLUGIN_URL = 'https://github.com/cloudcli-ai/cloudcli-plugin-starter';

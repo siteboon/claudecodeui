@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react';
-import { useTheme } from '../../contexts/ThemeContext';
-import { authenticatedFetch } from '../../utils/api';
-import { usePlugins } from '../../contexts/PluginsContext';
-import type { Project, ProjectSession } from '../../types/app';
+import { useTheme } from '../../../contexts/ThemeContext';
+import { authenticatedFetch } from '../../../utils/api';
+import { usePlugins } from '../../../contexts/PluginsContext';
+import type { Project, ProjectSession } from '../../../types/app';
 
 type PluginTabContentProps = {
   pluginName: string;

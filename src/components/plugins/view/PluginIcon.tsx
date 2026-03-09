@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { authenticatedFetch } from '../../utils/api';
+import { authenticatedFetch } from '../../../utils/api';
 
 type Props = {
   pluginName: string;
