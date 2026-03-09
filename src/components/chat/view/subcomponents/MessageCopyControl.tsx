@@ -14,7 +14,12 @@ type CopyFormatOption = {
 // Converts markdown into readable plain text for "Copy as text".
 const convertMarkdownToPlainText = (markdown: string): string => {
   let plainText = markdown.replace(/\r\n/g, '\n');
-  plainText = plainText.replace(/```[\w-]*\n([\s\S]*?)```/g, '$1');
+  const codeBlocks: string[] = [];
+  plainText = plainText.replace(/```[\w-]*\n([\s\S]*?)```/g, (_match, code: string) => {
+    const placeholder = `@@CODEBLOCK${codeBlocks.length}@@`;
+    codeBlocks.push(code.replace(/\n$/, ''));
+    return placeholder;
+  });
   plainText = plainText.replace(/`([^`]+)`/g, '$1');
   plainText = plainText.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '$1');
   plainText = plainText.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1');
@@ -27,6 +32,7 @@ const convertMarkdownToPlainText = (markdown: string): string => {
   plainText = plainText.replace(/~~(.*?)~~/g, '$1');
   plainText = plainText.replace(/<\/?[^>]+(>|$)/g, '');
   plainText = plainText.replace(/\n{3,}/g, '\n\n');
+  plainText = plainText.replace(/@@CODEBLOCK(\d+)@@/g, (_match, index: string) => codeBlocks[Number(index)] ?? '');
   return plainText.trim();
 };
 
