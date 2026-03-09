@@ -438,7 +438,7 @@
     "installPlaceholder": "https://github.com/user/my-plugin",
     "installButton": "설치",
     "installing": "설치 중…",
-    "securityWarning": "소스 코드를 검토했거나 신뢰할 수 있는 작성자의 플러グ인만 설치하세요.",
+    "securityWarning": "소스 코드를 검토했거나 신뢰할 수 있는 작성자의 플러그인만 설치하세요.",
     "scanningPlugins": "플러그인 스캔 중…",
     "noPluginsInstalled": "설치된 플러그인이 없습니다",
     "pullLatest": "git에서 최신 버전 가져오기",
