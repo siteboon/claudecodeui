@@ -673,30 +673,44 @@ router.post("/execute", async (req, res) => {
     }
 
     // Load command content
-    // Security: validate commandPath is within allowed directories
+    // Security: Prevent path traversal and symlink escapes.
+    // Canonicalize the requested path and verify it falls within an explicit
+    // allowed command root before reading.
+    let resolvedPath;
+    try {
+      resolvedPath = await fs.realpath(commandPath);
+    } catch {
+      return res.status(404).json({
+        error: "Command not found",
+        message: `Command file not found: ${commandPath}`,
+      });
+    }
+
     {
-      const resolvedPath = path.resolve(commandPath);
-      const userBase = path.resolve(
-        path.join(os.homedir(), ".claude", "commands"),
-      );
+      const allowedRoots = [path.join(os.homedir(), ".claude", "commands")];
       const pluginDirs = await getInstalledPluginCommandDirs();
-      const pluginBases = pluginDirs.map(({ commandsDir }) =>
-        path.resolve(commandsDir),
-      );
-      const projectBase = context?.projectPath
-        ? path.resolve(path.join(context.projectPath, ".claude", "commands"))
-        : null;
-      const isUnder = (base) => {
-        const rel = path.relative(base, resolvedPath);
+      for (const { commandsDir } of pluginDirs) {
+        allowedRoots.push(commandsDir);
+      }
+      if (context?.projectPath) {
+        allowedRoots.push(
+          path.join(context.projectPath, ".claude", "commands"),
+        );
+      }
+
+      const isUnderRoot = async (rootPath) => {
+        let realRoot;
+        try {
+          realRoot = await fs.realpath(rootPath);
+        } catch {
+          return false;
+        }
+        const rel = path.relative(realRoot, resolvedPath);
         return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
       };
-      if (
-        !(
-          isUnder(userBase) ||
-          pluginBases.some((base) => isUnder(base)) ||
-          (projectBase && isUnder(projectBase))
-        )
-      ) {
+
+      const checks = await Promise.all(allowedRoots.map(isUnderRoot));
+      if (!checks.some(Boolean)) {
         return res.status(403).json({
           error: "Access denied",
           message:
@@ -704,7 +718,7 @@ router.post("/execute", async (req, res) => {
         });
       }
     }
-    const content = await fs.readFile(commandPath, "utf8");
+    const content = await fs.readFile(resolvedPath, "utf8");
     const { data: metadata, content: commandContent } = matter(content);
     // Basic argument replacement (will be enhanced in command parser utility)
     let processedContent = commandContent;
