@@ -461,6 +461,8 @@
       "description": "File counts, lines of code, file-type breakdown, and recent activity for your project.",
       "install": "Install"
     },
-    "morePlugins": "More"
+    "morePlugins": "More",
+    "enable": "Enable",
+    "disable": "Disable"
   }
 }

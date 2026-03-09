@@ -461,6 +461,8 @@
       "description": "프로젝트의 파일 수, 코드 라인 수, 파일 유형별 분석 및 최근 활동을 확인합니다.",
       "install": "설치"
     },
-    "morePlugins": "더 보기"
+    "morePlugins": "더 보기",
+    "enable": "활성화",
+    "disable": "비활성화"
   }
 }

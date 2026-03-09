@@ -461,6 +461,8 @@
       "description": "查看项目的文件数、代码行数、文件类型分布以及最近活动。",
       "install": "安装"
     },
-    "morePlugins": "更多"
+    "morePlugins": "更多",
+    "enable": "启用",
+    "disable": "禁用"
   }
 }

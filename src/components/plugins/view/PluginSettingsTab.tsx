@@ -168,7 +168,7 @@ function PluginCard({
               <Trash2 className="h-3.5 w-3.5" />
             </button>
 
-            <ToggleSwitch checked={plugin.enabled} onChange={onToggle} ariaLabel={`${plugin.enabled ? 'Disable' : 'Enable'} ${plugin.displayName}`} />
+            <ToggleSwitch checked={plugin.enabled} onChange={onToggle} ariaLabel={`${plugin.enabled ? t('pluginSettings.disable') : t('pluginSettings.enable')} ${plugin.displayName}`} />
           </div>
         </div>
 
