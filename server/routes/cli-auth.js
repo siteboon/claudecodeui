@@ -100,7 +100,8 @@ router.get('/gemini/status', async (req, res) => {
  * Checks Claude authentication credentials using two methods with priority order:
  *
  * Priority 1: ANTHROPIC_API_KEY environment variable
- * Priority 2: ~/.claude/.credentials.json OAuth tokens
+ * Priority 2: ANTHROPIC_AUTH_TOKEN environment variable
+ * Priority 3: ~/.claude/.credentials.json OAuth tokens
  *
  * The Claude Agent SDK prioritizes environment variables over authenticated subscriptions.
  * This matching behavior ensures consistency with how the SDK authenticates.
@@ -128,7 +129,17 @@ async function checkClaudeCredentials() {
     };
   }
 
-  // Priority 2: Check ~/.claude/.credentials.json for OAuth tokens
+  // Priority 2: Check for ANTHROPIC_AUTH_TOKEN environment variable.
+  // The SDK accepts this token-based auth path when API key is not configured.
+  if (process.env.ANTHROPIC_AUTH_TOKEN && process.env.ANTHROPIC_AUTH_TOKEN.trim()) {
+    return {
+      authenticated: true,
+      email: 'API Key Auth',
+      method: 'api_key'
+    };
+  }
+
+  // Priority 3: Check ~/.claude/.credentials.json for OAuth tokens
   // This is the standard authentication method used by Claude CLI after running
   // 'claude /login' or 'claude setup-token' commands.
   try {
