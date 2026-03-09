@@ -229,7 +229,7 @@ function StarterPluginCard({ onInstall, installing }: { onInstall: () => void; i
                   {t('pluginSettings.starterPlugin.badge')}
                 </span>
                 <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                  tab
+                  {t('pluginSettings.tab')}
                 </span>
               </div>
               <p className="mt-1 text-sm leading-snug text-muted-foreground">
@@ -352,7 +352,7 @@ export default function PluginSettingsTab() {
             setInstallError(null);
           }}
           placeholder={t('pluginSettings.installPlaceholder')}
-          aria-label="Plugin git repository URL"
+          aria-label={t('pluginSettings.installAriaLabel')}
           className="flex-1 bg-transparent px-2 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
           onKeyDown={(e) => {
             if (e.key === 'Enter') void handleInstall();

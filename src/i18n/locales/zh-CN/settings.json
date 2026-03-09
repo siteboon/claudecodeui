@@ -463,6 +463,8 @@
     },
     "morePlugins": "更多",
     "enable": "启用",
-    "disable": "禁用"
+    "disable": "禁用",
+    "installAriaLabel": "插件 git 仓库 URL",
+    "tab": "标签"
   }
 }

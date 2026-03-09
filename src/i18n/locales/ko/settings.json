@@ -463,6 +463,8 @@
     },
     "morePlugins": "더 보기",
     "enable": "활성화",
-    "disable": "비활성화"
+    "disable": "비활성화",
+    "installAriaLabel": "플러그인 git 저장소 URL",
+    "tab": "탭"
   }
 }

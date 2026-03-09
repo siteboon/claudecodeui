@@ -463,6 +463,8 @@
     },
     "morePlugins": "詳細",
     "enable": "有効にする",
-    "disable": "無効にする"
+    "disable": "無効にする",
+    "installAriaLabel": "プラグインのgitリポジトリURL",
+    "tab": "タブ"
   }
 }

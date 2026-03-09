@@ -463,6 +463,8 @@
     },
     "morePlugins": "Ещё",
     "enable": "Включить",
-    "disable": "Выключить"
+    "disable": "Выключить",
+    "installAriaLabel": "URL git-репозитория плагина",
+    "tab": "вкладка"
   }
 }

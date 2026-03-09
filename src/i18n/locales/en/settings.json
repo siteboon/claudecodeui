@@ -463,6 +463,8 @@
     },
     "morePlugins": "More",
     "enable": "Enable",
-    "disable": "Disable"
+    "disable": "Disable",
+    "installAriaLabel": "Plugin git repository URL",
+    "tab": "tab"
   }
 }
