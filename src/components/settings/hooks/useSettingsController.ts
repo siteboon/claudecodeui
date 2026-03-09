@@ -98,7 +98,7 @@ type CodexSettingsStorage = {
 
 type ActiveLoginProvider = AgentProvider | '';
 
-const KNOWN_MAIN_TABS: SettingsMainTab[] = ['agents', 'appearance', 'git', 'api', 'tasks'];
+const KNOWN_MAIN_TABS: SettingsMainTab[] = ['agents', 'appearance', 'git', 'api', 'tasks', 'plugins'];
 
 const normalizeMainTab = (tab: string): SettingsMainTab => {
   // Keep backwards compatibility with older callers that still pass "tools".

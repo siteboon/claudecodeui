@@ -1,0 +1,134 @@
+{
+  "projects": {
+    "title": "Проекты",
+    "newProject": "Новый проект",
+    "deleteProject": "Удалить проект",
+    "renameProject": "Переименовать проект",
+    "noProjects": "Проекты не найдены",
+    "loadingProjects": "Загрузка проектов...",
+    "searchPlaceholder": "Поиск проектов...",
+    "projectNamePlaceholder": "Имя проекта",
+    "starred": "Избранное",
+    "all": "Все",
+    "untitledSession": "Безымянный сеанс",
+    "newSession": "Новый сеанс",
+    "codexSession": "Сеанс Codex",
+    "fetchingProjects": "Получение ваших проектов и сеансов Claude",
+    "projects": "проекты",
+    "noMatchingProjects": "Нет подходящих проектов",
+    "tryDifferentSearch": "Попробуйте изменить поисковый запрос",
+    "runClaudeCli": "Запустите Claude CLI в каталоге проекта для начала работы"
+  },
+  "app": {
+    "title": "Claude Code UI",
+    "subtitle": "Интерфейс AI помощника для программирования"
+  },
+  "sessions": {
+    "title": "Сеансы",
+    "newSession": "Новый сеанс",
+    "deleteSession": "Удалить сеанс",
+    "renameSession": "Переименовать сеанс",
+    "noSessions": "Сеансов пока нет",
+    "loadingSessions": "Загрузка сеансов...",
+    "unnamed": "Без имени",
+    "loading": "Загрузка...",
+    "showMore": "Показать больше сеансов"
+  },
+  "tooltips": {
+    "viewEnvironments": "Просмотр окружений",
+    "hideSidebar": "Скрыть боковую панель",
+    "createProject": "Создать новый проект",
+    "refresh": "Обновить проекты и сеансы (Ctrl+R)",
+    "renameProject": "Переименовать проект (F2)",
+    "deleteProject": "Удалить пустой проект (Delete)",
+    "addToFavorites": "Добавить в избранное",
+    "removeFromFavorites": "Удалить из избранного",
+    "editSessionName": "Вручную редактировать имя сеанса",
+    "deleteSession": "Удалить этот сеанс навсегда",
+    "save": "Сохранить",
+    "cancel": "Отмена",
+    "clearSearch": "Очистить поиск"
+  },
+  "navigation": {
+    "chat": "Чат",
+    "files": "Файлы",
+    "git": "Git",
+    "terminal": "Терминал",
+    "tasks": "Задачи"
+  },
+  "actions": {
+    "refresh": "Обновить",
+    "settings": "Настройки",
+    "collapseAll": "Свернуть все",
+    "expandAll": "Развернуть все",
+    "cancel": "Отмена",
+    "save": "Сохранить",
+    "delete": "Удалить",
+    "rename": "Переименовать",
+    "joinCommunity": "Присоединиться к сообществу"
+  },
+  "status": {
+    "active": "Активен",
+    "inactive": "Неактивен",
+    "thinking": "Думает...",
+    "error": "Ошибка",
+    "aborted": "Прервано",
+    "unknown": "Неизвестно"
+  },
+  "time": {
+    "justNow": "Только что",
+    "oneMinuteAgo": "1 мин. назад",
+    "minutesAgo": "{{count}} мин. назад",
+    "oneHourAgo": "1 час назад",
+    "hoursAgo": "{{count}} ч. назад",
+    "oneDayAgo": "1 день назад",
+    "daysAgo": "{{count}} дн. назад"
+  },
+  "messages": {
+    "deleteConfirm": "Вы уверены, что хотите это удалить?",
+    "renameSuccess": "Успешно переименовано",
+    "deleteSuccess": "Успешно удалено",
+    "errorOccurred": "Произошла ошибка",
+    "deleteSessionConfirm": "Вы уверены, что хотите удалить этот сеанс? Это действие нельзя отменить.",
+    "deleteProjectConfirm": "Вы уверены, что хотите удалить этот пустой проект? Это действие нельзя отменить.",
+    "enterProjectPath": "Пожалуйста, введите путь к проекту",
+    "deleteSessionFailed": "Не удалось удалить сеанс. Попробуйте снова.",
+    "deleteSessionError": "Ошибка при удалении сеанса. Попробуйте снова.",
+    "renameSessionFailed": "Не удалось переименовать сеанс. Попробуйте снова.",
+    "renameSessionError": "Ошибка при переименовании сеанса. Попробуйте снова.",
+    "deleteProjectFailed": "Не удалось удалить проект. Попробуйте снова.",
+    "deleteProjectError": "Ошибка при удалении проекта. Попробуйте снова.",
+    "createProjectFailed": "Не удалось создать проект. Попробуйте снова.",
+    "createProjectError": "Ошибка при создании проекта. Попробуйте снова."
+  },
+  "version": {
+    "updateAvailable": "Доступно обновление"
+  },
+  "search": {
+    "modeProjects": "Проекты",
+    "modeConversations": "Разговоры",
+    "conversationsPlaceholder": "Поиск в разговорах...",
+    "searching": "Поиск...",
+    "noResults": "Результаты не найдены",
+    "tryDifferentQuery": "Попробуйте другой поисковый запрос",
+    "matches_one": "{{count}} совпадение",
+    "matches_few": "{{count}} совпадения",
+    "matches_many": "{{count}} совпадений",
+    "matches_other": "{{count}} совпадений",
+    "projectsScanned_one": "{{count}} проект просканирован",
+    "projectsScanned_few": "{{count}} проекта просканировано",
+    "projectsScanned_many": "{{count}} проектов просканировано",
+    "projectsScanned_other": "{{count}} проектов просканировано"
+  },
+  "deleteConfirmation": {
+    "deleteProject": "Удалить проект",
+    "deleteSession": "Удалить сеанс",
+    "confirmDelete": "Вы уверены, что хотите удалить",
+    "sessionCount_one": "Этот проект содержит {{count}} разговор.",
+    "sessionCount_few": "Этот проект содержит {{count}} разговора.",
+    "sessionCount_many": "Этот проект содержит {{count}} разговоров.",
+    "sessionCount_other": "Этот проект содержит {{count}} разговоров.",
+    "allConversationsDeleted": "Все разговоры будут удалены навсегда.",
+    "cannotUndo": "Это действие нельзя отменить."
+  }
+}

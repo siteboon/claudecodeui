@@ -104,7 +104,8 @@
     "appearance": "외관",
     "git": "Git",
     "apiTokens": "API & 토큰",
-    "tasks": "작업"
+    "tasks": "작업",
+    "plugins": "플러그인"
   },
   "appearanceSettings": {
     "darkMode": {

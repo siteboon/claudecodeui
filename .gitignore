@@ -108,7 +108,7 @@ temp/
 .serena/
 CLAUDE.md
 .mcp.json
-
+.gemini/
 
 # Database files
 *.db
@@ -130,3 +130,8 @@ dev-debug.log
 # Task files
 tasks.json
 tasks/ 
+
+# Translations
+!src/i18n/locales/en/tasks.json
+!src/i18n/locales/ja/tasks.json
+!src/i18n/locales/ru/tasks.json
