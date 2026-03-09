@@ -1,5 +1,5 @@
 import { Check, ChevronDown, GitCommit, RefreshCw, Sparkles } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import MicButton from '../../../mic-button/view/MicButton';
 import type { ConfirmationRequest } from '../../types/types';
 
@@ -25,19 +25,17 @@ export default function CommitComposer({
   onGenerateMessage,
   onRequestConfirmation,
 }: CommitComposerProps) {
-  const [commitMessage, setCommitMessageState] = useState(() => commitMessageCache.get(projectPath) ?? '');
+  const [commitMessage, setCommitMessageRaw] = useState(() => commitMessageCache.get(projectPath) ?? '');
 
-  const setCommitMessage = useCallback(
-    (msg: string) => {
-      setCommitMessageState(msg);
-      if (msg) {
-        commitMessageCache.set(projectPath, msg);
-      } else {
-        commitMessageCache.delete(projectPath);
-      }
-    },
-    [projectPath],
-  );
+  const setCommitMessage = (msg: string) => {
+    setCommitMessageRaw(msg);
+    if (msg) {
+      commitMessageCache.set(projectPath, msg);
+    } else {
+      commitMessageCache.delete(projectPath);
+    }
+  };
+
   const [isCommitting, setIsCommitting] = useState(false);
   const [isGeneratingMessage, setIsGeneratingMessage] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(isMobile);
