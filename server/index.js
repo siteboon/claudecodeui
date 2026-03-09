@@ -2545,12 +2545,12 @@ async function startServer() {
         });
 
         // Clean up plugin processes on shutdown
-        const shutdownPlugins = () => {
-            stopAllPlugins();
+        const shutdownPlugins = async () => {
+            await stopAllPlugins();
             process.exit(0);
         };
-        process.on('SIGTERM', shutdownPlugins);
-        process.on('SIGINT', shutdownPlugins);
+        process.on('SIGTERM', () => void shutdownPlugins());
+        process.on('SIGINT', () => void shutdownPlugins());
     } catch (error) {
         console.error('[ERROR] Failed to start server:', error);
         process.exit(1);

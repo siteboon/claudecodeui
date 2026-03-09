@@ -1,10 +1,14 @@
 import { Check, ChevronDown, GitCommit, RefreshCw, Sparkles } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import MicButton from '../../../mic-button/view/MicButton';
 import type { ConfirmationRequest } from '../../types/types';
 
+// Persists commit messages across unmount/remount, keyed by project path
+const commitMessageCache = new Map<string, string>();
+
 type CommitComposerProps = {
   isMobile: boolean;
+  projectPath: string;
   selectedFileCount: number;
   isHidden: boolean;
   onCommit: (message: string) => Promise<boolean>;
@@ -14,13 +18,26 @@ type CommitComposerProps = {
 
 export default function CommitComposer({
   isMobile,
+  projectPath,
   selectedFileCount,
   isHidden,
   onCommit,
   onGenerateMessage,
   onRequestConfirmation,
 }: CommitComposerProps) {
-  const [commitMessage, setCommitMessage] = useState('');
+  const [commitMessage, setCommitMessageState] = useState(() => commitMessageCache.get(projectPath) ?? '');
+
+  const setCommitMessage = useCallback(
+    (msg: string) => {
+      setCommitMessageState(msg);
+      if (msg) {
+        commitMessageCache.set(projectPath, msg);
+      } else {
+        commitMessageCache.delete(projectPath);
+      }
+    },
+    [projectPath],
+  );
   const [isCommitting, setIsCommitting] = useState(false);
   const [isGeneratingMessage, setIsGeneratingMessage] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(isMobile);

@@ -64,9 +64,26 @@ router.get('/:name/assets/*', (req, res) => {
     return res.status(404).json({ error: 'Asset not found' });
   }
 
+  try {
+    const stat = fs.statSync(resolvedPath);
+    if (!stat.isFile()) {
+      return res.status(404).json({ error: 'Asset not found' });
+    }
+  } catch {
+    return res.status(404).json({ error: 'Asset not found' });
+  }
+
   const contentType = mime.lookup(resolvedPath) || 'application/octet-stream';
   res.setHeader('Content-Type', contentType);
-  fs.createReadStream(resolvedPath).pipe(res);
+  const stream = fs.createReadStream(resolvedPath);
+  stream.on('error', () => {
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to read asset' });
+    } else {
+      res.end();
+    }
+  });
+  stream.pipe(res);
 });
 
 // PUT /:name/enable — Toggle plugin enabled/disabled (starts/stops server if applicable)
@@ -99,7 +116,7 @@ router.put('/:name/enable', async (req, res) => {
           }
         }
       } else if (!enabled && isPluginRunning(plugin.name)) {
-        stopPluginServer(plugin.name);
+        await stopPluginServer(plugin.name);
       }
     }
 
@@ -153,7 +170,7 @@ router.post('/:name/update', async (req, res) => {
 
     const wasRunning = isPluginRunning(pluginName);
     if (wasRunning) {
-      stopPluginServer(pluginName);
+      await stopPluginServer(pluginName);
     }
 
     const manifest = await updatePluginFromGit(pluginName);
@@ -238,8 +255,11 @@ router.all('/:name/rpc/*', async (req, res) => {
     res.status(502).json({ error: 'Plugin server error', details: err.message });
   });
 
-  // Forward body (already parsed by express JSON middleware, so re-stringify)
-  if (req.body && Object.keys(req.body).length > 0) {
+  // Forward body (already parsed by express JSON middleware, so re-stringify).
+  // Check content-length to detect whether a body was actually sent, since
+  // req.body can be falsy for valid payloads like 0, false, null, or {}.
+  const hasBody = req.headers['content-length'] && parseInt(req.headers['content-length'], 10) > 0;
+  if (hasBody && req.body !== undefined) {
     const bodyStr = JSON.stringify(req.body);
     proxyReq.setHeader('content-length', Buffer.byteLength(bodyStr));
     proxyReq.write(bodyStr);

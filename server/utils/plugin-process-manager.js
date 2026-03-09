@@ -4,6 +4,8 @@ import { scanPlugins, getPluginsConfig, getPluginDir } from './plugin-loader.js'
 
 // Map<pluginName, { process, port }>
 const runningPlugins = new Map();
+// Map<pluginName, Promise<port>> — in-flight start operations
+const startingPlugins = new Map();
 
 /**
  * Start a plugin's server subprocess.
@@ -11,10 +13,16 @@ const runningPlugins = new Map();
  * to stdout within 10 seconds.
  */
 export function startPluginServer(name, pluginDir, serverEntry) {
-  return new Promise((resolve, reject) => {
-    if (runningPlugins.has(name)) {
-      return resolve(runningPlugins.get(name).port);
-    }
+  if (runningPlugins.has(name)) {
+    return Promise.resolve(runningPlugins.get(name).port);
+  }
+
+  // Coalesce concurrent starts for the same plugin
+  if (startingPlugins.has(name)) {
+    return startingPlugins.get(name);
+  }
+
+  const startPromise = new Promise((resolve, reject) => {
 
     const serverPath = path.join(pluginDir, serverEntry);
 
@@ -88,7 +96,12 @@ export function startPluginServer(name, pluginDir, serverEntry) {
         reject(new Error(`Plugin server exited with code ${code} before reporting ready`));
       }
     });
+  }).finally(() => {
+    startingPlugins.delete(name);
   });
+
+  startingPlugins.set(name, startPromise);
+  return startPromise;
 }
 
 /**

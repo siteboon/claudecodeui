@@ -108,6 +108,7 @@ export default function GitPanel({ selectedProject, isMobile = false, onFileOpen
           {activeView === 'changes' && (
             <ChangesView
               isMobile={isMobile}
+              projectPath={selectedProject.fullPath}
               gitStatus={gitStatus}
               gitDiff={gitDiff}
               isLoading={isLoading}
