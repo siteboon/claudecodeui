@@ -129,14 +129,15 @@ export function useSpeechOutput(chatMessages: ChatMessage[]) {
     try { localStorage.setItem(LANG_STORAGE_KEY, lang); } catch { /* noop */ }
   }, [lang]);
 
-  // Monitor speechSynthesis state
+  // Monitor speechSynthesis state (only when TTS is active)
   useEffect(() => {
     if (typeof window === 'undefined' || !window.speechSynthesis) return;
+    if (!enabled && !isSpeaking) return;
     const interval = setInterval(() => {
       setIsSpeaking(window.speechSynthesis.speaking);
     }, 200);
     return () => clearInterval(interval);
-  }, []);
+  }, [enabled, isSpeaking]);
 
   // Get voices filtered by current language
   const filteredVoices = availableVoices.filter((v) => {
