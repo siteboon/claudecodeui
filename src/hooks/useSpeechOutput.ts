@@ -235,6 +235,7 @@ export function useSpeechOutput(chatMessages: ChatMessage[]) {
       !lastMsg ||
       lastMsg.type !== 'assistant' ||
       lastMsg.isToolUse ||
+      lastMsg.isThinking ||
       lastMsg.isInteractivePrompt ||
       !lastMsg.content
     ) {
