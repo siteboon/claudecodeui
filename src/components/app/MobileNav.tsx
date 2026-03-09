@@ -1,11 +1,33 @@
-import { useState, useRef, useEffect, Dispatch, SetStateAction  } from 'react';
-import { MessageSquare, Folder, Terminal, GitBranch, ClipboardCheck, Ellipsis, Puzzle, Box, Database, Globe, Wrench, Zap, BarChart3 } from 'lucide-react';
+import { useState, useRef, useEffect, type Dispatch, type SetStateAction } from 'react';
+import {
+  MessageSquare,
+  Folder,
+  Terminal,
+  GitBranch,
+  ClipboardCheck,
+  Ellipsis,
+  Puzzle,
+  Box,
+  Database,
+  Globe,
+  Wrench,
+  Zap,
+  BarChart3,
+  type LucideIcon,
+} from 'lucide-react';
 import { useTasksSettings } from '../../contexts/TasksSettingsContext';
 import { usePlugins } from '../../contexts/PluginsContext';
 import { AppTab } from '../../types/app';
 
-const PLUGIN_ICON_MAP = {
+const PLUGIN_ICON_MAP: Record<string, LucideIcon> = {
   Puzzle, Box, Database, Globe, Terminal, Wrench, Zap, BarChart3, Folder, MessageSquare, GitBranch,
+};
+
+type CoreTabId = Exclude<AppTab, `plugin:${string}` | 'preview'>;
+type CoreNavItem = {
+  id: CoreTabId;
+  icon: LucideIcon;
+  label: string;
 };
 
 type MobileNavProps = {
@@ -19,7 +41,7 @@ export default function MobileNav({ activeTab, setActiveTab, isInputFocused }: M
   const shouldShowTasksTab = Boolean(tasksEnabled && isTaskMasterInstalled);
   const { plugins } = usePlugins();
   const [moreOpen, setMoreOpen] = useState(false);
-  const moreRef = useRef(null);
+  const moreRef = useRef<HTMLDivElement | null>(null);
 
   const enabledPlugins = plugins.filter((p) => p.enabled);
   const hasPlugins = enabledPlugins.length > 0;
@@ -28,8 +50,9 @@ export default function MobileNav({ activeTab, setActiveTab, isInputFocused }: M
   // Close the menu on outside tap
   useEffect(() => {
     if (!moreOpen) return;
-    const handleTap = (e) => {
-      if (moreRef.current && !moreRef.current.contains(e.target)) {
+    const handleTap = (e: PointerEvent) => {
+      const target = e.target;
+      if (moreRef.current && target instanceof Node && !moreRef.current.contains(target)) {
         setMoreOpen(false);
       }
     };
@@ -38,18 +61,21 @@ export default function MobileNav({ activeTab, setActiveTab, isInputFocused }: M
   }, [moreOpen]);
 
   // Close menu when a plugin tab is selected
-  const selectPlugin = (name) => {
-    setActiveTab(`plugin:${name}`);
+  const selectPlugin = (name: string) => {
+    const pluginTab = `plugin:${name}` as AppTab;
+    setActiveTab(pluginTab);
     setMoreOpen(false);
   };
 
-  const coreItems = [
+  const baseCoreItems: CoreNavItem[] = [
     { id: 'chat', icon: MessageSquare, label: 'Chat' },
     { id: 'shell', icon: Terminal, label: 'Shell' },
     { id: 'files', icon: Folder, label: 'Files' },
     { id: 'git', icon: GitBranch, label: 'Git' },
-    ...(shouldShowTasksTab ? [{ id: 'tasks', icon: ClipboardCheck, label: 'Tasks' }] : []),
   ];
+  const coreItems: CoreNavItem[] = shouldShowTasksTab
+    ? [...baseCoreItems, { id: 'tasks', icon: ClipboardCheck, label: 'Tasks' }]
+    : baseCoreItems;
 
   return (
     <div

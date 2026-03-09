@@ -24,10 +24,16 @@ function buildContext(
   return {
     theme: isDarkMode ? 'dark' : 'light',
     project: selectedProject
-      ? { name: selectedProject.name, path: selectedProject.fullPath || selectedProject.path }
+      ? {
+        name: selectedProject.name,
+        path: selectedProject.fullPath || selectedProject.path || '',
+      }
       : null,
     session: selectedSession
-      ? { id: selectedSession.id, title: selectedSession.title }
+      ? {
+        id: selectedSession.id,
+        title: selectedSession.title || selectedSession.name || selectedSession.id,
+      }
       : null,
   };
 }
@@ -44,7 +50,7 @@ export default function PluginTabContent({
   // Stable refs so effects don't need context values in their dep arrays
   const contextRef = useRef<PluginContext>(buildContext(isDarkMode, selectedProject, selectedSession));
   const contextCallbacksRef = useRef<Set<(ctx: PluginContext) => void>>(new Set());
-   
+
   const moduleRef = useRef<any>(null);
 
   const plugin = plugins.find(p => p.name === pluginName);
@@ -65,6 +71,7 @@ export default function PluginTabContent({
     let active = true;
     const container = containerRef.current;
     const entryFile = plugin?.entry ?? 'index.js';
+    const contextCallbacks = contextCallbacksRef.current;
 
     (async () => {
       try {
@@ -86,8 +93,8 @@ export default function PluginTabContent({
           get context(): PluginContext { return contextRef.current; },
 
           onContextChange(cb: (ctx: PluginContext) => void): () => void {
-            contextCallbacksRef.current.add(cb);
-            return () => contextCallbacksRef.current.delete(cb);
+            contextCallbacks.add(cb);
+            return () => contextCallbacks.delete(cb);
           },
 
           async rpc(method: string, path: string, body?: unknown): Promise<unknown> {
@@ -125,7 +132,7 @@ export default function PluginTabContent({
     return () => {
       active = false;
       try { moduleRef.current?.unmount?.(container); } catch { /* ignore */ }
-      contextCallbacksRef.current.clear();
+      contextCallbacks.clear();
       moduleRef.current = null;
     };
   }, [pluginName, plugin?.entry, plugin?.enabled]); // re-mount when plugin or enabled state changes
