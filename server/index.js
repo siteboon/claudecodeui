@@ -1424,10 +1424,13 @@ class WebSocketWriter {
     }
 
     send(data) {
-        if (this.ws.readyState === 1) { // WebSocket.OPEN
-            // Providers send raw objects, we stringify for WebSocket
-            this.ws.send(JSON.stringify(data));
-        }
+        const message = JSON.stringify(data);
+        // Broadcast to all connected clients so iOS reconnects receive streaming updates
+        connectedClients.forEach(client => {
+            if (client.readyState === WebSocket.OPEN) {
+                client.send(message);
+            }
+        });
     }
 
     updateWebSocket(newRawWs) {

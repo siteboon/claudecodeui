@@ -306,10 +306,21 @@ export default function ChatComposer({
               style={{ height: '50px' }}
             />
 
+            {/* Transparent full-height overlay covering the pl-12 zone — captures iOS touches before the textarea does */}
+            <div
+              className="absolute left-0 top-0 bottom-0"
+              style={{ width: '48px', zIndex: 20, cursor: 'pointer' }}
+              onClick={openImagePicker}
+              onMouseDown={(e) => e.preventDefault()}
+              aria-hidden="true"
+            />
+
             <button
               type="button"
               onClick={openImagePicker}
-              className="absolute left-2 top-1/2 -translate-y-1/2 transform rounded-xl p-2 transition-colors hover:bg-accent/60"
+              onMouseDown={(e) => e.preventDefault()}
+              className="absolute left-1 top-1/2 -translate-y-1/2 transform rounded-xl p-3 transition-colors hover:bg-accent/60"
+              style={{ minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 21 }}
               title={t('input.attachImages')}
             >
               <svg className="h-5 w-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
