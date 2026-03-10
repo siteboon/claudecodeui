@@ -139,6 +139,46 @@ async function validateGitRepository(projectPath) {
   }
 }
 
+function getGitErrorDetails(error) {
+  return `${error?.message || ''} ${error?.stderr || ''} ${error?.stdout || ''}`;
+}
+
+function isMissingHeadRevisionError(error) {
+  const errorDetails = getGitErrorDetails(error).toLowerCase();
+  return errorDetails.includes('unknown revision')
+    || errorDetails.includes('ambiguous argument')
+    || errorDetails.includes('needed a single revision')
+    || errorDetails.includes('bad revision');
+}
+
+async function getCurrentBranchName(projectPath) {
+  try {
+    // symbolic-ref works even when the repository has no commits.
+    const { stdout } = await spawnAsync('git', ['symbolic-ref', '--short', 'HEAD'], { cwd: projectPath });
+    const branchName = stdout.trim();
+    if (branchName) {
+      return branchName;
+    }
+  } catch (error) {
+    // Fall back to rev-parse for detached HEAD and older git edge cases.
+  }
+
+  const { stdout } = await spawnAsync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: projectPath });
+  return stdout.trim();
+}
+
+async function repositoryHasCommits(projectPath) {
+  try {
+    await spawnAsync('git', ['rev-parse', '--verify', 'HEAD'], { cwd: projectPath });
+    return true;
+  } catch (error) {
+    if (isMissingHeadRevisionError(error)) {
+      return false;
+    }
+    throw error;
+  }
+}
+
 // Get git status for a project
 router.get('/status', async (req, res) => {
   const { project } = req.query;
@@ -153,21 +193,8 @@ router.get('/status', async (req, res) => {
     // Validate git repository
     await validateGitRepository(projectPath);
 
-    // Get current branch - handle case where there are no commits yet
-    let branch = 'main';
-    let hasCommits = true;
-    try {
-      const { stdout: branchOutput } = await spawnAsync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: projectPath });
-      branch = branchOutput.trim();
-    } catch (error) {
-      // No HEAD exists - repository has no commits yet
-      if (error.message.includes('unknown revision') || error.message.includes('ambiguous argument')) {
-        hasCommits = false;
-        branch = 'main';
-      } else {
-        throw error;
-      }
-    }
+    const branch = await getCurrentBranchName(projectPath);
+    const hasCommits = await repositoryHasCommits(projectPath);
 
     // Get git status
     const { stdout: statusOutput } = await spawnAsync('git', ['status', '--porcelain'], { cwd: projectPath });
@@ -851,9 +878,30 @@ router.get('/remote-status', async (req, res) => {
     const projectPath = await getActualProjectPath(project);
     await validateGitRepository(projectPath);
 
-    // Get current branch
-    const { stdout: currentBranch } = await spawnAsync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: projectPath });
-    const branch = currentBranch.trim();
+    const branch = await getCurrentBranchName(projectPath);
+    const hasCommits = await repositoryHasCommits(projectPath);
+
+    const { stdout: remoteOutput } = await spawnAsync('git', ['remote'], { cwd: projectPath });
+    const remotes = remoteOutput.trim().split('\n').filter(r => r.trim());
+    const hasRemote = remotes.length > 0;
+    const fallbackRemoteName = hasRemote
+      ? (remotes.includes('origin') ? 'origin' : remotes[0])
+      : null;
+
+    // Repositories initialized with `git init` can have a branch but no commits.
+    // Return a non-error state so the UI can show the initial-commit workflow.
+    if (!hasCommits) {
+      return res.json({
+        hasRemote,
+        hasUpstream: false,
+        branch,
+        remoteName: fallbackRemoteName,
+        ahead: 0,
+        behind: 0,
+        isUpToDate: false,
+        message: 'Repository has no commits yet'
+      });
+    }
 
     // Check if there's a remote tracking branch (smart detection)
     let trackingBranch;
@@ -863,25 +911,11 @@ router.get('/remote-status', async (req, res) => {
       trackingBranch = stdout.trim();
       remoteName = trackingBranch.split('/')[0]; // Extract remote name (e.g., "origin/main" -> "origin")
     } catch (error) {
-      // No upstream branch configured - but check if we have remotes
-      let hasRemote = false;
-      let remoteName = null;
-      try {
-        const { stdout } = await spawnAsync('git', ['remote'], { cwd: projectPath });
-        const remotes = stdout.trim().split('\n').filter(r => r.trim());
-        if (remotes.length > 0) {
-          hasRemote = true;
-          remoteName = remotes.includes('origin') ? 'origin' : remotes[0];
-        }
-      } catch (remoteError) {
-        // No remotes configured
-      }
-
       return res.json({
         hasRemote,
         hasUpstream: false,
         branch,
-        remoteName,
+        remoteName: fallbackRemoteName,
         message: 'No remote tracking branch configured'
       });
     }
@@ -923,8 +957,7 @@ router.post('/fetch', async (req, res) => {
     await validateGitRepository(projectPath);
 
     // Get current branch and its upstream remote
-    const { stdout: currentBranch } = await spawnAsync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: projectPath });
-    const branch = currentBranch.trim();
+    const branch = await getCurrentBranchName(projectPath);
 
     let remoteName = 'origin'; // fallback
     try {
@@ -965,8 +998,7 @@ router.post('/pull', async (req, res) => {
     await validateGitRepository(projectPath);
 
     // Get current branch and its upstream remote
-    const { stdout: currentBranch } = await spawnAsync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: projectPath });
-    const branch = currentBranch.trim();
+    const branch = await getCurrentBranchName(projectPath);
 
     let remoteName = 'origin'; // fallback
     let remoteBranch = branch; // fallback
@@ -1034,8 +1066,7 @@ router.post('/push', async (req, res) => {
     await validateGitRepository(projectPath);
 
     // Get current branch and its upstream remote
-    const { stdout: currentBranch } = await spawnAsync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: projectPath });
-    const branch = currentBranch.trim();
+    const branch = await getCurrentBranchName(projectPath);
 
     let remoteName = 'origin'; // fallback
     let remoteBranch = branch; // fallback
@@ -1109,8 +1140,7 @@ router.post('/publish', async (req, res) => {
     validateBranchName(branch);
 
     // Get current branch to verify it matches the requested branch
-    const { stdout: currentBranch } = await spawnAsync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: projectPath });
-    const currentBranchName = currentBranch.trim();
+    const currentBranchName = await getCurrentBranchName(projectPath);
 
     if (currentBranchName !== branch) {
       return res.status(400).json({
