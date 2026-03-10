@@ -58,7 +58,7 @@
       "inputSettings": "Eingabeeinstellungen",
       "whisperDictation": "Whisper-Diktat"
     },
-    "darkMode": "Dunkelmodus",
+    "darkMode": "Darkmode",
     "autoExpandTools": "Werkzeuge automatisch erweitern",
     "showRawParameters": "Rohe Parameter anzeigen",
     "showThinking": "Denken anzeigen",
@@ -109,7 +109,7 @@
   },
   "appearanceSettings": {
     "darkMode": {
-      "label": "Dunkelmodus",
+      "label": "Darkmode",
       "description": "Zwischen hellem und dunklem Design wechseln"
     },
     "projectSorting": {
