@@ -7,6 +7,7 @@ import { queryClaudeSDK } from '../claude-sdk.js';
 import { spawnCursor } from '../cursor-cli.js';
 
 const router = express.Router();
+const COMMIT_DIFF_CHARACTER_LIMIT = 500_000;
 
 function spawnAsync(command, args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -769,8 +770,13 @@ router.get('/commit-diff', async (req, res) => {
       'git', ['show', commit],
       { cwd: projectPath }
     );
-    
-    res.json({ diff: stdout });
+
+    const isTruncated = stdout.length > COMMIT_DIFF_CHARACTER_LIMIT;
+    const diff = isTruncated
+      ? `${stdout.slice(0, COMMIT_DIFF_CHARACTER_LIMIT)}\n\n... Diff truncated to keep the UI responsive ...`
+      : stdout;
+
+    res.json({ diff, isTruncated });
   } catch (error) {
     console.error('Git commit diff error:', error);
     res.json({ error: error.message });
