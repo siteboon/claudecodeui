@@ -692,14 +692,28 @@ export function useChatRealtimeHandlers({
             const updated = [...previous];
             const lastIndex = updated.length - 1;
             const last = updated[lastIndex];
+            const normalizedTextResult = textResult.trim();
+
             if (last && last.type === 'assistant' && !last.isToolUse && last.isStreaming) {
               const finalContent =
-                textResult && textResult.trim()
+                normalizedTextResult
                   ? textResult
                   : `${last.content || ''}${pendingChunk || ''}`;
               // Clone the message instead of mutating in place so React can reliably detect state updates.
               updated[lastIndex] = { ...last, content: finalContent, isStreaming: false };
-            } else if (textResult && textResult.trim()) {
+            } else if (normalizedTextResult) {
+              const lastAssistantText =
+                last && last.type === 'assistant' && !last.isToolUse
+                  ? String(last.content || '').trim()
+                  : '';
+
+              // Cursor can emit the same final text through both streaming and result payloads.
+              // Skip adding a second assistant bubble when the final text is unchanged.
+              const isDuplicateFinalText = lastAssistantText === normalizedTextResult;
+              if (isDuplicateFinalText) {
+                return updated;
+              }
+
               updated.push({
                 type: resultData.is_error ? 'error' : 'assistant',
                 content: textResult,
