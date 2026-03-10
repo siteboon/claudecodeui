@@ -91,6 +91,11 @@ const runMigrations = () => {
       db.exec('ALTER TABLE users ADD COLUMN has_completed_onboarding BOOLEAN DEFAULT 0');
     }
 
+    if (!columnNames.includes('token_version')) {
+      console.log('Running migration: Adding token_version column');
+      db.exec('ALTER TABLE users ADD COLUMN token_version INTEGER DEFAULT 0');
+    }
+
     // Create session_names table if it doesn't exist (for existing installations)
     db.exec(`CREATE TABLE IF NOT EXISTS session_names (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -168,7 +173,7 @@ const userDb = {
   // Get user by ID
   getUserById: (userId) => {
     try {
-      const row = db.prepare('SELECT id, username, created_at, last_login FROM users WHERE id = ? AND is_active = 1').get(userId);
+      const row = db.prepare('SELECT id, username, created_at, last_login, token_version FROM users WHERE id = ? AND is_active = 1').get(userId);
       return row;
     } catch (err) {
       throw err;
@@ -177,8 +182,20 @@ const userDb = {
 
   getFirstUser: () => {
     try {
-      const row = db.prepare('SELECT id, username, created_at, last_login FROM users WHERE is_active = 1 LIMIT 1').get();
+      const row = db.prepare('SELECT id, username, created_at, last_login, token_version FROM users WHERE is_active = 1 LIMIT 1').get();
       return row;
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  updatePassword: (userId, passwordHash) => {
+    try {
+      const stmt = db.prepare(
+        'UPDATE users SET password_hash = ?, token_version = token_version + 1 WHERE id = ?'
+      );
+      const result = stmt.run(passwordHash, userId);
+      return result.changes > 0;
     } catch (err) {
       throw err;
     }
