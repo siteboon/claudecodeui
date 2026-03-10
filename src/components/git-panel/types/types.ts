@@ -3,7 +3,7 @@ import type { Project } from '../../../types/app';
 export type GitPanelView = 'changes' | 'history';
 export type FileStatusCode = 'M' | 'A' | 'D' | 'U';
 export type GitStatusFileGroup = 'modified' | 'added' | 'deleted' | 'untracked';
-export type ConfirmActionType = 'discard' | 'delete' | 'commit' | 'pull' | 'push' | 'publish';
+export type ConfirmActionType = 'discard' | 'delete' | 'commit' | 'pull' | 'push' | 'publish' | 'revertLocalCommit';
 
 export type FileDiffInfo = {
   old_string: string;

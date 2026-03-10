@@ -420,6 +420,53 @@ router.post('/commit', async (req, res) => {
   }
 });
 
+// Revert latest local commit (keeps changes staged)
+router.post('/revert-local-commit', async (req, res) => {
+  const { project } = req.body;
+
+  if (!project) {
+    return res.status(400).json({ error: 'Project name is required' });
+  }
+
+  try {
+    const projectPath = await getActualProjectPath(project);
+    await validateGitRepository(projectPath);
+
+    try {
+      await spawnAsync('git', ['rev-parse', '--verify', 'HEAD'], { cwd: projectPath });
+    } catch (error) {
+      return res.status(400).json({
+        error: 'No local commit to revert',
+        details: 'This repository has no commit yet.',
+      });
+    }
+
+    try {
+      // Soft reset rewinds one commit while preserving all file changes in the index.
+      await spawnAsync('git', ['reset', '--soft', 'HEAD~1'], { cwd: projectPath });
+    } catch (error) {
+      const errorDetails = `${error.stderr || ''} ${error.message || ''}`;
+      const isInitialCommit = errorDetails.includes('HEAD~1') &&
+        (errorDetails.includes('unknown revision') || errorDetails.includes('ambiguous argument'));
+
+      if (!isInitialCommit) {
+        throw error;
+      }
+
+      // Initial commit has no parent; deleting HEAD uncommits it and keeps files staged.
+      await spawnAsync('git', ['update-ref', '-d', 'HEAD'], { cwd: projectPath });
+    }
+
+    res.json({
+      success: true,
+      output: 'Latest local commit reverted successfully. Changes were kept staged.',
+    });
+  } catch (error) {
+    console.error('Git revert local commit error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get list of branches
 router.get('/branches', async (req, res) => {
   const { project } = req.query;
