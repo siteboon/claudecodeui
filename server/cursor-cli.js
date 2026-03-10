@@ -26,7 +26,6 @@ async function spawnCursor(command, options = {}, ws) {
     const { sessionId, projectPath, cwd, resume, toolsSettings, skipPermissions, model } = options;
     let capturedSessionId = sessionId; // Track session ID throughout the process
     let sessionCreatedSent = false; // Track if we've already sent session-created event
-    let messageBuffer = ''; // Buffer for accumulating assistant messages
     let hasRetriedWithTrust = false;
     let settled = false;
 
@@ -81,6 +80,7 @@ async function spawnCursor(command, options = {}, ws) {
     const runCursorProcess = (args, runReason = 'initial') => {
       const isTrustRetry = runReason === 'trust-retry';
       let runSawWorkspaceTrustPrompt = false;
+      let stdoutLineBuffer = '';
 
       if (isTrustRetry) {
         console.log('Retrying Cursor CLI with --trust after workspace trust prompt');
@@ -110,136 +110,137 @@ async function spawnCursor(command, options = {}, ws) {
         return true;
       };
 
+      const processCursorOutputLine = (line) => {
+        if (!line || !line.trim()) {
+          return;
+        }
+
+        try {
+          const response = JSON.parse(line);
+          console.log('Parsed JSON response:', response);
+
+          // Handle different message types
+          switch (response.type) {
+            case 'system':
+              if (response.subtype === 'init') {
+                // Capture session ID
+                if (response.session_id && !capturedSessionId) {
+                  capturedSessionId = response.session_id;
+                  console.log('Captured session ID:', capturedSessionId);
+
+                  // Update process key with captured session ID
+                  if (processKey !== capturedSessionId) {
+                    activeCursorProcesses.delete(processKey);
+                    activeCursorProcesses.set(capturedSessionId, cursorProcess);
+                  }
+
+                  // Set session ID on writer (for API endpoint compatibility)
+                  if (ws.setSessionId && typeof ws.setSessionId === 'function') {
+                    ws.setSessionId(capturedSessionId);
+                  }
+
+                  // Send session-created event only once for new sessions
+                  if (!sessionId && !sessionCreatedSent) {
+                    sessionCreatedSent = true;
+                    ws.send({
+                      type: 'session-created',
+                      sessionId: capturedSessionId,
+                      model: response.model,
+                      cwd: response.cwd
+                    });
+                  }
+                }
+
+                // Send system info to frontend
+                ws.send({
+                  type: 'cursor-system',
+                  data: response,
+                  sessionId: capturedSessionId || sessionId || null
+                });
+              }
+              break;
+
+            case 'user':
+              // Forward user message
+              ws.send({
+                type: 'cursor-user',
+                data: response,
+                sessionId: capturedSessionId || sessionId || null
+              });
+              break;
+
+            case 'assistant':
+              // Accumulate assistant message chunks
+              if (response.message && response.message.content && response.message.content.length > 0) {
+                const textContent = response.message.content[0].text;
+
+                // Send as Claude-compatible format for frontend
+                ws.send({
+                  type: 'claude-response',
+                  data: {
+                    type: 'content_block_delta',
+                    delta: {
+                      type: 'text_delta',
+                      text: textContent
+                    }
+                  },
+                  sessionId: capturedSessionId || sessionId || null
+                });
+              }
+              break;
+
+            case 'result':
+              // Session complete
+              console.log('Cursor session result:', response);
+
+              // Do not emit an extra content_block_stop here.
+              // The UI already finalizes the streaming message in cursor-result handling,
+              // and emitting both can produce duplicate assistant messages.
+              ws.send({
+                type: 'cursor-result',
+                sessionId: capturedSessionId || sessionId,
+                data: response,
+                success: response.subtype === 'success'
+              });
+              break;
+
+            default:
+              // Forward any other message types
+              ws.send({
+                type: 'cursor-response',
+                data: response,
+                sessionId: capturedSessionId || sessionId || null
+              });
+          }
+        } catch (parseError) {
+          console.log('Non-JSON response:', line);
+
+          if (shouldSuppressForTrustRetry(line)) {
+            return;
+          }
+
+          // If not JSON, send as raw text
+          ws.send({
+            type: 'cursor-output',
+            data: line,
+            sessionId: capturedSessionId || sessionId || null
+          });
+        }
+      };
+
       // Handle stdout (streaming JSON responses)
       cursorProcess.stdout.on('data', (data) => {
         const rawOutput = data.toString();
         console.log('Cursor CLI stdout:', rawOutput);
 
-        const lines = rawOutput.split('\n').filter((line) => line.trim());
+        // Stream chunks can split JSON objects across packets; keep trailing partial line.
+        stdoutLineBuffer += rawOutput;
+        const completeLines = stdoutLineBuffer.split(/\r?\n/);
+        stdoutLineBuffer = completeLines.pop() || '';
 
-        for (const line of lines) {
-          try {
-            const response = JSON.parse(line);
-            console.log('Parsed JSON response:', response);
-
-            // Handle different message types
-            switch (response.type) {
-              case 'system':
-                if (response.subtype === 'init') {
-                  // Capture session ID
-                  if (response.session_id && !capturedSessionId) {
-                    capturedSessionId = response.session_id;
-                    console.log('Captured session ID:', capturedSessionId);
-
-                    // Update process key with captured session ID
-                    if (processKey !== capturedSessionId) {
-                      activeCursorProcesses.delete(processKey);
-                      activeCursorProcesses.set(capturedSessionId, cursorProcess);
-                    }
-
-                    // Set session ID on writer (for API endpoint compatibility)
-                    if (ws.setSessionId && typeof ws.setSessionId === 'function') {
-                      ws.setSessionId(capturedSessionId);
-                    }
-
-                    // Send session-created event only once for new sessions
-                    if (!sessionId && !sessionCreatedSent) {
-                      sessionCreatedSent = true;
-                      ws.send({
-                        type: 'session-created',
-                        sessionId: capturedSessionId,
-                        model: response.model,
-                        cwd: response.cwd
-                      });
-                    }
-                  }
-
-                  // Send system info to frontend
-                  ws.send({
-                    type: 'cursor-system',
-                    data: response,
-                    sessionId: capturedSessionId || sessionId || null
-                  });
-                }
-                break;
-
-              case 'user':
-                // Forward user message
-                ws.send({
-                  type: 'cursor-user',
-                  data: response,
-                  sessionId: capturedSessionId || sessionId || null
-                });
-                break;
-
-              case 'assistant':
-                // Accumulate assistant message chunks
-                if (response.message && response.message.content && response.message.content.length > 0) {
-                  const textContent = response.message.content[0].text;
-                  messageBuffer += textContent;
-
-                  // Send as Claude-compatible format for frontend
-                  ws.send({
-                    type: 'claude-response',
-                    data: {
-                      type: 'content_block_delta',
-                      delta: {
-                        type: 'text_delta',
-                        text: textContent
-                      }
-                    },
-                    sessionId: capturedSessionId || sessionId || null
-                  });
-                }
-                break;
-
-              case 'result':
-                // Session complete
-                console.log('Cursor session result:', response);
-
-                // Send final message if we have buffered content
-                if (messageBuffer) {
-                  ws.send({
-                    type: 'claude-response',
-                    data: {
-                      type: 'content_block_stop'
-                    },
-                    sessionId: capturedSessionId || sessionId || null
-                  });
-                }
-
-                // Send completion event
-                ws.send({
-                  type: 'cursor-result',
-                  sessionId: capturedSessionId || sessionId,
-                  data: response,
-                  success: response.subtype === 'success'
-                });
-                break;
-
-              default:
-                // Forward any other message types
-                ws.send({
-                  type: 'cursor-response',
-                  data: response,
-                  sessionId: capturedSessionId || sessionId || null
-                });
-            }
-          } catch (parseError) {
-            console.log('Non-JSON response:', line);
-
-            if (shouldSuppressForTrustRetry(line)) {
-              continue;
-            }
-
-            // If not JSON, send as raw text
-            ws.send({
-              type: 'cursor-output',
-              data: line,
-              sessionId: capturedSessionId || sessionId || null
-            });
-          }
-        }
+        completeLines.forEach((line) => {
+          processCursorOutputLine(line.trim());
+        });
       });
 
       // Handle stderr
@@ -264,6 +265,12 @@ async function spawnCursor(command, options = {}, ws) {
 
         const finalSessionId = capturedSessionId || sessionId || processKey;
         activeCursorProcesses.delete(finalSessionId);
+
+        // Flush any final unterminated stdout line before completion handling.
+        if (stdoutLineBuffer.trim()) {
+          processCursorOutputLine(stdoutLineBuffer.trim());
+          stdoutLineBuffer = '';
+        }
 
         if (
           runSawWorkspaceTrustPrompt &&

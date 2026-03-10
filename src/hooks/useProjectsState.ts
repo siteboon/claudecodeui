@@ -18,6 +18,10 @@ type UseProjectsStateArgs = {
   activeSessions: Set<string>;
 };
 
+type FetchProjectsOptions = {
+  showLoadingState?: boolean;
+};
+
 const serialize = (value: unknown) => JSON.stringify(value ?? null);
 
 const projectsHaveChanges = (
@@ -152,9 +156,11 @@ export function useProjectsState({
 
   const loadingProgressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fetchProjects = useCallback(async () => {
+  const fetchProjects = useCallback(async ({ showLoadingState = true }: FetchProjectsOptions = {}) => {
     try {
-      setIsLoadingProjects(true);
+      if (showLoadingState) {
+        setIsLoadingProjects(true);
+      }
       const response = await api.projects();
       const projectData = (await response.json()) as Project[];
 
@@ -170,9 +176,16 @@ export function useProjectsState({
     } catch (error) {
       console.error('Error fetching projects:', error);
     } finally {
-      setIsLoadingProjects(false);
+      if (showLoadingState) {
+        setIsLoadingProjects(false);
+      }
     }
   }, []);
+
+  const refreshProjectsSilently = useCallback(async () => {
+    // Keep chat view stable while still syncing sidebar/session metadata in background.
+    await fetchProjects({ showLoadingState: false });
+  }, [fetchProjects]);
 
   const openSettings = useCallback((tab = 'tools') => {
     setSettingsInitialTab(tab);
@@ -547,6 +560,7 @@ export function useProjectsState({
     setShowSettings,
     openSettings,
     fetchProjects,
+    refreshProjectsSilently,
     sidebarSharedProps,
     handleProjectSelect,
     handleSessionSelect,
