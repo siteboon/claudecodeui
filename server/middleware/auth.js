@@ -58,6 +58,11 @@ const authenticateToken = async (req, res, next) => {
       return res.status(401).json({ error: 'Invalid token. User not found.' });
     }
 
+    // Check token version matches current DB version (invalidates tokens after password reset)
+    if (decoded.tokenVersion !== user.token_version) {
+      return res.status(401).json({ error: 'Session expired. Please log in again.' });
+    }
+
     req.user = user;
     next();
   } catch (error) {
@@ -69,12 +74,13 @@ const authenticateToken = async (req, res, next) => {
 // Generate JWT token (never expires)
 const generateToken = (user) => {
   return jwt.sign(
-    { 
-      userId: user.id, 
-      username: user.username 
+    {
+      userId: user.id,
+      username: user.username,
+      tokenVersion: user.token_version  // embed for invalidation on password reset
     },
     JWT_SECRET
-    // No expiration - token lasts forever
+    // No expiration - token lasts until version incremented
   );
 };
 
@@ -101,6 +107,10 @@ const authenticateWebSocket = (token) => {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
+    // Verify user still exists and token version is current
+    const user = userDb.getUserById(decoded.userId);
+    if (!user) return null;
+    if (decoded.tokenVersion !== user.token_version) return null;
     return decoded;
   } catch (error) {
     console.error('WebSocket token verification error:', error);
