@@ -59,6 +59,15 @@ if (DB_PATH !== LEGACY_DB_PATH && !fs.existsSync(DB_PATH) && fs.existsSync(LEGAC
 // Create database connection
 const db = new Database(DB_PATH);
 
+// app_config must exist before any other module imports (auth.js reads the JWT secret at load time).
+// runMigrations() also creates this table, but it runs too late for existing installations
+// where auth.js is imported before initializeDatabase() is called.
+db.exec(`CREATE TABLE IF NOT EXISTS app_config (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
+
 // Show app installation path prominently
 const appInstallPath = path.join(__dirname, '../..');
 console.log('');
@@ -90,6 +99,13 @@ const runMigrations = () => {
       console.log('Running migration: Adding has_completed_onboarding column');
       db.exec('ALTER TABLE users ADD COLUMN has_completed_onboarding BOOLEAN DEFAULT 0');
     }
+
+    // Create app_config table if it doesn't exist (for existing installations)
+    db.exec(`CREATE TABLE IF NOT EXISTS app_config (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
 
     // Create session_names table if it doesn't exist (for existing installations)
     db.exec(`CREATE TABLE IF NOT EXISTS session_names (
@@ -414,6 +430,33 @@ function applyCustomSessionNames(sessions, provider) {
   }
 }
 
+// App config database operations
+const appConfigDb = {
+  get: (key) => {
+    try {
+      const row = db.prepare('SELECT value FROM app_config WHERE key = ?').get(key);
+      return row?.value || null;
+    } catch (err) {
+      return null;
+    }
+  },
+
+  set: (key, value) => {
+    db.prepare(
+      'INSERT INTO app_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
+    ).run(key, value);
+  },
+
+  getOrCreateJwtSecret: () => {
+    let secret = appConfigDb.get('jwt_secret');
+    if (!secret) {
+      secret = crypto.randomBytes(64).toString('hex');
+      appConfigDb.set('jwt_secret', secret);
+    }
+    return secret;
+  }
+};
+
 // Backward compatibility - keep old names pointing to new system
 const githubTokensDb = {
   createGithubToken: (userId, tokenName, githubToken, description = null) => {
@@ -441,5 +484,6 @@ export {
   credentialsDb,
   sessionNamesDb,
   applyCustomSessionNames,
+  appConfigDb,
   githubTokensDb // Backward compatibility
 };

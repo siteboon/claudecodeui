@@ -63,3 +63,10 @@ CREATE TABLE IF NOT EXISTS session_names (
 );
 
 CREATE INDEX IF NOT EXISTS idx_session_names_lookup ON session_names(session_id, provider);
+
+-- App configuration table (auto-generated secrets, settings, etc.)
+CREATE TABLE IF NOT EXISTS app_config (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
