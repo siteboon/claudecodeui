@@ -68,7 +68,7 @@ export default function AgentsSettingsTab({
   ]);
 
   return (
-    <div className="flex h-full min-h-[400px] flex-col md:min-h-[500px] md:flex-row">
+    <div className="-mx-4 -mb-4 -mt-2 flex min-h-[300px] flex-col overflow-hidden md:-mx-6 md:-mb-6 md:-mt-2 md:min-h-[500px]">
       <AgentSelectorSection
         selectedAgent={selectedAgent}
         onSelectAgent={setSelectedAgent}

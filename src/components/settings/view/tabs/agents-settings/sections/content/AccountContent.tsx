@@ -27,7 +27,7 @@ const agentConfig: Record<AgentProvider, AgentVisualConfig> = {
     borderClass: 'border-blue-200 dark:border-blue-800',
     textClass: 'text-blue-900 dark:text-blue-100',
     subtextClass: 'text-blue-700 dark:text-blue-300',
-    buttonClass: 'bg-blue-600 hover:bg-blue-700',
+    buttonClass: 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800',
   },
   cursor: {
     name: 'Cursor',
@@ -35,15 +35,15 @@ const agentConfig: Record<AgentProvider, AgentVisualConfig> = {
     borderClass: 'border-purple-200 dark:border-purple-800',
     textClass: 'text-purple-900 dark:text-purple-100',
     subtextClass: 'text-purple-700 dark:text-purple-300',
-    buttonClass: 'bg-purple-600 hover:bg-purple-700',
+    buttonClass: 'bg-purple-600 hover:bg-purple-700 active:bg-purple-800',
   },
   codex: {
     name: 'Codex',
-    bgClass: 'bg-gray-100 dark:bg-gray-800/50',
+    bgClass: 'bg-muted/50',
     borderClass: 'border-gray-300 dark:border-gray-600',
     textClass: 'text-gray-900 dark:text-gray-100',
     subtextClass: 'text-gray-700 dark:text-gray-300',
-    buttonClass: 'bg-gray-800 hover:bg-gray-900 dark:bg-gray-700 dark:hover:bg-gray-600',
+    buttonClass: 'bg-gray-800 hover:bg-gray-900 active:bg-gray-950 dark:bg-gray-700 dark:hover:bg-gray-600 dark:active:bg-gray-500',
   },
   gemini: {
     name: 'Gemini',
@@ -52,7 +52,7 @@ const agentConfig: Record<AgentProvider, AgentVisualConfig> = {
     borderClass: 'border-indigo-200 dark:border-indigo-800',
     textClass: 'text-indigo-900 dark:text-indigo-100',
     subtextClass: 'text-indigo-700 dark:text-indigo-300',
-    buttonClass: 'bg-indigo-600 hover:bg-indigo-700',
+    buttonClass: 'bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800',
   },
 };
 
@@ -91,7 +91,7 @@ export default function AccountContent({ agent, authStatus, onLogin }: AccountCo
             </div>
             <div>
               {authStatus.loading ? (
-                <Badge variant="secondary" className="bg-gray-100 dark:bg-gray-800">
+                <Badge variant="secondary" className="bg-muted">
                   {t('agents.authStatus.checking')}
                 </Badge>
               ) : authStatus.authenticated ? (
@@ -107,7 +107,7 @@ export default function AccountContent({ agent, authStatus, onLogin }: AccountCo
           </div>
 
           {authStatus.method !== 'api_key' && (
-            <div className="border-t border-gray-200 pt-4 dark:border-gray-700">
+            <div className="border-t border-border/50 pt-4">
               <div className="flex items-center justify-between">
                 <div>
                   <div className={`font-medium ${config.textClass}`}>
@@ -132,7 +132,7 @@ export default function AccountContent({ agent, authStatus, onLogin }: AccountCo
           )}
 
           {authStatus.error && (
-            <div className="border-t border-gray-200 pt-4 dark:border-gray-700">
+            <div className="border-t border-border/50 pt-4">
               <div className="text-sm text-red-600 dark:text-red-400">
                 {t('agents.error', { error: authStatus.error })}
               </div>

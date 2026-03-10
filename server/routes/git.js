@@ -62,9 +62,18 @@ function validateBranchName(branch) {
   return branch;
 }
 
-function validateFilePath(file) {
+function validateFilePath(file, projectPath) {
   if (!file || file.includes('\0')) {
     throw new Error('Invalid file path');
+  }
+  // Prevent path traversal: resolve the file relative to the project root
+  // and ensure the result stays within the project directory
+  if (projectPath) {
+    const resolved = path.resolve(projectPath, file);
+    const normalizedRoot = path.resolve(projectPath) + path.sep;
+    if (!resolved.startsWith(normalizedRoot) && resolved !== path.resolve(projectPath)) {
+      throw new Error('Invalid file path: path traversal detected');
+    }
   }
   return file;
 }
@@ -76,14 +85,32 @@ function validateRemoteName(remote) {
   return remote;
 }
 
+function validateProjectPath(projectPath) {
+  if (!projectPath || projectPath.includes('\0')) {
+    throw new Error('Invalid project path');
+  }
+  const resolved = path.resolve(projectPath);
+  // Must be an absolute path after resolution
+  if (!path.isAbsolute(resolved)) {
+    throw new Error('Invalid project path: must be absolute');
+  }
+  // Block obviously dangerous paths
+  if (resolved === '/' || resolved === path.sep) {
+    throw new Error('Invalid project path: root directory not allowed');
+  }
+  return resolved;
+}
+
 // Helper function to get the actual project path from the encoded project name
 async function getActualProjectPath(projectName) {
+  let projectPath;
   try {
-    return await extractProjectDirectory(projectName);
+    projectPath = await extractProjectDirectory(projectName);
   } catch (error) {
     console.error(`Error extracting project directory for ${projectName}:`, error);
     throw new Error(`Unable to resolve project path for "${projectName}"`);
   }
+  return validateProjectPath(projectPath);
 }
 
 // Helper function to strip git diff headers
