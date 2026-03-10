@@ -109,6 +109,7 @@ function ChatInterface({
     scrollToBottom,
     scrollToBottomAndReset,
     handleScroll,
+    loadSessionMessages,
   } = useChatSessionState({
     selectedProject,
     selectedSession,
@@ -197,6 +198,23 @@ function ChatInterface({
     setPendingPermissionRequests,
   });
 
+  // On WebSocket reconnect, re-fetch the current session's messages from JSONL so missed
+  // streaming events (e.g. from long tool calls while iOS had the tab backgrounded) are shown.
+  // Also reset isLoading — if the server restarted or the session died mid-stream, the client
+  // would be stuck in "Processing..." forever without this reset.
+  const handleWebSocketReconnect = useCallback(async () => {
+    if (!selectedProject || !selectedSession) return;
+    const provider = (localStorage.getItem('selected-provider') as any) || 'claude';
+    const messages = await loadSessionMessages(selectedProject.name, selectedSession.id, false, provider);
+    if (messages && messages.length > 0) {
+      setChatMessages(messages);
+    }
+    // Reset loading state — if the session is still active, new WebSocket messages will
+    // set it back to true. If it died, this clears the permanent frozen state.
+    setIsLoading(false);
+    setCanAbortSession(false);
+  }, [selectedProject, selectedSession, loadSessionMessages, setChatMessages, setIsLoading, setCanAbortSession]);
+
   useChatRealtimeHandlers({
     latestMessage,
     provider,
@@ -219,6 +237,7 @@ function ChatInterface({
     onSessionNotProcessing,
     onReplaceTemporarySession,
     onNavigateToSession,
+    onWebSocketReconnect: handleWebSocketReconnect,
   });
 
   useEffect(() => {
