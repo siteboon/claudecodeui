@@ -131,6 +131,8 @@ export function useChatComposerState({
     ((event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>) => Promise<void>) | null
   >(null);
   const inputValueRef = useRef(input);
+  // Submission lock — prevents triple-fire on iOS (onTouchStart + onMouseDown + form onSubmit all firing together)
+  const isSubmittingRef = useRef(false);
 
   const handleBuiltInCommand = useCallback(
     (result: CommandExecutionResult) => {
@@ -473,8 +475,12 @@ export function useChatComposerState({
       event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,
     ) => {
       event.preventDefault();
+      // Guard against triple-fire on iOS: onTouchStart + onMouseDown + form onSubmit all fire simultaneously
+      if (isSubmittingRef.current) return;
+      isSubmittingRef.current = true;
       const currentInput = inputValueRef.current;
       if (!currentInput.trim() || isLoading || !selectedProject) {
+        isSubmittingRef.current = false;
         return;
       }
 
@@ -679,6 +685,8 @@ export function useChatComposerState({
       }
 
       safeLocalStorage.removeItem(`draft_input_${selectedProject.name}`);
+      // Release submission lock after a short delay to absorb any remaining duplicate events
+      setTimeout(() => { isSubmittingRef.current = false; }, 800);
     },
     [
       attachedImages,
