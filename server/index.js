@@ -1731,7 +1731,7 @@ function handleShellConnection(ws) {
                         }
                     } else if (provider === 'codex') {
                         if (hasSession && sessionId) {
-                            shellCommand = `codex resume "${sessionId}" || codex`;
+                            shellCommand = `codex resume "${sessionId}"`;
                         } else {
                             shellCommand = 'codex';
                         }
@@ -1765,7 +1765,7 @@ function handleShellConnection(ws) {
                         // Claude (default provider)
                         const command = initialCommand || 'claude';
                         if (hasSession && sessionId) {
-                            shellCommand = `claude --resume "${sessionId}" || claude`;
+                            shellCommand = `claude --resume "${sessionId}"`;
                         } else {
                             shellCommand = command;
                         }
