@@ -30,7 +30,7 @@
     "disconnected": "Getrennt",
     "scope": {
       "label": "Geltungsbereich",
-      "user": "Benutzer",
+      "user": "Benutzer:in",
       "project": "Projekt"
     }
   },
@@ -64,7 +64,7 @@
     "showThinking": "Denken anzeigen",
     "autoScrollToBottom": "Automatisch nach unten scrollen",
     "sendByCtrlEnter": "Mit Strg+Enter senden",
-    "sendByCtrlEnterDescription": "Wenn aktiviert, sendet Strg+Enter die Nachricht anstelle von Enter. Dies ist nützlich für IME-Benutzer, um versehentliches Senden zu vermeiden.",
+    "sendByCtrlEnterDescription": "Wenn aktiviert, sendet Strg+Enter die Nachricht anstelle von Enter. Dies ist nützlich für IME-Benutzer:innen, um versehentliches Senden zu vermeiden.",
     "dragHandle": {
       "dragging": "Handle wird gezogen",
       "closePanel": "Einstellungspanel schließen",
@@ -153,7 +153,7 @@
     },
     "scope": {
       "label": "Geltungsbereich",
-      "userGlobal": "Benutzer (Global)",
+      "userGlobal": "Benutzer:in (Global)",
       "projectLocal": "Projekt (Lokal)",
       "userDescription": "Benutzerbereich: Auf allen Projekten deines Computers verfügbar",
       "projectDescription": "Lokaler Bereich: Nur im ausgewählten Projekt verfügbar",
@@ -298,7 +298,7 @@
       "disconnected": "Getrennt",
       "checkingAuth": "Authentifizierungsstatus wird überprüft...",
       "loggedInAs": "Angemeldet als {{email}}",
-      "authenticatedUser": "authentifizierter Benutzer"
+      "authenticatedUser": "authentifizierte:r Benutzer:in"
     },
     "account": {
       "claude": {

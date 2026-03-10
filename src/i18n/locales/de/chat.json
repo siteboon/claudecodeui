@@ -9,7 +9,7 @@
     "copied": "Nachricht kopiert"
   },
   "messageTypes": {
-    "user": "B",
+    "user": "Benutzer:in",
     "error": "Fehler",
     "tool": "Werkzeug",
     "claude": "Claude",
