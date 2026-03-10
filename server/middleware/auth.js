@@ -1,9 +1,9 @@
 import jwt from 'jsonwebtoken';
-import { userDb } from '../database/db.js';
+import { userDb, appConfigDb } from '../database/db.js';
 import { IS_PLATFORM } from '../constants/config.js';
 
-// Get JWT secret from environment or use default (for development)
-const JWT_SECRET = process.env.JWT_SECRET || 'claude-ui-dev-secret-change-in-production';
+// Use env var if set, otherwise auto-generate a unique secret per installation
+const JWT_SECRET = process.env.JWT_SECRET || appConfigDb.getOrCreateJwtSecret();
 
 // Optional API key middleware
 const validateApiKey = (req, res, next) => {
@@ -58,6 +58,16 @@ const authenticateToken = async (req, res, next) => {
       return res.status(401).json({ error: 'Invalid token. User not found.' });
     }
 
+    // Auto-refresh: if token is past halfway through its lifetime, issue a new one
+    if (decoded.exp && decoded.iat) {
+      const now = Math.floor(Date.now() / 1000);
+      const halfLife = (decoded.exp - decoded.iat) / 2;
+      if (now > decoded.iat + halfLife) {
+        const newToken = generateToken(user);
+        res.setHeader('X-Refreshed-Token', newToken);
+      }
+    }
+
     req.user = user;
     next();
   } catch (error) {
@@ -66,15 +76,15 @@ const authenticateToken = async (req, res, next) => {
   }
 };
 
-// Generate JWT token (never expires)
+// Generate JWT token
 const generateToken = (user) => {
   return jwt.sign(
-    { 
-      userId: user.id, 
-      username: user.username 
+    {
+      userId: user.id,
+      username: user.username
     },
-    JWT_SECRET
-    // No expiration - token lasts forever
+    JWT_SECRET,
+    { expiresIn: '7d' }
   );
 };
 
@@ -101,7 +111,12 @@ const authenticateWebSocket = (token) => {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    return decoded;
+    // Verify user actually exists in database (matches REST authenticateToken behavior)
+    const user = userDb.getUserById(decoded.userId);
+    if (!user) {
+      return null;
+    }
+    return { userId: user.id, username: user.username };
   } catch (error) {
     console.error('WebSocket token verification error:', error);
     return null;

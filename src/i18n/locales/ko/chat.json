@@ -6,7 +6,10 @@
   },
   "copyMessage": {
     "copy": "메시지 복사",
-    "copied": "메시지 복사됨"
+    "copied": "메시지 복사됨",
+    "selectFormat": "복사 형식 선택",
+    "copyAsMarkdown": "마크다운으로 복사",
+    "copyAsText": "텍스트로 복사"
   },
   "messageTypes": {
     "user": "U",
