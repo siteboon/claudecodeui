@@ -40,16 +40,13 @@ export default function Shell({
   onProcessComplete = null,
   minimal = false,
   autoConnect = false,
-  isActive,
+  isActive = true,
 }: ShellProps) {
   const { t } = useTranslation('chat');
   const [isRestarting, setIsRestarting] = useState(false);
   const [cliPromptOptions, setCliPromptOptions] = useState<CliPromptOption[] | null>(null);
   const promptCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onOutputRef = useRef<(() => void) | null>(null);
-
-  // Keep the public API stable for existing callers that still pass `isActive`.
-  void isActive;
 
   const {
     terminalContainerRef,
@@ -156,6 +153,24 @@ export default function Shell({
       setCliPromptOptions(null);
     }
   }, [isConnected]);
+
+  useEffect(() => {
+    if (!isActive || !isInitialized || !isConnected) {
+      return;
+    }
+
+    const focusTerminal = () => {
+      terminalRef.current?.focus();
+    };
+
+    const animationFrameId = window.requestAnimationFrame(focusTerminal);
+    const timeoutId = window.setTimeout(focusTerminal, 0);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrameId);
+      window.clearTimeout(timeoutId);
+    };
+  }, [isActive, isConnected, isInitialized, terminalRef]);
 
   const sendInput = useCallback(
     (data: string) => {
