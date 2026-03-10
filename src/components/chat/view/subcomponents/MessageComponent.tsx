@@ -1,4 +1,4 @@
-import React, { memo, useMemo } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
 import type {
@@ -9,10 +9,10 @@ import type {
 } from '../../types/types';
 import { formatUsageLimitText } from '../../utils/chatFormatting';
 import { getClaudePermissionSuggestion } from '../../utils/chatPermissions';
-import { copyTextToClipboard } from '../../../../utils/clipboard';
 import type { Project } from '../../../../types/app';
 import { ToolRenderer, shouldHideToolResult } from '../../tools';
 import { Markdown } from './Markdown';
+import MessageCopyControl from './MessageCopyControl';
 
 type DiffLine = {
   type: string;
@@ -20,7 +20,7 @@ type DiffLine = {
   lineNum: number;
 };
 
-interface MessageComponentProps {
+type MessageComponentProps = {
   message: ChatMessage;
   prevMessage: ChatMessage | null;
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
@@ -32,7 +32,7 @@ interface MessageComponentProps {
   showThinking?: boolean;
   selectedProject?: Project | null;
   provider: Provider | string;
-}
+};
 
 type InteractiveOption = {
   number: string;
@@ -41,6 +41,7 @@ type InteractiveOption = {
 };
 
 type PermissionGrantState = 'idle' | 'granted' | 'error';
+const COPY_HIDDEN_TOOL_NAMES = new Set(['Bash', 'Edit', 'Write', 'ApplyPatch']);
 
 const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, onShowSettings, onGrantToolPermission, autoExpandTools, showRawParameters, showThinking, selectedProject, provider }: MessageComponentProps) => {
   const { t } = useTranslation('chat');
@@ -49,18 +50,32 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
       (prevMessage.type === 'user') ||
       (prevMessage.type === 'tool') ||
       (prevMessage.type === 'error'));
-  const messageRef = React.useRef<HTMLDivElement | null>(null);
-  const [isExpanded, setIsExpanded] = React.useState(false);
+  const messageRef = useRef<HTMLDivElement | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
   const permissionSuggestion = getClaudePermissionSuggestion(message, provider);
-  const [permissionGrantState, setPermissionGrantState] = React.useState<PermissionGrantState>('idle');
-  const [messageCopied, setMessageCopied] = React.useState(false);
+  const [permissionGrantState, setPermissionGrantState] = useState<PermissionGrantState>('idle');
+  const userCopyContent = String(message.content || '');
+  const formattedMessageContent = useMemo(
+    () => formatUsageLimitText(String(message.content || '')),
+    [message.content]
+  );
+  const assistantCopyContent = message.isToolUse
+    ? String(message.displayText || message.content || '')
+    : formattedMessageContent;
+  const isCommandOrFileEditToolResponse = Boolean(
+    message.isToolUse && COPY_HIDDEN_TOOL_NAMES.has(String(message.toolName || ''))
+  );
+  const shouldShowUserCopyControl = message.type === 'user' && userCopyContent.trim().length > 0;
+  const shouldShowAssistantCopyControl = message.type === 'assistant' &&
+    assistantCopyContent.trim().length > 0 &&
+    !isCommandOrFileEditToolResponse;
 
 
-  React.useEffect(() => {
+  useEffect(() => {
     setPermissionGrantState('idle');
   }, [permissionSuggestion?.entry, message.toolId]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const node = messageRef.current;
     if (!autoExpandTools || !node || !message.isToolUse) return;
 
@@ -120,43 +135,9 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
               </div>
             )}
             <div className="mt-1 flex items-center justify-end gap-1 text-xs text-blue-100">
-              <button
-                type="button"
-                onClick={() => {
-                  const text = String(message.content || '');
-                  if (!text) return;
-
-                  copyTextToClipboard(text).then((success) => {
-                    if (!success) return;
-                    setMessageCopied(true);
-                  });
-                }}
-                title={messageCopied ? t('copyMessage.copied') : t('copyMessage.copy')}
-                aria-label={messageCopied ? t('copyMessage.copied') : t('copyMessage.copy')}
-              >
-                {messageCopied ? (
-                  <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
-                    <path
-                      fillRule="evenodd"
-                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                ) : (
-                  <svg
-                    className="h-3.5 w-3.5"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                    <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
-                  </svg>
-                )}
-              </button>
+              {shouldShowUserCopyControl && (
+                <MessageCopyControl content={userCopyContent} messageType="user" />
+              )}
               <span>{formattedTime}</span>
             </div>
           </div>
@@ -430,7 +411,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                 )}
 
                 {(() => {
-                  const content = formatUsageLimitText(String(message.content || ''));
+                  const content = formattedMessageContent;
 
                   // Detect if content is pure JSON (starts with { or [)
                   const trimmedContent = content.trim();
@@ -476,9 +457,12 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
               </div>
             )}
 
-            {!isGrouped && (
-              <div className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
-                {formattedTime}
+            {(shouldShowAssistantCopyControl || !isGrouped) && (
+              <div className="mt-1 flex w-full items-center gap-2 text-[11px] text-gray-400 dark:text-gray-500">
+                {shouldShowAssistantCopyControl && (
+                  <MessageCopyControl content={assistantCopyContent} messageType="assistant" />
+                )}
+                {!isGrouped && <span>{formattedTime}</span>}
               </div>
             )}
           </div>
