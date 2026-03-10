@@ -104,7 +104,7 @@ function ClaudePermissions({
               type="checkbox"
               checked={skipPermissions}
               onChange={(event) => onSkipPermissionsChange(event.target.checked)}
-              className="h-4 w-4 rounded border-gray-300 bg-gray-100 text-blue-600 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+              className="h-4 w-4 rounded border-input bg-card text-primary focus:ring-2 focus:ring-primary"
             />
             <div>
               <div className="font-medium text-orange-900 dark:text-orange-100">
@@ -150,7 +150,7 @@ function ClaudePermissions({
         </div>
 
         <div className="space-y-2">
-          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+          <p className="text-sm font-medium text-muted-foreground">
             {t('permissions.allowedTools.quickAdd')}
           </p>
           <div className="flex flex-wrap gap-2">
@@ -184,7 +184,7 @@ function ClaudePermissions({
             </div>
           ))}
           {allowedTools.length === 0 && (
-            <div className="py-6 text-center text-gray-500 dark:text-gray-400">
+            <div className="py-6 text-center text-muted-foreground">
               {t('permissions.allowedTools.empty')}
             </div>
           )}
@@ -237,7 +237,7 @@ function ClaudePermissions({
             </div>
           ))}
           {disallowedTools.length === 0 && (
-            <div className="py-6 text-center text-gray-500 dark:text-gray-400">
+            <div className="py-6 text-center text-muted-foreground">
               {t('permissions.blockedTools.empty')}
             </div>
           )}
@@ -314,7 +314,7 @@ function CursorPermissions({
               type="checkbox"
               checked={skipPermissions}
               onChange={(event) => onSkipPermissionsChange(event.target.checked)}
-              className="h-4 w-4 rounded border-gray-300 bg-gray-100 text-purple-600 focus:ring-2 focus:ring-purple-500 dark:border-gray-600 dark:bg-gray-700"
+              className="h-4 w-4 rounded border-input bg-card text-primary focus:ring-2 focus:ring-primary"
             />
             <div>
               <div className="font-medium text-orange-900 dark:text-orange-100">
@@ -360,7 +360,7 @@ function CursorPermissions({
         </div>
 
         <div className="space-y-2">
-          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+          <p className="text-sm font-medium text-muted-foreground">
             {t('permissions.allowedCommands.quickAdd')}
           </p>
           <div className="flex flex-wrap gap-2">
@@ -394,7 +394,7 @@ function CursorPermissions({
             </div>
           ))}
           {allowedCommands.length === 0 && (
-            <div className="py-6 text-center text-gray-500 dark:text-gray-400">
+            <div className="py-6 text-center text-muted-foreground">
               {t('permissions.allowedCommands.empty')}
             </div>
           )}
@@ -447,7 +447,7 @@ function CursorPermissions({
             </div>
           ))}
           {disallowedCommands.length === 0 && (
-            <div className="py-6 text-center text-gray-500 dark:text-gray-400">
+            <div className="py-6 text-center text-muted-foreground">
               {t('permissions.blockedCommands.empty')}
             </div>
           )}
@@ -489,8 +489,8 @@ function CodexPermissions({ permissionMode, onPermissionModeChange }: Omit<Codex
 
         <div
           className={`cursor-pointer rounded-lg border p-4 transition-all ${permissionMode === 'default'
-            ? 'border-gray-400 bg-gray-100 dark:border-gray-500 dark:bg-gray-800'
-            : 'border-gray-200 bg-gray-50 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-900/50 dark:hover:border-gray-600'
+            ? 'border-border bg-accent'
+            : 'border-border bg-card/50 active:border-border active:bg-accent/50'
             }`}
           onClick={() => onPermissionModeChange('default')}
         >
@@ -514,7 +514,7 @@ function CodexPermissions({ permissionMode, onPermissionModeChange }: Omit<Codex
         <div
           className={`cursor-pointer rounded-lg border p-4 transition-all ${permissionMode === 'acceptEdits'
             ? 'border-green-400 bg-green-50 dark:border-green-600 dark:bg-green-900/20'
-            : 'border-gray-200 bg-gray-50 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-900/50 dark:hover:border-gray-600'
+            : 'border-border bg-card/50 active:border-border active:bg-accent/50'
             }`}
           onClick={() => onPermissionModeChange('acceptEdits')}
         >
@@ -538,7 +538,7 @@ function CodexPermissions({ permissionMode, onPermissionModeChange }: Omit<Codex
         <div
           className={`cursor-pointer rounded-lg border p-4 transition-all ${permissionMode === 'bypassPermissions'
             ? 'border-orange-400 bg-orange-50 dark:border-orange-600 dark:bg-orange-900/20'
-            : 'border-gray-200 bg-gray-50 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-900/50 dark:hover:border-gray-600'
+            : 'border-border bg-card/50 active:border-border active:bg-accent/50'
             }`}
           onClick={() => onPermissionModeChange('bypassPermissions')}
         >
@@ -566,7 +566,7 @@ function CodexPermissions({ permissionMode, onPermissionModeChange }: Omit<Codex
           <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
             {t('permissions.codex.technicalDetails')}
           </summary>
-          <div className="mt-2 space-y-2 rounded-lg bg-gray-50 p-3 text-xs text-muted-foreground dark:bg-gray-900/50">
+          <div className="mt-2 space-y-2 rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
             <p><strong>{t('permissions.codex.modes.default.title')}:</strong> {t('permissions.codex.technicalInfo.default')}</p>
             <p><strong>{t('permissions.codex.modes.acceptEdits.title')}:</strong> {t('permissions.codex.technicalInfo.acceptEdits')}</p>
             <p><strong>{t('permissions.codex.modes.bypassPermissions.title')}:</strong> {t('permissions.codex.technicalInfo.bypassPermissions')}</p>
@@ -603,8 +603,8 @@ function GeminiPermissions({ permissionMode, onPermissionModeChange }: Omit<Gemi
         {/* Default Mode */}
         <div
           className={`cursor-pointer rounded-lg border p-4 transition-all ${permissionMode === 'default'
-            ? 'border-gray-400 bg-gray-100 dark:border-gray-500 dark:bg-gray-800'
-            : 'border-gray-200 bg-gray-50 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-900/50 dark:hover:border-gray-600'
+            ? 'border-border bg-accent'
+            : 'border-border bg-card/50 active:border-border active:bg-accent/50'
             }`}
           onClick={() => onPermissionModeChange('default')}
         >
@@ -629,7 +629,7 @@ function GeminiPermissions({ permissionMode, onPermissionModeChange }: Omit<Gemi
         <div
           className={`cursor-pointer rounded-lg border p-4 transition-all ${permissionMode === 'auto_edit'
             ? 'border-green-400 bg-green-50 dark:border-green-600 dark:bg-green-900/20'
-            : 'border-gray-200 bg-gray-50 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-900/50 dark:hover:border-gray-600'
+            : 'border-border bg-card/50 active:border-border active:bg-accent/50'
             }`}
           onClick={() => onPermissionModeChange('auto_edit')}
         >
@@ -654,7 +654,7 @@ function GeminiPermissions({ permissionMode, onPermissionModeChange }: Omit<Gemi
         <div
           className={`cursor-pointer rounded-lg border p-4 transition-all ${permissionMode === 'yolo'
             ? 'border-orange-400 bg-orange-50 dark:border-orange-600 dark:bg-orange-900/20'
-            : 'border-gray-200 bg-gray-50 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-900/50 dark:hover:border-gray-600'
+            : 'border-border bg-card/50 active:border-border active:bg-accent/50'
             }`}
           onClick={() => onPermissionModeChange('yolo')}
         >

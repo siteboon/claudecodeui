@@ -308,6 +308,9 @@
       },
       "codex": {
         "description": "AI-ассистент OpenAI Codex"
+      },
+      "gemini": {
+        "description": "AI-ассистент Google Gemini"
       }
     },
     "connectionStatus": "Статус подключения",
