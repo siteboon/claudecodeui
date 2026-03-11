@@ -80,7 +80,7 @@ function ClaudeMcpServers({
           const toolsResult = serverTools[serverId];
 
           return (
-            <div key={serverId} className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/50">
+            <div key={serverId} className="rounded-lg border border-border bg-card/50 p-4">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <div className="mb-2 flex items-center gap-2">
@@ -102,19 +102,19 @@ function ClaudeMcpServers({
                     {server.type === 'stdio' && server.config?.command && (
                       <div>
                         {t('mcpServers.config.command')}:{' '}
-                        <code className="rounded bg-gray-100 px-1 text-xs dark:bg-gray-800">{server.config.command}</code>
+                        <code className="rounded bg-muted px-1 text-xs">{server.config.command}</code>
                       </div>
                     )}
                     {(server.type === 'sse' || server.type === 'http') && server.config?.url && (
                       <div>
                         {t('mcpServers.config.url')}:{' '}
-                        <code className="rounded bg-gray-100 px-1 text-xs dark:bg-gray-800">{server.config.url}</code>
+                        <code className="rounded bg-muted px-1 text-xs">{server.config.url}</code>
                       </div>
                     )}
                     {server.config?.args && server.config.args.length > 0 && (
                       <div>
                         {t('mcpServers.config.args')}:{' '}
-                        <code className="rounded bg-gray-100 px-1 text-xs dark:bg-gray-800">{server.config.args.join(' ')}</code>
+                        <code className="rounded bg-muted px-1 text-xs">{server.config.args.join(' ')}</code>
                       </div>
                     )}
                   </div>
@@ -156,7 +156,7 @@ function ClaudeMcpServers({
                     onClick={() => onEdit(server)}
                     variant="ghost"
                     size="sm"
-                    className="text-gray-600 hover:text-gray-700"
+                    className="text-muted-foreground hover:text-foreground"
                     title={t('mcpServers.actions.edit')}
                   >
                     <Edit3 className="h-4 w-4" />
@@ -176,7 +176,7 @@ function ClaudeMcpServers({
           );
         })}
         {servers.length === 0 && (
-          <div className="py-8 text-center text-gray-500 dark:text-gray-400">{t('mcpServers.empty')}</div>
+          <div className="py-8 text-center text-muted-foreground">{t('mcpServers.empty')}</div>
         )}
       </div>
     </div>
@@ -214,7 +214,7 @@ function CursorMcpServers({ servers, onAdd, onEdit, onDelete }: Omit<CursorMcpSe
           const serverId = server.id || server.name;
 
           return (
-            <div key={serverId} className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/50">
+            <div key={serverId} className="rounded-lg border border-border bg-card/50 p-4">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <div className="mb-2 flex items-center gap-2">
@@ -226,7 +226,7 @@ function CursorMcpServers({ servers, onAdd, onEdit, onDelete }: Omit<CursorMcpSe
                     {server.config?.command && (
                       <div>
                         {t('mcpServers.config.command')}:{' '}
-                        <code className="rounded bg-gray-100 px-1 text-xs dark:bg-gray-800">{server.config.command}</code>
+                        <code className="rounded bg-muted px-1 text-xs">{server.config.command}</code>
                       </div>
                     )}
                   </div>
@@ -236,7 +236,7 @@ function CursorMcpServers({ servers, onAdd, onEdit, onDelete }: Omit<CursorMcpSe
                     onClick={() => onEdit(server)}
                     variant="ghost"
                     size="sm"
-                    className="text-gray-600 hover:text-gray-700"
+                    className="text-muted-foreground hover:text-foreground"
                     title={t('mcpServers.actions.edit')}
                   >
                     <Edit3 className="h-4 w-4" />
@@ -256,7 +256,7 @@ function CursorMcpServers({ servers, onAdd, onEdit, onDelete }: Omit<CursorMcpSe
           );
         })}
         {servers.length === 0 && (
-          <div className="py-8 text-center text-gray-500 dark:text-gray-400">{t('mcpServers.empty')}</div>
+          <div className="py-8 text-center text-muted-foreground">{t('mcpServers.empty')}</div>
         )}
       </div>
     </div>
@@ -278,7 +278,7 @@ function CodexMcpServers({ servers, onAdd, onEdit, onDelete, deleteError }: Omit
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        <Server className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+        <Server className="h-5 w-5 text-muted-foreground" />
         <h3 className="text-lg font-medium text-foreground">{t('mcpServers.title')}</h3>
       </div>
       <p className="text-sm text-muted-foreground">{t('mcpServers.description.codex')}</p>
@@ -297,7 +297,7 @@ function CodexMcpServers({ servers, onAdd, onEdit, onDelete, deleteError }: Omit
 
       <div className="space-y-2">
         {servers.map((server) => (
-          <div key={server.name} className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/50">
+          <div key={server.name} className="rounded-lg border border-border bg-card/50 p-4">
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 <div className="mb-2 flex items-center gap-2">
@@ -310,19 +310,19 @@ function CodexMcpServers({ servers, onAdd, onEdit, onDelete, deleteError }: Omit
                   {server.config?.command && (
                     <div>
                       {t('mcpServers.config.command')}:{' '}
-                      <code className="rounded bg-gray-100 px-1 text-xs dark:bg-gray-800">{server.config.command}</code>
+                      <code className="rounded bg-muted px-1 text-xs">{server.config.command}</code>
                     </div>
                   )}
                   {server.config?.args && server.config.args.length > 0 && (
                     <div>
                       {t('mcpServers.config.args')}:{' '}
-                      <code className="rounded bg-gray-100 px-1 text-xs dark:bg-gray-800">{server.config.args.join(' ')}</code>
+                      <code className="rounded bg-muted px-1 text-xs">{server.config.args.join(' ')}</code>
                     </div>
                   )}
                   {server.config?.env && Object.keys(server.config.env).length > 0 && (
                     <div>
                       {t('mcpServers.config.environment')}:{' '}
-                      <code className="rounded bg-gray-100 px-1 text-xs dark:bg-gray-800">
+                      <code className="rounded bg-muted px-1 text-xs">
                         {Object.entries(server.config.env).map(([key, value]) => `${key}=${maskSecret(value)}`).join(', ')}
                       </code>
                     </div>
@@ -335,7 +335,7 @@ function CodexMcpServers({ servers, onAdd, onEdit, onDelete, deleteError }: Omit
                   onClick={() => onEdit(server)}
                   variant="ghost"
                   size="sm"
-                  className="text-gray-600 hover:text-gray-700"
+                  className="text-muted-foreground hover:text-foreground"
                   title={t('mcpServers.actions.edit')}
                 >
                   <Edit3 className="h-4 w-4" />
@@ -354,13 +354,13 @@ function CodexMcpServers({ servers, onAdd, onEdit, onDelete, deleteError }: Omit
           </div>
         ))}
         {servers.length === 0 && (
-          <div className="py-8 text-center text-gray-500 dark:text-gray-400">{t('mcpServers.empty')}</div>
+          <div className="py-8 text-center text-muted-foreground">{t('mcpServers.empty')}</div>
         )}
       </div>
 
-      <div className="rounded-lg border border-gray-300 bg-gray-100 p-4 dark:border-gray-600 dark:bg-gray-800/50">
-        <h4 className="mb-2 font-medium text-gray-900 dark:text-gray-100">{t('mcpServers.help.title')}</h4>
-        <p className="text-sm text-gray-700 dark:text-gray-300">{t('mcpServers.help.description')}</p>
+      <div className="rounded-lg border border-border bg-muted/50 p-4">
+        <h4 className="mb-2 font-medium text-foreground">{t('mcpServers.help.title')}</h4>
+        <p className="text-sm text-muted-foreground">{t('mcpServers.help.description')}</p>
       </div>
     </div>
   );

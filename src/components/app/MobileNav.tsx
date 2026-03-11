@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, type Dispatch, type SetStateAction } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   MessageSquare,
   Folder,
@@ -37,6 +38,7 @@ type MobileNavProps = {
 };
 
 export default function MobileNav({ activeTab, setActiveTab, isInputFocused }: MobileNavProps) {
+  const { t } = useTranslation(['common', 'settings']);
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
   const shouldShowTasksTab = Boolean(tasksEnabled && isTaskMasterInstalled);
   const { plugins } = usePlugins();
@@ -126,11 +128,10 @@ export default function MobileNav({ activeTab, setActiveTab, isInputFocused }: M
                   e.preventDefault();
                   setMoreOpen((v) => !v);
                 }}
-                className={`relative flex w-full touch-manipulation flex-col items-center justify-center gap-0.5 rounded-xl px-3 py-2 transition-all duration-200 active:scale-95 ${
-                  isPluginActive || moreOpen
+                className={`relative flex w-full touch-manipulation flex-col items-center justify-center gap-0.5 rounded-xl px-3 py-2 transition-all duration-200 active:scale-95 ${isPluginActive || moreOpen
                     ? 'text-primary'
                     : 'text-muted-foreground hover:text-foreground'
-                }`}
+                  }`}
                 aria-label="More plugins"
                 aria-expanded={moreOpen}
               >
@@ -142,7 +143,7 @@ export default function MobileNav({ activeTab, setActiveTab, isInputFocused }: M
                   strokeWidth={isPluginActive ? 2.4 : 1.8}
                 />
                 <span className={`relative z-10 text-[10px] font-medium transition-all duration-200 ${isPluginActive || moreOpen ? 'opacity-100' : 'opacity-60'}`}>
-                  More
+                  {t('settings:pluginSettings.morePlugins')}
                 </span>
               </button>
 
@@ -157,11 +158,10 @@ export default function MobileNav({ activeTab, setActiveTab, isInputFocused }: M
                       <button
                         key={p.name}
                         onClick={() => selectPlugin(p.name)}
-                        className={`flex w-full items-center gap-2.5 px-3.5 py-2.5 text-sm transition-colors ${
-                          isActive
+                        className={`flex w-full items-center gap-2.5 px-3.5 py-2.5 text-sm transition-colors ${isActive
                             ? 'bg-primary/8 text-primary'
                             : 'text-foreground hover:bg-muted/60'
-                        }`}
+                          }`}
                       >
                         <Icon className="h-4 w-4 flex-shrink-0" strokeWidth={isActive ? 2.2 : 1.8} />
                         <span className="truncate">{p.displayName}</span>

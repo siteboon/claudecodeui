@@ -309,6 +309,9 @@
       },
       "codex": {
         "description": "OpenAI Codex AI 어시스턴트"
+      },
+      "gemini": {
+        "description": "Google Gemini AI 어시스턴트"
       }
     },
     "connectionStatus": "연결 상태",
@@ -431,5 +434,41 @@
       "title": "Codex MCP 정보",
       "description": "Codex는 stdio 기반 MCP 서버를 지원합니다. 추가 도구와 리소스로 Codex의 기능을 확장하는 서버를 추가할 수 있습니다."
     }
+  },
+  "pluginSettings": {
+    "title": "플러그인",
+    "description": "커스텀 플러그인으로 인터페이스를 확장하세요. git에서 설치하거나 ~/.claude-code-ui/plugins/ 폴더에 직접 추가할 수 있습니다.",
+    "installPlaceholder": "https://github.com/user/my-plugin",
+    "installButton": "설치",
+    "installing": "설치 중…",
+    "securityWarning": "소스 코드를 검토했거나 신뢰할 수 있는 작성자의 플러그인만 설치하세요.",
+    "scanningPlugins": "플러그인 스캔 중…",
+    "noPluginsInstalled": "설치된 플러그인이 없습니다",
+    "pullLatest": "git에서 최신 버전 가져오기",
+    "noGitRemote": "git 리모트가 없음 — 업데이트 불가",
+    "uninstallPlugin": "플러그인 삭제",
+    "confirmUninstall": "다시 클릭하여 확인",
+    "confirmUninstallMessage": "{{name}} 플러그인을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
+    "cancel": "취소",
+    "remove": "삭제",
+    "updateFailed": "업데이트 실패",
+    "installFailed": "설치 실패",
+    "uninstallFailed": "삭제 실패",
+    "toggleFailed": "토글 실패",
+    "buildYourOwn": "나만의 플러그인 만들기",
+    "starter": "스타터",
+    "docs": "문서",
+    "starterPlugin": {
+      "name": "프로젝트 통계",
+      "badge": "스타터",
+      "description": "프로젝트의 파일 수, 코드 라인 수, 파일 유형별 분석 및 최근 활동을 확인합니다.",
+      "install": "설치"
+    },
+    "morePlugins": "더 보기",
+    "enable": "활성화",
+    "disable": "비활성화",
+    "installAriaLabel": "플러그인 git 저장소 URL",
+    "tab": "탭",
+    "runningStatus": "실행 중"
   }
 }
