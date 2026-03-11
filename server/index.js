@@ -2401,7 +2401,7 @@ app.get('*', (req, res) => {
         res.sendFile(indexPath);
     } else {
         // In development, redirect to Vite dev server only if dist doesn't exist
-        res.redirect(`http://localhost:${process.env.VITE_PORT || 5173}`);
+        res.redirect(`${req.protocol}://${req.hostname}:${VITE_PORT}`);
     }
 });
 
@@ -2493,6 +2493,7 @@ const PORT = process.env.PORT || 3001;
 const HOST = process.env.HOST || '0.0.0.0';
 // Show localhost in URL when binding to all interfaces (0.0.0.0 isn't a connectable address)
 const DISPLAY_HOST = HOST === '0.0.0.0' ? 'localhost' : HOST;
+const VITE_PORT = process.env.VITE_PORT || 5173;
 
 // Initialize database and start server
 async function startServer() {
@@ -2509,7 +2510,7 @@ async function startServer() {
         console.log(`${c.info('[INFO]')} Running in ${c.bright(isProduction ? 'PRODUCTION' : 'DEVELOPMENT')} mode`);
 
         if (!isProduction) {
-            console.log(`${c.warn('[WARN]')} Note: Requests will be proxied to Vite dev server at ${c.dim('http://localhost:' + (process.env.VITE_PORT || 5173))}`);
+            console.log(`${c.warn('[WARN]')} Note: Requests will be proxied to Vite dev server at ${c.dim('http://localhost:' + VITE_PORT)}`);
         }
 
         server.listen(PORT, HOST, async () => {
