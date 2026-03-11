@@ -9,7 +9,7 @@ export default defineConfig(({ command, mode }) => {
   const configuredHost = env.HOST || '0.0.0.0'
   const host = normalizeLoopbackHost(configuredHost)
   const proxyHost = getConnectableHost(configuredHost)
-  const port = env.PORT || 3001
+  const serverPort = env.SERVER_PORT || 3001
 
   return {
     plugins: [react()],
@@ -17,13 +17,13 @@ export default defineConfig(({ command, mode }) => {
       host,
       port: parseInt(env.VITE_PORT) || 5173,
       proxy: {
-        '/api': `http://${proxyHost}:${port}`,
+        '/api': `http://${proxyHost}:${serverPort}`,
         '/ws': {
-          target: `ws://${proxyHost}:${port}`,
+          target: `ws://${proxyHost}:${serverPort}`,
           ws: true
         },
         '/shell': {
-          target: `ws://${proxyHost}:${port}`,
+          target: `ws://${proxyHost}:${serverPort}`,
           ws: true
         }
       }
