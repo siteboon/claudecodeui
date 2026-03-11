@@ -768,7 +768,7 @@ router.get('/commits', async (req, res) => {
     // Get commit log with stats
     const { stdout } = await spawnAsync(
       'git',
-      ['log', '--pretty=format:%H|%an|%ae|%ad|%s', '--date=relative', '-n', String(safeLimit)],
+      ['log', '--pretty=format:%H|%an|%ae|%ad|%s', '--date=iso-strict', '-n', String(safeLimit)],
       { cwd: projectPath },
     );
     
