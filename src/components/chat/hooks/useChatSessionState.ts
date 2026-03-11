@@ -88,6 +88,7 @@ export function useChatSessionState({
   const isLoadingMoreRef = useRef(false);
   const allMessagesLoadedRef = useRef(false);
   const topLoadLockRef = useRef(false);
+  const scrollThrottleRef = useRef<number | null>(null);
   const pendingScrollRestoreRef = useRef<ScrollRestoreState | null>(null);
   const pendingInitialScrollRef = useRef(true);
   const messagesOffsetRef = useRef(0);
@@ -262,8 +263,14 @@ export function useChatSessionState({
       return;
     }
 
-    const nearBottom = isNearBottom();
-    setIsUserScrolledUp(!nearBottom);
+    // Throttle isUserScrolledUp state updates via rAF to reduce re-renders during fast scrolling
+    if (!scrollThrottleRef.current) {
+      scrollThrottleRef.current = requestAnimationFrame(() => {
+        scrollThrottleRef.current = null;
+        const nearBottom = isNearBottom();
+        setIsUserScrolledUp(!nearBottom);
+      });
+    }
 
     if (!allMessagesLoadedRef.current) {
       const scrolledNearTop = container.scrollTop < 100;
@@ -860,6 +867,16 @@ export function useChatSessionState({
 
   const loadEarlierMessages = useCallback(() => {
     setVisibleMessageCount((previousCount) => previousCount + 100);
+  }, []);
+
+  // Cleanup scroll throttle on unmount
+  useEffect(() => {
+    return () => {
+      if (scrollThrottleRef.current) {
+        cancelAnimationFrame(scrollThrottleRef.current);
+        scrollThrottleRef.current = null;
+      }
+    };
   }, []);
 
   return {

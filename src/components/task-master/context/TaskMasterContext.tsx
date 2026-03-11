@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { api } from '../../../utils/api';
+import { api, isProviderEnabled } from '../../../utils/api';
 import { useAuth } from '../../auth/context/AuthContext';
 import { useWebSocket } from '../../../contexts/WebSocketContext';
 import type {
@@ -197,6 +197,7 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
   }, [clearError, handleError, token, user]);
 
   useEffect(() => {
+    if (!isProviderEnabled('taskmaster')) return;
     if (!isAuthLoading && user && token) {
       void refreshProjects();
       void refreshMCPStatus();
@@ -204,12 +205,14 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
   }, [isAuthLoading, refreshMCPStatus, refreshProjects, token, user]);
 
   useEffect(() => {
+    if (!isProviderEnabled('taskmaster')) return;
     if (currentProject?.name && user && token) {
       void refreshTasks();
     }
   }, [currentProject?.name, refreshTasks, token, user]);
 
   useEffect(() => {
+    if (!isProviderEnabled('taskmaster')) return;
     const message = latestMessage as TaskMasterWebSocketMessage | null;
     if (!isTaskMasterMessage(message)) {
       return;

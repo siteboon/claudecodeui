@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTheme } from '../../../contexts/ThemeContext';
-import { authenticatedFetch } from '../../../utils/api';
+import { authenticatedFetch, getDisabledProviders, setProviderEnabled } from '../../../utils/api';
 import {
   AUTH_STATUS_ENDPOINTS,
   DEFAULT_AUTH_STATUS,
@@ -206,6 +206,14 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
     createEmptyCursorPermissions()
   ));
   const [codexPermissionMode, setCodexPermissionMode] = useState<CodexPermissionMode>('default');
+
+  const [disabledProviders, setDisabledProviders] = useState<string[]>(() => getDisabledProviders());
+
+  const toggleProvider = useCallback((provider: string) => {
+    const isCurrentlyEnabled = !disabledProviders.includes(provider);
+    setProviderEnabled(provider, !isCurrentlyEnabled);
+    setDisabledProviders(getDisabledProviders());
+  }, [disabledProviders]);
   const [geminiPermissionMode, setGeminiPermissionMode] = useState<GeminiPermissionMode>('default');
 
   const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
@@ -862,5 +870,7 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
     selectedProject,
     handleLoginComplete,
     saveSettings,
+    disabledProviders,
+    toggleProvider,
   };
 }

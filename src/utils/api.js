@@ -1,3 +1,39 @@
+// Provider enable/disable utilities
+// Unused providers are disabled by default for faster load times
+const DISABLED_PROVIDERS_KEY = 'disabled-providers';
+const DEFAULT_DISABLED = ['cursor', 'codex', 'taskmaster'];
+
+export const isProviderEnabled = (provider) => {
+  try {
+    const disabled = JSON.parse(localStorage.getItem(DISABLED_PROVIDERS_KEY)) || DEFAULT_DISABLED;
+    return !disabled.includes(provider);
+  } catch {
+    return !DEFAULT_DISABLED.includes(provider);
+  }
+};
+
+export const setProviderEnabled = (provider, enabled) => {
+  try {
+    let disabled = JSON.parse(localStorage.getItem(DISABLED_PROVIDERS_KEY)) || DEFAULT_DISABLED;
+    if (enabled) {
+      disabled = disabled.filter(p => p !== provider);
+    } else if (!disabled.includes(provider)) {
+      disabled.push(provider);
+    }
+    localStorage.setItem(DISABLED_PROVIDERS_KEY, JSON.stringify(disabled));
+  } catch {
+    // Ignore localStorage errors
+  }
+};
+
+export const getDisabledProviders = () => {
+  try {
+    return JSON.parse(localStorage.getItem(DISABLED_PROVIDERS_KEY)) || DEFAULT_DISABLED;
+  } catch {
+    return DEFAULT_DISABLED;
+  }
+};
+
 import { IS_PLATFORM } from "../constants/config";
 
 // Utility function for authenticated API calls

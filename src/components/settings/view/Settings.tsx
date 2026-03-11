@@ -65,6 +65,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     selectedProject,
     handleLoginComplete,
     saveSettings,
+    disabledProviders,
+    toggleProvider,
   } = useSettingsController({
     isOpen,
     initialTab,
@@ -122,37 +124,76 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
             {activeTab === 'git' && <GitSettingsTab />}
 
             {activeTab === 'agents' && (
-              <AgentsSettingsTab
-                claudeAuthStatus={claudeAuthStatus}
-                cursorAuthStatus={cursorAuthStatus}
-                codexAuthStatus={codexAuthStatus}
-                geminiAuthStatus={geminiAuthStatus}
-                onClaudeLogin={() => openLoginForProvider('claude')}
-                onCursorLogin={() => openLoginForProvider('cursor')}
-                onCodexLogin={() => openLoginForProvider('codex')}
-                onGeminiLogin={() => openLoginForProvider('gemini')}
-                claudePermissions={claudePermissions}
-                onClaudePermissionsChange={setClaudePermissions}
-                cursorPermissions={cursorPermissions}
-                onCursorPermissionsChange={setCursorPermissions}
-                codexPermissionMode={codexPermissionMode}
-                onCodexPermissionModeChange={setCodexPermissionMode}
-                geminiPermissionMode={geminiPermissionMode}
-                onGeminiPermissionModeChange={setGeminiPermissionMode}
-                mcpServers={mcpServers}
-                cursorMcpServers={cursorMcpServers}
-                codexMcpServers={codexMcpServers}
-                mcpTestResults={mcpTestResults}
-                mcpServerTools={mcpServerTools}
-                mcpToolsLoading={mcpToolsLoading}
-                onOpenMcpForm={openMcpForm}
-                onDeleteMcpServer={handleMcpDelete}
-                onTestMcpServer={handleMcpTest}
-                onDiscoverMcpTools={handleMcpToolsDiscovery}
-                onOpenCodexMcpForm={openCodexMcpForm}
-                onDeleteCodexMcpServer={handleCodexMcpDelete}
-                deleteError={deleteError}
-              />
+              <>
+                <AgentsSettingsTab
+                  claudeAuthStatus={claudeAuthStatus}
+                  cursorAuthStatus={cursorAuthStatus}
+                  codexAuthStatus={codexAuthStatus}
+                  geminiAuthStatus={geminiAuthStatus}
+                  onClaudeLogin={() => openLoginForProvider('claude')}
+                  onCursorLogin={() => openLoginForProvider('cursor')}
+                  onCodexLogin={() => openLoginForProvider('codex')}
+                  onGeminiLogin={() => openLoginForProvider('gemini')}
+                  claudePermissions={claudePermissions}
+                  onClaudePermissionsChange={setClaudePermissions}
+                  cursorPermissions={cursorPermissions}
+                  onCursorPermissionsChange={setCursorPermissions}
+                  codexPermissionMode={codexPermissionMode}
+                  onCodexPermissionModeChange={setCodexPermissionMode}
+                  geminiPermissionMode={geminiPermissionMode}
+                  onGeminiPermissionModeChange={setGeminiPermissionMode}
+                  mcpServers={mcpServers}
+                  cursorMcpServers={cursorMcpServers}
+                  codexMcpServers={codexMcpServers}
+                  mcpTestResults={mcpTestResults}
+                  mcpServerTools={mcpServerTools}
+                  mcpToolsLoading={mcpToolsLoading}
+                  onOpenMcpForm={openMcpForm}
+                  onDeleteMcpServer={handleMcpDelete}
+                  onTestMcpServer={handleMcpTest}
+                  onDiscoverMcpTools={handleMcpToolsDiscovery}
+                  onOpenCodexMcpForm={openCodexMcpForm}
+                  onDeleteCodexMcpServer={handleCodexMcpDelete}
+                  deleteError={deleteError}
+                />
+
+                {/* Provider Integrations */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-foreground">Provider Integrations</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Disable unused providers to improve app load time. Requires page refresh.
+                  </p>
+
+                  {[
+                    { id: 'cursor', label: 'Cursor', desc: 'Enable Cursor AI integration' },
+                    { id: 'codex', label: 'Codex', desc: 'Enable OpenAI Codex integration' },
+                    { id: 'taskmaster', label: 'TaskMaster', desc: 'Enable TaskMaster task management' },
+                  ].map(({ id, label, desc }) => (
+                    <div key={id} className="rounded-lg border border-border bg-muted/30 p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-medium text-foreground">{label}</div>
+                          <div className="text-sm text-muted-foreground">{desc}</div>
+                        </div>
+                        <button
+                          onClick={() => toggleProvider(id)}
+                          className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${
+                            !disabledProviders.includes(id) ? 'bg-primary' : 'bg-muted-foreground/30'
+                          }`}
+                          role="switch"
+                          aria-checked={!disabledProviders.includes(id)}
+                        >
+                          <span
+                            className={`${
+                              !disabledProviders.includes(id) ? 'translate-x-7' : 'translate-x-1'
+                            } inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-200`}
+                          />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
 
             {activeTab === 'tasks' && (
