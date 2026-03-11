@@ -53,12 +53,17 @@ export function useGitPanelController({
   const [recentCommits, setRecentCommits] = useState<GitCommitSummary[]>([]);
   const [commitDiffs, setCommitDiffs] = useState<GitDiffMap>({});
   const [remoteStatus, setRemoteStatus] = useState<GitRemoteStatus | null>(null);
+  const [localBranches, setLocalBranches] = useState<string[]>([]);
+  const [remoteBranches, setRemoteBranches] = useState<string[]>([]);
   const [isCreatingBranch, setIsCreatingBranch] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
   const [isPulling, setIsPulling] = useState(false);
   const [isPushing, setIsPushing] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isCreatingInitialCommit, setIsCreatingInitialCommit] = useState(false);
+  const [operationError, setOperationError] = useState<string | null>(null);
+
+  const clearOperationError = useCallback(() => setOperationError(null), []);
   const selectedProjectNameRef = useRef<string | null>(selectedProject?.name ?? null);
 
   useEffect(() => {
@@ -169,13 +174,19 @@ export function useGitPanelController({
 
       if (!data.error && data.branches) {
         setBranches(data.branches);
+        setLocalBranches(data.localBranches ?? data.branches);
+        setRemoteBranches(data.remoteBranches ?? []);
         return;
       }
 
       setBranches([]);
+      setLocalBranches([]);
+      setRemoteBranches([]);
     } catch (error) {
       console.error('Error fetching branches:', error);
       setBranches([]);
+      setLocalBranches([]);
+      setRemoteBranches([]);
     }
   }, [selectedProject]);
 
@@ -271,6 +282,33 @@ export function useGitPanelController({
     [fetchBranches, fetchGitStatus, selectedProject],
   );
 
+  const deleteBranch = useCallback(
+    async (branchName: string) => {
+      if (!selectedProject) return false;
+
+      try {
+        const response = await fetchWithAuth('/api/git/delete-branch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project: selectedProject.name, branch: branchName }),
+        });
+
+        const data = await readJson<GitOperationResponse>(response);
+        if (!data.success) {
+          setOperationError(data.error ?? 'Delete branch failed');
+          return false;
+        }
+
+        void fetchBranches();
+        return true;
+      } catch (error) {
+        setOperationError(error instanceof Error ? error.message : 'Delete branch failed');
+        return false;
+      }
+    },
+    [fetchBranches, selectedProject],
+  );
+
   const handleFetch = useCallback(async () => {
     if (!selectedProject) {
       return;
@@ -290,16 +328,17 @@ export function useGitPanelController({
       if (data.success) {
         void fetchGitStatus();
         void fetchRemoteStatus();
+        void fetchBranches();
         return;
       }
 
-      console.error('Fetch failed:', data.error);
+      setOperationError(data.error ?? 'Fetch failed');
     } catch (error) {
-      console.error('Error fetching from remote:', error);
+      setOperationError(error instanceof Error ? error.message : 'Fetch failed');
     } finally {
       setIsFetching(false);
     }
-  }, [fetchGitStatus, fetchRemoteStatus, selectedProject]);
+  }, [fetchBranches, fetchGitStatus, fetchRemoteStatus, selectedProject]);
 
   const handlePull = useCallback(async () => {
     if (!selectedProject) {
@@ -323,9 +362,9 @@ export function useGitPanelController({
         return;
       }
 
-      console.error('Pull failed:', data.error);
+      setOperationError(data.error ?? 'Pull failed');
     } catch (error) {
-      console.error('Error pulling from remote:', error);
+      setOperationError(error instanceof Error ? error.message : 'Pull failed');
     } finally {
       setIsPulling(false);
     }
@@ -353,9 +392,9 @@ export function useGitPanelController({
         return;
       }
 
-      console.error('Push failed:', data.error);
+      setOperationError(data.error ?? 'Push failed');
     } catch (error) {
-      console.error('Error pushing to remote:', error);
+      setOperationError(error instanceof Error ? error.message : 'Push failed');
     } finally {
       setIsPushing(false);
     }
@@ -640,12 +679,15 @@ export function useGitPanelController({
     // Reset repository-scoped state when project changes to avoid stale UI.
     setCurrentBranch('');
     setBranches([]);
+    setLocalBranches([]);
+    setRemoteBranches([]);
     setGitStatus(null);
     setRemoteStatus(null);
     setGitDiff({});
     setRecentCommits([]);
     setCommitDiffs({});
     setIsLoading(false);
+    setOperationError(null);
 
     if (!selectedProject) {
       return () => {
@@ -666,7 +708,6 @@ export function useGitPanelController({
     if (!selectedProject || activeView !== 'history') {
       return;
     }
-
     void fetchRecentCommits();
   }, [activeView, fetchRecentCommits, selectedProject]);
 
@@ -676,6 +717,8 @@ export function useGitPanelController({
     isLoading,
     currentBranch,
     branches,
+    localBranches,
+    remoteBranches,
     recentCommits,
     commitDiffs,
     remoteStatus,
@@ -685,9 +728,12 @@ export function useGitPanelController({
     isPushing,
     isPublishing,
     isCreatingInitialCommit,
+    operationError,
+    clearOperationError,
     refreshAll,
     switchBranch,
     createBranch,
+    deleteBranch,
     handleFetch,
     handlePull,
     handlePush,
