@@ -21,6 +21,12 @@ export const authenticatedFetch = (url, options = {}) => {
       ...defaultHeaders,
       ...options.headers,
     },
+  }).then((response) => {
+    const refreshedToken = response.headers.get('X-Refreshed-Token');
+    if (refreshedToken) {
+      localStorage.setItem('auth-token', refreshedToken);
+    }
+    return response;
   });
 };
 

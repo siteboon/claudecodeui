@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { useGitPanelController } from '../hooks/useGitPanelController';
+import { useRevertLocalCommit } from '../hooks/useRevertLocalCommit';
 import type { ConfirmationRequest, GitPanelProps, GitPanelView } from '../types/types';
 import ChangesView from '../view/changes/ChangesView';
 import HistoryView from '../view/history/HistoryView';
@@ -49,6 +50,11 @@ export default function GitPanel({ selectedProject, isMobile = false, onFileOpen
     onFileOpen,
   });
 
+  const { isRevertingLocalCommit, revertLatestLocalCommit } = useRevertLocalCommit({
+    projectName: selectedProject?.name ?? null,
+    onSuccess: refreshAll,
+  });
+
   const executeConfirmedAction = useCallback(async () => {
     if (!confirmAction) {
       return;
@@ -85,7 +91,9 @@ export default function GitPanel({ selectedProject, isMobile = false, onFileOpen
         isPulling={isPulling}
         isPushing={isPushing}
         isPublishing={isPublishing}
+        isRevertingLocalCommit={isRevertingLocalCommit}
         onRefresh={refreshAll}
+        onRevertLocalCommit={revertLatestLocalCommit}
         onSwitchBranch={switchBranch}
         onCreateBranch={createBranch}
         onFetch={handleFetch}

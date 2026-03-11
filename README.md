@@ -43,7 +43,7 @@
 <h3>CLI Selection</h3>
 <img src="public/screenshots/cli-selection.png" alt="CLI Selection" width="400">
 <br>
-<em>Select between Claude Code, Cursor CLI and Codex</em>
+<em>Select between Claude Code, Gemini, Cursor CLI and Codex</em>
 </td>
 </tr>
 </table>

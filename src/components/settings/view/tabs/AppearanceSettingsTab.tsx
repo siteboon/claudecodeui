@@ -1,8 +1,11 @@
-import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DarkModeToggle } from '../../../../shared/view/ui';
 import type { CodeEditorSettingsState, ProjectSortOrder } from '../../types/types';
 import LanguageSelector from '../../../../shared/view/ui/LanguageSelector';
+import SettingsCard from '../SettingsCard';
+import SettingsRow from '../SettingsRow';
+import SettingsSection from '../SettingsSection';
+import SettingsToggle from '../SettingsToggle';
 
 type AppearanceSettingsTabProps = {
   projectSortOrder: ProjectSortOrder;
@@ -15,52 +18,6 @@ type AppearanceSettingsTabProps = {
   onCodeEditorFontSizeChange: (value: string) => void;
 };
 
-type ToggleCardProps = {
-  label: string;
-  description: string;
-  checked: boolean;
-  onChange: (value: boolean) => void;
-  onIcon?: ReactNode;
-  offIcon?: ReactNode;
-  ariaLabel: string;
-};
-
-function ToggleCard({
-  label,
-  description,
-  checked,
-  onChange,
-  onIcon,
-  offIcon,
-  ariaLabel,
-}: ToggleCardProps) {
-  return (
-    <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/50">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="font-medium text-foreground">{label}</div>
-          <div className="text-sm text-muted-foreground">{description}</div>
-        </div>
-        <button
-          onClick={() => onChange(!checked)}
-          className="relative inline-flex h-8 w-14 items-center rounded-full bg-gray-200 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:bg-gray-700 dark:focus:ring-offset-gray-900"
-          role="switch"
-          aria-checked={checked}
-          aria-label={ariaLabel}
-        >
-          <span className="sr-only">{ariaLabel}</span>
-          <span
-            className={`${checked ? 'translate-x-7' : 'translate-x-1'
-              } flex h-6 w-6 transform items-center justify-center rounded-full bg-white shadow-lg transition-transform duration-200`}
-          >
-            {checked ? onIcon : offIcon}
-          </span>
-        </button>
-      </div>
-    </div>
-  );
-}
-
 export default function AppearanceSettingsTab({
   projectSortOrder,
   onProjectSortOrderChange,
@@ -72,108 +29,98 @@ export default function AppearanceSettingsTab({
   onCodeEditorFontSizeChange,
 }: AppearanceSettingsTabProps) {
   const { t } = useTranslation('settings');
-  const codeEditorThemeLabel = t('appearanceSettings.codeEditor.theme.label');
 
   return (
-    <div className="space-y-6 md:space-y-8">
-      <div className="space-y-4">
-        <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/50">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="font-medium text-foreground">{t('appearanceSettings.darkMode.label')}</div>
-              <div className="text-sm text-muted-foreground">
-                {t('appearanceSettings.darkMode.description')}
-              </div>
-            </div>
+    <div className="space-y-8">
+      <SettingsSection title={t('appearanceSettings.darkMode.label')}>
+        <SettingsCard>
+          <SettingsRow
+            label={t('appearanceSettings.darkMode.label')}
+            description={t('appearanceSettings.darkMode.description')}
+          >
             <DarkModeToggle ariaLabel={t('appearanceSettings.darkMode.label')} />
-          </div>
-        </div>
-      </div>
+          </SettingsRow>
+        </SettingsCard>
+      </SettingsSection>
 
-      <div className="space-y-4">
-        <LanguageSelector />
-      </div>
+      <SettingsSection title={t('mainTabs.appearance')}>
+        <SettingsCard>
+          <LanguageSelector />
+        </SettingsCard>
+      </SettingsSection>
 
-      <div className="space-y-4">
-        <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/50">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="font-medium text-foreground">
-                {t('appearanceSettings.projectSorting.label')}
-              </div>
-              <div className="text-sm text-muted-foreground">
-                {t('appearanceSettings.projectSorting.description')}
-              </div>
-            </div>
+      <SettingsSection title={t('appearanceSettings.projectSorting.label')}>
+        <SettingsCard>
+          <SettingsRow
+            label={t('appearanceSettings.projectSorting.label')}
+            description={t('appearanceSettings.projectSorting.description')}
+          >
             <select
               value={projectSortOrder}
               onChange={(event) => onProjectSortOrderChange(event.target.value as ProjectSortOrder)}
-              className="w-32 rounded-lg border border-gray-300 bg-gray-50 p-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+              className="w-full rounded-lg border border-input bg-card p-2.5 text-sm text-foreground touch-manipulation focus:border-primary focus:ring-1 focus:ring-primary sm:w-36"
             >
               <option value="name">{t('appearanceSettings.projectSorting.alphabetical')}</option>
               <option value="date">{t('appearanceSettings.projectSorting.recentActivity')}</option>
             </select>
-          </div>
-        </div>
-      </div>
+          </SettingsRow>
+        </SettingsCard>
+      </SettingsSection>
 
-      <div className="space-y-4">
-        <h3 className="text-lg font-semibold text-foreground">{t('appearanceSettings.codeEditor.title')}</h3>
-
-        <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/50">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="font-medium text-foreground">{codeEditorThemeLabel}</div>
-              <div className="text-sm text-muted-foreground">
-                {t('appearanceSettings.codeEditor.theme.description')}
-              </div>
-            </div>
+      <SettingsSection title={t('appearanceSettings.codeEditor.title')}>
+        <SettingsCard divided>
+          <SettingsRow
+            label={t('appearanceSettings.codeEditor.theme.label')}
+            description={t('appearanceSettings.codeEditor.theme.description')}
+          >
             <DarkModeToggle
               checked={codeEditorSettings.theme === 'dark'}
               onToggle={(enabled) => onCodeEditorThemeChange(enabled ? 'dark' : 'light')}
-              ariaLabel={codeEditorThemeLabel}
+              ariaLabel={t('appearanceSettings.codeEditor.theme.label')}
             />
-          </div>
-        </div>
+          </SettingsRow>
 
-        <ToggleCard
-          label={t('appearanceSettings.codeEditor.wordWrap.label')}
-          description={t('appearanceSettings.codeEditor.wordWrap.description')}
-          checked={codeEditorSettings.wordWrap}
-          onChange={onCodeEditorWordWrapChange}
-          ariaLabel={t('appearanceSettings.codeEditor.wordWrap.label')}
-        />
+          <SettingsRow
+            label={t('appearanceSettings.codeEditor.wordWrap.label')}
+            description={t('appearanceSettings.codeEditor.wordWrap.description')}
+          >
+            <SettingsToggle
+              checked={codeEditorSettings.wordWrap}
+              onChange={onCodeEditorWordWrapChange}
+              ariaLabel={t('appearanceSettings.codeEditor.wordWrap.label')}
+            />
+          </SettingsRow>
 
-        <ToggleCard
-          label={t('appearanceSettings.codeEditor.showMinimap.label')}
-          description={t('appearanceSettings.codeEditor.showMinimap.description')}
-          checked={codeEditorSettings.showMinimap}
-          onChange={onCodeEditorShowMinimapChange}
-          ariaLabel={t('appearanceSettings.codeEditor.showMinimap.label')}
-        />
+          <SettingsRow
+            label={t('appearanceSettings.codeEditor.showMinimap.label')}
+            description={t('appearanceSettings.codeEditor.showMinimap.description')}
+          >
+            <SettingsToggle
+              checked={codeEditorSettings.showMinimap}
+              onChange={onCodeEditorShowMinimapChange}
+              ariaLabel={t('appearanceSettings.codeEditor.showMinimap.label')}
+            />
+          </SettingsRow>
 
-        <ToggleCard
-          label={t('appearanceSettings.codeEditor.lineNumbers.label')}
-          description={t('appearanceSettings.codeEditor.lineNumbers.description')}
-          checked={codeEditorSettings.lineNumbers}
-          onChange={onCodeEditorLineNumbersChange}
-          ariaLabel={t('appearanceSettings.codeEditor.lineNumbers.label')}
-        />
+          <SettingsRow
+            label={t('appearanceSettings.codeEditor.lineNumbers.label')}
+            description={t('appearanceSettings.codeEditor.lineNumbers.description')}
+          >
+            <SettingsToggle
+              checked={codeEditorSettings.lineNumbers}
+              onChange={onCodeEditorLineNumbersChange}
+              ariaLabel={t('appearanceSettings.codeEditor.lineNumbers.label')}
+            />
+          </SettingsRow>
 
-        <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/50">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="font-medium text-foreground">
-                {t('appearanceSettings.codeEditor.fontSize.label')}
-              </div>
-              <div className="text-sm text-muted-foreground">
-                {t('appearanceSettings.codeEditor.fontSize.description')}
-              </div>
-            </div>
+          <SettingsRow
+            label={t('appearanceSettings.codeEditor.fontSize.label')}
+            description={t('appearanceSettings.codeEditor.fontSize.description')}
+          >
             <select
               value={codeEditorSettings.fontSize}
               onChange={(event) => onCodeEditorFontSizeChange(event.target.value)}
-              className="w-24 rounded-lg border border-gray-300 bg-gray-50 p-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+              className="w-full rounded-lg border border-input bg-card p-2.5 text-sm text-foreground touch-manipulation focus:border-primary focus:ring-1 focus:ring-primary sm:w-28"
             >
               <option value="10">10px</option>
               <option value="11">11px</option>
@@ -185,9 +132,9 @@ export default function AppearanceSettingsTab({
               <option value="18">18px</option>
               <option value="20">20px</option>
             </select>
-          </div>
-        </div>
-      </div>
+          </SettingsRow>
+        </SettingsCard>
+      </SettingsSection>
     </div>
   );
 }

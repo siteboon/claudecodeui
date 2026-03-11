@@ -6,7 +6,10 @@
   },
   "copyMessage": {
     "copy": "Copy message",
-    "copied": "Message copied"
+    "copied": "Message copied",
+    "selectFormat": "Select copy format",
+    "copyAsMarkdown": "Copy as markdown",
+    "copyAsText": "Copy as text"
   },
   "messageTypes": {
     "user": "U",

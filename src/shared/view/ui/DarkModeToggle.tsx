@@ -1,5 +1,6 @@
 import { Moon, Sun } from 'lucide-react';
 import { useTheme } from '../../../contexts/ThemeContext';
+import { cn } from '../../../lib/utils';
 
 type DarkModeToggleProps = {
   checked?: boolean;
@@ -13,7 +14,6 @@ function DarkModeToggle({
   ariaLabel = 'Toggle dark mode',
 }: DarkModeToggleProps) {
   const { isDarkMode, toggleDarkMode } = useTheme();
-  // Support controlled usage while keeping ThemeContext as the default source of truth.
   const isControlled = typeof checked === 'boolean' && typeof onToggle === 'function';
   const isEnabled = isControlled ? checked : isDarkMode;
 
@@ -29,21 +29,26 @@ function DarkModeToggle({
   return (
     <button
       onClick={handleToggle}
-      className="relative inline-flex h-8 w-14 items-center rounded-full bg-gray-200 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:bg-gray-700 dark:focus:ring-offset-gray-900"
+      className={cn(
+        'relative inline-flex h-7 w-12 flex-shrink-0 touch-manipulation cursor-pointer items-center rounded-full border-2 transition-colors duration-200',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+        isEnabled ? 'border-primary bg-primary' : 'border-border bg-muted',
+      )}
       role="switch"
       aria-checked={isEnabled}
       aria-label={ariaLabel}
     >
       <span className="sr-only">{ariaLabel}</span>
       <span
-        className={`${
-          isEnabled ? 'translate-x-7' : 'translate-x-1'
-        } flex h-6 w-6 transform items-center justify-center rounded-full bg-white shadow-lg transition-transform duration-200`}
+        className={cn(
+          'flex h-5 w-5 transform items-center justify-center rounded-full shadow-sm transition-transform duration-200',
+          isEnabled ? 'translate-x-[22px] bg-white' : 'translate-x-[2px] bg-foreground/60 dark:bg-foreground/80',
+        )}
       >
         {isEnabled ? (
-          <Moon className="h-3.5 w-3.5 text-gray-700" />
+          <Moon className="h-3 w-3 text-primary" />
         ) : (
-          <Sun className="h-3.5 w-3.5 text-yellow-500" />
+          <Sun className="h-3 w-3 text-white dark:text-background" />
         )}
       </span>
     </button>
