@@ -48,6 +48,7 @@ interface UseChatRealtimeHandlersArgs {
   onSessionNotProcessing?: (sessionId?: string | null) => void;
   onReplaceTemporarySession?: (sessionId?: string | null) => void;
   onNavigateToSession?: (sessionId: string) => void;
+  onWebSocketReconnect?: () => void;
 }
 
 const appendStreamingChunk = (
@@ -113,6 +114,7 @@ export function useChatRealtimeHandlers({
   onSessionNotProcessing,
   onReplaceTemporarySession,
   onNavigateToSession,
+  onWebSocketReconnect,
 }: UseChatRealtimeHandlersArgs) {
   const lastProcessedMessageRef = useRef<LatestChatMessage | null>(null);
 
@@ -136,7 +138,7 @@ export function useChatRealtimeHandlers({
         : null;
     const messageType = String(latestMessage.type);
 
-    const globalMessageTypes = ['projects_updated', 'taskmaster-project-updated', 'session-created'];
+    const globalMessageTypes = ['projects_updated', 'taskmaster-project-updated', 'session-created', 'websocket-reconnected'];
     const isGlobalMessage = globalMessageTypes.includes(messageType);
     const lifecycleMessageTypes = new Set([
       'claude-complete',
@@ -298,6 +300,11 @@ export function useChatRealtimeHandlers({
             ),
           );
         }
+        break;
+
+      case 'websocket-reconnected':
+        // WebSocket dropped and reconnected — re-fetch session history to catch up on missed messages
+        onWebSocketReconnect?.();
         break;
 
       case 'token-budget':
