@@ -126,6 +126,24 @@ const builtInCommands = [
     description: 'Rewind the conversation to a previous state',
     namespace: 'builtin',
     metadata: { type: 'builtin' }
+  },
+  {
+    name: '/compact',
+    description: 'Compact the conversation to reduce token usage',
+    namespace: 'builtin',
+    metadata: { type: 'builtin' }
+  },
+  {
+    name: '/export',
+    description: 'Export the conversation to a file',
+    namespace: 'builtin',
+    metadata: { type: 'builtin' }
+  },
+  {
+    name: '/context',
+    description: 'Show context window usage and token information',
+    namespace: 'builtin',
+    metadata: { type: 'builtin' }
   }
 ];
 
@@ -394,6 +412,75 @@ Custom commands can be created in:
       data: {
         steps,
         message: `Rewinding conversation by ${steps} step${steps > 1 ? 's' : ''}...`
+      }
+    };
+  },
+
+  '/compact': async (args, context) => {
+    const focusInstructions = args.join(' ') || null;
+    return {
+      type: 'builtin',
+      action: 'compact',
+      data: {
+        focusInstructions,
+        sessionId: context?.sessionId,
+        message: focusInstructions
+          ? `Compacting conversation with focus: "${focusInstructions}"...`
+          : 'Compacting conversation to reduce token usage...'
+      }
+    };
+  },
+
+  '/export': async (args, context) => {
+    const filename = args[0] || null;
+    const projectPath = context?.projectPath;
+    return {
+      type: 'builtin',
+      action: 'export',
+      data: {
+        filename,
+        projectPath,
+        sessionId: context?.sessionId,
+        message: filename
+          ? `Exporting conversation to ${filename}...`
+          : 'Exporting conversation...'
+      }
+    };
+  },
+
+  '/context': async (args, context) => {
+    const tokenUsage = context?.tokenUsage || { used: 0, total: 200000 };
+    const percentage = ((tokenUsage.used / tokenUsage.total) * 100);
+    const barLength = 40;
+    const filledLength = Math.round((percentage / 100) * barLength);
+    const emptyLength = barLength - filledLength;
+
+    let status = 'healthy';
+    let statusEmoji = '🟢';
+    if (percentage > 80) {
+      status = 'critical';
+      statusEmoji = '🔴';
+    } else if (percentage > 60) {
+      status = 'warning';
+      statusEmoji = '🟡';
+    }
+
+    const progressBar = '█'.repeat(filledLength) + '░'.repeat(emptyLength);
+
+    return {
+      type: 'builtin',
+      action: 'context',
+      data: {
+        tokenUsage: {
+          used: tokenUsage.used,
+          total: tokenUsage.total,
+          percentage: percentage.toFixed(1),
+          remaining: tokenUsage.total - tokenUsage.used
+        },
+        progressBar,
+        status,
+        statusEmoji,
+        sessionId: context?.sessionId
       }
     };
   }
