@@ -1,4 +1,5 @@
 {
+  "skillLoaded": "스킬 로드됨: {{name}}",
   "codeBlock": {
     "copy": "복사",
     "copied": "복사됨",
