@@ -48,6 +48,7 @@ interface UseChatRealtimeHandlersArgs {
   onSessionNotProcessing?: (sessionId?: string | null) => void;
   onReplaceTemporarySession?: (sessionId?: string | null) => void;
   onNavigateToSession?: (sessionId: string) => void;
+  onWebSocketReconnect?: () => void;
 }
 
 const appendStreamingChunk = (
@@ -113,6 +114,7 @@ export function useChatRealtimeHandlers({
   onSessionNotProcessing,
   onReplaceTemporarySession,
   onNavigateToSession,
+  onWebSocketReconnect,
 }: UseChatRealtimeHandlersArgs) {
   const lastProcessedMessageRef = useRef<LatestChatMessage | null>(null);
 
@@ -136,7 +138,7 @@ export function useChatRealtimeHandlers({
         : null;
     const messageType = String(latestMessage.type);
 
-    const globalMessageTypes = ['projects_updated', 'taskmaster-project-updated', 'session-created'];
+    const globalMessageTypes = ['projects_updated', 'taskmaster-project-updated', 'session-created', 'websocket-reconnected'];
     const isGlobalMessage = globalMessageTypes.includes(messageType);
     const lifecycleMessageTypes = new Set([
       'claude-complete',
@@ -298,6 +300,11 @@ export function useChatRealtimeHandlers({
             ),
           );
         }
+        break;
+
+      case 'websocket-reconnected':
+        // WebSocket dropped and reconnected — re-fetch session history to catch up on missed messages
+        onWebSocketReconnect?.();
         break;
 
       case 'token-budget':
@@ -692,14 +699,28 @@ export function useChatRealtimeHandlers({
             const updated = [...previous];
             const lastIndex = updated.length - 1;
             const last = updated[lastIndex];
+            const normalizedTextResult = textResult.trim();
+
             if (last && last.type === 'assistant' && !last.isToolUse && last.isStreaming) {
               const finalContent =
-                textResult && textResult.trim()
+                normalizedTextResult
                   ? textResult
                   : `${last.content || ''}${pendingChunk || ''}`;
               // Clone the message instead of mutating in place so React can reliably detect state updates.
               updated[lastIndex] = { ...last, content: finalContent, isStreaming: false };
-            } else if (textResult && textResult.trim()) {
+            } else if (normalizedTextResult) {
+              const lastAssistantText =
+                last && last.type === 'assistant' && !last.isToolUse
+                  ? String(last.content || '').trim()
+                  : '';
+
+              // Cursor can emit the same final text through both streaming and result payloads.
+              // Skip adding a second assistant bubble when the final text is unchanged.
+              const isDuplicateFinalText = lastAssistantText === normalizedTextResult;
+              if (isDuplicateFinalText) {
+                return updated;
+              }
+
               updated.push({
                 type: resultData.is_error ? 'error' : 'assistant',
                 content: textResult,

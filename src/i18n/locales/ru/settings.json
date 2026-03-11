@@ -104,7 +104,8 @@
     "appearance": "Внешний вид",
     "git": "Git",
     "apiTokens": "API и токены",
-    "tasks": "Задачи"
+    "tasks": "Задачи",
+    "plugins": "Плагины"
   },
   "appearanceSettings": {
     "darkMode": {
@@ -308,6 +309,9 @@
       },
       "codex": {
         "description": "AI-ассистент OpenAI Codex"
+      },
+      "gemini": {
+        "description": "AI-ассистент Google Gemini"
       }
     },
     "connectionStatus": "Статус подключения",
@@ -430,5 +434,41 @@
       "title": "О Codex MCP",
       "description": "Codex поддерживает MCP серверы на основе stdio. Вы можете добавлять серверы, которые расширяют возможности Codex дополнительными инструментами и ресурсами."
     }
+  },
+  "pluginSettings": {
+    "title": "Плагины",
+    "description": "Расширяйте интерфейс с помощью кастомных плагинов. Установите из git или добавьте папку в ~/.claude-code-ui/plugins/",
+    "installPlaceholder": "https://github.com/user/my-plugin",
+    "installButton": "Установить",
+    "installing": "Установка…",
+    "securityWarning": "Устанавливайте только те плагины, исходный код которых вы проверили или от авторов, которым вы доверяете.",
+    "scanningPlugins": "Сканирование плагинов…",
+    "noPluginsInstalled": "Плагины не установлены",
+    "pullLatest": "Получить обновления из git",
+    "noGitRemote": "Нет удаленного git-репозитория — обновление недоступно",
+    "uninstallPlugin": "Удалить плагин",
+    "confirmUninstall": "Нажмите еще раз для подтверждения",
+    "confirmUninstallMessage": "Удалить {{name}}? Это действие нельзя отменить.",
+    "cancel": "Отмена",
+    "remove": "Удалить",
+    "updateFailed": "Ошибка обновления",
+    "installFailed": "Ошибка установки",
+    "uninstallFailed": "Ошибка удаления",
+    "toggleFailed": "Ошибка переключения",
+    "buildYourOwn": "Создайте свой плагин",
+    "starter": "Шаблон",
+    "docs": "Документация",
+    "starterPlugin": {
+      "name": "Статистика проекта",
+      "badge": "шаблон",
+      "description": "Количество файлов, строк кода, разбивка по типам файлов и недавняя активность в вашем проекте.",
+      "install": "Установить"
+    },
+    "morePlugins": "Ещё",
+    "enable": "Включить",
+    "disable": "Выключить",
+    "installAriaLabel": "URL git-репозитория плагина",
+    "tab": "вкладка",
+    "runningStatus": "запущен"
   }
 }

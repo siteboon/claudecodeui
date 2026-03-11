@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Download, GitBranch, Plus, RefreshCw, Upload } from 'lucide-react';
+import { Check, ChevronDown, Download, GitBranch, Plus, RefreshCw, RotateCcw, Upload } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { ConfirmationRequest, GitRemoteStatus } from '../types/types';
 import NewBranchModal from './modals/NewBranchModal';
@@ -14,7 +14,9 @@ type GitPanelHeaderProps = {
   isPulling: boolean;
   isPushing: boolean;
   isPublishing: boolean;
+  isRevertingLocalCommit: boolean;
   onRefresh: () => void;
+  onRevertLocalCommit: () => Promise<void>;
   onSwitchBranch: (branchName: string) => Promise<boolean>;
   onCreateBranch: (branchName: string) => Promise<boolean>;
   onFetch: () => Promise<void>;
@@ -35,7 +37,9 @@ export default function GitPanelHeader({
   isPulling,
   isPushing,
   isPublishing,
+  isRevertingLocalCommit,
   onRefresh,
+  onRevertLocalCommit,
   onSwitchBranch,
   onCreateBranch,
   onFetch,
@@ -85,6 +89,14 @@ export default function GitPanelHeader({
       type: 'publish',
       message: `Publish branch "${currentBranch}" to ${remoteName}?`,
       onConfirm: onPublish,
+    });
+  };
+
+  const requestRevertLocalCommitConfirmation = () => {
+    onRequestConfirmation({
+      type: 'revertLocalCommit',
+      message: 'Revert the latest local commit? This removes the commit but keeps its changes staged.',
+      onConfirm: onRevertLocalCommit,
     });
   };
 
@@ -239,6 +251,17 @@ export default function GitPanelHeader({
               )}
             </>
           )}
+
+          <button
+            onClick={requestRevertLocalCommitConfirmation}
+            disabled={isRevertingLocalCommit}
+            className={`rounded-lg transition-colors hover:bg-accent disabled:opacity-50 ${isMobile ? 'p-1' : 'p-1.5'}`}
+            title="Revert latest local commit"
+          >
+            <RotateCcw
+              className={`text-muted-foreground ${isRevertingLocalCommit ? 'animate-pulse' : ''} ${isMobile ? 'h-3 w-3' : 'h-4 w-4'}`}
+            />
+          </button>
 
           <button
             onClick={onRefresh}

@@ -1730,8 +1730,14 @@ function handleShellConnection(ws) {
                             shellCommand = 'cursor-agent';
                         }
                     } else if (provider === 'codex') {
+                        // Use codex command; attempt to resume and fall back to a new session when the resume fails.
                         if (hasSession && sessionId) {
-                            shellCommand = `codex resume "${sessionId}" || codex`;
+                            if (os.platform() === 'win32') {
+                                // PowerShell syntax for fallback
+                                shellCommand = `codex resume "${sessionId}"; if ($LASTEXITCODE -ne 0) { codex }`;
+                            } else {
+                                shellCommand = `codex resume "${sessionId}" || codex`;
+                            }
                         } else {
                             shellCommand = 'codex';
                         }
@@ -1765,7 +1771,11 @@ function handleShellConnection(ws) {
                         // Claude (default provider)
                         const command = initialCommand || 'claude';
                         if (hasSession && sessionId) {
-                            shellCommand = `claude --resume "${sessionId}" || claude`;
+                            if (os.platform() === 'win32') {
+                                shellCommand = `claude --resume "${sessionId}"; if ($LASTEXITCODE -ne 0) { claude }`;
+                            } else {
+                                shellCommand = `claude --resume "${sessionId}" || claude`;
+                            }
                         } else {
                             shellCommand = command;
                         }

@@ -1,8 +1,16 @@
+import { PillBar, Pill } from '../../../../../../shared/view/ui';
+import SessionProviderLogo from '../../../../../llm-logo-provider/SessionProviderLogo';
 import type { AgentProvider } from '../../../../types/types';
-import AgentListItem from '../AgentListItem';
 import type { AgentSelectorSectionProps } from '../types';
 
-const AGENT_PROVIDERS: AgentProvider[] = ['claude', 'cursor', 'codex'];
+const AGENT_PROVIDERS: AgentProvider[] = ['claude', 'cursor', 'codex', 'gemini'];
+
+const AGENT_NAMES: Record<AgentProvider, string> = {
+  claude: 'Claude',
+  cursor: 'Cursor',
+  codex: 'Codex',
+  gemini: 'Gemini',
+};
 
 export default function AgentSelectorSection({
   selectedAgent,
@@ -10,35 +18,30 @@ export default function AgentSelectorSection({
   agentContextById,
 }: AgentSelectorSectionProps) {
   return (
-    <>
-      <div className="flex-shrink-0 border-b border-gray-200 dark:border-gray-700 md:hidden">
-        <div className="flex">
-          {AGENT_PROVIDERS.map((agent) => (
-            <AgentListItem
-              key={`mobile-${agent}`}
-              agentId={agent}
-              authStatus={agentContextById[agent].authStatus}
-              isSelected={selectedAgent === agent}
-              onClick={() => onSelectAgent(agent)}
-              isMobile
-            />
-          ))}
-        </div>
-      </div>
+    <div className="flex-shrink-0 border-b border-border px-3 py-2 md:px-4 md:py-3">
+      <PillBar className="w-full md:w-auto">
+        {AGENT_PROVIDERS.map((agent) => {
+          const dotColor =
+            agent === 'claude' ? 'bg-blue-500' :
+            agent === 'cursor' ? 'bg-purple-500' :
+            agent === 'gemini' ? 'bg-indigo-500' : 'bg-foreground/60';
 
-      <div className="hidden w-48 flex-shrink-0 border-r border-gray-200 dark:border-gray-700 md:block">
-        <div className="p-2">
-          {AGENT_PROVIDERS.map((agent) => (
-            <AgentListItem
-              key={`desktop-${agent}`}
-              agentId={agent}
-              authStatus={agentContextById[agent].authStatus}
-              isSelected={selectedAgent === agent}
+          return (
+            <Pill
+              key={agent}
+              isActive={selectedAgent === agent}
               onClick={() => onSelectAgent(agent)}
-            />
-          ))}
-        </div>
-      </div>
-    </>
+              className="min-w-0 flex-1 justify-center md:flex-initial"
+            >
+              <SessionProviderLogo provider={agent} className="h-4 w-4 flex-shrink-0" />
+              <span className="truncate">{AGENT_NAMES[agent]}</span>
+              {agentContextById[agent].authStatus.authenticated && (
+                <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${dotColor}`} />
+              )}
+            </Pill>
+          );
+        })}
+      </PillBar>
+    </div>
   );
 }

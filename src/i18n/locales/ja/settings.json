@@ -309,6 +309,9 @@
       },
       "codex": {
         "description": "OpenAI Codex AIアシスタント"
+      },
+      "gemini": {
+        "description": "Google Gemini AIアシスタント"
       }
     },
     "connectionStatus": "接続状態",
@@ -431,5 +434,41 @@
       "title": "Codex MCPについて",
       "description": "Codexはstdioベースのツールサーバーをサポートしています。追加のツールやリソースでCodexの機能を拡張するサーバーを追加できます。"
     }
+  },
+  "pluginSettings": {
+    "title": "プラグイン",
+    "description": "カスタムプラグインでインターフェースを拡張します。gitからインストールするか、~/.claude-code-ui/plugins/ にフォルダを配置してください。",
+    "installPlaceholder": "https://github.com/user/my-plugin",
+    "installButton": "インストール",
+    "installing": "インストール中…",
+    "securityWarning": "信頼できる作成者のプラグイン、またはソースコードを確認済みのプラグインのみをインストールしてください。",
+    "scanningPlugins": "プラグインをスキャン中…",
+    "noPluginsInstalled": "プラグインがインストールされていません",
+    "pullLatest": "gitから最新を取得",
+    "noGitRemote": "リモートgitリポジトリがありません — アップデート不可",
+    "uninstallPlugin": "プラグインを削除",
+    "confirmUninstall": "クリックして確定",
+    "confirmUninstallMessage": "{{name}} を削除しますか？この操作は取り消せません。",
+    "cancel": "キャンセル",
+    "remove": "削除",
+    "updateFailed": "アップデートに失敗しました",
+    "installFailed": "インストールに失敗しました",
+    "uninstallFailed": "削除に失敗しました",
+    "toggleFailed": "切り替えに失敗しました",
+    "buildYourOwn": "プラグインを自作する",
+    "starter": "スターター",
+    "docs": "ドキュメント",
+    "starterPlugin": {
+      "name": "プロジェクト統計",
+      "badge": "スターター",
+      "description": "プロジェクトのファイル数、コード行数、ファイルタイプの内訳、最近のアクティビティを表示します。",
+      "install": "インストール"
+    },
+    "morePlugins": "詳細",
+    "enable": "有効にする",
+    "disable": "無効にする",
+    "installAriaLabel": "プラグインのgitリポジトリURL",
+    "tab": "タブ",
+    "runningStatus": "実行中"
   }
 }

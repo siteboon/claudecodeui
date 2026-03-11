@@ -191,7 +191,6 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
   const closeTimerRef = useRef<number | null>(null);
 
   const [activeTab, setActiveTab] = useState<SettingsMainTab>(() => normalizeMainTab(initialTab));
-  const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'success' | 'error' | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [projectSortOrder, setProjectSortOrder] = useState<ProjectSortOrder>('name');
@@ -701,9 +700,6 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
   }, [checkAuthStatus, loginProvider]);
 
   const saveSettings = useCallback(() => {
-    setIsSaving(true);
-    setSaveStatus(null);
-
     try {
       const now = new Date().toISOString();
       localStorage.setItem('claude-settings', JSON.stringify({
@@ -732,16 +728,9 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
       }));
 
       setSaveStatus('success');
-      if (closeTimerRef.current !== null) {
-        window.clearTimeout(closeTimerRef.current);
-        closeTimerRef.current = null;
-      }
-      closeTimerRef.current = window.setTimeout(() => onClose(), 1000);
     } catch (error) {
       console.error('Error saving settings:', error);
       setSaveStatus('error');
-    } finally {
-      setIsSaving(false);
     }
   }, [
     claudePermissions.allowedTools,
@@ -751,7 +740,7 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
     cursorPermissions.allowedCommands,
     cursorPermissions.disallowedCommands,
     cursorPermissions.skipPermissions,
-    onClose,
+    geminiPermissionMode,
     projectSortOrder,
   ]);
 
@@ -804,10 +793,57 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
     window.dispatchEvent(new Event('codeEditorSettingsChanged'));
   }, [codeEditorSettings]);
 
+  // Auto-save permissions and sort order with debounce
+  const autoSaveTimerRef = useRef<number | null>(null);
+  const isInitialLoadRef = useRef(true);
+
+  useEffect(() => {
+    // Skip auto-save on initial load (settings are being loaded from localStorage)
+    if (isInitialLoadRef.current) {
+      isInitialLoadRef.current = false;
+      return;
+    }
+
+    if (autoSaveTimerRef.current !== null) {
+      window.clearTimeout(autoSaveTimerRef.current);
+    }
+
+    autoSaveTimerRef.current = window.setTimeout(() => {
+      saveSettings();
+    }, 500);
+
+    return () => {
+      if (autoSaveTimerRef.current !== null) {
+        window.clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, [saveSettings]);
+
+  // Clear save status after 2 seconds
+  useEffect(() => {
+    if (saveStatus === null) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => setSaveStatus(null), 2000);
+    return () => window.clearTimeout(timer);
+  }, [saveStatus]);
+
+  // Reset initial load flag when settings dialog opens
+  useEffect(() => {
+    if (isOpen) {
+      isInitialLoadRef.current = true;
+    }
+  }, [isOpen]);
+
   useEffect(() => () => {
     if (closeTimerRef.current !== null) {
       window.clearTimeout(closeTimerRef.current);
       closeTimerRef.current = null;
+    }
+    if (autoSaveTimerRef.current !== null) {
+      window.clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
     }
   }, []);
 
@@ -816,7 +852,6 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
     setActiveTab,
     isDarkMode,
     toggleDarkMode,
-    isSaving,
     saveStatus,
     deleteError,
     projectSortOrder,
@@ -861,6 +896,5 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
     loginProvider,
     selectedProject,
     handleLoginComplete,
-    saveSettings,
   };
 }

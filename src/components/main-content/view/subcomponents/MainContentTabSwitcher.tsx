@@ -1,7 +1,7 @@
 import { MessageSquare, Terminal, Folder, GitBranch, ClipboardCheck, type LucideIcon } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Tooltip } from '../../../../shared/view/ui';
+import { Tooltip, PillBar, Pill } from '../../../../shared/view/ui';
 import type { AppTab } from '../../../../types/app';
 import { usePlugins } from '../../../../contexts/PluginsContext';
 import PluginIcon from '../../../plugins/view/PluginIcon';
@@ -66,20 +66,17 @@ export default function MainContentTabSwitcher({
   const tabs: TabDefinition[] = [...builtInTabs, ...pluginTabs];
 
   return (
-    <div className="inline-flex items-center gap-[2px] rounded-lg bg-muted/60 p-[3px]">
+    <PillBar>
       {tabs.map((tab) => {
         const isActive = tab.id === activeTab;
         const displayLabel = tab.kind === 'builtin' ? t(tab.labelKey) : tab.label;
 
         return (
           <Tooltip key={tab.id} content={displayLabel} position="bottom">
-            <button
+            <Pill
+              isActive={isActive}
               onClick={() => setActiveTab(tab.id)}
-              className={`relative flex items-center gap-1.5 rounded-md px-2.5 py-[5px] text-sm font-medium transition-all duration-150 ${
-                isActive
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
+              className="px-2.5 py-[5px]"
             >
               {tab.kind === 'builtin' ? (
                 <tab.icon className="h-3.5 w-3.5" strokeWidth={isActive ? 2.2 : 1.8} />
@@ -91,10 +88,10 @@ export default function MainContentTabSwitcher({
                 />
               )}
               <span className="hidden lg:inline">{displayLabel}</span>
-            </button>
+            </Pill>
           </Tooltip>
         );
       })}
-    </div>
+    </PillBar>
   );
 }

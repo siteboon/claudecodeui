@@ -11,6 +11,7 @@ import {
   TERMINAL_OPTIONS,
   TERMINAL_RESIZE_DELAY_MS,
 } from '../constants/constants';
+import { copyTextToClipboard } from '../../../utils/clipboard';
 import { isCodexLoginCommand } from '../utils/auth';
 import { sendSocketMessage } from '../utils/socket';
 import { ensureXtermFocusStyles } from '../utils/terminalStyles';
@@ -103,6 +104,37 @@ export function useShellTerminal({
 
     nextTerminal.open(terminalContainerRef.current);
 
+    const copyTerminalSelection = async () => {
+      const selection = nextTerminal.getSelection();
+      if (!selection) {
+        return false;
+      }
+
+      return copyTextToClipboard(selection);
+    };
+
+    const handleTerminalCopy = (event: ClipboardEvent) => {
+      if (!nextTerminal.hasSelection()) {
+        return;
+      }
+
+      const selection = nextTerminal.getSelection();
+      if (!selection) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (event.clipboardData) {
+        event.clipboardData.setData('text/plain', selection);
+        return;
+      }
+
+      void copyTextToClipboard(selection);
+    };
+
+    terminalContainerRef.current.addEventListener('copy', handleTerminalCopy);
+
     nextTerminal.attachCustomKeyEventHandler((event) => {
       const activeAuthUrl = isCodexLoginCommand(initialCommandRef.current)
         ? CODEX_DEVICE_AUTH_URL
@@ -132,7 +164,7 @@ export function useShellTerminal({
       ) {
         event.preventDefault();
         event.stopPropagation();
-        document.execCommand('copy');
+        void copyTerminalSelection();
         return false;
       }
 
@@ -211,6 +243,7 @@ export function useShellTerminal({
     resizeObserver.observe(terminalContainerRef.current);
 
     return () => {
+      terminalContainerRef.current?.removeEventListener('copy', handleTerminalCopy);
       resizeObserver.disconnect();
       if (resizeTimeoutRef.current !== null) {
         window.clearTimeout(resizeTimeoutRef.current);

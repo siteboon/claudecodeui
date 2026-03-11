@@ -309,6 +309,9 @@
       },
       "codex": {
         "description": "OpenAI Codex AI 助手"
+      },
+      "gemini": {
+        "description": "Google Gemini AI 助手"
       }
     },
     "connectionStatus": "连接状态",
@@ -431,5 +434,41 @@
       "title": "关于 Codex MCP",
       "description": "Codex 支持基于 stdio 的 MCP 服务器。您可以添加服务器，通过额外的工具和资源来扩展 Codex 的功能。"
     }
+  },
+  "pluginSettings": {
+    "title": "插件",
+    "description": "通过自定义插件扩展界面。从 git 安装或直接将文件夹放入 ~/.claude-code-ui/plugins/",
+    "installPlaceholder": "https://github.com/user/my-plugin",
+    "installButton": "安装",
+    "installing": "安装中…",
+    "securityWarning": "仅安装您已审查过源代码或信任作者的插件。",
+    "scanningPlugins": "正在扫描插件…",
+    "noPluginsInstalled": "未安装插件",
+    "pullLatest": "从 git 拉取最新内容",
+    "noGitRemote": "无 git 远程仓库 — 无法更新",
+    "uninstallPlugin": "卸载插件",
+    "confirmUninstall": "再次点击确认",
+    "confirmUninstallMessage": "移除 {{name}}？此操作无法撤销。",
+    "cancel": "取消",
+    "remove": "移除",
+    "updateFailed": "更新失败",
+    "installFailed": "安装失败",
+    "uninstallFailed": "卸载失败",
+    "toggleFailed": "切换失败",
+    "buildYourOwn": "构建您自己的插件",
+    "starter": "入门模板",
+    "docs": "文档",
+    "starterPlugin": {
+      "name": "项目统计",
+      "badge": "入门",
+      "description": "查看项目的文件数、代码行数、文件类型分布以及最近活动。",
+      "install": "安装"
+    },
+    "morePlugins": "更多",
+    "enable": "启用",
+    "disable": "禁用",
+    "installAriaLabel": "插件 git 仓库 URL",
+    "tab": "标签",
+    "runningStatus": "运行中"
   }
 }
