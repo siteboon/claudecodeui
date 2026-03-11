@@ -9,6 +9,7 @@ type FileChangeListProps = {
   selectedFiles: Set<string>;
   isMobile: boolean;
   wrapText: boolean;
+  filePaths?: Set<string>;
   onToggleSelected: (filePath: string) => void;
   onToggleExpanded: (filePath: string) => void;
   onOpenFile: (filePath: string) => void;
@@ -23,6 +24,7 @@ export default function FileChangeList({
   selectedFiles,
   isMobile,
   wrapText,
+  filePaths,
   onToggleSelected,
   onToggleExpanded,
   onOpenFile,
@@ -32,23 +34,25 @@ export default function FileChangeList({
   return (
     <>
       {FILE_STATUS_GROUPS.map(({ key, status }) =>
-        (gitStatus[key] || []).map((filePath) => (
-          <FileChangeItem
-            key={filePath}
-            filePath={filePath}
-            status={status}
-            isMobile={isMobile}
-            isExpanded={expandedFiles.has(filePath)}
-            isSelected={selectedFiles.has(filePath)}
-            diff={gitDiff[filePath]}
-            wrapText={wrapText}
-            onToggleSelected={onToggleSelected}
-            onToggleExpanded={onToggleExpanded}
-            onOpenFile={onOpenFile}
-            onToggleWrapText={onToggleWrapText}
-            onRequestFileAction={onRequestFileAction}
-          />
-        )),
+        (gitStatus[key] || [])
+          .filter((filePath) => !filePaths || filePaths.has(filePath))
+          .map((filePath) => (
+            <FileChangeItem
+              key={filePath}
+              filePath={filePath}
+              status={status}
+              isMobile={isMobile}
+              isExpanded={expandedFiles.has(filePath)}
+              isSelected={selectedFiles.has(filePath)}
+              diff={gitDiff[filePath]}
+              wrapText={wrapText}
+              onToggleSelected={onToggleSelected}
+              onToggleExpanded={onToggleExpanded}
+              onOpenFile={onOpenFile}
+              onToggleWrapText={onToggleWrapText}
+              onRequestFileAction={onRequestFileAction}
+            />
+          )),
       )}
     </>
   );
