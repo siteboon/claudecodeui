@@ -69,6 +69,7 @@ import { startEnabledPluginServers, stopAllPlugins } from './utils/plugin-proces
 import { initializeDatabase, sessionNamesDb, applyCustomSessionNames } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { IS_PLATFORM } from './constants/config.js';
+import { getConnectableHost } from '../shared/networkHosts.js';
 
 const VALID_PROVIDERS = ['claude', 'codex', 'cursor', 'gemini'];
 
@@ -2401,7 +2402,8 @@ app.get('*', (req, res) => {
         res.sendFile(indexPath);
     } else {
         // In development, redirect to Vite dev server only if dist doesn't exist
-        res.redirect(`${req.protocol}://${req.hostname}:${VITE_PORT}`);
+        const redirectHost = getConnectableHost(req.hostname);
+        res.redirect(`${req.protocol}://${redirectHost}:${VITE_PORT}`);
     }
 });
 
@@ -2491,8 +2493,7 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
 
 const PORT = process.env.PORT || 3001;
 const HOST = process.env.HOST || '0.0.0.0';
-// Show localhost in URL when binding to all interfaces (0.0.0.0 isn't a connectable address)
-const DISPLAY_HOST = HOST === '0.0.0.0' ? 'localhost' : HOST;
+const DISPLAY_HOST = getConnectableHost(HOST);
 const VITE_PORT = process.env.VITE_PORT || 5173;
 
 // Initialize database and start server
@@ -2507,12 +2508,14 @@ async function startServer() {
 
         // Log Claude implementation mode
         console.log(`${c.info('[INFO]')} Using Claude Agents SDK for Claude integration`);
-        console.log(`${c.info('[INFO]')} Running in ${c.bright(isProduction ? 'PRODUCTION' : 'DEVELOPMENT')} mode`);
+        console.log('');
 
-        if (!isProduction) {
-            console.log(`${c.warn('[WARN]')} Note: Requests will be proxied to Vite dev server at ${c.dim('http://localhost:' + VITE_PORT)}`);
+        if (isProduction) {
+            console.log(`${c.info('[INFO]')} To run in production mode, go to http://${DISPLAY_HOST}:${PORT}`);            
         }
 
+        console.log(`${c.info('[INFO]')} To run in development mode with hot-module replacement, go to http://${DISPLAY_HOST}:${VITE_PORT}`);
+   
         server.listen(PORT, HOST, async () => {
             const appInstallPath = path.join(__dirname, '..');
 
