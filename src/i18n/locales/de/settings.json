@@ -431,5 +431,41 @@
       "title": "Über Codex MCP",
       "description": "Codex unterstützt stdio-basierte MCP-Server. Du kannst Server hinzufügen, die die Fähigkeiten von Codex mit zusätzlichen Werkzeugen und Ressourcen erweitern."
     }
+  },
+  "pluginSettings": {
+    "title": "Plugins",
+    "description": "Erweitere die Oberfläche mit eigenen Plugins. Installiere sie von Git oder lege einen Ordner in ~/.claude-code-ui/plugins/ ab.",
+    "installPlaceholder": "https://github.com/benutzer/mein-plugin",
+    "installButton": "Installieren",
+    "installing": "Wird installiert…",
+    "securityWarning": "Installiere nur Plugins, deren Quellcode du geprüft hast oder die von Autoren stammen, denen du vertraust.",
+    "scanningPlugins": "Plugins werden durchsucht…",
+    "noPluginsInstalled": "Keine Plugins installiert",
+    "pullLatest": "Neueste Version von Git laden",
+    "noGitRemote": "Kein Git-Remote — Update nicht verfügbar",
+    "uninstallPlugin": "Plugin deinstallieren",
+    "confirmUninstall": "Zum Bestätigen erneut klicken",
+    "confirmUninstallMessage": "{{name}} entfernen? Das kann nicht rückgängig gemacht werden.",
+    "cancel": "Abbrechen",
+    "remove": "Entfernen",
+    "updateFailed": "Update fehlgeschlagen",
+    "installFailed": "Installation fehlgeschlagen",
+    "uninstallFailed": "Deinstallation fehlgeschlagen",
+    "toggleFailed": "Umschalten fehlgeschlagen",
+    "buildYourOwn": "Eigenes Plugin erstellen",
+    "starter": "Starter",
+    "docs": "Dokumentation",
+    "starterPlugin": {
+      "name": "Projektstatistiken",
+      "badge": "starter",
+      "description": "Dateianzahl, Codezeilen, Dateityp-Aufschlüsselung und aktuelle Aktivitäten für dein Projekt.",
+      "install": "Installieren"
+    },
+    "morePlugins": "Mehr",
+    "enable": "Aktivieren",
+    "disable": "Deaktivieren",
+    "installAriaLabel": "Git-Repository-URL des Plugins",
+    "tab": "Tab",
+    "runningStatus": "läuft"
   }
 }
