@@ -10,8 +10,12 @@
  */
 
 const WS_FAIL_THRESHOLD = 3;
-let wsFailCount = 0;
-let usePollingFallback = false;
+
+// Per-endpoint fallback state so failures on one transport don't affect the other
+let chatWsFailCount = 0;
+let shellWsFailCount = 0;
+let useChatPollingFallback = false;
+let useShellPollingFallback = false;
 
 const OrigWebSocket = window.WebSocket;
 
@@ -25,6 +29,11 @@ function authHeaders(contentType = true): Record<string, string> {
   const token = getToken();
   if (token) headers['Authorization'] = `Bearer ${token}`;
   return headers;
+}
+
+/** Returns true if the response indicates a dead/cleaned-up connection (terminal). */
+function isTerminalResponse(resp: Response): boolean {
+  return resp.status === 410 || resp.status === 404;
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -44,14 +53,13 @@ class PollingWebSocket {
   onclose: EventCallback | null = null;
   onerror: EventCallback | null = null;
 
-  private _connectionId: string;
+  private _connectionId: string = '';
   private _polling = false;
   private _closed = false;
   private _listeners: Record<string, EventCallback[]> = {};
 
   constructor(url: string) {
     this.url = url;
-    this._connectionId = 'poll-' + Math.random().toString(36).slice(2);
     this._connect();
   }
 
@@ -75,10 +83,12 @@ class PollingWebSocket {
       const resp = await fetch('/api/poll/connect', {
         method: 'POST',
         headers: authHeaders(),
-        body: JSON.stringify({ connectionId: this._connectionId }),
+        body: '{}',
       });
       if (!resp.ok) throw new Error(`Connect failed: ${resp.status}`);
 
+      const body = await resp.json();
+      this._connectionId = body.connectionId;
       this.readyState = 1;
       console.log('[Poll Fallback] Chat connected:', this._connectionId);
       setTimeout(() => {
@@ -106,7 +116,7 @@ class PollingWebSocket {
           { cache: 'no-store', headers: { Authorization: `Bearer ${getToken()}` } },
         );
         if (!resp.ok) {
-          if (resp.status === 401) {
+          if (resp.status === 401 || isTerminalResponse(resp)) {
             this.close();
             return;
           }
@@ -116,7 +126,9 @@ class PollingWebSocket {
         const messages = await resp.json();
         if (messages?.length > 0) {
           for (const msg of messages) {
-            this.onmessage?.({ data: JSON.stringify(msg) });
+            const event = { data: JSON.stringify(msg) };
+            this.onmessage?.(event);
+            this._emit('message', event);
             // Yield between messages to prevent React setState batching
             await new Promise((r) => setTimeout(r, 10));
           }
@@ -169,14 +181,13 @@ class PollingShellWebSocket {
   onclose: EventCallback | null = null;
   onerror: EventCallback | null = null;
 
-  private _connectionId: string;
+  private _connectionId: string = '';
   private _polling = false;
   private _closed = false;
   private _listeners: Record<string, EventCallback[]> = {};
 
   constructor(url: string) {
     this.url = url;
-    this._connectionId = 'shell-poll-' + Math.random().toString(36).slice(2);
     this._connect();
   }
 
@@ -200,10 +211,12 @@ class PollingShellWebSocket {
       const resp = await fetch('/api/poll/shell/connect', {
         method: 'POST',
         headers: authHeaders(),
-        body: JSON.stringify({ connectionId: this._connectionId }),
+        body: '{}',
       });
       if (!resp.ok) throw new Error(`Shell connect failed: ${resp.status}`);
 
+      const body = await resp.json();
+      this._connectionId = body.connectionId;
       this.readyState = 1;
       console.log('[Poll Fallback] Shell connected:', this._connectionId);
       setTimeout(() => {
@@ -231,7 +244,7 @@ class PollingShellWebSocket {
           { cache: 'no-store', headers: { Authorization: `Bearer ${getToken()}` } },
         );
         if (!resp.ok) {
-          if (resp.status === 401) {
+          if (resp.status === 401 || isTerminalResponse(resp)) {
             this.close();
             return;
           }
@@ -242,7 +255,9 @@ class PollingShellWebSocket {
         if (messages?.length > 0) {
           for (const msg of messages) {
             const data = typeof msg === 'string' ? msg : JSON.stringify(msg);
-            this.onmessage?.({ data });
+            const event = { data };
+            this.onmessage?.(event);
+            this._emit('message', event);
           }
         }
         // Faster polling for interactive terminal feel
@@ -287,42 +302,44 @@ export function installPollingFallback(): void {
     if (typeof url === 'string') {
       // Chat WebSocket
       if (url.includes('/ws?token=') || url.endsWith('/ws')) {
-        if (usePollingFallback) {
+        if (useChatPollingFallback) {
           console.log('[Poll Fallback] Using HTTP polling for chat');
           return new PollingWebSocket(url) as unknown as WebSocket;
         }
         const ws = protocols ? new OrigWebSocket(url, protocols) : new OrigWebSocket(url);
         ws.addEventListener('error', () => {
-          wsFailCount++;
-          console.warn(`[Poll Fallback] WS failed (${wsFailCount}/${WS_FAIL_THRESHOLD})`);
-          if (wsFailCount >= WS_FAIL_THRESHOLD) {
-            usePollingFallback = true;
-            console.log('[Poll Fallback] Switching to HTTP polling mode');
+          chatWsFailCount++;
+          console.warn(`[Poll Fallback] Chat WS failed (${chatWsFailCount}/${WS_FAIL_THRESHOLD})`);
+          if (chatWsFailCount >= WS_FAIL_THRESHOLD) {
+            useChatPollingFallback = true;
+            console.log('[Poll Fallback] Switching chat to HTTP polling mode');
           }
         });
         ws.addEventListener('open', () => {
-          wsFailCount = 0;
+          chatWsFailCount = 0;
         });
         return ws;
       }
 
       // Shell WebSocket
       if (url.includes('/shell?token=') || url.endsWith('/shell')) {
-        if (usePollingFallback) {
+        if (useShellPollingFallback) {
           console.log('[Poll Fallback] Using HTTP polling for shell');
           return new PollingShellWebSocket(url) as unknown as WebSocket;
         }
         const ws = protocols ? new OrigWebSocket(url, protocols) : new OrigWebSocket(url);
         ws.addEventListener('error', () => {
-          wsFailCount++;
-          console.warn(`[Poll Fallback] Shell WS failed (${wsFailCount}/${WS_FAIL_THRESHOLD})`);
-          if (wsFailCount >= WS_FAIL_THRESHOLD) {
-            usePollingFallback = true;
-            console.log('[Poll Fallback] Switching to HTTP polling mode');
+          shellWsFailCount++;
+          console.warn(
+            `[Poll Fallback] Shell WS failed (${shellWsFailCount}/${WS_FAIL_THRESHOLD})`,
+          );
+          if (shellWsFailCount >= WS_FAIL_THRESHOLD) {
+            useShellPollingFallback = true;
+            console.log('[Poll Fallback] Switching shell to HTTP polling mode');
           }
         });
         ws.addEventListener('open', () => {
-          wsFailCount = 0;
+          shellWsFailCount = 0;
         });
         return ws;
       }

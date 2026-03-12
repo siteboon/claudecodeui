@@ -1982,6 +1982,7 @@ app.use('/api/poll', createPollingRouter({
     getActiveGeminiSessions,
     resolveToolApproval,
     getPendingApprovalsForSession,
+    reconnectSessionWriter,
     handleShellConnection,
 }));
 

@@ -17,14 +17,41 @@
  *   POST /api/poll/shell/disconnect — cleanup
  */
 
+import crypto from 'crypto';
 import { EventEmitter } from 'events';
 import { Router } from 'express';
+
+// ──────────────────────────────────────────────────────────────
+//  Helpers
+// ──────────────────────────────────────────────────────────────
+
+/** Generate a cryptographically random connection ID on the server side. */
+function generateConnectionId(prefix = 'poll') {
+  return `${prefix}-${crypto.randomBytes(16).toString('hex')}`;
+}
+
+/**
+ * Verify the authenticated user owns the connection.
+ * Returns the connection entry or sends an error response.
+ */
+function getOwnedConnection(map, connectionId, req, res) {
+  const conn = map.get(connectionId);
+  if (!conn) {
+    res.status(410).json({ error: 'No active connection' });
+    return null;
+  }
+  if (conn.ownerId !== req.user?.id) {
+    res.status(403).json({ error: 'Forbidden' });
+    return null;
+  }
+  return conn;
+}
 
 // ──────────────────────────────────────────────────────────────
 //  Chat Polling
 // ──────────────────────────────────────────────────────────────
 
-const pollConnections = new Map(); // connectionId → { writer, user, messages[], lastActivity }
+const pollConnections = new Map(); // connectionId → { writer, ownerId, messages[], lastActivity }
 
 class PollingWriter {
   constructor(connectionId) {
@@ -41,7 +68,16 @@ class PollingWriter {
     }
   }
 
-  updateWebSocket() {}
+  /**
+   * Retarget this writer to a new polling connection.
+   * Called by reconnectSessionWriter() when the client reconnects.
+   */
+  updateWebSocket(newConnectionId) {
+    if (typeof newConnectionId === 'string') {
+      this._connectionId = newConnectionId;
+    }
+  }
+
   setSessionId(id) { this.sessionId = id; }
   getSessionId() { return this.sessionId; }
 }
@@ -50,7 +86,7 @@ class PollingWriter {
 //  Shell Polling
 // ──────────────────────────────────────────────────────────────
 
-const pollShellConnections = new Map(); // connectionId → { fakeWs, outputQueue[], lastActivity }
+const pollShellConnections = new Map(); // connectionId → { fakeWs, ownerId, outputQueue[], lastActivity }
 
 /**
  * FakeShellWs — an EventEmitter that implements the subset of
@@ -126,6 +162,7 @@ setInterval(() => {
  * @param {Function} deps.getActiveGeminiSessions
  * @param {Function} deps.resolveToolApproval
  * @param {Function} deps.getPendingApprovalsForSession
+ * @param {Function} deps.reconnectSessionWriter
  * @param {Function} deps.handleShellConnection
  */
 export function createPollingRouter(deps) {
@@ -150,23 +187,22 @@ export function createPollingRouter(deps) {
     getActiveGeminiSessions,
     resolveToolApproval,
     getPendingApprovalsForSession,
+    reconnectSessionWriter,
     handleShellConnection,
   } = deps;
 
   // ── Chat: connect ────────────────────────────────────────
   router.post('/connect', authenticateToken, (req, res) => {
-    const { connectionId } = req.body;
-    if (!connectionId) return res.status(400).json({ error: 'connectionId required' });
-
+    const connectionId = generateConnectionId('poll');
     const writer = new PollingWriter(connectionId);
     pollConnections.set(connectionId, {
       writer,
-      user: req.user,
+      ownerId: req.user?.id,
       messages: [],
       lastActivity: Date.now(),
     });
     console.log('[Poll] Chat client connected:', connectionId);
-    res.json({ ok: true });
+    res.json({ ok: true, connectionId });
   });
 
   // ── Chat: poll messages ──────────────────────────────────
@@ -177,8 +213,8 @@ export function createPollingRouter(deps) {
     res.setHeader('ETag', `"${Date.now()}"`);
 
     const { connectionId } = req.query;
-    const conn = pollConnections.get(connectionId);
-    if (!conn) return res.status(400).json({ error: 'No active connection' });
+    const conn = getOwnedConnection(pollConnections, connectionId, req, res);
+    if (!conn) return;
 
     conn.lastActivity = Date.now();
     const msgs = conn.messages.splice(0);
@@ -188,8 +224,8 @@ export function createPollingRouter(deps) {
   // ── Chat: send command ───────────────────────────────────
   router.post('/send', authenticateToken, async (req, res) => {
     const { connectionId, ...data } = req.body;
-    const conn = pollConnections.get(connectionId);
-    if (!conn) return res.status(400).json({ error: 'No active connection' });
+    const conn = getOwnedConnection(pollConnections, connectionId, req, res);
+    if (!conn) return;
 
     conn.lastActivity = Date.now();
     const { writer } = conn;
@@ -231,6 +267,10 @@ export function createPollingRouter(deps) {
         else if (provider === 'codex') isActive = isCodexSessionActive(sessionId);
         else if (provider === 'gemini') isActive = isGeminiSessionActive(sessionId);
         else isActive = isClaudeSDKSessionActive(sessionId);
+        // Rebind in-flight session to this polling connection (mirrors WebSocket reconnect)
+        if (isActive && reconnectSessionWriter) {
+          reconnectSessionWriter(sessionId, connectionId);
+        }
         writer.send({ type: 'session-status', sessionId, provider, isProcessing: isActive });
       } else if (data.type === 'get-pending-permissions') {
         const { sessionId } = data;
@@ -256,6 +296,9 @@ export function createPollingRouter(deps) {
   // ── Chat: disconnect ─────────────────────────────────────
   router.post('/disconnect', authenticateToken, (req, res) => {
     const { connectionId } = req.body;
+    const conn = getOwnedConnection(pollConnections, connectionId, req, res);
+    if (!conn) return;
+
     pollConnections.delete(connectionId);
     console.log('[Poll] Chat client disconnected:', connectionId);
     res.json({ ok: true });
@@ -263,18 +306,17 @@ export function createPollingRouter(deps) {
 
   // ── Shell: connect ───────────────────────────────────────
   router.post('/shell/connect', authenticateToken, (req, res) => {
-    const { connectionId } = req.body;
-    if (!connectionId) return res.status(400).json({ error: 'connectionId required' });
-
+    const connectionId = generateConnectionId('shell-poll');
     const fakeWs = new FakeShellWs(connectionId);
     pollShellConnections.set(connectionId, {
       fakeWs,
+      ownerId: req.user?.id,
       outputQueue: [],
       lastActivity: Date.now(),
     });
     handleShellConnection(fakeWs);
     console.log('[Poll] Shell client connected:', connectionId);
-    res.json({ ok: true });
+    res.json({ ok: true, connectionId });
   });
 
   // ── Shell: poll output ───────────────────────────────────
@@ -285,8 +327,8 @@ export function createPollingRouter(deps) {
     res.setHeader('ETag', `"${Date.now()}"`);
 
     const { connectionId } = req.query;
-    const conn = pollShellConnections.get(connectionId);
-    if (!conn) return res.status(400).json({ error: 'No active shell connection' });
+    const conn = getOwnedConnection(pollShellConnections, connectionId, req, res);
+    if (!conn) return;
 
     conn.lastActivity = Date.now();
     const msgs = conn.outputQueue.splice(0);
@@ -296,8 +338,8 @@ export function createPollingRouter(deps) {
   // ── Shell: send input ────────────────────────────────────
   router.post('/shell/send', authenticateToken, (req, res) => {
     const { connectionId, ...data } = req.body;
-    const conn = pollShellConnections.get(connectionId);
-    if (!conn) return res.status(400).json({ error: 'No active shell connection' });
+    const conn = getOwnedConnection(pollShellConnections, connectionId, req, res);
+    if (!conn) return;
 
     conn.lastActivity = Date.now();
     conn.fakeWs.emit('message', JSON.stringify(data));
@@ -307,11 +349,11 @@ export function createPollingRouter(deps) {
   // ── Shell: disconnect ────────────────────────────────────
   router.post('/shell/disconnect', authenticateToken, (req, res) => {
     const { connectionId } = req.body;
-    const conn = pollShellConnections.get(connectionId);
-    if (conn) {
-      conn.fakeWs.close();
-      pollShellConnections.delete(connectionId);
-    }
+    const conn = getOwnedConnection(pollShellConnections, connectionId, req, res);
+    if (!conn) return;
+
+    conn.fakeWs.close();
+    pollShellConnections.delete(connectionId);
     console.log('[Poll] Shell client disconnected:', connectionId);
     res.json({ ok: true });
   });
