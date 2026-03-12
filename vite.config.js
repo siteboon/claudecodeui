@@ -14,7 +14,8 @@ export default defineConfig(({ mode }) => {
   const host = normalizeLoopbackHost(configuredHost)
   
   const proxyHost = getConnectableHost(configuredHost)
-  const serverPort = env.SERVER_PORT || 3001
+  // TODO: Remove support for legacy PORT variables in all locations in a future major release, leaving only SERVER_PORT.
+  const serverPort = env.SERVER_PORT || env.PORT || 3001
 
   return {
     plugins: [react()],
