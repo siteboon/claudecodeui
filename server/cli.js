@@ -288,6 +288,8 @@ async function main() {
     // Apply CLI options to environment variables
     if (options.serverPort) {
         process.env.SERVER_PORT = options.serverPort;
+    } else if (!process.env.SERVER_PORT && process.env.PORT) {
+        process.env.SERVER_PORT = process.env.PORT;
     }
     if (options.databasePath) {
         process.env.DATABASE_PATH = options.databasePath;
