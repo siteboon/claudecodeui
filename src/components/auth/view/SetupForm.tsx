@@ -90,6 +90,7 @@ export default function SetupForm() {
       <form onSubmit={handleSubmit} className="space-y-4">
         <AuthInputField
           id="username"
+          name="username"
           label="Username"
           value={formState.username}
           onChange={(value) => updateField('username', value)}
@@ -100,6 +101,7 @@ export default function SetupForm() {
 
         <AuthInputField
           id="password"
+          name="password"
           label="Password"
           value={formState.password}
           onChange={(value) => updateField('password', value)}
@@ -111,6 +113,7 @@ export default function SetupForm() {
 
         <AuthInputField
           id="confirmPassword"
+          name="confirmPassword"
           label="Confirm Password"
           value={formState.confirmPassword}
           onChange={(value) => updateField('confirmPassword', value)}
