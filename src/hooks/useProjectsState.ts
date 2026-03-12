@@ -18,6 +18,10 @@ type UseProjectsStateArgs = {
   activeSessions: Set<string>;
 };
 
+type FetchProjectsOptions = {
+  showLoadingState?: boolean;
+};
+
 const serialize = (value: unknown) => JSON.stringify(value ?? null);
 
 const projectsHaveChanges = (
@@ -106,10 +110,14 @@ const isUpdateAdditive = (
 
 const VALID_TABS: Set<string> = new Set(['chat', 'files', 'shell', 'git', 'tasks', 'preview']);
 
+const isValidTab = (tab: string): tab is AppTab => {
+  return VALID_TABS.has(tab) || tab.startsWith('plugin:');
+};
+
 const readPersistedTab = (): AppTab => {
   try {
     const stored = localStorage.getItem('activeTab');
-    if (stored && VALID_TABS.has(stored)) {
+    if (stored && isValidTab(stored)) {
       return stored as AppTab;
     }
   } catch {
@@ -148,9 +156,11 @@ export function useProjectsState({
 
   const loadingProgressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fetchProjects = useCallback(async () => {
+  const fetchProjects = useCallback(async ({ showLoadingState = true }: FetchProjectsOptions = {}) => {
     try {
-      setIsLoadingProjects(true);
+      if (showLoadingState) {
+        setIsLoadingProjects(true);
+      }
       const response = await api.projects();
       const projectData = (await response.json()) as Project[];
 
@@ -166,9 +176,16 @@ export function useProjectsState({
     } catch (error) {
       console.error('Error fetching projects:', error);
     } finally {
-      setIsLoadingProjects(false);
+      if (showLoadingState) {
+        setIsLoadingProjects(false);
+      }
     }
   }, []);
+
+  const refreshProjectsSilently = useCallback(async () => {
+    // Keep chat view stable while still syncing sidebar/session metadata in background.
+    await fetchProjects({ showLoadingState: false });
+  }, [fetchProjects]);
 
   const openSettings = useCallback((tab = 'tools') => {
     setSettingsInitialTab(tab);
@@ -543,6 +560,7 @@ export function useProjectsState({
     setShowSettings,
     openSettings,
     fetchProjects,
+    refreshProjectsSilently,
     sidebarSharedProps,
     handleProjectSelect,
     handleSessionSelect,

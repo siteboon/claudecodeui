@@ -64,6 +64,8 @@ import cliAuthRoutes from './routes/cli-auth.js';
 import userRoutes from './routes/user.js';
 import codexRoutes from './routes/codex.js';
 import geminiRoutes from './routes/gemini.js';
+import pluginsRoutes from './routes/plugins.js';
+import { startEnabledPluginServers, stopAllPlugins } from './utils/plugin-process-manager.js';
 import { initializeDatabase, sessionNamesDb, applyCustomSessionNames } from './database/db.js';
 import { configureWebPush } from './services/vapid-keys.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
@@ -325,7 +327,7 @@ const wss = new WebSocketServer({
 // Make WebSocket server available to routes
 app.locals.wss = wss;
 
-app.use(cors());
+app.use(cors({ exposedHeaders: ['X-Refreshed-Token'] }));
 app.use(express.json({
     limit: '50mb',
     type: (req) => {
@@ -389,6 +391,9 @@ app.use('/api/codex', authenticateToken, codexRoutes);
 
 // Gemini API Routes (protected)
 app.use('/api/gemini', authenticateToken, geminiRoutes);
+
+// Plugins API Routes (protected)
+app.use('/api/plugins', authenticateToken, pluginsRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
@@ -1696,50 +1701,49 @@ function handleShellConnection(ws) {
                 }));
 
                 try {
-                    // Prepare the shell command adapted to the platform and provider
+                    // Validate projectPath — resolve to absolute and verify it exists
+                    const resolvedProjectPath = path.resolve(projectPath);
+                    try {
+                        const stats = fs.statSync(resolvedProjectPath);
+                        if (!stats.isDirectory()) {
+                            throw new Error('Not a directory');
+                        }
+                    } catch (pathErr) {
+                        ws.send(JSON.stringify({ type: 'error', message: 'Invalid project path' }));
+                        return;
+                    }
+
+                    // Validate sessionId — only allow safe characters
+                    const safeSessionIdPattern = /^[a-zA-Z0-9_.\-:]+$/;
+                    if (sessionId && !safeSessionIdPattern.test(sessionId)) {
+                        ws.send(JSON.stringify({ type: 'error', message: 'Invalid session ID' }));
+                        return;
+                    }
+
+                    // Build shell command — use cwd for project path (never interpolate into shell string)
                     let shellCommand;
                     if (isPlainShell) {
-                        // Plain shell mode - just run the initial command in the project directory
-                        if (os.platform() === 'win32') {
-                            shellCommand = `Set-Location -Path "${projectPath}"; ${initialCommand}`;
-                        } else {
-                            shellCommand = `cd "${projectPath}" && ${initialCommand}`;
-                        }
+                        // Plain shell mode - run the initial command in the project directory
+                        shellCommand = initialCommand;
                     } else if (provider === 'cursor') {
-                        // Use cursor-agent command
-                        if (os.platform() === 'win32') {
-                            if (hasSession && sessionId) {
-                                shellCommand = `Set-Location -Path "${projectPath}"; cursor-agent --resume="${sessionId}"`;
-                            } else {
-                                shellCommand = `Set-Location -Path "${projectPath}"; cursor-agent`;
-                            }
+                        if (hasSession && sessionId) {
+                            shellCommand = `cursor-agent --resume="${sessionId}"`;
                         } else {
-                            if (hasSession && sessionId) {
-                                shellCommand = `cd "${projectPath}" && cursor-agent --resume="${sessionId}"`;
-                            } else {
-                                shellCommand = `cd "${projectPath}" && cursor-agent`;
-                            }
+                            shellCommand = 'cursor-agent';
                         }
-
                     } else if (provider === 'codex') {
-                        // Use codex command
-                        if (os.platform() === 'win32') {
-                            if (hasSession && sessionId) {
-                                // Try to resume session, but with fallback to a new session if it fails
-                                shellCommand = `Set-Location -Path "${projectPath}"; codex resume "${sessionId}"; if ($LASTEXITCODE -ne 0) { codex }`;
+                        // Use codex command; attempt to resume and fall back to a new session when the resume fails.
+                        if (hasSession && sessionId) {
+                            if (os.platform() === 'win32') {
+                                // PowerShell syntax for fallback
+                                shellCommand = `codex resume "${sessionId}"; if ($LASTEXITCODE -ne 0) { codex }`;
                             } else {
-                                shellCommand = `Set-Location -Path "${projectPath}"; codex`;
+                                shellCommand = `codex resume "${sessionId}" || codex`;
                             }
                         } else {
-                            if (hasSession && sessionId) {
-                                // Try to resume session, but with fallback to a new session if it fails
-                                shellCommand = `cd "${projectPath}" && codex resume "${sessionId}" || codex`;
-                            } else {
-                                shellCommand = `cd "${projectPath}" && codex`;
-                            }
+                            shellCommand = 'codex';
                         }
                     } else if (provider === 'gemini') {
-                        // Use gemini command
                         const command = initialCommand || 'gemini';
                         let resumeId = sessionId;
                         if (hasSession && sessionId) {
@@ -1750,41 +1754,32 @@ function handleShellConnection(ws) {
                                 const sess = sessionManager.getSession(sessionId);
                                 if (sess && sess.cliSessionId) {
                                     resumeId = sess.cliSessionId;
+                                    // Validate the looked-up CLI session ID too
+                                    if (!safeSessionIdPattern.test(resumeId)) {
+                                        resumeId = null;
+                                    }
                                 }
                             } catch (err) {
                                 console.error('Failed to get Gemini CLI session ID:', err);
                             }
                         }
 
-                        if (os.platform() === 'win32') {
-                            if (hasSession && resumeId) {
-                                shellCommand = `Set-Location -Path "${projectPath}"; ${command} --resume "${resumeId}"`;
-                            } else {
-                                shellCommand = `Set-Location -Path "${projectPath}"; ${command}`;
-                            }
+                        if (hasSession && resumeId) {
+                            shellCommand = `${command} --resume "${resumeId}"`;
                         } else {
-                            if (hasSession && resumeId) {
-                                shellCommand = `cd "${projectPath}" && ${command} --resume "${resumeId}"`;
-                            } else {
-                                shellCommand = `cd "${projectPath}" && ${command}`;
-                            }
+                            shellCommand = command;
                         }
                     } else {
-                        // Use claude command (default) or initialCommand if provided
+                        // Claude (default provider)
                         const command = initialCommand || 'claude';
-                        if (os.platform() === 'win32') {
-                            if (hasSession && sessionId) {
-                                // Try to resume session, but with fallback to new session if it fails
-                                shellCommand = `Set-Location -Path "${projectPath}"; claude --resume ${sessionId}; if ($LASTEXITCODE -ne 0) { claude }`;
+                        if (hasSession && sessionId) {
+                            if (os.platform() === 'win32') {
+                                shellCommand = `claude --resume "${sessionId}"; if ($LASTEXITCODE -ne 0) { claude }`;
                             } else {
-                                shellCommand = `Set-Location -Path "${projectPath}"; ${command}`;
+                                shellCommand = `claude --resume "${sessionId}" || claude`;
                             }
                         } else {
-                            if (hasSession && sessionId) {
-                                shellCommand = `cd "${projectPath}" && claude --resume ${sessionId} || claude`;
-                            } else {
-                                shellCommand = `cd "${projectPath}" && ${command}`;
-                            }
+                            shellCommand = command;
                         }
                     }
 
@@ -1803,7 +1798,7 @@ function handleShellConnection(ws) {
                         name: 'xterm-256color',
                         cols: termCols,
                         rows: termRows,
-                        cwd: os.homedir(),
+                        cwd: resolvedProjectPath,
                         env: {
                             ...process.env,
                             TERM: 'xterm-256color',
@@ -2537,7 +2532,20 @@ async function startServer() {
 
             // Start watching the projects folder for changes
             await setupProjectsWatcher();
+
+            // Start server-side plugin processes for enabled plugins
+            startEnabledPluginServers().catch(err => {
+                console.error('[Plugins] Error during startup:', err.message);
+            });
         });
+
+        // Clean up plugin processes on shutdown
+        const shutdownPlugins = async () => {
+            await stopAllPlugins();
+            process.exit(0);
+        };
+        process.on('SIGTERM', () => void shutdownPlugins());
+        process.on('SIGINT', () => void shutdownPlugins());
     } catch (error) {
         console.error('[ERROR] Failed to start server:', error);
         process.exit(1);

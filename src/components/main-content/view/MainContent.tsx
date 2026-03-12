@@ -3,6 +3,7 @@ import ChatInterface from '../../chat/view/ChatInterface';
 import FileTree from '../../file-tree/view/FileTree';
 import StandaloneShell from '../../standalone-shell/view/StandaloneShell';
 import GitPanel from '../../git-panel/view/GitPanel';
+import PluginTabContent from '../../plugins/view/PluginTabContent';
 import type { MainContentProps } from '../types/types';
 import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
@@ -145,7 +146,12 @@ function MainContent({
 
           {activeTab === 'shell' && (
             <div className="h-full w-full overflow-hidden">
-              <StandaloneShell project={selectedProject} session={selectedSession} showHeader={false} />
+              <StandaloneShell
+                project={selectedProject}
+                session={selectedSession}
+                showHeader={false}
+                isActive={activeTab === 'shell'}
+              />
             </div>
           )}
 
@@ -158,6 +164,16 @@ function MainContent({
           {shouldShowTasksTab && <TaskMasterPanel isVisible={activeTab === 'tasks'} />}
 
           <div className={`h-full overflow-hidden ${activeTab === 'preview' ? 'block' : 'hidden'}`} />
+
+          {activeTab.startsWith('plugin:') && (
+            <div className="h-full overflow-hidden">
+              <PluginTabContent
+                pluginName={activeTab.replace('plugin:', '')}
+                selectedProject={selectedProject}
+                selectedSession={selectedSession}
+              />
+            </div>
+          )}
         </div>
 
         <EditorSidebar

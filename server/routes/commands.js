@@ -3,8 +3,8 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import os from 'os';
-import matter from 'gray-matter';
 import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '../../shared/modelConstants.js';
+import { parseFrontmatter } from '../utils/frontmatter.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,7 +38,7 @@ async function scanCommandsDirectory(dir, baseDir, namespace) {
         // Parse markdown file for metadata
         try {
           const content = await fs.readFile(fullPath, 'utf8');
-          const { data: frontmatter, content: commandContent } = matter(content);
+          const { data: frontmatter, content: commandContent } = parseFrontmatter(content);
 
           // Calculate relative path from baseDir for command name
           const relativePath = path.relative(baseDir, fullPath);
@@ -475,7 +475,7 @@ router.post('/load', async (req, res) => {
 
     // Read and parse the command file
     const content = await fs.readFile(commandPath, 'utf8');
-    const { data: metadata, content: commandContent } = matter(content);
+    const { data: metadata, content: commandContent } = parseFrontmatter(content);
 
     res.json({
       path: commandPath,
@@ -560,7 +560,7 @@ router.post('/execute', async (req, res) => {
       }
     }
     const content = await fs.readFile(commandPath, 'utf8');
-    const { data: metadata, content: commandContent } = matter(content);
+    const { data: metadata, content: commandContent } = parseFrontmatter(content);
     // Basic argument replacement (will be enhanced in command parser utility)
     let processedContent = commandContent;
 

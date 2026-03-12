@@ -49,6 +49,15 @@ import jaCodeEditor from './locales/ja/codeEditor.json';
 // eslint-disable-next-line import-x/order
 import jaTasks from './locales/ja/tasks.json';
 
+import ruCommon from './locales/ru/common.json';
+import ruSettings from './locales/ru/settings.json';
+import ruAuth from './locales/ru/auth.json';
+import ruSidebar from './locales/ru/sidebar.json';
+import ruChat from './locales/ru/chat.json';
+import ruCodeEditor from './locales/ru/codeEditor.json';
+// eslint-disable-next-line import-x/order
+import ruTasks from './locales/ru/tasks.json';
+
 // Import supported languages configuration
 import { languages } from './languages.js';
 
@@ -106,6 +115,15 @@ i18n
         chat: jaChat,
         codeEditor: jaCodeEditor,
         tasks: jaTasks,
+      },
+      ru: {
+        common: ruCommon,
+        settings: ruSettings,
+        auth: ruAuth,
+        sidebar: ruSidebar,
+        chat: ruChat,
+        codeEditor: ruCodeEditor,
+        tasks: ruTasks,
       },
     },
 

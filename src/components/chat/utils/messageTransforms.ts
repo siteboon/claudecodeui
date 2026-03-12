@@ -34,6 +34,48 @@ const normalizeToolInput = (value: unknown): string => {
   }
 };
 
+const CURSOR_INTERNAL_USER_BLOCK_PATTERNS = [
+  /<user_info>[\s\S]*?<\/user_info>/gi,
+  /<agent_skills>[\s\S]*?<\/agent_skills>/gi,
+  /<available_skills>[\s\S]*?<\/available_skills>/gi,
+  /<environment_context>[\s\S]*?<\/environment_context>/gi,
+  /<environment_info>[\s\S]*?<\/environment_info>/gi,
+];
+
+const extractCursorUserQuery = (rawText: string): string => {
+  const userQueryMatches = [...rawText.matchAll(/<user_query>([\s\S]*?)<\/user_query>/gi)];
+  if (userQueryMatches.length === 0) {
+    return '';
+  }
+
+  return userQueryMatches
+    .map((match) => (match[1] || '').trim())
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+};
+
+const sanitizeCursorUserMessageText = (rawText: string): string => {
+  const decodedText = decodeHtmlEntities(rawText || '').trim();
+  if (!decodedText) {
+    return '';
+  }
+
+  // Cursor stores user-visible text inside <user_query> and prepends hidden context blocks
+  // (<user_info>, <agent_skills>, etc). We only render the actual query in chat history.
+  const extractedUserQuery = extractCursorUserQuery(decodedText);
+  if (extractedUserQuery) {
+    return extractedUserQuery;
+  }
+
+  let sanitizedText = decodedText;
+  CURSOR_INTERNAL_USER_BLOCK_PATTERNS.forEach((pattern) => {
+    sanitizedText = sanitizedText.replace(pattern, '');
+  });
+
+  return sanitizedText.trim();
+};
+
 const toAbsolutePath = (projectPath: string, filePath?: string) => {
   if (!filePath) {
     return filePath;
@@ -319,6 +361,10 @@ export const convertCursorSessionMessages = (blobs: CursorBlob[], projectPath: s
       }
     } catch (error) {
       console.log('Error parsing blob content:', error);
+    }
+
+    if (role === 'user') {
+      text = sanitizeCursorUserMessageText(text);
     }
 
     if (text && text.trim()) {

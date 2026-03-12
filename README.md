@@ -1,21 +1,23 @@
 <div align="center">
   <img src="public/logo.svg" alt="CloudCLI UI" width="64" height="64">
   <h1>Cloud CLI (aka Claude Code UI)</h1>
+  <p>A desktop and mobile UI for <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a>, <a href="https://docs.cursor.com/en/cli/overview">Cursor CLI</a>, <a href="https://developers.openai.com/codex">Codex</a>, and <a href="https://geminicli.com/">Gemini-CLI</a>.<br>Use it locally or remotely to view your active projects and sessions from everywhere.</p>
 </div>
 
-
-A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor CLI](https://docs.cursor.com/en/cli/overview), [Codex](https://developers.openai.com/codex), and [Gemini-CLI](https://geminicli.com/). You can use it locally or remotely to view your active projects and sessions and make changes to them from everywhere (mobile or desktop). This gives you a proper interface that works everywhere.
-
 <p align="center">
-  <a href="https://cloudcli.ai">CloudCLI Cloud</a> · <a href="https://discord.gg/buxwujPNRE">Discord</a> · <a href="https://github.com/siteboon/claudecodeui/issues">Bug Reports</a> · <a href="CONTRIBUTING.md">Contributing</a>
+  <a href="https://cloudcli.ai">CloudCLI Cloud</a> · <a href="https://cloudcli.ai/docs">Documentation</a> · <a href="https://discord.gg/buxwujPNRE">Discord</a> · <a href="https://github.com/siteboon/claudecodeui/issues">Bug Reports</a> · <a href="CONTRIBUTING.md">Contributing</a>
 </p>
 
 <p align="center">
-  <a href="https://discord.gg/buxwujPNRE"><img src="https://img.shields.io/badge/Discord-Join%20Community-5865F2?logo=discord&logoColor=white" alt="Join our Discord"></a>
+  <a href="https://cloudcli.ai"><img src="https://img.shields.io/badge/☁️_CloudCLI_Cloud-Try_Now-0066FF?style=for-the-badge" alt="CloudCLI Cloud"></a>
+  <a href="https://discord.gg/buxwujPNRE"><img src="https://img.shields.io/badge/Discord-Join%20Community-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Join our Discord"></a>
+  <br><br>
   <a href="https://trendshift.io/repositories/15586" target="_blank"><img src="https://trendshift.io/api/badge/repositories/15586" alt="siteboon%2Fclaudecodeui | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 </p>
 
-<div align="right"><i><b>English</b> · <a href="./README.ko.md">한국어</a> · <a href="./README.zh-CN.md">中文</a> · <a href="./README.ja.md">日本語</a></i></div>
+<div align="right"><i><b>English</b> · <a href="./README.ru.md">Русский</a> · <a href="./README.ko.md">한국어</a> · <a href="./README.zh-CN.md">中文</a> · <a href="./README.ja.md">日本語</a></i></div>
+
+---
 
 ## Screenshots
 
@@ -41,7 +43,7 @@ A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/cla
 <h3>CLI Selection</h3>
 <img src="public/screenshots/cli-selection.png" alt="CLI Selection" width="400">
 <br>
-<em>Select between Claude Code, Cursor CLI and Codex</em>
+<em>Select between Claude Code, Gemini, Cursor CLI and Codex</em>
 </td>
 </tr>
 </table>
@@ -58,8 +60,9 @@ A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/cla
 - **File Explorer** - Interactive file tree with syntax highlighting and live editing
 - **Git Explorer** - View, stage and commit your changes. You can also switch branches 
 - **Session Management** - Resume conversations, manage multiple sessions, and track history
+- **Plugin System** - Extend CloudCLI with custom plugins — add new tabs, backend services, and integrations. [Build your own →](https://github.com/cloudcli-ai/cloudcli-plugin-starter)
 - **TaskMaster AI Integration** *(Optional)* - Advanced project management with AI-powered task planning, PRD parsing, and workflow automation
-- **Model Compatibility** - Works with Claude Sonnet 4.5, Opus 4.5, GPT-5.2, and Gemini.
+- **Model Compatibility** - Works with Claude, GPT, and Gemini model families (see [`shared/modelConstants.js`](shared/modelConstants.js) for the full list of supported models)
 
 
 ## Quick Start
@@ -127,8 +130,8 @@ CloudCLI UI is the open source UI layer that powers CloudCLI Cloud. You can self
 To use Claude Code's full functionality, you'll need to manually enable tools:
 
 1. **Open Tools Settings** - Click the gear icon in the sidebar
-3. **Enable Selectively** - Turn on only the tools you need
-4. **Apply Settings** - Your preferences are saved locally
+2. **Enable Selectively** - Turn on only the tools you need
+3. **Apply Settings** - Your preferences are saved locally
 
 <div align="center">
 
@@ -138,6 +141,24 @@ To use Claude Code's full functionality, you'll need to manually enable tools:
 </div>
 
 **Recommended approach**: Start with basic tools enabled and add more as needed. You can always adjust these settings later.
+
+---
+
+## Plugins
+
+CloudCLI has a plugin system that lets you add custom tabs with their own frontend UI and optional Node.js backend. Install plugins from git repos directly in **Settings > Plugins**, or build your own.
+
+### Available Plugins
+
+| Plugin | Description |
+|---|---|
+| **[Project Stats](https://github.com/cloudcli-ai/cloudcli-plugin-starter)** | Shows file counts, lines of code, file-type breakdown, largest files, and recently modified files for your current project |
+
+### Build Your Own
+
+**[Plugin Starter Template →](https://github.com/cloudcli-ai/cloudcli-plugin-starter)** — fork this repo to create your own plugin. It includes a working example with frontend rendering, live context updates, and RPC communication to a backend server.
+
+**[Plugin Documentation →](https://cloudcli.ai/docs/plugin-overview)** — full guide to the plugin API, manifest format, security model, and more.
 
 ---
 ## FAQ
