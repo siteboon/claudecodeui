@@ -1,0 +1,272 @@
+{
+  "codeBlock": {
+    "copy": "Kopieren",
+    "copied": "Kopiert",
+    "copyCode": "Code kopieren"
+  },
+  "copyMessage": {
+    "copy": "Nachricht kopieren",
+    "copied": "Nachricht kopiert",
+    "selectFormat": "Kopierformat auswählen",
+    "copyAsMarkdown": "Als Markdown kopieren",
+    "copyAsText": "Als Text kopieren"
+  },
+  "messageTypes": {
+    "user": "Benutzer:in",
+    "error": "Fehler",
+    "tool": "Werkzeug",
+    "claude": "Claude",
+    "cursor": "Cursor",
+    "codex": "Codex",
+    "gemini": "Gemini"
+  },
+  "tools": {
+    "settings": "Werkzeugeinstellungen",
+    "error": "Werkzeugfehler",
+    "result": "Werkzeugergebnis",
+    "viewParams": "Eingabeparameter anzeigen",
+    "viewRawParams": "Rohe Parameter anzeigen",
+    "viewDiff": "Bearbeitungs-Diff anzeigen für",
+    "creatingFile": "Neue Datei wird erstellt:",
+    "updatingTodo": "Aufgabenliste wird aktualisiert",
+    "read": "Gelesen",
+    "readFile": "Datei lesen",
+    "updateTodo": "Aufgabenliste aktualisieren",
+    "readTodo": "Aufgabenliste lesen",
+    "searchResults": "Ergebnisse"
+  },
+  "search": {
+    "found": "{{count}} {{type}} gefunden",
+    "file": "Datei",
+    "files": "Dateien",
+    "pattern": "Muster:",
+    "in": "in:"
+  },
+  "fileOperations": {
+    "updated": "Datei erfolgreich aktualisiert",
+    "created": "Datei erfolgreich erstellt",
+    "written": "Datei erfolgreich geschrieben",
+    "diff": "Diff",
+    "newFile": "Neue Datei",
+    "viewContent": "Dateiinhalt anzeigen",
+    "viewFullOutput": "Vollständige Ausgabe anzeigen ({{count}} Zeichen)",
+    "contentDisplayed": "Der Dateiinhalt wird in der Diff-Ansicht oben angezeigt"
+  },
+  "interactive": {
+    "title": "Interaktive Eingabeaufforderung",
+    "waiting": "Warte auf deine Antwort in der CLI",
+    "instruction": "Bitte wähl eine Option in deinem Terminal, in dem Claude läuft.",
+    "selectedOption": "✓ Claude hat Option {{number}} ausgewählt",
+    "instructionDetail": "In der CLI würdest du diese Option interaktiv mit den Pfeiltasten oder durch Eingabe der Nummer auswählen."
+  },
+  "thinking": {
+    "title": "Denkt nach...",
+    "emoji": "💭 Denkt nach..."
+  },
+  "json": {
+    "response": "JSON-Antwort"
+  },
+  "permissions": {
+    "grant": "Berechtigung für {{tool}} erteilen",
+    "added": "Berechtigung hinzugefügt",
+    "addTo": "Fügt {{entry}} zu erlaubten Werkzeugen hinzu.",
+    "retry": "Berechtigung gespeichert. Wiederhole die Anfrage, um das Werkzeug zu verwenden.",
+    "error": "Berechtigungen konnten nicht aktualisiert werden. Bitte erneut versuchen.",
+    "openSettings": "Einstellungen öffnen"
+  },
+  "todo": {
+    "updated": "Aufgabenliste wurde erfolgreich aktualisiert",
+    "current": "Aktuelle Aufgabenliste"
+  },
+  "plan": {
+    "viewPlan": "📋 Implementierungsplan anzeigen",
+    "title": "Implementierungsplan"
+  },
+  "usageLimit": {
+    "resetAt": "Claude-Nutzungslimit erreicht. Dein Limit wird um **{{time}} {{timezone}}** zurückgesetzt - {{date}}"
+  },
+  "codex": {
+    "permissionMode": "Berechtigungsmodus",
+    "modes": {
+      "default": "Standardmodus",
+      "acceptEdits": "Bearbeitungen akzeptieren",
+      "bypassPermissions": "Berechtigungen umgehen",
+      "plan": "Planungsmodus"
+    },
+    "descriptions": {
+      "default": "Nur vertrauenswürdige Befehle (ls, cat, grep, git status usw.) werden automatisch ausgeführt. Andere Befehle werden übersprungen. Kann in den Arbeitsbereich schreiben.",
+      "acceptEdits": "Alle Befehle werden automatisch innerhalb des Arbeitsbereichs ausgeführt. Vollautomatischer Modus mit isolierter Ausführung.",
+      "bypassPermissions": "Vollständiger Systemzugriff ohne Einschränkungen. Alle Befehle werden automatisch mit vollem Festplatten- und Netzwerkzugriff ausgeführt. Mit Vorsicht verwenden.",
+      "plan": "Planungsmodus – keine Befehle werden ausgeführt"
+    },
+    "technicalDetails": "Technische Details"
+  },
+  "gemini": {
+    "permissionMode": "Gemini-Berechtigungsmodus",
+    "description": "Steuert, wie Gemini CLI Vorgangsgenehmigungen handhabt.",
+    "modes": {
+      "default": {
+        "title": "Standard (Genehmigung erforderlich)",
+        "description": "Gemini fordert vor der Ausführung von Befehlen, dem Schreiben von Dateien und dem Abrufen von Web-Ressourcen eine Genehmigung an."
+      },
+      "autoEdit": {
+        "title": "Auto-Bearbeitung (Dateigenehmigungen überspringen)",
+        "description": "Gemini genehmigt automatisch Dateibearbeitungen und Web-Abrufe, fragt aber weiterhin bei Shell-Befehlen nach."
+      },
+      "yolo": {
+        "title": "YOLO (Alle Berechtigungen umgehen)",
+        "description": "Gemini führt alle Vorgänge ohne Rückfrage aus. Vorsicht ist geboten."
+      }
+    }
+  },
+  "input": {
+    "placeholder": "/ für Befehle, @ für Dateien eingeben oder {{provider}} etwas fragen...",
+    "placeholderDefault": "Nachricht eingeben...",
+    "disabled": "Eingabe deaktiviert",
+    "attachFiles": "Dateien anhängen",
+    "attachImages": "Bilder anhängen",
+    "send": "Senden",
+    "stop": "Stoppen",
+    "hintText": {
+      "ctrlEnter": "Strg+Enter zum Senden • Shift+Enter für neue Zeile • Tab zum Moduswechsel • / für Slash-Befehle",
+      "enter": "Enter zum Senden • Shift+Enter für neue Zeile • Tab zum Moduswechsel • / für Slash-Befehle"
+    },
+    "clickToChangeMode": "Klicken, um den Berechtigungsmodus zu ändern (oder Tab in der Eingabe drücken)",
+    "showAllCommands": "Alle Befehle anzeigen",
+    "clearInput": "Eingabe leeren",
+    "scrollToBottom": "Nach unten scrollen"
+  },
+  "thinkingMode": {
+    "selector": {
+      "title": "Denkmodus",
+      "description": "Erweitertes Denken gibt Claude mehr Zeit, Alternativen zu evaluieren",
+      "active": "Aktiv",
+      "tip": "Höhere Denkmodi brauchen mehr Zeit, liefern aber eine gründlichere Analyse"
+    },
+    "modes": {
+      "none": {
+        "name": "Standard",
+        "description": "Reguläre Claude-Antwort",
+        "prefix": ""
+      },
+      "think": {
+        "name": "Denken",
+        "description": "Grundlegendes erweitertes Denken",
+        "prefix": "think"
+      },
+      "thinkHard": {
+        "name": "Intensiv denken",
+        "description": "Gründlichere Auswertung",
+        "prefix": "think hard"
+      },
+      "thinkHarder": {
+        "name": "Sehr intensiv denken",
+        "description": "Tiefgehende Analyse mit Alternativen",
+        "prefix": "think harder"
+      },
+      "ultrathink": {
+        "name": "Ultradenken",
+        "description": "Maximales Denkbudget",
+        "prefix": "ultrathink"
+      }
+    },
+    "buttonTitle": "Denkmodus: {{mode}}"
+  },
+  "providerSelection": {
+    "title": "KI-Assistent wählen",
+    "description": "Anbieter auswählen, um eine neue Unterhaltung zu starten",
+    "selectModel": "Modell auswählen",
+    "providerInfo": {
+      "anthropic": "von Anthropic",
+      "openai": "von OpenAI",
+      "cursorEditor": "KI-Code-Editor",
+      "google": "von Google"
+    },
+    "readyPrompt": {
+      "claude": "Bereit, Claude mit {{model}} zu verwenden. Gib unten deine Nachricht ein.",
+      "cursor": "Bereit, Cursor mit {{model}} zu verwenden. Gib unten deine Nachricht ein.",
+      "codex": "Bereit, Codex mit {{model}} zu verwenden. Gib unten deine Nachricht ein.",
+      "gemini": "Bereit, Gemini mit {{model}} zu verwenden. Gib unten deine Nachricht ein.",
+      "default": "Wähl oben einen Anbieter, um zu beginnen"
+    }
+  },
+  "session": {
+    "continue": {
+      "title": "Unterhaltung fortsetzen",
+      "description": "Stell Fragen zu deinem Code, fordere Änderungen an oder hol Hilfe bei Entwicklungsaufgaben"
+    },
+    "loading": {
+      "olderMessages": "Ältere Nachrichten werden geladen...",
+      "sessionMessages": "Sitzungsnachrichten werden geladen..."
+    },
+    "messages": {
+      "showingOf": "{{shown}} von {{total}} Nachrichten werden angezeigt",
+      "scrollToLoad": "Nach oben scrollen, um mehr zu laden",
+      "showingLast": "Letzte {{count}} Nachrichten werden angezeigt ({{total}} gesamt)",
+      "loadEarlier": "Frühere Nachrichten laden",
+      "loadAll": "Alle Nachrichten laden",
+      "loadingAll": "Alle Nachrichten werden geladen...",
+      "allLoaded": "Alle Nachrichten geladen",
+      "perfWarning": "Alle Nachrichten geladen – Scrollen kann langsamer sein. Klick auf 'Nach unten scrollen', um die Leistung wiederherzustellen."
+    }
+  },
+  "shell": {
+    "selectProject": {
+      "title": "Projekt auswählen",
+      "description": "Wähl ein Projekt, um ein interaktives Terminal in diesem Verzeichnis zu öffnen"
+    },
+    "status": {
+      "newSession": "Neue Sitzung",
+      "initializing": "Wird initialisiert...",
+      "restarting": "Wird neu gestartet..."
+    },
+    "actions": {
+      "disconnect": "Trennen",
+      "disconnectTitle": "Vom Terminal trennen",
+      "restart": "Neu starten",
+      "restartTitle": "Terminal neu starten (zuerst trennen)",
+      "connect": "Im Terminal fortfahren",
+      "connectTitle": "Mit Terminal verbinden"
+    },
+    "loading": "Terminal wird geladen...",
+    "connecting": "Verbindung zum Terminal wird hergestellt...",
+    "startSession": "Neue Claude-Sitzung starten",
+    "resumeSession": "Sitzung fortsetzen: {{displayName}}...",
+    "runCommand": "{{command}} in {{projectName}} ausführen",
+    "startCli": "Claude CLI wird in {{projectName}} gestartet",
+    "defaultCommand": "Befehl"
+  },
+  "claudeStatus": {
+    "actions": {
+      "thinking": "Denkt nach",
+      "processing": "Verarbeitet",
+      "analyzing": "Analysiert",
+      "working": "Arbeitet",
+      "computing": "Berechnet",
+      "reasoning": "Schlussfolgert"
+    },
+    "state": {
+      "live": "Live",
+      "paused": "Pausiert"
+    },
+    "elapsed": {
+      "seconds": "{{count}}s",
+      "minutesSeconds": "{{minutes}}m {{seconds}}s",
+      "label": "{{time}} vergangen",
+      "startingNow": "Startet jetzt"
+    },
+    "controls": {
+      "stopGeneration": "Generierung stoppen",
+      "pressEscToStop": "Jederzeit Esc drücken, um zu stoppen"
+    },
+    "providers": {
+      "assistant": "Assistent"
+    }
+  },
+  "projectSelection": {
+    "startChatWithProvider": "Wähl ein Projekt, um mit {{provider}} zu chatten"
+  },
+  "tasks": {
+    "nextTaskPrompt": "Nächste Aufgabe starten"
+  }
+}
