@@ -1,0 +1,142 @@
+{
+  "notConfigured": {
+    "title": "TaskMaster AI ist nicht konfiguriert",
+    "description": "TaskMaster hilft dabei, komplexe Projekte mit KI-Unterstützung in überschaubare Aufgaben aufzuteilen",
+    "whatIsTitle": "🎯 Was ist TaskMaster?",
+    "features": {
+      "aiPowered": "KI-gestütztes Aufgabenmanagement: Komplexe Projekte in handhabbare Unteraufgaben aufteilen",
+      "prdTemplates": "PRD-Vorlagen: Aufgaben aus Produktanforderungsdokumenten generieren",
+      "dependencyTracking": "Abhängigkeitsverfolgung: Aufgabenbeziehungen und Ausführungsreihenfolge verstehen",
+      "progressVisualization": "Fortschrittsvisualisierung: Kanban-Boards und detaillierte Aufgabenanalysen",
+      "cliIntegration": "CLI-Integration: Taskmaster-Befehle für erweiterte Workflows verwenden"
+    },
+    "initializeButton": "TaskMaster AI initialisieren"
+  },
+  "gettingStarted": {
+    "title": "Erste Schritte mit TaskMaster",
+    "subtitle": "TaskMaster ist initialisiert! Hier ist, was du als Nächstes tun kannst:",
+    "steps": {
+      "createPRD": {
+        "title": "Produktanforderungsdokument (PRD) erstellen",
+        "description": "Besprich deine Projektidee und erstelle ein PRD, das beschreibt, was du bauen möchtest.",
+        "addButton": "PRD hinzufügen",
+        "existingPRDs": "Vorhandene PRDs:"
+      },
+      "generateTasks": {
+        "title": "Aufgaben aus PRD generieren",
+        "description": "Sobald du ein PRD hast, bitte deinen KI-Assistenten, es zu analysieren. TaskMaster wird es automatisch in überschaubare Aufgaben mit Implementierungsdetails aufteilen."
+      },
+      "analyzeTasks": {
+        "title": "Aufgaben analysieren und erweitern",
+        "description": "Bitte deinen KI-Assistenten, die Aufgabenkomplexität zu analysieren und sie in detaillierte Unteraufgaben für eine einfachere Implementierung zu erweitern."
+      },
+      "startBuilding": {
+        "title": "Mit dem Bauen beginnen",
+        "description": "Bitte deinen KI-Assistenten, mit der Bearbeitung von Aufgaben zu beginnen, deren Status zu aktualisieren und neue Aufgaben hinzuzufügen, wenn dein Projekt sich weiterentwickelt."
+      }
+    },
+    "tip": "💡 Tipp: Beginne mit einem PRD, um das Beste aus TaskMasters KI-gestützter Aufgabengenerierung herauszuholen"
+  },
+  "setupModal": {
+    "title": "TaskMaster-Einrichtung",
+    "subtitle": "Interaktives CLI für {{projectName}}",
+    "willStart": "Die TaskMaster-Initialisierung startet automatisch",
+    "completed": "TaskMaster-Einrichtung abgeschlossen! Du kannst dieses Fenster jetzt schließen.",
+    "closeButton": "Schließen",
+    "closeContinueButton": "Schließen & Fortfahren"
+  },
+  "helpGuide": {
+    "title": "Erste Schritte mit TaskMaster",
+    "subtitle": "Dein Leitfaden für produktives Aufgabenmanagement",
+    "examples": {
+      "parsePRD": "💬 Beispiel:\n\"Ich habe gerade ein neues Projekt mit Claude Task Master initialisiert. Ich habe ein PRD unter .taskmaster/docs/prd.txt. Kannst du mir helfen, es zu analysieren und die ersten Aufgaben einzurichten?\"",
+      "expandTask": "💬 Beispiel:\n\"Aufgabe 5 scheint komplex. Kannst du sie in Unteraufgaben aufteilen?\"",
+      "addTask": "💬 Beispiel:\n\"Bitte füge eine neue Aufgabe hinzu, um Benutzerprofilbild-Uploads mit Cloudinary zu implementieren, und recherchiere den besten Ansatz.\""
+    },
+    "moreExamples": "Weitere Beispiele und Verwendungsmuster anzeigen →",
+    "proTips": {
+      "title": "💡 Profi-Tipps",
+      "search": "Verwende die Suchleiste, um bestimmte Aufgaben schnell zu finden",
+      "views": "Wechsle mit den Ansichts-Umschaltern zwischen Kanban-, Listen- und Rasteransicht",
+      "filters": "Verwende Filter, um dich auf bestimmte Aufgabenstatus oder Prioritäten zu konzentrieren",
+      "details": "Klicke auf eine Aufgabe, um detaillierte Informationen anzuzeigen und Unteraufgaben zu verwalten"
+    },
+    "learnMore": {
+      "title": "📚 Mehr erfahren",
+      "description": "TaskMaster AI ist ein fortschrittliches Aufgabenmanagementsystem für Entwickler:innen. Dokumentation, Beispiele und Möglichkeiten zur Mitarbeit am Projekt.",
+      "githubButton": "Auf GitHub ansehen"
+    }
+  },
+  "search": {
+    "placeholder": "Aufgaben suchen..."
+  },
+  "filters": {
+    "button": "Filter",
+    "status": "Status",
+    "priority": "Priorität",
+    "sortBy": "Sortieren nach",
+    "allStatuses": "Alle Status",
+    "allPriorities": "Alle Prioritäten",
+    "showing": "{{filtered}} von {{total}} Aufgaben werden angezeigt",
+    "clearFilters": "Filter zurücksetzen"
+  },
+  "sort": {
+    "id": "ID",
+    "status": "Status",
+    "priority": "Priorität",
+    "idAsc": "ID (aufsteigend)",
+    "idDesc": "ID (absteigend)",
+    "titleAsc": "Titel (A-Z)",
+    "titleDesc": "Titel (Z-A)",
+    "statusAsc": "Status (Ausstehend zuerst)",
+    "statusDesc": "Status (Erledigt zuerst)",
+    "priorityAsc": "Priorität (Hoch zuerst)",
+    "priorityDesc": "Priorität (Niedrig zuerst)"
+  },
+  "views": {
+    "kanban": "Kanban-Ansicht",
+    "list": "Listenansicht",
+    "grid": "Rasteransicht"
+  },
+  "kanban": {
+    "pending": "📋 Ausstehend",
+    "inProgress": "🚀 In Bearbeitung",
+    "done": "✅ Erledigt",
+    "blocked": "🚫 Blockiert",
+    "deferred": "⏳ Zurückgestellt",
+    "cancelled": "❌ Abgebrochen",
+    "noTasksYet": "Noch keine Aufgaben",
+    "tasksWillAppear": "Aufgaben werden hier angezeigt",
+    "moveTasksHere": "Aufgaben hierher verschieben, wenn sie gestartet werden",
+    "completedTasksHere": "Abgeschlossene Aufgaben erscheinen hier",
+    "statusTasksHere": "Aufgaben mit diesem Status werden hier angezeigt"
+  },
+  "buttons": {
+    "help": "TaskMaster-Leitfaden für Erste Schritte",
+    "prds": "PRDs",
+    "addPRD": "PRD hinzufügen",
+    "addTask": "Aufgabe hinzufügen",
+    "createNewPRD": "Neues PRD erstellen",
+    "prdsAvailable": "{{count}} PRD(s) verfügbar"
+  },
+  "prd": {
+    "modified": "Geändert: {{date}}"
+  },
+  "statuses": {
+    "pending": "Ausstehend",
+    "in-progress": "In Bearbeitung",
+    "done": "Erledigt",
+    "blocked": "Blockiert",
+    "deferred": "Zurückgestellt",
+    "cancelled": "Abgebrochen"
+  },
+  "priorities": {
+    "high": "Hoch",
+    "medium": "Mittel",
+    "low": "Niedrig"
+  },
+  "noMatchingTasks": {
+    "title": "Keine Aufgaben entsprechen deinen Filtern",
+    "description": "Versuche, deine Such- oder Filterkriterien anzupassen."
+  }
+}

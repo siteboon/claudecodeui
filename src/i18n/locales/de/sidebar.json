@@ -1,0 +1,128 @@
+{
+  "projects": {
+    "title": "Projekte",
+    "newProject": "Neues Projekt",
+    "deleteProject": "Projekt löschen",
+    "renameProject": "Projekt umbenennen",
+    "noProjects": "Keine Projekte gefunden",
+    "loadingProjects": "Projekte werden geladen...",
+    "searchPlaceholder": "Projekte durchsuchen...",
+    "projectNamePlaceholder": "Projektname",
+    "starred": "Favoriten",
+    "all": "Alle",
+    "untitledSession": "Unbenannte Sitzung",
+    "newSession": "Neue Sitzung",
+    "codexSession": "Codex-Sitzung",
+    "fetchingProjects": "Deine Claude-Projekte und -Sitzungen werden abgerufen",
+    "projects": "Projekte",
+    "noMatchingProjects": "Keine passenden Projekte",
+    "tryDifferentSearch": "Versuch, den Suchbegriff anzupassen",
+    "runClaudeCli": "Führ Claude CLI in einem Projektverzeichnis aus, um zu beginnen"
+  },
+  "app": {
+    "title": "Claude Code UI",
+    "subtitle": "KI-Programmierassistent-Oberfläche"
+  },
+  "sessions": {
+    "title": "Sitzungen",
+    "newSession": "Neue Sitzung",
+    "deleteSession": "Sitzung löschen",
+    "renameSession": "Sitzung umbenennen",
+    "noSessions": "Noch keine Sitzungen",
+    "loadingSessions": "Sitzungen werden geladen...",
+    "unnamed": "Unbenannt",
+    "loading": "Lädt...",
+    "showMore": "Weitere Sitzungen anzeigen"
+  },
+  "tooltips": {
+    "viewEnvironments": "Umgebungen anzeigen",
+    "hideSidebar": "Seitenleiste ausblenden",
+    "createProject": "Neues Projekt erstellen",
+    "refresh": "Projekte und Sitzungen aktualisieren (Strg+R)",
+    "renameProject": "Projekt umbenennen (F2)",
+    "deleteProject": "Leeres Projekt löschen (Entf)",
+    "addToFavorites": "Zu Favoriten hinzufügen",
+    "removeFromFavorites": "Aus Favoriten entfernen",
+    "editSessionName": "Sitzungsname manuell bearbeiten",
+    "deleteSession": "Diese Sitzung dauerhaft löschen",
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "clearSearch": "Suche leeren"
+  },
+  "navigation": {
+    "chat": "Chat",
+    "files": "Dateien",
+    "git": "Git",
+    "terminal": "Terminal",
+    "tasks": "Aufgaben"
+  },
+  "actions": {
+    "refresh": "Aktualisieren",
+    "settings": "Einstellungen",
+    "collapseAll": "Alle einklappen",
+    "expandAll": "Alle ausklappen",
+    "cancel": "Abbrechen",
+    "save": "Speichern",
+    "delete": "Löschen",
+    "rename": "Umbenennen",
+    "joinCommunity": "Community beitreten"
+  },
+  "status": {
+    "active": "Aktiv",
+    "inactive": "Inaktiv",
+    "thinking": "Denkt nach...",
+    "error": "Fehler",
+    "aborted": "Abgebrochen",
+    "unknown": "Unbekannt"
+  },
+  "time": {
+    "justNow": "Gerade eben",
+    "oneMinuteAgo": "vor 1 Min.",
+    "minutesAgo": "vor {{count}} Min.",
+    "oneHourAgo": "vor 1 Std.",
+    "hoursAgo": "vor {{count}} Std.",
+    "oneDayAgo": "vor 1 Tag",
+    "daysAgo": "vor {{count}} Tagen"
+  },
+  "messages": {
+    "deleteConfirm": "Möchtest du das wirklich löschen?",
+    "renameSuccess": "Erfolgreich umbenannt",
+    "deleteSuccess": "Erfolgreich gelöscht",
+    "errorOccurred": "Ein Fehler ist aufgetreten",
+    "deleteSessionConfirm": "Möchtest du diese Sitzung wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
+    "deleteProjectConfirm": "Möchtest du dieses leere Projekt wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
+    "enterProjectPath": "Bitte gib einen Projektpfad ein",
+    "deleteSessionFailed": "Sitzung konnte nicht gelöscht werden. Bitte erneut versuchen.",
+    "deleteSessionError": "Fehler beim Löschen der Sitzung. Bitte erneut versuchen.",
+    "renameSessionFailed": "Sitzung konnte nicht umbenannt werden. Bitte erneut versuchen.",
+    "renameSessionError": "Fehler beim Umbenennen der Sitzung. Bitte erneut versuchen.",
+    "deleteProjectFailed": "Projekt konnte nicht gelöscht werden. Bitte erneut versuchen.",
+    "deleteProjectError": "Fehler beim Löschen des Projekts. Bitte erneut versuchen.",
+    "createProjectFailed": "Projekt konnte nicht erstellt werden. Bitte erneut versuchen.",
+    "createProjectError": "Fehler beim Erstellen des Projekts. Bitte erneut versuchen."
+  },
+  "version": {
+    "updateAvailable": "Update verfügbar"
+  },
+  "search": {
+    "modeProjects": "Projekte",
+    "modeConversations": "Unterhaltungen",
+    "conversationsPlaceholder": "In Unterhaltungen suchen...",
+    "searching": "Sucht...",
+    "noResults": "Keine Ergebnisse gefunden",
+    "tryDifferentQuery": "Versuch eine andere Suchanfrage",
+    "matches_one": "{{count}} Treffer",
+    "matches_other": "{{count}} Treffer",
+    "projectsScanned_one": "{{count}} Projekt durchsucht",
+    "projectsScanned_other": "{{count}} Projekte durchsucht"
+  },
+  "deleteConfirmation": {
+    "deleteProject": "Projekt löschen",
+    "deleteSession": "Sitzung löschen",
+    "confirmDelete": "Möchtest du wirklich löschen",
+    "sessionCount_one": "Dieses Projekt enthält {{count}} Unterhaltung.",
+    "sessionCount_other": "Dieses Projekt enthält {{count}} Unterhaltungen.",
+    "allConversationsDeleted": "Alle Unterhaltungen werden dauerhaft gelöscht.",
+    "cannotUndo": "Diese Aktion kann nicht rückgängig gemacht werden."
+  }
+}
