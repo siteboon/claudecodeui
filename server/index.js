@@ -65,6 +65,7 @@ import userRoutes from './routes/user.js';
 import codexRoutes from './routes/codex.js';
 import geminiRoutes from './routes/gemini.js';
 import pluginsRoutes from './routes/plugins.js';
+import { createPollingRouter } from './polling.js';
 import { startEnabledPluginServers, stopAllPlugins } from './utils/plugin-process-manager.js';
 import { initializeDatabase, sessionNamesDb, applyCustomSessionNames } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
@@ -1959,6 +1960,31 @@ function handleShellConnection(ws) {
         console.error('[ERROR] Shell WebSocket error:', error);
     });
 }
+
+// HTTP Polling fallback (when WebSocket is blocked by corporate proxy)
+app.use('/api/poll', createPollingRouter({
+    authenticateToken,
+    queryClaudeSDK,
+    spawnCursor,
+    queryCodex,
+    spawnGemini,
+    abortClaudeSDKSession,
+    abortCursorSession,
+    abortCodexSession,
+    abortGeminiSession,
+    isClaudeSDKSessionActive,
+    isCursorSessionActive,
+    isCodexSessionActive,
+    isGeminiSessionActive,
+    getActiveClaudeSDKSessions,
+    getActiveCursorSessions,
+    getActiveCodexSessions,
+    getActiveGeminiSessions,
+    resolveToolApproval,
+    getPendingApprovalsForSession,
+    handleShellConnection,
+}));
+
 // Audio transcription endpoint
 app.post('/api/transcribe', authenticateToken, async (req, res) => {
     try {

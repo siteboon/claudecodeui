@@ -7,6 +7,10 @@ import 'katex/dist/katex.min.css'
 // Initialize i18n
 import './i18n/config.js'
 
+// Install HTTP polling fallback for environments where WebSocket is blocked
+import { installPollingFallback } from './lib/polling-transport.ts'
+installPollingFallback()
+
 // Clean up stale service workers on app load to prevent caching issues after builds
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then(registrations => {
