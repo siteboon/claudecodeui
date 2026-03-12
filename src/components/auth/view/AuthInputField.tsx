@@ -10,6 +10,12 @@ type AuthInputFieldProps = {
   autoComplete?: string;
 };
 
+/**
+ * A labelled input field for authentication forms.
+ * Renders a `<label>` / `<input>` pair and forwards browser autofill hints
+ * (`name`, `autoComplete`) so that password managers can identify and fill
+ * the field correctly.
+ */
 export default function AuthInputField({
   id,
   label,

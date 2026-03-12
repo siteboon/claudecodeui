@@ -16,6 +16,11 @@ const initialState: LoginFormState = {
   password: '',
 };
 
+/**
+ * Login form component.
+ * Handles credential input with browser autofill support (`autocomplete`
+ * attributes) so that password managers can offer to fill saved credentials.
+ */
 export default function LoginForm() {
   const { t } = useTranslation('auth');
   const { login } = useAuth();
