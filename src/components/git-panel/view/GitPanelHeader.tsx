@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Download, GitBranch, Plus, RefreshCw, RotateCcw, Upload } from 'lucide-react';
+import { AlertCircle, Check, ChevronDown, Download, GitBranch, Plus, RefreshCw, RotateCcw, Upload, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { ConfirmationRequest, GitRemoteStatus } from '../types/types';
 import NewBranchModal from './modals/NewBranchModal';
@@ -15,6 +15,7 @@ type GitPanelHeaderProps = {
   isPushing: boolean;
   isPublishing: boolean;
   isRevertingLocalCommit: boolean;
+  operationError: string | null;
   onRefresh: () => void;
   onRevertLocalCommit: () => Promise<void>;
   onSwitchBranch: (branchName: string) => Promise<boolean>;
@@ -23,6 +24,7 @@ type GitPanelHeaderProps = {
   onPull: () => Promise<void>;
   onPush: () => Promise<void>;
   onPublish: () => Promise<void>;
+  onClearError: () => void;
   onRequestConfirmation: (request: ConfirmationRequest) => void;
 };
 
@@ -38,6 +40,7 @@ export default function GitPanelHeader({
   isPushing,
   isPublishing,
   isRevertingLocalCommit,
+  operationError,
   onRefresh,
   onRevertLocalCommit,
   onSwitchBranch,
@@ -46,6 +49,7 @@ export default function GitPanelHeader({
   onPull,
   onPush,
   onPublish,
+  onClearError,
   onRequestConfirmation,
 }: GitPanelHeaderProps) {
   const [showBranchDropdown, setShowBranchDropdown] = useState(false);
@@ -63,10 +67,10 @@ export default function GitPanelHeader({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const aheadCount = remoteStatus?.ahead || 0;
-  const behindCount = remoteStatus?.behind || 0;
-  const remoteName = remoteStatus?.remoteName || 'remote';
-  const shouldShowFetchButton = aheadCount > 0 && behindCount > 0;
+  const aheadCount = remoteStatus?.ahead ?? 0;
+  const behindCount = remoteStatus?.behind ?? 0;
+  const remoteName = remoteStatus?.remoteName ?? 'remote';
+  const anyPending = isFetching || isPulling || isPushing || isPublishing;
 
   const requestPullConfirmation = () => {
     onRequestConfirmation({
@@ -103,57 +107,39 @@ export default function GitPanelHeader({
   const handleSwitchBranch = async (branchName: string) => {
     try {
       const success = await onSwitchBranch(branchName);
-      if (success) {
-        setShowBranchDropdown(false);
-      }
+      if (success) setShowBranchDropdown(false);
     } catch (error) {
       console.error('[GitPanelHeader] Failed to switch branch:', error);
     }
   };
 
-  const handleFetch = async () => {
-    try {
-      await onFetch();
-    } catch (error) {
-      console.error('[GitPanelHeader] Failed to fetch remote changes:', error);
-    }
-  };
-
   return (
     <>
+      {/* Branch row + action buttons */}
       <div className={`flex items-center justify-between border-b border-border/60 ${isMobile ? 'px-3 py-2' : 'px-4 py-3'}`}>
+        {/* Branch selector */}
         <div className="relative" ref={dropdownRef}>
           <button
-            onClick={() => setShowBranchDropdown((previous) => !previous)}
+            onClick={() => setShowBranchDropdown((prev) => !prev)}
             className={`flex items-center rounded-lg transition-colors hover:bg-accent ${isMobile ? 'space-x-1 px-2 py-1' : 'space-x-2 px-3 py-1.5'}`}
           >
             <GitBranch className={`text-muted-foreground ${isMobile ? 'h-3 w-3' : 'h-4 w-4'}`} />
             <span className="flex items-center gap-1">
               <span className={`font-medium ${isMobile ? 'text-xs' : 'text-sm'}`}>{currentBranch}</span>
               {remoteStatus?.hasRemote && (
-                <span className="flex items-center gap-1 text-xs">
+                <span className="flex items-center gap-0.5 text-xs">
                   {aheadCount > 0 && (
-                    <span
-                      className="text-green-600 dark:text-green-400"
-                      title={`${aheadCount} commit${aheadCount !== 1 ? 's' : ''} ahead`}
-                    >
-                      {'\u2191'}
-                      {aheadCount}
+                    <span className="text-green-600 dark:text-green-400" title={`${aheadCount} ahead`}>
+                      ↑{aheadCount}
                     </span>
                   )}
                   {behindCount > 0 && (
-                    <span
-                      className="text-primary"
-                      title={`${behindCount} commit${behindCount !== 1 ? 's' : ''} behind`}
-                    >
-                      {'\u2193'}
-                      {behindCount}
+                    <span className="text-primary" title={`${behindCount} behind`}>
+                      ↓{behindCount}
                     </span>
                   )}
                   {remoteStatus.isUpToDate && (
-                    <span className="text-muted-foreground" title="Up to date with remote">
-                      {'\u2713'}
-                    </span>
+                    <span className="text-muted-foreground" title="Up to date">✓</span>
                   )}
                 </span>
               )}
@@ -195,56 +181,54 @@ export default function GitPanelHeader({
           )}
         </div>
 
+        {/* Action buttons */}
         <div className={`flex items-center ${isMobile ? 'gap-1' : 'gap-2'}`}>
           {remoteStatus?.hasRemote && (
             <>
-              {!remoteStatus.hasUpstream && (
+              {!remoteStatus.hasUpstream ? (
                 <button
                   onClick={requestPublishConfirmation}
-                  disabled={isPublishing}
+                  disabled={anyPending}
                   className="flex items-center gap-1 rounded-lg bg-purple-600 px-2.5 py-1 text-sm text-white transition-colors hover:bg-purple-700 disabled:opacity-50"
-                  title={`Publish branch "${currentBranch}" to ${remoteName}`}
+                  title={`Publish "${currentBranch}" to ${remoteName}`}
                 >
                   <Upload className={`h-3 w-3 ${isPublishing ? 'animate-pulse' : ''}`} />
-                  <span>{isPublishing ? 'Publishing...' : 'Publish'}</span>
+                  {!isMobile && <span>{isPublishing ? 'Publishing…' : 'Publish'}</span>}
                 </button>
-              )}
-
-              {remoteStatus.hasUpstream && !remoteStatus.isUpToDate && (
+              ) : (
                 <>
+                  {/* Fetch — always visible when remote exists */}
+                  <button
+                    onClick={() => void onFetch()}
+                    disabled={anyPending}
+                    className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1 text-sm text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+                    title={`Fetch from ${remoteName}`}
+                  >
+                    <RefreshCw className={`h-3 w-3 ${isFetching ? 'animate-spin' : ''}`} />
+                    {!isMobile && <span>{isFetching ? 'Fetching…' : 'Fetch'}</span>}
+                  </button>
+
                   {behindCount > 0 && (
                     <button
                       onClick={requestPullConfirmation}
-                      disabled={isPulling}
+                      disabled={anyPending}
                       className="flex items-center gap-1 rounded-lg bg-green-600 px-2.5 py-1 text-sm text-white transition-colors hover:bg-green-700 disabled:opacity-50"
-                      title={`Pull ${behindCount} commit${behindCount !== 1 ? 's' : ''} from ${remoteName}`}
+                      title={`Pull ${behindCount} from ${remoteName}`}
                     >
                       <Download className={`h-3 w-3 ${isPulling ? 'animate-pulse' : ''}`} />
-                      <span>{isPulling ? 'Pulling...' : `Pull ${behindCount}`}</span>
+                      {!isMobile && <span>{isPulling ? 'Pulling…' : `Pull ${behindCount}`}</span>}
                     </button>
                   )}
 
                   {aheadCount > 0 && (
                     <button
                       onClick={requestPushConfirmation}
-                      disabled={isPushing}
+                      disabled={anyPending}
                       className="flex items-center gap-1 rounded-lg bg-orange-600 px-2.5 py-1 text-sm text-white transition-colors hover:bg-orange-700 disabled:opacity-50"
-                      title={`Push ${aheadCount} commit${aheadCount !== 1 ? 's' : ''} to ${remoteName}`}
+                      title={`Push ${aheadCount} to ${remoteName}`}
                     >
                       <Upload className={`h-3 w-3 ${isPushing ? 'animate-pulse' : ''}`} />
-                      <span>{isPushing ? 'Pushing...' : `Push ${aheadCount}`}</span>
-                    </button>
-                  )}
-
-                  {shouldShowFetchButton && (
-                    <button
-                      onClick={() => void handleFetch()}
-                      disabled={isFetching}
-                      className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1 text-sm text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
-                      title={`Fetch from ${remoteName}`}
-                    >
-                      <RefreshCw className={`h-3 w-3 ${isFetching ? 'animate-spin' : ''}`} />
-                      <span>{isFetching ? 'Fetching...' : 'Fetch'}</span>
+                      {!isMobile && <span>{isPushing ? 'Pushing…' : `Push ${aheadCount}`}</span>}
                     </button>
                   )}
                 </>
@@ -273,6 +257,21 @@ export default function GitPanelHeader({
           </button>
         </div>
       </div>
+
+      {/* Inline error banner */}
+      {operationError && (
+        <div className="flex items-start gap-2 border-b border-destructive/20 bg-destructive/10 px-4 py-2.5 text-sm text-destructive">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span className="flex-1 leading-snug">{operationError}</span>
+          <button
+            onClick={onClearError}
+            className="shrink-0 rounded p-0.5 hover:bg-destructive/20"
+            aria-label="Dismiss error"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       <NewBranchModal
         isOpen={showNewBranchModal}
