@@ -60,6 +60,22 @@ function createNotificationEvent({
   };
 }
 
+function normalizeErrorMessage(error) {
+  if (typeof error === 'string') {
+    return error;
+  }
+
+  if (error && typeof error.message === 'string') {
+    return error.message;
+  }
+
+  if (error == null) {
+    return 'Unknown error';
+  }
+
+  return String(error);
+}
+
 function buildPushBody(event) {
   const CODE_MAP = {
     'permission.required': event.meta?.toolName
@@ -131,7 +147,41 @@ function notifyUserIfEnabled({ userId, event }) {
   });
 }
 
+function notifyRunStopped({ userId, provider, sessionId = null, stopReason = 'completed' }) {
+  notifyUserIfEnabled({
+    userId,
+    event: createNotificationEvent({
+      provider,
+      sessionId,
+      kind: 'stop',
+      code: 'run.stopped',
+      meta: { stopReason },
+      severity: 'info',
+      dedupeKey: `${provider}:run:stop:${sessionId || 'none'}:${stopReason}`
+    })
+  });
+}
+
+function notifyRunFailed({ userId, provider, sessionId = null, error }) {
+  const errorMessage = normalizeErrorMessage(error);
+
+  notifyUserIfEnabled({
+    userId,
+    event: createNotificationEvent({
+      provider,
+      sessionId,
+      kind: 'error',
+      code: 'run.failed',
+      meta: { error: errorMessage },
+      severity: 'error',
+      dedupeKey: `${provider}:run:error:${sessionId || 'none'}:${errorMessage}`
+    })
+  });
+}
+
 export {
   createNotificationEvent,
-  notifyUserIfEnabled
+  notifyUserIfEnabled,
+  notifyRunStopped,
+  notifyRunFailed
 };

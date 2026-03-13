@@ -9,6 +9,7 @@ import os from 'os';
 import { getSessions, getSessionMessages } from './projects.js';
 import sessionManager from './sessionManager.js';
 import GeminiResponseHandler from './gemini-response-handler.js';
+import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
 
 let activeGeminiProcesses = new Map(); // Track active processes by session ID
 
@@ -172,6 +173,34 @@ async function spawnGemini(command, options = {}, ws) {
             stdio: ['pipe', 'pipe', 'pipe'],
             env: { ...process.env } // Inherit all environment variables
         });
+        let terminalNotificationSent = false;
+        let terminalFailureReason = null;
+
+        const notifyTerminalState = ({ code = null, error = null } = {}) => {
+            if (terminalNotificationSent) {
+                return;
+            }
+
+            terminalNotificationSent = true;
+
+            const finalSessionId = capturedSessionId || sessionId || processKey;
+            if (code === 0 && !error) {
+                notifyRunStopped({
+                    userId: ws?.userId || null,
+                    provider: 'gemini',
+                    sessionId: finalSessionId,
+                    stopReason: 'completed'
+                });
+                return;
+            }
+
+            notifyRunFailed({
+                userId: ws?.userId || null,
+                provider: 'gemini',
+                sessionId: finalSessionId,
+                error: error || terminalFailureReason || `Gemini CLI exited with code ${code}`
+            });
+        };
 
         // Attach temp file info to process for cleanup later
         geminiProcess.tempImagePaths = tempImagePaths;
@@ -196,10 +225,12 @@ async function spawnGemini(command, options = {}, ws) {
             if (timeout) clearTimeout(timeout);
             timeout = setTimeout(() => {
                 const socketSessionId = typeof ws.getSessionId === 'function' ? ws.getSessionId() : (capturedSessionId || sessionId || processKey);
+                terminalFailureReason = `Gemini CLI timeout - no response received for ${timeoutMs / 1000} seconds`;
                 ws.send({
                     type: 'gemini-error',
                     sessionId: socketSessionId,
-                    error: `Gemini CLI timeout - no response received for ${timeoutMs / 1000} seconds`
+                    error: terminalFailureReason,
+                    provider: 'gemini'
                 });
                 try {
                     geminiProcess.kill('SIGTERM');
@@ -340,7 +371,8 @@ async function spawnGemini(command, options = {}, ws) {
             ws.send({
                 type: 'gemini-error',
                 sessionId: socketSessionId,
-                error: errorMsg
+                error: errorMsg,
+                provider: 'gemini'
             });
         });
 
@@ -367,6 +399,7 @@ async function spawnGemini(command, options = {}, ws) {
                 type: 'claude-complete', // Use claude-complete for compatibility with UI
                 sessionId: finalSessionId,
                 exitCode: code,
+                provider: 'gemini',
                 isNewSession: !sessionId && !!command // Flag to indicate this was a new session
             });
 
@@ -381,8 +414,13 @@ async function spawnGemini(command, options = {}, ws) {
             }
 
             if (code === 0) {
+                notifyTerminalState({ code });
                 resolve();
             } else {
+                notifyTerminalState({
+                    code,
+                    error: code === null ? 'Gemini CLI process was terminated or timed out' : null
+                });
                 reject(new Error(code === null ? 'Gemini CLI process was terminated or timed out' : `Gemini CLI exited with code ${code}`));
             }
         });
@@ -397,8 +435,10 @@ async function spawnGemini(command, options = {}, ws) {
             ws.send({
                 type: 'gemini-error',
                 sessionId: errorSessionId,
-                error: error.message
+                error: error.message,
+                provider: 'gemini'
             });
+            notifyTerminalState({ error });
 
             reject(error);
         });

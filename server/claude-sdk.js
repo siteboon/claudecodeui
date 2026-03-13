@@ -18,7 +18,12 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
 import { CLAUDE_MODELS } from '../shared/modelConstants.js';
-import { createNotificationEvent, notifyUserIfEnabled } from './services/notification-orchestrator.js';
+import {
+  createNotificationEvent,
+  notifyRunFailed,
+  notifyRunStopped,
+  notifyUserIfEnabled
+} from './services/notification-orchestrator.js';
 
 const activeSessions = new Map();
 const pendingToolApprovals = new Map();
@@ -509,22 +514,6 @@ async function queryClaudeSDK(command, options = {}, ws) {
           }));
           return {};
         }]
-      }],
-      Stop: [{
-        matcher: '',
-        hooks: [async (input) => {
-          const stopReason = typeof input?.stop_reason === 'string' ? input.stop_reason : 'completed';
-          emitNotification(createNotificationEvent({
-            provider: 'claude',
-            sessionId: capturedSessionId || sessionId || null,
-            kind: 'stop',
-            code: 'run.stopped',
-            meta: { stopReason },
-            severity: 'info',
-            dedupeKey: `claude:hook:stop:${capturedSessionId || sessionId || 'none'}:${stopReason}`
-          }));
-          return {};
-        }]
       }]
     };
 
@@ -714,6 +703,12 @@ async function queryClaudeSDK(command, options = {}, ws) {
       exitCode: 0,
       isNewSession: !sessionId && !!command
     });
+    notifyRunStopped({
+      userId: ws?.userId || null,
+      provider: 'claude',
+      sessionId: capturedSessionId || sessionId || null,
+      stopReason: 'completed'
+    });
     console.log('claude-complete event sent');
 
   } catch (error) {
@@ -733,15 +728,12 @@ async function queryClaudeSDK(command, options = {}, ws) {
       error: error.message,
       sessionId: capturedSessionId || sessionId || null
     });
-    emitNotification(createNotificationEvent({
+    notifyRunFailed({
+      userId: ws?.userId || null,
       provider: 'claude',
       sessionId: capturedSessionId || sessionId || null,
-      kind: 'error',
-      code: 'run.failed',
-      meta: { error: error.message },
-      severity: 'error',
-      dedupeKey: `claude:error:${capturedSessionId || sessionId || 'none'}:${error.message}`
-    }));
+      error
+    });
 
     throw error;
   }
