@@ -1785,7 +1785,7 @@ function handleShellConnection(ws) {
 
                     // Use appropriate shell based on platform
                     const shell = os.platform() === 'win32' ? 'powershell.exe' : 'bash';
-                    const shellArgs = os.platform() === 'win32' ? ['-Command', shellCommand] : ['-c', shellCommand];
+                    const shellArgs = os.platform() === 'win32'  ? ['-ExecutionPolicy', 'RemoteSigned', '-Command', shellCommand] : ['-c', shellCommand];
 
                     // Use terminal dimensions from client if provided, otherwise use defaults
                     const termCols = data.cols || 80;
