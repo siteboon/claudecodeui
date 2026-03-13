@@ -87,21 +87,26 @@ class PollingWebSocket {
         headers: authHeaders(),
         body: '{}',
       });
+      if (this._closed) return;
       if (!resp.ok) throw new Error(`Connect failed: ${resp.status}`);
 
       const body = await resp.json();
+      if (this._closed) return;
       this._connectionId = body.connectionId;
       this.readyState = 1;
       console.log('[Poll Fallback] Chat connected:', this._connectionId);
       setTimeout(() => {
+        if (this._closed) return;
         this.onopen?.({});
         this._emit('open', {});
       }, 0);
       this._startPolling();
     } catch (e) {
+      if (this._closed) return;
       console.error('[Poll Fallback] Connect error:', e);
       this.readyState = 3;
       setTimeout(() => {
+        if (this._closed) return;
         this.onclose?.({ code: 1006 });
         this._emit('close', { code: 1006 });
       }, 0);
@@ -148,7 +153,15 @@ class PollingWebSocket {
   }
 
   send(data: string): void {
-    const payload = JSON.parse(data);
+    if (this._closed || this.readyState !== PollingWebSocket.OPEN) return;
+    if (!this._connectionId) return;
+    let payload: any;
+    try {
+      payload = JSON.parse(data);
+    } catch {
+      console.error('[Poll Fallback] Send: invalid JSON');
+      return;
+    }
     payload.connectionId = this._connectionId;
     fetch('/api/poll/send', {
       method: 'POST',
@@ -158,6 +171,7 @@ class PollingWebSocket {
   }
 
   close(): void {
+    if (this._closed) return;
     this._closed = true;
     this._polling = false;
     this.readyState = 3;
@@ -220,21 +234,26 @@ class PollingShellWebSocket {
         headers: authHeaders(),
         body: '{}',
       });
+      if (this._closed) return;
       if (!resp.ok) throw new Error(`Shell connect failed: ${resp.status}`);
 
       const body = await resp.json();
+      if (this._closed) return;
       this._connectionId = body.connectionId;
       this.readyState = 1;
       console.log('[Poll Fallback] Shell connected:', this._connectionId);
       setTimeout(() => {
+        if (this._closed) return;
         this.onopen?.({});
         this._emit('open', {});
       }, 0);
       this._startPolling();
     } catch (e) {
+      if (this._closed) return;
       console.error('[Poll Fallback] Shell connect error:', e);
       this.readyState = 3;
       setTimeout(() => {
+        if (this._closed) return;
         this.onclose?.({ code: 1006 });
         this._emit('close', { code: 1006 });
       }, 0);
@@ -280,7 +299,15 @@ class PollingShellWebSocket {
   }
 
   send(data: string): void {
-    const payload = JSON.parse(data);
+    if (this._closed || this.readyState !== PollingShellWebSocket.OPEN) return;
+    if (!this._connectionId) return;
+    let payload: any;
+    try {
+      payload = JSON.parse(data);
+    } catch {
+      console.error('[Poll Fallback] Shell send: invalid JSON');
+      return;
+    }
     payload.connectionId = this._connectionId;
     fetch('/api/poll/shell/send', {
       method: 'POST',
@@ -290,6 +317,7 @@ class PollingShellWebSocket {
   }
 
   close(): void {
+    if (this._closed) return;
     this._closed = true;
     this._polling = false;
     this.readyState = 3;
