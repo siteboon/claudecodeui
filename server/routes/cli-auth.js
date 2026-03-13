@@ -96,10 +96,27 @@ router.get('/gemini/status', async (req, res) => {
   }
 });
 
+async function loadClaudeSettingsEnv() {
+  try {
+    const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+    const content = await fs.readFile(settingsPath, 'utf8');
+    const settings = JSON.parse(content);
+
+    if (settings?.env && typeof settings.env === 'object') {
+      return settings.env;
+    }
+  } catch (error) {
+    // Ignore missing or malformed settings and fall back to other auth sources.
+  }
+
+  return {};
+}
+
 /**
  * Checks Claude authentication credentials using two methods with priority order:
  *
  * Priority 1: ANTHROPIC_API_KEY environment variable
+ * Priority 1b: ~/.claude/settings.json env values
  * Priority 2: ~/.claude/.credentials.json OAuth tokens
  *
  * The Claude Agent SDK prioritizes environment variables over authenticated subscriptions.
@@ -124,6 +141,27 @@ async function checkClaudeCredentials() {
     return {
       authenticated: true,
       email: 'API Key Auth',
+      method: 'api_key'
+    };
+  }
+
+  // Priority 1b: Check ~/.claude/settings.json env values.
+  // Claude Code can read proxy/auth values from settings.json even when the
+  // CloudCLI server process itself was not started with those env vars exported.
+  const settingsEnv = await loadClaudeSettingsEnv();
+
+  if (typeof settingsEnv.ANTHROPIC_API_KEY === 'string' && settingsEnv.ANTHROPIC_API_KEY.trim()) {
+    return {
+      authenticated: true,
+      email: 'API Key Auth',
+      method: 'api_key'
+    };
+  }
+
+  if (typeof settingsEnv.ANTHROPIC_AUTH_TOKEN === 'string' && settingsEnv.ANTHROPIC_AUTH_TOKEN.trim()) {
+    return {
+      authenticated: true,
+      email: 'Configured via settings.json',
       method: 'api_key'
     };
   }
