@@ -105,7 +105,28 @@
     "git": "Git",
     "apiTokens": "API & Tokens",
     "tasks": "Tasks",
+    "notifications": "Notifications",
     "plugins": "Plugins"
+
+  },
+  "notifications": {
+    "title": "Notifications",
+    "description": "Control which notification events you receive.",
+    "webPush": {
+      "title": "Web Push Notifications",
+      "enable": "Enable Push Notifications",
+      "disable": "Disable Push Notifications",
+      "enabled": "Push notifications are enabled",
+      "loading": "Updating...",
+      "unsupported": "Push notifications are not supported in this browser.",
+      "denied": "Push notifications are blocked. Please allow them in your browser settings."
+    },
+    "events": {
+      "title": "Event Types",
+      "actionRequired": "Action required",
+      "stop": "Run stopped",
+      "error": "Run failed"
+    }
   },
   "appearanceSettings": {
     "darkMode": {
