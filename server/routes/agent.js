@@ -875,8 +875,9 @@ router.post('/', validateExternalApiKey, async (req, res) => {
     // Determine the final project path
     if (githubUrl) {
       // Clone repository (to projectPath if provided, otherwise generate path)
+      // TODO: use credinitalsDB when refactoring
       const tokenToUse = githubToken || githubTokensDb.getActiveGithubToken(req.user.id);
-
+      
       let targetPath;
       if (projectPath) {
         targetPath = projectPath;
@@ -995,6 +996,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         console.log('🔄 Starting GitHub branch/PR creation workflow...');
 
         // Get GitHub token
+        // TODO: use credinitalsDB when refactoring
         const tokenToUse = githubToken || githubTokensDb.getActiveGithubToken(req.user.id);
 
         if (!tokenToUse) {

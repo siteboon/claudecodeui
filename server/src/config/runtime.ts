@@ -1,7 +1,7 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-import type { RuntimePaths } from '../shared/types/app.js';
+import type { RuntimePaths } from '@/shared/types/app.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

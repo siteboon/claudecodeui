@@ -1,4 +1,8 @@
-import type { ApiErrorShape, ApiMeta, ApiSuccessShape } from '../types/http.js';
+import type {
+  ApiErrorShape,
+  ApiMeta,
+  ApiSuccessShape,
+} from '@/shared/types/http.js';
 
 export function createApiMeta(requestId?: string, startedAt?: string): ApiMeta {
   return {

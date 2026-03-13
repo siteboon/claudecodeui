@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import type { NextFunction, Request, Response } from 'express';
 
-import type { RequestContext } from '../types/http.js';
+import type { RequestContext } from '@/shared/types/http.js';
 
 type RequestWithContext = Request & {
   context?: RequestContext;

@@ -1,4 +1,4 @@
-import { createServerApplication } from './app.js';
+import { createServerApplication } from '@/app.js';
 
 async function startServerApplication(): Promise<void> {
   const application = createServerApplication();

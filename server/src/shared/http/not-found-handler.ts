@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 
-import { createApiErrorResponse, createApiMeta } from './api-response.js';
-import { getRequestContext } from './request-context.js';
+import { createApiErrorResponse, createApiMeta } from '@/shared/http/api-response.js';
+import { getRequestContext } from '@/shared/http/request-context.js';
 
 export function notFoundHandler(req: Request, res: Response): void {
   const context = getRequestContext(req);

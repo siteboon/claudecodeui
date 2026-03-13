@@ -1,9 +1,9 @@
 import type { NextFunction, Request, Response } from 'express';
 
-import { AppError } from '../utils/app-error.js';
-import { logger } from '../utils/logger.js';
-import { createApiErrorResponse, createApiMeta } from './api-response.js';
-import { getRequestContext } from './request-context.js';
+import { createApiErrorResponse, createApiMeta } from '@/shared/http/api-response.js';
+import { getRequestContext } from '@/shared/http/request-context.js';
+import { AppError } from '@/shared/utils/app-error.js';
+import { logger } from '@/shared/utils/logger.js';
 
 export function errorHandler(
   error: Error,
