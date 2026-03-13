@@ -7,6 +7,7 @@ import { useChatProviderState } from '../hooks/useChatProviderState';
 import { useChatSessionState } from '../hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '../hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '../hooks/useChatComposerState';
+import { TtsProvider, useTts } from '../../../contexts/TtsContext';
 import ChatMessagesPane from './subcomponents/ChatMessagesPane';
 import ChatComposer from './subcomponents/ChatComposer';
 
@@ -291,7 +292,7 @@ function ChatInterface({
   }
 
   return (
-    <>
+    <TtsProvider chatMessages={chatMessages}>
       <div className="flex h-full flex-col">
         <ChatMessagesPane
           scrollContainerRef={scrollContainerRef}
@@ -411,7 +412,7 @@ function ChatInterface({
       </div>
 
       <QuickSettingsPanel />
-    </>
+    </TtsProvider>
   );
 }
 

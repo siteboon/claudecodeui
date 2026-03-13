@@ -72,6 +72,27 @@
       "draggingStatus": "Dragging...",
       "toggleAndMove": "Click to toggle, drag to move"
     },
+    "tts": {
+      "sectionTitle": "Text-to-Speech",
+      "enabled": "TTS Enabled",
+      "language": "Language",
+      "allLanguages": "All Languages",
+      "voice": "Voice ({{count}} available)",
+      "voiceAuto": "Auto (first match)",
+      "speed": "Speed",
+      "pitch": "Pitch",
+      "pitchLow": "Low",
+      "pitchNormal": "Normal",
+      "pitchHigh": "High",
+      "testVoice": "Test Voice",
+      "stop": "Stop",
+      "network": "Network",
+      "button": {
+        "stopSpeaking": "Stop speaking",
+        "ttsOn": "Text-to-Speech enabled (click to disable)",
+        "ttsOff": "Text-to-Speech disabled (click to enable)"
+      }
+    },
     "whisper": {
       "modes": {
         "default": "Default Mode",
