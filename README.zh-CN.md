@@ -70,7 +70,7 @@
 npx @siteboon/claude-code-ui
 ```
 
-服务器将启动并可通过 `http://localhost:3001`(或您配置的 PORT)访问。
+服务器将启动并可通过 `http://localhost:3001`(或您配置的 SERVER_PORT)访问。
 
 **重启**: 停止服务器后只需再次运行相同的 `npx` 命令
 
