@@ -75,7 +75,9 @@ class PollingWebSocket {
   }
 
   private _emit(event: string, data: any): void {
-    (this._listeners[event] || []).forEach((fn) => fn(data));
+    (this._listeners[event] || []).forEach((fn) => {
+      fn(data);
+    });
   }
 
   private async _connect(): Promise<void> {
@@ -113,8 +115,9 @@ class PollingWebSocket {
         const resp = await fetch(
           '/api/poll/messages?' +
             new URLSearchParams({ connectionId: this._connectionId, _t: String(Date.now()) }),
-          { cache: 'no-store', headers: { Authorization: `Bearer ${getToken()}` } },
+          { cache: 'no-store', headers: authHeaders(false) },
         );
+        if (this._closed) return;
         if (!resp.ok) {
           if (resp.status === 401 || isTerminalResponse(resp)) {
             this.close();
@@ -124,8 +127,10 @@ class PollingWebSocket {
           continue;
         }
         const messages = await resp.json();
+        if (this._closed) return;
         if (messages?.length > 0) {
           for (const msg of messages) {
+            if (this._closed) return;
             const event = { data: JSON.stringify(msg) };
             this.onmessage?.(event);
             this._emit('message', event);
@@ -203,7 +208,9 @@ class PollingShellWebSocket {
   }
 
   private _emit(event: string, data: any): void {
-    (this._listeners[event] || []).forEach((fn) => fn(data));
+    (this._listeners[event] || []).forEach((fn) => {
+      fn(data);
+    });
   }
 
   private async _connect(): Promise<void> {
@@ -241,8 +248,9 @@ class PollingShellWebSocket {
         const resp = await fetch(
           '/api/poll/shell/output?' +
             new URLSearchParams({ connectionId: this._connectionId, _t: String(Date.now()) }),
-          { cache: 'no-store', headers: { Authorization: `Bearer ${getToken()}` } },
+          { cache: 'no-store', headers: authHeaders(false) },
         );
+        if (this._closed) return;
         if (!resp.ok) {
           if (resp.status === 401 || isTerminalResponse(resp)) {
             this.close();
@@ -252,8 +260,10 @@ class PollingShellWebSocket {
           continue;
         }
         const messages = await resp.json();
+        if (this._closed) return;
         if (messages?.length > 0) {
           for (const msg of messages) {
+            if (this._closed) return;
             const data = typeof msg === 'string' ? msg : JSON.stringify(msg);
             const event = { data };
             this.onmessage?.(event);
