@@ -1,10 +1,18 @@
 import webPush from 'web-push';
-import { notificationPreferencesDb, pushSubscriptionsDb } from '../database/db.js';
+import { notificationPreferencesDb, pushSubscriptionsDb, sessionNamesDb } from '../database/db.js';
 
 const KIND_TO_PREF_KEY = {
   action_required: 'actionRequired',
   stop: 'stop',
   error: 'error'
+};
+
+const PROVIDER_LABELS = {
+  claude: 'Claude',
+  cursor: 'Cursor',
+  codex: 'Codex',
+  gemini: 'Gemini',
+  system: 'System'
 };
 
 const recentEventKeys = new Map();
@@ -76,6 +84,32 @@ function normalizeErrorMessage(error) {
   return String(error);
 }
 
+function normalizeSessionName(sessionName) {
+  if (typeof sessionName !== 'string') {
+    return null;
+  }
+
+  const normalized = sessionName.replace(/\s+/g, ' ').trim();
+  if (!normalized) {
+    return null;
+  }
+
+  return normalized.length > 80 ? `${normalized.slice(0, 77)}...` : normalized;
+}
+
+function resolveSessionName(event) {
+  const explicitSessionName = normalizeSessionName(event.meta?.sessionName);
+  if (explicitSessionName) {
+    return explicitSessionName;
+  }
+
+  if (!event.sessionId || !event.provider) {
+    return null;
+  }
+
+  return normalizeSessionName(sessionNamesDb.getName(event.sessionId, event.provider));
+}
+
 function buildPushBody(event) {
   const CODE_MAP = {
     'permission.required': event.meta?.toolName
@@ -86,13 +120,19 @@ function buildPushBody(event) {
     'agent.notification': event.meta?.message ? String(event.meta.message) : 'You have a new notification',
     'push.enabled': 'Push notifications are now enabled!'
   };
+  const providerLabel = PROVIDER_LABELS[event.provider] || 'Assistant';
+  const sessionName = resolveSessionName(event);
+  const message = CODE_MAP[event.code] || 'You have a new notification';
 
   return {
-    title: 'Claude Code UI',
-    body: CODE_MAP[event.code] || 'You have a new notification',
+    title: sessionName || 'Claude Code UI',
+    body: `${providerLabel}: ${message}`,
     data: {
       sessionId: event.sessionId || null,
-      code: event.code
+      code: event.code,
+      provider: event.provider || null,
+      sessionName,
+      tag: `${event.provider || 'assistant'}:${event.sessionId || 'none'}:${event.code}`
     }
   };
 }
@@ -147,7 +187,7 @@ function notifyUserIfEnabled({ userId, event }) {
   });
 }
 
-function notifyRunStopped({ userId, provider, sessionId = null, stopReason = 'completed' }) {
+function notifyRunStopped({ userId, provider, sessionId = null, stopReason = 'completed', sessionName = null }) {
   notifyUserIfEnabled({
     userId,
     event: createNotificationEvent({
@@ -155,14 +195,14 @@ function notifyRunStopped({ userId, provider, sessionId = null, stopReason = 'co
       sessionId,
       kind: 'stop',
       code: 'run.stopped',
-      meta: { stopReason },
+      meta: { stopReason, sessionName },
       severity: 'info',
       dedupeKey: `${provider}:run:stop:${sessionId || 'none'}:${stopReason}`
     })
   });
 }
 
-function notifyRunFailed({ userId, provider, sessionId = null, error }) {
+function notifyRunFailed({ userId, provider, sessionId = null, error, sessionName = null }) {
   const errorMessage = normalizeErrorMessage(error);
 
   notifyUserIfEnabled({
@@ -172,7 +212,7 @@ function notifyRunFailed({ userId, provider, sessionId = null, error }) {
       sessionId,
       kind: 'error',
       code: 'run.failed',
-      meta: { error: errorMessage },
+      meta: { error: errorMessage, sessionName },
       severity: 'error',
       dedupeKey: `${provider}:run:error:${sessionId || 'none'}:${errorMessage}`
     })

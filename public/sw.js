@@ -68,7 +68,7 @@ self.addEventListener('push', event => {
     icon: '/logo-256.png',
     badge: '/logo-128.png',
     data: payload.data || {},
-    tag: payload.data?.code || 'default',
+    tag: payload.data?.tag || `${payload.data?.sessionId || 'global'}:${payload.data?.code || 'default'}`,
     renotify: true
   };
 
@@ -82,16 +82,20 @@ self.addEventListener('notificationclick', event => {
   event.notification.close();
 
   const sessionId = event.notification.data?.sessionId;
+  const provider = event.notification.data?.provider || null;
   const urlPath = sessionId ? `/session/${sessionId}` : '/';
 
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async clientList => {
       for (const client of clientList) {
         if (client.url.includes(self.location.origin)) {
-          client.focus();
-          if (sessionId) {
-            client.navigate(self.location.origin + urlPath);
-          }
+          await client.focus();
+          client.postMessage({
+            type: 'notification:navigate',
+            sessionId: sessionId || null,
+            provider,
+            urlPath
+          });
           return;
         }
       }

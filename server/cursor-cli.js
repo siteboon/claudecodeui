@@ -24,7 +24,7 @@ function isWorkspaceTrustPrompt(text = '') {
 
 async function spawnCursor(command, options = {}, ws) {
   return new Promise(async (resolve, reject) => {
-    const { sessionId, projectPath, cwd, resume, toolsSettings, skipPermissions, model } = options;
+    const { sessionId, projectPath, cwd, resume, toolsSettings, skipPermissions, model, sessionSummary } = options;
     let capturedSessionId = sessionId; // Track session ID throughout the process
     let sessionCreatedSent = false; // Track if we've already sent session-created event
     let hasRetriedWithTrust = false;
@@ -97,6 +97,7 @@ async function spawnCursor(command, options = {}, ws) {
             userId: ws?.userId || null,
             provider: 'cursor',
             sessionId: finalSessionId,
+            sessionName: sessionSummary,
             stopReason: 'completed'
           });
           return;
@@ -106,6 +107,7 @@ async function spawnCursor(command, options = {}, ws) {
           userId: ws?.userId || null,
           provider: 'cursor',
           sessionId: finalSessionId,
+          sessionName: sessionSummary,
           error: error || `Cursor CLI exited with code ${code}`
         });
       };

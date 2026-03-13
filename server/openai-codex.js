@@ -192,6 +192,7 @@ function mapPermissionModeToCodexOptions(permissionMode) {
 export async function queryCodex(command, options = {}, ws) {
   const {
     sessionId,
+    sessionSummary,
     cwd,
     projectPath,
     model,
@@ -276,6 +277,7 @@ export async function queryCodex(command, options = {}, ws) {
           userId: ws?.userId || null,
           provider: 'codex',
           sessionId: currentSessionId,
+          sessionName: sessionSummary,
           error: terminalFailure
         });
       }
@@ -306,6 +308,7 @@ export async function queryCodex(command, options = {}, ws) {
         userId: ws?.userId || null,
         provider: 'codex',
         sessionId: currentSessionId,
+        sessionName: sessionSummary,
         stopReason: 'completed'
       });
     }
@@ -330,6 +333,7 @@ export async function queryCodex(command, options = {}, ws) {
           userId: ws?.userId || null,
           provider: 'codex',
           sessionId: currentSessionId,
+          sessionName: sessionSummary,
           error
         });
       }

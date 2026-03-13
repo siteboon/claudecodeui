@@ -14,7 +14,7 @@ import { notifyRunFailed, notifyRunStopped } from './services/notification-orche
 let activeGeminiProcesses = new Map(); // Track active processes by session ID
 
 async function spawnGemini(command, options = {}, ws) {
-    const { sessionId, projectPath, cwd, resume, toolsSettings, permissionMode, images } = options;
+    const { sessionId, projectPath, cwd, resume, toolsSettings, permissionMode, images, sessionSummary } = options;
     let capturedSessionId = sessionId; // Track session ID throughout the process
     let sessionCreatedSent = false; // Track if we've already sent session-created event
     let assistantBlocks = []; // Accumulate the full response blocks including tools
@@ -189,6 +189,7 @@ async function spawnGemini(command, options = {}, ws) {
                     userId: ws?.userId || null,
                     provider: 'gemini',
                     sessionId: finalSessionId,
+                    sessionName: sessionSummary,
                     stopReason: 'completed'
                 });
                 return;
@@ -198,6 +199,7 @@ async function spawnGemini(command, options = {}, ws) {
                 userId: ws?.userId || null,
                 provider: 'gemini',
                 sessionId: finalSessionId,
+                sessionName: sessionSummary,
                 error: error || terminalFailureReason || `Gemini CLI exited with code ${code}`
             });
         };

@@ -467,7 +467,7 @@ async function loadMcpConfig(cwd) {
  * @returns {Promise<void>}
  */
 async function queryClaudeSDK(command, options = {}, ws) {
-  const { sessionId } = options;
+  const { sessionId, sessionSummary } = options;
   let capturedSessionId = sessionId;
   let sessionCreatedSent = false;
   let tempImagePaths = [];
@@ -507,7 +507,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
             sessionId: capturedSessionId || sessionId || null,
             kind: 'action_required',
             code: 'agent.notification',
-            meta: { message },
+            meta: { message, sessionName: sessionSummary },
             severity: 'warning',
             requiresUserAction: true,
             dedupeKey: `claude:hook:notification:${capturedSessionId || sessionId || 'none'}:${message}`
@@ -553,7 +553,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
         sessionId: capturedSessionId || sessionId || null,
         kind: 'action_required',
         code: 'permission.required',
-        meta: { toolName },
+        meta: { toolName, sessionName: sessionSummary },
         severity: 'warning',
         requiresUserAction: true,
         dedupeKey: `claude:permission:${capturedSessionId || sessionId || 'none'}:${requestId}`
@@ -707,6 +707,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
       userId: ws?.userId || null,
       provider: 'claude',
       sessionId: capturedSessionId || sessionId || null,
+      sessionName: sessionSummary,
       stopReason: 'completed'
     });
     console.log('claude-complete event sent');
@@ -732,6 +733,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
       userId: ws?.userId || null,
       provider: 'claude',
       sessionId: capturedSessionId || sessionId || null,
+      sessionName: sessionSummary,
       error
     });
 
