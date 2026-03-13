@@ -1,6 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react';
 
-export type SettingsMainTab = 'agents' | 'appearance' | 'git' | 'api' | 'tasks' | 'plugins';
+export type SettingsMainTab = 'agents' | 'appearance' | 'git' | 'api' | 'tasks' | 'notifications' | 'plugins';
 export type AgentProvider = 'claude' | 'cursor' | 'codex' | 'gemini';
 export type AgentCategory = 'account' | 'permissions' | 'mcp';
 export type ProjectSortOrder = 'name' | 'date';
@@ -104,6 +104,18 @@ export type ClaudePermissionsState = {
   allowedTools: string[];
   disallowedTools: string[];
   skipPermissions: boolean;
+};
+
+export type NotificationPreferencesState = {
+  channels: {
+    inApp: boolean;
+    webPush: boolean;
+  };
+  events: {
+    actionRequired: boolean;
+    stop: boolean;
+    error: boolean;
+  };
 };
 
 export type CursorPermissionsState = {

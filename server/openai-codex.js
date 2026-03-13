@@ -14,6 +14,7 @@
  */
 
 import { Codex } from '@openai/codex-sdk';
+import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
 
 // Track active sessions
 const activeCodexSessions = new Map();
@@ -191,6 +192,7 @@ function mapPermissionModeToCodexOptions(permissionMode) {
 export async function queryCodex(command, options = {}, ws) {
   const {
     sessionId,
+    sessionSummary,
     cwd,
     projectPath,
     model,
@@ -203,6 +205,7 @@ export async function queryCodex(command, options = {}, ws) {
   let codex;
   let thread;
   let currentSessionId = sessionId;
+  let terminalFailure = null;
   const abortController = new AbortController();
 
   try {
@@ -268,6 +271,17 @@ export async function queryCodex(command, options = {}, ws) {
         sessionId: currentSessionId
       });
 
+      if (event.type === 'turn.failed' && !terminalFailure) {
+        terminalFailure = event.error || new Error('Turn failed');
+        notifyRunFailed({
+          userId: ws?.userId || null,
+          provider: 'codex',
+          sessionId: currentSessionId,
+          sessionName: sessionSummary,
+          error: terminalFailure
+        });
+      }
+
       // Extract and send token usage if available (normalized to match Claude format)
       if (event.type === 'turn.completed' && event.usage) {
         const totalTokens = (event.usage.input_tokens || 0) + (event.usage.output_tokens || 0);
@@ -283,11 +297,21 @@ export async function queryCodex(command, options = {}, ws) {
     }
 
     // Send completion event
-    sendMessage(ws, {
-      type: 'codex-complete',
-      sessionId: currentSessionId,
-      actualSessionId: thread.id
-    });
+    if (!terminalFailure) {
+      sendMessage(ws, {
+        type: 'codex-complete',
+        sessionId: currentSessionId,
+        actualSessionId: thread.id,
+        provider: 'codex'
+      });
+      notifyRunStopped({
+        userId: ws?.userId || null,
+        provider: 'codex',
+        sessionId: currentSessionId,
+        sessionName: sessionSummary,
+        stopReason: 'completed'
+      });
+    }
 
   } catch (error) {
     const session = currentSessionId ? activeCodexSessions.get(currentSessionId) : null;
@@ -301,8 +325,18 @@ export async function queryCodex(command, options = {}, ws) {
       sendMessage(ws, {
         type: 'codex-error',
         error: error.message,
-        sessionId: currentSessionId
+        sessionId: currentSessionId,
+        provider: 'codex'
       });
+      if (!terminalFailure) {
+        notifyRunFailed({
+          userId: ws?.userId || null,
+          provider: 'codex',
+          sessionId: currentSessionId,
+          sessionName: sessionSummary,
+          error
+        });
+      }
     }
 
   } finally {

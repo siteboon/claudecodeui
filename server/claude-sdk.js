@@ -18,6 +18,12 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
 import { CLAUDE_MODELS } from '../shared/modelConstants.js';
+import {
+  createNotificationEvent,
+  notifyRunFailed,
+  notifyRunStopped,
+  notifyUserIfEnabled
+} from './services/notification-orchestrator.js';
 
 const activeSessions = new Map();
 const pendingToolApprovals = new Map();
@@ -461,11 +467,19 @@ async function loadMcpConfig(cwd) {
  * @returns {Promise<void>}
  */
 async function queryClaudeSDK(command, options = {}, ws) {
-  const { sessionId } = options;
+  const { sessionId, sessionSummary } = options;
   let capturedSessionId = sessionId;
   let sessionCreatedSent = false;
   let tempImagePaths = [];
   let tempDir = null;
+
+  const emitNotification = (event) => {
+    notifyUserIfEnabled({
+      userId: ws?.userId || null,
+      writer: ws,
+      event
+    });
+  };
 
   try {
     // Map CLI options to SDK format
@@ -482,6 +496,26 @@ async function queryClaudeSDK(command, options = {}, ws) {
     const finalCommand = imageResult.modifiedCommand;
     tempImagePaths = imageResult.tempImagePaths;
     tempDir = imageResult.tempDir;
+
+    sdkOptions.hooks = {
+      Notification: [{
+        matcher: '',
+        hooks: [async (input) => {
+          const message = typeof input?.message === 'string' ? input.message : 'Claude requires your attention.';
+          emitNotification(createNotificationEvent({
+            provider: 'claude',
+            sessionId: capturedSessionId || sessionId || null,
+            kind: 'action_required',
+            code: 'agent.notification',
+            meta: { message, sessionName: sessionSummary },
+            severity: 'warning',
+            requiresUserAction: true,
+            dedupeKey: `claude:hook:notification:${capturedSessionId || sessionId || 'none'}:${message}`
+          }));
+          return {};
+        }]
+      }]
+    };
 
     sdkOptions.canUseTool = async (toolName, input, context) => {
       const requiresInteraction = TOOLS_REQUIRING_INTERACTION.has(toolName);
@@ -514,6 +548,16 @@ async function queryClaudeSDK(command, options = {}, ws) {
         input,
         sessionId: capturedSessionId || sessionId || null
       });
+      emitNotification(createNotificationEvent({
+        provider: 'claude',
+        sessionId: capturedSessionId || sessionId || null,
+        kind: 'action_required',
+        code: 'permission.required',
+        meta: { toolName, sessionName: sessionSummary },
+        severity: 'warning',
+        requiresUserAction: true,
+        dedupeKey: `claude:permission:${capturedSessionId || sessionId || 'none'}:${requestId}`
+      }));
 
       const decision = await waitForToolApproval(requestId, {
         timeoutMs: requiresInteraction ? 0 : undefined,
@@ -560,10 +604,22 @@ async function queryClaudeSDK(command, options = {}, ws) {
     const prevStreamTimeout = process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT;
     process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT = '300000';
 
-    const queryInstance = query({
-      prompt: finalCommand,
-      options: sdkOptions
-    });
+    let queryInstance;
+    try {
+      queryInstance = query({
+        prompt: finalCommand,
+        options: sdkOptions
+      });
+    } catch (hookError) {
+      // Older/newer SDK versions may not accept hook shapes yet.
+      // Keep notification behavior operational via runtime events even if hook registration fails.
+      console.warn('Failed to initialize Claude query with hooks, retrying without hooks:', hookError?.message || hookError);
+      delete sdkOptions.hooks;
+      queryInstance = query({
+        prompt: finalCommand,
+        options: sdkOptions
+      });
+    }
 
     // Restore immediately — Query constructor already captured the value
     if (prevStreamTimeout !== undefined) {
@@ -647,6 +703,13 @@ async function queryClaudeSDK(command, options = {}, ws) {
       exitCode: 0,
       isNewSession: !sessionId && !!command
     });
+    notifyRunStopped({
+      userId: ws?.userId || null,
+      provider: 'claude',
+      sessionId: capturedSessionId || sessionId || null,
+      sessionName: sessionSummary,
+      stopReason: 'completed'
+    });
     console.log('claude-complete event sent');
 
   } catch (error) {
@@ -665,6 +728,13 @@ async function queryClaudeSDK(command, options = {}, ws) {
       type: 'claude-error',
       error: error.message,
       sessionId: capturedSessionId || sessionId || null
+    });
+    notifyRunFailed({
+      userId: ws?.userId || null,
+      provider: 'claude',
+      sessionId: capturedSessionId || sessionId || null,
+      sessionName: sessionSummary,
+      error
     });
 
     throw error;

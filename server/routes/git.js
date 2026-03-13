@@ -651,26 +651,28 @@ router.get('/branches', async (req, res) => {
     
     // Get all branches
     const { stdout } = await spawnAsync('git', ['branch', '-a'], { cwd: projectPath });
-    
-    // Parse branches
-    const branches = stdout
+
+    const rawLines = stdout
       .split('\n')
-      .map(branch => branch.trim())
-      .filter(branch => branch && !branch.includes('->')) // Remove empty lines and HEAD pointer
-      .map(branch => {
-        // Remove asterisk from current branch
-        if (branch.startsWith('* ')) {
-          return branch.substring(2);
-        }
-        // Remove remotes/ prefix
-        if (branch.startsWith('remotes/origin/')) {
-          return branch.substring(15);
-        }
-        return branch;
-      })
-      .filter((branch, index, self) => self.indexOf(branch) === index); // Remove duplicates
-    
-    res.json({ branches });
+      .map(b => b.trim())
+      .filter(b => b && !b.includes('->'));
+
+    // Local branches (may start with '* ' for current)
+    const localBranches = rawLines
+      .filter(b => !b.startsWith('remotes/'))
+      .map(b => (b.startsWith('* ') ? b.substring(2) : b));
+
+    // Remote branches — strip 'remotes/<remote>/' prefix
+    const remoteBranches = rawLines
+      .filter(b => b.startsWith('remotes/'))
+      .map(b => b.replace(/^remotes\/[^/]+\//, ''))
+      .filter(name => !localBranches.includes(name)); // skip if already a local branch
+
+    // Backward-compat flat list (local + unique remotes, deduplicated)
+    const branches = [...localBranches, ...remoteBranches]
+      .filter((b, i, arr) => arr.indexOf(b) === i);
+
+    res.json({ branches, localBranches, remoteBranches });
   } catch (error) {
     console.error('Git branches error:', error);
     res.json({ error: error.message });
@@ -721,6 +723,32 @@ router.post('/create-branch', async (req, res) => {
   }
 });
 
+// Delete a local branch
+router.post('/delete-branch', async (req, res) => {
+  const { project, branch } = req.body;
+
+  if (!project || !branch) {
+    return res.status(400).json({ error: 'Project name and branch name are required' });
+  }
+
+  try {
+    const projectPath = await getActualProjectPath(project);
+    await validateGitRepository(projectPath);
+
+    // Safety: cannot delete the currently checked-out branch
+    const { stdout: currentBranch } = await spawnAsync('git', ['branch', '--show-current'], { cwd: projectPath });
+    if (currentBranch.trim() === branch) {
+      return res.status(400).json({ error: 'Cannot delete the currently checked-out branch' });
+    }
+
+    const { stdout } = await spawnAsync('git', ['branch', '-d', branch], { cwd: projectPath });
+    res.json({ success: true, output: stdout });
+  } catch (error) {
+    console.error('Git delete branch error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get recent commits
 router.get('/commits', async (req, res) => {
   const { project, limit = 10 } = req.query;
@@ -740,7 +768,7 @@ router.get('/commits', async (req, res) => {
     // Get commit log with stats
     const { stdout } = await spawnAsync(
       'git',
-      ['log', '--pretty=format:%H|%an|%ae|%ad|%s', '--date=relative', '-n', String(safeLimit)],
+      ['log', '--pretty=format:%H|%an|%ae|%ad|%s', '--date=iso-strict', '-n', String(safeLimit)],
       { cwd: projectPath },
     );
     

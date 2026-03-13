@@ -95,7 +95,7 @@ const authenticateWebSocket = (token) => {
     try {
       const user = userDb.getFirstUser();
       if (user) {
-        return { userId: user.id, username: user.username };
+        return { id: user.id, userId: user.id, username: user.username };
       }
       return null;
     } catch (error) {

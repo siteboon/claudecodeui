@@ -80,7 +80,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
     }
   }, [displayConfig, parsedData, onFileOpen]);
 
-  // Route subagent containers to dedicated component (after hooks to keep call order stable)
+  // Route subagent containers to dedicated component (after hooks to satisfy Rules of Hooks)
   if (isSubagentContainer && subagentState) {
     if (mode === 'result') {
       return null;

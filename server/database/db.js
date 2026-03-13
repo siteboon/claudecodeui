@@ -100,6 +100,35 @@ const runMigrations = () => {
       db.exec('ALTER TABLE users ADD COLUMN has_completed_onboarding BOOLEAN DEFAULT 0');
     }
 
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS user_notification_preferences (
+        user_id INTEGER PRIMARY KEY,
+        preferences_json TEXT NOT NULL,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS vapid_keys (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        public_key TEXT NOT NULL,
+        private_key TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS push_subscriptions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        endpoint TEXT NOT NULL UNIQUE,
+        keys_p256dh TEXT NOT NULL,
+        keys_auth TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
     // Create app_config table if it doesn't exist (for existing installations)
     db.exec(`CREATE TABLE IF NOT EXISTS app_config (
       key TEXT PRIMARY KEY,
@@ -376,6 +405,116 @@ const credentialsDb = {
   }
 };
 
+const DEFAULT_NOTIFICATION_PREFERENCES = {
+  channels: {
+    inApp: false,
+    webPush: false
+  },
+  events: {
+    actionRequired: true,
+    stop: true,
+    error: true
+  }
+};
+
+const normalizeNotificationPreferences = (value) => {
+  const source = value && typeof value === 'object' ? value : {};
+
+  return {
+    channels: {
+      inApp: source.channels?.inApp === true,
+      webPush: source.channels?.webPush === true
+    },
+    events: {
+      actionRequired: source.events?.actionRequired !== false,
+      stop: source.events?.stop !== false,
+      error: source.events?.error !== false
+    }
+  };
+};
+
+const notificationPreferencesDb = {
+  getPreferences: (userId) => {
+    try {
+      const row = db.prepare('SELECT preferences_json FROM user_notification_preferences WHERE user_id = ?').get(userId);
+      if (!row) {
+        const defaults = normalizeNotificationPreferences(DEFAULT_NOTIFICATION_PREFERENCES);
+        db.prepare(
+          'INSERT INTO user_notification_preferences (user_id, preferences_json, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)'
+        ).run(userId, JSON.stringify(defaults));
+        return defaults;
+      }
+
+      let parsed;
+      try {
+        parsed = JSON.parse(row.preferences_json);
+      } catch {
+        parsed = DEFAULT_NOTIFICATION_PREFERENCES;
+      }
+      return normalizeNotificationPreferences(parsed);
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  updatePreferences: (userId, preferences) => {
+    try {
+      const normalized = normalizeNotificationPreferences(preferences);
+      db.prepare(
+        `INSERT INTO user_notification_preferences (user_id, preferences_json, updated_at)
+         VALUES (?, ?, CURRENT_TIMESTAMP)
+         ON CONFLICT(user_id) DO UPDATE SET
+           preferences_json = excluded.preferences_json,
+           updated_at = CURRENT_TIMESTAMP`
+      ).run(userId, JSON.stringify(normalized));
+      return normalized;
+    } catch (err) {
+      throw err;
+    }
+  }
+};
+
+const pushSubscriptionsDb = {
+  saveSubscription: (userId, endpoint, keysP256dh, keysAuth) => {
+    try {
+      db.prepare(
+        `INSERT INTO push_subscriptions (user_id, endpoint, keys_p256dh, keys_auth)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(endpoint) DO UPDATE SET
+           user_id = excluded.user_id,
+           keys_p256dh = excluded.keys_p256dh,
+           keys_auth = excluded.keys_auth`
+      ).run(userId, endpoint, keysP256dh, keysAuth);
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  getSubscriptions: (userId) => {
+    try {
+      return db.prepare('SELECT endpoint, keys_p256dh, keys_auth FROM push_subscriptions WHERE user_id = ?').all(userId);
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  removeSubscription: (endpoint) => {
+    try {
+      db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(endpoint);
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  removeAllForUser: (userId) => {
+    try {
+      db.prepare('DELETE FROM push_subscriptions WHERE user_id = ?').run(userId);
+    } catch (err) {
+      throw err;
+    }
+  }
+};
+
 // Session custom names database operations
 const sessionNamesDb = {
   // Set (insert or update) a custom session name
@@ -482,6 +621,8 @@ export {
   userDb,
   apiKeysDb,
   credentialsDb,
+  notificationPreferencesDb,
+  pushSubscriptionsDb,
   sessionNamesDb,
   applyCustomSessionNames,
   appConfigDb,

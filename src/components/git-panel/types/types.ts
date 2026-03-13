@@ -1,9 +1,9 @@
 import type { Project } from '../../../types/app';
 
-export type GitPanelView = 'changes' | 'history';
+export type GitPanelView = 'changes' | 'history' | 'branches';
 export type FileStatusCode = 'M' | 'A' | 'D' | 'U';
 export type GitStatusFileGroup = 'modified' | 'added' | 'deleted' | 'untracked';
-export type ConfirmActionType = 'discard' | 'delete' | 'commit' | 'pull' | 'push' | 'publish' | 'revertLocalCommit';
+export type ConfirmActionType = 'discard' | 'delete' | 'commit' | 'pull' | 'push' | 'publish' | 'revertLocalCommit' | 'deleteBranch';
 
 export type FileDiffInfo = {
   old_string: string;
@@ -76,6 +76,8 @@ export type GitPanelController = {
   isLoading: boolean;
   currentBranch: string;
   branches: string[];
+  localBranches: string[];
+  remoteBranches: string[];
   recentCommits: GitCommitSummary[];
   commitDiffs: GitDiffMap;
   remoteStatus: GitRemoteStatus | null;
@@ -85,9 +87,12 @@ export type GitPanelController = {
   isPushing: boolean;
   isPublishing: boolean;
   isCreatingInitialCommit: boolean;
+  operationError: string | null;
+  clearOperationError: () => void;
   refreshAll: () => void;
   switchBranch: (branchName: string) => Promise<boolean>;
   createBranch: (branchName: string) => Promise<boolean>;
+  deleteBranch: (branchName: string) => Promise<boolean>;
   handleFetch: () => Promise<void>;
   handlePull: () => Promise<void>;
   handlePush: () => Promise<void>;
@@ -112,6 +117,8 @@ export type GitDiffResponse = GitApiErrorResponse & {
 
 export type GitBranchesResponse = GitApiErrorResponse & {
   branches?: string[];
+  localBranches?: string[];
+  remoteBranches?: string[];
 };
 
 export type GitCommitsResponse = GitApiErrorResponse & {

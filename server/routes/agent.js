@@ -450,9 +450,10 @@ async function cleanupProject(projectPath, sessionId = null) {
  * SSE Stream Writer - Adapts SDK/CLI output to Server-Sent Events
  */
 class SSEStreamWriter {
-  constructor(res) {
+  constructor(res, userId = null) {
     this.res = res;
     this.sessionId = null;
+    this.userId = userId;
     this.isSSEStreamWriter = true;  // Marker for transport detection
   }
 
@@ -485,9 +486,10 @@ class SSEStreamWriter {
  * Non-streaming response collector
  */
 class ResponseCollector {
-  constructor() {
+  constructor(userId = null) {
     this.messages = [];
     this.sessionId = null;
+    this.userId = userId;
   }
 
   send(data) {
@@ -920,7 +922,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       res.setHeader('Connection', 'keep-alive');
       res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
 
-      writer = new SSEStreamWriter(res);
+      writer = new SSEStreamWriter(res, req.user.id);
 
       // Send initial status
       writer.send({
@@ -930,7 +932,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       });
     } else {
       // Non-streaming mode: collect messages
-      writer = new ResponseCollector();
+      writer = new ResponseCollector(req.user.id);
 
       // Collect initial status message
       writer.send({
@@ -1219,7 +1221,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
         res.setHeader('X-Accel-Buffering', 'no');
-        writer = new SSEStreamWriter(res);
+        writer = new SSEStreamWriter(res, req.user.id);
       }
 
       if (!res.writableEnded) {
