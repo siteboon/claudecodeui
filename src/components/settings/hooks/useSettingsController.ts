@@ -738,7 +738,6 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
   }, [checkAuthStatus, loginProvider]);
 
   const saveSettings = useCallback(async () => {
-    setIsSaving(true);
     setSaveStatus(null);
 
     try {
@@ -790,7 +789,6 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
     cursorPermissions.disallowedCommands,
     cursorPermissions.skipPermissions,
     notificationPreferences,
-    onClose,
     geminiPermissionMode,
     projectSortOrder,
   ]);
