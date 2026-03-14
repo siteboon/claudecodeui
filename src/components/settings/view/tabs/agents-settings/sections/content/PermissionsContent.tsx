@@ -3,7 +3,7 @@ import { AlertTriangle, FileText, Plus, Shield, Terminal, X } from 'lucide-react
 import { useTranslation } from 'react-i18next';
 import { Button, Input } from '../../../../../../../shared/view/ui';
 import type { CodexPermissionMode, GeminiPermissionMode } from '../../../../../types/types';
-import { isFullReplModeActive, setFullReplMode } from '../../../../../chat/utils/chatStorage';
+import { isFullReplModeActive, setFullReplMode } from '../../../../../../chat/utils/chatStorage';
 import { authenticatedFetch } from '../../../../../../../utils/api';
 
 const COMMON_CLAUDE_TOOLS = [
