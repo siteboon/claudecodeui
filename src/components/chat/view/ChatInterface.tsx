@@ -344,7 +344,7 @@ function ChatInterface({
         {isFullReplModeActive() && provider === 'claude' && (
           <div className="mx-3 mb-1 flex items-center gap-2 rounded-md border border-purple-200/50 bg-purple-50/30 px-3 py-1.5 text-xs text-purple-300 dark:border-purple-800/30 dark:bg-purple-900/10">
             <Terminal className="h-3 w-3 flex-shrink-0" />
-            <span>Full REPL Mode. For MCP tools (chrome-devtools, figma, etc.), use the Shell tab.</span>
+            <span>Full REPL Mode. MCP server tools are only available in the Shell tab.</span>
           </div>
         )}
 
