@@ -24,6 +24,13 @@ import {
   notifyRunStopped,
   notifyUserIfEnabled
 } from './services/notification-orchestrator.js';
+import {
+  isFullReplMode,
+  getSettings,
+  getPermissions,
+  getMcpServersFromSettings,
+  persistAllowedTool
+} from './utils/settings-reader.js';
 
 const activeSessions = new Map();
 const pendingToolApprovals = new Map();
@@ -141,7 +148,7 @@ function matchesToolPermission(entry, toolName, input) {
  * @param {Object} options - CLI options
  * @returns {Object} SDK-compatible options
  */
-function mapCliOptionsToSDK(options = {}) {
+async function mapCliOptionsToSDK(options = {}) {
   const { sessionId, cwd, toolsSettings, permissionMode, images } = options;
 
   const sdkOptions = {};
@@ -156,39 +163,65 @@ function mapCliOptionsToSDK(options = {}) {
     sdkOptions.permissionMode = permissionMode;
   }
 
-  // Map tool settings
-  const settings = toolsSettings || {
-    allowedTools: [],
-    disallowedTools: [],
-    skipPermissions: false
-  };
+  // Full REPL Mode: override permissions from ~/.claude/settings.json
+  const fullRepl = isFullReplMode(options.fullReplMode);
+  if (fullRepl) {
+    const diskPermissions = await getPermissions();
+    const diskSettings = await getSettings();
 
-  // Handle tool permissions
-  if (settings.skipPermissions && permissionMode !== 'plan') {
-    // When skipping permissions, use bypassPermissions mode
-    sdkOptions.permissionMode = 'bypassPermissions';
-  }
+    let allowedTools = [...(diskPermissions.allow || [])];
 
-  let allowedTools = [...(settings.allowedTools || [])];
-
-  // Add plan mode default tools
-  if (permissionMode === 'plan') {
-    const planModeTools = ['Read', 'Task', 'exit_plan_mode', 'TodoRead', 'TodoWrite', 'WebFetch', 'WebSearch'];
-    for (const tool of planModeTools) {
-      if (!allowedTools.includes(tool)) {
-        allowedTools.push(tool);
+    // Add plan mode default tools
+    if (permissionMode === 'plan') {
+      const planModeTools = ['Read', 'Task', 'exit_plan_mode', 'TodoRead', 'TodoWrite', 'WebFetch', 'WebSearch'];
+      for (const tool of planModeTools) {
+        if (!allowedTools.includes(tool)) {
+          allowedTools.push(tool);
+        }
       }
     }
-  }
 
-  sdkOptions.allowedTools = allowedTools;
+    sdkOptions.allowedTools = allowedTools;
+    sdkOptions.disallowedTools = diskPermissions.deny || [];
+
+    if (diskSettings?.skipDangerousModePermissionPrompt) {
+      sdkOptions.permissionMode = 'bypassPermissions';
+    }
+
+    console.log(`[Full REPL] Loaded ${allowedTools.length} allowed, ${sdkOptions.disallowedTools.length} denied tools from settings.json`);
+  } else {
+    // Default mode: use browser-provided tool settings
+    const settings = toolsSettings || {
+      allowedTools: [],
+      disallowedTools: [],
+      skipPermissions: false
+    };
+
+    // Handle tool permissions
+    if (settings.skipPermissions && permissionMode !== 'plan') {
+      sdkOptions.permissionMode = 'bypassPermissions';
+    }
+
+    let allowedTools = [...(settings.allowedTools || [])];
+
+    // Add plan mode default tools
+    if (permissionMode === 'plan') {
+      const planModeTools = ['Read', 'Task', 'exit_plan_mode', 'TodoRead', 'TodoWrite', 'WebFetch', 'WebSearch'];
+      for (const tool of planModeTools) {
+        if (!allowedTools.includes(tool)) {
+          allowedTools.push(tool);
+        }
+      }
+    }
+
+    sdkOptions.allowedTools = allowedTools;
+    sdkOptions.disallowedTools = settings.disallowedTools || [];
+  }
 
   // Use the tools preset to make all default built-in tools available (including AskUserQuestion).
   // This was introduced in SDK 0.1.57. Omitting this preserves existing behavior (all tools available),
   // but being explicit ensures forward compatibility and clarity.
   sdkOptions.tools = { type: 'preset', preset: 'claude_code' };
-
-  sdkOptions.disallowedTools = settings.disallowedTools || [];
 
   // Map model (default to sonnet)
   // Valid models: sonnet, opus, haiku, opusplan, sonnet[1m]
@@ -404,59 +437,79 @@ async function cleanupTempFiles(tempImagePaths, tempDir) {
  * @param {string} cwd - Current working directory for project-specific configs
  * @returns {Object|null} MCP servers object or null if none found
  */
-async function loadMcpConfig(cwd) {
+async function loadMcpFromClaudeJson(cwd) {
   try {
     const claudeConfigPath = path.join(os.homedir(), '.claude.json');
 
-    // Check if config file exists
     try {
       await fs.access(claudeConfigPath);
     } catch (error) {
-      // File doesn't exist, return null
-      console.log('No ~/.claude.json found, proceeding without MCP servers');
-      return null;
+      return {};
     }
 
-    // Read and parse config file
     let claudeConfig;
     try {
       const configContent = await fs.readFile(claudeConfigPath, 'utf8');
       claudeConfig = JSON.parse(configContent);
     } catch (error) {
       console.error('Failed to parse ~/.claude.json:', error.message);
-      return null;
+      return {};
     }
 
-    // Extract MCP servers (merge global and project-specific)
     let mcpServers = {};
 
-    // Add global MCP servers
     if (claudeConfig.mcpServers && typeof claudeConfig.mcpServers === 'object') {
       mcpServers = { ...claudeConfig.mcpServers };
-      console.log(`Loaded ${Object.keys(mcpServers).length} global MCP servers`);
     }
 
-    // Add/override with project-specific MCP servers
     if (claudeConfig.claudeProjects && cwd) {
       const projectConfig = claudeConfig.claudeProjects[cwd];
       if (projectConfig && projectConfig.mcpServers && typeof projectConfig.mcpServers === 'object') {
         mcpServers = { ...mcpServers, ...projectConfig.mcpServers };
-        console.log(`Loaded ${Object.keys(projectConfig.mcpServers).length} project-specific MCP servers`);
       }
     }
 
-    // Return null if no servers found
-    if (Object.keys(mcpServers).length === 0) {
-      console.log('No MCP servers configured');
+    return mcpServers;
+  } catch (error) {
+    console.error('Error loading MCP from ~/.claude.json:', error.message);
+    return {};
+  }
+}
+
+async function loadMcpConfig(cwd, fullReplOverride) {
+  const fullRepl = isFullReplMode(fullReplOverride);
+
+  if (fullRepl) {
+    // Primary: ~/.claude/settings.json
+    const settingsMcp = await getMcpServersFromSettings();
+
+    // Secondary: ~/.claude.json for project-scoped servers
+    const claudeJsonMcp = await loadMcpFromClaudeJson(cwd);
+
+    // Merge: settings.json takes precedence
+    const merged = { ...claudeJsonMcp, ...settingsMcp };
+    const count = Object.keys(merged).length;
+
+    if (count === 0) {
+      console.log('[Full REPL] No MCP servers configured');
       return null;
     }
 
-    console.log(`Total MCP servers loaded: ${Object.keys(mcpServers).length}`);
-    return mcpServers;
-  } catch (error) {
-    console.error('Error loading MCP config:', error.message);
+    console.log(`[Full REPL] Total MCP servers loaded: ${count} (${Object.keys(settingsMcp).length} from settings.json, ${Object.keys(claudeJsonMcp).length} from .claude.json)`);
+    return merged;
+  }
+
+  // Default behavior: read from ~/.claude.json only
+  const mcpServers = await loadMcpFromClaudeJson(cwd);
+  const count = Object.keys(mcpServers).length;
+
+  if (count === 0) {
+    console.log('No MCP servers configured');
     return null;
   }
+
+  console.log(`Total MCP servers loaded: ${count}`);
+  return mcpServers;
 }
 
 /**
@@ -483,10 +536,10 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
   try {
     // Map CLI options to SDK format
-    const sdkOptions = mapCliOptionsToSDK(options);
+    const sdkOptions = await mapCliOptionsToSDK(options);
 
     // Load MCP configuration
-    const mcpServers = await loadMcpConfig(options.cwd);
+    const mcpServers = await loadMcpConfig(options.cwd, options.fullReplMode);
     if (mcpServers) {
       sdkOptions.mcpServers = mcpServers;
     }
@@ -592,6 +645,11 @@ async function queryClaudeSDK(command, options = {}, ws) {
           }
           if (Array.isArray(sdkOptions.disallowedTools)) {
             sdkOptions.disallowedTools = sdkOptions.disallowedTools.filter(entry => entry !== decision.rememberEntry);
+          }
+
+          // Persist to disk in Full REPL Mode
+          if (isFullReplMode(options.fullReplMode)) {
+            await persistAllowedTool(decision.rememberEntry);
           }
         }
         return { behavior: 'allow', updatedInput: decision.updatedInput ?? input };

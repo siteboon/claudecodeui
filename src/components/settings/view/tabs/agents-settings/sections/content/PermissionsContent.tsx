@@ -1,8 +1,10 @@
-import { useState } from 'react';
-import { AlertTriangle, Plus, Shield, X } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { AlertTriangle, FileText, Plus, Shield, Terminal, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button, Input } from '../../../../../../../shared/view/ui';
 import type { CodexPermissionMode, GeminiPermissionMode } from '../../../../../types/types';
+import { isFullReplModeActive, setFullReplMode } from '../../../../../chat/utils/chatStorage';
+import { authenticatedFetch } from '../../../../../../../utils/api';
 
 const COMMON_CLAUDE_TOOLS = [
   'Bash(git log:*)',
@@ -59,6 +61,143 @@ type ClaudePermissionsProps = {
   onDisallowedToolsChange: (value: string[]) => void;
 };
 
+type ReplModeConfig = {
+  fullReplMode: boolean;
+  settingsExists: boolean;
+  permissionCount: number;
+  mcpServerCount: number;
+  allowedTools: string[];
+  deniedTools: string[];
+  settingsPath: string;
+};
+
+function FullReplModeSection({ isActive, onActiveChange }: { isActive: boolean; onActiveChange: (enabled: boolean) => void }) {
+  const [replConfig, setReplConfig] = useState<ReplModeConfig | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const initialToggle = isFullReplModeActive();
+    authenticatedFetch('/api/settings/repl-mode')
+      .then(res => res.json())
+      .then(data => {
+        setReplConfig(data);
+        // If env var enables it, sync the local toggle
+        if (data.fullReplMode && !initialToggle) {
+          onActiveChange(true);
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to fetch REPL mode config:', error);
+        setReplConfig(null);
+      })
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleToggle = (enabled: boolean) => {
+    onActiveChange(enabled);
+  };
+
+  if (loading) return null;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <Terminal className="h-5 w-5 text-purple-500" />
+        <h3 className="text-lg font-medium text-foreground">Full REPL Mode</h3>
+      </div>
+
+      <div className={`rounded-lg border p-4 ${isActive
+        ? 'border-purple-400 bg-purple-50 dark:border-purple-600 dark:bg-purple-900/20'
+        : 'border-border bg-card/50'
+      }`}>
+        <label className="flex items-center gap-3">
+          <input
+            type="checkbox"
+            checked={isActive}
+            onChange={(e) => handleToggle(e.target.checked)}
+            className="h-4 w-4 rounded border-input bg-card text-primary focus:ring-2 focus:ring-primary"
+          />
+          <div>
+            <div className="font-medium text-foreground">
+              Use ~/.claude/settings.json for permissions
+            </div>
+            <div className="text-sm text-muted-foreground">
+              Syncs permissions and MCP servers with the native Claude Code CLI.
+              Changes made here or in the CLI are shared bidirectionally.
+            </div>
+          </div>
+        </label>
+
+        {replConfig?.fullReplMode && (
+          <div className="mt-2 text-xs text-muted-foreground">
+            Set via <code className="rounded bg-muted px-1">CLAUDE_FULL_REPL_MODE=true</code> environment variable
+          </div>
+        )}
+      </div>
+
+      {isActive && replConfig?.settingsExists && (
+        <div className="rounded-lg border border-purple-200 bg-purple-50/50 p-4 dark:border-purple-800 dark:bg-purple-900/10">
+          <div className="flex items-center gap-2 mb-3">
+            <FileText className="h-4 w-4 text-purple-500" />
+            <span className="text-sm font-medium text-foreground">
+              {replConfig.settingsPath}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="text-muted-foreground">Allowed tools:</span>{' '}
+              <span className="font-mono font-medium text-green-600 dark:text-green-400">{replConfig.permissionCount}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">MCP servers:</span>{' '}
+              <span className="font-mono font-medium text-blue-600 dark:text-blue-400">{replConfig.mcpServerCount}</span>
+            </div>
+          </div>
+          {replConfig.allowedTools.length > 0 && (
+            <details className="mt-3 text-sm">
+              <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                View allowed tools from settings.json
+              </summary>
+              <div className="mt-2 space-y-1">
+                {replConfig.allowedTools.map((tool) => (
+                  <div key={tool} className="rounded border border-green-200 bg-green-50 px-2 py-1 dark:border-green-800 dark:bg-green-900/20">
+                    <span className="font-mono text-xs text-green-800 dark:text-green-200">{tool}</span>
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
+          {replConfig.deniedTools.length > 0 && (
+            <details className="mt-2 text-sm">
+              <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                View denied tools from settings.json
+              </summary>
+              <div className="mt-2 space-y-1">
+                {replConfig.deniedTools.map((tool) => (
+                  <div key={tool} className="rounded border border-red-200 bg-red-50 px-2 py-1 dark:border-red-800 dark:bg-red-900/20">
+                    <span className="font-mono text-xs text-red-800 dark:text-red-200">{tool}</span>
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
+        </div>
+      )}
+
+      {isActive && !replConfig?.settingsExists && (
+        <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 dark:border-yellow-800 dark:bg-yellow-900/20">
+          <p className="text-sm text-yellow-800 dark:text-yellow-200">
+            <code className="rounded bg-yellow-100 px-1 dark:bg-yellow-800">~/.claude/settings.json</code> not found.
+            Run <code className="rounded bg-yellow-100 px-1 dark:bg-yellow-800">claude config</code> in your terminal to create it,
+            or permissions will fall back to the default (empty) settings.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ClaudePermissions({
   skipPermissions,
   onSkipPermissionsChange,
@@ -70,6 +209,12 @@ function ClaudePermissions({
   const { t } = useTranslation('settings');
   const [newAllowedTool, setNewAllowedTool] = useState('');
   const [newDisallowedTool, setNewDisallowedTool] = useState('');
+  const [fullReplActive, setFullReplActive] = useState(isFullReplModeActive());
+
+  const handleReplModeChange = (enabled: boolean) => {
+    setFullReplMode(enabled);
+    setFullReplActive(enabled);
+  };
 
   const handleAddAllowedTool = (tool: string) => {
     const updated = addUnique(allowedTools, tool);
@@ -93,167 +238,186 @@ function ClaudePermissions({
 
   return (
     <div className="space-y-6">
-      <div className="space-y-4">
-        <div className="flex items-center gap-3">
-          <AlertTriangle className="h-5 w-5 text-orange-500" />
-          <h3 className="text-lg font-medium text-foreground">{t('permissions.title')}</h3>
-        </div>
-        <div className="rounded-lg border border-orange-200 bg-orange-50 p-4 dark:border-orange-800 dark:bg-orange-900/20">
-          <label className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              checked={skipPermissions}
-              onChange={(event) => onSkipPermissionsChange(event.target.checked)}
-              className="h-4 w-4 rounded border-input bg-card text-primary focus:ring-2 focus:ring-primary"
-            />
-            <div>
-              <div className="font-medium text-orange-900 dark:text-orange-100">
-                {t('permissions.skipPermissions.label')}
-              </div>
-              <div className="text-sm text-orange-700 dark:text-orange-300">
-                {t('permissions.skipPermissions.claudeDescription')}
-              </div>
-            </div>
-          </label>
-        </div>
-      </div>
+      <FullReplModeSection isActive={fullReplActive} onActiveChange={handleReplModeChange} />
 
-      <div className="space-y-4">
-        <div className="flex items-center gap-3">
-          <Shield className="h-5 w-5 text-green-500" />
-          <h3 className="text-lg font-medium text-foreground">{t('permissions.allowedTools.title')}</h3>
-        </div>
-        <p className="text-sm text-muted-foreground">{t('permissions.allowedTools.description')}</p>
-
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <Input
-            value={newAllowedTool}
-            onChange={(event) => setNewAllowedTool(event.target.value)}
-            placeholder={t('permissions.allowedTools.placeholder')}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                handleAddAllowedTool(newAllowedTool);
-              }
-            }}
-            className="h-10 flex-1"
-          />
-          <Button
-            onClick={() => handleAddAllowedTool(newAllowedTool)}
-            disabled={!newAllowedTool.trim()}
-            size="sm"
-            className="h-10 px-4"
-          >
-            <Plus className="mr-2 h-4 w-4 sm:mr-0" />
-            <span className="sm:hidden">{t('permissions.actions.add')}</span>
-          </Button>
-        </div>
-
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-muted-foreground">
-            {t('permissions.allowedTools.quickAdd')}
+      {fullReplActive && (
+        <div className="rounded-lg border border-purple-200 bg-purple-50 p-4 dark:border-purple-800 dark:bg-purple-900/20">
+          <p className="text-sm text-purple-800 dark:text-purple-200">
+            Full REPL Mode is active. Permissions are managed via{' '}
+            <code className="rounded bg-purple-100 px-1 dark:bg-purple-800">~/.claude/settings.json</code>.
+            The manual permission controls below are disabled.
           </p>
-          <div className="flex flex-wrap gap-2">
-            {COMMON_CLAUDE_TOOLS.map((tool) => (
-              <Button
-                key={tool}
-                variant="outline"
-                size="sm"
-                onClick={() => handleAddAllowedTool(tool)}
-                disabled={allowedTools.includes(tool)}
-                className="h-8 text-xs"
-              >
-                {tool}
-              </Button>
-            ))}
+        </div>
+      )}
+
+      <div className={fullReplActive ? 'pointer-events-none opacity-40' : ''}>
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="h-5 w-5 text-orange-500" />
+            <h3 className="text-lg font-medium text-foreground">{t('permissions.title')}</h3>
+          </div>
+          <div className="rounded-lg border border-orange-200 bg-orange-50 p-4 dark:border-orange-800 dark:bg-orange-900/20">
+            <label className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                checked={skipPermissions}
+                onChange={(event) => onSkipPermissionsChange(event.target.checked)}
+                className="h-4 w-4 rounded border-input bg-card text-primary focus:ring-2 focus:ring-primary"
+                disabled={fullReplActive}
+              />
+              <div>
+                <div className="font-medium text-orange-900 dark:text-orange-100">
+                  {t('permissions.skipPermissions.label')}
+                </div>
+                <div className="text-sm text-orange-700 dark:text-orange-300">
+                  {t('permissions.skipPermissions.claudeDescription')}
+                </div>
+              </div>
+            </label>
           </div>
         </div>
 
-        <div className="space-y-2">
-          {allowedTools.map((tool) => (
-            <div key={tool} className="flex items-center justify-between rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-900/20">
-              <span className="font-mono text-sm text-green-800 dark:text-green-200">{tool}</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => onAllowedToolsChange(removeValue(allowedTools, tool))}
-                className="text-green-600 hover:text-green-700"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          ))}
-          {allowedTools.length === 0 && (
-            <div className="py-6 text-center text-muted-foreground">
-              {t('permissions.allowedTools.empty')}
-            </div>
-          )}
-        </div>
-      </div>
+        <div className="space-y-4 mt-6">
+          <div className="flex items-center gap-3">
+            <Shield className="h-5 w-5 text-green-500" />
+            <h3 className="text-lg font-medium text-foreground">{t('permissions.allowedTools.title')}</h3>
+          </div>
+          <p className="text-sm text-muted-foreground">{t('permissions.allowedTools.description')}</p>
 
-      <div className="space-y-4">
-        <div className="flex items-center gap-3">
-          <AlertTriangle className="h-5 w-5 text-red-500" />
-          <h3 className="text-lg font-medium text-foreground">{t('permissions.blockedTools.title')}</h3>
-        </div>
-        <p className="text-sm text-muted-foreground">{t('permissions.blockedTools.description')}</p>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Input
+              value={newAllowedTool}
+              onChange={(event) => setNewAllowedTool(event.target.value)}
+              placeholder={t('permissions.allowedTools.placeholder')}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  handleAddAllowedTool(newAllowedTool);
+                }
+              }}
+              className="h-10 flex-1"
+              disabled={fullReplActive}
+            />
+            <Button
+              onClick={() => handleAddAllowedTool(newAllowedTool)}
+              disabled={!newAllowedTool.trim() || fullReplActive}
+              size="sm"
+              className="h-10 px-4"
+            >
+              <Plus className="mr-2 h-4 w-4 sm:mr-0" />
+              <span className="sm:hidden">{t('permissions.actions.add')}</span>
+            </Button>
+          </div>
 
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <Input
-            value={newDisallowedTool}
-            onChange={(event) => setNewDisallowedTool(event.target.value)}
-            placeholder={t('permissions.blockedTools.placeholder')}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                handleAddDisallowedTool(newDisallowedTool);
-              }
-            }}
-            className="h-10 flex-1"
-          />
-          <Button
-            onClick={() => handleAddDisallowedTool(newDisallowedTool)}
-            disabled={!newDisallowedTool.trim()}
-            size="sm"
-            className="h-10 px-4"
-          >
-            <Plus className="mr-2 h-4 w-4 sm:mr-0" />
-            <span className="sm:hidden">{t('permissions.actions.add')}</span>
-          </Button>
-        </div>
-
-        <div className="space-y-2">
-          {disallowedTools.map((tool) => (
-            <div key={tool} className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/20">
-              <span className="font-mono text-sm text-red-800 dark:text-red-200">{tool}</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => onDisallowedToolsChange(removeValue(disallowedTools, tool))}
-                className="text-red-600 hover:text-red-700"
-              >
-                <X className="h-4 w-4" />
-              </Button>
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-muted-foreground">
+              {t('permissions.allowedTools.quickAdd')}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {COMMON_CLAUDE_TOOLS.map((tool) => (
+                <Button
+                  key={tool}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleAddAllowedTool(tool)}
+                  disabled={allowedTools.includes(tool) || fullReplActive}
+                  className="h-8 text-xs"
+                >
+                  {tool}
+                </Button>
+              ))}
             </div>
-          ))}
-          {disallowedTools.length === 0 && (
-            <div className="py-6 text-center text-muted-foreground">
-              {t('permissions.blockedTools.empty')}
-            </div>
-          )}
-        </div>
-      </div>
+          </div>
 
-      <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
-        <h4 className="mb-2 font-medium text-blue-900 dark:text-blue-100">
-          {t('permissions.toolExamples.title')}
-        </h4>
-        <ul className="space-y-1 text-sm text-blue-800 dark:text-blue-200">
-          <li><code className="rounded bg-blue-100 px-1 dark:bg-blue-800">"Bash(git log:*)"</code> {t('permissions.toolExamples.bashGitLog')}</li>
-          <li><code className="rounded bg-blue-100 px-1 dark:bg-blue-800">"Bash(git diff:*)"</code> {t('permissions.toolExamples.bashGitDiff')}</li>
-          <li><code className="rounded bg-blue-100 px-1 dark:bg-blue-800">"Write"</code> {t('permissions.toolExamples.write')}</li>
-          <li><code className="rounded bg-blue-100 px-1 dark:bg-blue-800">"Bash(rm:*)"</code> {t('permissions.toolExamples.bashRm')}</li>
-        </ul>
+          <div className="space-y-2">
+            {allowedTools.map((tool) => (
+              <div key={tool} className="flex items-center justify-between rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-900/20">
+                <span className="font-mono text-sm text-green-800 dark:text-green-200">{tool}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onAllowedToolsChange(removeValue(allowedTools, tool))}
+                  className="text-green-600 hover:text-green-700"
+                  disabled={fullReplActive}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+            {allowedTools.length === 0 && (
+              <div className="py-6 text-center text-muted-foreground">
+                {t('permissions.allowedTools.empty')}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-4 mt-6">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="h-5 w-5 text-red-500" />
+            <h3 className="text-lg font-medium text-foreground">{t('permissions.blockedTools.title')}</h3>
+          </div>
+          <p className="text-sm text-muted-foreground">{t('permissions.blockedTools.description')}</p>
+
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Input
+              value={newDisallowedTool}
+              onChange={(event) => setNewDisallowedTool(event.target.value)}
+              placeholder={t('permissions.blockedTools.placeholder')}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  handleAddDisallowedTool(newDisallowedTool);
+                }
+              }}
+              className="h-10 flex-1"
+              disabled={fullReplActive}
+            />
+            <Button
+              onClick={() => handleAddDisallowedTool(newDisallowedTool)}
+              disabled={!newDisallowedTool.trim() || fullReplActive}
+              size="sm"
+              className="h-10 px-4"
+            >
+              <Plus className="mr-2 h-4 w-4 sm:mr-0" />
+              <span className="sm:hidden">{t('permissions.actions.add')}</span>
+            </Button>
+          </div>
+
+          <div className="space-y-2">
+            {disallowedTools.map((tool) => (
+              <div key={tool} className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/20">
+                <span className="font-mono text-sm text-red-800 dark:text-red-200">{tool}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onDisallowedToolsChange(removeValue(disallowedTools, tool))}
+                  className="text-red-600 hover:text-red-700"
+                  disabled={fullReplActive}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+            {disallowedTools.length === 0 && (
+              <div className="py-6 text-center text-muted-foreground">
+                {t('permissions.blockedTools.empty')}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 mt-6 dark:border-blue-800 dark:bg-blue-900/20">
+          <h4 className="mb-2 font-medium text-blue-900 dark:text-blue-100">
+            {t('permissions.toolExamples.title')}
+          </h4>
+          <ul className="space-y-1 text-sm text-blue-800 dark:text-blue-200">
+            <li><code className="rounded bg-blue-100 px-1 dark:bg-blue-800">"Bash(git log:*)"</code> {t('permissions.toolExamples.bashGitLog')}</li>
+            <li><code className="rounded bg-blue-100 px-1 dark:bg-blue-800">"Bash(git diff:*)"</code> {t('permissions.toolExamples.bashGitDiff')}</li>
+            <li><code className="rounded bg-blue-100 px-1 dark:bg-blue-800">"Write"</code> {t('permissions.toolExamples.write')}</li>
+            <li><code className="rounded bg-blue-100 px-1 dark:bg-blue-800">"Bash(rm:*)"</code> {t('permissions.toolExamples.bashRm')}</li>
+          </ul>
+        </div>
       </div>
 
     </div>

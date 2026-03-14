@@ -1,6 +1,23 @@
 import type { ClaudeSettings } from '../types/types';
 
 export const CLAUDE_SETTINGS_KEY = 'claude-settings';
+const FULL_REPL_MODE_KEY = 'claude-full-repl-mode';
+
+export function isFullReplModeActive(): boolean {
+  try {
+    return localStorage.getItem(FULL_REPL_MODE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function setFullReplMode(enabled: boolean): void {
+  try {
+    localStorage.setItem(FULL_REPL_MODE_KEY, String(enabled));
+  } catch {
+    // ignore
+  }
+}
 
 export const safeLocalStorage = {
   setItem: (key: string, value: string) => {
@@ -75,6 +92,19 @@ export const safeLocalStorage = {
 };
 
 export function getClaudeSettings(): ClaudeSettings {
+  // In Full REPL Mode, permissions come from ~/.claude/settings.json on the server.
+  // Return empty tool lists so the server-side settings take precedence.
+  if (isFullReplModeActive()) {
+    const raw = safeLocalStorage.getItem(CLAUDE_SETTINGS_KEY);
+    const parsed = raw ? (() => { try { return JSON.parse(raw); } catch { return {}; } })() : {};
+    return {
+      allowedTools: [],
+      disallowedTools: [],
+      skipPermissions: false,
+      projectSortOrder: parsed.projectSortOrder || 'name',
+    };
+  }
+
   const raw = safeLocalStorage.getItem(CLAUDE_SETTINGS_KEY);
   if (!raw) {
     return {
