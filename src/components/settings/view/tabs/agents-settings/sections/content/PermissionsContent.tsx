@@ -210,6 +210,7 @@ function ClaudePermissions({
   const [newAllowedTool, setNewAllowedTool] = useState('');
   const [newDisallowedTool, setNewDisallowedTool] = useState('');
   const [fullReplActive, setFullReplActive] = useState(isFullReplModeActive());
+  console.log('[FULL-REPL-MODE] ClaudePermissions rendered, fullReplActive:', fullReplActive);
 
   const handleReplModeChange = (enabled: boolean) => {
     setFullReplMode(enabled);

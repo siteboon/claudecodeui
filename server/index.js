@@ -32,6 +32,7 @@ const c = {
 };
 
 console.log('PORT from env:', process.env.PORT);
+console.log('[FULL-REPL-MODE] Server version: full-repl-mode branch loaded');
 
 import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -46,6 +47,8 @@ import mime from 'mime-types';
 
 import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache, searchConversations } from './projects.js';
 import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions, resolveToolApproval, getPendingApprovalsForSession, reconnectSessionWriter } from './claude-sdk.js';
+import { queryClaudeCLI, abortClaudeCLISession, isClaudeCLISessionActive, getActiveClaudeCLISessions } from './claude-cli-query.js';
+import { isFullReplMode } from './utils/settings-reader.js';
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
 import { queryCodex, abortCodexSession, isCodexSessionActive, getActiveCodexSessions } from './openai-codex.js';
 import { spawnGemini, abortGeminiSession, isGeminiSessionActive, getActiveGeminiSessions } from './gemini-cli.js';
@@ -1464,8 +1467,14 @@ function handleChatConnection(ws, request) {
                 console.log('📁 Project:', data.options?.projectPath || 'Unknown');
                 console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
 
-                // Use Claude Agents SDK
-                await queryClaudeSDK(data.command, data.options, writer);
+                if (isFullReplMode(data.options?.fullReplMode)) {
+                    // Full REPL Mode: spawn native claude CLI
+                    console.log('[Full REPL v2] Using native CLI');
+                    await queryClaudeCLI(data.command, data.options, writer);
+                } else {
+                    // Default: use Claude Agents SDK
+                    await queryClaudeSDK(data.command, data.options, writer);
+                }
             } else if (data.type === 'cursor-command') {
                 console.log('[DEBUG] Cursor message:', data.command || '[Continue/Resume]');
                 console.log('📁 Project:', data.options?.cwd || 'Unknown');
@@ -1504,8 +1513,11 @@ function handleChatConnection(ws, request) {
                 } else if (provider === 'gemini') {
                     success = abortGeminiSession(data.sessionId);
                 } else {
-                    // Use Claude Agents SDK
-                    success = await abortClaudeSDKSession(data.sessionId);
+                    // Try CLI session first, then SDK
+                    success = abortClaudeCLISession(data.sessionId);
+                    if (!success) {
+                        success = await abortClaudeSDKSession(data.sessionId);
+                    }
                 }
 
                 writer.send({
@@ -1548,12 +1560,15 @@ function handleChatConnection(ws, request) {
                 } else if (provider === 'gemini') {
                     isActive = isGeminiSessionActive(sessionId);
                 } else {
-                    // Use Claude Agents SDK
-                    isActive = isClaudeSDKSessionActive(sessionId);
-                    if (isActive) {
-                        // Reconnect the session's writer to the new WebSocket so
-                        // subsequent SDK output flows to the refreshed client.
-                        reconnectSessionWriter(sessionId, ws);
+                    // Check CLI sessions first, then SDK
+                    isActive = isClaudeCLISessionActive(sessionId);
+                    if (!isActive) {
+                        isActive = isClaudeSDKSessionActive(sessionId);
+                        if (isActive) {
+                            // Reconnect the session's writer to the new WebSocket so
+                            // subsequent SDK output flows to the refreshed client.
+                            reconnectSessionWriter(sessionId, ws);
+                        }
                     }
                 }
 
@@ -1577,7 +1592,7 @@ function handleChatConnection(ws, request) {
             } else if (data.type === 'get-active-sessions') {
                 // Get all currently active sessions
                 const activeSessions = {
-                    claude: getActiveClaudeSDKSessions(),
+                    claude: [...getActiveClaudeSDKSessions(), ...getActiveClaudeCLISessions()],
                     cursor: getActiveCursorSessions(),
                     codex: getActiveCodexSessions(),
                     gemini: getActiveGeminiSessions()
