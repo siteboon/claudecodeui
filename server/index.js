@@ -47,7 +47,7 @@ import mime from 'mime-types';
 
 import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache, searchConversations } from './projects.js';
 import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions, resolveToolApproval, getPendingApprovalsForSession, reconnectSessionWriter } from './claude-sdk.js';
-import { queryClaudeCLI, abortClaudeCLISession, isClaudeCLISessionActive, getActiveClaudeCLISessions } from './claude-cli-query.js';
+import { queryClaudeCLI, abortClaudeCLISession, isClaudeCLISessionActive, getActiveClaudeCLISessions, getProjectSessionId, setProjectSessionId, findLatestSessionForProject } from './claude-cli-query.js';
 import { isFullReplMode } from './utils/settings-reader.js';
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
 import { queryCodex, abortCodexSession, isCodexSessionActive, getActiveCodexSessions } from './openai-codex.js';
@@ -1470,6 +1470,20 @@ function handleChatConnection(ws, request) {
                 if (isFullReplMode(data.options?.fullReplMode)) {
                     // Full REPL Mode: spawn native claude CLI
                     console.log('[Full REPL v2] Using native CLI');
+
+                    // Kill any active Shell PTY for this project to release the session lock.
+                    // The Shell will auto-resume when the user switches back.
+                    const projectPath = data.options?.cwd || data.options?.projectPath;
+                    if (projectPath) {
+                        for (const [key, session] of ptySessionsMap.entries()) {
+                            if (session.projectPath === projectPath && session.pty) {
+                                console.log(`[Full REPL v2] Killing Shell PTY for project handoff: ${key}`);
+                                try { session.pty.kill(); } catch { /* already dead */ }
+                                ptySessionsMap.delete(key);
+                            }
+                        }
+                    }
+
                     await queryClaudeCLI(data.command, data.options, writer);
                 } else {
                     // Default: use Claude Agents SDK
@@ -1787,11 +1801,28 @@ function handleShellConnection(ws) {
                     } else {
                         // Claude (default provider)
                         const command = initialCommand || 'claude';
-                        if (hasSession && sessionId) {
+
+                        // Check for session ID: explicit > registry > none
+                        let resumeSessionId = (hasSession && sessionId) ? sessionId : null;
+                        if (!resumeSessionId) {
+                            // Full REPL Mode: check if Chat created a session for this project
+                            const registrySessionId = getProjectSessionId(resolvedProjectPath);
+                            if (registrySessionId) {
+                                resumeSessionId = registrySessionId;
+                                console.log(`[Full REPL v2] Shell resuming Chat session from registry: ${registrySessionId}`);
+
+                                // Kill any active Chat CLI process for this project
+                                if (abortClaudeCLISession(registrySessionId)) {
+                                    console.log(`[Full REPL v2] Killed Chat CLI process for session handoff`);
+                                }
+                            }
+                        }
+
+                        if (resumeSessionId) {
                             if (os.platform() === 'win32') {
-                                shellCommand = `claude --resume "${sessionId}"; if ($LASTEXITCODE -ne 0) { claude }`;
+                                shellCommand = `claude --resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { claude }`;
                             } else {
-                                shellCommand = `claude --resume "${sessionId}" || claude`;
+                                shellCommand = `claude --resume "${resumeSessionId}" || claude`;
                             }
                         } else {
                             shellCommand = command;
@@ -1832,6 +1863,26 @@ function handleShellConnection(ws) {
                         projectPath,
                         sessionId
                     });
+
+                    // Shell → Chat sync: after Shell's claude starts, detect its session ID
+                    // by scanning the project's session files on disk after a delay.
+                    if (provider === 'claude' && !isPlainShell) {
+                        setTimeout(async () => {
+                            try {
+                                const latestSession = await findLatestSessionForProject(resolvedProjectPath);
+                                if (latestSession) {
+                                    setProjectSessionId(resolvedProjectPath, latestSession);
+                                    // Also update the PTY session record
+                                    const ptySession = ptySessionsMap.get(ptySessionKey);
+                                    if (ptySession) {
+                                        ptySession.sessionId = latestSession;
+                                    }
+                                }
+                            } catch (err) {
+                                console.error('[Full REPL v2] Failed to detect Shell session:', err.message);
+                            }
+                        }, 5000);
+                    }
 
                     // Handle data output
                     shellProcess.onData((data) => {

@@ -2,13 +2,14 @@
  * Claude CLI Query Runner (Full REPL Mode v2)
  *
  * Spawns the native `claude` CLI with `--output-format stream-json`
- * and maps the streaming JSON events to the same WebSocket message
- * format the Chat UI already expects.
+ * via node-pty (pseudo-terminal) and maps the streaming JSON events
+ * to the same WebSocket message format the Chat UI already expects.
  *
- * This replaces the SDK-based queryClaudeSDK() when Full REPL Mode is active.
+ * The claude binary requires a TTY to produce output, so we must use
+ * node-pty instead of child_process.spawn.
  */
 
-import { spawn } from 'child_process';
+import pty from 'node-pty';
 import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
@@ -16,31 +17,123 @@ import os from 'os';
 const activeCliSessions = new Map();
 
 /**
+ * Maps projectPath → last CLI session UUID.
+ * Used for bidirectional session sync between Chat and Shell tabs.
+ */
+const projectSessionRegistry = new Map();
+
+export function getProjectSessionId(projectPath) {
+  return projectSessionRegistry.get(projectPath) || null;
+}
+
+export function setProjectSessionId(projectPath, sessionId) {
+  if (projectPath && sessionId) {
+    projectSessionRegistry.set(projectPath, sessionId);
+    console.log(`[Full REPL v2] Registry: ${projectPath} → ${sessionId}`);
+  }
+}
+
+/**
+ * Scans ~/.claude/projects/ for the most recently modified session file
+ * for a given project path. Returns the session UUID or null.
+ */
+export async function findLatestSessionForProject(projectPath) {
+  try {
+    // Claude encodes project paths by replacing / with -
+    const encoded = projectPath.replace(/\//g, '-');
+    const projectDir = path.join(os.homedir(), '.claude', 'projects', encoded);
+
+    const entries = await fs.readdir(projectDir);
+    const jsonlFiles = entries.filter(e => e.endsWith('.jsonl'));
+
+    if (jsonlFiles.length === 0) return null;
+
+    // Find the most recently modified
+    let latest = null;
+    let latestMtime = 0;
+
+    for (const file of jsonlFiles) {
+      const filePath = path.join(projectDir, file);
+      const stat = await fs.stat(filePath);
+      if (stat.mtimeMs > latestMtime) {
+        latestMtime = stat.mtimeMs;
+        latest = file.replace('.jsonl', '');
+      }
+    }
+
+    return latest;
+  } catch {
+    return null;
+  }
+}
+
+let cachedClaudeBin = null;
+
+/**
+ * Finds the actual claude binary path, skipping shell functions/aliases.
+ */
+async function resolveClaudeBinary() {
+  if (cachedClaudeBin) return cachedClaudeBin;
+
+  const candidates = [
+    path.join(os.homedir(), '.local', 'bin', 'claude'),
+    '/usr/local/bin/claude',
+    '/opt/homebrew/bin/claude',
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      await fs.access(candidate);
+      cachedClaudeBin = candidate;
+      console.log(`[Full REPL v2] Resolved claude binary: ${cachedClaudeBin}`);
+      return cachedClaudeBin;
+    } catch {
+      // Not found, try next
+    }
+  }
+
+  console.log('[Full REPL v2] Could not resolve claude binary, falling back to PATH');
+  cachedClaudeBin = 'claude';
+  return cachedClaudeBin;
+}
+
+/**
  * Spawns the native claude CLI and streams structured JSON events to the WebSocket.
  */
 export async function queryClaudeCLI(command, options = {}, ws) {
-  const { sessionId, cwd, model, permissionMode, images, sessionSummary } = options;
+  const { sessionId, cwd, model, permissionMode, images } = options;
 
   const args = ['--output-format', 'stream-json', '--verbose'];
 
-  // Resume existing session
-  if (sessionId) {
-    args.push('--resume', sessionId);
+  // Resume: explicit session ID > registry > none
+  const isValidUUID = sessionId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionId);
+  const resolvedCwd = cwd || process.env.HOME;
+  let resumeId = isValidUUID ? sessionId : null;
+
+  if (!resumeId) {
+    // Check registry for a session created by Shell or a previous Chat query
+    const registryId = getProjectSessionId(resolvedCwd);
+    if (registryId) {
+      resumeId = registryId;
+      console.log(`[Full REPL v2] Chat resuming session from registry: ${resumeId}`);
+    }
   }
 
-  // Model selection
+  if (resumeId) {
+    args.push('--resume', resumeId);
+  }
+
   if (model) {
     args.push('--model', model);
   }
 
-  // Permission mode
   if (permissionMode === 'plan') {
     args.push('--permission-mode', 'plan');
   } else if (permissionMode && permissionMode !== 'default') {
     args.push('--permission-mode', permissionMode);
   }
 
-  // Handle images: save to temp files and prepend to prompt
+  // Handle images
   let finalCommand = command;
   let tempImagePaths = [];
   let tempDir = null;
@@ -57,31 +150,41 @@ export async function queryClaudeCLI(command, options = {}, ws) {
         tempImagePaths.push(imgPath);
       }
     }
-    // Prepend image paths to the prompt
     if (tempImagePaths.length > 0) {
       const imageRefs = tempImagePaths.map(p => `[Image: ${p}]`).join(' ');
       finalCommand = `${imageRefs}\n\n${command}`;
     }
   }
 
-  // Non-interactive mode: send prompt via --print
   args.push('--print', finalCommand);
 
-  const resolvedCwd = cwd || process.env.HOME;
+  // Build the full command string for bash -c.
+  // The claude binary is a Bun executable that requires a proper shell
+  // environment (same way the Shell tab spawns it).
+  const escapedArgs = args.map(a => `'${a.replace(/'/g, "'\\''")}'`).join(' ');
+  const shellCommand = `claude ${escapedArgs}`;
 
-  console.log(`[Full REPL v2] Spawning: claude ${args.slice(0, 4).join(' ')}... (cwd: ${resolvedCwd})`);
+  console.log(`[Full REPL v2] Spawning via bash: claude ${args.slice(0, 6).join(' ')}...`);
+  console.log(`[Full REPL v2] cwd: ${resolvedCwd}`);
 
-  const cliProcess = spawn('claude', args, {
+  const shell = os.platform() === 'win32' ? 'powershell.exe' : 'bash';
+  const shellArgs = os.platform() === 'win32' ? ['-Command', shellCommand] : ['-c', shellCommand];
+
+  const cliProcess = pty.spawn(shell, shellArgs, {
+    name: 'xterm-256color',
+    cols: 120,
+    rows: 40,
     cwd: resolvedCwd,
     env: {
       ...process.env,
       NO_COLOR: '1',
     },
-    stdio: ['pipe', 'pipe', 'pipe'],
   });
 
   let capturedSessionId = sessionId || null;
   let partialLine = '';
+  let sessionCreatedSent = false;
+  let bufferedMessages = [];
 
   const session = {
     process: cliProcess,
@@ -89,64 +192,91 @@ export async function queryClaudeCLI(command, options = {}, ws) {
     sessionId: capturedSessionId,
   };
 
-  // Track session
   const sessionKey = sessionId || `pending_${Date.now()}`;
   activeCliSessions.set(sessionKey, session);
 
-  // Parse stdout JSONL
-  cliProcess.stdout.on('data', (chunk) => {
-    partialLine += chunk.toString();
+  console.log(`[Full REPL v2] Process PID: ${cliProcess.pid}`);
+
+  // Parse PTY output as JSONL
+  cliProcess.onData((rawData) => {
+    partialLine += rawData;
     const lines = partialLine.split('\n');
-    partialLine = lines.pop(); // Keep incomplete line for next chunk
+    partialLine = lines.pop(); // Keep incomplete line
 
     for (const line of lines) {
       const trimmed = line.trim();
       if (!trimmed) continue;
 
-      try {
-        const event = JSON.parse(trimmed);
-        const wsMessages = mapCliEventToWsMessages(event, session);
-        for (const msg of wsMessages) {
-          ws.send(msg);
-        }
+      // Strip any ANSI escape sequences that might leak through
+      const cleaned = trimmed.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').trim();
+      if (!cleaned || cleaned[0] !== '{') continue;
 
-        // Capture session ID from init event
+      try {
+        const event = JSON.parse(cleaned);
+        console.log(`[Full REPL v2] Event: ${event.type}/${event.subtype || ''}`);
+        // Capture session ID from init event BEFORE mapping messages
         if (event.type === 'system' && event.subtype === 'init' && event.session_id) {
           capturedSessionId = event.session_id;
           session.sessionId = capturedSessionId;
 
-          // Re-key the session map
+          // Store in registry for Shell tab to pick up
+          setProjectSessionId(resolvedCwd, capturedSessionId);
+
           if (sessionKey !== capturedSessionId) {
             activeCliSessions.delete(sessionKey);
             activeCliSessions.set(capturedSessionId, session);
           }
         }
+
+        const wsMessages = mapCliEventToWsMessages(event, session);
+        for (const msg of wsMessages) {
+          if (msg.type === 'session-created') {
+            // Send session-created immediately, then flush buffered messages
+            // after a short delay so the UI has time to update activeViewSessionId
+            console.log(`[Full REPL v2] Sending WS: ${JSON.stringify(msg)}`);
+            ws.send(msg);
+            sessionCreatedSent = true;
+
+            // Flush any buffered messages after a tick
+            setTimeout(() => {
+              for (const buffered of bufferedMessages) {
+                console.log(`[Full REPL v2] Flushing buffered WS: ${JSON.stringify(buffered).substring(0, 200)}`);
+                ws.send(buffered);
+              }
+              bufferedMessages = [];
+            }, 100);
+          } else if (!sessionCreatedSent) {
+            // Buffer messages until session-created has been sent
+            bufferedMessages.push(msg);
+          } else {
+            console.log(`[Full REPL v2] Sending WS: ${JSON.stringify(msg).substring(0, 200)}`);
+            ws.send(msg);
+          }
+        }
       } catch {
-        // Not valid JSON, skip (startup noise, etc.)
+        // Not valid JSON, skip
       }
     }
   });
 
-  // Forward stderr as status messages
-  cliProcess.stderr.on('data', (chunk) => {
-    const text = chunk.toString().trim();
-    if (text) {
-      console.log(`[Full REPL v2 stderr] ${text}`);
-    }
-  });
-
-  cliProcess.on('error', (err) => {
-    console.error('[Full REPL v2] Failed to spawn claude CLI:', err.message);
-    ws.send({
-      type: 'claude-error',
-      error: `Failed to spawn claude CLI: ${err.message}. Is claude installed and in PATH?`,
-      sessionId: capturedSessionId,
-    });
-    activeCliSessions.delete(capturedSessionId || sessionKey);
-  });
-
-  cliProcess.on('close', (exitCode) => {
+  cliProcess.onExit(({ exitCode }) => {
     console.log(`[Full REPL v2] CLI process exited with code ${exitCode}`);
+
+    // Process any remaining partial line
+    if (partialLine.trim()) {
+      const cleaned = partialLine.trim().replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').trim();
+      if (cleaned && cleaned[0] === '{') {
+        try {
+          const event = JSON.parse(cleaned);
+          const wsMessages = mapCliEventToWsMessages(event, session);
+          for (const msg of wsMessages) {
+            ws.send(msg);
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
 
     ws.send({
       type: 'claude-complete',
@@ -170,8 +300,7 @@ export async function queryClaudeCLI(command, options = {}, ws) {
 }
 
 /**
- * Maps a CLI stream-json event to one or more WebSocket messages
- * in the format the Chat UI expects.
+ * Maps a CLI stream-json event to WebSocket messages the Chat UI expects.
  */
 function mapCliEventToWsMessages(event, session) {
   const sid = session.sessionId;
@@ -180,7 +309,6 @@ function mapCliEventToWsMessages(event, session) {
   switch (event.type) {
     case 'system': {
       if (event.subtype === 'init') {
-        // Emit session-created
         messages.push({
           type: 'session-created',
           sessionId: event.session_id,
@@ -190,9 +318,6 @@ function mapCliEventToWsMessages(event, session) {
     }
 
     case 'assistant': {
-      // The CLI emits the full assistant message with content array.
-      // The Chat UI expects: { type: 'claude-response', data: { message: {...}, ... }, sessionId }
-      // where data.message has { role, content: [...] }
       const msg = event.message;
       if (msg) {
         messages.push({
@@ -208,9 +333,6 @@ function mapCliEventToWsMessages(event, session) {
     }
 
     case 'user': {
-      // Tool results come as user messages with role: 'user' and content array
-      // containing tool_result blocks. The Chat UI handles this via:
-      // structuredMessageData?.role === 'user' && Array.isArray(structuredMessageData.content)
       const msg = event.message;
       if (msg) {
         messages.push({
@@ -218,7 +340,6 @@ function mapCliEventToWsMessages(event, session) {
           data: {
             message: msg,
             parent_tool_use_id: event.parent_tool_use_id || null,
-            // Include tool_use_result for richer rendering
             tool_use_result: event.tool_use_result || null,
           },
           sessionId: sid,
@@ -228,8 +349,6 @@ function mapCliEventToWsMessages(event, session) {
     }
 
     case 'result': {
-      // Final result with usage/cost info
-      // Emit token budget from the result
       if (event.modelUsage) {
         const models = Object.keys(event.modelUsage);
         if (models.length > 0) {
@@ -248,14 +367,10 @@ function mapCliEventToWsMessages(event, session) {
       break;
     }
 
-    case 'rate_limit_event': {
-      // Could emit as status, but not critical for rendering
+    case 'rate_limit_event':
       break;
-    }
 
     default: {
-      // Forward any unknown event types as generic claude-response
-      // so the UI can at least try to render them
       if (event.message) {
         messages.push({
           type: 'claude-response',
@@ -271,28 +386,25 @@ function mapCliEventToWsMessages(event, session) {
 }
 
 /**
- * Aborts an active CLI session by killing the process.
+ * Aborts an active CLI session.
  */
 export function abortClaudeCLISession(sessionId) {
   const session = activeCliSessions.get(sessionId);
   if (session?.process) {
-    session.process.kill('SIGINT');
+    session.process.write('\x03'); // Ctrl+C
+    setTimeout(() => {
+      try { session.process.kill(); } catch { /* already dead */ }
+    }, 1000);
     activeCliSessions.delete(sessionId);
     return true;
   }
   return false;
 }
 
-/**
- * Checks if a CLI session is currently active.
- */
 export function isClaudeCLISessionActive(sessionId) {
   return activeCliSessions.has(sessionId);
 }
 
-/**
- * Returns all active CLI sessions.
- */
 export function getActiveClaudeCLISessions() {
   return Array.from(activeCliSessions.keys());
 }
