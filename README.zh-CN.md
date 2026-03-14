@@ -74,13 +74,13 @@
 
 启动 CloudCLI UI，只需一行 `npx`（需要 Node.js v22+）：
 
-```
+```bash
 npx @siteboon/claude-code-ui
 ```
 
 或进行全局安装，便于日常使用：
 
-```
+```bash
 npm install -g @siteboon/claude-code-ui
 cloudcli
 ```

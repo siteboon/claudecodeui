@@ -78,13 +78,13 @@
 
 **npx** で今すぐ CloudCLI UI を試せます（**Node.js** v22+ が必要）：
 
-```
+```bash
 npx @siteboon/claude-code-ui
 ```
 
 または、普段使いするなら **グローバル** にインストール：
 
-```
+```bash
 npm install -g @siteboon/claude-code-ui
 cloudcli
 ```
