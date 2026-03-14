@@ -649,7 +649,11 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
           // Persist to disk in Full REPL Mode
           if (isFullReplMode(options.fullReplMode)) {
-            await persistAllowedTool(decision.rememberEntry);
+            try {
+              await persistAllowedTool(decision.rememberEntry);
+            } catch (persistError) {
+              console.error('[Full REPL] Failed to persist allowed tool to disk:', persistError.message);
+            }
           }
         }
         return { behavior: 'allow', updatedInput: decision.updatedInput ?? input };

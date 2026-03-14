@@ -32,7 +32,6 @@ const c = {
 };
 
 console.log('PORT from env:', process.env.PORT);
-console.log('[FULL-REPL-MODE] Server version: full-repl-mode branch loaded');
 
 import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';

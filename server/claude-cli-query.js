@@ -167,8 +167,15 @@ export async function queryClaudeCLI(command, options = {}, ws) {
   // Build the full command string for bash -c.
   // The claude binary is a Bun executable that requires a proper shell
   // environment (same way the Shell tab spawns it).
-  const escapedArgs = args.map(a => `'${a.replace(/'/g, "'\\''")}'`).join(' ');
-  const shellCommand = `claude ${escapedArgs}`;
+  const claudeBin = await resolveClaudeBinary();
+  const isWindows = os.platform() === 'win32';
+  const escapedArgs = args.map(a => {
+    if (isWindows) {
+      return `'${a.replace(/'/g, "''")}'`;
+    }
+    return `'${a.replace(/'/g, "'\\''")}'`;
+  }).join(' ');
+  const shellCommand = `${claudeBin} ${escapedArgs}`;
 
   console.log(`[Full REPL v2] Spawning via bash: claude ${args.slice(0, 6).join(' ')}...`);
   console.log(`[Full REPL v2] cwd: ${resolvedCwd}`);
@@ -237,25 +244,19 @@ export async function queryClaudeCLI(command, options = {}, ws) {
         const wsMessages = mapCliEventToWsMessages(event, session);
         for (const msg of wsMessages) {
           if (msg.type === 'session-created') {
-            // Send session-created immediately, then flush buffered messages
-            // after a short delay so the UI has time to update activeViewSessionId
             console.log(`[Full REPL v2] Sending WS: ${JSON.stringify(msg)}`);
             ws.send(msg);
-            sessionCreatedSent = true;
 
-            // Flush any buffered messages after a tick
-            setTimeout(() => {
-              for (const buffered of bufferedMessages) {
-                console.log(`[Full REPL v2] Flushing buffered WS: ${JSON.stringify(buffered).substring(0, 200)}`);
-                ws.send(buffered);
-              }
-              bufferedMessages = [];
-            }, 100);
+            // Flush buffered messages synchronously after session-created
+            for (const buffered of bufferedMessages) {
+              ws.send(buffered);
+            }
+            bufferedMessages = [];
+            sessionCreatedSent = true;
           } else if (!sessionCreatedSent) {
             // Buffer messages until session-created has been sent
             bufferedMessages.push(msg);
           } else {
-            console.log(`[Full REPL v2] Sending WS: ${JSON.stringify(msg).substring(0, 200)}`);
             ws.send(msg);
           }
         }
@@ -400,8 +401,8 @@ export function abortClaudeCLISession(sessionId) {
     session.process.write('\x03'); // Ctrl+C
     setTimeout(() => {
       try { session.process.kill(); } catch { /* already dead */ }
+      activeCliSessions.delete(sessionId);
     }, 1000);
-    activeCliSessions.delete(sessionId);
     return true;
   }
   return false;
