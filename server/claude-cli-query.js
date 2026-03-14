@@ -105,13 +105,11 @@ export async function queryClaudeCLI(command, options = {}, ws) {
 
   const args = ['--output-format', 'stream-json', '--verbose'];
 
-  // Skip MCP server loading for Chat queries. The CLI loads ALL configured
-  // MCP servers on startup (including failing ones that timeout for 10s+ each).
-  // Chat queries rarely need MCP servers. The Shell tab loads them natively.
-  // Users can override this with options.loadMcpServers = true if needed.
-  if (!options.loadMcpServers) {
-    args.push('--mcp-config', '{"mcpServers":{}}', '--strict-mcp-config');
-  }
+  // Skip MCP server loading for --print mode queries. The CLI waits for all
+  // MCP servers to connect/fail before processing, which adds 20-30s for servers
+  // that timeout. MCP tools are available in the Shell tab (persistent REPL).
+  // MCP_CONNECTION_NONBLOCKING only works for the interactive SDK mode, not --print.
+  args.push('--mcp-config', '{"mcpServers":{}}', '--strict-mcp-config');
 
   // Resume: explicit session ID > registry > none
   const isValidUUID = sessionId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionId);
