@@ -149,6 +149,7 @@ export function useChatRealtimeHandlers({
       'cursor-error',
       'codex-error',
       'gemini-error',
+      'copilot-error',
       'error',
     ]);
 
@@ -164,11 +165,19 @@ export function useChatRealtimeHandlers({
       rawStructuredData.type === 'system' &&
       rawStructuredData.subtype === 'init';
 
+    const isCopilotSystemInit =
+      latestMessage.type === 'copilot-system' &&
+      rawStructuredData &&
+      rawStructuredData.type === 'system' &&
+      rawStructuredData.subtype === 'init';
+
     const systemInitSessionId = isClaudeSystemInit
       ? structuredMessageData?.session_id
       : isCursorSystemInit
         ? rawStructuredData?.session_id
-        : null;
+        : isCopilotSystemInit
+          ? rawStructuredData?.session_id
+          : null;
 
     const activeViewSessionId =
       selectedSession?.id || currentSessionId || pendingViewSessionRef.current?.sessionId || null;
@@ -185,7 +194,8 @@ export function useChatRealtimeHandlers({
       (latestMessage.type === 'claude-error' ||
         latestMessage.type === 'cursor-error' ||
         latestMessage.type === 'codex-error' ||
-        latestMessage.type === 'gemini-error');
+        latestMessage.type === 'gemini-error' ||
+        latestMessage.type === 'copilot-error');
 
     const handleBackgroundLifecycle = (sessionId?: string) => {
       if (!sessionId) {
@@ -765,6 +775,154 @@ export function useChatRealtimeHandlers({
           }
         } catch (error) {
           console.warn('Error handling cursor-output message:', error);
+        }
+        break;
+
+      case 'copilot-system':
+        try {
+          const copilotData = latestMessage.data;
+          if (
+            copilotData &&
+            copilotData.type === 'system' &&
+            copilotData.subtype === 'init' &&
+            copilotData.session_id
+          ) {
+            if (!isSystemInitForView) {
+              return;
+            }
+
+            if (currentSessionId && copilotData.session_id !== currentSessionId) {
+              setIsSystemSessionChange(true);
+              onNavigateToSession?.(copilotData.session_id);
+              return;
+            }
+
+            if (!currentSessionId) {
+              setIsSystemSessionChange(true);
+              onNavigateToSession?.(copilotData.session_id);
+              return;
+            }
+          }
+        } catch (error) {
+          console.warn('Error handling copilot-system message:', error);
+        }
+        break;
+
+      case 'copilot-user':
+        break;
+
+      case 'copilot-error':
+        finalizeLifecycleForCurrentView(latestMessage.sessionId, currentSessionId, selectedSession?.id);
+        setChatMessages((previous) => [
+          ...previous,
+          {
+            type: 'error',
+            content: `Copilot error: ${latestMessage.error || 'Unknown error'}`,
+            timestamp: new Date(),
+          },
+        ]);
+        break;
+
+      case 'copilot-result': {
+        const copilotCompletedSessionId = latestMessage.sessionId || currentSessionId;
+        const pendingCopilotSessionId = sessionStorage.getItem('pendingSessionId');
+
+        finalizeLifecycleForCurrentView(
+          copilotCompletedSessionId,
+          currentSessionId,
+          selectedSession?.id,
+          pendingCopilotSessionId,
+        );
+
+        try {
+          const resultData = latestMessage.data || {};
+          const textResult = typeof resultData.result === 'string' ? resultData.result : '';
+
+          if (streamTimerRef.current) {
+            clearTimeout(streamTimerRef.current);
+            streamTimerRef.current = null;
+          }
+          const pendingChunk = streamBufferRef.current;
+          streamBufferRef.current = '';
+
+          setChatMessages((previous) => {
+            const updated = [...previous];
+            const lastIndex = updated.length - 1;
+            const last = updated[lastIndex];
+            const normalizedTextResult = textResult.trim();
+
+            if (last && last.type === 'assistant' && !last.isToolUse && last.isStreaming) {
+              const finalContent =
+                normalizedTextResult
+                  ? textResult
+                  : `${last.content || ''}${pendingChunk || ''}`;
+              updated[lastIndex] = { ...last, content: finalContent, isStreaming: false };
+            } else if (normalizedTextResult) {
+              const lastAssistantText =
+                last && last.type === 'assistant' && !last.isToolUse
+                  ? String(last.content || '').trim()
+                  : '';
+
+              const isDuplicateFinalText = lastAssistantText === normalizedTextResult;
+              if (isDuplicateFinalText) {
+                return updated;
+              }
+
+              updated.push({
+                type: resultData.is_error ? 'error' : 'assistant',
+                content: textResult,
+                timestamp: new Date(),
+                isStreaming: false,
+              });
+            }
+            return updated;
+          });
+        } catch (error) {
+          console.warn('Error handling copilot-result message:', error);
+        }
+
+        if (copilotCompletedSessionId && !currentSessionId && copilotCompletedSessionId === pendingCopilotSessionId) {
+          setCurrentSessionId(copilotCompletedSessionId);
+          sessionStorage.removeItem('pendingSessionId');
+          if (window.refreshProjects) {
+            setTimeout(() => window.refreshProjects?.(), 500);
+          }
+        }
+        break;
+      }
+
+      case 'copilot-output':
+        try {
+          const raw = String(latestMessage.data ?? '');
+          const cleaned = raw
+            .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
+            .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
+            .trim();
+
+          if (cleaned) {
+            streamBufferRef.current += streamBufferRef.current ? `\n${cleaned}` : cleaned;
+            if (!streamTimerRef.current) {
+              streamTimerRef.current = window.setTimeout(() => {
+                const chunk = streamBufferRef.current;
+                streamBufferRef.current = '';
+                streamTimerRef.current = null;
+                appendStreamingChunk(setChatMessages, chunk, true);
+              }, 100);
+            }
+          }
+        } catch (error) {
+          console.warn('Error handling copilot-output message:', error);
+        }
+        break;
+
+      case 'copilot-response':
+        try {
+          const copilotRespData = latestMessage.data;
+          if (copilotRespData?.content) {
+            appendStreamingChunk(setChatMessages, copilotRespData.content, true);
+          }
+        } catch (error) {
+          console.warn('Error handling copilot-response message:', error);
         }
         break;
 

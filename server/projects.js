@@ -438,6 +438,7 @@ async function getProjects(progressCallback = null) {
         isCustomName: !!customName,
         sessions: [],
         geminiSessions: [],
+        copilotSessions: [],
         sessionMeta: {
           hasMore: false,
           total: 0
@@ -493,6 +494,15 @@ async function getProjects(progressCallback = null) {
         project.geminiSessions = [];
       }
       applyCustomSessionNames(project.geminiSessions, 'gemini');
+
+      // Also fetch Copilot sessions for this project (from session manager)
+      try {
+        project.copilotSessions = sessionManager.getProjectSessions(actualProjectDir, 'copilot') || [];
+      } catch (e) {
+        console.warn(`Could not load Copilot sessions for project ${entry.name}:`, e.message);
+        project.copilotSessions = [];
+      }
+      applyCustomSessionNames(project.copilotSessions, 'copilot');
 
       // Add TaskMaster detection
       try {
@@ -562,12 +572,14 @@ async function getProjects(progressCallback = null) {
         isManuallyAdded: true,
         sessions: [],
         geminiSessions: [],
+        copilotSessions: [],
         sessionMeta: {
           hasMore: false,
           total: 0
         },
         cursorSessions: [],
-        codexSessions: []
+        codexSessions: [],
+        copilotSessions: []
       };
 
       // Try to fetch Cursor sessions for manual projects too
@@ -598,6 +610,14 @@ async function getProjects(progressCallback = null) {
         console.warn(`Could not load Gemini sessions for manual project ${projectName}:`, e.message);
       }
       applyCustomSessionNames(project.geminiSessions, 'gemini');
+
+      // Try to fetch Copilot sessions for manual projects too (from session manager)
+      try {
+        project.copilotSessions = sessionManager.getProjectSessions(actualProjectDir, 'copilot') || [];
+      } catch (e) {
+        console.warn(`Could not load Copilot sessions for manual project ${projectName}:`, e.message);
+      }
+      applyCustomSessionNames(project.copilotSessions, 'copilot');
 
       // Add TaskMaster detection for manual projects
       try {

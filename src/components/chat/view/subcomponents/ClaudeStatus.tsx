@@ -30,6 +30,7 @@ const PROVIDER_LABEL_KEYS: Record<string, string> = {
   codex: 'messageTypes.codex',
   cursor: 'messageTypes.cursor',
   gemini: 'messageTypes.gemini',
+  copilot: 'messageTypes.copilot',
 };
 
 function formatElapsedTime(totalSeconds: number, t: (key: string, options?: Record<string, unknown>) => string) {
