@@ -114,14 +114,14 @@ export async function queryClaudeCLI(command, options = {}, ws) {
   args.push('--mcp-config', '{"mcpServers":{}}', '--strict-mcp-config');
 
   // Resume: explicit session ID > registry > none
-  const isValidUUID = sessionId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionId);
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const resolvedCwd = cwd || process.env.HOME;
-  let resumeId = isValidUUID ? sessionId : null;
+  let resumeId = (sessionId && UUID_RE.test(sessionId)) ? sessionId : null;
 
   if (!resumeId) {
     // Check registry for a session created by Shell or a previous Chat query
     const registryId = getProjectSessionId(resolvedCwd);
-    if (registryId) {
+    if (registryId && UUID_RE.test(registryId)) {
       resumeId = registryId;
       console.log(`[Full REPL v2] Chat resuming session from registry: ${resumeId}`);
     }
