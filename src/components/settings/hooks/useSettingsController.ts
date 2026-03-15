@@ -279,6 +279,7 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
           email: null,
           loading: false,
           error: 'Failed to check authentication status',
+          isBedrock: false,
         });
         return;
       }

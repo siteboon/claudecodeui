@@ -3,17 +3,9 @@ import { spawn } from 'child_process';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
+import { isTruthyValue, loadClaudeSettingsEnv } from '../utils/env-helpers.js';
 
 const router = express.Router();
-
-function isTruthyValue(value) {
-  if (typeof value !== 'string') {
-    return false;
-  }
-
-  const normalized = value.trim().toLowerCase();
-  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
-}
 
 router.get('/claude/status', async (req, res) => {
   try {
@@ -108,22 +100,6 @@ router.get('/gemini/status', async (req, res) => {
   }
 });
 
-async function loadClaudeSettingsEnv() {
-  try {
-    const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
-    const content = await fs.readFile(settingsPath, 'utf8');
-    const settings = JSON.parse(content);
-
-    if (settings?.env && typeof settings.env === 'object') {
-      return settings.env;
-    }
-  } catch (error) {
-    // Ignore missing or malformed settings and fall back to other auth sources.
-  }
-
-  return {};
-}
-
 /**
  * Checks Claude authentication credentials using two methods with priority order:
  *
@@ -167,7 +143,8 @@ async function checkClaudeCredentials() {
     return {
       authenticated: true,
       email: 'API Key Auth',
-      method: 'api_key'
+      method: 'api_key',
+      isBedrock: false
     };
   }
 
