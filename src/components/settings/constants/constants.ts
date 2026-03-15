@@ -39,6 +39,7 @@ export const DEFAULT_AUTH_STATUS: AuthStatus = {
   email: null,
   loading: true,
   error: null,
+  isBedrock: false,
 };
 
 export const DEFAULT_MCP_TEST_RESULT: McpTestResult = {
