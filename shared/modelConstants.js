@@ -70,6 +70,31 @@ export const CODEX_MODELS = {
 };
 
 /**
+ * Copilot (GitHub) Models
+ */
+export const COPILOT_MODELS = {
+  OPTIONS: [
+    { value: "claude-sonnet-4.6", label: "Claude 4.6 Sonnet" },
+    { value: "claude-opus-4.6", label: "Claude 4.6 Opus" },
+    { value: "claude-opus-4.6-fast", label: "Claude 4.6 Opus (Fast)" },
+    { value: "claude-sonnet-4.5", label: "Claude 4.5 Sonnet" },
+    { value: "claude-opus-4.5", label: "Claude 4.5 Opus" },
+    { value: "claude-haiku-4.5", label: "Claude 4.5 Haiku" },
+    { value: "claude-sonnet-4", label: "Claude 4 Sonnet" },
+    { value: "gpt-5.4", label: "GPT-5.4" },
+    { value: "gpt-5.3-codex", label: "GPT-5.3 Codex" },
+    { value: "gpt-5.2-codex", label: "GPT-5.2 Codex" },
+    { value: "gpt-5.2", label: "GPT-5.2" },
+    { value: "gpt-5.1-codex-max", label: "GPT-5.1 Codex Max" },
+    { value: "gpt-5.1-codex", label: "GPT-5.1 Codex" },
+    { value: "gpt-5.1", label: "GPT-5.1" },
+    { value: "gemini-3-pro-preview", label: "Gemini 3 Pro Preview" },
+  ],
+
+  DEFAULT: "claude-sonnet-4.6",
+};
+
+/**
  * Gemini Models
  */
 export const GEMINI_MODELS = {
