@@ -10,7 +10,7 @@
  */
 
 import pty from 'node-pty';
-import { promises as fs } from 'fs';
+import { promises as fs, constants as fsConstants } from 'fs';
 import path from 'path';
 import os from 'os';
 
@@ -85,7 +85,7 @@ async function resolveClaudeBinary() {
 
   for (const candidate of candidates) {
     try {
-      await fs.access(candidate);
+      await fs.access(candidate, fsConstants.X_OK);
       cachedClaudeBin = candidate;
       console.log(`[Full REPL v2] Resolved claude binary: ${cachedClaudeBin}`);
       return cachedClaudeBin;
