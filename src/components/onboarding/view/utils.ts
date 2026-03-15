@@ -17,6 +17,7 @@ export const createInitialProviderStatuses = (): ProviderStatusMap => ({
   cursor: { authenticated: false, email: null, loading: true, error: null },
   codex: { authenticated: false, email: null, loading: true, error: null },
   gemini: { authenticated: false, email: null, loading: true, error: null },
+  copilot: { authenticated: false, email: null, loading: true, error: null },
 });
 
 export const readErrorMessageFromResponse = async (response: Response, fallback: string) => {
