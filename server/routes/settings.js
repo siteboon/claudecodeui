@@ -284,20 +284,12 @@ router.get('/repl-mode', async (req, res) => {
   try {
     const envMode = process.env.CLAUDE_FULL_REPL_MODE === 'true';
 
-    let settingsExists = false;
-    let permissionCount = 0;
-    let mcpServerCount = 0;
-    let allowedTools = [];
-    let deniedTools = [];
-
-    if (envMode) {
-      const settings = await getSettings();
-      settingsExists = !!settings;
-      allowedTools = settings?.permissions?.allow || [];
-      deniedTools = settings?.permissions?.deny || [];
-      permissionCount = allowedTools.length;
-      mcpServerCount = Object.keys(settings?.mcpServers || {}).length;
-    }
+    const settings = await getSettings();
+    const settingsExists = !!settings;
+    const allowedTools = settings?.permissions?.allow || [];
+    const deniedTools = settings?.permissions?.deny || [];
+    const permissionCount = allowedTools.length;
+    const mcpServerCount = Object.keys(settings?.mcpServers || {}).length;
 
     res.json({
       fullReplMode: envMode,

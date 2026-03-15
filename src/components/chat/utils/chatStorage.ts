@@ -3,11 +3,13 @@ import type { ClaudeSettings } from '../types/types';
 export const CLAUDE_SETTINGS_KEY = 'claude-settings';
 const FULL_REPL_MODE_KEY = 'claude-full-repl-mode';
 
-export function isFullReplModeActive(): boolean {
+export function isFullReplModeActive(): boolean | undefined {
   try {
-    return localStorage.getItem(FULL_REPL_MODE_KEY) === 'true';
+    const value = localStorage.getItem(FULL_REPL_MODE_KEY);
+    if (value === null) return undefined;
+    return value === 'true';
   } catch {
-    return false;
+    return undefined;
   }
 }
 

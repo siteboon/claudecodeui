@@ -1806,7 +1806,7 @@ function handleShellConnection(ws) {
                         if (!resumeSessionId) {
                             // Full REPL Mode: check if Chat created a session for this project
                             const registrySessionId = getProjectSessionId(resolvedProjectPath);
-                            if (registrySessionId) {
+                            if (registrySessionId && safeSessionIdPattern.test(registrySessionId)) {
                                 resumeSessionId = registrySessionId;
                                 console.log(`[Full REPL v2] Shell resuming Chat session from registry: ${registrySessionId}`);
 
@@ -1863,24 +1863,54 @@ function handleShellConnection(ws) {
                         sessionId
                     });
 
-                    // Shell → Chat sync: after Shell's claude starts, detect its session ID
-                    // by scanning the project's session files on disk after a delay.
+                    // Shell → Chat sync: detect session ID from PTY output
+                    // by watching for UUID patterns in early output (e.g. "Resuming Claude session <uuid>")
                     if (provider === 'claude' && !isPlainShell) {
-                        setTimeout(async () => {
-                            try {
-                                const latestSession = await findLatestSessionForProject(resolvedProjectPath);
-                                if (latestSession) {
-                                    setProjectSessionId(resolvedProjectPath, latestSession);
-                                    // Also update the PTY session record
-                                    const ptySession = ptySessionsMap.get(ptySessionKey);
-                                    if (ptySession) {
-                                        ptySession.sessionId = latestSession;
-                                    }
+                        const uuidPattern = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+                        let sessionDetected = false;
+                        let sessionDetectionTimeout = null;
+
+                        const sessionDetectionHandler = (outputData) => {
+                            if (sessionDetected) return;
+                            const match = outputData.match(uuidPattern);
+                            if (match) {
+                                sessionDetected = true;
+                                const detectedSessionId = match[0];
+                                setProjectSessionId(resolvedProjectPath, detectedSessionId);
+                                const ptySession = ptySessionsMap.get(ptySessionKey);
+                                if (ptySession) {
+                                    ptySession.sessionId = detectedSessionId;
                                 }
-                            } catch (err) {
-                                console.error('[Full REPL v2] Failed to detect Shell session:', err.message);
+                                console.log(`[Full REPL v2] Detected Shell session from PTY output: ${detectedSessionId}`);
+                                if (sessionDetectionTimeout) {
+                                    clearTimeout(sessionDetectionTimeout);
+                                    sessionDetectionTimeout = null;
+                                }
                             }
-                        }, 5000);
+                        };
+
+                        // Listen on PTY output for session ID
+                        const sessionDetectionDisposable = shellProcess.onData(sessionDetectionHandler);
+
+                        // Stop listening after 15 seconds if no UUID found
+                        sessionDetectionTimeout = setTimeout(() => {
+                            if (!sessionDetected) {
+                                sessionDetectionDisposable.dispose();
+                                // Fallback: scan disk for latest session file
+                                findLatestSessionForProject(resolvedProjectPath).then(latestSession => {
+                                    if (latestSession) {
+                                        setProjectSessionId(resolvedProjectPath, latestSession);
+                                        const ptySession = ptySessionsMap.get(ptySessionKey);
+                                        if (ptySession) {
+                                            ptySession.sessionId = latestSession;
+                                        }
+                                        console.log(`[Full REPL v2] Fallback: detected Shell session from disk: ${latestSession}`);
+                                    }
+                                }).catch(err => {
+                                    console.error('[Full REPL v2] Failed to detect Shell session:', err.message);
+                                });
+                            }
+                        }, 15000);
                     }
 
                     // Handle data output

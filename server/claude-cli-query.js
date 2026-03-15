@@ -125,6 +125,8 @@ export async function queryClaudeCLI(command, options = {}, ws) {
     }
   }
 
+  const isResumed = Boolean(resumeId);
+
   if (resumeId) {
     args.push('--resume', resumeId);
   }
@@ -198,6 +200,8 @@ export async function queryClaudeCLI(command, options = {}, ws) {
   let partialLine = '';
   let sessionCreatedSent = false;
   let bufferedMessages = [];
+  let lastPlaintextLine = '';
+  let structuredErrorSent = false;
 
   const session = {
     process: cliProcess,
@@ -222,7 +226,11 @@ export async function queryClaudeCLI(command, options = {}, ws) {
 
       // Strip any ANSI escape sequences that might leak through
       const cleaned = trimmed.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').trim();
-      if (!cleaned || cleaned[0] !== '{') continue;
+      if (!cleaned) continue;
+      if (cleaned[0] !== '{') {
+        lastPlaintextLine = cleaned;
+        continue;
+      }
 
       try {
         const event = JSON.parse(cleaned);
@@ -285,11 +293,20 @@ export async function queryClaudeCLI(command, options = {}, ws) {
       }
     }
 
+    // Emit plaintext CLI error if process failed without a structured error
+    if (exitCode && exitCode !== 0 && !structuredErrorSent && lastPlaintextLine) {
+      ws.send({
+        type: 'claude-error',
+        error: lastPlaintextLine,
+        sessionId: capturedSessionId || null,
+      });
+    }
+
     ws.send({
       type: 'claude-complete',
       sessionId: capturedSessionId,
       exitCode: exitCode || 0,
-      isNewSession: !sessionId,
+      isNewSession: !isResumed,
     });
 
     activeCliSessions.delete(capturedSessionId || sessionKey);

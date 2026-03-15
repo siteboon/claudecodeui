@@ -184,7 +184,7 @@ async function mapCliOptionsToSDK(options = {}) {
     sdkOptions.allowedTools = allowedTools;
     sdkOptions.disallowedTools = diskPermissions.deny || [];
 
-    if (diskSettings?.skipDangerousModePermissionPrompt) {
+    if (diskSettings?.skipDangerousModePermissionPrompt && permissionMode !== 'plan') {
       sdkOptions.permissionMode = 'bypassPermissions';
     }
 

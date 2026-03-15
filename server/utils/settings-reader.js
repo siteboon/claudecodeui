@@ -65,8 +65,16 @@ export async function getMcpServersFromSettings() {
 /**
  * Persists a newly-approved tool entry to ~/.claude/settings.json
  * using an atomic read-modify-write pattern (write to temp, rename).
+ * Serialized via a promise chain to prevent concurrent write races.
  */
+let writeQueue = Promise.resolve();
+
 export async function persistAllowedTool(entry) {
+  writeQueue = writeQueue.then(() => _persistAllowedToolImpl(entry)).catch(() => {});
+  return writeQueue;
+}
+
+async function _persistAllowedToolImpl(entry) {
   try {
     // Ensure ~/.claude directory exists
     await fs.mkdir(path.dirname(SETTINGS_PATH), { recursive: true });

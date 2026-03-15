@@ -671,6 +671,7 @@ export function useChatComposerState({
           },
         });
       } else {
+        const replMode = isFullReplModeActive();
         sendMessage({
           type: 'claude-command',
           command: messageContent,
@@ -684,7 +685,7 @@ export function useChatComposerState({
             model: claudeModel,
             sessionSummary,
             images: uploadedImages,
-            fullReplMode: isFullReplModeActive(),
+            ...(replMode !== undefined && { fullReplMode: replMode }),
           },
         });
       }
