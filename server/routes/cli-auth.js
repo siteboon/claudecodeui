@@ -485,7 +485,12 @@ async function checkCopilotCredentials() {
     const hostsPath = path.join(ghConfigDir, 'hosts.yml');
     const content = await fs.readFile(hostsPath, 'utf8');
 
-    if (content.includes('github.com') && content.includes('oauth_token')) {
+    // Parse line-by-line to avoid substring false positives.
+    // The hosts.yml format has top-level host keys like "github.com:"
+    const lines = content.split('\n');
+    const hasGitHubHost = lines.some(line => line.trimStart().startsWith('github.com:'));
+    const hasOAuthToken = lines.some(line => line.trimStart().startsWith('oauth_token:'));
+    if (hasGitHubHost && hasOAuthToken) {
       return {
         authenticated: true,
         email: 'GitHub CLI Auth'

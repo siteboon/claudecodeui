@@ -14,6 +14,9 @@ let activeCopilotProcesses = new Map(); // Track active processes by session ID
  * Prefers `copilot` on PATH, then falls back to the location used by `gh copilot`.
  */
 function getCopilotBinaryPath() {
+  if (process.platform === 'win32') {
+    return process.env.COPILOT_CLI_PATH || path.join(os.homedir(), 'AppData', 'Local', 'gh', 'copilot', 'copilot.exe');
+  }
   return process.env.COPILOT_CLI_PATH || path.join(os.homedir(), '.local', 'share', 'gh', 'copilot', 'copilot');
 }
 

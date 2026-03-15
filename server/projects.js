@@ -578,8 +578,7 @@ async function getProjects(progressCallback = null) {
           total: 0
         },
         cursorSessions: [],
-        codexSessions: [],
-        copilotSessions: []
+        codexSessions: []
       };
 
       // Try to fetch Cursor sessions for manual projects too
