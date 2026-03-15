@@ -3,6 +3,22 @@
 All notable changes to CloudCLI UI will be documented in this file.
 
 
+## [Unreleased]
+
+### New Features
+
+* **copilot:** add GitHub Copilot CLI provider with full backend adapter, WebSocket handlers, frontend types/state, settings, auth, onboarding, and sidebar support ([#1](https://github.com/Yintel12138/claudecodeui/pull/1))
+
+### Documentation
+
+* **i18n:** update README.zh-CN.md with comprehensive Chinese running guide including CLI usage, PM2 setup, troubleshooting, and version history ([#2](https://github.com/Yintel12138/claudecodeui/pull/2))
+* **docs:** sync all README translations (en, de, ja, ko, ru, zh-CN) to include GitHub Copilot CLI as a supported provider
+
+### Tests
+
+* **e2e:** add Playwright e2e test infrastructure with 16 tests covering navigation, settings, provider selection, and copilot integration
+
+
 ## [1.25.2](https://github.com/siteboon/claudecodeui/compare/v1.25.0...v1.25.2) (2026-03-11)
 
 ### New Features

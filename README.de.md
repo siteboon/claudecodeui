@@ -1,7 +1,7 @@
 <div align="center">
   <img src="public/logo.svg" alt="CloudCLI UI" width="64" height="64">
   <h1>Cloud CLI (auch bekannt als Claude Code UI)</h1>
-  <p>Eine Desktop- und Mobile-Oberfläche für <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a>, <a href="https://docs.cursor.com/en/cli/overview">Cursor CLI</a>, <a href="https://developers.openai.com/codex">Codex</a> und <a href="https://geminicli.com/">Gemini-CLI</a>.<br>Lokal oder remote nutzbar – verwalte deine aktiven Projekte und Sitzungen von überall.</p>
+  <p>Eine Desktop- und Mobile-Oberfläche für <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a>, <a href="https://docs.cursor.com/en/cli/overview">Cursor CLI</a>, <a href="https://developers.openai.com/codex">Codex</a>, <a href="https://geminicli.com/">Gemini-CLI</a> und <a href="https://docs.github.com/en/copilot/using-github-copilot/using-github-copilot-in-the-command-line">GitHub Copilot CLI</a>.<br>Lokal oder remote nutzbar – verwalte deine aktiven Projekte und Sitzungen von überall.</p>
 </div>
 
 <p align="center">
@@ -43,7 +43,7 @@
 <h3>CLI-Auswahl</h3>
 <img src="public/screenshots/cli-selection.png" alt="CLI-Auswahl" width="400">
 <br>
-<em>Wähle zwischen Claude Code, Gemini, Cursor CLI und Codex</em>
+<em>Wähle zwischen Claude Code, Gemini, Cursor CLI, Codex und GitHub Copilot</em>
 </td>
 </tr>
 </table>
@@ -108,7 +108,7 @@ CloudCLI UI ist die Open-Source-UI-Schicht, die CloudCLI Cloud antreibt. Du kann
 | **Rechner muss laufen** | Ja | Nein |
 | **Mobiler Zugriff** | Jeder Browser im Netzwerk | Jedes Gerät, native App in Entwicklung |
 | **Verfügbare Sitzungen** | Alle Sitzungen automatisch aus `~/.claude` erkannt | Alle Sitzungen in deiner Cloud-Umgebung |
-| **Unterstützte Agents** | Claude Code, Cursor CLI, Codex, Gemini CLI | Claude Code, Cursor CLI, Codex, Gemini CLI |
+| **Unterstützte Agents** | Claude Code, Cursor CLI, Codex, Gemini CLI, GitHub Copilot CLI | Claude Code, Cursor CLI, Codex, Gemini CLI, GitHub Copilot CLI |
 | **Datei-Explorer und Git** | Ja, direkt in der UI | Ja, direkt in der UI |
 | **MCP-Konfiguration** | Über UI verwaltet, synchronisiert mit lokalem `~/.claude` | Über UI verwaltet |
 | **IDE-Zugriff** | Deine lokale IDE | Jede IDE, die mit deiner Cloud-Umgebung verbunden ist |
@@ -174,7 +174,7 @@ Das bedeutet in der Praxis:
 
 - **Alle Sitzungen, nicht nur eine** – CloudCLI UI erkennt automatisch jede Sitzung aus dem `~/.claude`-Ordner. Remote Control stellt nur die einzelne aktive Sitzung bereit, um sie in der Claude Mobile App verfügbar zu machen.
 - **Deine Einstellungen sind deine Einstellungen** – MCP-Server, Tool-Berechtigungen und Projektkonfiguration, die in CloudCLI UI geändert werden, werden direkt in die Claude Code-Konfiguration geschrieben und treten sofort in Kraft – und umgekehrt.
-- **Funktioniert mit mehr Agents** – Claude Code, Cursor CLI, Codex und Gemini CLI, nicht nur Claude Code.
+- **Funktioniert mit mehr Agents** – Claude Code, Cursor CLI, Codex, Gemini CLI und GitHub Copilot CLI, nicht nur Claude Code.
 - **Vollständige UI, nicht nur ein Chat-Fenster** – Datei-Explorer, Git-Integration, MCP-Verwaltung und ein Shell-Terminal sind alle eingebaut.
 - **CloudCLI Cloud läuft in der Cloud** – Laptop zuklappen, der Agent läuft weiter. Kein Terminal zu überwachen, kein Rechner, der laufen muss.
 
@@ -183,7 +183,7 @@ Das bedeutet in der Praxis:
 <details>
 <summary>Muss ich ein KI-Abonnement separat bezahlen?</summary>
 
-Ja. CloudCLI stellt die Umgebung bereit, nicht die KI. Du bringst dein eigenes Claude-, Cursor-, Codex- oder Gemini-Abonnement mit. CloudCLI Cloud beginnt bei $7/Monat für die gehostete Umgebung zusätzlich dazu.
+Ja. CloudCLI stellt die Umgebung bereit, nicht die KI. Du bringst dein eigenes Claude-, Cursor-, Codex-, Gemini- oder GitHub Copilot-Abonnement mit. CloudCLI Cloud beginnt bei $7/Monat für die gehostete Umgebung zusätzlich dazu.
 
 </details>
 
@@ -223,6 +223,7 @@ Dieses Projekt ist Open Source und kann unter der GPL v3-Lizenz kostenlos genutz
 - **[Cursor CLI](https://docs.cursor.com/en/cli/overview)** - Cursors offizielle CLI
 - **[Codex](https://developers.openai.com/codex)** - OpenAI Codex
 - **[Gemini-CLI](https://geminicli.com/)** - Google Gemini CLI
+- **[GitHub Copilot CLI](https://docs.github.com/en/copilot/using-github-copilot/using-github-copilot-in-the-command-line)** - GitHub Copilot CLI
 - **[React](https://react.dev/)** - UI-Bibliothek
 - **[Vite](https://vitejs.dev/)** - Schnelles Build-Tool und Dev-Server
 - **[Tailwind CSS](https://tailwindcss.com/)** - Utility-first CSS-Framework
@@ -235,5 +236,5 @@ Dieses Projekt ist Open Source und kann unter der GPL v3-Lizenz kostenlos genutz
 ---
 
 <div align="center">
-  <strong>Mit Sorgfalt für die Claude Code-, Cursor- und Codex-Community erstellt.</strong>
+  <strong>Mit Sorgfalt für die Claude Code-, Cursor-, Codex-, Gemini- und Copilot-Community erstellt.</strong>
 </div>
