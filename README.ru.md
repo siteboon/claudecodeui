@@ -4,7 +4,7 @@
 </div>
 
 
-Десктопный и мобильный UI для [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor CLI](https://docs.cursor.com/en/cli/overview), [Codex](https://developers.openai.com/codex) и [Gemini-CLI](https://geminicli.com/). Его можно использовать локально или удаленно, чтобы просматривать активные проекты и сессии и вносить изменения откуда угодно, с мобильного или десктопа. Это дает полноценный интерфейс, который работает везде.
+Десктопный и мобильный UI для [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor CLI](https://docs.cursor.com/en/cli/overview), [Codex](https://developers.openai.com/codex), [Gemini-CLI](https://geminicli.com/) и [GitHub Copilot CLI](https://docs.github.com/en/copilot/using-github-copilot/using-github-copilot-in-the-command-line). Его можно использовать локально или удаленно, чтобы просматривать активные проекты и сессии и вносить изменения откуда угодно, с мобильного или десктопа.
 
 <p align="center">
   <a href="https://cloudcli.ai">CloudCLI Cloud</a> · <a href="https://discord.gg/buxwujPNRE">Discord</a> · <a href="https://github.com/siteboon/claudecodeui/issues">Сообщить об ошибке</a> · <a href="CONTRIBUTING.md">Участие в разработке</a>
@@ -41,7 +41,7 @@
 <h3>Выбор CLI</h3>
 <img src="public/screenshots/cli-selection.png" alt="CLI Selection" width="400">
 <br>
-<em>Выбор между Claude Code, Cursor CLI, Codex и Gemini CLI</em>
+<em>Выбор между Claude Code, Cursor CLI, Codex, Gemini CLI и GitHub Copilot</em>
 </td>
 </tr>
 </table>
@@ -59,7 +59,7 @@
 - **Git Explorer** - просмотр, stage и commit изменений, а также переключение веток
 - **Управление сессиями** - возобновление диалогов, работа с несколькими сессиями и история
 - **Интеграция с TaskMaster AI** *(опционально)* - расширенное управление проектами с AI-планированием задач, разбором PRD и автоматизацией workflows
-- **Совместимость с моделями** - работает с Claude Sonnet 4.5, Opus 4.5, GPT-5.2 и Gemini.
+- **Совместимость с моделями** - работает с Claude, GPT и Gemini (полный список поддерживаемых моделей в [`shared/modelConstants.js`](shared/modelConstants.js))
 
 
 ## Быстрый старт
@@ -105,7 +105,7 @@ CloudCLI UI - это open source UI-слой, на котором построе
 | **Машина должна оставаться включенной** | Да | Нет |
 | **Доступ с мобильных устройств** | Любой браузер в вашей сети | Любое устройство, нативное приложение в разработке |
 | **Доступные сессии** | Все сессии автоматически обнаруживаются в `~/.claude` | Все сессии внутри вашей облачной среды |
-| **Поддерживаемые агенты** | Claude Code, Cursor CLI, Codex, Gemini CLI | Claude Code, Cursor CLI, Codex, Gemini CLI |
+| **Поддерживаемые агенты** | Claude Code, Cursor CLI, Codex, Gemini CLI, GitHub Copilot CLI | Claude Code, Cursor CLI, Codex, Gemini CLI, GitHub Copilot CLI |
 | **Файловый менеджер и Git** | Да, встроены в UI | Да, встроены в UI |
 | **Конфигурация MCP** | Управляется через UI, синхронизируется с локальным `~/.claude` | Управляется через UI |
 | **Доступ из IDE** | Ваша локальная IDE | Любая IDE, подключенная к облачной среде |
@@ -153,7 +153,7 @@ CloudCLI UI и CloudCLI Cloud расширяют Claude Code, а не работ
 
 - **Все ваши сессии, а не одна** — CloudCLI UI автоматически находит каждую сессию из папки `~/.claude`. Remote Control предоставляет только одну активную сессию, чтобы сделать ее доступной в мобильном приложении Claude.
 - **Ваши настройки остаются вашими** — MCP-серверы, права инструментов и конфигурация проекта, измененные в CloudCLI UI, записываются напрямую в конфиг Claude Code и вступают в силу сразу же, и наоборот.
-- **Поддержка большего числа агентов** — Claude Code, Cursor CLI, Codex и Gemini CLI, а не только Claude Code.
+- **Поддержка большего числа агентов** — Claude Code, Cursor CLI, Codex, Gemini CLI и GitHub Copilot CLI, а не только Claude Code.
 - **Полноценный UI, а не просто окно чата** — встроены файловый менеджер, Git-интеграция, управление MCP и shell-терминал.
 - **CloudCLI Cloud работает в облаке** — можно закрыть ноутбук, а агент продолжит работу. Не нужно держать терминал открытым и машину в активном состоянии.
 
@@ -162,7 +162,7 @@ CloudCLI UI и CloudCLI Cloud расширяют Claude Code, а не работ
 <details>
 <summary>Нужно ли отдельно платить за AI-подписку?</summary>
 
-Да. CloudCLI предоставляет среду, а не сам AI. Вы используете собственную подписку Claude, Cursor, Codex или Gemini. CloudCLI Cloud стоит от $7/месяц за хостируемую среду сверх этого.
+Да. CloudCLI предоставляет среду, а не сам AI. Вы используете собственную подписку Claude, Cursor, Codex, Gemini или GitHub Copilot. CloudCLI Cloud стоит от $7/месяц за хостируемую среду сверх этого.
 
 </details>
 
@@ -202,6 +202,7 @@ GNU General Public License v3.0 - подробности в файле [LICENSE]
 - **[Cursor CLI](https://docs.cursor.com/en/cli/overview)** - официальный CLI от Cursor
 - **[Codex](https://developers.openai.com/codex)** - OpenAI Codex
 - **[Gemini-CLI](https://geminicli.com/)** - Google Gemini CLI
+- **[GitHub Copilot CLI](https://docs.github.com/en/copilot/using-github-copilot/using-github-copilot-in-the-command-line)** - GitHub Copilot CLI
 - **[React](https://react.dev/)** - библиотека пользовательских интерфейсов
 - **[Vite](https://vitejs.dev/)** - быстрый инструмент сборки и dev-сервер
 - **[Tailwind CSS](https://tailwindcss.com/)** - utility-first CSS framework
@@ -214,5 +215,5 @@ GNU General Public License v3.0 - подробности в файле [LICENSE]
 ---
 
 <div align="center">
-  <strong>Сделано с любовью к сообществу Claude Code, Cursor и Codex.</strong>
+  <strong>Сделано с любовью к сообществу Claude Code, Cursor, Codex, Gemini и Copilot.</strong>
 </div>

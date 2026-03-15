@@ -59,6 +59,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     cursorAuthStatus,
     codexAuthStatus,
     geminiAuthStatus,
+    copilotAuthStatus,
     geminiPermissionMode,
     setGeminiPermissionMode,
     openLoginForProvider,
@@ -110,7 +111,11 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
       ? cursorAuthStatus.authenticated
       : loginProvider === 'codex'
         ? codexAuthStatus.authenticated
-        : false;
+        : loginProvider === 'gemini'
+          ? geminiAuthStatus.authenticated
+          : loginProvider === 'copilot'
+            ? copilotAuthStatus.authenticated
+            : false;
 
   return (
     <div className="modal-backdrop fixed inset-0 z-[9999] flex items-center justify-center bg-background/80 backdrop-blur-sm md:p-4">
@@ -161,10 +166,12 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
                   cursorAuthStatus={cursorAuthStatus}
                   codexAuthStatus={codexAuthStatus}
                   geminiAuthStatus={geminiAuthStatus}
+                  copilotAuthStatus={copilotAuthStatus}
                   onClaudeLogin={() => openLoginForProvider('claude')}
                   onCursorLogin={() => openLoginForProvider('cursor')}
                   onCodexLogin={() => openLoginForProvider('codex')}
                   onGeminiLogin={() => openLoginForProvider('gemini')}
+                  onCopilotLogin={() => openLoginForProvider('copilot')}
                   claudePermissions={claudePermissions}
                   onClaudePermissionsChange={setClaudePermissions}
                   cursorPermissions={cursorPermissions}

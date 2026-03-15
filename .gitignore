@@ -139,3 +139,9 @@ tasks/
 
 # Git worktrees
 .worktrees/
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/e2e/screenshots/
