@@ -25,8 +25,7 @@ export default function AgentSelectorSection({
           const dotColor =
             agent === 'claude' ? 'bg-blue-500' :
             agent === 'cursor' ? 'bg-purple-500' :
-            agent === 'gemini' ? 'bg-indigo-500' :
-            agent === 'copilot' ? 'bg-foreground/60' : 'bg-foreground/60';
+            agent === 'gemini' ? 'bg-indigo-500' : 'bg-foreground/60';
 
           return (
             <Pill

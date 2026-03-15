@@ -15,8 +15,10 @@ router.get('/sessions/:sessionId/messages', async (req, res) => {
 
         // Verify session ownership: reject if the session belongs to a different user
         const ownerId = getCopilotSessionOwner(sessionId);
-        if (ownerId && req.user && req.user.id !== ownerId) {
-            return res.status(403).json({ success: false, error: 'Access denied' });
+        if (ownerId) {
+            if (!req.user || req.user.id !== ownerId) {
+                return res.status(403).json({ success: false, error: 'Access denied' });
+            }
         }
 
         let messages = sessionManager.getSessionMessages(sessionId);
@@ -45,8 +47,10 @@ router.delete('/sessions/:sessionId', async (req, res) => {
 
         // Verify session ownership: reject if the session belongs to a different user
         const ownerId = getCopilotSessionOwner(sessionId);
-        if (ownerId && req.user && req.user.id !== ownerId) {
-            return res.status(403).json({ success: false, error: 'Access denied' });
+        if (ownerId) {
+            if (!req.user || req.user.id !== ownerId) {
+                return res.status(403).json({ success: false, error: 'Access denied' });
+            }
         }
 
         await sessionManager.deleteSession(sessionId);
