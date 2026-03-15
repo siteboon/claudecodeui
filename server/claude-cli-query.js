@@ -39,8 +39,8 @@ export function setProjectSessionId(projectPath, sessionId) {
  */
 export async function findLatestSessionForProject(projectPath) {
   try {
-    // Claude encodes project paths by replacing / with -
-    const encoded = projectPath.replace(/\//g, '-');
+    // Claude encodes project paths by replacing non-alphanumeric chars with -
+    const encoded = projectPath.replace(/[^a-zA-Z0-9-]/g, '-');
     const projectDir = path.join(os.homedir(), '.claude', 'projects', encoded);
 
     const entries = await fs.readdir(projectDir);
@@ -150,10 +150,18 @@ export async function queryClaudeCLI(command, options = {}, ws) {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'claude-img-'));
     for (let i = 0; i < images.length; i++) {
       const img = images[i];
-      if (img.data && img.mediaType) {
-        const ext = img.mediaType.split('/')[1] || 'png';
+      // Support both data URL format (data:mime;base64,...) and raw base64
+      const dataUrlMatch = typeof img.data === 'string'
+        ? img.data.match(/^data:([^;]+);base64,(.+)$/)
+        : null;
+      const mimeType = img.mediaType || img.mimeType || dataUrlMatch?.[1];
+      const base64Data = dataUrlMatch?.[2] ||
+        (typeof img.data === 'string' && !img.data.startsWith('data:') ? img.data : null);
+
+      if (mimeType && base64Data) {
+        const ext = mimeType.split('/')[1] || 'png';
         const imgPath = path.join(tempDir, `image_${i}.${ext}`);
-        const buffer = Buffer.from(img.data, 'base64');
+        const buffer = Buffer.from(base64Data, 'base64');
         await fs.writeFile(imgPath, buffer);
         tempImagePaths.push(imgPath);
       }

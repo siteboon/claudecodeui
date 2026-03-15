@@ -1470,13 +1470,14 @@ function handleChatConnection(ws, request) {
                     // Full REPL Mode: spawn native claude CLI
                     console.log('[Full REPL v2] Using native CLI');
 
-                    // Kill any active Shell PTY for this project to release the session lock.
-                    // The Shell will auto-resume when the user switches back.
+                    // Kill any active Claude Shell PTY for this project to release the session lock.
+                    // Only targets Claude sessions (UUID session IDs), not plain shell/cursor/codex/gemini.
                     const projectPath = data.options?.cwd || data.options?.projectPath;
+                    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
                     if (projectPath) {
                         for (const [key, session] of ptySessionsMap.entries()) {
-                            if (session.projectPath === projectPath && session.pty) {
-                                console.log(`[Full REPL v2] Killing Shell PTY for project handoff: ${key}`);
+                            if (session.projectPath === projectPath && session.pty && session.sessionId && uuidPattern.test(session.sessionId)) {
+                                console.log(`[Full REPL v2] Killing Claude Shell PTY for project handoff: ${key}`);
                                 try { session.pty.kill(); } catch { /* already dead */ }
                                 ptySessionsMap.delete(key);
                             }
@@ -1809,12 +1810,12 @@ function handleShellConnection(ws) {
                             if (registrySessionId && safeSessionIdPattern.test(registrySessionId)) {
                                 resumeSessionId = registrySessionId;
                                 console.log(`[Full REPL v2] Shell resuming Chat session from registry: ${registrySessionId}`);
-
-                                // Kill any active Chat CLI process for this project
-                                if (abortClaudeCLISession(registrySessionId)) {
-                                    console.log(`[Full REPL v2] Killed Chat CLI process for session handoff`);
-                                }
                             }
+                        }
+
+                        // Kill any active Chat CLI process for the session being resumed
+                        if (resumeSessionId && abortClaudeCLISession(resumeSessionId)) {
+                            console.log('[Full REPL v2] Killed Chat CLI process for session handoff');
                         }
 
                         if (resumeSessionId) {
