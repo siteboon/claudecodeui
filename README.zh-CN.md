@@ -75,15 +75,15 @@
 
 ### 自托管（开源）
 
-使用 **npx** 立即体验 CloudCLI UI（需要 **Node.js** v22+）：
+使用 **npx** 立即体验 CloudCLI UI（需要 **Node.js** v22+，并且已安装至少一个支持的 CLI：Claude Code CLI、Cursor CLI、Codex、Gemini-CLI 或 GitHub Copilot CLI）：
 
-```
+```bash
 npx @siteboon/claude-code-ui
 ```
 
 或**全局安装**以供常规使用：
 
-```
+```bash
 npm install -g @siteboon/claude-code-ui
 cloudcli
 ```

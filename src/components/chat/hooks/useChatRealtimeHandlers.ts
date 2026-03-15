@@ -5,6 +5,38 @@ import { safeLocalStorage } from '../utils/chatStorage';
 import type { ChatMessage, PendingPermissionRequest } from '../types/types';
 import type { Project, ProjectSession, SessionProvider } from '../../../types/app';
 
+/**
+ * Strips ANSI escape sequences and control characters from terminal output.
+ * Uses character-by-character iteration to avoid Biome's noControlCharactersInRegex rule.
+ */
+const stripTerminalNoise = (value: string): string => {
+  let result = '';
+  let inEscapeSequence = false;
+
+  for (const char of value) {
+    const code = char.charCodeAt(0);
+
+    if (inEscapeSequence) {
+      if (char >= '@' && char <= '~') {
+        inEscapeSequence = false;
+      }
+      continue;
+    }
+
+    if (code === 0x1b) {
+      inEscapeSequence = true;
+      continue;
+    }
+
+    // Allow TAB (0x09), LF (0x0A), CR (0x0D), and printable chars (>= 0x20)
+    if (code === 0x09 || code === 0x0a || code === 0x0d || code >= 0x20) {
+      result += char;
+    }
+  }
+
+  return result;
+};
+
 type PendingViewSession = {
   sessionId: string | null;
   startedAt: number;
@@ -894,10 +926,7 @@ export function useChatRealtimeHandlers({
       case 'copilot-output':
         try {
           const raw = String(latestMessage.data ?? '');
-          const cleaned = raw
-            .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
-            .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
-            .trim();
+          const cleaned = stripTerminalNoise(raw).trim();
 
           if (cleaned) {
             streamBufferRef.current += streamBufferRef.current ? `\n${cleaned}` : cleaned;

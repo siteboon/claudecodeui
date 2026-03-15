@@ -1,5 +1,6 @@
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
 import crossSpawn from 'cross-spawn';
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
@@ -8,16 +9,43 @@ import { notifyRunFailed, notifyRunStopped } from './services/notification-orche
 const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
 
 let activeCopilotProcesses = new Map(); // Track active processes by session ID
+const copilotSessionOwners = new Map(); // Track session-to-userId mapping for ownership checks
 
 /**
  * Resolve the copilot binary path.
- * Prefers `copilot` on PATH, then falls back to the location used by `gh copilot`.
+ * Checks COPILOT_CLI_PATH env, then PATH lookup, then official install locations.
  */
 function getCopilotBinaryPath() {
-  if (process.platform === 'win32') {
-    return process.env.COPILOT_CLI_PATH || path.join(os.homedir(), 'AppData', 'Local', 'gh', 'copilot', 'copilot.exe');
+  // 1. Explicit override via environment variable
+  if (process.env.COPILOT_CLI_PATH) {
+    return process.env.COPILOT_CLI_PATH;
   }
-  return process.env.COPILOT_CLI_PATH || path.join(os.homedir(), '.local', 'share', 'gh', 'copilot', 'copilot');
+
+  // 2. Try to find copilot on PATH
+  try {
+    const cmd = process.platform === 'win32' ? 'where copilot' : 'which copilot';
+    const result = execSync(cmd, { encoding: 'utf8', timeout: 5000 }).trim();
+    if (result) {
+      return result.split('\n')[0]; // Use first match
+    }
+  } catch {
+    // Not found on PATH, try fallback locations
+  }
+
+  // 3. Check official installation locations
+  if (process.platform !== 'win32') {
+    const homeBinPath = path.join(os.homedir(), '.local', 'bin', 'copilot');
+    if (fs.existsSync(homeBinPath)) {
+      return homeBinPath;
+    }
+
+    if (fs.existsSync('/usr/local/bin/copilot')) {
+      return '/usr/local/bin/copilot';
+    }
+  }
+
+  // 4. Fall back to bare command name (let shell resolve)
+  return 'copilot';
 }
 
 async function spawnCopilot(command, options = {}, ws) {
@@ -150,6 +178,12 @@ async function spawnCopilot(command, options = {}, ws) {
                   if (processKey !== capturedSessionId) {
                     activeCopilotProcesses.delete(processKey);
                     activeCopilotProcesses.set(capturedSessionId, copilotProcess);
+                  }
+
+                  // Track session ownership for authorization checks
+                  const ownerId = ws?.userId || null;
+                  if (ownerId) {
+                    copilotSessionOwners.set(capturedSessionId, ownerId);
                   }
 
                   // Set session ID on writer (for API endpoint compatibility)
@@ -349,9 +383,19 @@ function getActiveCopilotSessions() {
   return Array.from(activeCopilotProcesses.keys());
 }
 
+function getCopilotSessionOwner(sessionId) {
+  return copilotSessionOwners.get(sessionId) || null;
+}
+
+function removeCopilotSessionOwner(sessionId) {
+  copilotSessionOwners.delete(sessionId);
+}
+
 export {
   spawnCopilot,
   abortCopilotSession,
   isCopilotSessionActive,
-  getActiveCopilotSessions
+  getActiveCopilotSessions,
+  getCopilotSessionOwner,
+  removeCopilotSessionOwner
 };

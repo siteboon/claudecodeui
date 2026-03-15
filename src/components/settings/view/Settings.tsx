@@ -111,7 +111,11 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
       ? cursorAuthStatus.authenticated
       : loginProvider === 'codex'
         ? codexAuthStatus.authenticated
-        : false;
+        : loginProvider === 'gemini'
+          ? geminiAuthStatus.authenticated
+          : loginProvider === 'copilot'
+            ? copilotAuthStatus.authenticated
+            : false;
 
   return (
     <div className="modal-backdrop fixed inset-0 z-[9999] flex items-center justify-center bg-background/80 backdrop-blur-sm md:p-4">
