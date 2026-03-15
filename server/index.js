@@ -1484,6 +1484,11 @@ function handleChatConnection(ws, request) {
                         }
                     }
 
+                    // Normalize cwd so the CLI runner uses the correct project path
+                    if (!data.options.cwd && projectPath) {
+                        data.options.cwd = projectPath;
+                    }
+
                     await queryClaudeCLI(data.command, data.options, writer);
                 } else {
                     // Default: use Claude Agents SDK
@@ -1861,15 +1866,17 @@ function handleShellConnection(ws) {
                         buffer: [],
                         timeoutId: null,
                         projectPath,
-                        sessionId
+                        sessionId: resumeSessionId || sessionId
                     });
 
                     // Shell → Chat sync: detect session ID from PTY output
                     // by watching for UUID patterns in early output (e.g. "Resuming Claude session <uuid>")
+                    let sessionDetected = false;
+                    let sessionDetectionTimeout = null;
+                    let sessionDetectionDisposable = null;
+
                     if (provider === 'claude' && !isPlainShell) {
                         const uuidPattern = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
-                        let sessionDetected = false;
-                        let sessionDetectionTimeout = null;
 
                         const sessionDetectionHandler = (outputData) => {
                             if (sessionDetected) return;
@@ -1891,7 +1898,7 @@ function handleShellConnection(ws) {
                         };
 
                         // Listen on PTY output for session ID
-                        const sessionDetectionDisposable = shellProcess.onData(sessionDetectionHandler);
+                        sessionDetectionDisposable = shellProcess.onData(sessionDetectionHandler);
 
                         // Stop listening after 15 seconds if no UUID found
                         sessionDetectionTimeout = setTimeout(() => {
@@ -1982,6 +1989,15 @@ function handleShellConnection(ws) {
                     // Handle process exit
                     shellProcess.onExit((exitCode) => {
                         console.log('🔚 Shell process exited with code:', exitCode.exitCode, 'signal:', exitCode.signal);
+
+                        // Clean up session detection listener/timeout
+                        sessionDetected = true;
+                        sessionDetectionDisposable?.dispose();
+                        if (sessionDetectionTimeout) {
+                            clearTimeout(sessionDetectionTimeout);
+                            sessionDetectionTimeout = null;
+                        }
+
                         const session = ptySessionsMap.get(ptySessionKey);
                         if (session && session.ws && session.ws.readyState === WebSocket.OPEN) {
                             session.ws.send(JSON.stringify({

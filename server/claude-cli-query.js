@@ -14,6 +14,8 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
 
+const ANSI_ESCAPE_RE = /\x1b\[[0-9;]*[a-zA-Z]/g;
+
 const activeCliSessions = new Map();
 
 /**
@@ -233,7 +235,7 @@ export async function queryClaudeCLI(command, options = {}, ws) {
       if (!trimmed) continue;
 
       // Strip any ANSI escape sequences that might leak through
-      const cleaned = trimmed.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').trim();
+      const cleaned = trimmed.replace(ANSI_ESCAPE_RE, '').trim();
       if (!cleaned) continue;
       if (cleaned[0] !== '{') {
         lastPlaintextLine = cleaned;
@@ -282,12 +284,12 @@ export async function queryClaudeCLI(command, options = {}, ws) {
     }
   });
 
-  cliProcess.onExit(({ exitCode }) => {
+  cliProcess.onExit(async ({ exitCode }) => {
     console.log(`[Full REPL v2] CLI process exited with code ${exitCode}`);
 
     // Process any remaining partial line
     if (partialLine.trim()) {
-      const cleaned = partialLine.trim().replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').trim();
+      const cleaned = partialLine.trim().replace(ANSI_ESCAPE_RE, '').trim();
       if (cleaned && cleaned[0] === '{') {
         try {
           const event = JSON.parse(cleaned);
@@ -320,12 +322,12 @@ export async function queryClaudeCLI(command, options = {}, ws) {
     activeCliSessions.delete(capturedSessionId || sessionKey);
 
     // Clean up temp images
-    if (tempImagePaths.length > 0) {
-      for (const p of tempImagePaths) {
-        fs.unlink(p).catch(() => {});
-      }
-      if (tempDir) {
-        fs.rmdir(tempDir).catch(() => {});
+    if (tempDir) {
+      try {
+        await Promise.all(tempImagePaths.map(p => fs.unlink(p).catch(() => {})));
+        await fs.rmdir(tempDir).catch(() => {});
+      } catch {
+        // ignore cleanup errors
       }
     }
   });
