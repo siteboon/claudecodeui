@@ -59,6 +59,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     cursorAuthStatus,
     codexAuthStatus,
     geminiAuthStatus,
+    copilotAuthStatus,
     geminiPermissionMode,
     setGeminiPermissionMode,
     openLoginForProvider,
@@ -161,10 +162,12 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
                   cursorAuthStatus={cursorAuthStatus}
                   codexAuthStatus={codexAuthStatus}
                   geminiAuthStatus={geminiAuthStatus}
+                  copilotAuthStatus={copilotAuthStatus}
                   onClaudeLogin={() => openLoginForProvider('claude')}
                   onCursorLogin={() => openLoginForProvider('cursor')}
                   onCodexLogin={() => openLoginForProvider('codex')}
                   onGeminiLogin={() => openLoginForProvider('gemini')}
+                  onCopilotLogin={() => openLoginForProvider('copilot')}
                   claudePermissions={claudePermissions}
                   onClaudePermissionsChange={setClaudePermissions}
                   cursorPermissions={cursorPermissions}

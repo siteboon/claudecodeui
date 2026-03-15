@@ -96,6 +96,26 @@ router.get('/gemini/status', async (req, res) => {
   }
 });
 
+router.get('/copilot/status', async (req, res) => {
+  try {
+    const result = await checkCopilotCredentials();
+
+    res.json({
+      authenticated: result.authenticated,
+      email: result.email,
+      error: result.error
+    });
+
+  } catch (error) {
+    console.error('Error checking Copilot auth status:', error);
+    res.status(500).json({
+      authenticated: false,
+      email: null,
+      error: error.message
+    });
+  }
+});
+
 async function loadClaudeSettingsEnv() {
   try {
     const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
@@ -429,6 +449,57 @@ async function checkGeminiCredentials() {
       error: 'Gemini CLI not configured'
     };
   }
+}
+
+async function checkCopilotCredentials() {
+  // Check for GitHub token environment variable
+  if (process.env.GITHUB_TOKEN && process.env.GITHUB_TOKEN.trim()) {
+    return {
+      authenticated: true,
+      email: 'GitHub Token Auth'
+    };
+  }
+
+  // Check for GitHub Copilot OAuth credentials
+  try {
+    const copilotConfigDir = path.join(os.homedir(), '.copilot');
+    const hostsPath = path.join(copilotConfigDir, 'hosts.json');
+    const content = await fs.readFile(hostsPath, 'utf8');
+    const hosts = JSON.parse(content);
+
+    // Check for github.com entry
+    const githubHost = hosts['github.com'];
+    if (githubHost && githubHost.oauth_token) {
+      return {
+        authenticated: true,
+        email: githubHost.user || 'GitHub User'
+      };
+    }
+  } catch (e) {
+    // Fall through to next check
+  }
+
+  // Check gh CLI auth as fallback
+  try {
+    const ghConfigDir = path.join(os.homedir(), '.config', 'gh');
+    const hostsPath = path.join(ghConfigDir, 'hosts.yml');
+    const content = await fs.readFile(hostsPath, 'utf8');
+
+    if (content.includes('github.com') && content.includes('oauth_token')) {
+      return {
+        authenticated: true,
+        email: 'GitHub CLI Auth'
+      };
+    }
+  } catch (e) {
+    // Fall through
+  }
+
+  return {
+    authenticated: false,
+    email: null,
+    error: 'Copilot CLI not configured'
+  };
 }
 
 export default router;
