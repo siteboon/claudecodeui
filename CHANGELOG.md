@@ -7,11 +7,11 @@ All notable changes to CloudCLI UI will be documented in this file.
 
 ### New Features
 
-* **copilot:** add GitHub Copilot CLI provider with full backend adapter, WebSocket handlers, frontend types/state, settings, auth, onboarding, and sidebar support ([#1](https://github.com/Yintel12138/claudecodeui/pull/1))
+* **copilot:** add GitHub Copilot CLI provider with full backend adapter, WebSocket handlers, frontend types/state, settings, auth, onboarding, and sidebar support ([`#549`](https://github.com/siteboon/claudecodeui/pull/549))
 
 ### Documentation
 
-* **i18n:** update README.zh-CN.md with comprehensive Chinese running guide including CLI usage, PM2 setup, troubleshooting, and version history ([#2](https://github.com/Yintel12138/claudecodeui/pull/2))
+* **i18n:** update README.zh-CN.md with comprehensive Chinese running guide including CLI usage, PM2 setup, troubleshooting, and version history ([`#549`](https://github.com/siteboon/claudecodeui/pull/549))
 * **docs:** sync all README translations (en, de, ja, ko, ru, zh-CN) to include GitHub Copilot CLI as a supported provider
 
 ### Tests
