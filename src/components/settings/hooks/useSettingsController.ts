@@ -248,6 +248,7 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
   const [cursorAuthStatus, setCursorAuthStatus] = useState<AuthStatus>(DEFAULT_AUTH_STATUS);
   const [codexAuthStatus, setCodexAuthStatus] = useState<AuthStatus>(DEFAULT_AUTH_STATUS);
   const [geminiAuthStatus, setGeminiAuthStatus] = useState<AuthStatus>(DEFAULT_AUTH_STATUS);
+  const [copilotAuthStatus, setCopilotAuthStatus] = useState<AuthStatus>(DEFAULT_AUTH_STATUS);
 
   const setAuthStatusByProvider = useCallback((provider: AgentProvider, status: AuthStatus) => {
     if (provider === 'claude') {
@@ -262,6 +263,11 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
 
     if (provider === 'gemini') {
       setGeminiAuthStatus(status);
+      return;
+    }
+
+    if (provider === 'copilot') {
+      setCopilotAuthStatus(status);
       return;
     }
 
@@ -939,6 +945,7 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
     cursorAuthStatus,
     codexAuthStatus,
     geminiAuthStatus,
+    copilotAuthStatus,
     geminiPermissionMode,
     setGeminiPermissionMode,
     openLoginForProvider,

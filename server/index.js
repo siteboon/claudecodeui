@@ -49,6 +49,7 @@ import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getAct
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
 import { queryCodex, abortCodexSession, isCodexSessionActive, getActiveCodexSessions } from './openai-codex.js';
 import { spawnGemini, abortGeminiSession, isGeminiSessionActive, getActiveGeminiSessions } from './gemini-cli.js';
+import { spawnCopilot, abortCopilotSession, isCopilotSessionActive, getActiveCopilotSessions } from './copilot-cli.js';
 import sessionManager from './sessionManager.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
@@ -64,6 +65,7 @@ import cliAuthRoutes from './routes/cli-auth.js';
 import userRoutes from './routes/user.js';
 import codexRoutes from './routes/codex.js';
 import geminiRoutes from './routes/gemini.js';
+import copilotRoutes from './routes/copilot.js';
 import pluginsRoutes from './routes/plugins.js';
 import { startEnabledPluginServers, stopAllPlugins } from './utils/plugin-process-manager.js';
 import { initializeDatabase, sessionNamesDb, applyCustomSessionNames } from './database/db.js';
@@ -71,7 +73,7 @@ import { configureWebPush } from './services/vapid-keys.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { IS_PLATFORM } from './constants/config.js';
 
-const VALID_PROVIDERS = ['claude', 'codex', 'cursor', 'gemini'];
+const VALID_PROVIDERS = ['claude', 'codex', 'cursor', 'gemini', 'copilot'];
 
 // File system watchers for provider project/session folders
 const PROVIDER_WATCH_PATHS = [
@@ -79,7 +81,8 @@ const PROVIDER_WATCH_PATHS = [
     { provider: 'cursor', rootPath: path.join(os.homedir(), '.cursor', 'chats') },
     { provider: 'codex', rootPath: path.join(os.homedir(), '.codex', 'sessions') },
     { provider: 'gemini', rootPath: path.join(os.homedir(), '.gemini', 'projects') },
-    { provider: 'gemini_sessions', rootPath: path.join(os.homedir(), '.gemini', 'sessions') }
+    { provider: 'gemini_sessions', rootPath: path.join(os.homedir(), '.gemini', 'sessions') },
+    { provider: 'copilot', rootPath: path.join(os.homedir(), '.copilot', 'projects') }
 ];
 const WATCHER_IGNORED_PATTERNS = [
     '**/node_modules/**',
@@ -391,6 +394,9 @@ app.use('/api/codex', authenticateToken, codexRoutes);
 
 // Gemini API Routes (protected)
 app.use('/api/gemini', authenticateToken, geminiRoutes);
+
+// Copilot API Routes (protected)
+app.use('/api/copilot', authenticateToken, copilotRoutes);
 
 // Plugins API Routes (protected)
 app.use('/api/plugins', authenticateToken, pluginsRoutes);
@@ -1484,6 +1490,12 @@ function handleChatConnection(ws, request) {
                 console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
                 console.log('🤖 Model:', data.options?.model || 'default');
                 await spawnGemini(data.command, data.options, writer);
+            } else if (data.type === 'copilot-command') {
+                console.log('[DEBUG] Copilot message:', data.command || '[Continue/Resume]');
+                console.log('📁 Project:', data.options?.projectPath || data.options?.cwd || 'Unknown');
+                console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
+                console.log('🤖 Model:', data.options?.model || 'default');
+                await spawnCopilot(data.command, data.options, writer);
             } else if (data.type === 'cursor-resume') {
                 // Backward compatibility: treat as cursor-command with resume and no prompt
                 console.log('[DEBUG] Cursor resume session (compat):', data.sessionId);
@@ -1503,6 +1515,8 @@ function handleChatConnection(ws, request) {
                     success = abortCodexSession(data.sessionId);
                 } else if (provider === 'gemini') {
                     success = abortGeminiSession(data.sessionId);
+                } else if (provider === 'copilot') {
+                    success = abortCopilotSession(data.sessionId);
                 } else {
                     // Use Claude Agents SDK
                     success = await abortClaudeSDKSession(data.sessionId);
@@ -1547,6 +1561,8 @@ function handleChatConnection(ws, request) {
                     isActive = isCodexSessionActive(sessionId);
                 } else if (provider === 'gemini') {
                     isActive = isGeminiSessionActive(sessionId);
+                } else if (provider === 'copilot') {
+                    isActive = isCopilotSessionActive(sessionId);
                 } else {
                     // Use Claude Agents SDK
                     isActive = isClaudeSDKSessionActive(sessionId);
@@ -1580,7 +1596,8 @@ function handleChatConnection(ws, request) {
                     claude: getActiveClaudeSDKSessions(),
                     cursor: getActiveCursorSessions(),
                     codex: getActiveCodexSessions(),
-                    gemini: getActiveGeminiSessions()
+                    gemini: getActiveGeminiSessions(),
+                    copilot: getActiveCopilotSessions()
                 };
                 writer.send({
                     type: 'active-sessions',

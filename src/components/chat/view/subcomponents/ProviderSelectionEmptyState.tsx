@@ -6,6 +6,7 @@ import {
   CLAUDE_MODELS,
   CURSOR_MODELS,
   CODEX_MODELS,
+  COPILOT_MODELS,
   GEMINI_MODELS,
 } from "../../../../../shared/modelConstants";
 import type { ProjectSession, SessionProvider } from "../../../../types/app";
@@ -25,6 +26,8 @@ type ProviderSelectionEmptyStateProps = {
   setCodexModel: (model: string) => void;
   geminiModel: string;
   setGeminiModel: (model: string) => void;
+  copilotModel: string;
+  setCopilotModel: (model: string) => void;
   tasksEnabled: boolean;
   isTaskMasterInstalled: boolean | null;
   onShowAllTasks?: (() => void) | null;
@@ -73,12 +76,21 @@ const PROVIDERS: ProviderDef[] = [
     ring: "ring-blue-500/15",
     check: "bg-blue-500 text-white",
   },
+  {
+    id: "copilot",
+    name: "Copilot",
+    infoKey: "providerSelection.providerInfo.github",
+    accent: "border-gray-700 dark:border-gray-400",
+    ring: "ring-gray-700/15",
+    check: "bg-gray-700 dark:bg-gray-500 text-white",
+  },
 ];
 
 function getModelConfig(p: SessionProvider) {
   if (p === "claude") return CLAUDE_MODELS;
   if (p === "codex") return CODEX_MODELS;
   if (p === "gemini") return GEMINI_MODELS;
+  if (p === "copilot") return COPILOT_MODELS;
   return CURSOR_MODELS;
 }
 
@@ -88,10 +100,12 @@ function getModelValue(
   cu: string,
   co: string,
   g: string,
+  cp: string,
 ) {
   if (p === "claude") return c;
   if (p === "codex") return co;
   if (p === "gemini") return g;
+  if (p === "copilot") return cp;
   return cu;
 }
 
@@ -109,6 +123,8 @@ export default function ProviderSelectionEmptyState({
   setCodexModel,
   geminiModel,
   setGeminiModel,
+  copilotModel,
+  setCopilotModel,
   tasksEnabled,
   isTaskMasterInstalled,
   onShowAllTasks,
@@ -135,6 +151,9 @@ export default function ProviderSelectionEmptyState({
     } else if (provider === "gemini") {
       setGeminiModel(value);
       localStorage.setItem("gemini-model", value);
+    } else if (provider === "copilot") {
+      setCopilotModel(value);
+      localStorage.setItem("copilot-model", value);
     } else {
       setCursorModel(value);
       localStorage.setItem("cursor-model", value);
@@ -148,6 +167,7 @@ export default function ProviderSelectionEmptyState({
     cursorModel,
     codexModel,
     geminiModel,
+    copilotModel,
   );
 
   /* ── New session — provider picker ── */
@@ -166,7 +186,7 @@ export default function ProviderSelectionEmptyState({
           </div>
 
           {/* Provider cards — horizontal row, equal width */}
-          <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-2.5">
+          <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-5 sm:gap-2.5">
             {PROVIDERS.map((p) => {
               const active = provider === p.id;
               return (
@@ -250,6 +270,9 @@ export default function ProviderSelectionEmptyState({
                   }),
                   gemini: t("providerSelection.readyPrompt.gemini", {
                     model: geminiModel,
+                  }),
+                  copilot: t("providerSelection.readyPrompt.copilot", {
+                    model: copilotModel,
                   }),
                 }[provider]
               }
