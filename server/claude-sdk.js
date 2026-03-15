@@ -18,6 +18,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
 import { CLAUDE_MODELS } from '../shared/modelConstants.js';
+import { isTruthyValue, loadClaudeSettingsEnv } from './utils/env-helpers.js';
 import {
   createNotificationEvent,
   notifyRunFailed,
@@ -458,30 +459,6 @@ async function loadMcpConfig(cwd) {
     console.error('Error loading MCP config:', error.message);
     return null;
   }
-}
-
-function isTruthyValue(value) {
-  if (typeof value !== 'string') {
-    return false;
-  }
-
-  const normalized = value.trim().toLowerCase();
-  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
-}
-
-async function loadClaudeSettingsEnv() {
-  try {
-    const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
-    const content = await fs.readFile(settingsPath, 'utf8');
-    const parsed = JSON.parse(content);
-    if (parsed?.env && typeof parsed.env === 'object') {
-      return parsed.env;
-    }
-  } catch {
-    // Ignore missing/malformed settings and fall back to process.env.
-  }
-
-  return {};
 }
 
 function resolveClaudeEnvValue(key, settingsEnv) {
