@@ -21,7 +21,7 @@ function getCopilotBinaryPath() {
 }
 
 async function spawnCopilot(command, options = {}, ws) {
-  return new Promise(async (resolve, reject) => {
+  return new Promise((resolve, reject) => {
     const { sessionId, projectPath, cwd, resume, toolsSettings, permissionMode, model, sessionSummary } = options;
     let capturedSessionId = sessionId; // Track session ID throughout the process
     let sessionCreatedSent = false; // Track if we've already sent session-created event

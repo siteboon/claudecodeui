@@ -200,8 +200,8 @@ test.describe('Onboarding & Main UI', () => {
     const body = page.locator('body');
     await expect(body).toBeVisible();
 
-    // Take a screenshot for visual verification
-    await page.waitForTimeout(2_000);
+    // Wait for the page to settle
+    await page.waitForLoadState('networkidle');
     await page.screenshot({ path: 'e2e/screenshots/post-login.png', fullPage: true });
   });
 
