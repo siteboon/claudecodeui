@@ -11,7 +11,7 @@ Thanks for your interest in contributing to CloudCLI UI! Before you start, pleas
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/) 22 or later
-- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and configured
+- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code), [Cursor CLI](https://docs.cursor.com/en/cli/overview), [Codex](https://developers.openai.com/codex), [Gemini-CLI](https://geminicli.com/), or [GitHub Copilot CLI](https://docs.github.com/en/copilot/using-github-copilot/using-github-copilot-in-the-command-line) installed and configured (at least one)
 
 ## Getting Started
 

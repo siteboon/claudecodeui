@@ -1,7 +1,7 @@
 <div align="center">
   <img src="public/logo.svg" alt="CloudCLI UI" width="64" height="64">
   <h1>Cloud CLI（又名 Claude Code UI）</h1>
-  <p><a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a>、<a href="https://docs.cursor.com/en/cli/overview">Cursor CLI</a>、<a href="https://developers.openai.com/codex">Codex</a> 和 <a href="https://geminicli.com/">Gemini-CLI</a> 的桌面端和移动端界面。<br>您可以在本地或远程使用它来随时随地查看活跃项目和会话。</p>
+  <p><a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a>、<a href="https://docs.cursor.com/en/cli/overview">Cursor CLI</a>、<a href="https://developers.openai.com/codex">Codex</a>、<a href="https://geminicli.com/">Gemini-CLI</a> 和 <a href="https://docs.github.com/en/copilot/using-github-copilot/using-github-copilot-in-the-command-line">GitHub Copilot CLI</a> 的桌面端和移动端界面。<br>您可以在本地或远程使用它来随时随地查看活跃项目和会话。</p>
 </div>
 
 <p align="center">
@@ -44,7 +44,7 @@
 <h3>CLI 选择</h3>
 <img src="public/screenshots/cli-selection.png" alt="CLI Selection" width="400">
 <br>
-<em>在 Claude Code、Gemini、Cursor CLI 和 Codex 之间选择</em>
+<em>在 Claude Code、Gemini、Cursor CLI、Codex 和 GitHub Copilot 之间选择</em>
 </td>
 </tr>
 </table>
@@ -107,7 +107,7 @@ CloudCLI UI 是驱动 CloudCLI Cloud 的开源 UI 层。您可以在自己的机
 | **机器需保持运行** | 是 | 否 |
 | **移动端访问** | 网络内任意浏览器 | 任意设备，原生 App 即将推出 |
 | **可用会话** | 从 `~/.claude` 自动发现所有会话 | 云环境内的所有会话 |
-| **支持的 Agent** | Claude Code、Cursor CLI、Codex、Gemini CLI | Claude Code、Cursor CLI、Codex、Gemini CLI |
+| **支持的 Agent** | Claude Code、Cursor CLI、Codex、Gemini CLI、GitHub Copilot CLI | Claude Code、Cursor CLI、Codex、Gemini CLI、GitHub Copilot CLI |
 | **文件浏览器和 Git** | 是，内置于 UI | 是，内置于 UI |
 | **MCP 配置** | 通过 UI 管理，与本地 `~/.claude` 配置同步 | 通过 UI 管理 |
 | **IDE 访问** | 您的本地 IDE | 任意连接到云环境的 IDE |
@@ -270,7 +270,7 @@ CloudCLI UI 和 CloudCLI Cloud 是对 Claude Code 的扩展而非并行工具—
 
 - **所有会话，而非仅一个** — CloudCLI UI 自动发现 `~/.claude` 文件夹中的每个会话。Remote Control 只暴露单个活跃会话。
 - **您的设置就是您的设置** — 在 CloudCLI UI 中更改的 MCP 服务器、工具权限和项目配置直接写入您的 Claude Code 配置并立即生效，反之亦然。
-- **支持更多 Agent** — Claude Code、Cursor CLI、Codex 和 Gemini CLI，不仅限于 Claude Code。
+- **支持更多 Agent** — Claude Code、Cursor CLI、Codex、Gemini CLI 和 GitHub Copilot CLI，不仅限于 Claude Code。
 - **完整 UI，不只是聊天窗口** — 文件浏览器、Git 集成、MCP 管理和 shell 终端均内置。
 - **CloudCLI Cloud 在云端运行** — 合上笔记本，Agent 继续运行。无需守候终端，无需保持机器唤醒。
 
@@ -279,7 +279,7 @@ CloudCLI UI 和 CloudCLI Cloud 是对 Claude Code 的扩展而非并行工具—
 <details>
 <summary>需要单独付费购买 AI 订阅吗？</summary>
 
-是的。CloudCLI 提供环境，不提供 AI。您需要自带 Claude、Cursor、Codex 或 Gemini 订阅。CloudCLI Cloud 在此基础上从 $7/月起提供托管环境。
+是的。CloudCLI 提供环境，不提供 AI。您需要自带 Claude、Cursor、Codex、Gemini 或 GitHub Copilot 订阅。CloudCLI Cloud 在此基础上从 $7/月起提供托管环境。
 
 </details>
 
@@ -364,6 +364,7 @@ GNU General Public License v3.0 - 详见 [LICENSE](LICENSE) 文件。
 - **[Cursor CLI](https://docs.cursor.com/en/cli/overview)** - Cursor 的官方 CLI
 - **[Codex](https://developers.openai.com/codex)** - OpenAI Codex
 - **[Gemini-CLI](https://geminicli.com/)** - Google Gemini CLI
+- **[GitHub Copilot CLI](https://docs.github.com/en/copilot/using-github-copilot/using-github-copilot-in-the-command-line)** - GitHub Copilot CLI
 - **[React](https://react.dev/)** - 用户界面库
 - **[Vite](https://vitejs.dev/)** - 快速构建工具和开发服务器
 - **[Tailwind CSS](https://tailwindcss.com/)** - 实用优先的 CSS 框架
@@ -376,5 +377,5 @@ GNU General Public License v3.0 - 详见 [LICENSE](LICENSE) 文件。
 ---
 
 <div align="center">
-  <strong>为 Claude Code、Cursor、Codex 和 Gemini 社区精心打造。</strong>
+  <strong>为 Claude Code、Cursor、Codex、Gemini 和 Copilot 社区精心打造。</strong>
 </div>
