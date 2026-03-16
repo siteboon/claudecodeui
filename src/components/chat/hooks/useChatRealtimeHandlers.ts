@@ -18,7 +18,7 @@ const stripTerminalNoise = (value: string): string => {
     const code = char.charCodeAt(0);
 
     if (inCsiSequence) {
-      // CSI sequences end with a byte in the 0x40-0x7E range
+      // CSI sequences end with a byte in the 0x40-0x7e range
       if (code >= 0x40 && code <= 0x7e) {
         inCsiSequence = false;
         inEscapeSequence = false;
