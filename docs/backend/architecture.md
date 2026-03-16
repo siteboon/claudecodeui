@@ -2,13 +2,14 @@
 
 ## Goal
 
-This structure keeps the Day 1 runtime stable while giving the backend a clear home for shared HTTP concerns, shared types, OpenAPI work, and feature modules. The current runtime still lives in `server/legacy-runtime.js`, but everything new should be shaped around the layout below.
+This structure keeps the Day 1 runtime stable while giving the backend a clear home for shared HTTP concerns, shared types, OpenAPI work, and feature modules. The current runtime still lives in `server/index.js`, but everything new should be shaped around the layout below.
 
 ## Structure
 
 ```text
 server/
-  legacy-runtime.js
+  index.js
+  start.js
   src/
     app.ts
     bootstrap.ts
@@ -51,9 +52,13 @@ server/
 
 ## File And Folder Roles
 
-- `server/legacy-runtime.js`
+- `server/index.js`
   Temporary compatibility boundary for the old monolith. Day 1 keeps behavior here so the new TypeScript layout can grow around a stable runtime.
   Example: the existing websocket handlers, inline routes, and provider startup still live here until they are migrated module by module.
+
+- `server/start.js`
+  Thin production entrypoint for the compiled backend output.
+  Example: `server:start` uses this file to verify `server/dist/bootstrap.js` exists and then loads it.
 
 - `src/bootstrap.ts`
   Executable backend entrypoint used by `npm run server` and `npm run server:dev`.
@@ -61,7 +66,7 @@ server/
 
 - `src/app.ts`
   Composition root for the backend application.
-  Example: today it bridges into `legacy-runtime.js`; later it will create the Express app, apply shared middleware, register modules, attach websocket setup, and return the running application shape.
+  Example: today it bridges into `index.js`; later it will create the Express app, apply shared middleware, register modules, attach websocket setup, and return the running application shape.
 
 - `src/config/`
   Runtime configuration helpers and environment-aware path logic.
@@ -177,7 +182,7 @@ server/
 
 ## Day 1 Notes
 
-- The runtime still executes through `server/legacy-runtime.js` for safety.
+- The runtime still executes through `server/index.js` for safety.
 - The new `src/` structure is now the required home for all new backend code.
 - The generated inventory in `docs/backend/endpoint-inventory.*` is the source of truth for what must be migrated into these folders next.
 
@@ -186,7 +191,7 @@ server/
 These scripts live in `package.json`. The key distinction is:
 
 - `server` and `server:dev` run the backend directly from TypeScript.
-- `server:start` runs the compiled backend through `server/index.js`.
+- `server:start` runs the compiled backend through `server/start.js`.
 - `build` only builds the frontend.
 - `server:build` only builds the backend.
 - `start` runs the full production-style flow.
@@ -199,12 +204,12 @@ These scripts live in `package.json`. The key distinction is:
   Example: you are editing a React screen that calls `/api/projects` and also changing the backend route behavior.
 
 - `npm run server:dev`
-  Starts the backend in watch mode with `tsx watch server/src/bootstrap.ts`.
+  Starts the backend in watch mode with `tsx watch --tsconfig server/tsconfig.json server/src/bootstrap.ts`.
   Use this for backend-only development.
   Example: you are refactoring request handling, logging, module structure, or shared HTTP utilities and want automatic restarts.
 
 - `npm run server`
-  Starts the backend once from TypeScript without watch mode.
+  Starts the backend once from TypeScript with `tsx --tsconfig server/tsconfig.json server/src/bootstrap.ts`.
   Use this when you want a stable one-shot backend process.
   Example: you want to reproduce a startup bug, inspect logs without reload noise, or test one backend flow manually.
 
@@ -226,7 +231,7 @@ These scripts live in `package.json`. The key distinction is:
   Example: you changed `server/src/app.ts`, shared types, or future module imports and want to confirm compiled output is valid.
 
 - `npm run server:start`
-  Starts the built backend through `server/index.js`.
+  Starts the built backend through `server/start.js`.
   Use this after `npm run server:build` when you want to run compiled backend output only.
   Example: dev mode works, but you want to make sure the production entrypoint and compiled files also work correctly.
 

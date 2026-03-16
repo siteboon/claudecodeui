@@ -41,7 +41,7 @@
       "path": "/health",
       "tag": "System",
       "authMode": "public",
-      "sourceFile": "server/legacy-runtime.js",
+      "sourceFile": "server/index.js",
       "sourceLine": 345,
       "purpose": "Expose server health, timestamp, and install mode for diagnostics.",
       "consumerFiles": [
@@ -65,7 +65,7 @@
       "path": "/api/system/update",
       "tag": "System",
       "authMode": "bearer_token",
-      "sourceFile": "server/legacy-runtime.js",
+      "sourceFile": "server/index.js",
       "sourceLine": 425,
       "purpose": "Run the application update workflow on the host machine.",
       "consumerFiles": [
@@ -107,7 +107,7 @@
       "path": "/api/projects",
       "tag": "Projects",
       "authMode": "bearer_token",
-      "sourceFile": "server/legacy-runtime.js",
+      "sourceFile": "server/index.js",
       "sourceLine": 491,
       "purpose": "List detected projects and workspaces.",
       "consumerFiles": [
@@ -149,7 +149,7 @@
       "path": "/api/projects/:projectName/sessions",
       "tag": "Sessions",
       "authMode": "bearer_token",
-      "sourceFile": "server/legacy-runtime.js",
+      "sourceFile": "server/index.js",
       "sourceLine": 500,
       "purpose": "List or manage sessions associated with a project or provider.",
       "consumerFiles": [
@@ -196,7 +196,7 @@
       "path": "/api/projects/:projectName/sessions/:sessionId/messages",
       "tag": "Sessions",
       "authMode": "bearer_token",
-      "sourceFile": "server/legacy-runtime.js",
+      "sourceFile": "server/index.js",
       "sourceLine": 512,
       "purpose": "Return paginated messages for a stored session.",
       "consumerFiles": [
@@ -244,7 +244,7 @@
       "path": "/api/projects/:projectName/rename",
       "tag": "Projects",
       "authMode": "bearer_token",
-      "sourceFile": "server/legacy-runtime.js",
+      "sourceFile": "server/index.js",
       "sourceLine": 537,
       "purpose": "PUT /api/projects/:projectName/rename for backend runtime support.",
       "consumerFiles": [
@@ -291,7 +291,7 @@
       "path": "/api/projects/:projectName/sessions/:sessionId",
       "tag": "Sessions",
       "authMode": "bearer_token",
-      "sourceFile": "server/legacy-runtime.js",
+      "sourceFile": "server/index.js",
       "sourceLine": 548,
       "purpose": "List or manage sessions associated with a project or provider.",
       "consumerFiles": [
@@ -337,7 +337,7 @@
       "path": "/api/sessions/:sessionId/rename",
       "tag": "Sessions",
       "authMode": "bearer_token",
-      "sourceFile": "server/legacy-runtime.js",
+      "sourceFile": "server/index.js",
       "sourceLine": 563,
       "purpose": "List or manage sessions associated with a project or provider.",
       "consumerFiles": [
@@ -384,7 +384,7 @@
       "path": "/api/projects/:projectName",
       "tag": "Projects",
       "authMode": "bearer_token",
-      "sourceFile": "server/legacy-runtime.js",
+      "sourceFile": "server/index.js",
       "sourceLine": 589,
       "purpose": "DELETE /api/projects/:projectName for backend runtime support.",
       "consumerFiles": [
@@ -431,7 +431,7 @@
       "path": "/api/projects/create",
       "tag": "Projects",
       "authMode": "bearer_token",
-      "sourceFile": "server/legacy-runtime.js",
+      "sourceFile": "server/index.js",
       "sourceLine": 601,
       "purpose": "Manually add a project path to the workspace list.",
       "consumerFiles": [
@@ -476,7 +476,7 @@
       "path": "/api/search/conversations",
       "tag": "Sessions",
       "authMode": "bearer_token",
-      "sourceFile": "server/legacy-runtime.js",
+      "sourceFile": "server/index.js",
       "sourceLine": 618,
       "purpose": "Search conversation history across stored projects and stream results.",
       "consumerFiles": [
@@ -521,7 +521,7 @@
       "path": "/api/browse-filesystem",
       "tag": "Realtime",
       "authMode": "bearer_token",
-      "sourceFile": "server/legacy-runtime.js",
+      "sourceFile": "server/index.js",
       "sourceLine": 674,
       "purpose": "Browse local directories so the UI can suggest workspace locations.",
       "consumerFiles": [
@@ -565,7 +565,7 @@
       "path": "/api/create-folder",
       "tag": "Projects",
       "authMode": "bearer_token",
-      "sourceFile": "server/legacy-runtime.js",
+      "sourceFile": "server/index.js",
       "sourceLine": 754,
       "purpose": "Create a new directory on the local filesystem.",
       "consumerFiles": [
@@ -609,7 +609,7 @@
       "path": "/api/projects/:projectName/file",
       "tag": "Files",
       "authMode": "bearer_token",
-      "sourceFile": "server/legacy-runtime.js",
+      "sourceFile": "server/index.js",
       "sourceLine": 795,
       "purpose": "Read, write, create, rename, delete, or upload project files.",
       "consumerFiles": [
@@ -655,7 +655,7 @@
       "path": "/api/projects/:projectName/files/content",
       "tag": "Files",
       "authMode": "bearer_token",
-      "sourceFile": "server/legacy-runtime.js",
+      "sourceFile": "server/index.js",
       "sourceLine": 835,
       "purpose": "Read, write, create, rename, delete, or upload project files.",
       "consumerFiles": [
@@ -701,7 +701,7 @@
       "path": "/api/projects/:projectName/file",
       "tag": "Files",
       "authMode": "bearer_token",
-      "sourceFile": "server/legacy-runtime.js",
+      "sourceFile": "server/index.js",
       "sourceLine": 888,
       "purpose": "Read, write, create, rename, delete, or upload project files.",
       "consumerFiles": [
@@ -749,7 +749,7 @@
       "path": "/api/projects/:projectName/files",
       "tag": "Files",
       "authMode": "bearer_token",
-      "sourceFile": "server/legacy-runtime.js",
+      "sourceFile": "server/index.js",
       "sourceLine": 937,
       "purpose": "Read, write, create, rename, delete, or upload project files.",
       "consumerFiles": [
@@ -793,7 +793,7 @@
       "path": "/api/projects/:projectName/files/create",
       "tag": "Files",
       "authMode": "bearer_token",
-      "sourceFile": "server/legacy-runtime.js",
+      "sourceFile": "server/index.js",
       "sourceLine": 1016,
       "purpose": "Read, write, create, rename, delete, or upload project files.",
       "consumerFiles": [
@@ -842,7 +842,7 @@
       "path": "/api/projects/:projectName/files/rename",
       "tag": "Files",
       "authMode": "bearer_token",
-      "sourceFile": "server/legacy-runtime.js",
+      "sourceFile": "server/index.js",
       "sourceLine": 1093,
       "purpose": "Read, write, create, rename, delete, or upload project files.",
       "consumerFiles": [
@@ -890,7 +890,7 @@
       "path": "/api/projects/:projectName/files",
       "tag": "Files",
       "authMode": "bearer_token",
-      "sourceFile": "server/legacy-runtime.js",
+      "sourceFile": "server/index.js",
       "sourceLine": 1170,
       "purpose": "Read, write, create, rename, delete, or upload project files.",
       "consumerFiles": [
@@ -940,7 +940,7 @@
       "path": "/api/projects/:projectName/files/upload",
       "tag": "Files",
       "authMode": "bearer_token",
-      "sourceFile": "server/legacy-runtime.js",
+      "sourceFile": "server/index.js",
       "sourceLine": 1396,
       "purpose": "Read, write, create, rename, delete, or upload project files.",
       "consumerFiles": [
@@ -985,7 +985,7 @@
       "path": "/api/transcribe",
       "tag": "Realtime",
       "authMode": "bearer_token",
-      "sourceFile": "server/legacy-runtime.js",
+      "sourceFile": "server/index.js",
       "sourceLine": 1964,
       "purpose": "Transcribe uploaded audio and optionally enhance the result for prompts or tasks.",
       "consumerFiles": [
@@ -1030,7 +1030,7 @@
       "path": "/api/projects/:projectName/upload-images",
       "tag": "Files",
       "authMode": "bearer_token",
-      "sourceFile": "server/legacy-runtime.js",
+      "sourceFile": "server/index.js",
       "sourceLine": 2113,
       "purpose": "Upload images for chat use and return browser-safe data URLs.",
       "consumerFiles": [
@@ -1075,7 +1075,7 @@
       "path": "/api/projects/:projectName/sessions/:sessionId/token-usage",
       "tag": "Sessions",
       "authMode": "bearer_token",
-      "sourceFile": "server/legacy-runtime.js",
+      "sourceFile": "server/index.js",
       "sourceLine": 2198,
       "purpose": "Report token usage for a stored provider session.",
       "consumerFiles": [
@@ -1122,7 +1122,7 @@
       "path": "*",
       "tag": "System",
       "authMode": "public",
-      "sourceFile": "server/legacy-runtime.js",
+      "sourceFile": "server/index.js",
       "sourceLine": 2386,
       "purpose": "Serve the React application fallback for non-API routes.",
       "consumerFiles": [],

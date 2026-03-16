@@ -620,7 +620,7 @@ function writeMarkdown(filePath, summary, records, realtimeContracts) {
 }
 
 const clientFiles = walkFiles(clientRoot).filter(filePath => /\.(js|jsx|ts|tsx)$/.test(filePath));
-const legacyRuntimePath = path.join(serverRoot, 'legacy-runtime.js');
+const legacyRuntimePath = path.join(serverRoot, 'index.js');
 const runtimeContent = readText(legacyRuntimePath);
 const mounts = parseMounts(runtimeContent);
 const records = [];
@@ -639,7 +639,7 @@ const summary = {
   httpRoutes: records.filter(record => record.transport === 'http').length,
   sseRoutes: records.filter(record => record.transport === 'sse').length,
   modularRoutes: records.filter(record => record.sourceFile.includes('/routes/')).length,
-  inlineRoutes: records.filter(record => record.sourceFile === 'server/legacy-runtime.js').length,
+  inlineRoutes: records.filter(record => record.sourceFile === 'server/index.js').length,
   routeFilesScanned: new Set(records.map(record => record.sourceFile)).size,
 };
 

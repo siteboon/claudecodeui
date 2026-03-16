@@ -3,7 +3,7 @@
   "version": "1.26.3",
   "description": "A web-based UI for Claude Code CLI",
   "type": "module",
-  "main": "server/index.js",
+  "main": "server/start.js",
   "bin": {
     "claude-code-ui": "server/cli.js",
     "cloudcli": "server/cli.js"
@@ -25,10 +25,10 @@
   },
   "scripts": {
     "dev": "concurrently --kill-others \"npm run server\" \"npm run client\"",
-    "server:dev": "tsx watch server/src/bootstrap.ts",
-    "server": "tsx server/src/bootstrap.ts",
+    "server:dev": "tsx watch --tsconfig server/tsconfig.json server/src/bootstrap.ts",
+    "server": "tsx --tsconfig server/tsconfig.json server/src/bootstrap.ts",
     "server:build": "tsc -p server/tsconfig.json && tsc-alias -p server/tsconfig.json",
-    "server:start": "node server/index.js",
+    "server:start": "node server/start.js",
     "client": "vite",
     "build": "vite build",
     "preview": "vite preview",

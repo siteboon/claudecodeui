@@ -14,7 +14,7 @@ export function getRuntimePaths(): RuntimePaths {
     serverSrcDir,
     serverDir,
     projectRoot: path.resolve(serverDir, '..'),
-    legacyRuntimePath: path.join(serverDir, 'legacy-runtime.js'),
+    legacyRuntimePath: path.join(serverDir, 'index.js'),
     bootstrapEntrypointPath: path.join(serverDir, 'dist', 'bootstrap.js'),
   };
 }
