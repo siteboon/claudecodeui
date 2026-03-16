@@ -187,7 +187,7 @@ async function spawnCopilot(command, options = {}, ws) {
                   }
 
                   // Set session ID on writer (for API endpoint compatibility)
-                  if (ws.setSessionId && typeof ws.setSessionId === 'function') {
+                  if (ws?.setSessionId && typeof ws.setSessionId === 'function') {
                     ws.setSessionId(capturedSessionId);
                   }
 
