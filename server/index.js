@@ -1756,6 +1756,7 @@ function handleShellConnection(ws) {
 
                     // Build shell command — use cwd for project path (never interpolate into shell string)
                     let shellCommand;
+                    let resumeSessionId = null;
                     if (isPlainShell) {
                         // Plain shell mode - run the initial command in the project directory
                         shellCommand = initialCommand;
@@ -1808,7 +1809,7 @@ function handleShellConnection(ws) {
                         const command = initialCommand || 'claude';
 
                         // Check for session ID: explicit > registry > none
-                        let resumeSessionId = (hasSession && sessionId) ? sessionId : null;
+                        resumeSessionId = (hasSession && sessionId) ? sessionId : null;
                         if (!resumeSessionId) {
                             // Full REPL Mode: check if Chat created a session for this project
                             const registrySessionId = getProjectSessionId(resolvedProjectPath);
