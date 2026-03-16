@@ -1,7 +1,10 @@
 import express from 'express';
+import path from 'path';
+import os from 'os';
 import { apiKeysDb, credentialsDb, notificationPreferencesDb, pushSubscriptionsDb } from '../database/db.js';
 import { getPublicKey } from '../services/vapid-keys.js';
 import { createNotificationEvent, notifyUserIfEnabled } from '../services/notification-orchestrator.js';
+import { isFullReplMode, getSettings, SETTINGS_PATH } from '../utils/settings-reader.js';
 
 const router = express.Router();
 
@@ -270,6 +273,36 @@ router.post('/push/unsubscribe', async (req, res) => {
   } catch (error) {
     console.error('Error removing push subscription:', error);
     res.status(500).json({ error: 'Failed to remove push subscription' });
+  }
+});
+
+// ===============================
+// Full REPL Mode Configuration
+// ===============================
+
+router.get('/repl-mode', async (req, res) => {
+  try {
+    const envMode = process.env.CLAUDE_FULL_REPL_MODE === 'true';
+
+    const settings = await getSettings();
+    const settingsExists = !!settings;
+    const allowedTools = settings?.permissions?.allow || [];
+    const deniedTools = settings?.permissions?.deny || [];
+    const permissionCount = allowedTools.length;
+    const mcpServerCount = Object.keys(settings?.mcpServers || {}).length;
+
+    res.json({
+      fullReplMode: envMode,
+      settingsExists,
+      permissionCount,
+      mcpServerCount,
+      allowedTools,
+      deniedTools,
+      settingsPath: SETTINGS_PATH
+    });
+  } catch (error) {
+    console.error('Error fetching REPL mode config:', error);
+    res.status(500).json({ error: 'Failed to fetch REPL mode configuration' });
   }
 });
 

@@ -46,6 +46,8 @@ import mime from 'mime-types';
 
 import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache, searchConversations } from './projects.js';
 import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions, resolveToolApproval, getPendingApprovalsForSession, reconnectSessionWriter } from './claude-sdk.js';
+import { queryClaudeCLI, abortClaudeCLISession, isClaudeCLISessionActive, getActiveClaudeCLISessions, getProjectSessionId, setProjectSessionId, findLatestSessionForProject } from './claude-cli-query.js';
+import { isFullReplMode } from './utils/settings-reader.js';
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
 import { queryCodex, abortCodexSession, isCodexSessionActive, getActiveCodexSessions } from './openai-codex.js';
 import { spawnGemini, abortGeminiSession, isGeminiSessionActive, getActiveGeminiSessions } from './gemini-cli.js';
@@ -1465,8 +1467,34 @@ function handleChatConnection(ws, request) {
                 console.log('📁 Project:', data.options?.projectPath || 'Unknown');
                 console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
 
-                // Use Claude Agents SDK
-                await queryClaudeSDK(data.command, data.options, writer);
+                if (isFullReplMode(data.options?.fullReplMode)) {
+                    // Full REPL Mode: spawn native claude CLI
+                    console.log('[Full REPL v2] Using native CLI');
+
+                    // Kill any active Claude Shell PTY for this project to release the session lock.
+                    // Only targets Claude sessions (UUID session IDs), not plain shell/cursor/codex/gemini.
+                    const projectPath = data.options?.cwd || data.options?.projectPath;
+                    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+                    if (projectPath) {
+                        for (const [key, session] of ptySessionsMap.entries()) {
+                            if (session.projectPath === projectPath && session.pty && session.sessionId && uuidPattern.test(session.sessionId)) {
+                                console.log(`[Full REPL v2] Killing Claude Shell PTY for project handoff: ${key}`);
+                                try { session.pty.kill(); } catch { /* already dead */ }
+                                ptySessionsMap.delete(key);
+                            }
+                        }
+                    }
+
+                    // Normalize cwd so the CLI runner uses the correct project path
+                    if (!data.options.cwd && projectPath) {
+                        data.options.cwd = projectPath;
+                    }
+
+                    await queryClaudeCLI(data.command, data.options, writer);
+                } else {
+                    // Default: use Claude Agents SDK
+                    await queryClaudeSDK(data.command, data.options, writer);
+                }
             } else if (data.type === 'cursor-command') {
                 console.log('[DEBUG] Cursor message:', data.command || '[Continue/Resume]');
                 console.log('📁 Project:', data.options?.cwd || 'Unknown');
@@ -1505,8 +1533,11 @@ function handleChatConnection(ws, request) {
                 } else if (provider === 'gemini') {
                     success = abortGeminiSession(data.sessionId);
                 } else {
-                    // Use Claude Agents SDK
-                    success = await abortClaudeSDKSession(data.sessionId);
+                    // Try CLI session first, then SDK
+                    success = abortClaudeCLISession(data.sessionId);
+                    if (!success) {
+                        success = await abortClaudeSDKSession(data.sessionId);
+                    }
                 }
 
                 writer.send({
@@ -1549,12 +1580,15 @@ function handleChatConnection(ws, request) {
                 } else if (provider === 'gemini') {
                     isActive = isGeminiSessionActive(sessionId);
                 } else {
-                    // Use Claude Agents SDK
-                    isActive = isClaudeSDKSessionActive(sessionId);
-                    if (isActive) {
-                        // Reconnect the session's writer to the new WebSocket so
-                        // subsequent SDK output flows to the refreshed client.
-                        reconnectSessionWriter(sessionId, ws);
+                    // Check CLI sessions first, then SDK
+                    isActive = isClaudeCLISessionActive(sessionId);
+                    if (!isActive) {
+                        isActive = isClaudeSDKSessionActive(sessionId);
+                        if (isActive) {
+                            // Reconnect the session's writer to the new WebSocket so
+                            // subsequent SDK output flows to the refreshed client.
+                            reconnectSessionWriter(sessionId, ws);
+                        }
                     }
                 }
 
@@ -1578,7 +1612,7 @@ function handleChatConnection(ws, request) {
             } else if (data.type === 'get-active-sessions') {
                 // Get all currently active sessions
                 const activeSessions = {
-                    claude: getActiveClaudeSDKSessions(),
+                    claude: [...getActiveClaudeSDKSessions(), ...getActiveClaudeCLISessions()],
                     cursor: getActiveCursorSessions(),
                     codex: getActiveCodexSessions(),
                     gemini: getActiveGeminiSessions()
@@ -1723,6 +1757,7 @@ function handleShellConnection(ws) {
 
                     // Build shell command — use cwd for project path (never interpolate into shell string)
                     let shellCommand;
+                    let resumeSessionId = null;
                     if (isPlainShell) {
                         // Plain shell mode - run the initial command in the project directory
                         shellCommand = initialCommand;
@@ -1773,11 +1808,28 @@ function handleShellConnection(ws) {
                     } else {
                         // Claude (default provider)
                         const command = initialCommand || 'claude';
-                        if (hasSession && sessionId) {
+
+                        // Check for session ID: explicit > registry > none
+                        resumeSessionId = (hasSession && sessionId) ? sessionId : null;
+                        if (!resumeSessionId) {
+                            // Full REPL Mode: check if Chat created a session for this project
+                            const registrySessionId = getProjectSessionId(resolvedProjectPath);
+                            if (registrySessionId && safeSessionIdPattern.test(registrySessionId)) {
+                                resumeSessionId = registrySessionId;
+                                console.log(`[Full REPL v2] Shell resuming Chat session from registry: ${registrySessionId}`);
+                            }
+                        }
+
+                        // Kill any active Chat CLI process for the session being resumed
+                        if (resumeSessionId && abortClaudeCLISession(resumeSessionId)) {
+                            console.log('[Full REPL v2] Killed Chat CLI process for session handoff');
+                        }
+
+                        if (resumeSessionId) {
                             if (os.platform() === 'win32') {
-                                shellCommand = `claude --resume "${sessionId}"; if ($LASTEXITCODE -ne 0) { claude }`;
+                                shellCommand = `claude --resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { claude }`;
                             } else {
-                                shellCommand = `claude --resume "${sessionId}" || claude`;
+                                shellCommand = `claude --resume "${resumeSessionId}" || claude`;
                             }
                         } else {
                             shellCommand = command;
@@ -1816,8 +1868,60 @@ function handleShellConnection(ws) {
                         buffer: [],
                         timeoutId: null,
                         projectPath,
-                        sessionId
+                        sessionId: resumeSessionId || sessionId
                     });
+
+                    // Shell → Chat sync: detect session ID from PTY output
+                    // by watching for UUID patterns in early output (e.g. "Resuming Claude session <uuid>")
+                    let sessionDetected = false;
+                    let sessionDetectionTimeout = null;
+                    let sessionDetectionDisposable = null;
+
+                    if (provider === 'claude' && !isPlainShell) {
+                        const uuidPattern = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+                        const sessionDetectionHandler = (outputData) => {
+                            if (sessionDetected) return;
+                            const match = outputData.match(uuidPattern);
+                            if (match) {
+                                sessionDetected = true;
+                                const detectedSessionId = match[0];
+                                setProjectSessionId(resolvedProjectPath, detectedSessionId);
+                                const ptySession = ptySessionsMap.get(ptySessionKey);
+                                if (ptySession) {
+                                    ptySession.sessionId = detectedSessionId;
+                                }
+                                console.log(`[Full REPL v2] Detected Shell session from PTY output: ${detectedSessionId}`);
+                                if (sessionDetectionTimeout) {
+                                    clearTimeout(sessionDetectionTimeout);
+                                    sessionDetectionTimeout = null;
+                                }
+                            }
+                        };
+
+                        // Listen on PTY output for session ID
+                        sessionDetectionDisposable = shellProcess.onData(sessionDetectionHandler);
+
+                        // Stop listening after 15 seconds if no UUID found
+                        sessionDetectionTimeout = setTimeout(() => {
+                            if (!sessionDetected) {
+                                sessionDetectionDisposable.dispose();
+                                // Fallback: scan disk for latest session file
+                                findLatestSessionForProject(resolvedProjectPath).then(latestSession => {
+                                    if (latestSession) {
+                                        setProjectSessionId(resolvedProjectPath, latestSession);
+                                        const ptySession = ptySessionsMap.get(ptySessionKey);
+                                        if (ptySession) {
+                                            ptySession.sessionId = latestSession;
+                                        }
+                                        console.log(`[Full REPL v2] Fallback: detected Shell session from disk: ${latestSession}`);
+                                    }
+                                }).catch(err => {
+                                    console.error('[Full REPL v2] Failed to detect Shell session:', err.message);
+                                });
+                            }
+                        }, 15000);
+                    }
 
                     // Handle data output
                     shellProcess.onData((data) => {
@@ -1887,6 +1991,15 @@ function handleShellConnection(ws) {
                     // Handle process exit
                     shellProcess.onExit((exitCode) => {
                         console.log('🔚 Shell process exited with code:', exitCode.exitCode, 'signal:', exitCode.signal);
+
+                        // Clean up session detection listener/timeout
+                        sessionDetected = true;
+                        sessionDetectionDisposable?.dispose();
+                        if (sessionDetectionTimeout) {
+                            clearTimeout(sessionDetectionTimeout);
+                            sessionDetectionTimeout = null;
+                        }
+
                         const session = ptySessionsMap.get(ptySessionKey);
                         if (session && session.ws && session.ws.readyState === WebSocket.OPEN) {
                             session.ws.send(JSON.stringify({
