@@ -1,6 +1,7 @@
 import type { SessionProvider } from '../../types/app';
 import ClaudeLogo from './ClaudeLogo';
 import CodexLogo from './CodexLogo';
+import CopilotLogo from './CopilotLogo';
 import CursorLogo from './CursorLogo';
 import GeminiLogo from './GeminiLogo';
 
@@ -23,6 +24,10 @@ export default function SessionProviderLogo({
 
   if (provider === 'gemini') {
     return <GeminiLogo className={className} />;
+  }
+
+  if (provider === 'copilot') {
+    return <CopilotLogo className={className} />;
   }
 
   return <ClaudeLogo className={className} />;

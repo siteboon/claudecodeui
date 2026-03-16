@@ -1,7 +1,7 @@
 import { IS_PLATFORM } from '../../../constants/config';
 import type { CliProvider, ProviderStatusMap } from './types';
 
-export const cliProviders: CliProvider[] = ['claude', 'cursor', 'codex', 'gemini'];
+export const cliProviders: CliProvider[] = ['claude', 'cursor', 'codex', 'gemini', 'copilot'];
 
 export const gitEmailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -17,6 +17,7 @@ export const createInitialProviderStatuses = (): ProviderStatusMap => ({
   cursor: { authenticated: false, email: null, loading: true, error: null },
   codex: { authenticated: false, email: null, loading: true, error: null },
   gemini: { authenticated: false, email: null, loading: true, error: null },
+  copilot: { authenticated: false, email: null, loading: true, error: null },
 });
 
 export const readErrorMessageFromResponse = async (response: Response, fallback: string) => {

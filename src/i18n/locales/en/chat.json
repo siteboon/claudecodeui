@@ -18,7 +18,8 @@
     "claude": "Claude",
     "cursor": "Cursor",
     "codex": "Codex",
-    "gemini": "Gemini"
+    "gemini": "Gemini",
+    "copilot": "Copilot"
   },
   "tools": {
     "settings": "Tool Settings",
@@ -119,6 +120,24 @@
       }
     }
   },
+  "copilot": {
+    "permissionMode": "Copilot Permission Mode",
+    "description": "Control how Copilot CLI handles operation approvals.",
+    "modes": {
+      "default": {
+        "title": "Standard (Ask for Approval)",
+        "description": "Copilot will prompt for approval before executing commands and writing files."
+      },
+      "autoEdit": {
+        "title": "Auto Edit (Allow All Tools)",
+        "description": "Copilot will automatically approve all tool usage without prompting."
+      },
+      "yolo": {
+        "title": "YOLO (Bypass All Permissions)",
+        "description": "Copilot will execute all operations without asking for approval. Exercise caution."
+      }
+    }
+  },
   "input": {
     "placeholder": "Type / for commands, @ for files, or ask {{provider}} anything...",
     "placeholderDefault": "Type your message...",
@@ -180,13 +199,15 @@
       "anthropic": "by Anthropic",
       "openai": "by OpenAI",
       "cursorEditor": "AI Code Editor",
-      "google": "by Google"
+      "google": "by Google",
+      "github": "by GitHub"
     },
     "readyPrompt": {
       "claude": "Ready to use Claude with {{model}}. Start typing your message below.",
       "cursor": "Ready to use Cursor with {{model}}. Start typing your message below.",
       "codex": "Ready to use Codex with {{model}}. Start typing your message below.",
       "gemini": "Ready to use Gemini with {{model}}. Start typing your message below.",
+      "copilot": "Ready to use Copilot with {{model}}. Start typing your message below.",
       "default": "Select a provider above to begin"
     }
   },

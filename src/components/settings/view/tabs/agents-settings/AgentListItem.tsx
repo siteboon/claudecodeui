@@ -31,7 +31,11 @@ const agentConfig: Record<AgentProvider, AgentConfig> = {
   gemini: {
     name: 'Gemini',
     color: 'indigo',
-  }
+  },
+  copilot: {
+    name: 'Copilot',
+    color: 'gray',
+  },
 };
 
 const colorClasses = {

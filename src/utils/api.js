@@ -69,6 +69,8 @@ export const api = {
       url = `/api/cursor/sessions/${sessionId}/messages${queryString ? `?${queryString}` : ''}`;
     } else if (provider === 'gemini') {
       url = `/api/gemini/sessions/${sessionId}/messages${queryString ? `?${queryString}` : ''}`;
+    } else if (provider === 'copilot') {
+      url = `/api/copilot/sessions/${sessionId}/messages${queryString ? `?${queryString}` : ''}`;
     } else {
       url = `/api/projects/${projectName}/sessions/${sessionId}/messages${queryString ? `?${queryString}` : ''}`;
     }
@@ -94,6 +96,10 @@ export const api = {
     }),
   deleteGeminiSession: (sessionId) =>
     authenticatedFetch(`/api/gemini/sessions/${sessionId}`, {
+      method: 'DELETE',
+    }),
+  deleteCopilotSession: (sessionId) =>
+    authenticatedFetch(`/api/copilot/sessions/${sessionId}`, {
       method: 'DELETE',
     }),
   deleteProject: (projectName, force = false) =>

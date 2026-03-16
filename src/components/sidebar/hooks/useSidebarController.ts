@@ -422,6 +422,8 @@ export function useSidebarController({
         response = await api.deleteCodexSession(sessionId);
       } else if (provider === 'gemini') {
         response = await api.deleteGeminiSession(sessionId);
+      } else if (provider === 'copilot') {
+        response = await api.deleteCopilotSession(sessionId);
       } else {
         response = await api.deleteSession(projectName, sessionId);
       }
