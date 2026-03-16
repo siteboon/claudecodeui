@@ -17,6 +17,11 @@ const initialState: SetupFormState = {
   confirmPassword: '',
 };
 
+/**
+ * Validates the account-setup form state.
+ * @returns An error message string if validation fails, or `null` when the
+ *   form is valid.
+ */
 function validateSetupForm(formState: SetupFormState): string | null {
   if (!formState.username.trim() || !formState.password || !formState.confirmPassword) {
     return 'Please fill in all fields.';
@@ -37,6 +42,12 @@ function validateSetupForm(formState: SetupFormState): string | null {
   return null;
 }
 
+/**
+ * Account setup / registration form.
+ * Uses `autoComplete="new-password"` on password fields so that password
+ * managers recognise this as a registration flow and offer to save the new
+ * credentials after submission.
+ */
 export default function SetupForm() {
   const { register } = useAuth();
 
@@ -79,31 +90,37 @@ export default function SetupForm() {
       <form onSubmit={handleSubmit} className="space-y-4">
         <AuthInputField
           id="username"
+          name="username"
           label="Username"
           value={formState.username}
           onChange={(value) => updateField('username', value)}
           placeholder="Enter your username"
           isDisabled={isSubmitting}
+          autoComplete="username"
         />
 
         <AuthInputField
           id="password"
+          name="password"
           label="Password"
           value={formState.password}
           onChange={(value) => updateField('password', value)}
           placeholder="Enter your password"
           isDisabled={isSubmitting}
           type="password"
+          autoComplete="new-password"
         />
 
         <AuthInputField
           id="confirmPassword"
+          name="confirmPassword"
           label="Confirm Password"
           value={formState.confirmPassword}
           onChange={(value) => updateField('confirmPassword', value)}
           placeholder="Confirm your password"
           isDisabled={isSubmitting}
           type="password"
+          autoComplete="new-password"
         />
 
         <AuthErrorAlert errorMessage={errorMessage} />
