@@ -81,6 +81,10 @@ router.get('/:name/assets/*', (req, res) => {
 
   const contentType = mime.lookup(resolvedPath) || 'application/octet-stream';
   res.setHeader('Content-Type', contentType);
+  // Prevent CDN/proxy caching of plugin assets so updates take effect immediately
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   const stream = fs.createReadStream(resolvedPath);
   stream.on('error', () => {
     if (!res.headersSent) {
@@ -236,7 +240,7 @@ router.all('/:name/rpc/*', async (req, res) => {
     'content-type': req.headers['content-type'] || 'application/json',
   };
 
-  // Add per-plugin secrets as X-Plugin-Secret-* headers
+  // Add per-plugin user-configured secrets as X-Plugin-Secret-* headers
   for (const [key, value] of Object.entries(secrets)) {
     headers[`x-plugin-secret-${key.toLowerCase()}`] = String(value);
   }
