@@ -141,7 +141,7 @@ function matchesToolPermission(entry, toolName, input) {
  * @param {Object} options - CLI options
  * @returns {Object} SDK-compatible options
  */
-function mapCliOptionsToSDK(options = {}) {
+async function mapCliOptionsToSDK(options = {}) {
   const { sessionId, cwd, toolsSettings, permissionMode, images } = options;
 
   const sdkOptions = {};
@@ -190,9 +190,10 @@ function mapCliOptionsToSDK(options = {}) {
 
   sdkOptions.disallowedTools = settings.disallowedTools || [];
 
-  // Map model (default to sonnet)
-  // Valid models: sonnet, opus, haiku, opusplan, sonnet[1m]
-  sdkOptions.model = options.model || CLAUDE_MODELS.DEFAULT;
+  // Map model (default to sonnet). In Bedrock mode this resolves model aliases
+  // (sonnet/opus/haiku) to configured inference profile IDs when available.
+  const settingsEnv = await loadClaudeSettingsEnv();
+  sdkOptions.model = resolveClaudeModel(options.model, settingsEnv);
   console.log(`Using model: ${sdkOptions.model}`);
 
   // Map system prompt configuration
@@ -459,6 +460,72 @@ async function loadMcpConfig(cwd) {
   }
 }
 
+function isTruthyValue(value) {
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+}
+
+async function loadClaudeSettingsEnv() {
+  try {
+    const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+    const content = await fs.readFile(settingsPath, 'utf8');
+    const parsed = JSON.parse(content);
+    if (parsed?.env && typeof parsed.env === 'object') {
+      return parsed.env;
+    }
+  } catch {
+    // Ignore missing/malformed settings and fall back to process.env.
+  }
+
+  return {};
+}
+
+function resolveClaudeEnvValue(key, settingsEnv) {
+  const processValue = process.env[key];
+  if (typeof processValue === 'string' && processValue.trim()) {
+    return processValue.trim();
+  }
+
+  const settingsValue = settingsEnv[key];
+  if (typeof settingsValue === 'string' && settingsValue.trim()) {
+    return settingsValue.trim();
+  }
+
+  return '';
+}
+
+function resolveClaudeModel(modelAlias, settingsEnv) {
+  const requestedModel = modelAlias || CLAUDE_MODELS.DEFAULT;
+  const isBedrockEnabled = isTruthyValue(resolveClaudeEnvValue('CLAUDE_CODE_USE_BEDROCK', settingsEnv));
+  if (!isBedrockEnabled) {
+    return requestedModel;
+  }
+
+  const explicitModel = resolveClaudeEnvValue('ANTHROPIC_MODEL', settingsEnv);
+  const explicitFastModel = resolveClaudeEnvValue('ANTHROPIC_SMALL_FAST_MODEL', settingsEnv);
+  const sonnetDefault = resolveClaudeEnvValue('ANTHROPIC_DEFAULT_SONNET_MODEL', settingsEnv);
+  const opusDefault = resolveClaudeEnvValue('ANTHROPIC_DEFAULT_OPUS_MODEL', settingsEnv);
+  const haikuDefault = resolveClaudeEnvValue('ANTHROPIC_DEFAULT_HAIKU_MODEL', settingsEnv);
+
+  if (requestedModel === 'haiku') {
+    return haikuDefault || explicitFastModel || explicitModel || requestedModel;
+  }
+
+  if (requestedModel === 'opus' || requestedModel === 'opusplan') {
+    return opusDefault || explicitModel || requestedModel;
+  }
+
+  if (requestedModel === 'sonnet' || requestedModel === 'sonnet[1m]') {
+    return sonnetDefault || explicitModel || requestedModel;
+  }
+
+  return explicitModel || requestedModel;
+}
+
 /**
  * Executes a Claude query using the SDK
  * @param {string} command - User prompt/command
@@ -483,7 +550,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
   try {
     // Map CLI options to SDK format
-    const sdkOptions = mapCliOptionsToSDK(options);
+    const sdkOptions = await mapCliOptionsToSDK(options);
 
     // Load MCP configuration
     const mcpServers = await loadMcpConfig(options.cwd);

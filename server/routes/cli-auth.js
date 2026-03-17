@@ -6,6 +6,15 @@ import os from 'os';
 
 const router = express.Router();
 
+function isTruthyValue(value) {
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+}
+
 router.get('/claude/status', async (req, res) => {
   try {
     const credentialsResult = await checkClaudeCredentials();
@@ -14,7 +23,8 @@ router.get('/claude/status', async (req, res) => {
       return res.json({
         authenticated: true,
         email: credentialsResult.email || 'Authenticated',
-        method: credentialsResult.method  // 'api_key' or 'credentials_file'
+        method: credentialsResult.method,  // 'api_key', 'credentials_file', or 'bedrock'
+        isBedrock: Boolean(credentialsResult.isBedrock)
       });
     }
 
@@ -22,6 +32,7 @@ router.get('/claude/status', async (req, res) => {
       authenticated: false,
       email: null,
       method: null,
+      isBedrock: false,
       error: credentialsResult.error || 'Not authenticated'
     });
 
@@ -31,6 +42,7 @@ router.get('/claude/status', async (req, res) => {
       authenticated: false,
       email: null,
       method: null,
+      isBedrock: false,
       error: error.message
     });
   }
@@ -134,6 +146,20 @@ async function loadClaudeSettingsEnv() {
  *   - method: 'api_key' for env var, 'credentials_file' for OAuth tokens
  */
 async function checkClaudeCredentials() {
+  const settingsEnv = await loadClaudeSettingsEnv();
+
+  // Priority 0: Bedrock mode bypasses Claude OAuth checks.
+  const bedrockEnabled = isTruthyValue(process.env.CLAUDE_CODE_USE_BEDROCK)
+    || isTruthyValue(settingsEnv.CLAUDE_CODE_USE_BEDROCK);
+  if (bedrockEnabled) {
+    return {
+      authenticated: true,
+      email: 'AWS Bedrock',
+      method: 'bedrock',
+      isBedrock: true
+    };
+  }
+
   // Priority 1: Check for ANTHROPIC_API_KEY environment variable
   // The SDK checks this first and uses it if present, even if OAuth tokens exist.
   // When set, API calls are charged via pay-as-you-go rates instead of subscription.
@@ -148,13 +174,12 @@ async function checkClaudeCredentials() {
   // Priority 1b: Check ~/.claude/settings.json env values.
   // Claude Code can read proxy/auth values from settings.json even when the
   // CloudCLI server process itself was not started with those env vars exported.
-  const settingsEnv = await loadClaudeSettingsEnv();
-
   if (typeof settingsEnv.ANTHROPIC_API_KEY === 'string' && settingsEnv.ANTHROPIC_API_KEY.trim()) {
     return {
       authenticated: true,
       email: 'API Key Auth',
-      method: 'api_key'
+      method: 'api_key',
+      isBedrock: false
     };
   }
 
@@ -162,7 +187,8 @@ async function checkClaudeCredentials() {
     return {
       authenticated: true,
       email: 'Configured via settings.json',
-      method: 'api_key'
+      method: 'api_key',
+      isBedrock: false
     };
   }
 
@@ -182,7 +208,8 @@ async function checkClaudeCredentials() {
         return {
           authenticated: true,
           email: creds.email || creds.user || null,
-          method: 'credentials_file'
+          method: 'credentials_file',
+          isBedrock: false
         };
       }
     }
@@ -190,13 +217,15 @@ async function checkClaudeCredentials() {
     return {
       authenticated: false,
       email: null,
-      method: null
+      method: null,
+      isBedrock: false
     };
   } catch (error) {
     return {
       authenticated: false,
       email: null,
-      method: null
+      method: null,
+      isBedrock: false
     };
   }
 }
