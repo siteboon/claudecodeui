@@ -334,6 +334,7 @@ export default function ChatComposer({
                 type="button"
                 onClick={openImagePicker}
                 className="rounded-xl p-2 transition-colors hover:bg-accent/60"
+                aria-label={t('input.attachImages')}
                 title={t('input.attachImages')}
               >
                 <svg className="h-5 w-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
