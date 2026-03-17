@@ -1,7 +1,7 @@
 import express from 'express';
 import sessionManager from '../sessionManager.js';
 import { sessionNamesDb } from '../database/db.js';
-import { getCopilotSessionOwner, removeCopilotSessionOwner } from '../copilot-cli.js';
+import { getCopilotSessionOwner, removeCopilotSessionOwner, abortCopilotSession } from '../copilot-cli.js';
 
 const router = express.Router();
 
@@ -15,10 +15,8 @@ router.get('/sessions/:sessionId/messages', async (req, res) => {
 
         // Verify session ownership: reject if the session belongs to a different user
         const ownerId = getCopilotSessionOwner(sessionId);
-        if (ownerId) {
-            if (!req.user || req.user.id !== ownerId) {
-                return res.status(403).json({ success: false, error: 'Access denied' });
-            }
+        if (!req.user || (ownerId && req.user.id !== ownerId)) {
+            return res.status(403).json({ success: false, error: 'Access denied' });
         }
 
         let messages = sessionManager.getSessionMessages(sessionId);
@@ -47,11 +45,12 @@ router.delete('/sessions/:sessionId', async (req, res) => {
 
         // Verify session ownership: reject if the session belongs to a different user
         const ownerId = getCopilotSessionOwner(sessionId);
-        if (ownerId) {
-            if (!req.user || req.user.id !== ownerId) {
-                return res.status(403).json({ success: false, error: 'Access denied' });
-            }
+        if (!req.user || (ownerId && req.user.id !== ownerId)) {
+            return res.status(403).json({ success: false, error: 'Access denied' });
         }
+
+        // Terminate active process if running
+        abortCopilotSession(sessionId);
 
         await sessionManager.deleteSession(sessionId);
         sessionNamesDb.deleteName(sessionId, 'copilot');

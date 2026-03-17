@@ -12,14 +12,27 @@ import type { Project, ProjectSession, SessionProvider } from '../../../types/ap
 const stripTerminalNoise = (value: string): string => {
   let result = '';
   let inEscapeSequence = false;
+  let inCsiSequence = false;
 
   for (const char of value) {
     const code = char.charCodeAt(0);
 
-    if (inEscapeSequence) {
-      if (char >= '@' && char <= '~') {
+    if (inCsiSequence) {
+      // CSI sequences end with a byte in the 0x40-0x7e range
+      if (code >= 0x40 && code <= 0x7e) {
+        inCsiSequence = false;
         inEscapeSequence = false;
       }
+      continue;
+    }
+
+    if (inEscapeSequence) {
+      if (char === '[') {
+        inCsiSequence = true;
+        continue;
+      }
+      // Non-CSI escape: single char after ESC ends it
+      inEscapeSequence = false;
       continue;
     }
 
