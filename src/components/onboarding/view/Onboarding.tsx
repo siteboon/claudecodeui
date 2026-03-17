@@ -281,7 +281,6 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           provider={activeLoginProvider}
           project={selectedProject}
           onComplete={handleLoginComplete}
-          isOnboarding={true}
         />
       )}
     </>
