@@ -72,6 +72,27 @@
       "draggingStatus": "드래그 중...",
       "toggleAndMove": "클릭하여 토글, 드래그하여 이동"
     },
+    "tts": {
+      "sectionTitle": "텍스트 음성 변환",
+      "enabled": "TTS 활성화",
+      "language": "언어",
+      "allLanguages": "모든 언어",
+      "voice": "음성 ({{count}}개 사용 가능)",
+      "voiceAuto": "자동 (첫 번째 일치)",
+      "speed": "속도",
+      "pitch": "피치",
+      "pitchLow": "낮음",
+      "pitchNormal": "보통",
+      "pitchHigh": "높음",
+      "testVoice": "음성 테스트",
+      "stop": "중지",
+      "network": "네트워크",
+      "button": {
+        "stopSpeaking": "읽기 중지",
+        "ttsOn": "텍스트 음성 변환 활성화 (클릭하여 비활성화)",
+        "ttsOff": "텍스트 음성 변환 비활성화 (클릭하여 활성화)"
+      }
+    },
     "whisper": {
       "modes": {
         "default": "기본 모드",
