@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { CircleHelp, Search, X } from 'lucide-react';
 import { Prompt, PromptType } from '../types/types';
 import PromptCard from './PromptCard';
@@ -22,9 +22,81 @@ export default function PromptLibrary({
   onApplyRole,
   onInsertTemplate
 }: PromptLibraryProps) {
+  const modalRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const titleId = useId();
   const [activeTab, setActiveTab] = useState<PromptType>('role');
   const [searchQuery, setSearchQuery] = useState('');
   const [showHelp, setShowHelp] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    previousFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+
+    const modalElement = modalRef.current;
+    if (!modalElement) {
+      return;
+    }
+
+    const focusableSelectors = [
+      'a[href]',
+      'button:not([disabled])',
+      'textarea:not([disabled])',
+      'input:not([disabled])',
+      'select:not([disabled])',
+      '[tabindex]:not([tabindex="-1"])'
+    ].join(',');
+
+    const getFocusableElements = () =>
+      Array.from(modalElement.querySelectorAll<HTMLElement>(focusableSelectors))
+        .filter((element) => !element.hasAttribute('disabled') && element.getAttribute('aria-hidden') !== 'true');
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+
+      if (event.key !== 'Tab') {
+        return;
+      }
+
+      const focusableElements = getFocusableElements();
+      if (focusableElements.length === 0) {
+        event.preventDefault();
+        titleRef.current?.focus();
+        return;
+      }
+
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+      const currentActive = document.activeElement;
+
+      if (event.shiftKey && currentActive === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+      } else if (!event.shiftKey && currentActive === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
+      }
+    };
+
+    titleRef.current?.focus();
+
+    modalElement.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      modalElement.removeEventListener('keydown', handleKeyDown);
+      previousFocusRef.current?.focus();
+    };
+  }, [isOpen, onClose]);
 
   const filteredPrompts = useMemo(() => {
     return prompts.filter(prompt => {
@@ -54,10 +126,21 @@ export default function PromptLibrary({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="flex max-h-[80vh] w-full max-w-4xl flex-col rounded-lg bg-white shadow-xl dark:bg-gray-900">
+      <div
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="flex max-h-[80vh] w-full max-w-4xl flex-col rounded-lg bg-white shadow-xl dark:bg-gray-900"
+      >
         <div className="relative flex items-center justify-between border-b border-gray-200 p-4 dark:border-gray-700">
           <div>
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+            <h2
+              id={titleId}
+              ref={titleRef}
+              tabIndex={-1}
+              className="text-xl font-semibold text-gray-900 outline-none dark:text-gray-100"
+            >
               Prompt Library
             </h2>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
