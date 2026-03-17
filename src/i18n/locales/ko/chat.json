@@ -250,5 +250,32 @@
   },
   "tasks": {
     "nextTaskPrompt": "다음 작업 시작"
+  },
+  "promptLibrary": {
+    "title": "프롬프트 라이브러리",
+    "subtitle": "역할은 지속적인 컨텍스트를 추가합니다. 템플릿은 재사용 가능한 텍스트를 삽입합니다.",
+    "helpButtonTitle": "나만의 프롬프트 만드는 방법",
+    "helpButton": "직접 추가하기",
+    "helpTitle": "나만의 역할 또는 템플릿 만들기",
+    "helpDescription": "마크다운 프롬프트 파일을 추가하면 이 라이브러리에 표시됩니다.",
+    "helpClose": "도움말 닫기",
+    "helpPaths": "전역 프롬프트는 <0>~/.claude/prompts/</0>에, 프로젝트별 프롬프트는 <1>{project}/.claude/prompts/</1>에 마크다운 파일을 추가하세요.",
+    "helpTypes": "지속 컨텍스트에는 <0>type: role</0>, 재사용 입력 텍스트에는 <1>type: template</1>를 사용하세요.",
+    "tabs": {
+      "roles": "역할",
+      "templates": "템플릿"
+    },
+    "searchPlaceholder": "프롬프트 검색...",
+    "loading": "프롬프트 로딩 중...",
+    "loadError": "프롬프트를 불러오지 못했습니다",
+    "empty": "프롬프트를 찾을 수 없습니다",
+    "actions": {
+      "applyRole": "역할 적용",
+      "insertTemplate": "템플릿 삽입"
+    },
+    "selector": {
+      "clearRole": "역할 지우기",
+      "openLibrary": "프롬프트 라이브러리 열기"
+    }
   }
 }

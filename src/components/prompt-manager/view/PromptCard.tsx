@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Prompt } from '../types/types';
 
 interface PromptCardProps {
@@ -8,6 +9,8 @@ interface PromptCardProps {
 }
 
 export default function PromptCard({ prompt, onApply, onInsert }: PromptCardProps) {
+  const { t } = useTranslation('chat');
+
   return (
     <div className="rounded-lg border border-gray-200 p-4 transition-colors hover:border-blue-500 dark:border-gray-700 dark:hover:border-blue-400">
       <div className="mb-2 flex items-start justify-between">
@@ -45,7 +48,7 @@ export default function PromptCard({ prompt, onApply, onInsert }: PromptCardProp
             onClick={() => onApply(prompt)}
             className="flex-1 rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
           >
-            Apply Role
+            {t('promptLibrary.actions.applyRole')}
           </button>
         )}
         {onInsert && (
@@ -53,7 +56,7 @@ export default function PromptCard({ prompt, onApply, onInsert }: PromptCardProp
             onClick={() => onInsert(prompt)}
             className="flex-1 rounded bg-green-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-green-700"
           >
-            Insert Template
+            {t('promptLibrary.actions.insertTemplate')}
           </button>
         )}
       </div>
