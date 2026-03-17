@@ -161,7 +161,7 @@ export function useChatComposerState({
     applyRole,
     clearRole,
     insertTemplate,
-  } = usePrompts(selectedProject?.path || null);
+  } = usePrompts(selectedProject?.name || null);
 
   useEffect(() => {
     loadPrompts();
