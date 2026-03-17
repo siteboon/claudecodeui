@@ -5,6 +5,7 @@ import os from 'os';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { parseFrontmatter } from '../utils/frontmatter.js';
+import { extractProjectDirectory } from '../projects.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -82,13 +83,33 @@ function validatePromptPath(promptPath, allowedDirs) {
   return resolvedPath;
 }
 
+async function resolveProjectPath(projectId) {
+  if (!projectId) {
+    return null;
+  }
+
+  if (typeof projectId !== 'string' || projectId.includes('\0')) {
+    throw new Error('Invalid project identifier');
+  }
+
+  const extractedPath = await extractProjectDirectory(projectId);
+  const resolvedPath = path.resolve(extractedPath);
+
+  if (!path.isAbsolute(resolvedPath) || resolvedPath === path.sep) {
+    throw new Error('Invalid project path');
+  }
+
+  return resolvedPath;
+}
+
 /**
  * POST /api/prompts/list
  * List all available prompts from built-in, user, and project directories
  */
 router.post('/list', async (req, res) => {
   try {
-    const { projectPath } = req.body;
+    const { projectId } = req.body;
+    const projectPath = await resolveProjectPath(projectId);
 
     // Scan built-in prompts
     const builtInDir = path.join(__dirname, '../../shared/prompts');
@@ -129,7 +150,8 @@ router.post('/list', async (req, res) => {
  */
 router.post('/load', async (req, res) => {
   try {
-    const { promptPath, projectPath } = req.body;
+    const { promptPath, projectId } = req.body;
+    const projectPath = await resolveProjectPath(projectId);
 
     // Define allowed directories
     const allowedDirs = [

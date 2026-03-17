@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { authenticatedFetch } from '../../../utils/api';
 import type { Prompt, ActiveRole, PromptsListResponse, PromptLoadResponse } from '../types/types';
 
-export function usePrompts(projectPath: string | null) {
+export function usePrompts(projectId: string | null) {
   const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -13,10 +13,10 @@ export function usePrompts(projectPath: string | null) {
     setError(null);
 
     try {
-      console.log('[usePrompts] Loading prompts, projectPath:', projectPath);
+      console.log('[usePrompts] Loading prompts, projectId:', projectId);
       const response = await authenticatedFetch('/api/prompts/list', {
         method: 'POST',
-        body: JSON.stringify({ projectPath })
+        body: JSON.stringify({ projectId })
       });
 
       console.log('[usePrompts] Response status:', response.status);
@@ -37,14 +37,14 @@ export function usePrompts(projectPath: string | null) {
     } finally {
       setLoading(false);
     }
-  }, [projectPath]);
+  }, [projectId]);
 
   const loadPromptContent = useCallback(async (prompt: Prompt): Promise<string> => {
     const response = await authenticatedFetch('/api/prompts/load', {
       method: 'POST',
       body: JSON.stringify({
         promptPath: prompt.path,
-        projectPath
+        projectId
       })
     });
 
@@ -54,7 +54,7 @@ export function usePrompts(projectPath: string | null) {
 
     const data: PromptLoadResponse = await response.json();
     return data.content;
-  }, [projectPath]);
+  }, [projectId]);
 
   const applyRole = useCallback(async (prompt: Prompt) => {
     try {
