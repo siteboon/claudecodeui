@@ -475,6 +475,13 @@ function resolveClaudeEnvValue(key, settingsEnv) {
   return '';
 }
 
+/**
+ * Resolves a UI model alias (e.g. "sonnet") to the actual model ID.
+ *
+ * When Bedrock is enabled, looks up the alias in CLAUDE_MODELS.BEDROCK
+ * for sensible defaults. Users can still override via ANTHROPIC_MODEL
+ * (in env or ~/.claude/settings.json) for custom inference profiles.
+ */
 function resolveClaudeModel(modelAlias, settingsEnv) {
   const requestedModel = modelAlias || CLAUDE_MODELS.DEFAULT;
   const isBedrockEnabled = isTruthyValue(resolveClaudeEnvValue('CLAUDE_CODE_USE_BEDROCK', settingsEnv));
@@ -482,25 +489,14 @@ function resolveClaudeModel(modelAlias, settingsEnv) {
     return requestedModel;
   }
 
+  // Allow explicit env override for custom inference profiles / regions
   const explicitModel = resolveClaudeEnvValue('ANTHROPIC_MODEL', settingsEnv);
-  const explicitFastModel = resolveClaudeEnvValue('ANTHROPIC_SMALL_FAST_MODEL', settingsEnv);
-  const sonnetDefault = resolveClaudeEnvValue('ANTHROPIC_DEFAULT_SONNET_MODEL', settingsEnv);
-  const opusDefault = resolveClaudeEnvValue('ANTHROPIC_DEFAULT_OPUS_MODEL', settingsEnv);
-  const haikuDefault = resolveClaudeEnvValue('ANTHROPIC_DEFAULT_HAIKU_MODEL', settingsEnv);
-
-  if (requestedModel === 'haiku') {
-    return haikuDefault || explicitFastModel || explicitModel || requestedModel;
+  if (explicitModel) {
+    return explicitModel;
   }
 
-  if (requestedModel === 'opus' || requestedModel === 'opusplan') {
-    return opusDefault || explicitModel || requestedModel;
-  }
-
-  if (requestedModel === 'sonnet' || requestedModel === 'sonnet[1m]') {
-    return sonnetDefault || explicitModel || requestedModel;
-  }
-
-  return explicitModel || requestedModel;
+  // Look up in centralized Bedrock constants
+  return CLAUDE_MODELS.BEDROCK[requestedModel] || requestedModel;
 }
 
 /**
