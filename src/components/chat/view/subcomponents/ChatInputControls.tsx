@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PermissionMode, Provider } from '../../types/types';
+import { PromptSelector, type ActiveRole } from '../../../prompt-manager';
 import ThinkingModeSelector from './ThinkingModeSelector';
 import TokenUsagePie from './TokenUsagePie';
 
@@ -18,6 +19,9 @@ interface ChatInputControlsProps {
   isUserScrolledUp: boolean;
   hasMessages: boolean;
   onScrollToBottom: () => void;
+  onOpenPromptLibrary: () => void;
+  activeRole: ActiveRole | null;
+  onClearRole: () => void;
 }
 
 export default function ChatInputControls({
@@ -34,6 +38,9 @@ export default function ChatInputControls({
   isUserScrolledUp,
   hasMessages,
   onScrollToBottom,
+  onOpenPromptLibrary,
+  activeRole,
+  onClearRole,
 }: ChatInputControlsProps) {
   const { t } = useTranslation('chat');
 
@@ -77,6 +84,12 @@ export default function ChatInputControls({
       {provider === 'claude' && (
         <ThinkingModeSelector selectedMode={thinkingMode} onModeChange={setThinkingMode} onClose={() => {}} className="" />
       )}
+
+      <PromptSelector
+        onOpenLibrary={onOpenPromptLibrary}
+        activeRole={activeRole}
+        onClearRole={onClearRole}
+      />
 
       <TokenUsagePie used={tokenBudget?.used || 0} total={tokenBudget?.total || parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 160000} />
 
