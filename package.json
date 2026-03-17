@@ -34,6 +34,8 @@
     "preview": "vite preview",
     "typecheck:client": "tsc --noEmit -p tsconfig.json",
     "typecheck:server": "tsc --noEmit -p server/tsconfig.json",
+    "test:server": "node --import tsx --test server/src/shared/platform/runtime-platform.test.ts server/src/shared/platform/text.test.ts server/src/shared/platform/stream.test.ts server/src/shared/platform/path.test.ts server/src/shared/platform/shell.test.ts",
+    "verify:server": "npm run typecheck:server && npm run test:server && npm run server:build",
     "typecheck": "npm run typecheck:client && npm run typecheck:server",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",

@@ -1,0 +1,47 @@
+name: Cross Platform Server Verification
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    name: Verify on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+        node:
+          - 22
+
+    steps:
+      # This step checks out the repository so the matrix job can build and test it.
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # This step installs the Node.js version the README already declares as the project baseline.
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      # This step installs dependencies exactly as locked so native and shell behavior stays reproducible.
+      - name: Install dependencies
+        run: npm ci
+
+      # This step verifies the TypeScript server code before runtime checks.
+      - name: Typecheck server
+        run: npm run typecheck:server
+
+      # This step runs the built-in Node tests that exercise the OS adapter layer directly.
+      - name: Test server adapters
+        run: npm run test:server
+
+      # This step ensures the in-progress TypeScript backend still compiles in each OS environment.
+      - name: Build server
+        run: npm run server:build

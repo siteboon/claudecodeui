@@ -22,6 +22,12 @@ server/
         error-handler.ts
         not-found-handler.ts
         request-context.ts
+      platform/
+        runtime-platform.ts
+        text.ts
+        stream.ts
+        shell.ts
+        path.ts
       types/
         app.ts
         http.ts
@@ -79,6 +85,11 @@ server/
   Example: `request-context.ts` is where request IDs, timestamps, and per-request metadata are attached.
   Example: `async-handler.ts` removes repeated `try/catch(next)` wrappers in controllers.
   Example: `not-found-handler.ts` is the generic fallback for unknown API routes.
+
+- `src/shared/platform/`
+  Shared OS-adapter helpers for shell spawning, line ending normalization, streaming stdout/stderr parsing, and path normalization.
+  Example: `platform/stream.ts` is where process output gets split into complete lines without leaking CRLF edge cases into feature code.
+  Example: `platform/shell.ts` is where PowerShell-vs-bash command construction lives so provider modules do not branch on `process.platform`.
 
 - `src/shared/types/`
   Global type aliases that are safe to share across modules. This layer uses `type`, not `interface`.
