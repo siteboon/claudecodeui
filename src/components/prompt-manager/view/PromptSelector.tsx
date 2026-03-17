@@ -1,6 +1,7 @@
 import React from 'react';
 import { Sparkles, X, type LucideIcon } from 'lucide-react';
 import * as Icons from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { ActiveRole } from '../types/types';
 
 interface PromptSelectorProps {
@@ -14,6 +15,7 @@ export default function PromptSelector({
   activeRole,
   onClearRole
 }: PromptSelectorProps) {
+  const { t } = useTranslation('chat');
   let RoleIcon: LucideIcon | null = null;
 
   if (activeRole?.icon) {
@@ -35,7 +37,7 @@ export default function PromptSelector({
             type="button"
             onClick={onClearRole}
             className="rounded p-0.5 transition-colors hover:bg-primary/20"
-            title="Clear role"
+            title={t('promptLibrary.selector.clearRole')}
           >
             <X className="h-3 w-3" />
           </button>
@@ -47,7 +49,7 @@ export default function PromptSelector({
         type="button"
         onClick={onOpenLibrary}
         className="rounded-lg p-2 transition-colors hover:bg-accent/60"
-        title="Open Prompt Library"
+        title={t('promptLibrary.selector.openLibrary')}
       >
         <Sparkles className="h-5 w-5 text-muted-foreground" />
       </button>
