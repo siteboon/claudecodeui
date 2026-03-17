@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { X, Search } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { CircleHelp, Search, X } from 'lucide-react';
 import { Prompt, PromptType } from '../types/types';
 import PromptCard from './PromptCard';
 
@@ -24,6 +24,7 @@ export default function PromptLibrary({
 }: PromptLibraryProps) {
   const [activeTab, setActiveTab] = useState<PromptType>('role');
   const [searchQuery, setSearchQuery] = useState('');
+  const [showHelp, setShowHelp] = useState(false);
 
   const filteredPrompts = useMemo(() => {
     return prompts.filter(prompt => {
@@ -54,17 +55,79 @@ export default function PromptLibrary({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
       <div className="flex max-h-[80vh] w-full max-w-4xl flex-col rounded-lg bg-white shadow-xl dark:bg-gray-900">
-        <div className="flex items-center justify-between border-b border-gray-200 p-4 dark:border-gray-700">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-            Prompt Library
-          </h2>
-          <button onClick={onClose} className="rounded p-1 hover:bg-gray-100 dark:hover:bg-gray-800">
-            <X className="h-5 w-5" />
-          </button>
+        <div className="relative flex items-center justify-between border-b border-gray-200 p-4 dark:border-gray-700">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+              Prompt Library
+            </h2>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              Roles add persistent context. Templates insert reusable text.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowHelp((previous) => !previous)}
+              className="inline-flex items-center gap-2 rounded-md border border-gray-200 px-3 py-1.5 text-sm text-gray-700 transition-colors hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+              title="How to create your own prompt"
+            >
+              <CircleHelp className="h-4 w-4" />
+              How to add your own
+            </button>
+            <button type="button" onClick={onClose} className="rounded p-1 hover:bg-gray-100 dark:hover:bg-gray-800">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          {showHelp && (
+            <div className="absolute right-14 top-16 z-10 w-[min(32rem,calc(100vw-3rem))] rounded-xl border border-blue-100 bg-white p-4 shadow-2xl dark:border-blue-900/40 dark:bg-gray-950">
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-medium text-gray-900 dark:text-gray-100">
+                    Create your own roles or templates
+                  </p>
+                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    Add markdown prompt files and they will appear in this library.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowHelp(false)}
+                  className="rounded p-1 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+                  title="Close help"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="space-y-3 text-sm text-gray-700 dark:text-gray-200">
+                <p>
+                  Add markdown files to <code>~/.claude/prompts/</code> for global prompts or
+                  <code> {'{project}/.claude/prompts/'}</code> for project-specific prompts.
+                </p>
+                <p>
+                  Use <code>type: role</code> for persistent context and <code>type: template</code>
+                  for reusable input text.
+                </p>
+                <pre className="overflow-x-auto rounded-md bg-gray-50 p-3 text-xs text-gray-800 dark:bg-gray-900 dark:text-gray-200"><code>{`---
+name: My Custom Prompt
+type: role
+category: custom
+description: Helps with a specific workflow
+icon: Star
+tags: [custom, workflow]
+---
+
+Your reusable prompt content goes here.`}</code></pre>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex gap-4 border-b border-gray-200 px-4 pt-4 dark:border-gray-700">
           <button
+            type="button"
             onClick={() => setActiveTab('role')}
             className={`px-1 pb-2 font-medium ${
               activeTab === 'role'
@@ -75,6 +138,7 @@ export default function PromptLibrary({
             Roles
           </button>
           <button
+            type="button"
             onClick={() => setActiveTab('template')}
             className={`px-1 pb-2 font-medium ${
               activeTab === 'template'
