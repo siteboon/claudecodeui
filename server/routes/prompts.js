@@ -1,5 +1,5 @@
 import express from 'express';
-import { promises as fs } from 'fs';
+import { promises as fs, realpathSync, statSync } from 'fs';
 import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
@@ -58,25 +58,31 @@ async function scanPromptsDirectory(dir, namespace) {
 }
 
 function validatePromptPath(promptPath, allowedDirs) {
-  // Resolve to absolute path to prevent traversal attacks
-  const resolvedPath = path.resolve(promptPath);
+  // Resolve symlinks to prevent traversal attacks through linked paths
+  const resolvedPath = realpathSync(promptPath);
 
-  // Check if path is within allowed directories using path.relative
+  // Check if real path is within one of the real-resolved allowed directories
   const isAllowed = allowedDirs.some(dir => {
-    const resolvedDir = path.resolve(dir);
-    const relativePath = path.relative(resolvedDir, resolvedPath);
+    let resolvedDir;
+    try {
+      resolvedDir = realpathSync(dir);
+    } catch {
+      return false;
+    }
 
-    // Path is valid if:
-    // 1. relative path doesn't start with '..' (not outside allowed dir)
-    // 2. relative path is not empty (not the dir itself, but that's ok)
-    // 3. path doesn't contain null bytes
-    return relativePath &&
-           !relativePath.startsWith('..') &&
-           !relativePath.includes('\0') &&
-           !path.isAbsolute(relativePath);
+    const normalizedDir = resolvedDir.endsWith(path.sep)
+      ? resolvedDir
+      : `${resolvedDir}${path.sep}`;
+
+    return resolvedPath === resolvedDir || resolvedPath.startsWith(normalizedDir);
   });
 
   if (!isAllowed) {
+    throw new Error('Invalid prompt path');
+  }
+
+  const stats = statSync(resolvedPath);
+  if (!stats.isFile()) {
     throw new Error('Invalid prompt path');
   }
 
@@ -165,6 +171,10 @@ router.post('/load', async (req, res) => {
 
     // Validate path
     const validPath = validatePromptPath(promptPath, allowedDirs);
+
+    if (path.extname(validPath).toLowerCase() !== '.md') {
+      throw new Error('Only Markdown prompt files are allowed');
+    }
 
     // Read and parse file
     const content = await fs.readFile(validPath, 'utf-8');
