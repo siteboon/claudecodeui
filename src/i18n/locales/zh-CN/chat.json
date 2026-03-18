@@ -275,7 +275,17 @@
     },
     "selector": {
       "clearRole": "清除角色",
-      "openLibrary": "打开提示词库"
+      "openLibrary": "打开提示词库",
+      "manageRoles": "管理活动角色",
+      "role": "角色",
+      "roles": "角色"
+    },
+    "roleManagement": {
+      "title": "管理活动角色",
+      "subtitle": "拖动以重新排序优先级。较高的角色优先。",
+      "empty": "没有活动角色。在提示词库中切换角色以添加它们。",
+      "clearAll": "清除所有角色",
+      "confirmClearAll": "您确定要清除所有活动角色吗？"
     }
   }
 }

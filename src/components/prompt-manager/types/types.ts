@@ -20,6 +20,11 @@ export interface ActiveRole {
   icon?: string;
 }
 
+export interface ActiveRoleWithPriority extends ActiveRole {
+  priority: number;
+  path: string;
+}
+
 export interface PromptsListResponse {
   prompts: Prompt[];
   builtIn: Prompt[];

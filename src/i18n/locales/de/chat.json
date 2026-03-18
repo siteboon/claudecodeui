@@ -293,7 +293,17 @@
     },
     "selector": {
       "clearRole": "Rolle entfernen",
-      "openLibrary": "Prompt-Bibliothek öffnen"
+      "openLibrary": "Prompt-Bibliothek öffnen",
+      "manageRoles": "Aktive Rollen verwalten",
+      "role": "Rolle",
+      "roles": "Rollen"
+    },
+    "roleManagement": {
+      "title": "Aktive Rollen verwalten",
+      "subtitle": "Ziehen Sie zum Neuordnen der Priorität. Höhere Rollen haben Vorrang.",
+      "empty": "Keine aktiven Rollen. Aktivieren Sie Rollen in der Prompt-Bibliothek, um sie hinzuzufügen.",
+      "clearAll": "Alle Rollen löschen",
+      "confirmClearAll": "Möchten Sie wirklich alle aktiven Rollen löschen?"
     }
   }
 }

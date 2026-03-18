@@ -144,6 +144,7 @@ export function useChatComposerState({
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
   const [thinkingMode, setThinkingMode] = useState('none');
   const [showPromptLibrary, setShowPromptLibrary] = useState(false);
+  const [showRoleManagement, setShowRoleManagement] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputHighlightRef = useRef<HTMLDivElement>(null);
@@ -156,10 +157,13 @@ export function useChatComposerState({
     prompts,
     loading: promptsLoading,
     error: promptsError,
-    activeRole,
+    activeRoles,
     loadPrompts,
-    applyRole,
-    clearRole,
+    toggleRole,
+    reorderRoles,
+    removeRole,
+    clearAllRoles,
+    getCombinedRoleContent,
     insertTemplate,
   } = usePrompts(selectedProject?.fullPath || selectedProject?.path || null);
 
@@ -537,9 +541,10 @@ export function useChatComposerState({
 
       let messageContent = currentInput;
 
-      // Prepend active role content if a role is active
-      if (activeRole) {
-        messageContent = `${activeRole.content}\n\n${currentInput}`;
+      // Prepend combined role content if roles are active
+      const combinedRoleContent = getCombinedRoleContent();
+      if (combinedRoleContent) {
+        messageContent = `${combinedRoleContent}\n\n${currentInput}`;
       }
 
       const selectedThinkingMode = thinkingModes.find((mode: { id: string; prefix?: string }) => mode.id === thinkingMode);
@@ -727,7 +732,7 @@ export function useChatComposerState({
       safeLocalStorage.removeItem(`draft_input_${selectedProject.name}`);
     },
     [
-      activeRole,
+      getCombinedRoleContent,
       selectedSession,
       attachedImages,
       claudeModel,
@@ -1011,12 +1016,11 @@ export function useChatComposerState({
     [onInputFocusChange],
   );
 
-  const handleApplyRole = useCallback(
+  const handleToggleRole = useCallback(
     async (prompt: Prompt) => {
-      await applyRole(prompt);
-      setShowPromptLibrary(false);
+      await toggleRole(prompt);
     },
-    [applyRole],
+    [toggleRole],
   );
 
   const handleInsertTemplate = useCallback(
@@ -1075,12 +1079,16 @@ export function useChatComposerState({
     isInputFocused,
     showPromptLibrary,
     setShowPromptLibrary,
+    showRoleManagement,
+    setShowRoleManagement,
     prompts,
     promptsLoading,
     promptsError,
-    activeRole,
-    clearRole,
-    handleApplyRole,
+    activeRoles,
+    handleToggleRole,
+    reorderRoles,
+    removeRole,
+    clearAllRoles,
     handleInsertTemplate,
   };
 }

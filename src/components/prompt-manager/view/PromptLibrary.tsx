@@ -1,7 +1,7 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { CircleHelp, Search, X } from 'lucide-react';
 import { Trans, useTranslation } from 'react-i18next';
-import { Prompt, PromptType } from '../types/types';
+import { Prompt, PromptType, ActiveRoleWithPriority } from '../types/types';
 import PromptCard from './PromptCard';
 
 interface PromptLibraryProps {
@@ -10,7 +10,8 @@ interface PromptLibraryProps {
   prompts: Prompt[];
   loading: boolean;
   error?: string | null;
-  onApplyRole: (prompt: Prompt) => void;
+  activeRoles: ActiveRoleWithPriority[];
+  onToggleRole: (prompt: Prompt) => void;
   onInsertTemplate: (prompt: Prompt) => void;
 }
 
@@ -20,7 +21,8 @@ export default function PromptLibrary({
   prompts,
   loading,
   error,
-  onApplyRole,
+  activeRoles,
+  onToggleRole,
   onInsertTemplate
 }: PromptLibraryProps) {
   const { t } = useTranslation('chat');
@@ -274,7 +276,8 @@ Your reusable prompt content goes here.`}</code></pre>
                       <PromptCard
                         key={prompt.path}
                         prompt={prompt}
-                        onApply={activeTab === 'role' ? onApplyRole : undefined}
+                        onToggle={activeTab === 'role' ? onToggleRole : undefined}
+                        isActive={activeTab === 'role' ? activeRoles.some(role => role.path === prompt.path) : false}
                         onInsert={activeTab === 'template' ? onInsertTemplate : undefined}
                       />
                     ))}

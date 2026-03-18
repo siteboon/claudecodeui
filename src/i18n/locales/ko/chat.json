@@ -275,7 +275,17 @@
     },
     "selector": {
       "clearRole": "역할 지우기",
-      "openLibrary": "프롬프트 라이브러리 열기"
+      "openLibrary": "프롬프트 라이브러리 열기",
+      "manageRoles": "활성 역할 관리",
+      "role": "역할",
+      "roles": "역할"
+    },
+    "roleManagement": {
+      "title": "활성 역할 관리",
+      "subtitle": "드래그하여 우선순위를 재정렬합니다. 상위 역할이 우선합니다.",
+      "empty": "활성 역할이 없습니다. 프롬프트 라이브러리에서 역할을 전환하여 추가하세요.",
+      "clearAll": "모든 역할 지우기",
+      "confirmClearAll": "모든 활성 역할을 지우시겠습니까?"
     }
   }
 }

@@ -293,7 +293,17 @@
     },
     "selector": {
       "clearRole": "Clear role",
-      "openLibrary": "Open Prompt Library"
+      "openLibrary": "Open Prompt Library",
+      "manageRoles": "Manage active roles",
+      "role": "role",
+      "roles": "roles"
+    },
+    "roleManagement": {
+      "title": "Manage Active Roles",
+      "subtitle": "Drag to reorder priority. Higher roles take precedence.",
+      "empty": "No active roles. Toggle roles in the Prompt Library to add them.",
+      "clearAll": "Clear All Roles",
+      "confirmClearAll": "Are you sure you want to clear all active roles?"
     }
   }
 }

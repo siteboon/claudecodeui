@@ -13,7 +13,7 @@ import type {
 } from 'react';
 import MicButton from '../../../mic-button/view/MicButton';
 import type { PendingPermissionRequest, PermissionMode, Provider } from '../../types/types';
-import { PromptLibrary, type ActiveRole, type Prompt } from '../../../prompt-manager';
+import { PromptLibrary, RoleManagementModal, type ActiveRoleWithPriority, type Prompt } from '../../../prompt-manager';
 import CommandMenu from './CommandMenu';
 import ClaudeStatus from './ClaudeStatus';
 import ImageAttachment from './ImageAttachment';
@@ -95,12 +95,16 @@ interface ChatComposerProps {
   onTranscript: (text: string) => void;
   showPromptLibrary: boolean;
   setShowPromptLibrary: (show: boolean) => void;
+  showRoleManagement: boolean;
+  setShowRoleManagement: (show: boolean) => void;
   prompts: Prompt[];
   promptsLoading: boolean;
   promptsError: string | null;
-  activeRole: ActiveRole | null;
-  clearRole: () => void;
-  handleApplyRole: (prompt: Prompt) => void;
+  activeRoles: ActiveRoleWithPriority[];
+  handleToggleRole: (prompt: Prompt) => void;
+  reorderRoles: (newOrder: ActiveRoleWithPriority[]) => void;
+  removeRole: (path: string) => void;
+  clearAllRoles: () => void;
   handleInsertTemplate: (prompt: Prompt) => void;
 }
 
@@ -161,12 +165,16 @@ export default function ChatComposer({
   onTranscript,
   showPromptLibrary,
   setShowPromptLibrary,
+  showRoleManagement,
+  setShowRoleManagement,
   prompts,
   promptsLoading,
   promptsError,
-  activeRole,
-  clearRole,
-  handleApplyRole,
+  activeRoles,
+  handleToggleRole,
+  reorderRoles,
+  removeRole,
+  clearAllRoles,
   handleInsertTemplate,
 }: ChatComposerProps) {
   const { t } = useTranslation('chat');
@@ -223,8 +231,8 @@ export default function ChatComposer({
           hasMessages={hasMessages}
           onScrollToBottom={onScrollToBottom}
           onOpenPromptLibrary={() => setShowPromptLibrary(true)}
-          activeRole={activeRole}
-          onClearRole={clearRole}
+          activeRoles={activeRoles}
+          onOpenRoleManagement={() => setShowRoleManagement(true)}
         />
         )}
       </div>
@@ -387,8 +395,18 @@ export default function ChatComposer({
         prompts={prompts}
         loading={promptsLoading}
         error={promptsError}
-        onApplyRole={handleApplyRole}
+        activeRoles={activeRoles}
+        onToggleRole={handleToggleRole}
         onInsertTemplate={handleInsertTemplate}
+      />
+
+      <RoleManagementModal
+        isOpen={showRoleManagement}
+        onClose={() => setShowRoleManagement(false)}
+        activeRoles={activeRoles}
+        onReorderRoles={reorderRoles}
+        onRemoveRole={removeRole}
+        onClearAllRoles={clearAllRoles}
       />
     </div>
   );
