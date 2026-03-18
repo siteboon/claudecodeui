@@ -93,6 +93,8 @@ export function validateManifest(manifest) {
   return { valid: true };
 }
 
+const BUILD_TIMEOUT_MS = 60_000;
+
 /** Run `npm run build` if the plugin's package.json declares a build script. */
 function runBuildIfNeeded(dir, packageJsonPath, onSuccess, onError) {
   try {
@@ -110,9 +112,22 @@ function runBuildIfNeeded(dir, packageJsonPath, onSuccess, onError) {
   });
 
   let stderr = '';
+  let settled = false;
+
+  const timer = setTimeout(() => {
+    if (settled) return;
+    settled = true;
+    buildProcess.removeAllListeners();
+    buildProcess.kill();
+    onError(new Error('npm run build timed out'));
+  }, BUILD_TIMEOUT_MS);
+
   buildProcess.stderr.on('data', (data) => { stderr += data.toString(); });
 
   buildProcess.on('close', (code) => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
     if (code !== 0) {
       return onError(new Error(`npm run build failed (exit code ${code}): ${stderr.trim()}`));
     }
@@ -120,6 +135,9 @@ function runBuildIfNeeded(dir, packageJsonPath, onSuccess, onError) {
   });
 
   buildProcess.on('error', (err) => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
     onError(new Error(`Failed to spawn build: ${err.message}`));
   });
 }
