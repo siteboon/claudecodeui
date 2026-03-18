@@ -17,6 +17,7 @@ import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { validatePassword } from './utils/validation.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -288,7 +289,12 @@ async function resetPassword() {
     }
 
     // Get the single user
-    const user = db.prepare('SELECT id, username FROM users WHERE is_active = 1 LIMIT 1').get();
+    let user;
+    try {
+        user = db.prepare('SELECT id, username FROM users WHERE is_active = 1 LIMIT 1').get();
+    } catch {
+        // Table doesn't exist yet — fresh install before server has run
+    }
     if (!user) {
         db.close();
         console.error(`${c.error('[ERROR]')} No user account found. Start the server and complete setup first.`);
@@ -301,17 +307,10 @@ async function resetPassword() {
     const newPassword = await promptPassword('New password: ');
     const confirmation = await promptPassword('Confirm password: ');
 
-    // Validate length
-    if (newPassword.length < 6) {
+    const validation = validatePassword(newPassword, confirmation);
+    if (!validation.ok) {
         db.close();
-        console.error(`${c.error('[ERROR]')} Password must be at least 6 characters.`);
-        process.exit(1);
-    }
-
-    // Validate match
-    if (newPassword !== confirmation) {
-        db.close();
-        console.error(`${c.error('[ERROR]')} Passwords do not match.`);
+        console.error(`${c.error('[ERROR]')} ${validation.error}`);
         process.exit(1);
     }
 

@@ -192,7 +192,7 @@ const userDb = {
     try {
       const stmt = db.prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)');
       const result = stmt.run(username, passwordHash);
-      return { id: result.lastInsertRowid, username };
+      return { id: result.lastInsertRowid, username, token_version: 0 };
     } catch (err) {
       throw err;
     }
