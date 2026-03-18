@@ -30,17 +30,12 @@ const __dirname = path.dirname(__filename);
  * to the legacy location inside the server/database/ folder.
  *
  * Priority:
- *   1. DATABASE_PATH environment variable (set by cli.js or load-env.js)
+ *   1. DATABASE_PATH environment variable (set by cli.js or load-env-vars.js)
  *   2. Legacy path: server/database/auth.db
  */
 function resolveDatabasePath(): string {
-  if (process.env.DATABASE_PATH) {
-    return process.env.DATABASE_PATH;
-  }
-
-  // Fallback: <project-root>/server/database/auth.db
-  const serverDir = path.resolve(__dirname, '..', '..', '..');
-  return path.join(serverDir, 'database', 'auth.db');
+    // process.env.DATABASE_PATH is set by load-env-vars.js to either the .env value or a default(~/.cloudcli/auth.db) in the user's home directory. 
+    return process.env.DATABASE_PATH || resolveLegacyDatabasePath();
 }
 
 /**
@@ -79,6 +74,7 @@ function migrateLegacyDatabase(targetPath: string): void {
   try {
     fs.copyFileSync(legacyPath, targetPath);
     logger.info('Migrated legacy database', { from: legacyPath, to: targetPath });
+
 
     // copy the write-ahead log and shared memory files (auth.db-wal, auth.db-shm) if they exist, to preserve any uncommitted transactions
     for (const suffix of ['-wal', '-shm']) {

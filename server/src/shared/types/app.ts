@@ -6,6 +6,7 @@ export type RuntimePaths = {
   projectRoot: string;
   legacyRuntimePath: string;
   bootstrapEntrypointPath: string;
+  refactorRuntimePath: string;
 };
 
 export type AppLocals = {
