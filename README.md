@@ -154,6 +154,7 @@ CloudCLI has a plugin system that lets you add custom tabs with their own fronte
 | Plugin | Description |
 |---|---|
 | **[Project Stats](https://github.com/cloudcli-ai/cloudcli-plugin-starter)** | Shows file counts, lines of code, file-type breakdown, largest files, and recently modified files for your current project |
+| **[Web Terminal](https://github.com/cloudcli-ai/cloudcli-plugin-terminal)** | Full xterm.js terminal with multi-tab support|
 
 ### Build Your Own
 
