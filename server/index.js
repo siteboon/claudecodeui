@@ -65,7 +65,7 @@ import userRoutes from './routes/user.js';
 import codexRoutes from './routes/codex.js';
 import geminiRoutes from './routes/gemini.js';
 import pluginsRoutes from './routes/plugins.js';
-import { startEnabledPluginServers, stopAllPlugins } from './utils/plugin-process-manager.js';
+import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
 import { initializeDatabase, sessionNamesDb, applyCustomSessionNames } from './database/db.js';
 import { configureWebPush } from './services/vapid-keys.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
@@ -1396,6 +1396,50 @@ const uploadFilesHandler = async (req, res) => {
 
 app.post('/api/projects/:projectName/files/upload', authenticateToken, uploadFilesHandler);
 
+/**
+ * Proxy an authenticated client WebSocket to a plugin's internal WS server.
+ * Auth is enforced by verifyClient before this function is reached.
+ */
+function handlePluginWsProxy(clientWs, pathname) {
+    const pluginName = pathname.replace('/plugin-ws/', '');
+    if (!pluginName || /[^a-zA-Z0-9_-]/.test(pluginName)) {
+        clientWs.close(4400, 'Invalid plugin name');
+        return;
+    }
+
+    const port = getPluginPort(pluginName);
+    if (!port) {
+        clientWs.close(4404, 'Plugin not running');
+        return;
+    }
+
+    const upstream = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+
+    upstream.on('open', () => {
+        console.log(`[Plugins] WS proxy connected to "${pluginName}" on port ${port}`);
+    });
+
+    // Relay messages bidirectionally
+    upstream.on('message', (data) => {
+        if (clientWs.readyState === WebSocket.OPEN) clientWs.send(data);
+    });
+    clientWs.on('message', (data) => {
+        if (upstream.readyState === WebSocket.OPEN) upstream.send(data);
+    });
+
+    // Propagate close in both directions
+    upstream.on('close', () => { if (clientWs.readyState === WebSocket.OPEN) clientWs.close(); });
+    clientWs.on('close', () => { if (upstream.readyState === WebSocket.OPEN) upstream.close(); });
+
+    upstream.on('error', (err) => {
+        console.error(`[Plugins] WS proxy error for "${pluginName}":`, err.message);
+        if (clientWs.readyState === WebSocket.OPEN) clientWs.close(4502, 'Upstream error');
+    });
+    clientWs.on('error', () => {
+        if (upstream.readyState === WebSocket.OPEN) upstream.close();
+    });
+}
+
 // WebSocket connection handler that routes based on URL path
 wss.on('connection', (ws, request) => {
     const url = request.url;
@@ -1409,6 +1453,8 @@ wss.on('connection', (ws, request) => {
         handleShellConnection(ws);
     } else if (pathname === '/ws') {
         handleChatConnection(ws, request);
+    } else if (pathname.startsWith('/plugin-ws/')) {
+        handlePluginWsProxy(ws, pathname);
     } else {
         console.log('[WARN] Unknown WebSocket path:', pathname);
         ws.close();
