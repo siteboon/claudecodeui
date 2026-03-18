@@ -93,6 +93,37 @@ export function validateManifest(manifest) {
   return { valid: true };
 }
 
+/** Run `npm run build` if the plugin's package.json declares a build script. */
+function runBuildIfNeeded(dir, packageJsonPath, onSuccess, onError) {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+    if (!pkg.scripts?.build) {
+      return onSuccess();
+    }
+  } catch {
+    return onSuccess(); // Unreadable package.json — skip build
+  }
+
+  const buildProcess = spawn('npm', ['run', 'build'], {
+    cwd: dir,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  let stderr = '';
+  buildProcess.stderr.on('data', (data) => { stderr += data.toString(); });
+
+  buildProcess.on('close', (code) => {
+    if (code !== 0) {
+      return onError(new Error(`npm run build failed (exit code ${code}): ${stderr.trim()}`));
+    }
+    onSuccess();
+  });
+
+  buildProcess.on('error', (err) => {
+    onError(new Error(`Failed to spawn build: ${err.message}`));
+  });
+}
+
 export function scanPlugins() {
   const pluginsDir = getPluginsDir();
   const config = getPluginsConfig();
@@ -289,7 +320,7 @@ export function installPluginFromGit(url) {
       // --ignore-scripts prevents postinstall hooks from executing arbitrary code.
       const packageJsonPath = path.join(tempDir, 'package.json');
       if (fs.existsSync(packageJsonPath)) {
-        const npmProcess = spawn('npm', ['install', '--production', '--ignore-scripts'], {
+        const npmProcess = spawn('npm', ['install', '--ignore-scripts'], {
           cwd: tempDir,
           stdio: ['ignore', 'pipe', 'pipe'],
         });
@@ -299,7 +330,7 @@ export function installPluginFromGit(url) {
             cleanupTemp();
             return reject(new Error(`npm install for ${repoName} failed (exit code ${npmCode})`));
           }
-          finalize(manifest);
+          runBuildIfNeeded(tempDir, packageJsonPath, () => finalize(manifest), (err) => { cleanupTemp(); reject(err); });
         });
 
         npmProcess.on('error', (err) => {
@@ -356,7 +387,7 @@ export function updatePluginFromGit(name) {
       // Re-run npm install if package.json exists
       const packageJsonPath = path.join(pluginDir, 'package.json');
       if (fs.existsSync(packageJsonPath)) {
-        const npmProcess = spawn('npm', ['install', '--production', '--ignore-scripts'], {
+        const npmProcess = spawn('npm', ['install', '--ignore-scripts'], {
           cwd: pluginDir,
           stdio: ['ignore', 'pipe', 'pipe'],
         });
@@ -364,7 +395,7 @@ export function updatePluginFromGit(name) {
           if (npmCode !== 0) {
             return reject(new Error(`npm install for ${name} failed (exit code ${npmCode})`));
           }
-          resolve(manifest);
+          runBuildIfNeeded(pluginDir, packageJsonPath, () => resolve(manifest), (err) => reject(err));
         });
         npmProcess.on('error', (err) => reject(err));
       } else {
