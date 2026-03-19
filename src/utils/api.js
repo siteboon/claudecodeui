@@ -54,25 +54,18 @@ export const api = {
   projects: () => authenticatedFetch('/api/projects'),
   sessions: (projectName, limit = 5, offset = 0) =>
     authenticatedFetch(`/api/projects/${projectName}/sessions?limit=${limit}&offset=${offset}`),
-  sessionMessages: (projectName, sessionId, limit = null, offset = 0, provider = 'claude') => {
+  // Unified endpoint — all providers through one URL
+  unifiedSessionMessages: (sessionId, provider = 'claude', { projectName = '', projectPath = '', limit = null, offset = 0 } = {}) => {
     const params = new URLSearchParams();
+    params.append('provider', provider);
+    if (projectName) params.append('projectName', projectName);
+    if (projectPath) params.append('projectPath', projectPath);
     if (limit !== null) {
-      params.append('limit', limit);
-      params.append('offset', offset);
+      params.append('limit', String(limit));
+      params.append('offset', String(offset));
     }
     const queryString = params.toString();
-
-    let url;
-    if (provider === 'codex') {
-      url = `/api/codex/sessions/${sessionId}/messages${queryString ? `?${queryString}` : ''}`;
-    } else if (provider === 'cursor') {
-      url = `/api/cursor/sessions/${sessionId}/messages${queryString ? `?${queryString}` : ''}`;
-    } else if (provider === 'gemini') {
-      url = `/api/gemini/sessions/${sessionId}/messages${queryString ? `?${queryString}` : ''}`;
-    } else {
-      url = `/api/projects/${projectName}/sessions/${sessionId}/messages${queryString ? `?${queryString}` : ''}`;
-    }
-    return authenticatedFetch(url);
+    return authenticatedFetch(`/api/sessions/${encodeURIComponent(sessionId)}/messages${queryString ? `?${queryString}` : ''}`);
   },
   renameProject: (projectName, displayName) =>
     authenticatedFetch(`/api/projects/${projectName}/rename`, {
