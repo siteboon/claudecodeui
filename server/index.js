@@ -1606,6 +1606,8 @@ function handleChatConnection(ws, request) {
                     isActive = isCodexSessionActive(sessionId);
                 } else if (provider === 'gemini') {
                     isActive = isGeminiSessionActive(sessionId);
+                } else if (provider === 'kimi') {
+                    isActive = isKimiSessionActive(sessionId);
                 } else {
                     // Use Claude Agents SDK
                     isActive = isClaudeSDKSessionActive(sessionId);

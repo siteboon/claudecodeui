@@ -109,7 +109,7 @@ async function spawnKimi(command, options = {}, ws) {
                 const socketSessionId = typeof ws.getSessionId === 'function' ? ws.getSessionId() : (capturedSessionId || sessionId || processKey);
                 terminalFailureReason = `Kimi CLI timeout - no response received for ${timeoutMs / 1000} seconds`;
                 ws.send({
-                    type: 'kimi-error',
+                    type: 'gemini-error',
                     sessionId: socketSessionId,
                     error: terminalFailureReason,
                     provider: 'kimi'
@@ -162,12 +162,14 @@ async function spawnKimi(command, options = {}, ws) {
 
             accumulatedText += rawOutput;
 
-            // Stream text chunks to the frontend
+            // Stream text chunks to the frontend — reuse gemini-response type
+            // so the existing frontend message handler picks it up without changes
             const socketSessionId = typeof ws.getSessionId === 'function' ? ws.getSessionId() : (capturedSessionId || sessionId);
             ws.send({
-                type: 'kimi-response',
+                type: 'gemini-response',
                 sessionId: socketSessionId,
-                data: { type: 'message', content: rawOutput }
+                data: { type: 'message', content: rawOutput },
+                provider: 'kimi'
             });
         });
 
@@ -181,9 +183,10 @@ async function spawnKimi(command, options = {}, ws) {
                 return;
             }
 
+            // Reuse gemini-error type so the frontend handler processes it
             const socketSessionId = typeof ws.getSessionId === 'function' ? ws.getSessionId() : (capturedSessionId || sessionId);
             ws.send({
-                type: 'kimi-error',
+                type: 'gemini-error',
                 sessionId: socketSessionId,
                 error: errorMsg,
                 provider: 'kimi'
@@ -224,10 +227,14 @@ async function spawnKimi(command, options = {}, ws) {
         kimiProcess.on('error', (error) => {
             const finalSessionId = capturedSessionId || sessionId || processKey;
             activeKimiProcesses.delete(finalSessionId);
+            // Also clean the original key in case re-keying never happened
+            if (finalSessionId !== processKey) {
+                activeKimiProcesses.delete(processKey);
+            }
 
             const errorSessionId = typeof ws.getSessionId === 'function' ? ws.getSessionId() : finalSessionId;
             ws.send({
-                type: 'kimi-error',
+                type: 'gemini-error',
                 sessionId: errorSessionId,
                 error: error.message,
                 provider: 'kimi'

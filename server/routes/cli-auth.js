@@ -483,7 +483,7 @@ async function checkKimiCredentials() {
       return {
         authenticated: false,
         email: null,
-        error: 'Kimi CLI not configured. Install: npm install -g @anthropic-ai/kimi-cli'
+        error: 'Kimi CLI not configured. Install: curl -fsSL https://kimi.moonshot.cn/install.sh | sh'
       };
     }
     return {
