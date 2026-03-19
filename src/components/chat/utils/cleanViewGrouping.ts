@@ -87,22 +87,21 @@ export const summarizeToolGroup = (tools: ChatMessage[]): string => {
     counts.set(name, (counts.get(name) || 0) + 1);
   }
 
-  const labels: Record<string, string> = {
-    Read: 'file read',
-    Grep: 'search',
-    Glob: 'file search',
-    WebSearch: 'web search',
-    WebFetch: 'web fetch',
-    Agent: 'subagent',
-    LSP: 'LSP query',
-    TodoRead: 'todo read',
+  const labels: Record<string, [string, string]> = {
+    Read: ['file read', 'file reads'],
+    Grep: ['search', 'searches'],
+    Glob: ['file search', 'file searches'],
+    WebSearch: ['web search', 'web searches'],
+    WebFetch: ['web fetch', 'web fetches'],
+    Agent: ['subagent', 'subagents'],
+    LSP: ['LSP query', 'LSP queries'],
+    TodoRead: ['todo read', 'todo reads'],
   };
 
   const parts: string[] = [];
   for (const [name, count] of counts) {
-    const label = labels[name] || name.toLowerCase();
-    const plural = count > 1 ? `${label}${label.endsWith('s') ? '' : 'es'}` : label;
-    parts.push(`${count} ${count > 1 ? plural : label}`);
+    const [singular, plural] = labels[name] || [name.toLowerCase(), `${name.toLowerCase()}s`];
+    parts.push(`${count} ${count > 1 ? plural : singular}`);
   }
 
   return parts.join(', ');
