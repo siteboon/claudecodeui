@@ -35,6 +35,7 @@ function ChatInterface({
   autoExpandTools,
   showRawParameters,
   showThinking,
+  cleanView,
   autoScrollToBottom,
   sendByCtrlEnter,
   externalMessageUpdate,
@@ -316,6 +317,7 @@ function ChatInterface({
           autoExpandTools={autoExpandTools}
           showRawParameters={showRawParameters}
           showThinking={showThinking}
+          cleanView={cleanView}
           selectedProject={selectedProject}
           isLoading={isLoading}
         />
