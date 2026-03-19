@@ -47,6 +47,11 @@ export const TOOL_DISPLAY_TOGGLES: PreferenceToggleItem[] = [
     labelKey: 'quickSettings.showThinking',
     icon: Brain,
   },
+  {
+    key: 'cleanView',
+    labelKey: 'quickSettings.cleanView',
+    icon: Sparkles,
+  },
 ];
 
 export const VIEW_OPTION_TOGGLES: PreferenceToggleItem[] = [

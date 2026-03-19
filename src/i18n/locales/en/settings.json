@@ -65,6 +65,7 @@
     "autoScrollToBottom": "Auto-scroll to bottom",
     "sendByCtrlEnter": "Send by Ctrl+Enter",
     "sendByCtrlEnterDescription": "When enabled, pressing Ctrl+Enter will send the message instead of just Enter. This is useful for IME users to avoid accidental sends.",
+    "cleanView": "Clean view (hide noise)",
     "dragHandle": {
       "dragging": "Dragging handle",
       "closePanel": "Close settings panel",
