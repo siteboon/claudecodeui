@@ -357,6 +357,26 @@ async function checkCodexCredentials() {
   }
 }
 
+router.get('/kimi/status', async (req, res) => {
+  try {
+    const result = await checkKimiCredentials();
+
+    res.json({
+      authenticated: result.authenticated,
+      email: result.email,
+      error: result.error
+    });
+
+  } catch (error) {
+    console.error('Error checking Kimi auth status:', error);
+    res.status(500).json({
+      authenticated: false,
+      email: null,
+      error: error.message
+    });
+  }
+});
+
 async function checkGeminiCredentials() {
   if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim()) {
     return {
@@ -427,6 +447,49 @@ async function checkGeminiCredentials() {
       authenticated: false,
       email: null,
       error: 'Gemini CLI not configured'
+    };
+  }
+}
+
+async function checkKimiCredentials() {
+  // Check MOONSHOT_API_KEY env var (Kimi's primary API key)
+  if (process.env.MOONSHOT_API_KEY && process.env.MOONSHOT_API_KEY.trim()) {
+    return {
+      authenticated: true,
+      email: 'API Key Auth'
+    };
+  }
+
+  // Check kimi-cli config directory for stored credentials
+  try {
+    const configPath = path.join(os.homedir(), '.kimi', 'config.json');
+    const content = await fs.readFile(configPath, 'utf8');
+    const config = JSON.parse(content);
+
+    if (config.api_key || config.access_token) {
+      return {
+        authenticated: true,
+        email: config.email || config.user || 'Authenticated'
+      };
+    }
+
+    return {
+      authenticated: false,
+      email: null,
+      error: 'No valid credentials found'
+    };
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return {
+        authenticated: false,
+        email: null,
+        error: 'Kimi CLI not configured. Install: npm install -g @anthropic-ai/kimi-cli'
+      };
+    }
+    return {
+      authenticated: false,
+      email: null,
+      error: 'Kimi CLI not configured'
     };
   }
 }

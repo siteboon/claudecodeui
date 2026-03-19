@@ -21,7 +21,7 @@ export const SETTINGS_MAIN_TABS: SettingsMainTab[] = [
   'notifications',
 ];
 
-export const AGENT_PROVIDERS: AgentProvider[] = ['claude', 'cursor', 'codex'];
+export const AGENT_PROVIDERS: AgentProvider[] = ['claude', 'cursor', 'codex', 'kimi'];
 export const AGENT_CATEGORIES: AgentCategory[] = ['account', 'permissions', 'mcp'];
 
 export const DEFAULT_PROJECT_SORT_ORDER: ProjectSortOrder = 'name';
@@ -93,4 +93,5 @@ export const AUTH_STATUS_ENDPOINTS: Record<AgentProvider, string> = {
   cursor: '/api/cli/cursor/status',
   codex: '/api/cli/codex/status',
   gemini: '/api/cli/gemini/status',
+  kimi: '/api/cli/kimi/status',
 };
