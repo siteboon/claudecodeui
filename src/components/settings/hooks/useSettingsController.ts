@@ -43,6 +43,7 @@ type StatusApiResponse = {
   email?: string | null;
   error?: string | null;
   method?: string;
+  isBedrock?: boolean;
 };
 
 type JsonResult = {
@@ -278,6 +279,7 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
           email: null,
           loading: false,
           error: 'Failed to check authentication status',
+          isBedrock: false,
         });
         return;
       }
@@ -289,6 +291,7 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
         loading: false,
         error: data.error || null,
         method: data.method,
+        isBedrock: Boolean(data.isBedrock),
       });
     } catch (error) {
       console.error(`Error checking ${provider} auth status:`, error);
@@ -297,6 +300,7 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
         email: null,
         loading: false,
         error: getErrorMessage(error),
+        isBedrock: false,
       });
     }
   }, [setAuthStatusByProvider]);

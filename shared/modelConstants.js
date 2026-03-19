@@ -21,6 +21,24 @@ export const CLAUDE_MODELS = {
   ],
 
   DEFAULT: "sonnet",
+
+  /**
+   * AWS Bedrock model IDs keyed by SDK alias.
+   *
+   * The Claude Agent SDK supports both `global.anthropic.*` (dynamic
+   * routing, no pricing premium) and `anthropic.*` (base) model IDs.
+   * Regional prefixes (`us.`, `eu.`, etc.) are also valid but carry a
+   * 10% premium and are only needed for data-residency requirements.
+   *
+   * @see https://platform.claude.com/docs/en/build-with-claude/claude-on-amazon-bedrock
+   */
+  BEDROCK: {
+    sonnet:       "anthropic.claude-sonnet-4-6",
+    "sonnet[1m]": "anthropic.claude-sonnet-4-6",
+    opus:         "anthropic.claude-opus-4-6-v1",
+    opusplan:     "anthropic.claude-opus-4-6-v1",
+    haiku:        "anthropic.claude-haiku-4-5-20251001-v1:0",
+  },
 };
 
 /**
