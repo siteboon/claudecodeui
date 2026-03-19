@@ -350,6 +350,19 @@ export const convertCursorSessionMessages = (blobs: CursorBlob[], projectPath: s
   return converted;
 };
 
+/**
+ * Detect if a user message is a skill definition load.
+ * Returns the skill name if detected, null otherwise.
+ */
+const detectSkillLoad = (text: string): string | null => {
+  if (!text.startsWith('Base directory for this skill:')) {
+    return null;
+  }
+  // Extract skill name from path like ".../skills/server-debugging/..."
+  const pathMatch = text.match(/skills\/([^/\n]+)/);
+  return pathMatch ? pathMatch[1] : 'unknown';
+};
+
 export const convertSessionMessages = (rawMessages: any[]): ChatMessage[] => {
   const converted: ChatMessage[] = [];
   const toolResults = new Map<
@@ -389,6 +402,19 @@ export const convertSessionMessages = (rawMessages: any[]): ChatMessage[] => {
         content = decodeHtmlEntities(message.message.content);
       } else {
         content = decodeHtmlEntities(String(message.message.content));
+      }
+
+      // Detect skill definitions — flag them so the view layer can render as chips
+      const skillName = detectSkillLoad(content);
+      if (skillName) {
+        converted.push({
+          type: 'user',
+          content,
+          timestamp: message.timestamp || new Date().toISOString(),
+          isSkillLoad: true,
+          skillName,
+        });
+        return;
       }
 
       const shouldSkip =
