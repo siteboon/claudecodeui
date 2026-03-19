@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Prompt } from '../types/types';
 
@@ -42,6 +42,19 @@ interface PromptCardProps {
 
 export default function PromptCard({ prompt, onApply, onInsert, onToggle, isActive = false }: PromptCardProps) {
   const { t } = useTranslation('chat');
+  const [optimisticActive, setOptimisticActive] = useState(isActive);
+
+  // Sync optimistic state with actual state
+  useEffect(() => {
+    setOptimisticActive(isActive);
+  }, [isActive]);
+
+  const handleToggle = () => {
+    // Optimistically update UI immediately
+    setOptimisticActive(!optimisticActive);
+    // Then call the actual toggle function
+    onToggle?.(prompt);
+  };
 
   return (
     <div className="rounded-lg border border-gray-200 p-4 transition-colors hover:border-blue-500 dark:border-gray-700 dark:hover:border-blue-400">
@@ -53,8 +66,8 @@ export default function PromptCard({ prompt, onApply, onInsert, onToggle, isActi
         <div className="flex items-center gap-2">
           {prompt.type === 'role' && onToggle && (
             <RoleToggle
-              isActive={isActive}
-              onChange={() => onToggle(prompt)}
+              isActive={optimisticActive}
+              onChange={handleToggle}
             />
           )}
           {prompt.namespace && (

@@ -99,7 +99,7 @@ export function usePrompts(projectId: string | null) {
       } else {
         // Role doesn't exist, check limit
         if (activeRoles.length >= 5) {
-          setError('Maximum 5 roles can be active at once');
+          window.alert('Maximum 5 roles can be active at once');
           return false;
         }
 
@@ -116,7 +116,7 @@ export function usePrompts(projectId: string | null) {
         return true; // Role was added
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to toggle role');
+      window.alert(err instanceof Error ? err.message : 'Не удалось переключить роль');
       return false;
     }
   }, [loadPromptContent, activeRoles]);
@@ -140,7 +140,7 @@ export function usePrompts(projectId: string | null) {
         setActiveRoles([...activeRoles, newRole]);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to apply role');
+      window.alert(err instanceof Error ? err.message : 'Не удалось применить роль');
     }
   }, [loadPromptContent, activeRoles]);
 
