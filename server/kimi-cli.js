@@ -40,8 +40,8 @@ async function spawnKimi(command, options = {}, ws) {
         args.push('--debug');
     }
 
-    // Permission handling
-    if (settings.skipPermissions || options.skipPermissions || permissionMode === 'yolo') {
+    // Permission handling (only add --yolo when NOT using --print, since --print implies it)
+    if (!args.includes('--print') && (settings.skipPermissions || options.skipPermissions || permissionMode === 'yolo')) {
         args.push('--yolo');
     }
 

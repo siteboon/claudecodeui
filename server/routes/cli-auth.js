@@ -462,28 +462,29 @@ async function checkKimiCredentials() {
 
   // Check kimi-cli config directory for stored credentials
   try {
-    const configPath = path.join(os.homedir(), '.kimi', 'config.json');
+    const configPath = path.join(os.homedir(), '.kimi', 'config.toml');
     const content = await fs.readFile(configPath, 'utf8');
-    const config = JSON.parse(content);
 
-    if (config.api_key || config.access_token) {
+    // kimi-cli uses TOML config; check for api_key in provider blocks
+    const hasApiKey = /api_key\s*=\s*"[^"]+"|api_key\s*=\s*'[^']+'/.test(content);
+    if (hasApiKey) {
       return {
         authenticated: true,
-        email: config.email || config.user || 'Authenticated'
+        email: 'Authenticated'
       };
     }
 
     return {
       authenticated: false,
       email: null,
-      error: 'No valid credentials found'
+      error: 'No API key found in kimi config'
     };
   } catch (error) {
     if (error.code === 'ENOENT') {
       return {
         authenticated: false,
         email: null,
-        error: 'Kimi CLI not configured. Install: curl -fsSL https://kimi.moonshot.cn/install.sh | sh'
+        error: 'Kimi CLI not configured. Install: curl -LsSf https://code.kimi.com/install.sh | bash'
       };
     }
     return {
