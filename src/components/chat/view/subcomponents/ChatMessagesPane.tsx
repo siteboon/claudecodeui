@@ -1,10 +1,14 @@
 import { useTranslation } from 'react-i18next';
-import { useCallback, useRef } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import type { ChatMessage } from '../../types/types';
 import type { Project, ProjectSession, SessionProvider } from '../../../../types/app';
 import { getIntrinsicMessageKey } from '../../utils/messageKeys';
+import { groupMessagesForCleanView } from '../../utils/cleanViewGrouping';
+import { applyCleanViewFilters } from '../../utils/cleanViewFilters';
 import MessageComponent from './MessageComponent';
+import SkillLoadChip from './SkillLoadChip';
+import CollapsedToolGroup from './CollapsedToolGroup';
 import ProviderSelectionEmptyState from './ProviderSelectionEmptyState';
 import AssistantThinkingIndicator from './AssistantThinkingIndicator';
 
@@ -50,6 +54,7 @@ interface ChatMessagesPaneProps {
   autoExpandTools?: boolean;
   showRawParameters?: boolean;
   showThinking?: boolean;
+  cleanView?: boolean;
   selectedProject: Project;
   isLoading: boolean;
 }
@@ -96,6 +101,7 @@ export default function ChatMessagesPane({
   autoExpandTools,
   showRawParameters,
   showThinking,
+  cleanView,
   selectedProject,
   isLoading,
 }: ChatMessagesPaneProps) {
@@ -127,6 +133,13 @@ export default function ChatMessagesPane({
     messageKeyMapRef.current.set(message, candidateKey);
     return candidateKey;
   }, []);
+
+  // Clean view pipeline: strip noise → group read-only tools (memoized)
+  const cleanViewItems = useMemo(() => {
+    const isClean = cleanView ?? true;
+    const filtered = isClean ? applyCleanViewFilters(visibleMessages) : visibleMessages;
+    return groupMessagesForCleanView(filtered, isClean);
+  }, [visibleMessages, cleanView]);
 
   return (
     <div
@@ -240,25 +253,65 @@ export default function ChatMessagesPane({
             </div>
           )}
 
-          {visibleMessages.map((message, index) => {
-            const prevMessage = index > 0 ? visibleMessages[index - 1] : null;
-            return (
-              <MessageComponent
-                key={getMessageKey(message)}
-                message={message}
-                prevMessage={prevMessage}
-                createDiff={createDiff}
-                onFileOpen={onFileOpen}
-                onShowSettings={onShowSettings}
-                onGrantToolPermission={onGrantToolPermission}
-                autoExpandTools={autoExpandTools}
-                showRawParameters={showRawParameters}
-                showThinking={showThinking}
-                selectedProject={selectedProject}
-                provider={provider}
-              />
-            );
-          })}
+          {cleanViewItems.map((item, index) => {
+              if (item.kind === 'group') {
+                return (
+                  <CollapsedToolGroup
+                    key={`group-${item.tools[0]?.toolId || index}`}
+                    tools={item.tools}
+                    createDiff={createDiff}
+                    onFileOpen={onFileOpen}
+                    onShowSettings={onShowSettings}
+                    onGrantToolPermission={onGrantToolPermission}
+                    autoExpandTools={autoExpandTools}
+                    showRawParameters={showRawParameters}
+                    showThinking={showThinking}
+                    selectedProject={selectedProject}
+                    provider={provider}
+                  />
+                );
+              }
+
+              const message = item.message;
+
+              // Render skill loads as chips in clean view
+              if (message.isSkillLoad && (cleanView ?? true)) {
+                return (
+                  <SkillLoadChip
+                    key={getMessageKey(message)}
+                    skillName={message.skillName || 'unknown'}
+                    timestamp={message.timestamp}
+                  />
+                );
+              }
+
+              // Find previous non-group message for grouping logic
+              let prevMessage: ChatMessage | null = null;
+              for (let i = index - 1; i >= 0; i--) {
+                const prev = cleanViewItems[i];
+                if (prev.kind === 'message') {
+                  prevMessage = prev.message;
+                  break;
+                }
+              }
+
+              return (
+                <MessageComponent
+                  key={getMessageKey(message)}
+                  message={message}
+                  prevMessage={prevMessage}
+                  createDiff={createDiff}
+                  onFileOpen={onFileOpen}
+                  onShowSettings={onShowSettings}
+                  onGrantToolPermission={onGrantToolPermission}
+                  autoExpandTools={autoExpandTools}
+                  showRawParameters={showRawParameters}
+                  showThinking={showThinking}
+                  selectedProject={selectedProject}
+                  provider={provider}
+                />
+              );
+            })}
         </>
       )}
 
