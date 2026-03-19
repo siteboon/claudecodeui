@@ -489,6 +489,12 @@ function resolveClaudeModel(modelAlias, settingsEnv) {
     return requestedModel;
   }
 
+  // If the caller passed a specific model ID (not a UI alias), honour it directly
+  const UI_ALIASES = new Set(Object.keys(CLAUDE_MODELS.BEDROCK));
+  if (modelAlias && !UI_ALIASES.has(requestedModel)) {
+    return requestedModel;
+  }
+
   // Allow explicit env override for custom inference profiles / regions
   const explicitModel = resolveClaudeEnvValue('ANTHROPIC_MODEL', settingsEnv);
   if (explicitModel) {
