@@ -4,7 +4,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
 import TOML from '@iarna/toml';
-import { getCodexSessions, getCodexSessionMessages, deleteCodexSession } from '../projects.js';
+import { getCodexSessions, deleteCodexSession } from '../projects.js';
 import { applyCustomSessionNames, sessionNamesDb } from '../database/db.js';
 
 const router = express.Router();
@@ -64,24 +64,6 @@ router.get('/sessions', async (req, res) => {
     res.json({ success: true, sessions });
   } catch (error) {
     console.error('Error fetching Codex sessions:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-router.get('/sessions/:sessionId/messages', async (req, res) => {
-  try {
-    const { sessionId } = req.params;
-    const { limit, offset } = req.query;
-
-    const result = await getCodexSessionMessages(
-      sessionId,
-      limit ? parseInt(limit, 10) : null,
-      offset ? parseInt(offset, 10) : 0
-    );
-
-    res.json({ success: true, ...result });
-  } catch (error) {
-    console.error('Error fetching Codex session messages:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });

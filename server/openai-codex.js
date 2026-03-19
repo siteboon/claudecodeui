@@ -15,6 +15,8 @@
 
 import { Codex } from '@openai/codex-sdk';
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
+import { codexAdapter } from './providers/codex/adapter.js';
+import { createNormalizedMessage } from './providers/types.js';
 
 // Track active sessions
 const activeCodexSessions = new Map();
@@ -241,11 +243,7 @@ export async function queryCodex(command, options = {}, ws) {
     });
 
     // Send session created event
-    sendMessage(ws, {
-      type: 'session-created',
-      sessionId: currentSessionId,
-      provider: 'codex'
-    });
+    sendMessage(ws, createNormalizedMessage({ kind: 'session_created', newSessionId: currentSessionId, sessionId: currentSessionId, provider: 'codex' }));
 
     // Execute with streaming
     const streamedTurn = await thread.runStreamed(command, {
@@ -265,11 +263,11 @@ export async function queryCodex(command, options = {}, ws) {
 
       const transformed = transformCodexEvent(event);
 
-      sendMessage(ws, {
-        type: 'codex-response',
-        data: transformed,
-        sessionId: currentSessionId
-      });
+      // Normalize the transformed event into NormalizedMessage(s) via adapter
+      const normalizedMsgs = codexAdapter.normalizeMessage(transformed, currentSessionId);
+      for (const msg of normalizedMsgs) {
+        sendMessage(ws, msg);
+      }
 
       if (event.type === 'turn.failed' && !terminalFailure) {
         terminalFailure = event.error || new Error('Turn failed');
@@ -285,25 +283,13 @@ export async function queryCodex(command, options = {}, ws) {
       // Extract and send token usage if available (normalized to match Claude format)
       if (event.type === 'turn.completed' && event.usage) {
         const totalTokens = (event.usage.input_tokens || 0) + (event.usage.output_tokens || 0);
-        sendMessage(ws, {
-          type: 'token-budget',
-          data: {
-            used: totalTokens,
-            total: 200000 // Default context window for Codex models
-          },
-          sessionId: currentSessionId
-        });
+        sendMessage(ws, createNormalizedMessage({ kind: 'status', text: 'token_budget', tokenBudget: { used: totalTokens, total: 200000 }, sessionId: currentSessionId, provider: 'codex' }));
       }
     }
 
     // Send completion event
     if (!terminalFailure) {
-      sendMessage(ws, {
-        type: 'codex-complete',
-        sessionId: currentSessionId,
-        actualSessionId: thread.id,
-        provider: 'codex'
-      });
+      sendMessage(ws, createNormalizedMessage({ kind: 'complete', actualSessionId: thread.id, sessionId: currentSessionId, provider: 'codex' }));
       notifyRunStopped({
         userId: ws?.userId || null,
         provider: 'codex',
@@ -322,12 +308,7 @@ export async function queryCodex(command, options = {}, ws) {
 
     if (!wasAborted) {
       console.error('[Codex] Error:', error);
-      sendMessage(ws, {
-        type: 'codex-error',
-        error: error.message,
-        sessionId: currentSessionId,
-        provider: 'codex'
-      });
+      sendMessage(ws, createNormalizedMessage({ kind: 'error', content: error.message, sessionId: currentSessionId, provider: 'codex' }));
       if (!terminalFailure) {
         notifyRunFailed({
           userId: ws?.userId || null,
