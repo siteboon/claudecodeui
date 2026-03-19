@@ -1,4 +1,6 @@
 // Gemini Response Handler - JSON Stream processing
+import { geminiAdapter } from './providers/gemini/adapter.js';
+
 class GeminiResponseHandler {
   constructor(ws, options = {}) {
     this.ws = ws;
@@ -27,13 +29,12 @@ class GeminiResponseHandler {
         this.handleEvent(event);
       } catch (err) {
         // Not a JSON line, probably debug output or CLI warnings
-        // console.error('[Gemini Handler] Non-JSON line ignored:', line);
       }
     }
   }
 
   handleEvent(event) {
-    const socketSessionId = typeof this.ws.getSessionId === 'function' ? this.ws.getSessionId() : null;
+    const sid = typeof this.ws.getSessionId === 'function' ? this.ws.getSessionId() : null;
 
     if (event.type === 'init') {
       if (this.onInit) {
@@ -42,88 +43,26 @@ class GeminiResponseHandler {
       return;
     }
 
+    // Invoke per-type callbacks for session tracking
     if (event.type === 'message' && event.role === 'assistant') {
       const content = event.content || '';
-
-      // Notify the parent CLI handler of accumulated text
       if (this.onContentFragment && content) {
         this.onContentFragment(content);
       }
+    } else if (event.type === 'tool_use' && this.onToolUse) {
+      this.onToolUse(event);
+    } else if (event.type === 'tool_result' && this.onToolResult) {
+      this.onToolResult(event);
+    }
 
-      let payload = {
-        type: 'gemini-response',
-        data: {
-          type: 'message',
-          content: content,
-          isPartial: event.delta === true
-        }
-      };
-      if (socketSessionId) payload.sessionId = socketSessionId;
-      this.ws.send(payload);
-    }
-    else if (event.type === 'tool_use') {
-      if (this.onToolUse) {
-        this.onToolUse(event);
-      }
-      let payload = {
-        type: 'gemini-tool-use',
-        toolName: event.tool_name,
-        toolId: event.tool_id,
-        parameters: event.parameters || {}
-      };
-      if (socketSessionId) payload.sessionId = socketSessionId;
-      this.ws.send(payload);
-    }
-    else if (event.type === 'tool_result') {
-      if (this.onToolResult) {
-        this.onToolResult(event);
-      }
-      let payload = {
-        type: 'gemini-tool-result',
-        toolId: event.tool_id,
-        status: event.status,
-        output: event.output || ''
-      };
-      if (socketSessionId) payload.sessionId = socketSessionId;
-      this.ws.send(payload);
-    }
-    else if (event.type === 'result') {
-      // Send a finalize message string
-      let payload = {
-        type: 'gemini-response',
-        data: {
-          type: 'message',
-          content: '',
-          isPartial: false
-        }
-      };
-      if (socketSessionId) payload.sessionId = socketSessionId;
-      this.ws.send(payload);
-
-      if (event.stats && event.stats.total_tokens) {
-        let statsPayload = {
-          type: 'claude-status',
-          data: {
-            status: 'Complete',
-            tokens: event.stats.total_tokens
-          }
-        };
-        if (socketSessionId) statsPayload.sessionId = socketSessionId;
-        this.ws.send(statsPayload);
-      }
-    }
-    else if (event.type === 'error') {
-      let payload = {
-        type: 'gemini-error',
-        error: event.error || event.message || 'Unknown Gemini streaming error'
-      };
-      if (socketSessionId) payload.sessionId = socketSessionId;
-      this.ws.send(payload);
+    // Normalize via adapter and send all resulting messages
+    const normalized = geminiAdapter.normalizeMessage(event, sid);
+    for (const msg of normalized) {
+      this.ws.send(msg);
     }
   }
 
   forceFlush() {
-    // If the buffer has content, try to parse it one last time
     if (this.buffer.trim()) {
       try {
         const event = JSON.parse(this.buffer);

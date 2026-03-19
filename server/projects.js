@@ -1014,7 +1014,7 @@ async function getSessionMessages(projectName, sessionId, limit = null, offset =
               messages.push(entry);
             }
           } catch (parseError) {
-            console.warn('Error parsing line:', parseError.message);
+            // Silently skip malformed JSONL lines (common with concurrent writes)
           }
         }
       }
