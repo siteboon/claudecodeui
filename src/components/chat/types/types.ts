@@ -46,6 +46,8 @@ export interface ChatMessage {
     currentToolIndex: number;
     isComplete: boolean;
   };
+  isSkillLoad?: boolean;
+  skillName?: string;
   [key: string]: unknown;
 }
 
