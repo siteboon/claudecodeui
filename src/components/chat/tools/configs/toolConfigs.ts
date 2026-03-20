@@ -1,6 +1,6 @@
 /**
  * Centralized tool configuration registry
- * Defines display behavior for all tool types 
+ * Defines display behavior for all tool types
  */
 
 export interface ToolDisplayConfig {
@@ -183,16 +183,24 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
       type: 'collapsible',
       defaultOpen: false,
       title: (result) => {
-        const toolData = result.toolUseResult || {};
-        const count = toolData.numFiles || toolData.filenames?.length || 0;
+        // Prefer structured data; fall back to parsing content string
+        const toolData = result?.toolUseResult || {};
+        const fromStructured = toolData.numFiles ?? toolData.filenames?.length;
+        if (fromStructured != null) {
+          const count = fromStructured as number;
+          return `Found ${count} ${count === 1 ? 'file' : 'files'}`;
+        }
+        const lines = (result?.content || '').split('\n').filter((l: string) => l.trim() && !l.startsWith('Found ') && l !== 'No files found' && l !== 'No matches found');
+        const count = lines.length;
         return `Found ${count} ${count === 1 ? 'file' : 'files'}`;
       },
       contentType: 'file-list',
       getContentProps: (result) => {
-        const toolData = result.toolUseResult || {};
-        return {
-          files: toolData.filenames || []
-        };
+        const toolData = result?.toolUseResult || {};
+        const files: string[] = toolData.filenames?.length
+          ? toolData.filenames
+          : (result?.content || '').split('\n').filter((l: string) => l.trim() && !l.startsWith('Found ') && l !== 'No files found' && l !== 'No matches found');
+        return { files, mode: 'grep' as const };
       }
     }
   },
@@ -216,16 +224,23 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
       type: 'collapsible',
       defaultOpen: false,
       title: (result) => {
-        const toolData = result.toolUseResult || {};
-        const count = toolData.numFiles || toolData.filenames?.length || 0;
+        const toolData = result?.toolUseResult || {};
+        const fromStructured = toolData.numFiles ?? toolData.filenames?.length;
+        if (fromStructured != null) {
+          const count = fromStructured as number;
+          return `Found ${count} ${count === 1 ? 'file' : 'files'}`;
+        }
+        const lines = (result?.content || '').split('\n').filter((l: string) => l.trim() && !l.startsWith('Found ') && l !== 'No files found' && l !== 'No matches found');
+        const count = lines.length;
         return `Found ${count} ${count === 1 ? 'file' : 'files'}`;
       },
       contentType: 'file-list',
       getContentProps: (result) => {
-        const toolData = result.toolUseResult || {};
-        return {
-          files: toolData.filenames || []
-        };
+        const toolData = result?.toolUseResult || {};
+        const files: string[] = toolData.filenames?.length
+          ? toolData.filenames
+          : (result?.content || '').split('\n').filter((l: string) => l.trim() && !l.startsWith('Found ') && l !== 'No files found' && l !== 'No matches found');
+        return { files, mode: 'glob' as const };
       }
     }
   },
@@ -390,8 +405,8 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
         // If only prompt exists (and required fields), show just the prompt
         // Otherwise show all available fields
         const hasOnlyPrompt = input.prompt &&
-          !input.model &&
-          !input.resume;
+            !input.model &&
+            !input.resume;
 
         if (hasOnlyPrompt) {
           return {
@@ -447,9 +462,9 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
           // If content is an array (typical for agent responses with multiple text blocks)
           if (Array.isArray(content)) {
             const textContent = content
-              .filter((item: any) => item.type === 'text')
-              .map((item: any) => item.text)
-              .join('\n\n');
+                .filter((item: any) => item.type === 'text')
+                .map((item: any) => item.text)
+                .join('\n\n');
             return { content: textContent || 'No response text' };
           }
           return { content: String(content) };
