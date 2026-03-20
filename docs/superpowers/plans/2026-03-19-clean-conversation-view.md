@@ -690,7 +690,7 @@ Replace the `visibleMessages.map(...)` block (lines 243-261) with grouped render
               // Find previous non-group message for grouping logic
               let prevMessage: ChatMessage | null = null;
               for (let i = index - 1; i >= 0; i--) {
-                const prev = items[i];
+                const prev = cleanViewItems[i];
                 if (prev.kind === 'message') {
                   prevMessage = prev.message;
                   break;

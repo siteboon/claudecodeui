@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ChevronRight, Search } from 'lucide-react';
-import type { ChatMessage } from '../../types/types';
+import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult } from '../../types/types';
 import type { Project } from '../../../../types/app';
 import { summarizeToolGroup } from '../../utils/cleanViewGrouping';
 import MessageComponent from './MessageComponent';
@@ -10,7 +10,7 @@ interface CollapsedToolGroupProps {
   createDiff: (oldStr: string, newStr: string) => any;
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onShowSettings?: () => void;
-  onGrantToolPermission?: (suggestion: { entry: string; toolName: string }) => { success: boolean };
+  onGrantToolPermission?: (suggestion: ClaudePermissionSuggestion) => PermissionGrantResult | null | undefined;
   autoExpandTools?: boolean;
   showRawParameters?: boolean;
   showThinking?: boolean;
@@ -31,7 +31,7 @@ export default function CollapsedToolGroup({
   provider,
 }: CollapsedToolGroupProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const summary = summarizeToolGroup(tools);
+  const summary = useMemo(() => summarizeToolGroup(tools), [tools]);
 
   return (
     <div className="px-3 sm:px-0">

@@ -285,12 +285,15 @@ export default function ChatMessagesPane({
                 );
               }
 
-              // Find previous non-group message for grouping logic
+              // Find previous message — groups break visual continuity
               let prevMessage: ChatMessage | null = null;
               for (let i = index - 1; i >= 0; i--) {
                 const prev = cleanViewItems[i];
                 if (prev.kind === 'message') {
                   prevMessage = prev.message;
+                  break;
+                }
+                if (prev.kind === 'group') {
                   break;
                 }
               }
