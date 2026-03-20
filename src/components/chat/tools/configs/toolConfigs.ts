@@ -41,6 +41,22 @@ export interface ToolDisplayConfig {
   };
 }
 
+const STATUS_LINES = new Set(['No files found', 'No matches found']);
+
+function parseToolFileLines(content: unknown): string[] {
+  const raw =
+    typeof content === 'string'
+      ? content
+      : Array.isArray(content)
+        ? content.map((v) => String(v)).join('\n')
+        : '';
+
+  return raw
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith('Found ') && !STATUS_LINES.has(l));
+}
+
 export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
   // ============================================================================
   // COMMAND TOOLS
@@ -187,10 +203,11 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
         const toolData = result?.toolUseResult || {};
         const fromStructured = toolData.numFiles ?? toolData.filenames?.length;
         if (fromStructured != null) {
-          const count = fromStructured as number;
+          const count = Number(fromStructured);
+          if (!Number.isFinite(count)) return 'Found 0 files';
           return `Found ${count} ${count === 1 ? 'file' : 'files'}`;
         }
-        const lines = (result?.content || '').split('\n').filter((l: string) => l.trim() && !l.startsWith('Found ') && l !== 'No files found' && l !== 'No matches found');
+        const lines = parseToolFileLines(result?.content);
         const count = lines.length;
         return `Found ${count} ${count === 1 ? 'file' : 'files'}`;
       },
@@ -199,7 +216,7 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
         const toolData = result?.toolUseResult || {};
         const files: string[] = toolData.filenames?.length
           ? toolData.filenames
-          : (result?.content || '').split('\n').filter((l: string) => l.trim() && !l.startsWith('Found ') && l !== 'No files found' && l !== 'No matches found');
+          : parseToolFileLines(result?.content);
         return { files, mode: 'grep' as const };
       }
     }
@@ -227,10 +244,11 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
         const toolData = result?.toolUseResult || {};
         const fromStructured = toolData.numFiles ?? toolData.filenames?.length;
         if (fromStructured != null) {
-          const count = fromStructured as number;
+          const count = Number(fromStructured);
+          if (!Number.isFinite(count)) return 'Found 0 files';
           return `Found ${count} ${count === 1 ? 'file' : 'files'}`;
         }
-        const lines = (result?.content || '').split('\n').filter((l: string) => l.trim() && !l.startsWith('Found ') && l !== 'No files found' && l !== 'No matches found');
+        const lines = parseToolFileLines(result?.content);
         const count = lines.length;
         return `Found ${count} ${count === 1 ? 'file' : 'files'}`;
       },
@@ -239,7 +257,7 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
         const toolData = result?.toolUseResult || {};
         const files: string[] = toolData.filenames?.length
           ? toolData.filenames
-          : (result?.content || '').split('\n').filter((l: string) => l.trim() && !l.startsWith('Found ') && l !== 'No files found' && l !== 'No matches found');
+          : parseToolFileLines(result?.content);
         return { files, mode: 'glob' as const };
       }
     }
