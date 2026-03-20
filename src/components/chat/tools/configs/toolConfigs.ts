@@ -43,6 +43,7 @@ export interface ToolDisplayConfig {
 
 const STATUS_LINES = new Set(['No files found', 'No matches found']);
 
+/** Safely extract file paths from tool result content of any shape. */
 function parseToolFileLines(content: unknown): string[] {
   const raw =
     typeof content === 'string'
@@ -55,6 +56,29 @@ function parseToolFileLines(content: unknown): string[] {
     .split('\n')
     .map((l) => l.trim())
     .filter((l) => l && !l.startsWith('Found ') && !STATUS_LINES.has(l));
+}
+
+/** Build a "Found N file(s)" title from structured data or parsed content. */
+function getFileCountTitle(result: any): string {
+  const toolData = result?.toolUseResult || {};
+  const fromStructured = toolData.numFiles ?? (Array.isArray(toolData.filenames) ? toolData.filenames.length : undefined);
+  if (fromStructured != null) {
+    const count = Number(fromStructured);
+    if (Number.isFinite(count) && count >= 0) {
+      return `Found ${count} ${count === 1 ? 'file' : 'files'}`;
+    }
+  }
+  const count = parseToolFileLines(result?.content).length;
+  return `Found ${count} ${count === 1 ? 'file' : 'files'}`;
+}
+
+/** Extract file list from structured data or parsed content. */
+function getFileList(result: any): string[] {
+  const toolData = result?.toolUseResult || {};
+  if (Array.isArray(toolData.filenames) && toolData.filenames.length > 0) {
+    return toolData.filenames;
+  }
+  return parseToolFileLines(result?.content);
 }
 
 export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
@@ -198,27 +222,9 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     result: {
       type: 'collapsible',
       defaultOpen: false,
-      title: (result) => {
-        // Prefer structured data; fall back to parsing content string
-        const toolData = result?.toolUseResult || {};
-        const fromStructured = toolData.numFiles ?? toolData.filenames?.length;
-        if (fromStructured != null) {
-          const count = Number(fromStructured);
-          if (!Number.isFinite(count)) return 'Found 0 files';
-          return `Found ${count} ${count === 1 ? 'file' : 'files'}`;
-        }
-        const lines = parseToolFileLines(result?.content);
-        const count = lines.length;
-        return `Found ${count} ${count === 1 ? 'file' : 'files'}`;
-      },
+      title: (result) => getFileCountTitle(result),
       contentType: 'file-list',
-      getContentProps: (result) => {
-        const toolData = result?.toolUseResult || {};
-        const files: string[] = toolData.filenames?.length
-          ? toolData.filenames
-          : parseToolFileLines(result?.content);
-        return { files, mode: 'grep' as const };
-      }
+      getContentProps: (result) => ({ files: getFileList(result) })
     }
   },
 
@@ -240,26 +246,9 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     result: {
       type: 'collapsible',
       defaultOpen: false,
-      title: (result) => {
-        const toolData = result?.toolUseResult || {};
-        const fromStructured = toolData.numFiles ?? toolData.filenames?.length;
-        if (fromStructured != null) {
-          const count = Number(fromStructured);
-          if (!Number.isFinite(count)) return 'Found 0 files';
-          return `Found ${count} ${count === 1 ? 'file' : 'files'}`;
-        }
-        const lines = parseToolFileLines(result?.content);
-        const count = lines.length;
-        return `Found ${count} ${count === 1 ? 'file' : 'files'}`;
-      },
+      title: (result) => getFileCountTitle(result),
       contentType: 'file-list',
-      getContentProps: (result) => {
-        const toolData = result?.toolUseResult || {};
-        const files: string[] = toolData.filenames?.length
-          ? toolData.filenames
-          : parseToolFileLines(result?.content);
-        return { files, mode: 'glob' as const };
-      }
+      getContentProps: (result) => ({ files: getFileList(result) })
     }
   },
 
