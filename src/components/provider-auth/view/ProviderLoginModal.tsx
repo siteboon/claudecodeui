@@ -24,7 +24,7 @@ type ProviderLoginModalProps = {
 const getProviderCommand = ({
   provider,
   customCommand,
-  isAuthenticated,
+  isAuthenticated: _isAuthenticated,
 }: {
   provider: CliProvider;
   customCommand?: string;
@@ -35,10 +35,7 @@ const getProviderCommand = ({
   }
 
   if (provider === 'claude') {
-    if (isAuthenticated) {
-      return 'claude setup-token --dangerously-skip-permissions';
-    }
-    return 'claude /login --dangerously-skip-permissions';
+    return 'claude --dangerously-skip-permissions /login';
   }
 
   if (provider === 'cursor') {
