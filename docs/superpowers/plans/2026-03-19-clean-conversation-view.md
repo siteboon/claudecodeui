@@ -205,7 +205,7 @@ const detectSkillLoad = (text: string): string | null => {
     return null;
   }
   // Extract skill name from path like ".../skills/server-debugging/..."
-  const pathMatch = text.match(/skills\/([^/\n]+)/);
+  const pathMatch = text.match(/skills[\\/]+([^/\\\n]+)/);
   return pathMatch ? pathMatch[1] : 'unknown';
 };
 ```
