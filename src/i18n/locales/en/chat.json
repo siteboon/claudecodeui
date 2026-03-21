@@ -268,5 +268,42 @@
   },
   "tasks": {
     "nextTaskPrompt": "Start the next task"
+  },
+  "promptLibrary": {
+    "title": "Prompt Library",
+    "subtitle": "Roles add persistent context. Templates insert reusable text.",
+    "helpButtonTitle": "How to create your own prompt",
+    "helpButton": "How to add your own",
+    "helpTitle": "Create your own roles or templates",
+    "helpDescription": "Add markdown prompt files and they will appear in this library.",
+    "helpClose": "Close help",
+    "helpPaths": "Add markdown files to <0>~/.claude/prompts/</0> for global prompts or <1>{project}/.claude/prompts/</1> for project-specific prompts.",
+    "helpTypes": "Use <0>type: role</0> for persistent context and <1>type: template</1> for reusable input text.",
+    "tabs": {
+      "roles": "Roles",
+      "templates": "Templates"
+    },
+    "searchPlaceholder": "Search prompts...",
+    "loading": "Loading prompts...",
+    "loadError": "Failed to load prompts",
+    "empty": "No prompts found",
+    "actions": {
+      "applyRole": "Apply Role",
+      "insertTemplate": "Insert Template"
+    },
+    "selector": {
+      "clearRole": "Clear role",
+      "openLibrary": "Open Prompt Library",
+      "manageRoles": "Manage active roles",
+      "role": "role",
+      "roles": "roles"
+    },
+    "roleManagement": {
+      "title": "Manage Active Roles",
+      "subtitle": "Drag to reorder priority. Higher roles take precedence.",
+      "empty": "No active roles. Toggle roles in the Prompt Library to add them.",
+      "clearAll": "Clear All Roles",
+      "confirmClearAll": "Are you sure you want to clear all active roles?"
+    }
   }
 }

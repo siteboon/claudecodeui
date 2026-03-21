@@ -21,6 +21,7 @@ import type {
 } from '../types/types';
 import type { Project, ProjectSession, SessionProvider } from '../../../types/app';
 import { escapeRegExp } from '../utils/chatFormatting';
+import { usePrompts, type Prompt } from '../../prompt-manager';
 import { useFileMentions } from './useFileMentions';
 import { type SlashCommand, useSlashCommands } from './useSlashCommands';
 
@@ -144,6 +145,8 @@ export function useChatComposerState({
   const [imageErrors, setImageErrors] = useState<Map<string, string>>(new Map());
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
   const [thinkingMode, setThinkingMode] = useState('none');
+  const [showPromptLibrary, setShowPromptLibrary] = useState(false);
+  const [showRoleManagement, setShowRoleManagement] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputHighlightRef = useRef<HTMLDivElement>(null);
@@ -151,6 +154,24 @@ export function useChatComposerState({
     ((event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>) => Promise<void>) | null
   >(null);
   const inputValueRef = useRef(input);
+
+  const {
+    prompts,
+    loading: promptsLoading,
+    error: promptsError,
+    activeRoles,
+    loadPrompts,
+    toggleRole,
+    reorderRoles,
+    removeRole,
+    clearAllRoles,
+    getCombinedRoleContent,
+    insertTemplate,
+  } = usePrompts(selectedProject?.fullPath || selectedProject?.path || null);
+
+  useEffect(() => {
+    loadPrompts();
+  }, [loadPrompts]);
 
   const handleBuiltInCommand = useCallback(
     (result: CommandExecutionResult) => {
@@ -490,9 +511,16 @@ export function useChatComposerState({
       }
 
       let messageContent = currentInput;
+
+      // Prepend combined role content if roles are active
+      const combinedRoleContent = getCombinedRoleContent();
+      if (combinedRoleContent) {
+        messageContent = `${combinedRoleContent}\n\n${currentInput}`;
+      }
+
       const selectedThinkingMode = thinkingModes.find((mode: { id: string; prefix?: string }) => mode.id === thinkingMode);
       if (selectedThinkingMode && selectedThinkingMode.prefix) {
-        messageContent = `${selectedThinkingMode.prefix}: ${currentInput}`;
+        messageContent = `${selectedThinkingMode.prefix}: ${messageContent}`;
       }
 
       let uploadedImages: unknown[] = [];
@@ -672,6 +700,7 @@ export function useChatComposerState({
       safeLocalStorage.removeItem(`draft_input_${selectedProject.name}`);
     },
     [
+      getCombinedRoleContent,
       selectedSession,
       attachedImages,
       claudeModel,
@@ -718,7 +747,7 @@ export function useChatComposerState({
       inputValueRef.current = next;
       return next;
     });
-  }, [selectedProject?.name]);
+  }, [selectedProject]);
 
   useEffect(() => {
     if (!selectedProject) {
@@ -955,6 +984,23 @@ export function useChatComposerState({
     [onInputFocusChange],
   );
 
+  const handleToggleRole = useCallback(
+    async (prompt: Prompt) => {
+      await toggleRole(prompt);
+    },
+    [toggleRole],
+  );
+
+  const handleInsertTemplate = useCallback(
+    async (prompt: Prompt) => {
+      const content = await insertTemplate(prompt);
+      setInput(content);
+      inputValueRef.current = content;
+      setShowPromptLibrary(false);
+    },
+    [insertTemplate],
+  );
+
   return {
     input,
     setInput,
@@ -999,5 +1045,18 @@ export function useChatComposerState({
     handleGrantToolPermission,
     handleInputFocusChange,
     isInputFocused,
+    showPromptLibrary,
+    setShowPromptLibrary,
+    showRoleManagement,
+    setShowRoleManagement,
+    prompts,
+    promptsLoading,
+    promptsError,
+    activeRoles,
+    handleToggleRole,
+    reorderRoles,
+    removeRole,
+    clearAllRoles,
+    handleInsertTemplate,
   };
 }

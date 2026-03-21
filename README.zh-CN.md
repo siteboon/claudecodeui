@@ -58,6 +58,7 @@
 - **文件浏览器** - 交互式文件树，支持语法高亮与实时编辑
 - **Git 浏览器** - 查看、暂存并提交更改，还可切换分支
 - **会话管理** - 恢复对话、管理多个会话并跟踪历史记录
+- **提示词管理器** - 浏览内置角色和模板，将角色提示词应用到聊天中，并添加你自己的自定义提示词
 - **插件系统** - 通过自定义选项卡、后端服务与集成扩展 CloudCLI。 [开始构建 →](https://github.com/cloudcli-ai/cloudcli-plugin-starter)
 - **TaskMaster AI 集成** *(可选)* - 结合 AI 任务规划、PRD 分析与工作流自动化，实现高级项目管理
 - **模型兼容性** - 支持 Claude、GPT、Gemini 模型家族（完整支持列表见 [`shared/modelConstants.js`](shared/modelConstants.js)）
