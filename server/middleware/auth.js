@@ -58,6 +58,11 @@ const authenticateToken = async (req, res, next) => {
       return res.status(401).json({ error: 'Invalid token. User not found.' });
     }
 
+    // Check token version matches current DB version (invalidates tokens after password reset)
+    if (decoded.tokenVersion !== user.token_version) {
+      return res.status(401).json({ error: 'Session expired. Please log in again.' });
+    }
+
     // Auto-refresh: if token is past halfway through its lifetime, issue a new one
     if (decoded.exp && decoded.iat) {
       const now = Math.floor(Date.now() / 1000);
@@ -81,7 +86,8 @@ const generateToken = (user) => {
   return jwt.sign(
     {
       userId: user.id,
-      username: user.username
+      username: user.username,
+      tokenVersion: user.token_version
     },
     JWT_SECRET,
     { expiresIn: '7d' }
@@ -111,9 +117,12 @@ const authenticateWebSocket = (token) => {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    // Verify user actually exists in database (matches REST authenticateToken behavior)
+    // Verify user actually exists and token version is current
     const user = userDb.getUserById(decoded.userId);
     if (!user) {
+      return null;
+    }
+    if (decoded.tokenVersion !== user.token_version) {
       return null;
     }
     return { userId: user.id, username: user.username };

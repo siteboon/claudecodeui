@@ -17,6 +17,7 @@ import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { validatePassword } from './utils/validation.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -152,6 +153,7 @@ Commands:
   start          Start the Claude Code UI server (default)
   status         Show configuration and data locations
   update         Update to the latest version
+  reset-password Reset the admin password (interactive)
   help           Show this help information
   version        Show version information
 
@@ -244,6 +246,98 @@ async function updatePackage() {
     }
 }
 
+// Reset password via interactive CLI prompt
+async function resetPassword() {
+    const { default: Database } = await import('better-sqlite3');
+    const { default: bcrypt } = await import('bcrypt');
+    const readline = await import('readline');
+
+    // Helper: prompt with hidden input (characters not echoed to terminal)
+    function promptPassword(question) {
+        return new Promise((resolve) => {
+            const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+            rl._writeToOutput = function (str) {
+                if (str === question) rl.output.write(str); // show question, swallow typed chars
+            };
+            rl.question(question, (answer) => {
+                rl.output.write('\n');
+                rl.close();
+                resolve(answer);
+            });
+        });
+    }
+
+    // Open DB directly — avoids side effects of importing server/database/db.js
+    const dbPath = getDatabasePath();
+    let db;
+    try {
+        db = new Database(dbPath);
+    } catch (err) {
+        console.error(`${c.error('[ERROR]')} Could not open database at: ${dbPath}`);
+        console.error(`         ${err.message}`);
+        process.exit(1);
+    }
+
+    // Ensure token_version column exists (CLI may run before server has run migrations)
+    try {
+        const columns = db.prepare('PRAGMA table_info(users)').all().map(col => col.name);
+        if (!columns.includes('token_version')) {
+            db.exec('ALTER TABLE users ADD COLUMN token_version INTEGER DEFAULT 0');
+        }
+    } catch (err) {
+        // Non-fatal: migration may fail if column already added concurrently
+    }
+
+    // Get the single user
+    let user;
+    try {
+        user = db.prepare('SELECT id, username FROM users WHERE is_active = 1 LIMIT 1').get();
+    } catch {
+        // Table doesn't exist yet — fresh install before server has run
+    }
+    if (!user) {
+        db.close();
+        console.error(`${c.error('[ERROR]')} No user account found. Start the server and complete setup first.`);
+        process.exit(1);
+    }
+
+    console.log(`\n${c.info('[INFO]')} Resetting password for user: ${c.bright(user.username)}\n`);
+
+    // Prompt for new password (hidden)
+    const newPassword = await promptPassword('New password: ');
+    const confirmation = await promptPassword('Confirm password: ');
+
+    const validation = validatePassword(newPassword, confirmation);
+    if (!validation.ok) {
+        db.close();
+        console.error(`${c.error('[ERROR]')} ${validation.error}`);
+        process.exit(1);
+    }
+
+    // Hash first (async), then write to DB (sync)
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+
+    try {
+        const result = db.prepare(
+            'UPDATE users SET password_hash = ?, token_version = token_version + 1 WHERE id = ?'
+        ).run(passwordHash, user.id);
+
+        if (result.changes === 0) {
+            db.close();
+            console.error(`${c.error('[ERROR]')} Password update failed — no rows affected.`);
+            process.exit(1);
+        }
+
+        db.close();
+        console.log(`\n${c.ok('[OK]')} Password updated successfully.`);
+        console.log(`${c.info('[INFO]')} All existing sessions have been invalidated. Please log in again.\n`);
+    } catch (err) {
+        db.close();
+        console.error(`${c.error('[ERROR]')} Failed to update password: ${err.message}`);
+        process.exit(1);
+    }
+}
+
 // Start the server
 async function startServer() {
     // Check for updates silently on startup
@@ -315,6 +409,9 @@ async function main() {
             break;
         case 'update':
             await updatePackage();
+            break;
+        case 'reset-password':
+            await resetPassword();
             break;
         default:
             console.error(`\n❌ Unknown command: ${command}`);
