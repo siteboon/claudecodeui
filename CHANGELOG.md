@@ -3,6 +3,8 @@
 All notable changes to CloudCLI UI will be documented in this file.
 
 
+## [1.26.3](https://github.com/siteboon/claudecodeui/compare/v1.26.2...v1.26.3) (2026-03-22)
+
 ## [1.26.2](https://github.com/siteboon/claudecodeui/compare/v1.26.0...v1.26.2) (2026-03-21)
 
 ### Bug Fixes
