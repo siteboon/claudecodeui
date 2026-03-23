@@ -10,10 +10,12 @@ export default function AgentsSettingsTab({
   cursorAuthStatus,
   codexAuthStatus,
   geminiAuthStatus,
+  kiroAuthStatus,
   onClaudeLogin,
   onCursorLogin,
   onCodexLogin,
   onGeminiLogin,
+  onKiroLogin,
   claudePermissions,
   onClaudePermissionsChange,
   cursorPermissions,
@@ -57,18 +59,20 @@ export default function AgentsSettingsTab({
       onLogin: onGeminiLogin,
     },
     kiro: {
-      authStatus: { authenticated: false, email: null, loading: false, error: null },
-      onLogin: () => {},
+      authStatus: kiroAuthStatus,
+      onLogin: onKiroLogin,
     },
   }), [
     claudeAuthStatus,
     codexAuthStatus,
     cursorAuthStatus,
     geminiAuthStatus,
+    kiroAuthStatus,
     onClaudeLogin,
     onCodexLogin,
     onCursorLogin,
     onGeminiLogin,
+    onKiroLogin,
   ]);
 
   return (
