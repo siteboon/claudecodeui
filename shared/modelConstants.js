@@ -71,6 +71,27 @@ export const CODEX_MODELS = {
 };
 
 /**
+ * Kiro Models
+ *
+ * Kiro is AWS's agentic IDE built on Claude (https://kiro.dev).
+ * It uses Claude models under the hood via AWS infrastructure.
+ *
+ * TODO: verify exact model identifiers accepted by the Kiro CLI --model flag.
+ * Values below are reasonable defaults based on Kiro's Claude foundation.
+ */
+export const KIRO_MODELS = {
+  OPTIONS: [
+    { value: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
+    { value: "claude-opus-4-5", label: "Claude Opus 4.5" },
+    { value: "claude-sonnet-4", label: "Claude Sonnet 4" },
+    { value: "claude-opus-4", label: "Claude Opus 4" },
+    { value: "claude-haiku-4", label: "Claude Haiku 4" },
+  ],
+
+  DEFAULT: "claude-sonnet-4-5",
+};
+
+/**
  * Gemini Models
  */
 export const GEMINI_MODELS = {

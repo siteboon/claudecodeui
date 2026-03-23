@@ -20,7 +20,7 @@ const router = express.Router();
  * Auth: authenticateToken applied at mount level in index.js
  *
  * Query params:
- *   provider    - 'claude' | 'cursor' | 'codex' | 'gemini' (default: 'claude')
+ *   provider    - 'claude' | 'cursor' | 'codex' | 'gemini' | 'kiro' (default: 'claude')
  *   projectName - required for claude provider
  *   projectPath - required for cursor provider (absolute path used for cwdId hash)
  *   limit       - page size (omit or null for all)
