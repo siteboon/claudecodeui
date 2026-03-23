@@ -17,7 +17,9 @@
     "tool": "ツール",
     "claude": "Claude",
     "cursor": "Cursor",
-    "codex": "Codex"
+    "codex": "Codex",
+    "gemini": "Gemini",
+    "kiro": "Kiro"
   },
   "tools": {
     "settings": "ツール設定",
@@ -158,12 +160,16 @@
     "providerInfo": {
       "anthropic": "by Anthropic",
       "openai": "by OpenAI",
-      "cursorEditor": "AIコードエディタ"
+      "cursorEditor": "AIコードエディタ",
+      "google": "by Google",
+      "kiro": "AWS Agentic IDE"
     },
     "readyPrompt": {
       "claude": "{{model}}でClaudeを使用する準備ができました。下にメッセージを入力してください。",
       "cursor": "{{model}}でCursorを使用する準備ができました。下にメッセージを入力してください。",
       "codex": "{{model}}でCodexを使用する準備ができました。下にメッセージを入力してください。",
+      "gemini": "{{model}}でGeminiを使用する準備ができました。下にメッセージを入力してください。",
+      "kiro": "{{model}}でKiroを使用する準備ができました。下にメッセージを入力してください。",
       "default": "上からプロバイダーを選択して開始してください"
     }
   },

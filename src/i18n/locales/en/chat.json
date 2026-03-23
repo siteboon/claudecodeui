@@ -18,7 +18,8 @@
     "claude": "Claude",
     "cursor": "Cursor",
     "codex": "Codex",
-    "gemini": "Gemini"
+    "gemini": "Gemini",
+    "kiro": "Kiro"
   },
   "tools": {
     "settings": "Tool Settings",
@@ -180,13 +181,15 @@
       "anthropic": "by Anthropic",
       "openai": "by OpenAI",
       "cursorEditor": "AI Code Editor",
-      "google": "by Google"
+      "google": "by Google",
+      "kiro": "AWS Agentic IDE"
     },
     "readyPrompt": {
       "claude": "Ready to use Claude with {{model}}. Start typing your message below.",
       "cursor": "Ready to use Cursor with {{model}}. Start typing your message below.",
       "codex": "Ready to use Codex with {{model}}. Start typing your message below.",
       "gemini": "Ready to use Gemini with {{model}}. Start typing your message below.",
+      "kiro": "Ready to use Kiro with {{model}}. Start typing your message below.",
       "default": "Select a provider above to begin"
     }
   },

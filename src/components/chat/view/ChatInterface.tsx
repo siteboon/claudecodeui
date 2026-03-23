@@ -280,7 +280,7 @@ function ChatInterface({
           : provider === 'gemini'
             ? t('messageTypes.gemini')
             : provider === 'kiro'
-              ? t('messageTypes.kiro')
+              ? t('messageTypes.kiro', { defaultValue: 'Kiro' })
               : t('messageTypes.claude');
 
     return (
@@ -412,7 +412,7 @@ function ChatInterface({
                   : provider === 'gemini'
                     ? t('messageTypes.gemini')
                     : provider === 'kiro'
-                      ? t('messageTypes.kiro')
+                      ? t('messageTypes.kiro', { defaultValue: 'Kiro' })
                       : t('messageTypes.claude'),
           })}
           isTextareaExpanded={isTextareaExpanded}
