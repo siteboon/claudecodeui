@@ -18,7 +18,8 @@
     "claude": "Claude",
     "cursor": "Cursor",
     "codex": "Codex",
-    "gemini": "Gemini"
+    "gemini": "Gemini",
+    "kiro": "Kiro"
   },
   "tools": {
     "settings": "도구 설정",
@@ -162,13 +163,15 @@
       "anthropic": "Anthropic 제공",
       "openai": "OpenAI 제공",
       "cursorEditor": "AI 코드 에디터",
-      "google": "Google 제공"
+      "google": "Google 제공",
+      "kiro": "AWS Agentic IDE"
     },
     "readyPrompt": {
       "claude": "{{model}} 모델로 Claude를 사용할 준비가 되었습니다. 아래에 메시지를 입력하세요.",
       "cursor": "{{model}} 모델로 Cursor를 사용할 준비가 되었습니다. 아래에 메시지를 입력하세요.",
       "codex": "{{model}} 모델로 Codex를 사용할 준비가 되었습니다. 아래에 메시지를 입력하세요.",
       "gemini": "{{model}} 모델로 Gemini를 사용할 준비가 되었습니다. 아래에 메시지를 입력하세요.",
+      "kiro": "{{model}} 모델로 Kiro를 사용할 준비가 되었습니다. 아래에 메시지를 입력하세요.",
       "default": "시작하려면 위에서 제공자를 선택하세요"
     }
   },
