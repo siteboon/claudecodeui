@@ -54,6 +54,15 @@ const agentConfig: Record<AgentProvider, AgentVisualConfig> = {
     subtextClass: 'text-indigo-700 dark:text-indigo-300',
     buttonClass: 'bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800',
   },
+  kiro: {
+    name: 'Kiro',
+    description: 'Amazon Kiro agentic IDE',
+    bgClass: 'bg-orange-50 dark:bg-orange-900/20',
+    borderClass: 'border-orange-200 dark:border-orange-800',
+    textClass: 'text-orange-900 dark:text-orange-100',
+    subtextClass: 'text-orange-700 dark:text-orange-300',
+    buttonClass: 'bg-orange-600 hover:bg-orange-700 active:bg-orange-800',
+  },
 };
 
 export default function AccountContent({ agent, authStatus, onLogin }: AccountContentProps) {

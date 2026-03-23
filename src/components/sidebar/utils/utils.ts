@@ -64,6 +64,10 @@ export const getSessionName = (session: SessionWithProvider, t: TFunction): stri
     return session.summary || session.name || t('projects.newSession');
   }
 
+  if (session.__provider === 'kiro') {
+    return session.summary || session.name || t('projects.newSession');
+  }
+
   return session.summary || t('projects.newSession');
 };
 
@@ -91,6 +95,7 @@ export const createSessionViewModel = (
     isCursorSession: session.__provider === 'cursor',
     isCodexSession: session.__provider === 'codex',
     isGeminiSession: session.__provider === 'gemini',
+    isKiroSession: session.__provider === 'kiro',
     isActive: diffInMinutes < 10,
     sessionName: getSessionName(session, t),
     sessionTime: getSessionTime(session),
@@ -122,7 +127,12 @@ export const getAllSessions = (
     __provider: 'gemini' as const,
   }));
 
-  return [...claudeSessions, ...cursorSessions, ...codexSessions, ...geminiSessions].sort(
+  const kiroSessions = (project.kiroSessions || []).map((session) => ({
+    ...session,
+    __provider: 'kiro' as const,
+  }));
+
+  return [...claudeSessions, ...cursorSessions, ...codexSessions, ...geminiSessions, ...kiroSessions].sort(
     (a, b) => getSessionDate(b).getTime() - getSessionDate(a).getTime(),
   );
 };

@@ -438,6 +438,7 @@ async function getProjects(progressCallback = null) {
         isCustomName: !!customName,
         sessions: [],
         geminiSessions: [],
+        kiroSessions: [],
         sessionMeta: {
           hasMore: false,
           total: 0
@@ -493,6 +494,16 @@ async function getProjects(progressCallback = null) {
         project.geminiSessions = [];
       }
       applyCustomSessionNames(project.geminiSessions, 'gemini');
+
+      // Also fetch Kiro sessions for this project
+      // TODO: verify actual Kiro session storage path once CLI is available
+      try {
+        project.kiroSessions = await getKiroSessions(actualProjectDir);
+      } catch (e) {
+        console.warn(`Could not load Kiro sessions for project ${entry.name}:`, e.message);
+        project.kiroSessions = [];
+      }
+      applyCustomSessionNames(project.kiroSessions, 'kiro');
 
       // Add TaskMaster detection
       try {
@@ -562,6 +573,7 @@ async function getProjects(progressCallback = null) {
         isManuallyAdded: true,
         sessions: [],
         geminiSessions: [],
+        kiroSessions: [],
         sessionMeta: {
           hasMore: false,
           total: 0
@@ -598,6 +610,15 @@ async function getProjects(progressCallback = null) {
         console.warn(`Could not load Gemini sessions for manual project ${projectName}:`, e.message);
       }
       applyCustomSessionNames(project.geminiSessions, 'gemini');
+
+      // Try to fetch Kiro sessions for manual projects too
+      // TODO: verify actual Kiro session storage path once CLI is available
+      try {
+        project.kiroSessions = await getKiroSessions(actualProjectDir);
+      } catch (e) {
+        console.warn(`Could not load Kiro sessions for manual project ${projectName}:`, e.message);
+      }
+      applyCustomSessionNames(project.kiroSessions, 'kiro');
 
       // Add TaskMaster detection for manual projects
       try {
@@ -1266,7 +1287,8 @@ async function addProjectManually(projectPath, displayName = null) {
     displayName: displayName || await generateDisplayName(projectName, absolutePath),
     isManuallyAdded: true,
     sessions: [],
-    cursorSessions: []
+    cursorSessions: [],
+    kiroSessions: []
   };
 }
 
@@ -2538,6 +2560,164 @@ async function getGeminiCliSessionMessages(sessionId) {
   return [];
 }
 
+/**
+ * Discover Kiro sessions for a given project path.
+ *
+ * TODO: verify actual Kiro session storage path once Kiro CLI is available.
+ * Most likely candidates:
+ *   - ~/.kiro/sessions/  (global sessions)
+ *   - <projectPath>/.kiro/  (project-local specs/tasks that act like session context)
+ *
+ * Currently returns sessions from ~/.kiro/sessions/ if the directory exists,
+ * filtering by project path if a project root file is present.
+ */
+async function getKiroSessions(projectPath) {
+  // TODO: verify actual Kiro session storage path — this is a best-effort stub
+  const kiroSessionsDir = path.join(os.homedir(), '.kiro', 'sessions');
+  try {
+    await fs.access(kiroSessionsDir);
+  } catch {
+    return [];
+  }
+
+  const sessions = [];
+  let sessionFiles;
+  try {
+    sessionFiles = await fs.readdir(kiroSessionsDir);
+  } catch {
+    return [];
+  }
+
+  const normalizedProjectPath = normalizeComparablePath(projectPath);
+
+  for (const sessionFile of sessionFiles) {
+    if (!sessionFile.endsWith('.json') && !sessionFile.endsWith('.jsonl')) continue;
+    try {
+      const filePath = path.join(kiroSessionsDir, sessionFile);
+      const data = await fs.readFile(filePath, 'utf8');
+
+      // TODO: verify actual Kiro session file format — using best-guess field names
+      // Parse the file: .jsonl files are line-delimited JSON (one object per line),
+      // .json files are a single JSON blob.
+      let session;
+      try {
+        if (sessionFile.endsWith('.jsonl')) {
+          // JSONL: each line is a separate JSON object; treat first non-empty parsed line as session metadata
+          const lines = data.split('\n').filter(l => l.trim());
+          const parsed = lines.map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+          // Reconstruct a session-like object from the lines array
+          session = parsed.length === 1 ? parsed[0] : { messages: parsed };
+        } else {
+          session = JSON.parse(data);
+        }
+      } catch {
+        continue;
+      }
+
+      // If session has a projectPath field, filter by it
+      if (session.projectPath && normalizedProjectPath) {
+        if (normalizeComparablePath(session.projectPath) !== normalizedProjectPath) {
+          continue;
+        }
+      }
+
+      // Skip sessions with no projectPath — they can't be associated with a specific project.
+      // TODO: include unscoped sessions in a global bucket once project association is confirmed
+      if (!session.projectPath) {
+        continue;
+      }
+
+      const sessionId = session.sessionId || session.id || sessionFile.replace(/\.(json|jsonl)$/, '');
+      const messages = session.messages || [];
+      const firstUserMsg = messages.find(m => m.role === 'user' || m.type === 'user');
+      let summary = 'Kiro Session';
+      if (firstUserMsg) {
+        const text = typeof firstUserMsg.content === 'string'
+          ? firstUserMsg.content
+          : Array.isArray(firstUserMsg.content)
+            ? firstUserMsg.content.filter(p => p.text).map(p => p.text).join(' ')
+            : '';
+        if (text) {
+          summary = text.length > 50 ? text.substring(0, 50) + '...' : text;
+        }
+      }
+
+      sessions.push({
+        id: sessionId,
+        summary,
+        messageCount: messages.length,
+        lastActivity: session.lastUpdated || session.updatedAt || session.startTime || null,
+        provider: 'kiro'
+      });
+    } catch {
+      continue;
+    }
+  }
+
+  return sessions.sort((a, b) =>
+    new Date(b.lastActivity || 0) - new Date(a.lastActivity || 0)
+  );
+}
+
+/**
+ * Get messages for a specific Kiro CLI session by ID.
+ *
+ * TODO: verify actual Kiro session file format and storage path.
+ */
+async function getKiroCliSessionMessages(sessionId) {
+  // TODO: verify actual Kiro session storage path (~/.kiro/sessions/ or similar)
+  const kiroSessionsDir = path.join(os.homedir(), '.kiro', 'sessions');
+  let sessionFiles;
+  try {
+    sessionFiles = await fs.readdir(kiroSessionsDir);
+  } catch {
+    return [];
+  }
+
+  for (const sessionFile of sessionFiles) {
+    if (!sessionFile.endsWith('.json') && !sessionFile.endsWith('.jsonl')) continue;
+    try {
+      const filePath = path.join(kiroSessionsDir, sessionFile);
+      const data = await fs.readFile(filePath, 'utf8');
+      // Parse the file: .jsonl files are line-delimited JSON, .json files are a single blob.
+      let session;
+      if (sessionFile.endsWith('.jsonl')) {
+        const lines = data.split('\n').filter(l => l.trim());
+        const parsed = lines.map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+        session = parsed.length === 1 ? parsed[0] : { messages: parsed };
+      } else {
+        session = JSON.parse(data);
+      }
+      const fileSessionId = session.sessionId || session.id || sessionFile.replace(/\.(json|jsonl)$/, '');
+      if (fileSessionId !== sessionId) continue;
+
+      // TODO: verify actual Kiro message format field names
+      return (session.messages || []).map(msg => {
+        const role = msg.role === 'user' ? 'user'
+          : (msg.role === 'assistant' || msg.type === 'assistant') ? 'assistant'
+          : msg.role || msg.type;
+
+        let content = '';
+        if (typeof msg.content === 'string') {
+          content = msg.content;
+        } else if (Array.isArray(msg.content)) {
+          content = msg.content.filter(p => p.text).map(p => p.text).join('\n');
+        }
+
+        return {
+          type: 'message',
+          message: { role, content },
+          timestamp: msg.timestamp || null
+        };
+      });
+    } catch {
+      continue;
+    }
+  }
+
+  return [];
+}
+
 export {
   getProjects,
   getSessions,
@@ -2557,5 +2737,7 @@ export {
   deleteCodexSession,
   getGeminiCliSessions,
   getGeminiCliSessionMessages,
+  getKiroSessions,
+  getKiroCliSessionMessages,
   searchConversations
 };

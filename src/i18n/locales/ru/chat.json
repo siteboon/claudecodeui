@@ -18,7 +18,8 @@
     "claude": "Claude",
     "cursor": "Cursor",
     "codex": "Codex",
-    "gemini": "Gemini"
+    "gemini": "Gemini",
+    "kiro": "Kiro"
   },
   "tools": {
     "settings": "Настройки инструмента",
@@ -180,13 +181,15 @@
       "anthropic": "от Anthropic",
       "openai": "от OpenAI",
       "cursorEditor": "AI редактор кода",
-      "google": "от Google"
+      "google": "от Google",
+      "kiro": "AWS Agentic IDE"
     },
     "readyPrompt": {
       "claude": "Готов использовать Claude с {{model}}. Начните вводить сообщение ниже.",
       "cursor": "Готов использовать Cursor с {{model}}. Начните вводить сообщение ниже.",
       "codex": "Готов использовать Codex с {{model}}. Начните вводить сообщение ниже.",
       "gemini": "Готов использовать Gemini с {{model}}. Начните вводить сообщение ниже.",
+      "kiro": "Готов использовать Kiro с {{model}}. Начните вводить сообщение ниже.",
       "default": "Выберите провайдера выше для начала"
     }
   },
