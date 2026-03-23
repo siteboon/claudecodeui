@@ -86,7 +86,8 @@ const PROVIDER_WATCH_PATHS = [
     { provider: 'gemini', rootPath: path.join(os.homedir(), '.gemini', 'projects') },
     { provider: 'gemini_sessions', rootPath: path.join(os.homedir(), '.gemini', 'sessions') },
     // TODO: verify actual Kiro session storage path (~/.kiro/sessions/ is best guess)
-    { provider: 'kiro', rootPath: path.join(os.homedir(), '.kiro', 'sessions') }
+    // optional: true — skip mkdir on startup so we don't create ~/.kiro/sessions for users who don't have Kiro installed
+    { provider: 'kiro', rootPath: path.join(os.homedir(), '.kiro', 'sessions'), optional: true }
 ];
 const WATCHER_IGNORED_PATTERNS = [
     '**/node_modules/**',
@@ -180,11 +181,22 @@ async function setupProjectsWatcher() {
         }, WATCHER_DEBOUNCE_MS);
     };
 
-    for (const { provider, rootPath } of PROVIDER_WATCH_PATHS) {
+    for (const { provider, rootPath, optional } of PROVIDER_WATCH_PATHS) {
         try {
-            // chokidar v4 emits ENOENT via the "error" event for missing roots and will not auto-recover.
-            // Ensure provider folders exist before creating the watcher so watching stays active.
-            await fsPromises.mkdir(rootPath, { recursive: true });
+            if (optional) {
+                // For optional providers (e.g. Kiro), skip mkdir so we don't create directories
+                // for users who don't have the provider installed. Only watch if the path exists.
+                try {
+                    await fsPromises.access(rootPath);
+                } catch {
+                    // Path doesn't exist and is optional — skip watching entirely
+                    continue;
+                }
+            } else {
+                // chokidar v4 emits ENOENT via the "error" event for missing roots and will not auto-recover.
+                // Ensure provider folders exist before creating the watcher so watching stays active.
+                await fsPromises.mkdir(rootPath, { recursive: true });
+            }
 
             // Initialize chokidar watcher with optimized settings
             const watcher = chokidar.watch(rootPath, {

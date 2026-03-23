@@ -2597,9 +2597,19 @@ async function getKiroSessions(projectPath) {
       const data = await fs.readFile(filePath, 'utf8');
 
       // TODO: verify actual Kiro session file format — using best-guess field names
+      // Parse the file: .jsonl files are line-delimited JSON (one object per line),
+      // .json files are a single JSON blob.
       let session;
       try {
-        session = JSON.parse(data);
+        if (sessionFile.endsWith('.jsonl')) {
+          // JSONL: each line is a separate JSON object; treat first non-empty parsed line as session metadata
+          const lines = data.split('\n').filter(l => l.trim());
+          const parsed = lines.map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+          // Reconstruct a session-like object from the lines array
+          session = parsed.length === 1 ? parsed[0] : { messages: parsed };
+        } else {
+          session = JSON.parse(data);
+        }
       } catch {
         continue;
       }
@@ -2609,6 +2619,12 @@ async function getKiroSessions(projectPath) {
         if (normalizeComparablePath(session.projectPath) !== normalizedProjectPath) {
           continue;
         }
+      }
+
+      // Skip sessions with no projectPath — they can't be associated with a specific project.
+      // TODO: include unscoped sessions in a global bucket once project association is confirmed
+      if (!session.projectPath) {
+        continue;
       }
 
       const sessionId = session.sessionId || session.id || sessionFile.replace(/\.(json|jsonl)$/, '');
@@ -2663,7 +2679,15 @@ async function getKiroCliSessionMessages(sessionId) {
     try {
       const filePath = path.join(kiroSessionsDir, sessionFile);
       const data = await fs.readFile(filePath, 'utf8');
-      const session = JSON.parse(data);
+      // Parse the file: .jsonl files are line-delimited JSON, .json files are a single blob.
+      let session;
+      if (sessionFile.endsWith('.jsonl')) {
+        const lines = data.split('\n').filter(l => l.trim());
+        const parsed = lines.map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+        session = parsed.length === 1 ? parsed[0] : { messages: parsed };
+      } else {
+        session = JSON.parse(data);
+      }
       const fileSessionId = session.sessionId || session.id || sessionFile.replace(/\.(json|jsonl)$/, '');
       if (fileSessionId !== sessionId) continue;
 

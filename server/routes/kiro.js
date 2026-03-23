@@ -5,6 +5,8 @@ import { sessionNamesDb } from '../database/db.js';
 const router = express.Router();
 
 router.delete('/sessions/:sessionId', async (req, res) => {
+    // TODO: add per-user ownership check (see #574)
+    // Note: gemini.js uses the same pattern without ownership checks — keeping consistent.
     try {
         const { sessionId } = req.params;
 

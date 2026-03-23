@@ -101,6 +101,7 @@ export const kiroAdapter = {
    * TODO: verify actual Kiro session storage path once CLI is available.
    */
   async fetchHistory(sessionId, opts = {}) {
+    const { limit = null, offset = 0 } = opts;
     let rawMessages;
     try {
       rawMessages = sessionManager.getSessionMessages(sessionId);
@@ -193,12 +194,15 @@ export const kiroAdapter = {
       }
     }
 
+    const total = normalized.length;
+    const sliced = limit !== null ? normalized.slice(offset, offset + limit) : normalized.slice(offset);
+
     return {
-      messages: normalized,
-      total: normalized.length,
-      hasMore: false,
-      offset: 0,
-      limit: null,
+      messages: sliced,
+      total,
+      hasMore: limit !== null ? offset + limit < total : false,
+      offset,
+      limit,
     };
   },
 };
