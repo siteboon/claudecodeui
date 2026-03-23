@@ -40,6 +40,7 @@ interface UseChatComposerStateArgs {
   claudeModel: string;
   codexModel: string;
   geminiModel: string;
+  kiroModel: string;
   isLoading: boolean;
   canAbortSession: boolean;
   tokenBudget: Record<string, unknown> | null;
@@ -112,6 +113,7 @@ export function useChatComposerState({
   claudeModel,
   codexModel,
   geminiModel,
+  kiroModel,
   isLoading,
   canAbortSession,
   tokenBudget,
@@ -281,7 +283,7 @@ export function useChatComposerState({
           projectName: selectedProject.name,
           sessionId: currentSessionId,
           provider,
-          model: provider === 'cursor' ? cursorModel : provider === 'codex' ? codexModel : provider === 'gemini' ? geminiModel : claudeModel,
+          model: provider === 'cursor' ? cursorModel : provider === 'codex' ? codexModel : provider === 'gemini' ? geminiModel : provider === 'kiro' ? kiroModel : claudeModel,
           tokenUsage: tokenBudget,
         };
 
@@ -333,6 +335,7 @@ export function useChatComposerState({
       currentSessionId,
       cursorModel,
       geminiModel,
+      kiroModel,
       handleBuiltInCommand,
       handleCustomCommand,
       input,
@@ -571,7 +574,9 @@ export function useChatComposerState({
                 ? 'codex-settings'
                 : provider === 'gemini'
                   ? 'gemini-settings'
-                  : 'claude-settings';
+                  : provider === 'kiro'
+                    ? 'kiro-settings'
+                    : 'claude-settings';
           const savedSettings = safeLocalStorage.getItem(settingsKey);
           if (savedSettings) {
             return JSON.parse(savedSettings);
@@ -638,6 +643,22 @@ export function useChatComposerState({
             toolsSettings,
           },
         });
+      } else if (provider === 'kiro') {
+        sendMessage({
+          type: 'kiro-command',
+          command: messageContent,
+          sessionId: effectiveSessionId,
+          options: {
+            cwd: resolvedProjectPath,
+            projectPath: resolvedProjectPath,
+            sessionId: effectiveSessionId,
+            resume: Boolean(effectiveSessionId),
+            model: kiroModel,
+            sessionSummary,
+            permissionMode,
+            toolsSettings,
+          },
+        });
       } else {
         sendMessage({
           type: 'claude-command',
@@ -680,6 +701,7 @@ export function useChatComposerState({
       cursorModel,
       executeCommand,
       geminiModel,
+      kiroModel,
       isLoading,
       onSessionActive,
       onSessionProcessing,
