@@ -25,21 +25,19 @@ async function spawnKiro(command, options = {}, ws) {
     };
 
     // Build Kiro CLI command arguments
-    // TODO: verify actual Kiro CLI argument format — modeled after Gemini CLI structure
-    const args = [];
-
-    // Add prompt if we have a command
-    if (command && command.trim()) {
-        // TODO: verify correct Kiro CLI flag for passing a prompt (--prompt, --message, or positional arg)
-        args.push('--prompt', command);
-    }
+    // Real Kiro CLI interface: kiro chat --no-interactive [--resume <id>] [--agent <name>] <message>
+    const args = ['chat', '--no-interactive'];
 
     // If we have a sessionId, attempt to resume
     if (sessionId) {
         const session = sessionManager.getSession(sessionId);
         if (session && session.cliSessionId) {
-            // TODO: verify correct Kiro CLI flag for resuming a session (--resume, --session, etc.)
             args.push('--resume', session.cliSessionId);
+        } else {
+            // TODO: verify native Kiro session ID format to confirm direct resume is valid
+            // Sessions discovered from disk by getKiroSessions() are not in sessionManager,
+            // so use sessionId directly as the resume value for disk-discovered sessions.
+            args.push('--resume', sessionId);
         }
     }
 
@@ -48,19 +46,14 @@ async function spawnKiro(command, options = {}, ws) {
     const cleanPath = (cwd || projectPath || process.cwd()).replace(/[^\x20-\x7E]/g, '').trim();
     const workingDir = cleanPath;
 
-    // TODO: verify if Kiro CLI has a model selection flag
+    // Use --agent flag if a model/agent name is specified
     if (options.model) {
-        args.push('--model', options.model);
+        args.push('--agent', options.model);
     }
 
-    // TODO: verify Kiro CLI output format flag (--output-format, --json, etc.)
-    // Assuming JSON line output similar to Gemini CLI
-    args.push('--output-format', 'stream-json');
-
-    // Handle permission/approval modes
-    // TODO: verify Kiro CLI permission mode flags
-    if (settings.skipPermissions || options.skipPermissions || permissionMode === 'yolo') {
-        args.push('--yolo');
+    // Pass the user message as a positional argument
+    if (command && command.trim()) {
+        args.push(command);
     }
 
     // Try to find kiro in PATH first, then fall back to environment variable
@@ -87,6 +80,10 @@ async function spawnKiro(command, options = {}, ws) {
         });
         let terminalNotificationSent = false;
         let terminalFailureReason = null;
+
+        // Store process reference for potential abort
+        // processKey is declared before notifyTerminalState so the closure captures a stable variable
+        const processKey = capturedSessionId || sessionId || Date.now().toString();
 
         const notifyTerminalState = ({ code = null, error = null } = {}) => {
             if (terminalNotificationSent) {
@@ -115,9 +112,6 @@ async function spawnKiro(command, options = {}, ws) {
                 error: error || terminalFailureReason || `Kiro CLI exited with code ${code}`
             });
         };
-
-        // Store process reference for potential abort
-        const processKey = capturedSessionId || sessionId || Date.now().toString();
         activeKiroProcesses.set(processKey, kiroProcess);
 
         // Store sessionId on the process object for debugging
@@ -238,6 +232,15 @@ async function spawnKiro(command, options = {}, ws) {
         // Handle process completion
         kiroProcess.on('close', async (code) => {
             clearTimeout(timeout);
+
+            // Flush any remaining lineBuffer content that wasn't terminated by a newline
+            if (lineBuffer.trim()) {
+                const content = lineBuffer.trim();
+                lineBuffer = '';
+                // treat as raw text - send as stream_delta
+                const socketSessionId = capturedSessionId || sessionId;
+                ws.send(createNormalizedMessage({ kind: 'stream_delta', content, sessionId: socketSessionId, provider: 'kiro' }));
+            }
 
             // Clean up process reference
             const finalSessionId = capturedSessionId || sessionId || processKey;

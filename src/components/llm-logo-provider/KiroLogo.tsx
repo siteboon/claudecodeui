@@ -1,4 +1,8 @@
-const KiroLogo = ({className = 'w-5 h-5'}) => {
+interface KiroLogoProps {
+  className?: string;
+}
+
+const KiroLogo = ({ className = 'w-5 h-5' }: KiroLogoProps) => {
   // TODO: replace with official Kiro icon once available at /icons/kiro-icon.svg
   // Kiro is AWS's agentic IDE built on Claude (https://kiro.dev)
   // For now, render a simple "K" text badge as a fallback
