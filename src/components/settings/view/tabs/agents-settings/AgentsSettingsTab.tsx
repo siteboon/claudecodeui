@@ -56,6 +56,10 @@ export default function AgentsSettingsTab({
       authStatus: geminiAuthStatus,
       onLogin: onGeminiLogin,
     },
+    kiro: {
+      authStatus: { authenticated: false, email: null, loading: false, error: null },
+      onLogin: () => {},
+    },
   }), [
     claudeAuthStatus,
     codexAuthStatus,
