@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const LOCALES_DIR = path.resolve(__dirname, '../locales');
 const SUPPORTED_LOCALES = ['en', 'de', 'ja', 'ko', 'ru', 'zh-CN'];
 

@@ -79,26 +79,26 @@ describe('mapCliOptionsToSDK', () => {
   });
 
   describe('useWorktree', () => {
-    it('does not set worktree by default', () => {
+    it('does not set settings.worktree by default', () => {
       const result = mapCliOptionsToSDK();
-      expect(result.worktree).toBeUndefined();
+      expect(result.settings).toBeUndefined();
     });
 
-    it('does not set worktree when useWorktree is false', () => {
+    it('does not set settings.worktree when useWorktree is false', () => {
       const result = mapCliOptionsToSDK({
         toolsSettings: { useWorktree: false, allowedTools: [], disallowedTools: [], skipPermissions: false },
       });
-      expect(result.worktree).toBeUndefined();
+      expect(result.settings).toBeUndefined();
     });
 
-    it('sets worktree to empty object when useWorktree is true', () => {
+    it('passes worktree via settings option when useWorktree is true', () => {
       const result = mapCliOptionsToSDK({
         toolsSettings: { useWorktree: true, allowedTools: [], disallowedTools: [], skipPermissions: false },
       });
-      expect(result.worktree).toEqual({});
+      expect(result.settings).toEqual({ worktree: {} });
     });
 
-    it('sets worktree alongside other settings', () => {
+    it('sets worktree alongside other options', () => {
       const result = mapCliOptionsToSDK({
         cwd: '/my/project',
         model: 'opus',
@@ -109,7 +109,7 @@ describe('mapCliOptionsToSDK', () => {
           disallowedTools: ['Bash(rm:*)'],
         },
       });
-      expect(result.worktree).toEqual({});
+      expect(result.settings).toEqual({ worktree: {} });
       expect(result.permissionMode).toBe('bypassPermissions');
       expect(result.allowedTools).toEqual(['Read', 'Write']);
       expect(result.disallowedTools).toEqual(['Bash(rm:*)']);
