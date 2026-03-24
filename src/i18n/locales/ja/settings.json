@@ -354,8 +354,8 @@
       "cursorDescription": "Cursor CLIの -f フラグに相当"
     },
     "useWorktree": {
-      "label": "Use git worktree isolation",
-      "description": "Runs Claude Code in an isolated git worktree. Equivalent to --worktree flag."
+      "label": "git worktree 分離を使用",
+      "description": "Claude Code を分離された git worktree で実行します。--worktree フラグに相当。"
     },
     "allowedTools": {
       "title": "許可されたツール",

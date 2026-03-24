@@ -333,8 +333,8 @@
       "cursorDescription": "Entspricht dem Flag -f in der Cursor CLI"
     },
     "useWorktree": {
-      "label": "Use git worktree isolation",
-      "description": "Runs Claude Code in an isolated git worktree. Equivalent to --worktree flag."
+      "label": "Git-Worktree-Isolation verwenden",
+      "description": "Führt Claude Code in einem isolierten Git-Worktree aus. Entspricht dem Flag --worktree."
     },
     "allowedTools": {
       "title": "Erlaubte Werkzeuge",
