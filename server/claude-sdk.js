@@ -818,5 +818,6 @@ export {
   getActiveClaudeSDKSessions,
   resolveToolApproval,
   getPendingApprovalsForSession,
+  mapCliOptionsToSDK,
   reconnectSessionWriter
 };
