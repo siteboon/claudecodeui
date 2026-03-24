@@ -171,6 +171,11 @@ function mapCliOptionsToSDK(options = {}) {
     sdkOptions.permissionMode = 'bypassPermissions';
   }
 
+  // Handle worktree mode
+  if (settings.useWorktree) {
+    sdkOptions.worktree = {};
+  }
+
   let allowedTools = [...(settings.allowedTools || [])];
 
   // Add plan mode default tools

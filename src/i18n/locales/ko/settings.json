@@ -353,6 +353,10 @@
       "claudeDescription": "--dangerously-skip-permissions 플래그와 동일",
       "cursorDescription": "Cursor CLI의 -f 플래그와 동일"
     },
+    "useWorktree": {
+      "label": "Use git worktree isolation",
+      "description": "Runs Claude Code in an isolated git worktree. Equivalent to --worktree flag."
+    },
     "allowedTools": {
       "title": "허용된 도구",
       "description": "권한 확인 없이 자동으로 허용되는 도구",

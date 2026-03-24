@@ -353,6 +353,10 @@
       "claudeDescription": "等同于 --dangerously-skip-permissions 标志",
       "cursorDescription": "等同于 Cursor CLI 中的 -f 标志"
     },
+    "useWorktree": {
+      "label": "Use git worktree isolation",
+      "description": "Runs Claude Code in an isolated git worktree. Equivalent to --worktree flag."
+    },
     "allowedTools": {
       "title": "允许的工具",
       "description": "无需权限提示即可自动使用的工具",

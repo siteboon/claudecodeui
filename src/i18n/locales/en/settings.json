@@ -353,6 +353,10 @@
       "claudeDescription": "Equivalent to --dangerously-skip-permissions flag",
       "cursorDescription": "Equivalent to -f flag in Cursor CLI"
     },
+    "useWorktree": {
+      "label": "Use git worktree isolation",
+      "description": "Runs Claude Code in an isolated git worktree. Equivalent to --worktree flag."
+    },
     "allowedTools": {
       "title": "Allowed Tools",
       "description": "Tools that are automatically allowed without prompting for permission",
