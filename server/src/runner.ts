@@ -4,14 +4,21 @@ import cors from 'cors';
 import path from 'path';
 import fs from "fs";
 
+import { dirname } from 'path';
+import { fileURLToPath } from 'url';
+
 import { initializeDatabase } from '@/shared/database/init-db.js';
 import { initializeWatcher } from '@/modules/sessions/sessions.watcher.js';
 import { getConnectableHost } from '@/shared/utils/networkHosts.js';
+import { logger } from '@/shared/utils/logger.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 console.log("----------------Hello there, Refactored Runner!-------------------");
 
 const app = express();
+
 const server = http.createServer(app);
 
 const serverPortEnv = process.env.SERVER_PORT;
@@ -41,6 +48,17 @@ app.use(express.json({
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 
+// Simple logging middleware to track all incoming requests
+// TODO: REMOVE THIS
+app.use((req, res, next) => {
+    // Only log API endpoints to avoid spamming the console with static file requests
+    if (req.url.startsWith('/')) {
+        console.log(`=============> [${new Date().toISOString()}] ${req.method} ${req.url}`);
+    }
+    next();
+});
+
+
 // This matches files found in the root public folder (like api-docs.html when we run `/api-docs.html`).
 // If the file is found, it's automatically sent. If it is not, it passes it to the next route checker.
 // This will run in production as well as development URLs.
@@ -65,15 +83,17 @@ app.use(express.static(path.join(__dirname, '../../dist'), {
 }));
 
 // Serve React app for all other routes (excluding static files)
+// This will match routes like /sessions in production builds
 app.get('*', (req, res) => {
     // Skip requests for static assets (files with extensions)
     if (path.extname(req.path)) {
         return res.status(404).send('Not found');
     }
-    
+
     // Only serve index.html for HTML routes, not for static assets
     // Static assets should already be handled by express.static middleware above
-    const indexPath = path.join(__dirname, '../dist/index.html');
+    const indexPath = path.join(__dirname, '../../dist/index.html');
+
 
     // Check if dist/index.html exists (production build available)
     if (fs.existsSync(indexPath)) {
@@ -82,12 +102,9 @@ app.get('*', (req, res) => {
         res.setHeader('Pragma', 'no-cache');
         res.setHeader('Expires', '0');
         res.sendFile(indexPath);
-    } else {
-        // In development, redirect to Vite dev server only if dist doesn't exist
-        const redirectHost = getConnectableHost(req.hostname);
-        res.redirect(`${req.protocol}://${redirectHost}:${VITE_PORT}`);
     }
 });
+
 
 
 async function main() {
@@ -95,13 +112,27 @@ async function main() {
         await initializeDatabase();
 
         server.listen(SERVER_PORT, HOST, async () => {
-            console.log(`Server is running on http://${HOST}:${SERVER_PORT}`);
+            const appInstallPath = path.join(__dirname, '../..');
+            const distIndexPath = path.join(__dirname, '../../dist/index.html');
+            const hasProductionBuild = fs.existsSync(distIndexPath);
+
+            if (hasProductionBuild) {
+                logger.info(`To run in production mode, go to http://${DISPLAY_HOST}:${SERVER_PORT}`);
+            }
+
+            logger.info(`To run in development mode with hot-module replacement, go to http://${DISPLAY_HOST}:${VITE_PORT}`);
+            logger.info('═'.repeat(63));
+            logger.info('CloudCLI Server - Ready');
+            logger.info('═'.repeat(63));
+            logger.info(`Server URL: http://${DISPLAY_HOST}:${SERVER_PORT}`);
+            logger.info(`Installed at: ${appInstallPath}`);
+            logger.info('Run "cloudcli status" for full configuration details');
 
             await initializeWatcher();
         });
 
     } catch (error) {
-        console.error("Failed to initialize database:", error);
+        logger.error(`Failed to initialize database: ${error}`);
         process.exit(1);
     }
 }
