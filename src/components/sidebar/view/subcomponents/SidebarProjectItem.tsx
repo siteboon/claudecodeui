@@ -1,4 +1,4 @@
-import { Check, ChevronDown, ChevronRight, Edit3, Folder, FolderOpen, Star, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, Edit3, Folder, FolderOpen, GitBranch, Star, Trash2, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
 import { Button } from '../../../../shared/view/ui';
 import { cn } from '../../../../lib/utils';
@@ -173,7 +173,15 @@ export default function SidebarProjectItem({
                   ) : (
                     <>
                       <div className="flex min-w-0 flex-1 items-center justify-between">
-                        <h3 className="truncate text-sm font-medium text-foreground">{project.displayName}</h3>
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <h3 className="truncate text-sm font-medium text-foreground">{project.displayName}</h3>
+                          {project.worktreeInfo?.branchName && (
+                            <span className="inline-flex shrink-0 items-center gap-0.5 rounded px-1 py-0.5 text-[10px] leading-none font-medium bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
+                              <GitBranch className="h-2.5 w-2.5" />
+                              {project.worktreeInfo.branchName}
+                            </span>
+                          )}
+                        </div>
                         {tasksEnabled && (
                           <TaskIndicator
                             status={taskStatus}
@@ -311,8 +319,19 @@ export default function SidebarProjectItem({
                 </div>
               ) : (
                 <div>
-                  <div className="truncate text-sm font-semibold text-foreground" title={project.displayName}>
-                    {project.displayName}
+                  <div className="flex items-center gap-1.5 truncate">
+                    <span className="truncate text-sm font-semibold text-foreground" title={project.displayName}>
+                      {project.displayName}
+                    </span>
+                    {project.worktreeInfo?.branchName && (
+                      <span
+                        className="inline-flex shrink-0 items-center gap-0.5 rounded px-1 py-0.5 text-[10px] leading-none font-medium bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
+                        title={`${t('projects.branch', { defaultValue: 'Branch' })}: ${project.worktreeInfo.branchName}`}
+                      >
+                        <GitBranch className="h-2.5 w-2.5" />
+                        {project.worktreeInfo.branchName}
+                      </span>
+                    )}
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {sessionCountDisplay}

@@ -56,3 +56,14 @@ export type MCPServerStatus = {
 } | null;
 
 export type SettingsProject = Pick<Project, 'name' | 'displayName' | 'fullPath' | 'path'>;
+
+export type RepoGroup = {
+  /** Discriminant so the sidebar can distinguish groups from standalone projects. */
+  __type: 'repo-group';
+  /** Absolute path to the main repository root. */
+  repoRoot: string;
+  /** Human-readable name derived from the main worktree's displayName. */
+  displayName: string;
+  /** Child projects (main worktree first, then linked worktrees sorted by branch). */
+  projects: Project[];
+};

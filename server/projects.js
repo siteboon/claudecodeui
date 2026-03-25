@@ -67,6 +67,7 @@ import { open } from 'sqlite';
 import os from 'os';
 import sessionManager from './sessionManager.js';
 import { applyCustomSessionNames } from './database/db.js';
+import { getWorktreeInfo } from './routes/git.js';
 
 // Import TaskMaster detection functions
 async function detectTaskMasterFolder(projectPath) {
@@ -513,6 +514,13 @@ async function getProjects(progressCallback = null) {
         };
       }
 
+      // Detect git worktree information
+      try {
+        project.worktreeInfo = await getWorktreeInfo(actualProjectDir);
+      } catch (e) {
+        project.worktreeInfo = null;
+      }
+
       projects.push(project);
     }
   } catch (error) {
@@ -625,6 +633,13 @@ async function getProjects(progressCallback = null) {
         };
       }
 
+      // Detect git worktree information for manual projects
+      try {
+        project.worktreeInfo = await getWorktreeInfo(actualProjectDir);
+      } catch (e) {
+        project.worktreeInfo = null;
+      }
+
       projects.push(project);
     }
   }
@@ -636,6 +651,31 @@ async function getProjects(progressCallback = null) {
       current: totalProjects,
       total: totalProjects
     });
+  }
+
+  // Post-process: group projects that share the same underlying git repository
+  // (i.e. multiple worktrees of the same repo).
+  const repoGroups = new Map();
+  for (const project of projects) {
+    const repoRoot = project.worktreeInfo?.mainRepoRoot;
+    if (repoRoot) {
+      if (!repoGroups.has(repoRoot)) {
+        repoGroups.set(repoRoot, []);
+      }
+      repoGroups.get(repoRoot).push(project);
+    }
+  }
+
+  for (const [repoRoot, grouped] of repoGroups) {
+    if (grouped.length > 1) {
+      // The "main" project is the one that is NOT a linked worktree
+      const mainProject = grouped.find(p => !p.worktreeInfo?.isWorktree) || grouped[0];
+      for (const p of grouped) {
+        p.repoGroup = repoRoot;
+        p.repoGroupSize = grouped.length;
+        p.isMainWorktree = p === mainProject;
+      }
+    }
   }
 
   return projects;

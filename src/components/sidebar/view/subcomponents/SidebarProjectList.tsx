@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import type { TFunction } from 'i18next';
 import type { LoadingProgress, Project, ProjectSession, SessionProvider } from '../../../../types/app';
 import type {
@@ -6,8 +6,10 @@ import type {
   MCPServerStatus,
   SessionWithProvider,
 } from '../../types/types';
+import { groupProjectsByRepo, isRepoGroup } from '../../utils/utils';
 import SidebarProjectItem from './SidebarProjectItem';
 import SidebarProjectsState from './SidebarProjectsState';
+import SidebarRepoGroup from './SidebarRepoGroup';
 
 export type SidebarProjectListProps = {
   projects: Project[];
@@ -112,48 +114,96 @@ export default function SidebarProjectList({
 
   const showProjects = !isLoading && projects.length > 0 && filteredProjects.length > 0;
 
+  const groupedItems = useMemo(
+    () => groupProjectsByRepo(filteredProjects),
+    [filteredProjects],
+  );
+
+  const sharedProps = {
+    selectedProject,
+    selectedSession,
+    expandedProjects,
+    editingProject,
+    editingName,
+    loadingSessions,
+    initialSessionsLoaded,
+    currentTime,
+    editingSession,
+    editingSessionName,
+    deletingProjects,
+    tasksEnabled,
+    mcpServerStatus,
+    getProjectSessions,
+    isProjectStarred,
+    onEditingNameChange,
+    onToggleProject,
+    onProjectSelect,
+    onToggleStarProject,
+    onStartEditingProject,
+    onCancelEditingProject,
+    onSaveProjectName,
+    onDeleteProject,
+    onSessionSelect,
+    onDeleteSession,
+    onLoadMoreSessions,
+    onNewSession,
+    onEditingSessionNameChange,
+    onStartEditingSession,
+    onCancelEditingSession,
+    onSaveEditingSession,
+    t,
+  };
+
   return (
     <div className="pb-safe-area-inset-bottom md:space-y-1">
       {!showProjects
         ? state
-        : filteredProjects.map((project) => (
-            <SidebarProjectItem
-              key={project.name}
-              project={project}
-              selectedProject={selectedProject}
-              selectedSession={selectedSession}
-              isExpanded={expandedProjects.has(project.name)}
-              isDeleting={deletingProjects.has(project.name)}
-              isStarred={isProjectStarred(project.name)}
-              editingProject={editingProject}
-              editingName={editingName}
-              sessions={getProjectSessions(project)}
-              initialSessionsLoaded={initialSessionsLoaded.has(project.name)}
-              isLoadingSessions={Boolean(loadingSessions[project.name])}
-              currentTime={currentTime}
-              editingSession={editingSession}
-              editingSessionName={editingSessionName}
-              tasksEnabled={tasksEnabled}
-              mcpServerStatus={mcpServerStatus}
-              onEditingNameChange={onEditingNameChange}
-              onToggleProject={onToggleProject}
-              onProjectSelect={onProjectSelect}
-              onToggleStarProject={onToggleStarProject}
-              onStartEditingProject={onStartEditingProject}
-              onCancelEditingProject={onCancelEditingProject}
-              onSaveProjectName={onSaveProjectName}
-              onDeleteProject={onDeleteProject}
-              onSessionSelect={onSessionSelect}
-              onDeleteSession={onDeleteSession}
-              onLoadMoreSessions={onLoadMoreSessions}
-              onNewSession={onNewSession}
-              onEditingSessionNameChange={onEditingSessionNameChange}
-              onStartEditingSession={onStartEditingSession}
-              onCancelEditingSession={onCancelEditingSession}
-              onSaveEditingSession={onSaveEditingSession}
-              t={t}
-            />
-          ))}
+        : groupedItems.map((item) =>
+            isRepoGroup(item) ? (
+              <SidebarRepoGroup
+                key={`repo-group:${item.repoRoot}`}
+                group={item}
+                {...sharedProps}
+              />
+            ) : (
+              <SidebarProjectItem
+                key={item.name}
+                project={item}
+                selectedProject={selectedProject}
+                selectedSession={selectedSession}
+                isExpanded={expandedProjects.has(item.name)}
+                isDeleting={deletingProjects.has(item.name)}
+                isStarred={isProjectStarred(item.name)}
+                editingProject={editingProject}
+                editingName={editingName}
+                sessions={getProjectSessions(item)}
+                initialSessionsLoaded={initialSessionsLoaded.has(item.name)}
+                isLoadingSessions={Boolean(loadingSessions[item.name])}
+                currentTime={currentTime}
+                editingSession={editingSession}
+                editingSessionName={editingSessionName}
+                tasksEnabled={tasksEnabled}
+                mcpServerStatus={mcpServerStatus}
+                onEditingNameChange={onEditingNameChange}
+                onToggleProject={onToggleProject}
+                onProjectSelect={onProjectSelect}
+                onToggleStarProject={onToggleStarProject}
+                onStartEditingProject={onStartEditingProject}
+                onCancelEditingProject={onCancelEditingProject}
+                onSaveProjectName={onSaveProjectName}
+                onDeleteProject={onDeleteProject}
+                onSessionSelect={onSessionSelect}
+                onDeleteSession={onDeleteSession}
+                onLoadMoreSessions={onLoadMoreSessions}
+                onNewSession={onNewSession}
+                onEditingSessionNameChange={onEditingSessionNameChange}
+                onStartEditingSession={onStartEditingSession}
+                onCancelEditingSession={onCancelEditingSession}
+                onSaveEditingSession={onSaveEditingSession}
+                t={t}
+              />
+            ),
+          )}
     </div>
   );
 }

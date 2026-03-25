@@ -17,7 +17,10 @@
     "projects": "プロジェクト",
     "noMatchingProjects": "一致するプロジェクトがありません",
     "tryDifferentSearch": "検索語を変えてお試しください",
-    "runClaudeCli": "プロジェクトディレクトリでClaude CLIを実行して始めましょう"
+    "runClaudeCli": "プロジェクトディレクトリでClaude CLIを実行して始めましょう",
+    "branch": "ブランチ",
+    "repoGroup": "リポジトリ",
+    "worktrees": "ワークツリー"
   },
   "app": {
     "title": "Claude Code UI",

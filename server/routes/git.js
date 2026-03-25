@@ -1485,4 +1485,91 @@ router.post('/delete-untracked', async (req, res) => {
   }
 });
 
+/**
+ * Detect whether a directory is a git worktree and resolve the main repository root.
+ *
+ * Uses `git rev-parse --git-common-dir` (Git 2.5+) to distinguish linked worktrees
+ * from the primary worktree.  Returns `null` when the directory is not inside a git
+ * repository or when an older git version is used.
+ *
+ * @param {string} projectPath – absolute path to the directory to inspect
+ * @returns {Promise<{isWorktree: boolean, worktreeRoot: string, mainRepoRoot: string, branchName: string} | null>}
+ */
+export async function getWorktreeInfo(projectPath) {
+  try {
+    const [toplevel, commonDir, gitDir, branch] = await Promise.all([
+      spawnAsync('git', ['rev-parse', '--show-toplevel'], { cwd: projectPath }).then(r => r.stdout.trim()),
+      spawnAsync('git', ['rev-parse', '--git-common-dir'], { cwd: projectPath }).then(r => r.stdout.trim()),
+      spawnAsync('git', ['rev-parse', '--git-dir'], { cwd: projectPath }).then(r => r.stdout.trim()),
+      getCurrentBranchName(projectPath).catch(() => ''),
+    ]);
+
+    const resolvedCommon = path.resolve(projectPath, commonDir);
+    const resolvedGit = path.resolve(projectPath, gitDir);
+    const isLinkedWorktree = resolvedCommon !== resolvedGit;
+
+    // The main repo root is the parent of the .git directory that --git-common-dir points to.
+    const mainRepoRoot = isLinkedWorktree
+      ? path.dirname(resolvedCommon)
+      : toplevel;
+
+    return {
+      isWorktree: isLinkedWorktree,
+      worktreeRoot: toplevel,
+      mainRepoRoot,
+      branchName: branch,
+    };
+  } catch {
+    // Not a git repo, git too old, or other failure – graceful degradation.
+    return null;
+  }
+}
+
+/**
+ * List every worktree associated with the repository that contains `projectPath`.
+ *
+ * Parses the porcelain output of `git worktree list --porcelain`.
+ *
+ * @param {string} projectPath – absolute path inside any worktree of the repository
+ * @returns {Promise<Array<{path: string, head: string, branch: string, isBare: boolean}>>}
+ */
+export async function listWorktrees(projectPath) {
+  try {
+    const { stdout } = await spawnAsync('git', ['worktree', 'list', '--porcelain'], { cwd: projectPath });
+    const worktrees = [];
+    let current = {};
+
+    for (const line of stdout.split('\n')) {
+      if (line === '') {
+        if (current.path) {
+          worktrees.push(current);
+        }
+        current = {};
+      } else if (line.startsWith('worktree ')) {
+        current.path = line.slice('worktree '.length);
+      } else if (line.startsWith('HEAD ')) {
+        current.head = line.slice('HEAD '.length);
+      } else if (line.startsWith('branch ')) {
+        // "branch refs/heads/main" → "main"
+        current.branch = line.slice('branch '.length).replace(/^refs\/heads\//, '');
+      } else if (line === 'bare') {
+        current.isBare = true;
+      }
+    }
+    // Handle last entry if stdout didn't end with a blank line.
+    if (current.path) {
+      worktrees.push(current);
+    }
+
+    return worktrees.map(wt => ({
+      path: wt.path || '',
+      head: wt.head || '',
+      branch: wt.branch || '',
+      isBare: Boolean(wt.isBare),
+    }));
+  } catch {
+    return [];
+  }
+}
+
 export default router;
