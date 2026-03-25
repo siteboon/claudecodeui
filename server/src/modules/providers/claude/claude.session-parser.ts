@@ -1,7 +1,8 @@
 import os from 'os';
 import path from 'path';
 import { sessionsDb } from '@/shared/database/repositories/sessions.db.js';
-import { buildLookupMap, extractFirstValidJsonlData, findFilesRecursivelyCreatedAfterLastScan, SessionData } from '@/modules/sessions/sessions.utils.js';
+import { buildLookupMap, extractFirstValidJsonlData, findFilesRecursivelyCreatedAfterLastScan } from '@/modules/providers/shared/session-parser.utils.js';
+import { SessionData } from '@/shared/types/session.js';
 
 export async function processClaudeSessionFile(file: string, nameMap?: Map<string, string>): Promise<SessionData | null> {
     if (!nameMap) {
@@ -17,7 +18,7 @@ export async function processClaudeSessionFile(file: string, nameMap?: Map<strin
     }));
 }
 
-export async function getClaudeSessions() {
+export async function processClaudeSessions() {
     const base = path.join(os.homedir(), '.claude');
     // Pre-load names from history index
     const nameMap = await buildLookupMap(path.join(base, 'history.jsonl'), 'sessionId', 'display');

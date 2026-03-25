@@ -5,7 +5,8 @@ import fsp from 'node:fs/promises';
 import readline from 'readline';
 import crypto from 'node:crypto';
 import { sessionsDb } from '@/shared/database/repositories/sessions.db.js';
-import { extractFirstValidJsonlData, findFilesRecursivelyCreatedAfterLastScan, SessionData } from '@/modules/sessions/sessions.utils.js';
+import { extractFirstValidJsonlData, findFilesRecursivelyCreatedAfterLastScan } from '@/modules/providers/shared/session-parser.utils.js';
+import { SessionData } from '@/shared/types/session.js';
 
 function md5(input: string): string {
     return crypto.createHash('md5').update(input).digest('hex');
@@ -56,7 +57,7 @@ export async function processCursorSessionFile(file: string): Promise<SessionDat
     });
 }
 
-export async function getCursorSessions() {
+export async function processCursorSessions() {
     try {
         const cursorBase = path.join(os.homedir(), '.cursor');
         const projectsDir = path.join(cursorBase, 'projects');

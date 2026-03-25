@@ -1,10 +1,10 @@
 import { scanStateDb } from '@/shared/database/repositories/scan-state.db.js';
-import { getClaudeSessions } from '@/modules/providers/claude/claude.session-parser.js';
-import { getCodexSessions } from '@/modules/providers/codex/codex.session-parser.js';
-import { getGeminiSessions } from '@/modules/providers/gemini/gemini.session-parser.js';
-import { getCursorSessions } from '@/modules/providers/cursor/cursor.session-parser.js';
+import { processClaudeSessions } from '@/modules/providers/claude/claude.session-parser.js';
+import { processCodexSessions } from '@/modules/providers/codex/codex.session-parser.js';
+import { processGeminiSessions } from '@/modules/providers/gemini/gemini.session-parser.js';
+import { processCursorSessions } from '@/modules/providers/cursor/cursor.session-parser.js';
 
-export async function getSessions() {
+export async function processSessions() {
 
     // 1. Start the timer with a unique label
     console.time("🚀 Workspace sync total time");
@@ -13,10 +13,10 @@ export async function getSessions() {
     try {
         // Wrapping in Promise.all allows these to process concurrently, speeding up the boot time
         await Promise.allSettled([
-            getClaudeSessions(),
-            getCodexSessions(),
-            getGeminiSessions(),
-            getCursorSessions()
+            processClaudeSessions(),
+            processCodexSessions(),
+            processGeminiSessions(),
+            processCursorSessions()
         ]);
 
         scanStateDb.updateLastScannedAt();

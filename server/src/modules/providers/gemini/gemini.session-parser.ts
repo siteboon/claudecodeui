@@ -2,7 +2,8 @@ import os from 'os';
 import path from 'path';
 import fsp from 'node:fs/promises';
 import { sessionsDb } from '@/shared/database/repositories/sessions.db.js';
-import { findFilesRecursivelyCreatedAfterLastScan, SessionData } from '@/modules/sessions/sessions.utils.js';
+import { findFilesRecursivelyCreatedAfterLastScan } from '@/modules/providers/shared/session-parser.utils.js';
+import { SessionData } from '@/shared/types/session.js';
 
 export async function processGeminiSessionFile(file: string): Promise<SessionData | null> {
     try {
@@ -23,7 +24,7 @@ export async function processGeminiSessionFile(file: string): Promise<SessionDat
     return null;
 }
 
-export async function getGeminiSessions() {
+export async function processGeminiSessions() {
     const geminiPath = path.join(os.homedir(), '.gemini', 'sessions');
     const files = await findFilesRecursivelyCreatedAfterLastScan(geminiPath, '.json');
 

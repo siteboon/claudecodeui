@@ -3,7 +3,7 @@ import path from "path";
 import os from "os";
 import { promises as fsPromises } from "fs";
 import { logger } from "@/shared/utils/logger.js";
-import { getSessions } from "@/modules/sessions/sessions.service.js";
+import { processSessions } from "@/modules/sessions/sessions.service.js";
 import { processClaudeSessionFile } from "@/modules/providers/claude/claude.session-parser.js";
 import { processCodexSessionFile } from "@/modules/providers/codex/codex.session-parser.js";
 import { processGeminiSessionFile } from "@/modules/providers/gemini/gemini.session-parser.js";
@@ -117,7 +117,7 @@ const onUpdate = async (
 export async function initializeWatcher() {
     logger.info("Setting up project watchers for providers...");
 
-    await getSessions();
+    await processSessions();
 
     for (const { provider, rootPath } of PROVIDER_WATCH_PATHS) {
         try {

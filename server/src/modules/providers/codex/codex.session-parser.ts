@@ -1,7 +1,8 @@
 import os from 'os';
 import path from 'path';
 import { sessionsDb } from '@/shared/database/repositories/sessions.db.js';
-import { buildLookupMap, extractFirstValidJsonlData, findFilesRecursivelyCreatedAfterLastScan, SessionData } from '@/modules/sessions/sessions.utils.js';
+import { buildLookupMap, extractFirstValidJsonlData, findFilesRecursivelyCreatedAfterLastScan } from '@/modules/providers/shared/session-parser.utils.js';
+import { SessionData } from '@/shared/types/session.js';
 
 export async function processCodexSessionFile(file: string, nameMap?: Map<string, string>): Promise<SessionData | null> {
     if (!nameMap) {
@@ -17,7 +18,7 @@ export async function processCodexSessionFile(file: string, nameMap?: Map<string
     }));
 }
 
-export async function getCodexSessions() {
+export async function processCodexSessions() {
     const base = path.join(os.homedir(), '.codex');
     // Use the thread_name attribute as requested
     const nameMap = await buildLookupMap(path.join(base, 'session_index.jsonl'), 'id', 'thread_name');

@@ -3,16 +3,7 @@ import fsp from 'node:fs/promises';
 import readline from 'readline';
 import path from 'path';
 import { scanStateDb } from '@/shared/database/repositories/scan-state.db.js';
-
-// ============================================================================
-// SHARED TYPES & UTILITIES
-// ============================================================================
-
-export type SessionData = {
-    sessionId: string;
-    workspacePath: string;
-    sessionName?: string;
-}
+import { SessionData } from '@/shared/types/session.js';
 
 /**
  * Reads a JSONL file and builds a Map of Key -> Value.
@@ -39,7 +30,7 @@ export async function buildLookupMap(filePath: string, keyField: string, valueFi
 /**
  * Recursively walks a directory tree and returns a flat array of all files 
  * matching a specific extension (e.g., '.jsonl' or '.json').
- * It will only find the files created after the last scan date.
+ * It will only find the files created after
  */
 export async function findFilesRecursivelyCreatedAfterLastScan(
     dirPath: string,
@@ -61,6 +52,7 @@ export async function findFilesRecursivelyCreatedAfterLastScan(
                     const stats = await fsp.stat(fullPath);
                     if (stats.birthtime > lastScanDate) {
                         fileList.push(fullPath);
+                        console.log("=====> full path is: ", fullPath)
                     }
                 } else {
                     fileList.push(fullPath);
