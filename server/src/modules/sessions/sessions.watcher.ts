@@ -3,17 +3,15 @@ import path from "path";
 import os from "os";
 import { promises as fsPromises } from "fs";
 import { logger } from "@/shared/utils/logger.js";
-import { 
-    processClaudeSessionFile, 
-    processCodexSessionFile, 
-    processGeminiSessionFile, 
-    processCursorSessionFile, 
-    getSessions
-} from "@/modules/workspace/get-workspaces/get-workspaces.js";
+import { getSessions } from "@/modules/sessions/sessions.service.js";
+import { processClaudeSessionFile } from "@/modules/providers/claude/claude.session-parser.js";
+import { processCodexSessionFile } from "@/modules/providers/codex/codex.session-parser.js";
+import { processGeminiSessionFile } from "@/modules/providers/gemini/gemini.session-parser.js";
+import { processCursorSessionFile } from "@/modules/providers/cursor/cursor.session-parser.js";
 import { sessionsDb } from "@/shared/database/repositories/sessions.db.js";
 import { LLMProvider } from "@/shared/types/app.js";
 
-let projectsWatchers = [];
+let projectsWatchers: any[] = [];
 
 // File system watchers for provider project/session folders
 const PROVIDER_WATCH_PATHS: { provider: LLMProvider; rootPath: string }[] = [
@@ -45,8 +43,7 @@ const WATCHER_IGNORED_PATTERNS = [
     "**/.DS_Store",
 ];
 
-type EventType = "add" | "change" | "unlink" | "addDir" | "unlinkDir";
-
+type EventType = "add" | "change";
 
 const onUpdate = async (
     eventType: EventType,

@@ -3,7 +3,7 @@ import http from 'http';
 
 import { userDb } from "@/shared/database/repositories/users.js";
 import { initializeDatabase } from '@/shared/database/init-db.js';
-import { initializeWatcher } from '@/modules/watcher/file-watcher.js';
+import { initializeWatcher } from '@/modules/sessions/sessions.watcher.js';
 
 console.log("----------------Hello there, Refactored Runner!-------------------");
 
