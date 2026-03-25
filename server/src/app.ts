@@ -14,19 +14,19 @@ export function createServerApplication(): ServerApplication {
     start: async () => {
       // ----------------------------------------------
       // Legacy backend Runner
-      // logger.info('Bootstrapping backend via legacy runtime bridge', {
-      //   legacyRuntime: runtimePaths.legacyRuntimePath,
-      // });
-      // await import(pathToFileURL(runtimePaths.legacyRuntimePath).href);
+      logger.info('Bootstrapping backend via legacy runtime bridge', {
+        legacyRuntime: runtimePaths.legacyRuntimePath,
+      });
+      await import(pathToFileURL(runtimePaths.legacyRuntimePath).href);
       // ----------------------------------------------
 
 
       // ----------------------------------------------
       // Refactor backend Runner
-      logger.info('Bootstrapping backend via refactor runtime', {
-        refactorRuntime: runtimePaths.refactorRuntimePath,
-      });
-      await import(pathToFileURL(runtimePaths.refactorRuntimePath).href);
+      // logger.info('Bootstrapping backend via refactor runtime', {
+      //   refactorRuntime: runtimePaths.refactorRuntimePath,
+      // });
+      // await import(pathToFileURL(runtimePaths.refactorRuntimePath).href);
     },
   };
 }
