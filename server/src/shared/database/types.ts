@@ -6,6 +6,8 @@
  * from SELECT queries; input types represent what goes into INSERT/UPDATE.
  */
 
+import { LLMProvider } from "@/shared/types/app.js";
+
 // ---------------------------------------------------------------------------
 // Users
 // ---------------------------------------------------------------------------
@@ -94,17 +96,15 @@ export type CreateCredentialResult = {
 // Session Names
 // ---------------------------------------------------------------------------
 
-export type SessionNameRow = {
-  id: number;
+export type SessionsRow = {
   session_id: string;
-  provider: string;
+  provider: LLMProvider;
+  workspacePath: string;
   custom_name: string;
-  created_at: string;
-  updated_at: string;
 };
 
 /** Minimal shape used in batch lookups. */
-export type SessionNameLookupRow = Pick<SessionNameRow, 'session_id' | 'custom_name'>;
+export type SessionNameLookupRow = Pick<SessionsRow, 'session_id' | 'custom_name'>;
 
 /**
  * Any object that has an `id` and `summary` field.
@@ -115,6 +115,16 @@ export type SessionWithSummary = {
   summary?: string;
   [key: string]: unknown;
 };
+
+
+
+// ---------------------------------------------------------------------------
+// Scan State
+// ---------------------------------------------------------------------------
+export type ScanStateRow = {
+  last_scanned_at: string;
+}
+
 
 // ---------------------------------------------------------------------------
 // App Config

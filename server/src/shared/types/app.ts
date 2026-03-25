@@ -18,3 +18,6 @@ export type ServerApplication = {
   runtimePaths: RuntimePaths;
   start: () => Promise<void>;
 };
+
+// ---------------------------------------------------------------------------
+export type LLMProvider = 'claude' | 'codex' | 'cursor' | 'gemini'; 

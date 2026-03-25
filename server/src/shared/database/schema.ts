@@ -39,17 +39,30 @@ CREATE TABLE IF NOT EXISTS user_credentials (
 );
 `;
 
-export const SESSION_NAMES_TABLE_SCHEMA_SQL = `
-CREATE TABLE IF NOT EXISTS session_names (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id TEXT NOT NULL,
-    provider TEXT NOT NULL DEFAULT 'claude',
-    custom_name TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(session_id, provider)
+export const SESSIONS_TABLE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS sessions (
+    session_id TEXT PRIMARY KEY NOT NULL,
+    provider TEXT NOT NULL,
+    custom_name TEXT,
+    workspace_path TEXT NOT NULL,
+    FOREIGN KEY (workspace_path) REFERENCES workspace_original_paths(workspace_path)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE
 );
 `;
+
+export const WORK_SPACE_PATH_SQL = `
+CREATE TABLE IF NOT EXISTS workspace_original_paths (
+    workspace_path TEXT PRIMARY KEY NOT NULL
+);
+`
+
+export const LAST_SCANNED_AT_SQL = `
+CREATE TABLE IF NOT EXISTS scan_state (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  last_scanned_at TIMESTAMP NULL
+);
+`
 
 export const APP_CONFIG_TABLE_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS app_config (
@@ -70,20 +83,21 @@ CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 CREATE INDEX IF NOT EXISTS idx_users_active ON users(is_active);
 
 ${API_KEYS_TABLE_SCHEMA_SQL}
-
 CREATE INDEX IF NOT EXISTS idx_api_keys_key ON api_keys(api_key);
 CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys(user_id);
 CREATE INDEX IF NOT EXISTS idx_api_keys_active ON api_keys(is_active);
 
 ${USER_CREDENTIALS_TABLE_SCHEMA_SQL}
-
 CREATE INDEX IF NOT EXISTS idx_user_credentials_user_id ON user_credentials(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_credentials_type ON user_credentials(credential_type);
 CREATE INDEX IF NOT EXISTS idx_user_credentials_active ON user_credentials(is_active);
 
-${SESSION_NAMES_TABLE_SCHEMA_SQL}
+${SESSIONS_TABLE_SCHEMA_SQL}
+CREATE INDEX IF NOT EXISTS idx_session_ids_lookup ON sessions(session_id);
 
-CREATE INDEX IF NOT EXISTS idx_session_names_lookup ON session_names(session_id, provider);
+${WORK_SPACE_PATH_SQL}
+
+${LAST_SCANNED_AT_SQL}
 
 ${APP_CONFIG_TABLE_SCHEMA_SQL}
 `;

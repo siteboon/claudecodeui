@@ -9,7 +9,7 @@ export const initializeDatabase = async () => {
         const db = getConnection();
         db.exec(INIT_SCHEMA_SQL);
         logger.info('Database schema applied');
-        runMigrations(db);
+        runMigrations(db); // ? If we rename the database to something new, would a migration be still necessary?
     } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         logger.error('Database initialization failed', { error: message });
