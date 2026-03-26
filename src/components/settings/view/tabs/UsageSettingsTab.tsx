@@ -87,7 +87,7 @@ export default function UsageSettingsTab() {
     );
   }
 
-  if (error || !data) {
+  if (!data) {
     return (
       <div className="space-y-6">
         <Header />
@@ -102,6 +102,13 @@ export default function UsageSettingsTab() {
   return (
     <div className="space-y-6 md:space-y-8">
       <Header />
+
+      {error && (
+        <div className="flex items-center gap-2 rounded-lg border border-border bg-card p-3 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 flex-shrink-0" />
+          {error}
+        </div>
+      )}
 
       {/* Plan badge */}
       {data.plan && (
