@@ -67,39 +67,17 @@ async function fetchRateLimits(accessToken) {
       utilization: isNaN(sessionUtil) ? null : sessionUtil,
       percent: isNaN(sessionUtil) ? null : Math.round(sessionUtil * 100),
       resetAt: isNaN(sessionReset) ? null : sessionReset,
-      resetText: isNaN(sessionReset) ? '' : formatResetTime(sessionReset),
       status: sessionStatus || null,
     },
     weekly: {
       utilization: isNaN(weeklyUtil) ? null : weeklyUtil,
       percent: isNaN(weeklyUtil) ? null : Math.round(weeklyUtil * 100),
       resetAt: isNaN(weeklyReset) ? null : weeklyReset,
-      resetText: isNaN(weeklyReset) ? '' : formatResetTime(weeklyReset),
       status: weeklyStatus || null,
     },
   };
 }
 
-function formatResetTime(unixSeconds) {
-  const diffSec = unixSeconds - Math.floor(Date.now() / 1000);
-  if (diffSec <= 0) return 'Resets now';
-
-  const h = Math.floor(diffSec / 3600);
-  const m = Math.floor((diffSec % 3600) / 60);
-
-  if (h > 24) {
-    const date = new Date(unixSeconds * 1000);
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const hour = date.getHours() % 12 || 12;
-    const min = date.getMinutes().toString().padStart(2, '0');
-    const ampm = date.getHours() >= 12 ? 'PM' : 'AM';
-    return `Resets ${days[date.getDay()]} ${hour}:${min} ${ampm}`;
-  }
-  if (h > 0 && m > 0) return `Resets in ${h} hr ${m} min`;
-  if (h > 0) return `Resets in ${h} hr`;
-  if (m > 0) return `Resets in ${m} min`;
-  return 'Resets in less than a minute';
-}
 
 function formatPlanName(type) {
   const names = { free: 'Free', pro: 'Pro', max: 'Max', team: 'Team', enterprise: 'Enterprise' };

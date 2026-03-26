@@ -134,7 +134,13 @@
     "currentSession": "Current session",
     "weeklyAllModels": "Weekly — All models",
     "lastUpdated": "Last updated",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "resetsNow": "Resets now",
+    "resetsLessThanMinute": "Resets in less than a minute",
+    "resetsInHrMin": "Resets in {{h}} hr {{m}} min",
+    "resetsInHr": "Resets in {{h}} hr",
+    "resetsInMin": "Resets in {{m}} min",
+    "resetsOnDay": "Resets {{day}} {{time}}"
   },
   "appearanceSettings": {
     "darkMode": {

@@ -6,7 +6,7 @@ import { api } from '../../../../utils/api';
 type RateLimitPeriod = {
   utilization: number | null;
   percent: number | null;
-  resetText: string;
+  resetAt: number | null;
   status: string | null;
 };
 
@@ -27,9 +27,31 @@ function barColor(pct: number): string {
   return 'bg-blue-600 dark:bg-blue-500';
 }
 
+function formatResetTime(resetAt: number | null, t: (key: string, opts?: Record<string, unknown>) => string): string {
+  if (resetAt === null) return '';
+  const diffSec = resetAt - Math.floor(Date.now() / 1000);
+  if (diffSec <= 0) return t('usage.resetsNow');
+
+  const h = Math.floor(diffSec / 3600);
+  const m = Math.floor((diffSec % 3600) / 60);
+
+  if (h > 24) {
+    const date = new Date(resetAt * 1000);
+    const day = date.toLocaleDateString(undefined, { weekday: 'short' });
+    const time = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    return t('usage.resetsOnDay', { day, time });
+  }
+  if (h > 0 && m > 0) return t('usage.resetsInHrMin', { h, m });
+  if (h > 0) return t('usage.resetsInHr', { h });
+  if (m > 0) return t('usage.resetsInMin', { m });
+  return t('usage.resetsLessThanMinute');
+}
+
 function RateLimitMeter({ label, period }: { label: string; period: RateLimitPeriod }) {
+  const { t } = useTranslation('settings');
   if (period.percent === null) return null;
   const pct = Math.min(period.percent, 100);
+  const resetText = formatResetTime(period.resetAt, t);
   return (
     <div className="space-y-2 rounded-lg border border-border bg-card p-4">
       <div className="flex items-center justify-between">
@@ -43,7 +65,7 @@ function RateLimitMeter({ label, period }: { label: string; period: RateLimitPer
         />
       </div>
       <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>{period.resetText}</span>
+        <span>{resetText}</span>
         {period.status && period.status !== 'allowed' && (
           <span className="font-medium text-amber-600 dark:text-amber-400">{period.status}</span>
         )}
