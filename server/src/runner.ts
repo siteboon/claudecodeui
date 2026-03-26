@@ -11,11 +11,10 @@ import { initializeDatabase } from '@/shared/database/init-db.js';
 import { initializeWatcher } from '@/modules/sessions/sessions.watcher.js';
 import { getConnectableHost } from '@/shared/utils/networkHosts.js';
 import { logger } from '@/shared/utils/logger.js';
+import { authRoutes } from '@/modules/auth/auth.routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-
-console.log("----------------Hello there, Refactored Runner!-------------------");
 
 const app = express();
 
@@ -49,7 +48,7 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 
 // Simple logging middleware to track all incoming requests
-// TODO: REMOVE THIS
+// TODO: REMOVE THIS LATER
 app.use((req, res, next) => {
     // Only log API endpoints to avoid spamming the console with static file requests
     if (req.url.startsWith('/')) {
@@ -59,6 +58,8 @@ app.use((req, res, next) => {
 });
 
 
+app.use('/api/auth', authRoutes);
+
 // This matches files found in the root public folder (like api-docs.html when we run `/api-docs.html`).
 // If the file is found, it's automatically sent. If it is not, it passes it to the next route checker.
 // This will run in production as well as development URLs.
@@ -66,6 +67,7 @@ app.use(express.static(path.join(__dirname, '../../public')));
 
 // If the file is not in the public directory, it's checked if it exists in the root dist folder which was built from vite.
 //  * Note: If the request is for `/` (i.e. homepage), `express.static` automatically maps the request to `/index.html`.
+// This will fetch /index.html for `/` calls in production.
 app.use(express.static(path.join(__dirname, '../../dist'), {
     setHeaders: (res, filePath) => {
         if (filePath.endsWith('.html')) {
@@ -83,7 +85,7 @@ app.use(express.static(path.join(__dirname, '../../dist'), {
 }));
 
 // Serve React app for all other routes (excluding static files)
-// This will match routes like /sessions in production builds
+// This will match routes like /sessions (UI navigation routes) in production builds
 app.get('*', (req, res) => {
     // Skip requests for static assets (files with extensions)
     if (path.extname(req.path)) {
