@@ -4,6 +4,10 @@
     "useDefineForClassFields": true,
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "module": "ESNext",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    },
     "skipLibCheck": true,
     "moduleResolution": "Bundler",
     "resolveJsonModule": true,
