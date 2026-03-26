@@ -41,7 +41,7 @@ async function fetchRateLimits(accessToken) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: process.env.CLAUDE_HAIKU_MODEL || 'claude-3-haiku-latest',
+        model: process.env.CLAUDE_HAIKU_MODEL || 'claude-3-haiku-20240307',
         max_tokens: 1,
         messages: [{ role: 'user', content: '.' }],
       }),
@@ -51,6 +51,8 @@ async function fetchRateLimits(accessToken) {
   }
 
   if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    console.error(`[USAGE] Rate limit probe failed (${res.status}): ${body}`);
     return null;
   }
 

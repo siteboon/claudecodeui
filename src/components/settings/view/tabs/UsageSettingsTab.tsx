@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, BarChart3, Loader2, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../../../utils/api';
@@ -28,8 +28,10 @@ function barColor(pct: number): string {
   return 'bg-blue-600 dark:bg-blue-500';
 }
 
+type TFn = (key: string, opts?: Record<string, unknown>) => string;
+
 /** Formats a unix-epoch reset timestamp into a localised human-readable string. */
-function formatResetTime(resetAt: number | null, t: (key: string, opts?: Record<string, unknown>) => string): string {
+function formatResetTime(resetAt: number | null, t: TFn): string {
   if (resetAt === null) return '';
   const diffSec = resetAt - Math.floor(Date.now() / 1000);
   if (diffSec <= 0) return t('usage.resetsNow');
@@ -50,11 +52,10 @@ function formatResetTime(resetAt: number | null, t: (key: string, opts?: Record<
 }
 
 /** Renders a single rate-limit progress bar with reset time and status. */
-function RateLimitMeter({ label, period }: { label: string; period: RateLimitPeriod }) {
-  const { t } = useTranslation('settings');
+function RateLimitMeter({ label, period, t }: { label: string; period: RateLimitPeriod; t: TFn }) {
+  const resetText = useMemo(() => formatResetTime(period.resetAt, t), [period.resetAt, t]);
   if (period.percent === null) return null;
   const pct = Math.min(period.percent, 100);
-  const resetText = formatResetTime(period.resetAt, t);
   return (
     <div className="space-y-2 rounded-lg border border-border bg-card p-4">
       <div className="flex items-center justify-between">
@@ -97,11 +98,11 @@ export default function UsageSettingsTab() {
       setData(await res.json());
       setLastUpdated(new Date().toLocaleTimeString());
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load usage data');
+      setError(err instanceof Error ? err.message : t('usage.loadError'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => { fetchUsage(); }, [fetchUsage]);
 
@@ -117,9 +118,9 @@ export default function UsageSettingsTab() {
     return (
       <div className="space-y-6">
         <Header />
-        <div className="flex items-center gap-2 rounded-lg border border-border bg-card p-4 text-sm text-destructive">
+        <div className="flex items-center gap-2 rounded-lg border border-border bg-card p-3 text-sm text-destructive">
           <AlertCircle className="h-4 w-4 flex-shrink-0" />
-          {error || 'Failed to load usage data'}
+          {error || t('usage.loadError')}
         </div>
       </div>
     );
@@ -157,10 +158,12 @@ export default function UsageSettingsTab() {
           <RateLimitMeter
             label={t('usage.currentSession')}
             period={data.rateLimits.session}
+            t={t}
           />
           <RateLimitMeter
             label={t('usage.weeklyAllModels')}
             period={data.rateLimits.weekly}
+            t={t}
           />
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">

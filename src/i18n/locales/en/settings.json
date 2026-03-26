@@ -140,7 +140,8 @@
     "resetsInHrMin": "Resets in {{h}} hr {{m}} min",
     "resetsInHr": "Resets in {{h}} hr",
     "resetsInMin": "Resets in {{m}} min",
-    "resetsOnDay": "Resets {{day}} {{time}}"
+    "resetsOnDay": "Resets {{day}} {{time}}",
+    "loadError": "Failed to load usage data"
   },
   "appearanceSettings": {
     "darkMode": {

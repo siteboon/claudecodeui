@@ -169,7 +169,9 @@ const runMigrations = () => {
       if (!cols.includes('cost_usd')) {
         db.exec('ALTER TABLE usage_log ADD COLUMN cost_usd REAL DEFAULT 0');
       }
-    } catch { /* ignore */ }
+    } catch (err) {
+      console.error('[MIGRATION] Failed to add cost_usd column to usage_log:', err.message);
+    }
 
     console.log('Database migrations completed successfully');
   } catch (error) {
