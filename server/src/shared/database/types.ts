@@ -116,6 +116,11 @@ export type SessionWithSummary = {
   [key: string]: unknown;
 };
 
+export type WorkspaceOriginalPathRow = {
+  workspace_path: string;
+  custom_workspace_name: string | null;
+};
+
 
 
 // ---------------------------------------------------------------------------

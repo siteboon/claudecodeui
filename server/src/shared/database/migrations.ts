@@ -2,28 +2,29 @@ import { Database } from "better-sqlite3";
 import { APP_CONFIG_TABLE_SCHEMA_SQL, LAST_SCANNED_AT_SQL, SESSIONS_TABLE_SCHEMA_SQL, WORK_SPACE_PATH_SQL } from "@/shared/database/schema.js";
 import { logger } from "@/shared/utils/logger.js";
 
-const addColumnToUsersTableIfNotExists = (
+const addColumnToTableIfNotExists = (
     db: Database,
+    tableName: string,
     columnNames: string[],
     columnName: string,
     columnType: string,
 ) => {
     if (!columnNames.includes(columnName)) {
         logger.info(
-            `Running migration: Adding ${columnName} column to users table`,
+            `Running migration: Adding ${columnName} column to ${tableName} table`,
         );
-        db.exec(`ALTER TABLE users ADD COLUMN ${columnName} ${columnType}`);
+        db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnType}`);
     }
 };
 
 export const runMigrations = (db: Database) => {
     try {
-        const tableInfo = db.prepare("PRAGMA table_info(users)").all() as { name: string }[];
-        const columnNames = tableInfo.map((col) => col.name);
+        const usersTableInfo = db.prepare("PRAGMA table_info(users)").all() as { name: string }[];
+        const userColumnNames = usersTableInfo.map((col) => col.name);
 
-        addColumnToUsersTableIfNotExists(db, columnNames, "git_name", "TEXT");
-        addColumnToUsersTableIfNotExists(db, columnNames, "git_email", "TEXT");
-        addColumnToUsersTableIfNotExists(db, columnNames, "has_completed_onboarding", "BOOLEAN DEFAULT 0",
+        addColumnToTableIfNotExists(db, "users", userColumnNames, "git_name", "TEXT");
+        addColumnToTableIfNotExists(db, "users", userColumnNames, "git_email", "TEXT");
+        addColumnToTableIfNotExists(db, "users", userColumnNames, "has_completed_onboarding", "BOOLEAN DEFAULT 0",
         );
 
         // Create app_config table if it doesn't exist (for existing installations)
@@ -36,6 +37,15 @@ export const runMigrations = (db: Database) => {
         );
 
         db.exec(WORK_SPACE_PATH_SQL);
+        const workspaceOriginalPathsTableInfo = db.prepare("PRAGMA table_info(workspace_original_paths)").all() as { name: string }[];
+        const workspaceOriginalPathsColumnNames = workspaceOriginalPathsTableInfo.map((col) => col.name);
+        addColumnToTableIfNotExists(
+            db,
+            "workspace_original_paths",
+            workspaceOriginalPathsColumnNames,
+            "custom_workspace_name",
+            "TEXT DEFAULT NULL",
+        );
 
         db.exec(LAST_SCANNED_AT_SQL);
 

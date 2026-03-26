@@ -53,7 +53,8 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 export const WORK_SPACE_PATH_SQL = `
 CREATE TABLE IF NOT EXISTS workspace_original_paths (
-    workspace_path TEXT PRIMARY KEY NOT NULL
+    workspace_path TEXT PRIMARY KEY NOT NULL,
+    custom_workspace_name TEXT DEFAULT NULL
 );
 `
 
