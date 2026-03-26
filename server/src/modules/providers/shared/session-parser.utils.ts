@@ -52,7 +52,6 @@ export async function findFilesRecursivelyCreatedAfterLastScan(
                     const stats = await fsp.stat(fullPath);
                     if (stats.birthtime > lastScanDate) {
                         fileList.push(fullPath);
-                        console.log("=====> full path is: ", fullPath)
                     }
                 } else {
                     fileList.push(fullPath);
