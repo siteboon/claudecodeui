@@ -5,6 +5,7 @@ import os from 'os';
 
 const router = express.Router();
 
+/** Reads Claude OAuth credentials from ~/.claude/.credentials.json. */
 async function getSubscriptionInfo() {
   try {
     const credPath = path.join(os.homedir(), '.claude', '.credentials.json');
@@ -79,6 +80,7 @@ async function fetchRateLimits(accessToken) {
 }
 
 
+/** Maps a subscription type key to a display-friendly plan name. */
 function formatPlanName(type) {
   const names = { free: 'Free', pro: 'Pro', max: 'Max', team: 'Team', enterprise: 'Enterprise' };
   return names[type] || type || 'Unknown';

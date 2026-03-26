@@ -21,12 +21,14 @@ type UsageData = {
   rateLimits: RateLimits | null;
 };
 
+/** Returns a Tailwind background-color class based on the usage percentage. */
 function barColor(pct: number): string {
   if (pct >= 90) return 'bg-red-500';
   if (pct >= 70) return 'bg-amber-500';
   return 'bg-blue-600 dark:bg-blue-500';
 }
 
+/** Formats a unix-epoch reset timestamp into a localised human-readable string. */
 function formatResetTime(resetAt: number | null, t: (key: string, opts?: Record<string, unknown>) => string): string {
   if (resetAt === null) return '';
   const diffSec = resetAt - Math.floor(Date.now() / 1000);
@@ -47,6 +49,7 @@ function formatResetTime(resetAt: number | null, t: (key: string, opts?: Record<
   return t('usage.resetsLessThanMinute');
 }
 
+/** Renders a single rate-limit progress bar with reset time and status. */
 function RateLimitMeter({ label, period }: { label: string; period: RateLimitPeriod }) {
   const { t } = useTranslation('settings');
   if (period.percent === null) return null;
@@ -74,6 +77,7 @@ function RateLimitMeter({ label, period }: { label: string; period: RateLimitPer
   );
 }
 
+/** Settings tab that displays Anthropic API usage and rate-limit meters. */
 export default function UsageSettingsTab() {
   const { t } = useTranslation('settings');
   const [data, setData] = useState<UsageData | null>(null);
@@ -177,6 +181,7 @@ export default function UsageSettingsTab() {
   );
 }
 
+/** Page header with icon and translated title. */
 function Header() {
   const { t } = useTranslation('settings');
   return (
