@@ -121,6 +121,7 @@
     "@types/bcrypt": "^6.0.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/cors": "^2.8.19",
+    "@types/cross-spawn": "^6.0.6",
     "@types/express": "^5.0.3",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.19.7",

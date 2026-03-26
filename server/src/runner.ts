@@ -12,6 +12,8 @@ import { initializeWatcher } from '@/modules/sessions/sessions.watcher.js';
 import { getConnectableHost } from '@/shared/utils/networkHosts.js';
 import { logger } from '@/shared/utils/logger.js';
 import { authRoutes } from '@/modules/auth/auth.routes.js';
+import { userRoutes } from '@/modules/user/user.routes.js';
+import { authenticateToken } from '@/modules/auth/auth.middleware.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -58,7 +60,11 @@ app.use((req, res, next) => {
 });
 
 
+// Authentication routes (public)
 app.use('/api/auth', authRoutes);
+
+// User API Routes (protected)
+app.use('/api/user', authenticateToken, userRoutes);
 
 // This matches files found in the root public folder (like api-docs.html when we run `/api-docs.html`).
 // If the file is found, it's automatically sent. If it is not, it passes it to the next route checker.
