@@ -19,6 +19,7 @@ export const SETTINGS_MAIN_TABS: SettingsMainTab[] = [
   'api',
   'tasks',
   'notifications',
+  'usage',
 ];
 
 export const AGENT_PROVIDERS: AgentProvider[] = ['claude', 'cursor', 'codex'];

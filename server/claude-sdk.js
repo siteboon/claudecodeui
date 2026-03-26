@@ -26,6 +26,7 @@ import {
 } from './services/notification-orchestrator.js';
 import { claudeAdapter } from './providers/claude/adapter.js';
 import { createNormalizedMessage } from './providers/types.js';
+import { usageDb } from './database/db.js';
 
 const activeSessions = new Map();
 const pendingToolApprovals = new Map();
@@ -661,9 +662,28 @@ async function queryClaudeSDK(command, options = {}, ws) {
       // Extract and send token budget updates from result messages
       if (message.type === 'result') {
         const models = Object.keys(message.modelUsage || {});
-        if (models.length > 0) {
-          // Model info available in result message
+
+        // Log usage to database for each model
+        for (const modelKey of models) {
+          const md = message.modelUsage[modelKey];
+          if (md) {
+            try {
+              usageDb.log(
+                capturedSessionId || sessionId || null,
+                modelKey,
+                md.inputTokens || 0,
+                md.outputTokens || 0,
+                md.cacheReadInputTokens || 0,
+                md.cacheCreationInputTokens || 0,
+                md.costUSD || 0
+              );
+            } catch (e) {
+              // Don't break the session if logging fails
+              console.error('Usage logging error:', e.message);
+            }
+          }
         }
+
         const tokenBudgetData = extractTokenBudget(message);
         if (tokenBudgetData) {
           ws.send(createNormalizedMessage({ kind: 'status', text: 'token_budget', tokenBudget: tokenBudgetData, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));

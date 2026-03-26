@@ -1,4 +1,4 @@
-import { Bell, Bot, GitBranch, Key, ListChecks, Palette, Puzzle } from 'lucide-react';
+import { BarChart3, Bell, Bot, GitBranch, Key, ListChecks, Palette, Puzzle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../../lib/utils';
 import { PillBar, Pill } from '../../../shared/view/ui';
@@ -23,6 +23,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'tasks', labelKey: 'mainTabs.tasks', icon: ListChecks },
   { id: 'plugins', labelKey: 'mainTabs.plugins', icon: Puzzle },
   { id: 'notifications', labelKey: 'mainTabs.notifications', icon: Bell },
+  { id: 'usage', labelKey: 'mainTabs.usage', icon: BarChart3 },
 ];
 
 export default function SettingsSidebar({ activeTab, onChange }: SettingsSidebarProps) {

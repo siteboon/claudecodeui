@@ -106,8 +106,8 @@
     "apiTokens": "API & Tokens",
     "tasks": "Tasks",
     "notifications": "Notifications",
+    "usage": "Usage",
     "plugins": "Plugins"
-
   },
   "notifications": {
     "title": "Notifications",
@@ -127,6 +127,14 @@
       "stop": "Run stopped",
       "error": "Run failed"
     }
+  },
+  "usage": {
+    "title": "Usage",
+    "planLimits": "Plan usage limits",
+    "currentSession": "Current session",
+    "weeklyAllModels": "Weekly — All models",
+    "lastUpdated": "Last updated",
+    "refresh": "Refresh"
   },
   "appearanceSettings": {
     "darkMode": {

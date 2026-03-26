@@ -148,6 +148,29 @@ const runMigrations = () => {
     )`);
     db.exec('CREATE INDEX IF NOT EXISTS idx_session_names_lookup ON session_names(session_id, provider)');
 
+    // Usage tracking table
+    db.exec(`CREATE TABLE IF NOT EXISTS usage_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT,
+      model TEXT,
+      input_tokens INTEGER DEFAULT 0,
+      output_tokens INTEGER DEFAULT 0,
+      cache_read_tokens INTEGER DEFAULT 0,
+      cache_creation_tokens INTEGER DEFAULT 0,
+      cost_usd REAL DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_usage_log_created ON usage_log(created_at)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_usage_log_session ON usage_log(session_id)');
+
+    // Migration: add cost_usd column if missing
+    try {
+      const cols = db.prepare("PRAGMA table_info(usage_log)").all().map(c => c.name);
+      if (!cols.includes('cost_usd')) {
+        db.exec('ALTER TABLE usage_log ADD COLUMN cost_usd REAL DEFAULT 0');
+      }
+    } catch { /* ignore */ }
+
     console.log('Database migrations completed successfully');
   } catch (error) {
     console.error('Error running migrations:', error.message);
@@ -596,6 +619,14 @@ const appConfigDb = {
   }
 };
 
+const usageDb = {
+  log: (sessionId, model, inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens, costUsd = 0) => {
+    db.prepare(
+      'INSERT INTO usage_log (session_id, model, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(sessionId, model, inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens, costUsd);
+  },
+};
+
 // Backward compatibility - keep old names pointing to new system
 const githubTokensDb = {
   createGithubToken: (userId, tokenName, githubToken, description = null) => {
@@ -626,5 +657,6 @@ export {
   sessionNamesDb,
   applyCustomSessionNames,
   appConfigDb,
+  usageDb,
   githubTokensDb // Backward compatibility
 };

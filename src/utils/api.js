@@ -242,4 +242,9 @@ export const api = {
     method: 'DELETE',
     ...options,
   }),
+
+  // Usage
+  usage: {
+    current: () => authenticatedFetch('/api/usage/current'),
+  },
 };
