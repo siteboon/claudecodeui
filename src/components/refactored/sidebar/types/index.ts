@@ -1,0 +1,1 @@
+export type SearchMode = 'projects' | 'conversations';
