@@ -9,18 +9,21 @@ import { IS_PLATFORM } from '@/constants/config';
 type SidebarHeaderProps = {
   isCollapsed: boolean;
   onToggleCollapse: () => void;
+  isRefreshing: boolean;
+  onRefresh: () => void;
+  onNewProject: () => void;
 };
 
-export default function SidebarHeader({ isCollapsed, onToggleCollapse }: SidebarHeaderProps) {
-  // UI States declared here to avoid prop drilling as per instructions
+export default function SidebarHeader({ 
+  isCollapsed, 
+  onToggleCollapse,
+  isRefreshing,
+  onRefresh,
+  onNewProject
+}: SidebarHeaderProps) {
+  // UI States for search
   const [searchMode, setSearchMode] = useState<SearchMode>('projects');
   const [searchFilter, setSearchFilter] = useState('');
-  const [isRefreshing, setIsRefreshing] = useState(false);
-
-  const handleRefresh = () => {
-    setIsRefreshing(true);
-    setTimeout(() => setIsRefreshing(false), 1000);
-  };
 
   const LogoBlock = () => (
     <div className="flex min-w-0 items-center gap-2.5">
@@ -61,16 +64,17 @@ export default function SidebarHeader({ isCollapsed, onToggleCollapse }: Sidebar
               variant="ghost"
               size="sm"
               className="h-7 w-7 rounded-lg p-0 text-muted-foreground hover:bg-accent/80 hover:text-foreground"
-              onClick={handleRefresh}
+              onClick={onRefresh}
               disabled={isRefreshing}
               title="Refresh"
             >
-              <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")} />
+              <RefreshCw className={cn("h-3.5 w-3.5 transition-opacity", isRefreshing && "animate-spin opacity-50")} />
             </Button>
             <Button
               variant="ghost"
               size="sm"
               className="h-7 w-7 rounded-lg p-0 text-muted-foreground hover:bg-accent/80 hover:text-foreground"
+              onClick={onNewProject}
               title="New Project"
             >
               <Plus className="h-3.5 w-3.5" />
@@ -104,14 +108,15 @@ export default function SidebarHeader({ isCollapsed, onToggleCollapse }: Sidebar
           <LogoWithLink />
           <div className="flex flex-shrink-0 gap-1.5">
             <button
-              className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted/50 transition-all active:scale-95"
-              onClick={handleRefresh}
+              className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted/50 transition-all active:scale-95 disabled:opacity-70"
+              onClick={onRefresh}
               disabled={isRefreshing}
             >
-              <RefreshCw className={cn("h-4 w-4 text-muted-foreground", isRefreshing && "animate-spin")} />
+              <RefreshCw className={cn("h-4 w-4 text-muted-foreground transition-opacity", isRefreshing && "animate-spin opacity-50")} />
             </button>
             <button
               className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/90 text-primary-foreground transition-all active:scale-95"
+              onClick={onNewProject}
             >
               <FolderPlus className="h-4 w-4" />
             </button>
