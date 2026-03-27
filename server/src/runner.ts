@@ -40,6 +40,8 @@ async function importRoute(relativePath: string): Promise<any> {
 }
 
 const [
+    healthRoutes,
+    systemRoutes,
     gitRoutes,
     mcpRoutes,
     cursorRoutes,
@@ -58,7 +60,12 @@ const [
     geminiRoutes,
     pluginsRoutes,
     messagesRoutes,
+    projectsInlineRoutes,
+    filesRoutes,
+    sessionsInlineRoutes,
 ] = await Promise.all([
+    importRoute('./modules/health/health.routes.js'),
+    importRoute('./modules/system/system.routes.js'),
     importRoute('./modules/git/git.routes.js'),
     importRoute('./modules/mcp/mcp.routes.js'),
     importRoute('./modules/cursor/cursor.routes.js'),
@@ -77,6 +84,9 @@ const [
     importRoute('./modules/gemini/gemini.routes.js'),
     importRoute('./modules/plugins/plugins.routes.js'),
     importRoute('./modules/messages/messages.routes.js'),
+    importRoute('./modules/projects/projects.inline.routes.js'),
+    importRoute('./modules/files/files.routes.js'),
+    importRoute('./modules/sessions/sessions.inline.routes.js'),
 ]);
 
 // ---------- MIDDLEWARES ----------------
@@ -105,6 +115,9 @@ app.use((req, res, next) => {
     next();
 });
 
+
+// Public health check endpoint (no authentication required)
+app.use(healthRoutes);
 
 // Optional API key validation (if configured)
 app.use('/api', validateApiKey);
@@ -162,6 +175,12 @@ app.use('/api/sessions', authenticateToken, messagesRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
+
+// System and inline routes migrated from legacy index.js
+app.use(systemRoutes);
+app.use(projectsInlineRoutes);
+app.use(filesRoutes);
+app.use(sessionsInlineRoutes);
 
 // This matches files found in the root public folder (like api-docs.html when we run `/api-docs.html`).
 // If the file is found, it's automatically sent. If it is not, it passes it to the next route checker.
