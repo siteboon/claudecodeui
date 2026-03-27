@@ -6,6 +6,7 @@ import type { Plugin } from '../../../contexts/PluginsContext';
 import PluginIcon from './PluginIcon';
 
 const STARTER_PLUGIN_URL = 'https://github.com/cloudcli-ai/cloudcli-plugin-starter';
+const TERMINAL_PLUGIN_URL = 'https://github.com/cloudcli-ai/cloudcli-plugin-terminal';
 
 /* ─── Toggle Switch ─────────────────────────────────────────────────────── */
 function ToggleSwitch({ checked, onChange, ariaLabel }: { checked: boolean; onChange: (v: boolean) => void; ariaLabel: string }) {
@@ -264,6 +265,67 @@ function StarterPluginCard({ onInstall, installing }: { onInstall: () => void; i
   );
 }
 
+/* ─── Terminal Plugin Card ──────────────────────────────────────────────── */
+function TerminalPluginCard({ onInstall, installing }: { onInstall: () => void; installing: boolean }) {
+  const { t } = useTranslation('settings');
+
+  return (
+    <div className="relative flex overflow-hidden rounded-lg border border-dashed border-border bg-card transition-all duration-200 hover:border-blue-400 dark:hover:border-blue-500">
+      <div className="w-[3px] flex-shrink-0 bg-blue-500/30" />
+      <div className="min-w-0 flex-1 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="h-5 w-5 flex-shrink-0 text-blue-500">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+                <rect x="3" y="3" width="18" height="18" rx="2"/>
+                <path d="M7 8l4 4-4 4"/>
+                <line x1="13" y1="16" x2="17" y2="16"/>
+              </svg>
+            </div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-semibold leading-none text-foreground">
+                  {t('pluginSettings.terminalPlugin.name')}
+                </span>
+                <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-600 dark:bg-blue-950/50 dark:text-blue-400">
+                  {t('pluginSettings.terminalPlugin.badge')}
+                </span>
+                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                  {t('pluginSettings.tab')}
+                </span>
+              </div>
+              <p className="mt-1 text-sm leading-snug text-muted-foreground">
+                {t('pluginSettings.terminalPlugin.description')}
+              </p>
+              <a
+                href={TERMINAL_PLUGIN_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground/60 transition-colors hover:text-foreground"
+              >
+                <GitBranch className="h-3 w-3" />
+                cloudcli-ai/cloudcli-plugin-terminal
+              </a>
+            </div>
+          </div>
+          <button
+            onClick={onInstall}
+            disabled={installing}
+            className="flex flex-shrink-0 items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+          >
+            {installing ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Download className="h-3.5 w-3.5" />
+            )}
+            {installing ? t('pluginSettings.installing') : t('pluginSettings.terminalPlugin.install')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Main Component ────────────────────────────────────────────────────── */
 export default function PluginSettingsTab() {
   const { t } = useTranslation('settings');
@@ -273,6 +335,7 @@ export default function PluginSettingsTab() {
   const [gitUrl, setGitUrl] = useState('');
   const [installing, setInstalling] = useState(false);
   const [installingStarter, setInstallingStarter] = useState(false);
+  const [installingTerminal, setInstallingTerminal] = useState(false);
   const [installError, setInstallError] = useState<string | null>(null);
   const [confirmUninstall, setConfirmUninstall] = useState<string | null>(null);
   const [updatingPlugins, setUpdatingPlugins] = useState<Set<string>>(new Set());
@@ -311,6 +374,16 @@ export default function PluginSettingsTab() {
     setInstallingStarter(false);
   };
 
+  const handleInstallTerminal = async () => {
+    setInstallingTerminal(true);
+    setInstallError(null);
+    const result = await installPlugin(TERMINAL_PLUGIN_URL);
+    if (!result.success) {
+      setInstallError(result.error || t('pluginSettings.installFailed'));
+    }
+    setInstallingTerminal(false);
+  };
+
   const handleUninstall = async (name: string) => {
     if (confirmUninstall !== name) {
       setConfirmUninstall(name);
@@ -326,6 +399,7 @@ export default function PluginSettingsTab() {
   };
 
   const hasStarterInstalled = plugins.some((p) => p.name === 'project-stats');
+  const hasTerminalInstalled = plugins.some((p) => p.name === 'web-terminal');
 
   return (
     <div className="space-y-6">
@@ -382,9 +456,16 @@ export default function PluginSettingsTab() {
         </span>
       </p>
 
-      {/* Starter plugin suggestion — above the list */}
-      {!loading && !hasStarterInstalled && (
-        <StarterPluginCard onInstall={handleInstallStarter} installing={installingStarter} />
+      {/* Official plugin suggestions — above the list */}
+      {!loading && (!hasStarterInstalled || !hasTerminalInstalled) && (
+        <div className="space-y-2">
+          {!hasStarterInstalled && (
+            <StarterPluginCard onInstall={handleInstallStarter} installing={installingStarter} />
+          )}
+          {!hasTerminalInstalled && (
+            <TerminalPluginCard onInstall={handleInstallTerminal} installing={installingTerminal} />
+          )}
+        </div>
       )}
 
       {/* Plugin List */}
@@ -423,33 +504,30 @@ export default function PluginSettingsTab() {
         </div>
       )}
 
-      {/* Build your own */}
-      <div className="flex items-center justify-between gap-4 border-t border-border/50 pt-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <BookOpen className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground/40" />
-          <span className="text-xs text-muted-foreground/60">
-            {t('pluginSettings.buildYourOwn')}
-          </span>
-        </div>
-        <div className="flex flex-shrink-0 items-center gap-3">
-          <a
-            href={STARTER_PLUGIN_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground/60 transition-colors hover:text-foreground"
-          >
-            {t('pluginSettings.starter')} <ExternalLink className="h-2.5 w-2.5" />
-          </a>
-          <span className="text-muted-foreground/20">·</span>
-          <a
-            href="https://cloudcli.ai/docs/plugin-overview"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground/60 transition-colors hover:text-foreground"
-          >
-            {t('pluginSettings.docs')} <ExternalLink className="h-2.5 w-2.5" />
-          </a>
-        </div>
+      {/* Starter plugin */}
+      <div className="flex items-center justify-center gap-3 border-t border-border/50 pt-2">
+        <BookOpen className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground/40" />
+        <span className="text-xs text-muted-foreground/60">
+          {t('pluginSettings.starterPluginLabel')}
+        </span>
+        <span className="text-muted-foreground/20">·</span>
+        <a
+          href={STARTER_PLUGIN_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-xs text-muted-foreground/60 transition-colors hover:text-foreground"
+        >
+          {t('pluginSettings.starter')} <ExternalLink className="h-2.5 w-2.5" />
+        </a>
+        <span className="text-muted-foreground/20">·</span>
+        <a
+          href="https://cloudcli.ai/docs/plugin-overview"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-xs text-muted-foreground/60 transition-colors hover:text-foreground"
+        >
+          {t('pluginSettings.docs')} <ExternalLink className="h-2.5 w-2.5" />
+        </a>
       </div>
     </div>
   );

@@ -476,13 +476,19 @@
     "installFailed": "Installation failed",
     "uninstallFailed": "Uninstall failed",
     "toggleFailed": "Toggle failed",
-    "buildYourOwn": "Build your own plugin",
+    "starterPluginLabel": "Starter Plugin",
     "starter": "Starter",
     "docs": "Docs",
     "starterPlugin": {
       "name": "Project Stats",
       "badge": "starter",
       "description": "File counts, lines of code, file-type breakdown, and recent activity for your project.",
+      "install": "Install"
+    },
+    "terminalPlugin": {
+      "name": "Terminal",
+      "badge": "official",
+      "description": "Integrated terminal with full shell access directly within the interface.",
       "install": "Install"
     },
     "morePlugins": "More",
