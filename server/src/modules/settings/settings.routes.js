@@ -1,7 +1,10 @@
 import express from 'express';
-import { apiKeysDb, credentialsDb, notificationPreferencesDb, pushSubscriptionsDb } from '../../../database/db.js';
-import { getPublicKey } from '../../../services/vapid-keys.js';
-import { createNotificationEvent, notifyUserIfEnabled } from '../../../services/notification-orchestrator.js';
+import { apiKeysDb } from '@/shared/database/repositories/api-keys.js';
+import { credentialsDb } from '@/shared/database/repositories/credentials.js';
+import { notificationPreferencesDb } from '@/shared/database/repositories/notification-preferences.js';
+import { pushSubscriptionsDb } from '@/shared/database/repositories/push-subscriptions.js';
+import { getPublicKey } from '@/modules/push-sub/push-sub.services.js';
+import { createNotificationEvent, notifyUserIfEnabled } from '@/services/notification-orchestrator.js';
 
 const router = express.Router();
 
@@ -183,7 +186,7 @@ router.patch('/credentials/:credentialId/toggle', async (req, res) => {
 
 router.get('/notification-preferences', async (req, res) => {
   try {
-    const preferences = notificationPreferencesDb.getPreferences(req.user.id);
+    const preferences = notificationPreferencesDb.getNotificationPreferences(req.user.id);
     res.json({ success: true, preferences });
   } catch (error) {
     console.error('Error fetching notification preferences:', error);
@@ -193,7 +196,7 @@ router.get('/notification-preferences', async (req, res) => {
 
 router.put('/notification-preferences', async (req, res) => {
   try {
-    const preferences = notificationPreferencesDb.updatePreferences(req.user.id, req.body || {});
+    const preferences = notificationPreferencesDb.updateNotificationPreferences(req.user.id, req.body || {});
     res.json({ success: true, preferences });
   } catch (error) {
     console.error('Error saving notification preferences:', error);
@@ -221,12 +224,12 @@ router.post('/push/subscribe', async (req, res) => {
     if (!endpoint || !keys?.p256dh || !keys?.auth) {
       return res.status(400).json({ error: 'Missing subscription fields' });
     }
-    pushSubscriptionsDb.saveSubscription(req.user.id, endpoint, keys.p256dh, keys.auth);
+    pushSubscriptionsDb.createPushSubscription(req.user.id, endpoint, keys.p256dh, keys.auth);
 
     // Enable webPush in preferences so the confirmation goes through the full pipeline
-    const currentPrefs = notificationPreferencesDb.getPreferences(req.user.id);
+    const currentPrefs = notificationPreferencesDb.getNotificationPreferences(req.user.id);
     if (!currentPrefs?.channels?.webPush) {
-      notificationPreferencesDb.updatePreferences(req.user.id, {
+      notificationPreferencesDb.updateNotificationPreferences(req.user.id, {
         ...currentPrefs,
         channels: { ...currentPrefs?.channels, webPush: true },
       });
@@ -255,12 +258,12 @@ router.post('/push/unsubscribe', async (req, res) => {
     if (!endpoint) {
       return res.status(400).json({ error: 'Missing endpoint' });
     }
-    pushSubscriptionsDb.removeSubscription(endpoint);
+    pushSubscriptionsDb.deletePushSubscription(endpoint);
 
     // Disable webPush in preferences to match subscription state
-    const currentPrefs = notificationPreferencesDb.getPreferences(req.user.id);
+    const currentPrefs = notificationPreferencesDb.getNotificationPreferences(req.user.id);
     if (currentPrefs?.channels?.webPush) {
-      notificationPreferencesDb.updatePreferences(req.user.id, {
+      notificationPreferencesDb.updateNotificationPreferences(req.user.id, {
         ...currentPrefs,
         channels: { ...currentPrefs.channels, webPush: false },
       });

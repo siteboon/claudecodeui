@@ -39,6 +39,48 @@ CREATE TABLE IF NOT EXISTS user_credentials (
 );
 `;
 
+export const USER_NOTIFICATION_PREFERENCES_TABLE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS user_notification_preferences (
+    user_id INTEGER PRIMARY KEY,
+    preferences_json TEXT NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+`;
+
+export const VAPID_KEYS_TABLE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS vapid_keys (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    public_key TEXT NOT NULL,
+    private_key TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+`;
+
+export const PUSH_SUBSCRIPTIONS_TABLE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    endpoint TEXT NOT NULL UNIQUE,
+    keys_p256dh TEXT NOT NULL,
+    keys_auth TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+`;
+
+export const SESSION_NAMES_TABLE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS session_names (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    provider TEXT NOT NULL DEFAULT 'claude',
+    custom_name TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(session_id, provider)
+);
+`;
+
 export const SESSIONS_TABLE_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS sessions (
     session_id TEXT PRIMARY KEY NOT NULL,
@@ -92,6 +134,17 @@ ${USER_CREDENTIALS_TABLE_SCHEMA_SQL}
 CREATE INDEX IF NOT EXISTS idx_user_credentials_user_id ON user_credentials(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_credentials_type ON user_credentials(credential_type);
 CREATE INDEX IF NOT EXISTS idx_user_credentials_active ON user_credentials(is_active);
+
+${USER_NOTIFICATION_PREFERENCES_TABLE_SCHEMA_SQL}
+CREATE INDEX IF NOT EXISTS idx_user_notification_preferences_user_id ON user_notification_preferences(user_id);
+
+${VAPID_KEYS_TABLE_SCHEMA_SQL}
+
+${PUSH_SUBSCRIPTIONS_TABLE_SCHEMA_SQL}
+CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user_id ON push_subscriptions(user_id);
+
+${SESSION_NAMES_TABLE_SCHEMA_SQL}
+CREATE INDEX IF NOT EXISTS idx_session_names_lookup ON session_names(session_id, provider);
 
 ${SESSIONS_TABLE_SCHEMA_SQL}
 CREATE INDEX IF NOT EXISTS idx_session_ids_lookup ON sessions(session_id);

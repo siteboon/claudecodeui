@@ -2,7 +2,7 @@ import express from 'express';
 import path from 'path';
 import os from 'os';
 import { promises as fsPromises } from 'fs';
-import { sessionNamesDb } from '../../../database/db.js';
+import { sessionNamesDb } from '@/shared/database/repositories/session-names.js';
 import { extractProjectDirectory } from '../../../projects.js';
 import { authenticateToken } from '../auth/auth.middleware.js';
 
@@ -27,7 +27,7 @@ router.put('/api/sessions/:sessionId/rename', authenticateToken, async (req, res
         if (!provider || !VALID_PROVIDERS.includes(provider)) {
             return res.status(400).json({ error: `Provider must be one of: ${VALID_PROVIDERS.join(', ')}` });
         }
-        sessionNamesDb.setName(safeSessionId, provider, summary.trim());
+        sessionNamesDb.createSessionName(safeSessionId, provider, summary.trim());
         res.json({ success: true });
     } catch (error) {
         console.error(`[API] Error renaming session ${req.params.sessionId}:`, error);

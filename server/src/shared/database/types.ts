@@ -99,12 +99,21 @@ export type CreateCredentialResult = {
 export type SessionsRow = {
   session_id: string;
   provider: LLMProvider;
-  workspacePath: string;
+  workspace_path: string;
+  custom_name: string | null;
+};
+
+export type SessionNameRow = {
+  id: number;
+  session_id: string;
+  provider: LLMProvider;
   custom_name: string;
+  created_at: string;
+  updated_at: string;
 };
 
 /** Minimal shape used in batch lookups. */
-export type SessionNameLookupRow = Pick<SessionsRow, 'session_id' | 'custom_name'>;
+export type SessionNameLookupRow = Pick<SessionNameRow, 'session_id' | 'custom_name'>;
 
 /**
  * Any object that has an `id` and `summary` field.
@@ -129,6 +138,32 @@ export type WorkspaceOriginalPathRow = {
 export type ScanStateRow = {
   last_scanned_at: string;
 }
+
+// ---------------------------------------------------------------------------
+// Notification preferences / push
+// ---------------------------------------------------------------------------
+
+export type UserNotificationPreferencesRow = {
+  user_id: number;
+  preferences_json: string;
+  updated_at: string;
+};
+
+export type PushSubscriptionRow = {
+  id: number;
+  user_id: number;
+  endpoint: string;
+  keys_p256dh: string;
+  keys_auth: string;
+  created_at: string;
+};
+
+export type VapidKeyRow = {
+  id: number;
+  public_key: string;
+  private_key: string;
+  created_at: string;
+};
 
 
 // ---------------------------------------------------------------------------

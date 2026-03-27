@@ -9,6 +9,7 @@ import { fileURLToPath } from 'url';
 
 import { initializeDatabase } from '@/shared/database/init-db.js';
 import { initializeWatcher } from '@/modules/sessions/sessions.watcher.js';
+import { configureWebPush } from '@/modules/push-sub/push-sub.services.js';
 import { getConnectableHost } from '@/shared/utils/networkHosts.js';
 import { logger } from '@/shared/utils/logger.js';
 import { authRoutes } from '@/modules/auth/auth.routes.js';
@@ -234,6 +235,7 @@ app.get('*', (req, res) => {
 async function main() {
     try {
         await initializeDatabase();
+        configureWebPush();
 
         server.listen(SERVER_PORT, HOST, async () => {
             const appInstallPath = path.join(__dirname, '../..');

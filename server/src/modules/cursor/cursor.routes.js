@@ -7,7 +7,7 @@ import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 import crypto from 'crypto';
 import { CURSOR_MODELS } from '../../../../shared/modelConstants.js';
-import { applyCustomSessionNames } from '../../../database/db.js';
+import { applyCustomSessionNames } from '@/shared/database/repositories/session-names.js';
 
 const router = express.Router();
 

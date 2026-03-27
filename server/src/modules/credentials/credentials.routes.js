@@ -1,5 +1,5 @@
 import express from 'express';
-import { credentialsDb } from '../../../database/db.js';
+import { credentialsDb } from '@/shared/database/repositories/credentials.js';
 
 const router = express.Router();
 

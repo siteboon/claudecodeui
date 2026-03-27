@@ -1,10 +1,5 @@
 import { workspaceOriginalPathsDb } from '@/shared/database/repositories/workspace-original-paths.db.js';
 import { getConnection } from '@/shared/database/connection.js';
-import type {
-    SessionNameLookupRow,
-    SessionWithSummary,
-} from '@/shared/database/types.js';
-import { logger } from '@/shared/utils/logger.js';
 
 // ---------------------------------------------------------------------------
 // Queries
@@ -27,7 +22,7 @@ export const sessionsDb = {
     deleteSession(session_id: string): void {
         const db = getConnection();
         db.prepare('DELETE FROM sessions WHERE session_id = ?').run(session_id);
-    }
+    },
 
 
     // /** Inserts or updates a custom session name (upsert on session_id + provider). */

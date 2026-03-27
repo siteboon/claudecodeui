@@ -1,5 +1,5 @@
 import express from 'express';
-import { apiKeysDb } from '../../../database/db.js';
+import { apiKeysDb } from '@/shared/database/repositories/api-keys.js';
 
 const router = express.Router();
 

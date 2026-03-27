@@ -1,5 +1,5 @@
 import express from 'express';
-import { notificationPreferencesDb } from '../../../database/db.js';
+import { notificationPreferencesDb } from '@/shared/database/repositories/notification-preferences.js';
 
 const router = express.Router();
 
@@ -9,7 +9,7 @@ const router = express.Router();
 
 router.get('/', async (req, res) => {
   try {
-    const preferences = notificationPreferencesDb.getPreferences(req.user.id);
+    const preferences = notificationPreferencesDb.getNotificationPreferences(req.user.id);
     res.json({ success: true, preferences });
   } catch (error) {
     console.error('Error fetching notification preferences:', error);
@@ -19,7 +19,7 @@ router.get('/', async (req, res) => {
 
 router.put('/', async (req, res) => {
   try {
-    const preferences = notificationPreferencesDb.updatePreferences(req.user.id, req.body || {});
+    const preferences = notificationPreferencesDb.updateNotificationPreferences(req.user.id, req.body || {});
     res.json({ success: true, preferences });
   } catch (error) {
     console.error('Error saving notification preferences:', error);

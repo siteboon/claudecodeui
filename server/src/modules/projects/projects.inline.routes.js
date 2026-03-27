@@ -11,7 +11,7 @@ import {
     addProjectManually,
     searchConversations
 } from '../../../projects.js';
-import { applyCustomSessionNames, sessionNamesDb } from '../../../database/db.js';
+import { applyCustomSessionNames, sessionNamesDb } from '@/shared/database/repositories/session-names.js';
 import { authenticateToken } from '../auth/auth.middleware.js';
 import { WORKSPACES_ROOT, validateWorkspacePath } from './projects.routes.js';
 
@@ -70,7 +70,7 @@ router.delete('/api/projects/:projectName/sessions/:sessionId', authenticateToke
         const { projectName, sessionId } = req.params;
         console.log(`[API] Deleting session: ${sessionId} from project: ${projectName}`);
         await deleteSession(projectName, sessionId);
-        sessionNamesDb.deleteName(sessionId, 'claude');
+        sessionNamesDb.deleteSessionName(sessionId, 'claude');
         console.log(`[API] Session ${sessionId} deleted successfully`);
         res.json({ success: true });
     } catch (error) {
