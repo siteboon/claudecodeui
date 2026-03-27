@@ -692,7 +692,7 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
       setGeminiPermissionMode(savedGeminiSettings.permissionMode || 'default');
 
       try {
-        const notificationResponse = await authenticatedFetch('/api/settings/notification-preferences');
+        const notificationResponse = await authenticatedFetch('/api/notification-preferences');
         if (notificationResponse.ok) {
           const notificationData = await toResponseJson<NotificationPreferencesResponse>(notificationResponse);
           if (notificationData.success && notificationData.preferences) {
@@ -767,7 +767,7 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
         lastUpdated: now,
       }));
 
-      const notificationResponse = await authenticatedFetch('/api/settings/notification-preferences', {
+      const notificationResponse = await authenticatedFetch('/api/notification-preferences', {
         method: 'PUT',
         body: JSON.stringify(notificationPreferences),
       });

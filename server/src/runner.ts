@@ -13,7 +13,7 @@ import { getConnectableHost } from '@/shared/utils/networkHosts.js';
 import { logger } from '@/shared/utils/logger.js';
 import { authRoutes } from '@/modules/auth/auth.routes.js';
 import { userRoutes } from '@/modules/user/user.routes.js';
-import { authenticateToken } from '@/modules/auth/auth.middleware.js';
+import { validateApiKey, authenticateToken } from '@/modules/auth/auth.middleware.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -32,6 +32,52 @@ const HOST = process.env.HOST || '0.0.0.0';
 
 const DISPLAY_HOST = getConnectableHost(HOST);
 const VITE_PORT = process.env.VITE_PORT || 5173;
+
+async function importRoute(relativePath: string): Promise<any> {
+    const moduleUrl = new URL(relativePath, import.meta.url);
+    const routeModule = await import(moduleUrl.href);
+    return routeModule.default;
+}
+
+const [
+    gitRoutes,
+    mcpRoutes,
+    cursorRoutes,
+    taskmasterRoutes,
+    mcpUtilsRoutes,
+    commandsRoutes,
+    settingsRoutes,
+    apiKeysRoutes,
+    credentialsRoutes,
+    notificationPreferencesRoutes,
+    pushSubRoutes,
+    agentRoutes,
+    projectsRoutes,
+    cliAuthRoutes,
+    codexRoutes,
+    geminiRoutes,
+    pluginsRoutes,
+    messagesRoutes,
+] = await Promise.all([
+    importRoute('./modules/git/git.routes.js'),
+    importRoute('./modules/mcp/mcp.routes.js'),
+    importRoute('./modules/cursor/cursor.routes.js'),
+    importRoute('./modules/taskmaster/taskmaster.routes.js'),
+    importRoute('./modules/mcp-utils/mcp-utils.routes.js'),
+    importRoute('./modules/commands/commands.routes.js'),
+    importRoute('./modules/settings/settings.routes.js'),
+    importRoute('./modules/api-keys/api-keys.routes.js'),
+    importRoute('./modules/credentials/credentials.routes.js'),
+    importRoute('./modules/notification-preferences/notification-preferences.routes.js'),
+    importRoute('./modules/push-sub/push-sub.routes.js'),
+    importRoute('./modules/agent/agent.routes.js'),
+    importRoute('./modules/projects/projects.routes.js'),
+    importRoute('./modules/cli-auth/cli-auth.routes.js'),
+    importRoute('./modules/codex/codex.routes.js'),
+    importRoute('./modules/gemini/gemini.routes.js'),
+    importRoute('./modules/plugins/plugins.routes.js'),
+    importRoute('./modules/messages/messages.routes.js'),
+]);
 
 // ---------- MIDDLEWARES ----------------
 app.use(cors({ exposedHeaders: ['X-Refreshed-Token'] }));
@@ -60,11 +106,62 @@ app.use((req, res, next) => {
 });
 
 
+// Optional API key validation (if configured)
+app.use('/api', validateApiKey);
+
 // Authentication routes (public)
 app.use('/api/auth', authRoutes);
 
+// Projects API Routes (protected)
+app.use('/api/projects', authenticateToken, projectsRoutes);
+
+// Git API Routes (protected)
+app.use('/api/git', authenticateToken, gitRoutes);
+
+// MCP API Routes (protected)
+app.use('/api/mcp', authenticateToken, mcpRoutes);
+
+// Cursor API Routes (protected)
+app.use('/api/cursor', authenticateToken, cursorRoutes);
+
+// TaskMaster API Routes (protected)
+app.use('/api/taskmaster', authenticateToken, taskmasterRoutes);
+
+// MCP utilities
+app.use('/api/mcp-utils', authenticateToken, mcpUtilsRoutes);
+
+// Commands API Routes (protected)
+app.use('/api/commands', authenticateToken, commandsRoutes);
+
+// Settings API Routes (protected, legacy endpoint)
+app.use('/api/settings', authenticateToken, settingsRoutes);
+
+// Settings sub-modules API Routes (protected)
+app.use('/api/api-keys', authenticateToken, apiKeysRoutes);
+app.use('/api/credentials', authenticateToken, credentialsRoutes);
+app.use('/api/notification-preferences', authenticateToken, notificationPreferencesRoutes);
+app.use('/api/push-sub', authenticateToken, pushSubRoutes);
+
+// CLI Authentication API Routes (protected)
+app.use('/api/cli', authenticateToken, cliAuthRoutes);
+
 // User API Routes (protected)
 app.use('/api/user', authenticateToken, userRoutes);
+
+// Codex API Routes (protected)
+app.use('/api/codex', authenticateToken, codexRoutes);
+
+// Gemini API Routes (protected)
+app.use('/api/gemini', authenticateToken, geminiRoutes);
+
+// Plugins API Routes (protected)
+app.use('/api/plugins', authenticateToken, pluginsRoutes);
+
+// Unified session messages route (protected)
+app.use('/api/sessions', authenticateToken, messagesRoutes);
+
+// Agent API Routes (uses API key authentication)
+app.use('/api/agent', agentRoutes);
 
 // This matches files found in the root public folder (like api-docs.html when we run `/api-docs.html`).
 // If the file is found, it's automatically sent. If it is not, it passes it to the next route checker.

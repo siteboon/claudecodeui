@@ -52,7 +52,7 @@ export function useWebPush(): WebPushState {
       setPermission(perm);
       if (perm !== 'granted') return;
 
-      const keyRes = await authenticatedFetch('/api/settings/push/vapid-public-key');
+      const keyRes = await authenticatedFetch('/api/push-sub/vapid-public-key');
       const { publicKey } = await keyRes.json();
 
       const registration = await navigator.serviceWorker.ready;
@@ -62,7 +62,7 @@ export function useWebPush(): WebPushState {
       });
 
       const subJson = subscription.toJSON();
-      await authenticatedFetch('/api/settings/push/subscribe', {
+      await authenticatedFetch('/api/push-sub/subscribe', {
         method: 'POST',
         body: JSON.stringify({
           endpoint: subJson.endpoint,
@@ -86,7 +86,7 @@ export function useWebPush(): WebPushState {
       if (subscription) {
         const endpoint = subscription.endpoint;
         await subscription.unsubscribe();
-        await authenticatedFetch('/api/settings/push/unsubscribe', {
+        await authenticatedFetch('/api/push-sub/unsubscribe', {
           method: 'POST',
           body: JSON.stringify({ endpoint }),
         });

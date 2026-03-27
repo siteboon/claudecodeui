@@ -28,7 +28,7 @@ const parseJson = async <T>(response: Response): Promise<T> => {
 };
 
 export const fetchGithubTokenCredentials = async () => {
-  const response = await api.get('/settings/credentials?type=github_token');
+  const response = await api.get('/credentials?type=github_token');
   const data = await parseJson<CredentialsResponse>(response);
 
   if (!response.ok) {
