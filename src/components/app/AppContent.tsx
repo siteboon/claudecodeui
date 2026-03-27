@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import Sidebar from '../sidebar/view/Sidebar';
@@ -49,6 +49,43 @@ export default function AppContent() {
     isMobile,
     activeSessions,
   });
+
+  // Resizable sidebar
+  const MIN_SIDEBAR_WIDTH = 240;
+  const MAX_SIDEBAR_WIDTH = 600;
+  const DEFAULT_SIDEBAR_WIDTH = 288; // matches md:w-72
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const saved = localStorage.getItem('sidebar-width');
+    return saved ? Math.max(MIN_SIDEBAR_WIDTH, Math.min(MAX_SIDEBAR_WIDTH, Number(saved))) : DEFAULT_SIDEBAR_WIDTH;
+  });
+  const isResizingRef = useRef(false);
+  const sidebarWidthRef = useRef(sidebarWidth);
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingRef.current = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!isResizingRef.current) return;
+      const newWidth = Math.max(MIN_SIDEBAR_WIDTH, Math.min(MAX_SIDEBAR_WIDTH, moveEvent.clientX));
+      sidebarWidthRef.current = newWidth;
+      setSidebarWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      isResizingRef.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      localStorage.setItem('sidebar-width', String(sidebarWidthRef.current));
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, []);
 
   useEffect(() => {
     // Expose a non-blocking refresh for chat/session flows.
@@ -127,8 +164,13 @@ export default function AppContent() {
   return (
     <div className="fixed inset-0 flex bg-background">
       {!isMobile ? (
-        <div className="h-full flex-shrink-0 border-r border-border/50">
+        <div className="relative h-full flex-shrink-0 border-r border-border/50" style={{ width: sidebarWidth }}>
           <Sidebar {...sidebarSharedProps} />
+          {/* Resize handle */}
+          <div
+            className="absolute right-0 top-0 z-10 h-full w-1 cursor-col-resize hover:bg-primary/20 active:bg-primary/30"
+            onMouseDown={handleResizeStart}
+          />
         </div>
       ) : (
         <div

@@ -179,7 +179,7 @@ export default function SidebarRepoGroup({
         <GitFork className="h-3 w-3 shrink-0 opacity-60" />
         <span className="truncate">{group.displayName}</span>
         <button
-          className="ml-auto shrink-0 rounded p-0.5 opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100 md:opacity-0"
+          className="ml-auto shrink-0 rounded p-0.5 text-muted-foreground/40 transition-colors hover:bg-muted hover:text-foreground"
           onClick={(e) => {
             e.stopPropagation();
             onNewSession(mainProject);
