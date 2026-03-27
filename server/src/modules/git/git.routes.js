@@ -1,5 +1,5 @@
 import express from 'express';
-import { spawn } from 'child_process';
+import spawn from 'cross-spawn';
 import path from 'path';
 import { promises as fs } from 'fs';
 import { extractProjectDirectory } from '../../../projects.js';

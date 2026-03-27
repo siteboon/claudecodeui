@@ -4,7 +4,7 @@ import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-import { spawn } from 'child_process';
+import spawn from 'cross-spawn';
 
 const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
@@ -16,10 +16,6 @@ const __dirname = dirname(__filename);
 router.get('/cli/list', async (req, res) => {
   try {
     console.log('📋 Listing MCP servers using Claude CLI');
-    
-    const { spawn } = await import('child_process');
-    const { promisify } = await import('util');
-    const exec = promisify(spawn);
     
     const process = spawn('claude', ['mcp', 'list'], {
       stdio: ['pipe', 'pipe', 'pipe']
@@ -61,8 +57,6 @@ router.post('/cli/add', async (req, res) => {
     const { name, type = 'stdio', command, args = [], url, headers = {}, env = {}, scope = 'user', projectPath } = req.body;
     
     console.log(`➕ Adding MCP server using Claude CLI (${scope} scope):`, name);
-    
-    const { spawn } = await import('child_process');
     
     let cliArgs = ['mcp', 'add'];
     
@@ -178,8 +172,6 @@ router.post('/cli/add-json', async (req, res) => {
       });
     }
     
-    const { spawn } = await import('child_process');
-    
     // Build the command: claude mcp add-json --scope <scope> <name> '<json>'
     const cliArgs = ['mcp', 'add-json', '--scope', scope, name];
     
@@ -250,8 +242,6 @@ router.delete('/cli/remove/:name', async (req, res) => {
     
     console.log('🗑️ Removing MCP server using Claude CLI:', actualName, 'scope:', actualScope);
     
-    const { spawn } = await import('child_process');
-    
     // Build command args based on scope
     let cliArgs = ['mcp', 'remove'];
     
@@ -307,8 +297,6 @@ router.get('/cli/get/:name', async (req, res) => {
     const { name } = req.params;
     
     console.log('📄 Getting MCP server details using Claude CLI:', name);
-    
-    const { spawn } = await import('child_process');
     
     const process = spawn('claude', ['mcp', 'get', name], {
       stdio: ['pipe', 'pipe', 'pipe']

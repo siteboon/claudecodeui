@@ -12,7 +12,7 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import { promises as fsPromises } from 'fs';
-import { spawn } from 'child_process';
+import spawn from 'cross-spawn';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import os from 'os';
@@ -474,7 +474,6 @@ router.get('/next/:projectName', async (req, res) => {
 
         // Try to execute task-master next command
         try {
-            const { spawn } = await import('child_process');
             
             const nextTaskCommand = spawn('task-master', ['next'], {
                 cwd: projectPath,

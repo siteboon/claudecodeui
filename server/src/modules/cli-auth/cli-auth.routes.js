@@ -1,5 +1,5 @@
 import express from 'express';
-import { spawn } from 'child_process';
+import spawn from 'cross-spawn';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
