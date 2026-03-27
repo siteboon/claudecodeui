@@ -52,6 +52,7 @@ export interface Project {
   repoGroup?: string;
   repoGroupSize?: number;
   isMainWorktree?: boolean;
+  isStale?: boolean;
   [key: string]: unknown;
 }
 

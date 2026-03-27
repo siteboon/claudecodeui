@@ -20,7 +20,10 @@
     "runClaudeCli": "在项目目录中运行 Claude CLI 以开始使用",
     "branch": "分支",
     "repoGroup": "仓库",
-    "worktrees": "工作树"
+    "worktrees": "工作树",
+    "archived": "已归档",
+    "showMoreWorktrees": "显示更多 {{count}} 个...",
+    "newGroupSession": "在 {{name}} 中新建会话"
   },
   "app": {
     "title": "Claude Code UI",

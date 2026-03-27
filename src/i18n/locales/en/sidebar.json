@@ -20,7 +20,10 @@
     "runClaudeCli": "Run Claude CLI in a project directory to get started",
     "branch": "Branch",
     "repoGroup": "Repository",
-    "worktrees": "worktrees"
+    "worktrees": "worktrees",
+    "archived": "archived",
+    "showMoreWorktrees": "Show {{count}} more...",
+    "newGroupSession": "New session in {{name}}"
   },
   "app": {
     "title": "Claude Code UI",
