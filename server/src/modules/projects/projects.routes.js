@@ -1,7 +1,7 @@
 import express from 'express';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { spawn } from 'child_process';
+import spawn from 'cross-spawn';
 import os from 'os';
 import { addProjectManually } from '../../../projects.js';
 import { githubTokensDb } from '@/shared/database/repositories/github-tokens.js';
