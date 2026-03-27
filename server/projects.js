@@ -67,7 +67,11 @@ import { open } from 'sqlite';
 import os from 'os';
 import sessionManager from './sessionManager.js';
 import { applyCustomSessionNames } from './database/db.js';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { getWorktreeInfo } from './routes/git.js';
+
+const execFileAsync = promisify(execFile);
 
 // Import TaskMaster detection functions
 async function detectTaskMasterFolder(projectPath) {
@@ -1264,6 +1268,39 @@ async function isProjectEmpty(projectName) {
   }
 }
 
+/**
+ * Clean up a git worktree directory if the project path is inside a Claude worktree.
+ * Runs `git worktree remove` from the main repo, falling back to directory deletion.
+ */
+async function cleanupWorktreeDirectory(projectPath) {
+  if (!projectPath) return;
+  const marker = '/.claude/worktrees/';
+  const markerIdx = projectPath.indexOf(marker);
+  if (markerIdx === -1) return;
+
+  const mainRepoRoot = projectPath.substring(0, markerIdx);
+  const afterMarker = projectPath.substring(markerIdx + marker.length);
+  const worktreeName = afterMarker.split('/')[0];
+  if (!worktreeName) return;
+
+  const worktreePath = projectPath.substring(0, markerIdx + marker.length + worktreeName.length);
+
+  try {
+    await execFileAsync('git', ['worktree', 'remove', worktreePath, '--force'], { cwd: mainRepoRoot });
+    console.log(`[INFO] Removed git worktree: ${worktreePath}`);
+  } catch (err) {
+    // Worktree may already be gone or git command unavailable — try direct deletion
+    try {
+      await fs.rm(worktreePath, { recursive: true, force: true });
+      // Also prune stale worktree entries from git
+      await execFileAsync('git', ['worktree', 'prune'], { cwd: mainRepoRoot }).catch(() => {});
+      console.log(`[INFO] Deleted worktree directory: ${worktreePath}`);
+    } catch {
+      // Directory already gone, nothing to do
+    }
+  }
+}
+
 // Delete a project (force=true to delete even with sessions)
 async function deleteProject(projectName, force = false) {
   const projectDir = path.join(os.homedir(), '.claude', 'projects', projectName);
@@ -1280,6 +1317,11 @@ async function deleteProject(projectName, force = false) {
     // Fallback to extractProjectDirectory if projectPath is not in config
     if (!projectPath) {
       projectPath = await extractProjectDirectory(projectName);
+    }
+
+    // Clean up git worktree if this project is inside one
+    if (projectPath) {
+      await cleanupWorktreeDirectory(projectPath);
     }
 
     // Remove the project directory (includes all Claude sessions)
@@ -2659,5 +2701,6 @@ export {
   getGeminiCliSessionMessages,
   searchConversations,
   synthesizeWorktreeInfoFromPath,
-  fixWorktreeDisplayNames
+  fixWorktreeDisplayNames,
+  cleanupWorktreeDirectory
 };

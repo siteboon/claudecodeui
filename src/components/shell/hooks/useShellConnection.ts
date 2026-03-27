@@ -3,6 +3,7 @@ import type { MutableRefObject } from 'react';
 import type { FitAddon } from '@xterm/addon-fit';
 import type { Terminal } from '@xterm/xterm';
 import type { Project, ProjectSession } from '../../../types/app';
+import { getClaudeSettings } from '../../chat/utils/chatStorage';
 import { TERMINAL_INIT_DELAY_MS } from '../constants/constants';
 import { getShellWebSocketUrl, parseShellMessage, sendSocketMessage } from '../utils/socket';
 
@@ -142,6 +143,7 @@ export function useShellConnection({
 
             currentFitAddon.fit();
 
+            const claudeSettings = getClaudeSettings();
             sendSocketMessage(socket, {
               type: 'init',
               projectPath: currentProject.fullPath || currentProject.path || '',
@@ -152,6 +154,10 @@ export function useShellConnection({
               rows: currentTerminal.rows,
               initialCommand: initialCommandRef.current,
               isPlainShell: isPlainShellRef.current,
+              claudeSettings: {
+                skipPermissions: claudeSettings.skipPermissions,
+                useWorktree: claudeSettings.useWorktree,
+              },
             });
           }, TERMINAL_INIT_DELAY_MS);
         };
