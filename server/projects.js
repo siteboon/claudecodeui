@@ -382,6 +382,52 @@ async function extractProjectDirectory(projectName) {
   }
 }
 
+/**
+ * Synthesize worktreeInfo from a path containing the Claude Code worktree
+ * directory convention: <repo>/.claude/worktrees/<name>
+ * Returns null if the path doesn't match.
+ */
+function synthesizeWorktreeInfoFromPath(decodedPath) {
+  const marker = '/.claude/worktrees/';
+  const markerIdx = decodedPath.indexOf(marker);
+  if (markerIdx === -1) return null;
+
+  const mainRepoRoot = decodedPath.substring(0, markerIdx);
+  const afterMarker = decodedPath.substring(markerIdx + marker.length);
+  const worktreeName = afterMarker.split('/')[0] || '';
+  return {
+    isWorktree: true,
+    worktreeRoot: decodedPath.substring(0, markerIdx + marker.length + worktreeName.length),
+    mainRepoRoot,
+    branchName: worktreeName,
+  };
+}
+
+/**
+ * Fix display names for worktree children within a repo group.
+ * - Subdirectory worktrees keep their relative path (e.g. "backend")
+ * - Worktrees whose displayName equals branchName get the main project's name
+ *   to avoid duplication with the branch badge
+ * - Custom names are never overwritten
+ */
+function fixWorktreeDisplayNames(grouped, mainProject) {
+  for (const p of grouped) {
+    if (p !== mainProject && p.fullPath && !p.isCustomName) {
+      const worktreeRoot = p.worktreeInfo?.worktreeRoot;
+      const branchName = p.worktreeInfo?.branchName;
+
+      if (worktreeRoot && p.fullPath.startsWith(worktreeRoot) && p.fullPath !== worktreeRoot) {
+        const relativePath = p.fullPath.substring(worktreeRoot.length + 1);
+        if (relativePath) {
+          p.displayName = relativePath;
+        }
+      } else if (branchName && p.displayName === branchName) {
+        p.displayName = mainProject.displayName;
+      }
+    }
+  }
+}
+
 async function getProjects(progressCallback = null) {
   const claudeDir = path.join(os.homedir(), '.claude', 'projects');
   const config = await loadProjectConfig();
@@ -431,23 +477,13 @@ async function getProjects(progressCallback = null) {
       const autoDisplayName = await generateDisplayName(entry.name, actualProjectDir);
       const fullPath = actualProjectDir;
 
-      // Check if the project directory still exists on disk
-      let isStale = false;
-      if (actualProjectDir) {
-        try {
-          await fs.access(actualProjectDir);
-        } catch {
-          isStale = true;
-        }
-      }
-
       const project = {
         name: entry.name,
         path: actualProjectDir,
         displayName: customName || autoDisplayName,
         fullPath: fullPath,
         isCustomName: !!customName,
-        isStale,
+        isStale: false,
         sessions: [],
         geminiSessions: [],
         sessionMeta: {
@@ -525,35 +561,22 @@ async function getProjects(progressCallback = null) {
         };
       }
 
-      // Detect git worktree information
-      try {
-        project.worktreeInfo = await getWorktreeInfo(actualProjectDir);
-      } catch (e) {
-        project.worktreeInfo = null;
+      // Detect git worktree info and directory existence concurrently
+      {
+        const [worktreeResult, accessResult] = await Promise.allSettled([
+          getWorktreeInfo(actualProjectDir),
+          actualProjectDir ? fs.access(actualProjectDir) : Promise.reject(),
+        ]);
+        project.worktreeInfo = worktreeResult.status === 'fulfilled' ? worktreeResult.value : null;
+        project.isStale = accessResult.status === 'rejected';
       }
 
-      // Fallback: if worktreeInfo is null but the project path contains a Claude
-      // worktree marker, this is a deleted worktree. Synthesize worktreeInfo from
-      // the path so it can still be grouped with its parent repo.
+      // Fallback: if worktreeInfo is null but the path contains the Claude Code
+      // worktree directory convention (<repo>/.claude/worktrees/<name>), synthesize
+      // worktreeInfo so this deleted worktree can still be grouped with its parent.
       if (!project.worktreeInfo) {
         const decodedPath = actualProjectDir || entry.name.replace(/-/g, '/');
-        // Claude Code stores worktrees at <repo>/.claude/worktrees/<name>
-        const worktreeMarkers = ['/.claude/worktrees/', '/.claude-worktrees/'];
-        for (const marker of worktreeMarkers) {
-          const markerIdx = decodedPath.indexOf(marker);
-          if (markerIdx !== -1) {
-            const mainRepoRoot = decodedPath.substring(0, markerIdx);
-            const afterMarker = decodedPath.substring(markerIdx + marker.length);
-            const worktreeName = afterMarker.split('/')[0] || '';
-            project.worktreeInfo = {
-              isWorktree: true,
-              worktreeRoot: decodedPath.substring(0, markerIdx + marker.length + worktreeName.length),
-              mainRepoRoot,
-              branchName: worktreeName,
-            };
-            break;
-          }
-        }
+        project.worktreeInfo = synthesizeWorktreeInfoFromPath(decodedPath);
       }
 
       projects.push(project);
@@ -711,26 +734,7 @@ async function getProjects(progressCallback = null) {
         p.isMainWorktree = p === mainProject;
       }
 
-      // Fix display names for worktree children:
-      for (const p of grouped) {
-        if (p !== mainProject && p.fullPath && !p.isCustomName) {
-          const worktreeRoot = p.worktreeInfo?.worktreeRoot;
-          const branchName = p.worktreeInfo?.branchName;
-
-          if (worktreeRoot && p.fullPath.startsWith(worktreeRoot) && p.fullPath !== worktreeRoot) {
-            // Subdirectory within a worktree (e.g. "backend") – keep the relative path
-            const relativePath = p.fullPath.substring(worktreeRoot.length + 1);
-            if (relativePath) {
-              p.displayName = relativePath;
-            }
-          } else if (branchName && p.displayName === branchName) {
-            // The displayName is just the worktree dirname (same as branchName),
-            // which causes duplication. Use the main project's name instead so the
-            // branch badge provides the distinguishing info.
-            p.displayName = mainProject.displayName;
-          }
-        }
-      }
+      fixWorktreeDisplayNames(grouped, mainProject);
     }
   }
 
@@ -2653,5 +2657,7 @@ export {
   deleteCodexSession,
   getGeminiCliSessions,
   getGeminiCliSessionMessages,
-  searchConversations
+  searchConversations,
+  synthesizeWorktreeInfoFromPath,
+  fixWorktreeDisplayNames
 };

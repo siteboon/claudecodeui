@@ -100,6 +100,10 @@ export default function SidebarProjectItem({
   const sessionCountLabel = `${sessionCountDisplay} session${sessions.length === 1 ? '' : 's'}`;
   const taskStatus = getTaskIndicatorStatus(project, mcpServerStatus);
 
+  const branchBadgeClasses = project.isMainWorktree && project.repoGroup
+    ? 'bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400'
+    : 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400';
+
   const toggleProject = () => onToggleProject(project.name);
   const toggleStarProject = () => onToggleStarProject(project.name);
 
@@ -178,12 +182,7 @@ export default function SidebarProjectItem({
                         <div className="flex min-w-0 items-center gap-1.5">
                           <h3 className="truncate text-sm font-medium text-foreground">{project.displayName}</h3>
                           {project.worktreeInfo?.branchName && (
-                            <span className={cn(
-                              'inline-flex shrink-0 items-center gap-0.5 rounded px-1 py-0.5 text-[10px] leading-none font-medium',
-                              project.isMainWorktree && project.repoGroup
-                                ? 'bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400'
-                                : 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400',
-                            )}>
+                            <span className={`inline-flex shrink-0 items-center gap-0.5 rounded px-1 py-0.5 text-[10px] leading-none font-medium ${branchBadgeClasses}`}>
                               <GitBranch className="h-2.5 w-2.5" />
                               {project.worktreeInfo.branchName}
                             </span>
@@ -334,12 +333,7 @@ export default function SidebarProjectItem({
                     </span>
                     {project.worktreeInfo?.branchName && (
                       <span
-                        className={cn(
-                          'inline-flex shrink-0 items-center gap-0.5 rounded px-1 py-0.5 text-[10px] leading-none font-medium',
-                          project.isMainWorktree && project.repoGroup
-                            ? 'bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400'
-                            : 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400',
-                        )}
+                        className={`inline-flex shrink-0 items-center gap-0.5 rounded px-1 py-0.5 text-[10px] leading-none font-medium ${branchBadgeClasses}`}
                         title={`${t('projects.branch', { defaultValue: 'Branch' })}: ${project.worktreeInfo.branchName}`}
                       >
                         <GitBranch className="h-2.5 w-2.5" />

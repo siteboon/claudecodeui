@@ -9,6 +9,10 @@ import { useSessionProtection } from '../../hooks/useSessionProtection';
 import { useProjectsState } from '../../hooks/useProjectsState';
 import MobileNav from './MobileNav';
 
+const MIN_SIDEBAR_WIDTH = 240;
+const MAX_SIDEBAR_WIDTH = 600;
+const DEFAULT_SIDEBAR_WIDTH = 288; // matches md:w-72
+
 export default function AppContent() {
   const navigate = useNavigate();
   const { sessionId } = useParams<{ sessionId?: string }>();
@@ -51,9 +55,6 @@ export default function AppContent() {
   });
 
   // Resizable sidebar
-  const MIN_SIDEBAR_WIDTH = 240;
-  const MAX_SIDEBAR_WIDTH = 600;
-  const DEFAULT_SIDEBAR_WIDTH = 288; // matches md:w-72
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = localStorage.getItem('sidebar-width');
     return saved ? Math.max(MIN_SIDEBAR_WIDTH, Math.min(MAX_SIDEBAR_WIDTH, Number(saved))) : DEFAULT_SIDEBAR_WIDTH;
@@ -166,10 +167,14 @@ export default function AppContent() {
       {!isMobile ? (
         <div className="relative h-full flex-shrink-0 border-r border-border/50" style={{ width: sidebarWidth }}>
           <Sidebar {...sidebarSharedProps} />
-          {/* Resize handle */}
+          {/* Resize handle — double-click to reset to default width */}
           <div
-            className="absolute right-0 top-0 z-10 h-full w-1 cursor-col-resize hover:bg-primary/20 active:bg-primary/30"
+            className="absolute right-0 top-0 z-10 h-full w-2 cursor-col-resize hover:bg-primary/20 active:bg-primary/30"
             onMouseDown={handleResizeStart}
+            onDoubleClick={() => {
+              setSidebarWidth(DEFAULT_SIDEBAR_WIDTH);
+              localStorage.setItem('sidebar-width', String(DEFAULT_SIDEBAR_WIDTH));
+            }}
           />
         </div>
       ) : (
