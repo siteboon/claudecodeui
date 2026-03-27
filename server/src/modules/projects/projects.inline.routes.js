@@ -8,12 +8,12 @@ import {
     renameProject,
     deleteSession,
     deleteProject,
-    addProjectManually,
     searchConversations
 } from '../../../projects.js';
 import { applyCustomSessionNames, sessionNamesDb } from '@/shared/database/repositories/session-names.js';
+import { workspaceOriginalPathsDb } from '@/shared/database/repositories/workspace-original-paths.db.js';
 import { authenticateToken } from '../auth/auth.middleware.js';
-import { WORKSPACES_ROOT, validateWorkspacePath } from './projects.routes.js';
+import { getWorkspaceNameFromPath, WORKSPACES_ROOT, validateWorkspacePath } from './projects.utils.js';
 
 const router = express.Router();
 
@@ -100,8 +100,18 @@ router.post('/api/projects/create', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: 'Project path is required' });
         }
 
-        const project = await addProjectManually(projectPath.trim());
-        res.json({ success: true, project });
+        const resolvedPath = path.resolve(projectPath.trim());
+        const validation = await validateWorkspacePath(resolvedPath);
+        if (!validation.valid) {
+            return res.status(400).json({
+                error: 'Invalid workspace path',
+                details: validation.error
+            });
+        }
+
+        const safePath = validation.resolvedPath || resolvedPath;
+        workspaceOriginalPathsDb.createWorkspacePath(safePath, getWorkspaceNameFromPath(safePath));
+        res.json({ success: true, message: 'Workspace saved successfully' });
     } catch (error) {
         console.error('Error creating project:', error);
         res.status(500).json({ error: error.message });

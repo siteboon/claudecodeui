@@ -71,8 +71,6 @@ export const createWorkspaceRequest = async (payload: CreateWorkspacePayload) =>
   if (!response.ok) {
     throw new Error(data.details || data.error || 'Failed to create workspace');
   }
-
-  return data.project;
 };
 
 const buildCloneProgressQuery = ({
@@ -108,7 +106,7 @@ export const cloneWorkspaceWithProgress = (
   params: CloneWorkspaceParams,
   handlers: CloneProgressHandlers,
 ) =>
-  new Promise<Record<string, unknown> | undefined>((resolve, reject) => {
+  new Promise<void>((resolve, reject) => {
     const query = buildCloneProgressQuery(params);
     const eventSource = new EventSource(`/api/projects/clone-progress?${query}`);
     let settled = false;
@@ -132,7 +130,7 @@ export const cloneWorkspaceWithProgress = (
         }
 
         if (payload.type === 'complete') {
-          settle(() => resolve(payload.project));
+          settle(() => resolve());
           return;
         }
 

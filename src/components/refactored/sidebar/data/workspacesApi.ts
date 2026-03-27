@@ -7,7 +7,7 @@ import type { Project } from '@/types/app';
  */
 export const fetchWorkspaces = async (): Promise<Project[]> => {
   try {
-    const response = await authenticatedFetch('/api/get-workspaces');
+    const response = await authenticatedFetch('/api/projects');
     if (!response.ok) {
       throw new Error(`Failed to fetch workspaces: ${response.statusText}`);
     }

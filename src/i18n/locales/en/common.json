@@ -154,8 +154,8 @@
       "newPath": "Workspace Path",
       "existingPlaceholder": "/path/to/existing/workspace",
       "newPlaceholder": "/path/to/new/workspace",
-      "existingHelp": "Full path to your existing workspace directory",
-      "newHelp": "Full path to your workspace directory",
+      "existingHelp": "You can also paste your chosen workspace directory path above",
+      "newHelp": "You can also paste your chosen workspace directory path above",
       "githubUrl": "GitHub URL (Optional)",
       "githubPlaceholder": "https://github.com/username/repository",
       "githubHelp": "Optional: provide a GitHub URL to clone a repository",
@@ -186,9 +186,9 @@
       "usingProvidedToken": "Using provided token",
       "noAuthentication": "No authentication",
       "sshKey": "SSH Key",
-      "existingInfo": "The workspace will be added to your project list and will be available for Claude/Cursor sessions.",
+      "existingInfo": "This workspace will be available to your chosen ai providers.",
       "newWithClone": "The repository will be cloned from this folder.",
-      "newEmpty": "The workspace will be added to your project list and will be available for Claude/Cursor sessions.",
+      "newEmpty": "This workspace will be available to your chosen ai providers.",
       "cloningRepository": "Cloning repository..."
     },
     "buttons": {

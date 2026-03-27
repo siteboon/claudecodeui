@@ -7,7 +7,8 @@ import crypto from 'crypto';
 import { userDb } from '@/shared/database/repositories/users.js';
 import { apiKeysDb } from '@/shared/database/repositories/api-keys.js';
 import { githubTokensDb } from '@/shared/database/repositories/github-tokens.js';
-import { addProjectManually } from '../../../projects.js';
+import { workspaceOriginalPathsDb } from '@/shared/database/repositories/workspace-original-paths.db.js';
+import { getWorkspaceNameFromPath } from '@/modules/projects/projects.utils.js';
 import { queryClaudeSDK } from '../../../claude-sdk.js';
 import { spawnCursor } from '../../../cursor-cli.js';
 import { queryCodex } from '../../../openai-codex.js';
@@ -902,20 +903,9 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       }
     }
 
-    // Register the project (or use existing registration)
-    let project;
-    try {
-      project = await addProjectManually(finalProjectPath);
-      console.log('📦 Project registered:', project);
-    } catch (error) {
-      // If project already exists, that's fine - continue with the existing registration
-      if (error.message && error.message.includes('Project already configured')) {
-        console.log('📦 Using existing project registration for:', finalProjectPath);
-        project = { path: finalProjectPath };
-      } else {
-        throw error;
-      }
-    }
+    // Register the workspace path in the refactored metadata table.
+    workspaceOriginalPathsDb.createWorkspacePath(finalProjectPath, getWorkspaceNameFromPath(finalProjectPath));
+    console.log('📦 Workspace registered:', finalProjectPath);
 
     // Set up writer based on streaming mode
     if (stream) {

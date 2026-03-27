@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { fetchGithubTokenCredentials } from '../data/workspaceApi';
+import { fetchGithubTokenCredentials } from '../data/projectWizardApi';
 import type { GithubTokenCredential } from '../types';
 
 type UseGithubTokensParams = {
