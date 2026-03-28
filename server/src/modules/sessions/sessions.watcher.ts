@@ -4,10 +4,10 @@ import os from "os";
 import { promises as fsPromises } from "fs";
 import { logger } from "@/shared/utils/logger.js";
 import { processSessions } from "@/modules/sessions/sessions.service.js";
-import { processClaudeSessionFile } from "@/modules/providers/claude/claude.session-parser.js";
-import { processCodexSessionFile } from "@/modules/providers/codex/codex.session-parser.js";
-import { processGeminiSessionFile } from "@/modules/providers/gemini/gemini.session-parser.js";
-import { processCursorSessionFile } from "@/modules/providers/cursor/cursor.session-parser.js";
+import { processClaudeSessionFile } from "@/modules/providers/claude/claude.session-processor.js";
+import { processCodexSessionFile } from "@/modules/providers/codex/codex.session-processor.js";
+import { processGeminiSessionFile } from "@/modules/providers/gemini/gemini.session-processor.js";
+import { processCursorSessionFile } from "@/modules/providers/cursor/cursor.session-processor.js";
 import { sessionsDb } from "@/shared/database/repositories/sessions.db.js";
 import { LLMProvider } from "@/shared/types/app.js";
 

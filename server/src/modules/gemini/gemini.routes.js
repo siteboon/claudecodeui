@@ -1,6 +1,6 @@
 import express from 'express';
 import sessionManager from '../../../sessionManager.js';
-import { sessionsDb } from '@/shared/database/repositories/sessions.db.js';
+import { deleteSession as deleteSessionFromProviders } from '@/modules/sessions/sessions.service.js';
 
 const router = express.Router();
 
@@ -13,7 +13,7 @@ router.delete('/sessions/:sessionId', async (req, res) => {
         }
 
         await sessionManager.deleteSession(sessionId);
-        sessionsDb.deleteSession(sessionId);
+        await deleteSessionFromProviders(sessionId);
         res.json({ success: true });
     } catch (error) {
         console.error(`Error deleting Gemini session ${req.params.sessionId}:`, error);

@@ -1,6 +1,7 @@
 import { workspaceOriginalPathsDb } from '@/shared/database/repositories/workspace-original-paths.db.js';
 import { getConnection } from '@/shared/database/connection.js';
-import type { SessionWithSummary } from '@/shared/database/types.js';
+import path from 'node:path';
+import type { SessionsRow, SessionWithSummary } from '@/shared/database/types.js';
 
 // ---------------------------------------------------------------------------
 // Queries
@@ -11,6 +12,11 @@ type SessionNameLookupRow = {
     custom_name: string;
 };
 
+type SessionMetadataLookupRow = Pick<
+    SessionsRow,
+    'session_id' | 'provider' | 'workspace_path' | 'created_at' | 'updated_at'
+>;
+
 function normalizeTimestamp(value?: string): string | null {
     if (!value) return null;
 
@@ -20,6 +26,34 @@ function normalizeTimestamp(value?: string): string | null {
     }
 
     return parsed.toISOString();
+}
+
+function normalizeCodexWorkspacePath(workspacePath: string): string {
+    const trimmedPath = workspacePath.trim();
+    if (!trimmedPath) {
+        return workspacePath;
+    }
+
+    if (process.platform !== 'win32') {
+        return path.normalize(trimmedPath);
+    }
+
+    let strippedPath = trimmedPath;
+    if (strippedPath.startsWith('\\\\?\\UNC\\')) {
+        strippedPath = `\\\\${strippedPath.slice('\\\\?\\UNC\\'.length)}`;
+    } else if (strippedPath.startsWith('\\\\?\\')) {
+        strippedPath = strippedPath.slice('\\\\?\\'.length);
+    }
+
+    return path.win32.normalize(strippedPath);
+}
+
+function normalizeWorkspacePathForProvider(provider: string, workspacePath: string): string {
+    if (provider !== 'codex') {
+        return workspacePath;
+    }
+
+    return normalizeCodexWorkspacePath(workspacePath);
 }
 
 export const sessionsDb = {
@@ -35,17 +69,30 @@ export const sessionsDb = {
         const db = getConnection();
         const createdAtValue = normalizeTimestamp(createdAt);
         const updatedAtValue = normalizeTimestamp(updatedAt);
+        const normalizedWorkspacePath = normalizeWorkspacePathForProvider(provider, workspacePath);
 
         // First, ensure the workspace path is recorded in the workspace_original_paths table
         // since it's a foreign key in the sessions table.
-        workspaceOriginalPathsDb.createWorkspacePath(workspacePath);
+        workspaceOriginalPathsDb.createWorkspacePath(normalizedWorkspacePath);
 
         db.prepare(
             `INSERT INTO sessions (session_id, provider, custom_name, workspace_path, created_at, updated_at)
              VALUES (?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))
-             ON CONFLICT(session_id) DO UPDATE SET updated_at = excluded.updated_at
+             ON CONFLICT(session_id) DO UPDATE SET
+               updated_at = excluded.updated_at,
+               workspace_path = excluded.workspace_path
              WHERE sessions.provider = excluded.provider`
-        ).run(session_id, provider, customName, workspacePath, createdAtValue, updatedAtValue);
+        ).run(session_id, provider, customName, normalizedWorkspacePath, createdAtValue, updatedAtValue);
+    },
+
+    /** Updates a custom session name by session id, regardless of provider. */
+    updateSessionCustomName(sessionId: string, customName: string): void {
+        const db = getConnection();
+        db.prepare(
+            `UPDATE sessions
+             SET custom_name = ?, updated_at = CURRENT_TIMESTAMP
+             WHERE session_id = ?`
+        ).run(customName, sessionId);
     },
 
     /** Updates a custom session name for an existing session row. */
@@ -56,6 +103,19 @@ export const sessionsDb = {
              SET custom_name = ?, updated_at = CURRENT_TIMESTAMP
              WHERE session_id = ? AND provider = ?`
         ).run(customName, sessionId, provider);
+    },
+
+    getSessionById(sessionId: string): SessionMetadataLookupRow | null {
+        const db = getConnection();
+        const row = db
+            .prepare(
+                `SELECT session_id, provider, workspace_path, created_at, updated_at
+                 FROM sessions
+                 WHERE session_id = ?`
+            )
+            .get(sessionId) as SessionMetadataLookupRow | undefined;
+
+        return row ?? null;
     },
 
     getSessionName(sessionId: string, provider: string): string | null {

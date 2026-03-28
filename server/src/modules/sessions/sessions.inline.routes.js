@@ -24,10 +24,10 @@ router.put('/api/sessions/:sessionId/rename', authenticateToken, async (req, res
         if (summary.trim().length > 500) {
             return res.status(400).json({ error: 'Summary must not exceed 500 characters' });
         }
-        if (!provider || !VALID_PROVIDERS.includes(provider)) {
+        if (provider && !VALID_PROVIDERS.includes(provider)) {
             return res.status(400).json({ error: `Provider must be one of: ${VALID_PROVIDERS.join(', ')}` });
         }
-        sessionsDb.createSessionName(safeSessionId, provider, summary.trim());
+        sessionsDb.updateSessionCustomName(safeSessionId, summary.trim());
         res.json({ success: true });
     } catch (error) {
         console.error(`[API] Error renaming session ${req.params.sessionId}:`, error);

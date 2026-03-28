@@ -4,8 +4,9 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
 import TOML from '@iarna/toml';
-import { getCodexSessions, deleteCodexSession } from '../../../projects.js';
+import { getCodexSessions } from '../../../projects.js';
 import { sessionsDb } from '@/shared/database/repositories/sessions.db.js';
+import { deleteSession as deleteSessionFromProviders } from '@/modules/sessions/sessions.service.js';
 
 const router = express.Router();
 
@@ -71,8 +72,7 @@ router.get('/sessions', async (req, res) => {
 router.delete('/sessions/:sessionId', async (req, res) => {
   try {
     const { sessionId } = req.params;
-    await deleteCodexSession(sessionId);
-    sessionsDb.deleteSession(sessionId);
+    await deleteSessionFromProviders(sessionId);
     res.json({ success: true });
   } catch (error) {
     console.error(`Error deleting Codex session ${req.params.sessionId}:`, error);

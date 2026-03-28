@@ -49,3 +49,67 @@ export async function processClaudeSessions() {
         }
     }
 }
+
+function encodeClaudeProjectPath(projectPath: string): string {
+    return projectPath.replace(/[^a-zA-Z0-9-]/g, '-');
+}
+
+async function removeFileIfExists(filePath: string): Promise<boolean> {
+    try {
+        await fsp.unlink(filePath);
+        return true;
+    } catch (error: any) {
+        if (error?.code === 'ENOENT') {
+            return false;
+        }
+        throw error;
+    }
+}
+
+async function listDirectoryEntriesSafe(directoryPath: string): Promise<import('node:fs').Dirent[]> {
+    try {
+        return await fsp.readdir(directoryPath, { withFileTypes: true });
+    } catch {
+        return [];
+    }
+}
+
+async function findFilesByName(rootPath: string, fileName: string): Promise<string[]> {
+    const matches: string[] = [];
+    const stack = [rootPath];
+
+    while (stack.length > 0) {
+        const currentPath = stack.pop() as string;
+        const entries = await listDirectoryEntriesSafe(currentPath);
+
+        for (const entry of entries) {
+            const fullPath = path.join(currentPath, entry.name);
+            if (entry.isDirectory()) {
+                stack.push(fullPath);
+            } else if (entry.isFile() && entry.name === fileName) {
+                matches.push(fullPath);
+            }
+        }
+    }
+
+    return matches;
+}
+
+export async function deleteClaudeSession(sessionId: string, workspacePath?: string): Promise<boolean> {
+    const claudeProjectsDir = path.join(os.homedir(), '.claude', 'projects');
+    const fileName = `${sessionId}.jsonl`;
+    let deleted = false;
+
+    if (workspacePath) {
+        const encodedPath = encodeClaudeProjectPath(workspacePath);
+        const candidateFilePath = path.join(claudeProjectsDir, encodedPath, fileName);
+        deleted = (await removeFileIfExists(candidateFilePath)) || deleted;
+    }
+
+    const matches = await findFilesByName(claudeProjectsDir, fileName);
+    for (const filePath of matches) {
+        deleted = (await removeFileIfExists(filePath)) || deleted;
+    }
+
+    return deleted;
+}
