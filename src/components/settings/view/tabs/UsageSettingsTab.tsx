@@ -131,8 +131,7 @@ export default function UsageSettingsTab() {
     } finally {
       setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [setData, setError, setLoading, setLastUpdated]);
 
   useEffect(() => { fetchUsage(); }, [fetchUsage]);
 
