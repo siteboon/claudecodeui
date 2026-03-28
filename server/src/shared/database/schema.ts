@@ -69,24 +69,14 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
 );
 `;
 
-export const SESSION_NAMES_TABLE_SCHEMA_SQL = `
-CREATE TABLE IF NOT EXISTS session_names (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id TEXT NOT NULL,
-    provider TEXT NOT NULL DEFAULT 'claude',
-    custom_name TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(session_id, provider)
-);
-`;
-
 export const SESSIONS_TABLE_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS sessions (
     session_id TEXT PRIMARY KEY NOT NULL,
     provider TEXT NOT NULL,
     custom_name TEXT,
     workspace_path TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (workspace_path) REFERENCES workspace_original_paths(workspace_path)
     ON DELETE CASCADE
     ON UPDATE CASCADE
@@ -142,9 +132,6 @@ ${VAPID_KEYS_TABLE_SCHEMA_SQL}
 
 ${PUSH_SUBSCRIPTIONS_TABLE_SCHEMA_SQL}
 CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user_id ON push_subscriptions(user_id);
-
-${SESSION_NAMES_TABLE_SCHEMA_SQL}
-CREATE INDEX IF NOT EXISTS idx_session_names_lookup ON session_names(session_id, provider);
 
 ${SESSIONS_TABLE_SCHEMA_SQL}
 CREATE INDEX IF NOT EXISTS idx_session_ids_lookup ON sessions(session_id);

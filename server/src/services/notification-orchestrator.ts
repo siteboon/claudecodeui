@@ -2,7 +2,7 @@ import webPush from 'web-push';
 
 import { notificationPreferencesDb } from '@/shared/database/repositories/notification-preferences.js';
 import { pushSubscriptionsDb } from '@/shared/database/repositories/push-subscriptions.js';
-import { sessionNamesDb } from '@/shared/database/repositories/session-names.js';
+import { sessionsDb } from '@/shared/database/repositories/sessions.db.js';
 
 type NotificationKind = 'action_required' | 'stop' | 'error' | 'info' | string;
 
@@ -126,7 +126,7 @@ function resolveSessionName(event: NotificationEvent): string | null {
     return null;
   }
 
-  return normalizeSessionName(sessionNamesDb.getSessionName(event.sessionId, event.provider));
+  return normalizeSessionName(sessionsDb.getSessionName(event.sessionId, event.provider));
 }
 
 function buildPushBody(event: NotificationEvent) {
@@ -314,4 +314,3 @@ export {
   notifyRunStopped,
   notifyRunFailed,
 };
-

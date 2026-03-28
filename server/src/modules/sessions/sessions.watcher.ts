@@ -100,7 +100,24 @@ const onUpdate = async (
                 }
 
                 if (sessionId && workspacePath) {
-                    sessionsDb.createSession(sessionId, provider, workspacePath, sessionName);
+                    let createdAt: string | undefined;
+                    let updatedAt: string | undefined;
+                    try {
+                        const stat = await fsPromises.stat(filePath);
+                        createdAt = stat.birthtime.toISOString();
+                        updatedAt = stat.mtime.toISOString();
+                    } catch {
+                        // Ignore stat failures and let DB defaults handle created_at/updated_at.
+                    }
+
+                    sessionsDb.createSession(
+                        sessionId,
+                        provider,
+                        workspacePath,
+                        sessionName,
+                        createdAt,
+                        updatedAt,
+                    );
                 }
                 break;
             }

@@ -3,7 +3,6 @@ import {
     APP_CONFIG_TABLE_SCHEMA_SQL,
     LAST_SCANNED_AT_SQL,
     PUSH_SUBSCRIPTIONS_TABLE_SCHEMA_SQL,
-    SESSION_NAMES_TABLE_SCHEMA_SQL,
     SESSIONS_TABLE_SCHEMA_SQL,
     USER_NOTIFICATION_PREFERENCES_TABLE_SCHEMA_SQL,
     VAPID_KEYS_TABLE_SCHEMA_SQL,
@@ -45,15 +44,17 @@ export const runMigrations = (db: Database) => {
         db.exec(PUSH_SUBSCRIPTIONS_TABLE_SCHEMA_SQL);
         db.exec("CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user_id ON push_subscriptions(user_id)");
 
-        // Create session_names table if it doesn't exist (for existing installations)
-        db.exec(SESSION_NAMES_TABLE_SCHEMA_SQL);
-        db.exec("CREATE INDEX IF NOT EXISTS idx_session_names_lookup ON session_names(session_id, provider)");
-
         // Create sessions table if it doesn't exist (for existing installations)
         db.exec(SESSIONS_TABLE_SCHEMA_SQL);
         db.exec(
             "CREATE INDEX IF NOT EXISTS idx_session_ids_lookup ON sessions(session_id)"
         );
+        const sessionsTableInfo = db.prepare("PRAGMA table_info(sessions)").all() as { name: string }[];
+        const sessionColumnNames = sessionsTableInfo.map((col) => col.name);
+        addColumnToTableIfNotExists(db, "sessions", sessionColumnNames, "created_at", "DATETIME");
+        addColumnToTableIfNotExists(db, "sessions", sessionColumnNames, "updated_at", "DATETIME");
+        db.exec("UPDATE sessions SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP)");
+        db.exec("UPDATE sessions SET updated_at = COALESCE(updated_at, CURRENT_TIMESTAMP)");
 
         db.exec(WORK_SPACE_PATH_SQL);
         const workspaceOriginalPathsTableInfo = db.prepare("PRAGMA table_info(workspace_original_paths)").all() as { name: string }[];

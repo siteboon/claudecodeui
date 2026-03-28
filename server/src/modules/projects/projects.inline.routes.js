@@ -10,7 +10,7 @@ import {
     deleteProject,
     searchConversations
 } from '../../../projects.js';
-import { applyCustomSessionNames, sessionNamesDb } from '@/shared/database/repositories/session-names.js';
+import { sessionsDb } from '@/shared/database/repositories/sessions.db.js';
 import { workspaceOriginalPathsDb } from '@/shared/database/repositories/workspace-original-paths.db.js';
 import { authenticateToken } from '../auth/auth.middleware.js';
 import { getWorkspaceNameFromPath, WORKSPACES_ROOT, validateWorkspacePath } from './projects.utils.js';
@@ -46,7 +46,7 @@ router.get('/api/projects/:projectName/sessions', authenticateToken, async (req,
     try {
         const { limit = 5, offset = 0 } = req.query;
         const result = await getSessions(req.params.projectName, parseInt(limit), parseInt(offset));
-        applyCustomSessionNames(result.sessions, 'claude');
+        sessionsDb.applyCustomSessionNames(result.sessions, 'claude');
         res.json(result);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -70,7 +70,7 @@ router.delete('/api/projects/:projectName/sessions/:sessionId', authenticateToke
         const { projectName, sessionId } = req.params;
         console.log(`[API] Deleting session: ${sessionId} from project: ${projectName}`);
         await deleteSession(projectName, sessionId);
-        sessionNamesDb.deleteSessionName(sessionId, 'claude');
+        sessionsDb.deleteSession(sessionId);
         console.log(`[API] Session ${sessionId} deleted successfully`);
         res.json({ success: true });
     } catch (error) {
