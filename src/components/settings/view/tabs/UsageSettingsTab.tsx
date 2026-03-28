@@ -4,15 +4,17 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../../../../utils/api';
 
 type RateLimitPeriod = {
-  utilization: number | null;
+  key: string;
   percent: number | null;
   resetAt: number | null;
   status: string | null;
+  limit?: number;
+  remaining?: number;
 };
 
 type RateLimits = {
-  session: RateLimitPeriod;
-  weekly: RateLimitPeriod;
+  type: 'unified' | 'standard';
+  periods: RateLimitPeriod[];
 };
 
 type UsageData = {
@@ -29,6 +31,22 @@ function barColor(pct: number): string {
 }
 
 type TFn = (key: string, opts?: Record<string, unknown>) => string;
+
+/** Maps a period key to a translated label based on the rate-limit type. */
+const LABEL_KEYS: Record<RateLimits['type'], Record<string, string>> = {
+  unified: { '5h': 'usage.currentSession', '7d': 'usage.weeklyAllModels' },
+  standard: {
+    tokens: 'usage.standardTokens',
+    requests: 'usage.standardRequests',
+    'input-tokens': 'usage.standardInputTokens',
+    'output-tokens': 'usage.standardOutputTokens',
+  },
+};
+
+function periodLabel(type: RateLimits['type'], key: string, t: TFn): string {
+  const i18nKey = LABEL_KEYS[type]?.[key];
+  return i18nKey ? t(i18nKey) : key;
+}
 
 /** Formats a unix-epoch reset timestamp into a localised human-readable string. */
 function formatResetTime(resetAt: number | null, t: TFn): string {
@@ -56,11 +74,15 @@ function RateLimitMeter({ label, period, t }: { label: string; period: RateLimit
   const resetText = useMemo(() => formatResetTime(period.resetAt, t), [period.resetAt, t]);
   if (period.percent === null) return null;
   const pct = Math.min(period.percent, 100);
+  const { limit, remaining } = period;
+
   return (
     <div className="space-y-2 rounded-lg border border-border bg-card p-4">
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium text-foreground">{label}</span>
-        <span className="text-sm text-muted-foreground">{period.percent}% used</span>
+        <span className="text-sm text-muted-foreground">
+          {period.percent}% {t('usage.used')}
+        </span>
       </div>
       <div className="h-2.5 overflow-hidden rounded-full bg-muted">
         <div
@@ -69,7 +91,14 @@ function RateLimitMeter({ label, period, t }: { label: string; period: RateLimit
         />
       </div>
       <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>{resetText}</span>
+        <span>
+          {resetText}
+          {limit != null && remaining != null && (
+            <span className="ml-2">
+              ({remaining.toLocaleString()} / {limit.toLocaleString()} {t('usage.remaining')})
+            </span>
+          )}
+        </span>
         {period.status && period.status !== 'allowed' && (
           <span className="font-medium text-amber-600 dark:text-amber-400">{period.status}</span>
         )}
@@ -98,11 +127,12 @@ export default function UsageSettingsTab() {
       setData(await res.json());
       setLastUpdated(new Date().toLocaleTimeString());
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('usage.loadError'));
+      setError(err instanceof Error ? err.message : 'Failed to load usage data');
     } finally {
       setLoading(false);
     }
-  }, [t]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => { fetchUsage(); }, [fetchUsage]);
 
@@ -125,6 +155,8 @@ export default function UsageSettingsTab() {
       </div>
     );
   }
+
+  const rl = data.rateLimits;
 
   return (
     <div className="space-y-6 md:space-y-8">
@@ -149,28 +181,29 @@ export default function UsageSettingsTab() {
         </div>
       )}
 
-      {/* Real rate limits from Anthropic */}
-      {data.rateLimits && (
+      {/* Rate limit meters */}
+      {rl && rl.periods.length > 0 && (
         <div className="space-y-3">
           <h4 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
             {t('usage.planLimits')}
           </h4>
-          <RateLimitMeter
-            label={t('usage.currentSession')}
-            period={data.rateLimits.session}
-            t={t}
-          />
-          <RateLimitMeter
-            label={t('usage.weeklyAllModels')}
-            period={data.rateLimits.weekly}
-            t={t}
-          />
+          {rl.type === 'standard' && (
+            <p className="text-xs text-muted-foreground">{t('usage.standardNote')}</p>
+          )}
+          {rl.periods.map((period) => (
+            <RateLimitMeter
+              key={period.key}
+              label={periodLabel(rl.type, period.key, t)}
+              period={period}
+              t={t}
+            />
+          ))}
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">
               {t('usage.lastUpdated')}: {lastUpdated}
             </span>
             <button
-              onClick={() => fetchUsage()}
+              onClick={fetchUsage}
               disabled={loading}
               className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
               title={t('usage.refresh')}
@@ -178,6 +211,13 @@ export default function UsageSettingsTab() {
               <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
             </button>
           </div>
+        </div>
+      )}
+
+      {/* No rate limits available */}
+      {(!rl || rl.periods.length === 0) && data.plan && (
+        <div className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
+          {t('usage.noLimitsAvailable')}
         </div>
       )}
     </div>
