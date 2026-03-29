@@ -108,6 +108,7 @@ export function useChatSessionState({
   const [totalMessages, setTotalMessages] = useState(0);
   const [canAbortSession, setCanAbortSession] = useState(false);
   const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
+  const userManuallyScrolledRef = useRef(false);
   const [tokenBudget, setTokenBudget] = useState<Record<string, unknown> | null>(null);
   const [visibleMessageCount, setVisibleMessageCount] = useState(INITIAL_VISIBLE_MESSAGES);
   const [claudeStatus, setClaudeStatus] = useState<{ text: string; tokens: number; can_interrupt: boolean } | null>(null);
@@ -222,7 +223,7 @@ export function useChatSessionState({
     const container = scrollContainerRef.current;
     if (!container) return false;
     const { scrollTop, scrollHeight, clientHeight } = container;
-    return scrollHeight - scrollTop - clientHeight < 50;
+    return scrollHeight - scrollTop - clientHeight < 150;
   }, []);
 
   const loadOlderMessages = useCallback(
@@ -259,12 +260,28 @@ export function useChatSessionState({
     [hasMoreMessages, isLoadingMoreMessages, selectedProject, selectedSession, sessionStore],
   );
 
+  // Mark that user physically scrolled (wheel/touch) — used to distinguish
+  // user-initiated scroll-up from programmatic scroll position drift during streaming.
+  const handleUserInteractionScroll = useCallback(() => {
+    userManuallyScrolledRef.current = true;
+  }, []);
+
   const handleScroll = useCallback(async () => {
     const container = scrollContainerRef.current;
     if (!container) return;
 
     const nearBottom = isNearBottom();
-    setIsUserScrolledUp(!nearBottom);
+
+    // Only set isUserScrolledUp=true if the user physically interacted (wheel/touch).
+    // During streaming, content grows and the bottom moves away — but if the user
+    // didn't manually scroll, we should keep auto-scrolling to bottom.
+    if (userManuallyScrolledRef.current) {
+      setIsUserScrolledUp(!nearBottom);
+      userManuallyScrolledRef.current = false;
+    } else if (nearBottom) {
+      // Programmatic scroll landed near bottom → clear scrolled-up state
+      setIsUserScrolledUp(false);
+    }
 
     if (!allMessagesLoadedRef.current) {
       const scrolledNearTop = container.scrollTop < 100;
@@ -296,6 +313,7 @@ export function useChatSessionState({
     topLoadLockRef.current = false;
     pendingScrollRestoreRef.current = null;
     setIsUserScrolledUp(false);
+    userManuallyScrolledRef.current = false;
   }, [selectedProject?.name, selectedSession?.id]);
 
   // Initial scroll to bottom
@@ -569,30 +587,42 @@ export function useChatSessionState({
     return chatMessages.slice(-visibleMessageCount);
   }, [chatMessages, visibleMessageCount]);
 
-  useEffect(() => {
+  // Save scroll position snapshot for non-autoScroll mode.
+  // Uses useLayoutEffect to capture position BEFORE the browser paints,
+  // and only runs when chatMessages actually changes (not every render).
+  const prevChatMessagesRef = useRef(chatMessages);
+  useLayoutEffect(() => {
     if (!autoScrollToBottom && scrollContainerRef.current) {
       const container = scrollContainerRef.current;
       scrollPositionRef.current = { height: container.scrollHeight, top: container.scrollTop };
     }
-  });
+    prevChatMessagesRef.current = chatMessages;
+  }, [autoScrollToBottom, chatMessages]);
 
+  // Auto-scroll to bottom when content changes.
+  // Key fix: depend on `chatMessages` identity (not just .length) so streaming
+  // updates — which replace message content without changing array length — still
+  // trigger the scroll. Use rAF for a paint-aligned, flicker-free scroll.
   useEffect(() => {
     if (!scrollContainerRef.current || chatMessages.length === 0) return;
     if (isLoadingMoreRef.current || isLoadingMoreMessages || pendingScrollRestoreRef.current) return;
     if (searchScrollActiveRef.current) return;
 
     if (autoScrollToBottom) {
-      if (!isUserScrolledUp) setTimeout(() => scrollToBottom(), 50);
+      if (!isUserScrolledUp) {
+        requestAnimationFrame(() => scrollToBottom());
+      }
       return;
     }
 
+    // Non-autoScroll mode: anchor scroll position so new content doesn't push viewport
     const container = scrollContainerRef.current;
     const prevHeight = scrollPositionRef.current.height;
     const prevTop = scrollPositionRef.current.top;
     const newHeight = container.scrollHeight;
     const heightDiff = newHeight - prevHeight;
     if (heightDiff > 0 && prevTop > 0) container.scrollTop = prevTop + heightDiff;
-  }, [autoScrollToBottom, chatMessages.length, isLoadingMoreMessages, isUserScrolledUp, scrollToBottom]);
+  }, [autoScrollToBottom, chatMessages, isLoadingMoreMessages, isUserScrolledUp, scrollToBottom]);
 
   useEffect(() => {
     const container = scrollContainerRef.current;
@@ -731,5 +761,6 @@ export function useChatSessionState({
     scrollToBottomAndReset,
     isNearBottom,
     handleScroll,
+    handleUserInteractionScroll,
   };
 }
