@@ -248,6 +248,7 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
   const [cursorAuthStatus, setCursorAuthStatus] = useState<AuthStatus>(DEFAULT_AUTH_STATUS);
   const [codexAuthStatus, setCodexAuthStatus] = useState<AuthStatus>(DEFAULT_AUTH_STATUS);
   const [geminiAuthStatus, setGeminiAuthStatus] = useState<AuthStatus>(DEFAULT_AUTH_STATUS);
+  const [kiroAuthStatus, setKiroAuthStatus] = useState<AuthStatus>(DEFAULT_AUTH_STATUS);
 
   const setAuthStatusByProvider = useCallback((provider: AgentProvider, status: AuthStatus) => {
     if (provider === 'claude') {
@@ -264,6 +265,8 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
       setGeminiAuthStatus(status);
       return;
     }
+
+    if (provider === 'kiro') { setKiroAuthStatus(status); return; }
 
     setCodexAuthStatus(status);
   }, []);
@@ -831,6 +834,7 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
     void checkAuthStatus('cursor');
     void checkAuthStatus('codex');
     void checkAuthStatus('gemini');
+    void checkAuthStatus('kiro');
   }, [checkAuthStatus, initialTab, isOpen, loadSettings]);
 
   useEffect(() => {
@@ -939,6 +943,7 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
     cursorAuthStatus,
     codexAuthStatus,
     geminiAuthStatus,
+    kiroAuthStatus,
     geminiPermissionMode,
     setGeminiPermissionMode,
     openLoginForProvider,

@@ -7,6 +7,7 @@ import {
   CURSOR_MODELS,
   CODEX_MODELS,
   GEMINI_MODELS,
+  KIRO_MODELS,
 } from "../../../../../shared/modelConstants";
 import type { ProjectSession, SessionProvider } from "../../../../types/app";
 import { NextTaskBanner } from "../../../task-master";
@@ -25,6 +26,8 @@ type ProviderSelectionEmptyStateProps = {
   setCodexModel: (model: string) => void;
   geminiModel: string;
   setGeminiModel: (model: string) => void;
+  kiroModel: string;
+  setKiroModel: (model: string) => void;
   tasksEnabled: boolean;
   isTaskMasterInstalled: boolean | null;
   onShowAllTasks?: (() => void) | null;
@@ -73,12 +76,21 @@ const PROVIDERS: ProviderDef[] = [
     ring: "ring-blue-500/15",
     check: "bg-blue-500 text-white",
   },
+  {
+    id: "kiro",
+    name: "Kiro",
+    infoKey: "providerSelection.providerInfo.kiro",
+    accent: "border-orange-500 dark:border-orange-400",
+    ring: "ring-orange-500/15",
+    check: "bg-orange-500 text-white",
+  },
 ];
 
 function getModelConfig(p: SessionProvider) {
   if (p === "claude") return CLAUDE_MODELS;
   if (p === "codex") return CODEX_MODELS;
   if (p === "gemini") return GEMINI_MODELS;
+  if (p === "kiro") return KIRO_MODELS;
   return CURSOR_MODELS;
 }
 
@@ -88,10 +100,12 @@ function getModelValue(
   cu: string,
   co: string,
   g: string,
+  ki: string,
 ) {
   if (p === "claude") return c;
   if (p === "codex") return co;
   if (p === "gemini") return g;
+  if (p === "kiro") return ki;
   return cu;
 }
 
@@ -109,6 +123,8 @@ export default function ProviderSelectionEmptyState({
   setCodexModel,
   geminiModel,
   setGeminiModel,
+  kiroModel,
+  setKiroModel,
   tasksEnabled,
   isTaskMasterInstalled,
   onShowAllTasks,
@@ -135,6 +151,9 @@ export default function ProviderSelectionEmptyState({
     } else if (provider === "gemini") {
       setGeminiModel(value);
       localStorage.setItem("gemini-model", value);
+    } else if (provider === "kiro") {
+      setKiroModel(value);
+      localStorage.setItem("kiro-model", value);
     } else {
       setCursorModel(value);
       localStorage.setItem("cursor-model", value);
@@ -148,6 +167,7 @@ export default function ProviderSelectionEmptyState({
     cursorModel,
     codexModel,
     geminiModel,
+    kiroModel,
   );
 
   /* ── New session — provider picker ── */
@@ -250,6 +270,9 @@ export default function ProviderSelectionEmptyState({
                   }),
                   gemini: t("providerSelection.readyPrompt.gemini", {
                     model: geminiModel,
+                  }),
+                  kiro: t("providerSelection.readyPrompt.kiro", {
+                    model: kiroModel,
                   }),
                 }[provider]
               }

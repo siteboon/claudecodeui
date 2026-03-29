@@ -71,6 +71,8 @@ function ChatInterface({
     setCodexModel,
     geminiModel,
     setGeminiModel,
+    kiroModel,
+    setKiroModel,
     permissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
@@ -181,6 +183,7 @@ function ChatInterface({
     claudeModel,
     codexModel,
     geminiModel,
+    kiroModel,
     isLoading,
     canAbortSession,
     tokenBudget,
@@ -276,7 +279,9 @@ function ChatInterface({
           ? t('messageTypes.codex')
           : provider === 'gemini'
             ? t('messageTypes.gemini')
-            : t('messageTypes.claude');
+            : provider === 'kiro'
+              ? t('messageTypes.kiro', { defaultValue: 'Kiro' })
+              : t('messageTypes.claude');
 
     return (
       <div className="flex h-full items-center justify-center">
@@ -314,6 +319,8 @@ function ChatInterface({
           setCodexModel={setCodexModel}
           geminiModel={geminiModel}
           setGeminiModel={setGeminiModel}
+          kiroModel={kiroModel}
+          setKiroModel={setKiroModel}
           tasksEnabled={tasksEnabled}
           isTaskMasterInstalled={isTaskMasterInstalled}
           onShowAllTasks={onShowAllTasks}
@@ -404,7 +411,9 @@ function ChatInterface({
                   ? t('messageTypes.codex')
                   : provider === 'gemini'
                     ? t('messageTypes.gemini')
-                    : t('messageTypes.claude'),
+                    : provider === 'kiro'
+                      ? t('messageTypes.kiro', { defaultValue: 'Kiro' })
+                      : t('messageTypes.claude'),
           })}
           isTextareaExpanded={isTextareaExpanded}
           sendByCtrlEnter={sendByCtrlEnter}
