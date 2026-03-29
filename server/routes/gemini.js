@@ -1,6 +1,7 @@
 import express from 'express';
 import sessionManager from '../sessionManager.js';
 import { sessionNamesDb } from '../database/db.js';
+import { deleteGeminiCliSession } from '../projects.js';
 
 const router = express.Router();
 
@@ -12,7 +13,18 @@ router.delete('/sessions/:sessionId', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Invalid session ID format' });
         }
 
-        await sessionManager.deleteSession(sessionId);
+        // Try deleting from UI sessions and CLI sessions
+        let deleted = false;
+        try {
+            await sessionManager.deleteSession(sessionId);
+            deleted = true;
+        } catch { }
+
+        try {
+            await deleteGeminiCliSession(sessionId);
+            deleted = true;
+        } catch { }
+
         sessionNamesDb.deleteName(sessionId, 'gemini');
         res.json({ success: true });
     } catch (error) {
