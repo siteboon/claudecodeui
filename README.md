@@ -213,9 +213,11 @@ Yes, for self-hosted. CloudCLI UI reads from and writes to the same `~/.claude` 
 
 ## License
 
-GNU General Public License v3.0 - see [LICENSE](LICENSE) file for details.
+GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later) — see [LICENSE](LICENSE) for the full text, including additional terms under Section 7.
 
-This project is open source and free to use, modify, and distribute under the GPL v3 license.
+This project is open source and free to use, modify, and distribute under the AGPL-3.0-or-later license. If you modify this software and run it as a network service, you must make your modified source code available to users of that service.
+
+CloudCLI UI  - (https://cloudcli.ai).
 
 ## Acknowledgments
 
