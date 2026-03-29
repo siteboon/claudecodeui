@@ -229,7 +229,7 @@ export function useGitPanelController({
 
         const data = await readJson<GitOperationResponse>(response);
         if (!data.success) {
-          console.error('Failed to switch branch:', data.error);
+          setOperationError(data.error ?? 'Failed to switch branch');
           return false;
         }
 
@@ -237,7 +237,7 @@ export function useGitPanelController({
         void fetchGitStatus();
         return true;
       } catch (error) {
-        console.error('Error switching branch:', error);
+        setOperationError(error instanceof Error ? error.message : 'Failed to switch branch');
         return false;
       }
     },

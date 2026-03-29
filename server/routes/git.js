@@ -684,20 +684,31 @@ router.post('/checkout', async (req, res) => {
   const { project, branch } = req.body;
   
   if (!project || !branch) {
-    return res.status(400).json({ error: 'Project name and branch are required' });
+    return res.status(400).json({ success: false, error: 'Project name and branch are required' });
   }
 
   try {
     const projectPath = await getActualProjectPath(project);
-    
+
     // Checkout the branch
     validateBranchName(branch);
+
+    // Block checkout in linked worktrees — each worktree is tied to its branch
+    const worktreeInfo = await getWorktreeInfo(projectPath);
+    if (worktreeInfo?.isWorktree) {
+      return res.status(400).json({
+        success: false,
+        error: 'This project is a git worktree — switching branches is not supported. Each worktree is tied to its own branch.',
+      });
+    }
+
     const { stdout } = await spawnAsync('git', ['checkout', branch], { cwd: projectPath });
-    
+
     res.json({ success: true, output: stdout });
   } catch (error) {
     console.error('Git checkout error:', error);
-    res.status(500).json({ error: error.message });
+    const detail = error.stderr?.trim() || error.message;
+    res.status(500).json({ success: false, error: detail });
   }
 });
 
