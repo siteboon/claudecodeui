@@ -235,5 +235,42 @@
     "providers": {
       "assistant": "Assistant"
     }
+  },
+  "promptLibrary": {
+    "title": "プロンプトライブラリ",
+    "subtitle": "ロールは永続的なコンテキストを追加します。テンプレートは再利用可能なテキストを挿入します。",
+    "helpButtonTitle": "独自プロンプトの作成方法",
+    "helpButton": "独自の追加方法",
+    "helpTitle": "独自のロールやテンプレートを作成",
+    "helpDescription": "Markdown のプロンプトファイルを追加すると、このライブラリに表示されます。",
+    "helpClose": "ヘルプを閉じる",
+    "helpPaths": "グローバルプロンプトは <0>~/.claude/prompts/</0> に、プロジェクト固有のプロンプトは <1>{project}/.claude/prompts/</1> に Markdown ファイルを追加してください。",
+    "helpTypes": "永続コンテキストには <0>type: role</0>、再利用可能な入力テキストには <1>type: template</1> を使用します。",
+    "tabs": {
+      "roles": "ロール",
+      "templates": "テンプレート"
+    },
+    "searchPlaceholder": "プロンプトを検索...",
+    "loading": "プロンプトを読み込み中...",
+    "loadError": "プロンプトの読み込みに失敗しました",
+    "empty": "プロンプトが見つかりません",
+    "actions": {
+      "applyRole": "ロールを適用",
+      "insertTemplate": "テンプレートを挿入"
+    },
+    "selector": {
+      "clearRole": "ロールをクリア",
+      "openLibrary": "プロンプトライブラリを開く",
+      "manageRoles": "アクティブなロールを管理",
+      "role": "ロール",
+      "roles": "ロール"
+    },
+    "roleManagement": {
+      "title": "アクティブなロールを管理",
+      "subtitle": "ドラッグして優先順位を並べ替えます。上位のロールが優先されます。",
+      "empty": "アクティブなロールがありません。プロンプトライブラリでロールを切り替えて追加してください。",
+      "clearAll": "すべてのロールをクリア",
+      "confirmClearAll": "すべてのアクティブなロールをクリアしてもよろしいですか？"
+    }
   }
 }
