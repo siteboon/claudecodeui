@@ -2538,6 +2538,44 @@ async function getGeminiCliSessionMessages(sessionId) {
   return [];
 }
 
+async function deleteGeminiCliSession(sessionId) {
+  const geminiTmpDir = path.join(os.homedir(), '.gemini', 'tmp');
+  let projectDirs;
+  try {
+    projectDirs = await fs.readdir(geminiTmpDir);
+  } catch {
+    throw new Error(`Gemini CLI session not found: ${sessionId}`);
+  }
+
+  for (const projectDir of projectDirs) {
+    const chatsDir = path.join(geminiTmpDir, projectDir, 'chats');
+    let chatFiles;
+    try {
+      chatFiles = await fs.readdir(chatsDir);
+    } catch {
+      continue;
+    }
+
+    for (const chatFile of chatFiles) {
+      if (!chatFile.endsWith('.json')) continue;
+      try {
+        const filePath = path.join(chatsDir, chatFile);
+        const data = await fs.readFile(filePath, 'utf8');
+        const session = JSON.parse(data);
+        const fileSessionId = session.sessionId || chatFile.replace('.json', '');
+        if (fileSessionId === sessionId) {
+          await fs.unlink(filePath);
+          return true;
+        }
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  throw new Error(`Gemini CLI session file not found: ${sessionId}`);
+}
+
 export {
   getProjects,
   getSessions,
@@ -2557,5 +2595,6 @@ export {
   deleteCodexSession,
   getGeminiCliSessions,
   getGeminiCliSessionMessages,
+  deleteGeminiCliSession,
   searchConversations
 };
