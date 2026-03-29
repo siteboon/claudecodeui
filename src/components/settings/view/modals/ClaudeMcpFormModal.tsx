@@ -416,12 +416,21 @@ export default function ClaudeMcpFormModal({
                 value={Object.entries(formData.config.env).map(([key, value]) => `${key}=${value}`).join('\n')}
                 onChange={(event) => {
                   const env: Record<string, string> = {};
+                  const isNewLine = event.target.value.lastIndexOf('\n') === event.target.value.length - 1;
                   event.target.value.split('\n').forEach((line) => {
                     const [key, ...valueParts] = line.split('=');
                     if (key && key.trim()) {
-                      env[key.trim()] = valueParts.join('=').trim();
+                      let trimmedKey = key.trim();
+                      if (env[trimmedKey]) {
+                        // if key already exists, add an underscore to prevent data loss
+                        trimmedKey += '_'
+                      }
+                      env[trimmedKey] = valueParts.join('=').trim();
                     }
                   });
+                  if (isNewLine) {
+                    env[''] = '';
+                  }
                   updateConfig('env', env);
                 }}
                 className="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
