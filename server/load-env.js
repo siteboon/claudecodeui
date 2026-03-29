@@ -8,6 +8,12 @@ import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Remove CLAUDECODE env var so the Claude Agent SDK can spawn CLI subprocesses.
+// When the server is started from within a Claude Code session (or PM2 inherits that
+// environment), this variable tricks the CLI into thinking it's a nested session and
+// it refuses to start.
+delete process.env.CLAUDECODE;
+
 try {
   const envPath = path.join(__dirname, '../.env');
   const envFile = fs.readFileSync(envPath, 'utf8');

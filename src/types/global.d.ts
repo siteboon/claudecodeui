@@ -4,6 +4,7 @@ declare global {
   interface Window {
     __ROUTER_BASENAME__?: string;
     refreshProjects?: () => void | Promise<void>;
+    updateProjectBranch?: (projectName: string, branchName: string) => void;
     openSettings?: (tab?: string) => void;
   }
 

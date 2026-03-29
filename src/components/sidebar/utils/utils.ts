@@ -3,6 +3,7 @@ import type { Project } from '../../../types/app';
 import type {
   AdditionalSessionsByProject,
   ProjectSortOrder,
+  RepoGroup,
   SettingsProject,
   SessionViewModel,
   SessionWithProvider,
@@ -184,7 +185,12 @@ export const filterProjects = (projects: Project[], searchFilter: string): Proje
   return projects.filter((project) => {
     const displayName = (project.displayName || project.name).toLowerCase();
     const projectName = project.name.toLowerCase();
-    return displayName.includes(normalizedSearch) || projectName.includes(normalizedSearch);
+    const branchName = (project.worktreeInfo?.branchName || '').toLowerCase();
+    return (
+      displayName.includes(normalizedSearch) ||
+      projectName.includes(normalizedSearch) ||
+      branchName.includes(normalizedSearch)
+    );
   });
 };
 
@@ -209,6 +215,62 @@ export const getTaskIndicatorStatus = (
 
   return 'not-configured';
 };
+
+/**
+ * Group projects that share the same underlying git repository (worktrees).
+ *
+ * Returns a mixed array of standalone `Project`s (no worktree siblings) and
+ * `RepoGroup` objects (multiple worktrees of the same repo).  The position of
+ * each group matches the position of its *first* member in the original array
+ * so that the existing sort order is preserved.
+ */
+export const groupProjectsByRepo = (
+  projects: Project[],
+): (Project | RepoGroup)[] => {
+  const groups = new Map<string, Project[]>();
+  const insertionOrder: string[] = [];
+
+  for (const project of projects) {
+    const repoRoot = project.repoGroup;
+    if (!repoRoot) {
+      // Standalone project – use its unique name as the key so it stays in order.
+      const key = `__standalone__${project.name}`;
+      groups.set(key, [project]);
+      insertionOrder.push(key);
+    } else if (!groups.has(repoRoot)) {
+      groups.set(repoRoot, [project]);
+      insertionOrder.push(repoRoot);
+    } else {
+      groups.get(repoRoot)!.push(project);
+    }
+  }
+
+  return insertionOrder.map((key) => {
+    const members = groups.get(key)!;
+    if (key.startsWith('__standalone__') || members.length === 1) {
+      return members[0];
+    }
+
+    // Sort: main worktree first, then by branch name alphabetically.
+    const sorted = [...members].sort((a, b) => {
+      if (a.isMainWorktree && !b.isMainWorktree) return -1;
+      if (!a.isMainWorktree && b.isMainWorktree) return 1;
+      return (a.worktreeInfo?.branchName || '').localeCompare(b.worktreeInfo?.branchName || '');
+    });
+
+    const main = sorted.find((p) => p.isMainWorktree) || sorted[0];
+
+    return {
+      __type: 'repo-group' as const,
+      repoRoot: key,
+      displayName: main.displayName,
+      projects: sorted,
+    };
+  });
+};
+
+export const isRepoGroup = (item: Project | RepoGroup): item is RepoGroup =>
+  (item as RepoGroup).__type === 'repo-group';
 
 export const normalizeProjectForSettings = (project: Project): SettingsProject => {
   const fallbackPath =

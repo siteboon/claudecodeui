@@ -17,7 +17,13 @@
     "projects": "projects",
     "noMatchingProjects": "No matching projects",
     "tryDifferentSearch": "Try adjusting your search term",
-    "runClaudeCli": "Run Claude CLI in a project directory to get started"
+    "runClaudeCli": "Run Claude CLI in a project directory to get started",
+    "branch": "Branch",
+    "repoGroup": "Repository",
+    "worktrees": "worktrees",
+    "archived": "archived",
+    "showMoreWorktrees": "Show {{count}} more...",
+    "newGroupSession": "New session in {{name}}"
   },
   "app": {
     "title": "Claude Code UI",
@@ -123,6 +129,7 @@
     "sessionCount_one": "This project contains {{count}} conversation.",
     "sessionCount_other": "This project contains {{count}} conversations.",
     "allConversationsDeleted": "All conversations will be permanently deleted.",
-    "cannotUndo": "This action cannot be undone."
+    "cannotUndo": "This action cannot be undone.",
+    "worktreeWarning": "This project uses a git worktree. Deleting it will also remove the worktree branch and its files from disk."
   }
 }

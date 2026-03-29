@@ -36,7 +36,9 @@
     "release": "./release.sh",
     "prepublishOnly": "npm run build",
     "postinstall": "node scripts/fix-node-pty.js",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "keywords": [
     "claude code",
@@ -135,7 +137,8 @@
     "tailwindcss": "^3.4.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.56.1",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "vitest": "^4.1.1"
   },
   "lint-staged": {
     "src/**/*.{ts,tsx,js,jsx}": "eslint"

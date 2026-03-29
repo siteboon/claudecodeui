@@ -30,6 +30,13 @@ export interface ProjectTaskmasterInfo {
   [key: string]: unknown;
 }
 
+export interface WorktreeInfo {
+  isWorktree: boolean;
+  worktreeRoot: string;
+  mainRepoRoot: string;
+  branchName: string;
+}
+
 export interface Project {
   name: string;
   displayName: string;
@@ -41,6 +48,11 @@ export interface Project {
   geminiSessions?: ProjectSession[];
   sessionMeta?: ProjectSessionMeta;
   taskmaster?: ProjectTaskmasterInfo;
+  worktreeInfo?: WorktreeInfo | null;
+  repoGroup?: string;
+  repoGroupSize?: number;
+  isMainWorktree?: boolean;
+  isStale?: boolean;
   [key: string]: unknown;
 }
 

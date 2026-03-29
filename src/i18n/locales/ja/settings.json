@@ -353,6 +353,10 @@
       "claudeDescription": "--dangerously-skip-permissions フラグに相当",
       "cursorDescription": "Cursor CLIの -f フラグに相当"
     },
+    "useWorktree": {
+      "label": "git worktree 分離を使用",
+      "description": "Claude Code を分離された git worktree で実行します。--worktree フラグに相当。"
+    },
     "allowedTools": {
       "title": "許可されたツール",
       "description": "権限の確認なしに自動的に許可されるツール",

@@ -128,6 +128,13 @@ export default function SidebarModals({
                         </p>
                       </div>
                     )}
+                    {deleteConfirmation.project.worktreeInfo?.isWorktree && !deleteConfirmation.project.isStale && (
+                      <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-900/20">
+                        <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
+                          {t('deleteConfirmation.worktreeWarning', { defaultValue: 'This project uses a git worktree. Deleting it will also remove the worktree branch and its files from disk.' })}
+                        </p>
+                      </div>
+                    )}
                     <p className="mt-3 text-xs text-muted-foreground">
                       {t('deleteConfirmation.cannotUndo')}
                     </p>
