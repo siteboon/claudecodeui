@@ -187,6 +187,21 @@ export function useProjectsState({
     await fetchProjects({ showLoadingState: false });
   }, [fetchProjects]);
 
+  const updateProjectBranch = useCallback((projectName: string, branchName: string) => {
+    setProjects((prev) =>
+      prev.map((p) =>
+        p.name === projectName && p.worktreeInfo
+          ? { ...p, worktreeInfo: { ...p.worktreeInfo, branchName } }
+          : p,
+      ),
+    );
+    setSelectedProject((prev) =>
+      prev?.name === projectName && prev.worktreeInfo
+        ? { ...prev, worktreeInfo: { ...prev.worktreeInfo, branchName } }
+        : prev,
+    );
+  }, []);
+
   const openSettings = useCallback((tab = 'tools') => {
     setSettingsInitialTab(tab);
     setShowSettings(true);
@@ -561,6 +576,7 @@ export function useProjectsState({
     openSettings,
     fetchProjects,
     refreshProjectsSilently,
+    updateProjectBranch,
     sidebarSharedProps,
     handleProjectSelect,
     handleSessionSelect,

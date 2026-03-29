@@ -235,13 +235,17 @@ export function useGitPanelController({
 
         setCurrentBranch(branchName);
         void fetchGitStatus();
+        void fetchBranches();
+        if (selectedProject) {
+          window.updateProjectBranch?.(selectedProject.name, branchName);
+        }
         return true;
       } catch (error) {
         setOperationError(error instanceof Error ? error.message : 'Failed to switch branch');
         return false;
       }
     },
-    [fetchGitStatus, selectedProject],
+    [fetchBranches, fetchGitStatus, selectedProject],
   );
 
   const createBranch = useCallback(
