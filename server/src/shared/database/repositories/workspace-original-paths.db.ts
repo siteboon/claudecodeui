@@ -16,6 +16,25 @@ export const workspaceOriginalPathsDb = {
         `).run(workspacePath, customWorkspaceName);
     },
 
+    getWorkspacePath(workspacePath: string): WorkspaceOriginalPathRow | null {
+        const db = getConnection();
+        const row = db.prepare(`
+            SELECT workspace_path, custom_workspace_name, isStarred
+            FROM workspace_original_paths
+            WHERE workspace_path = ?
+        `).get(workspacePath) as WorkspaceOriginalPathRow | undefined;
+
+        return row ?? null;
+    },
+
+    getWorkspacePaths(): WorkspaceOriginalPathRow[] {
+        const db = getConnection();
+        return db.prepare(`
+            SELECT workspace_path, custom_workspace_name, isStarred
+            FROM workspace_original_paths
+        `).all() as WorkspaceOriginalPathRow[];
+    },
+
     getCustomWorkspaceName(workspacePath: string): string | null {
         const db = getConnection();
         const row = db.prepare(`
@@ -34,5 +53,22 @@ export const workspaceOriginalPathsDb = {
             VALUES (?, ?)
             ON CONFLICT(workspace_path) DO UPDATE SET custom_workspace_name = excluded.custom_workspace_name
         `).run(workspacePath, customWorkspaceName);
+    },
+
+    updateWorkspaceIsStarred(workspacePath: string, isStarred: boolean): void {
+        const db = getConnection();
+        db.prepare(`
+            UPDATE workspace_original_paths
+            SET isStarred = ?
+            WHERE workspace_path = ?
+        `).run(isStarred ? 1 : 0, workspacePath);
+    },
+
+    deleteWorkspacePath(workspacePath: string): void {
+        const db = getConnection();
+        db.prepare(`
+            DELETE FROM workspace_original_paths
+            WHERE workspace_path = ?
+        `).run(workspacePath);
     },
 };

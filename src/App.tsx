@@ -14,9 +14,13 @@ const router = createBrowserRouter([
     path: "/",
     element: <RootLayout />, // The layout wraps all children
     children: [
-      {
+      { 
         path: "/",
         element: <Home />,
+      },
+      {
+        path: "/session/:sessionId",
+        element: <SessionContent />,
       },
       {
         path: "/sessions/:sessionId",

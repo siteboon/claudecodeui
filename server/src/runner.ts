@@ -61,6 +61,7 @@ const [
     geminiRoutes,
     pluginsRoutes,
     messagesRoutes,
+    sidebarRoutes,
     projectsInlineRoutes,
     filesRoutes,
     sessionsInlineRoutes,
@@ -85,6 +86,7 @@ const [
     importRoute('./modules/gemini/gemini.routes.js'),
     importRoute('./modules/plugins/plugins.routes.js'),
     importRoute('./modules/messages/messages.routes.js'),
+    importRoute('./modules/sidebar/sidebar.routes.js'),
     importRoute('./modules/projects/projects.inline.routes.js'),
     importRoute('./modules/files/files.routes.js'),
     importRoute('./modules/sessions/sessions.inline.routes.js'),
@@ -173,6 +175,9 @@ app.use('/api/plugins', authenticateToken, pluginsRoutes);
 
 // Unified session messages route (protected)
 app.use('/api/sessions', authenticateToken, messagesRoutes);
+
+// Refactored sidebar routes (protected)
+app.use(sidebarRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);

@@ -90,7 +90,7 @@ export const sessionsDb = {
         const db = getConnection();
         db.prepare(
             `UPDATE sessions
-             SET custom_name = ?, updated_at = CURRENT_TIMESTAMP
+             SET custom_name = ?
              WHERE session_id = ?`
         ).run(customName, sessionId);
     },
@@ -100,7 +100,7 @@ export const sessionsDb = {
         const db = getConnection();
         db.prepare(
             `UPDATE sessions
-             SET custom_name = ?, updated_at = CURRENT_TIMESTAMP
+             SET custom_name = ?
              WHERE session_id = ? AND provider = ?`
         ).run(customName, sessionId, provider);
     },
@@ -116,6 +116,27 @@ export const sessionsDb = {
             .get(sessionId) as SessionMetadataLookupRow | undefined;
 
         return row ?? null;
+    },
+
+    getAllSessions(): SessionsRow[] {
+        const db = getConnection();
+        return db
+            .prepare(
+                `SELECT session_id, provider, workspace_path, custom_name, created_at, updated_at
+                 FROM sessions`
+            )
+            .all() as SessionsRow[];
+    },
+
+    getSessionsByWorkspacePath(workspacePath: string): SessionsRow[] {
+        const db = getConnection();
+        return db
+            .prepare(
+                `SELECT session_id, provider, workspace_path, custom_name, created_at, updated_at
+                 FROM sessions
+                 WHERE workspace_path = ?`
+            )
+            .all(workspacePath) as SessionsRow[];
     },
 
     getSessionName(sessionId: string, provider: string): string | null {

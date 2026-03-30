@@ -86,7 +86,8 @@ CREATE TABLE IF NOT EXISTS sessions (
 export const WORK_SPACE_PATH_SQL = `
 CREATE TABLE IF NOT EXISTS workspace_original_paths (
     workspace_path TEXT PRIMARY KEY NOT NULL,
-    custom_workspace_name TEXT DEFAULT NULL
+    custom_workspace_name TEXT DEFAULT NULL,
+    isStarred BOOLEAN DEFAULT 0
 );
 `
 
@@ -135,8 +136,10 @@ CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user_id ON push_subscriptions(
 
 ${SESSIONS_TABLE_SCHEMA_SQL}
 CREATE INDEX IF NOT EXISTS idx_session_ids_lookup ON sessions(session_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_workspace_path ON sessions(workspace_path);
 
 ${WORK_SPACE_PATH_SQL}
+CREATE INDEX IF NOT EXISTS idx_workspace_original_paths_is_starred ON workspace_original_paths(isStarred);
 
 ${LAST_SCANNED_AT_SQL}
 

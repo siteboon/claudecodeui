@@ -51,6 +51,17 @@ export async function processCodexSessions() {
     }
 }
 
+function getPathNumberVariants(value: number): string[] {
+    const unpadded = String(value);
+    const padded = unpadded.padStart(2, '0');
+
+    if (unpadded === padded) {
+        return [unpadded];
+    }
+
+    return [unpadded, padded];
+}
+
 function buildCodexDatePathParts(createdAt: string): Array<{ year: string; month: string; day: string }> {
     const parsedDate = new Date(createdAt);
     if (Number.isNaN(parsedDate.getTime())) {
@@ -59,25 +70,40 @@ function buildCodexDatePathParts(createdAt: string): Array<{ year: string; month
 
     const localDate = {
         year: String(parsedDate.getFullYear()),
-        month: String(parsedDate.getMonth() + 1),
-        day: String(parsedDate.getDate()),
+        month: parsedDate.getMonth() + 1,
+        day: parsedDate.getDate(),
     };
 
     const utcDate = {
         year: String(parsedDate.getUTCFullYear()),
-        month: String(parsedDate.getUTCMonth() + 1),
-        day: String(parsedDate.getUTCDate()),
+        month: parsedDate.getUTCMonth() + 1,
+        day: parsedDate.getUTCDate(),
     };
 
-    if (
+    const rawDateParts =
         localDate.year === utcDate.year &&
-        localDate.month === utcDate.month &&
-        localDate.day === utcDate.day
-    ) {
-        return [localDate];
+            localDate.month === utcDate.month &&
+            localDate.day === utcDate.day
+            ? [localDate]
+            : [localDate, utcDate];
+
+    const uniqueDateParts = new Map<string, { year: string; month: string; day: string }>();
+    for (const datePart of rawDateParts) {
+        const monthVariants = getPathNumberVariants(datePart.month);
+        const dayVariants = getPathNumberVariants(datePart.day);
+
+        for (const month of monthVariants) {
+            for (const day of dayVariants) {
+                uniqueDateParts.set(`${datePart.year}-${month}-${day}`, {
+                    year: datePart.year,
+                    month,
+                    day,
+                });
+            }
+        }
     }
 
-    return [localDate, utcDate];
+    return [...uniqueDateParts.values()];
 }
 
 async function removeFileIfExists(filePath: string): Promise<boolean> {

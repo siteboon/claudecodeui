@@ -1,7 +1,7 @@
 import { Folder, MessageSquare, Search, X } from 'lucide-react';
 import { Input } from '@/shared/view/ui';
 import { cn } from '@/lib/utils';
-import { SearchMode } from '@/components/refactored/sidebar/types/index.js';
+import type { SearchMode } from '@/components/refactored/sidebar/types';
 
 
 type SidebarSearchProps = {

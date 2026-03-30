@@ -49,6 +49,9 @@ export const runMigrations = (db: Database) => {
         db.exec(
             "CREATE INDEX IF NOT EXISTS idx_session_ids_lookup ON sessions(session_id)"
         );
+        db.exec(
+            "CREATE INDEX IF NOT EXISTS idx_sessions_workspace_path ON sessions(workspace_path)"
+        );
         const sessionsTableInfo = db.prepare("PRAGMA table_info(sessions)").all() as { name: string }[];
         const sessionColumnNames = sessionsTableInfo.map((col) => col.name);
         addColumnToTableIfNotExists(db, "sessions", sessionColumnNames, "created_at", "DATETIME");
@@ -65,6 +68,16 @@ export const runMigrations = (db: Database) => {
             workspaceOriginalPathsColumnNames,
             "custom_workspace_name",
             "TEXT DEFAULT NULL",
+        );
+        addColumnToTableIfNotExists(
+            db,
+            "workspace_original_paths",
+            workspaceOriginalPathsColumnNames,
+            "isStarred",
+            "BOOLEAN DEFAULT 0",
+        );
+        db.exec(
+            "CREATE INDEX IF NOT EXISTS idx_workspace_original_paths_is_starred ON workspace_original_paths(isStarred)"
         );
 
         db.exec(LAST_SCANNED_AT_SQL);

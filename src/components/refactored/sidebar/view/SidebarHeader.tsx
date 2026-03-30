@@ -1,7 +1,7 @@
-import { useState } from 'react';
 import { FolderPlus, Plus, RefreshCw, PanelLeftClose } from 'lucide-react';
-import type { SearchMode } from '../types';
-import { SidebarSearch } from './SidebarSearch';
+
+import type { SearchMode } from '@/components/refactored/sidebar/types';
+import { SidebarSearch } from '@/components/refactored/sidebar/view/SidebarSearch';
 import { Button } from '@/shared/view/ui';
 import { cn } from '@/lib/utils';
 import { IS_PLATFORM } from '@/constants/config';
@@ -12,6 +12,10 @@ type SidebarHeaderProps = {
   isRefreshing: boolean;
   onRefresh: () => void;
   onNewProject: () => void;
+  searchMode: SearchMode;
+  onSearchModeChange: (mode: SearchMode) => void;
+  searchFilter: string;
+  onSearchFilterChange: (value: string) => void;
 };
 
 export default function SidebarHeader({ 
@@ -19,12 +23,12 @@ export default function SidebarHeader({
   onToggleCollapse,
   isRefreshing,
   onRefresh,
-  onNewProject
+  onNewProject,
+  searchMode,
+  onSearchModeChange,
+  searchFilter,
+  onSearchFilterChange,
 }: SidebarHeaderProps) {
-  // UI States for search
-  const [searchMode, setSearchMode] = useState<SearchMode>('projects');
-  const [searchFilter, setSearchFilter] = useState('');
-
   const LogoBlock = () => (
     <div className="flex min-w-0 items-center gap-2.5">
       <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-primary/90 shadow-sm">
@@ -63,7 +67,7 @@ export default function SidebarHeader({
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 w-7 rounded-lg p-0 text-muted-foreground hover:bg-accent/80 hover:text-foreground"
+              className="h-8 w-8 rounded-lg p-0 text-muted-foreground hover:bg-accent/80 hover:text-foreground"
               onClick={onRefresh}
               disabled={isRefreshing}
               title="Refresh"
@@ -73,7 +77,7 @@ export default function SidebarHeader({
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 w-7 rounded-lg p-0 text-muted-foreground hover:bg-accent/80 hover:text-foreground"
+              className="h-8 w-8 rounded-lg p-0 text-muted-foreground hover:bg-accent/80 hover:text-foreground"
               onClick={onNewProject}
               title="New Project"
             >
@@ -82,7 +86,7 @@ export default function SidebarHeader({
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 w-7 rounded-lg p-0 text-muted-foreground hover:bg-accent/80 hover:text-foreground"
+              className="h-8 w-8 rounded-lg p-0 text-muted-foreground hover:bg-accent/80 hover:text-foreground"
               onClick={onToggleCollapse}
               title="Hide Sidebar"
             >
@@ -93,9 +97,9 @@ export default function SidebarHeader({
 
         <SidebarSearch 
           searchMode={searchMode}
-          onSearchModeChange={setSearchMode}
+          onSearchModeChange={onSearchModeChange}
           searchFilter={searchFilter}
-          onSearchFilterChange={setSearchFilter}
+          onSearchFilterChange={onSearchFilterChange}
         />
       </div>
 
@@ -108,14 +112,14 @@ export default function SidebarHeader({
           <LogoWithLink />
           <div className="flex flex-shrink-0 gap-1.5">
             <button
-              className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted/50 transition-all active:scale-95 disabled:opacity-70"
+              className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted/50 transition-all active:scale-95 disabled:opacity-70"
               onClick={onRefresh}
               disabled={isRefreshing}
             >
               <RefreshCw className={cn("h-4 w-4 text-muted-foreground transition-opacity", isRefreshing && "animate-spin opacity-50")} />
             </button>
             <button
-              className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/90 text-primary-foreground transition-all active:scale-95"
+              className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/90 text-primary-foreground transition-all active:scale-95"
               onClick={onNewProject}
             >
               <FolderPlus className="h-4 w-4" />
@@ -125,9 +129,9 @@ export default function SidebarHeader({
 
         <SidebarSearch 
           searchMode={searchMode}
-          onSearchModeChange={setSearchMode}
+          onSearchModeChange={onSearchModeChange}
           searchFilter={searchFilter}
-          onSearchFilterChange={setSearchFilter}
+          onSearchFilterChange={onSearchFilterChange}
         />
       </div>
 
