@@ -7,15 +7,54 @@ import { SessionData } from '@/shared/types/session.js';
 
 export async function processGeminiSessionFile(file: string): Promise<SessionData | null> {
     try {
-        // Gemini uses standard JSON (not JSONL), so we read the whole file at once
-
         const fileContent = await fsp.readFile(file, 'utf8');
         const data = JSON.parse(fileContent);
-        if (data?.id && data?.projectPath) {
+
+        // Check for new format: data.sessionId
+        // Fallback for old format: data.id and data.projectPath
+        if (data?.sessionId || (data?.id && data?.projectPath)) {
+            let sessionId = data.sessionId || data.id;
+            let workspacePath = data.projectPath || '';
+            let sessionName = 'New Gemini Chat';
+
+            // Extract workspacePath for new format
+            if (data?.sessionId && file.includes(`${path.sep}chats${path.sep}`)) {
+                const chatsDir = path.dirname(file);
+                const workspaceDir = path.dirname(chatsDir);
+                const projectRootFile = path.join(workspaceDir, '.project_root');
+                
+                try {
+                    const rootContent = await fsp.readFile(projectRootFile, 'utf8');
+                    if (rootContent) {
+                        workspacePath = rootContent.trim();
+                    }
+                } catch (e) {
+                    // Ignore if .project_root doesn't exist
+                }
+            }
+
+            // Extract sessionName
+            if (data.messages && Array.isArray(data.messages) && data.messages.length > 0) {
+                const firstMessage = data.messages[0];
+                if (firstMessage?.content && Array.isArray(firstMessage.content) && firstMessage.content.length > 0) {
+                    sessionName = firstMessage.content[0]?.text?.trim() || sessionName;
+                } else if (firstMessage?.content && typeof firstMessage.content === 'string') {
+                    sessionName = firstMessage.content.trim() || sessionName;
+                }
+            } else if (data.messages?.[0]?.content) {
+                // old format fallback
+                sessionName = data.messages[0].content;
+            }
+
+            // Clean up sessionName
+            if (sessionName) {
+                sessionName = sessionName.replace(/\n/g, ' ').trim().substring(0, 100);
+            }
+
             return {
-                sessionId: data.id,
-                workspacePath: data.projectPath,
-                sessionName: data.messages?.[0]?.content || 'New Gemini Chat'
+                sessionId,
+                workspacePath,
+                sessionName
             };
         }
     } catch (e) {
@@ -25,10 +64,24 @@ export async function processGeminiSessionFile(file: string): Promise<SessionDat
 }
 
 export async function processGeminiSessions() {
-    const geminiPath = path.join(os.homedir(), '.gemini', 'sessions');
-    const files = await findFilesRecursivelyCreatedAfterLastScan(geminiPath, '.json');
+    const geminiHome = path.join(os.homedir(), '.gemini');
+    
+    // Process old sessions directory
+    const oldGeminiPath = path.join(geminiHome, 'sessions');
+    const oldFiles = await findFilesRecursivelyCreatedAfterLastScan(oldGeminiPath, '.json');
+    
+    // Process new tmp/chats directories
+    const tmpGeminiPath = path.join(geminiHome, 'tmp');
+    const tmpFiles = await findFilesRecursivelyCreatedAfterLastScan(tmpGeminiPath, '.json');
+    
+    const files = [...oldFiles, ...tmpFiles];
 
     for (const file of files) {
+        // For tmp files, only process those inside a 'chats' directory
+        if (file.startsWith(tmpGeminiPath) && !file.includes(`${path.sep}chats${path.sep}`)) {
+            continue;
+        }
+
         const result = await processGeminiSessionFile(file);
         if (result) {
             let createdAt: string | undefined;
