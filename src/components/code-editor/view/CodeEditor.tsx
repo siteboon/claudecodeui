@@ -15,6 +15,7 @@ import CodeEditorHeader from './subcomponents/CodeEditorHeader';
 import CodeEditorLoadingState from './subcomponents/CodeEditorLoadingState';
 import CodeEditorSurface from './subcomponents/CodeEditorSurface';
 import CodeEditorBinaryFile from './subcomponents/CodeEditorBinaryFile';
+import CodeEditorSettingsModal from './modals/CodeEditorSettingsModal';
 
 type CodeEditorProps = {
   file: CodeEditorFile;
@@ -39,13 +40,19 @@ export default function CodeEditor({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showDiff, setShowDiff] = useState(Boolean(file.diffInfo));
   const [markdownPreview, setMarkdownPreview] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
   const {
     isDarkMode,
+    setIsDarkMode,
     wordWrap,
+    setWordWrap,
     minimapEnabled,
+    setMinimapEnabled,
     showLineNumbers,
+    setShowLineNumbers,
     fontSize,
+    setFontSize,
   } = useCodeEditorSettings();
 
   const {
@@ -199,7 +206,7 @@ export default function CodeEditor({
             saving={saving}
             saveSuccess={saveSuccess}
             onToggleMarkdownPreview={() => setMarkdownPreview((previous) => !previous)}
-            onOpenSettings={() => window.openSettings?.('appearance')}
+            onOpenSettings={() => setIsSettingsModalOpen(true)}
             onDownload={handleDownload}
             onSave={handleSave}
             onToggleFullscreen={() => setIsFullscreen((previous) => !previous)}
@@ -246,6 +253,20 @@ export default function CodeEditor({
           />
         </div>
       </div>
+      <CodeEditorSettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
+        isDarkMode={isDarkMode}
+        onThemeChange={(value) => setIsDarkMode(value === 'dark')}
+        wordWrap={wordWrap}
+        onWordWrapChange={setWordWrap}
+        minimapEnabled={minimapEnabled}
+        onMinimapChange={setMinimapEnabled}
+        showLineNumbers={showLineNumbers}
+        onShowLineNumbersChange={setShowLineNumbers}
+        fontSize={fontSize}
+        onFontSizeChange={setFontSize}
+      />
     </>
   );
 }

@@ -201,10 +201,6 @@ function Sidebar({
         onConfirmDeleteSession={confirmDeleteSession}
         showVersionModal={showVersionModal}
         onCloseVersionModal={() => setShowVersionModal(false)}
-        releaseInfo={releaseInfo}
-        currentVersion={currentVersion}
-        latestVersion={latestVersion}
-        installMode={installMode}
         t={t}
       />
 

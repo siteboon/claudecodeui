@@ -23,10 +23,6 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     setActiveTab,
     saveStatus,
     deleteError,
-    projectSortOrder,
-    setProjectSortOrder,
-    codeEditorSettings,
-    updateCodeEditorSetting,
     claudePermissions,
     setClaudePermissions,
     notificationPreferences,
@@ -140,18 +136,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
           {/* Content */}
           <main className="flex-1 overflow-y-auto">
             <div key={activeTab} className="settings-content-enter space-y-6 p-4 pb-safe-area-inset-bottom md:space-y-8 md:p-6">
-              {activeTab === 'appearance' && (
-                <AppearanceSettingsTab
-                  projectSortOrder={projectSortOrder}
-                  onProjectSortOrderChange={setProjectSortOrder}
-                  codeEditorSettings={codeEditorSettings}
-                  onCodeEditorThemeChange={(value) => updateCodeEditorSetting('theme', value)}
-                  onCodeEditorWordWrapChange={(value) => updateCodeEditorSetting('wordWrap', value)}
-                  onCodeEditorShowMinimapChange={(value) => updateCodeEditorSetting('showMinimap', value)}
-                  onCodeEditorLineNumbersChange={(value) => updateCodeEditorSetting('lineNumbers', value)}
-                  onCodeEditorFontSizeChange={(value) => updateCodeEditorSetting('fontSize', value)}
-                />
-              )}
+              {activeTab === 'appearance' && <AppearanceSettingsTab />}
 
               {activeTab === 'git' && <GitSettingsTab />}
 

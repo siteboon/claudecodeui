@@ -4,7 +4,6 @@ import { authenticatedFetch } from '../../../utils/api';
 import {
   AUTH_STATUS_ENDPOINTS,
   DEFAULT_AUTH_STATUS,
-  DEFAULT_CODE_EDITOR_SETTINGS,
   DEFAULT_CURSOR_PERMISSIONS,
 } from '../constants/constants';
 import type {
@@ -12,7 +11,6 @@ import type {
   AuthStatus,
   ClaudeMcpFormState,
   ClaudePermissionsState,
-  CodeEditorSettingsState,
   CodexMcpFormState,
   CodexPermissionMode,
   CursorPermissionsState,
@@ -21,7 +19,6 @@ import type {
   McpToolsResult,
   McpTestResult,
   NotificationPreferencesState,
-  ProjectSortOrder,
   SettingsMainTab,
   SettingsProject,
 } from '../types/types';
@@ -84,7 +81,6 @@ type ClaudeSettingsStorage = {
   allowedTools?: string[];
   disallowedTools?: string[];
   skipPermissions?: boolean;
-  projectSortOrder?: ProjectSortOrder;
 };
 
 type CursorSettingsStorage = {
@@ -138,14 +134,6 @@ const toCodexPermissionMode = (value: unknown): CodexPermissionMode => {
 
   return 'default';
 };
-
-const readCodeEditorSettings = (): CodeEditorSettingsState => ({
-  theme: localStorage.getItem('codeEditorTheme') === 'light' ? 'light' : 'dark',
-  wordWrap: localStorage.getItem('codeEditorWordWrap') === 'true',
-  showMinimap: localStorage.getItem('codeEditorShowMinimap') !== 'false',
-  lineNumbers: localStorage.getItem('codeEditorLineNumbers') !== 'false',
-  fontSize: localStorage.getItem('codeEditorFontSize') ?? DEFAULT_CODE_EDITOR_SETTINGS.fontSize,
-});
 
 const mapCliServersToMcpServers = (servers: McpCliServer[] = []): McpServer[] => (
   servers.map((server) => ({
@@ -211,11 +199,6 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
   const [activeTab, setActiveTab] = useState<SettingsMainTab>(() => normalizeMainTab(initialTab));
   const [saveStatus, setSaveStatus] = useState<'success' | 'error' | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [projectSortOrder, setProjectSortOrder] = useState<ProjectSortOrder>('name');
-  const [codeEditorSettings, setCodeEditorSettings] = useState<CodeEditorSettingsState>(() => (
-    readCodeEditorSettings()
-  ));
-
   const [claudePermissions, setClaudePermissions] = useState<ClaudePermissionsState>(() => (
     createEmptyClaudePermissions()
   ));
@@ -667,7 +650,6 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
         disallowedTools: savedClaudeSettings.disallowedTools || [],
         skipPermissions: Boolean(savedClaudeSettings.skipPermissions),
       });
-      setProjectSortOrder(savedClaudeSettings.projectSortOrder === 'date' ? 'date' : 'name');
 
       const savedCursorSettings = parseJson<CursorSettingsStorage>(
         localStorage.getItem('cursor-tools-settings'),
@@ -718,7 +700,6 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
       setCursorPermissions(createEmptyCursorPermissions());
       setNotificationPreferences(createDefaultNotificationPreferences());
       setCodexPermissionMode('default');
-      setProjectSortOrder('name');
     }
   }, [fetchCodexMcpServers, fetchCursorMcpServers, fetchMcpServers]);
 
@@ -746,7 +727,6 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
         allowedTools: claudePermissions.allowedTools,
         disallowedTools: claudePermissions.disallowedTools,
         skipPermissions: claudePermissions.skipPermissions,
-        projectSortOrder,
         lastUpdated: now,
       }));
 
@@ -790,15 +770,7 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
     cursorPermissions.skipPermissions,
     notificationPreferences,
     geminiPermissionMode,
-    projectSortOrder,
   ]);
-
-  const updateCodeEditorSetting = useCallback(
-    <K extends keyof CodeEditorSettingsState>(key: K, value: CodeEditorSettingsState[K]) => {
-      setCodeEditorSettings((prev) => ({ ...prev, [key]: value }));
-    },
-    [],
-  );
 
   const openMcpForm = useCallback((server?: McpServer) => {
     setEditingMcpServer(server || null);
@@ -832,15 +804,6 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
     void checkAuthStatus('codex');
     void checkAuthStatus('gemini');
   }, [checkAuthStatus, initialTab, isOpen, loadSettings]);
-
-  useEffect(() => {
-    localStorage.setItem('codeEditorTheme', codeEditorSettings.theme);
-    localStorage.setItem('codeEditorWordWrap', String(codeEditorSettings.wordWrap));
-    localStorage.setItem('codeEditorShowMinimap', String(codeEditorSettings.showMinimap));
-    localStorage.setItem('codeEditorLineNumbers', String(codeEditorSettings.lineNumbers));
-    localStorage.setItem('codeEditorFontSize', codeEditorSettings.fontSize);
-    window.dispatchEvent(new Event('codeEditorSettingsChanged'));
-  }, [codeEditorSettings]);
 
   // Auto-save permissions and sort order with debounce
   const autoSaveTimerRef = useRef<number | null>(null);
@@ -903,10 +866,6 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
     toggleDarkMode,
     saveStatus,
     deleteError,
-    projectSortOrder,
-    setProjectSortOrder,
-    codeEditorSettings,
-    updateCodeEditorSetting,
     claudePermissions,
     setClaudePermissions,
     cursorPermissions,

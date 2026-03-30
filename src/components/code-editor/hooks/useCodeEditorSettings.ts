@@ -46,11 +46,12 @@ export const useCodeEditorSettings = () => {
   // Keep legacy behavior where the editor writes theme and wrap settings directly.
   useEffect(() => {
     localStorage.setItem(CODE_EDITOR_STORAGE_KEYS.theme, isDarkMode ? 'dark' : 'light');
-  }, [isDarkMode]);
-
-  useEffect(() => {
     localStorage.setItem(CODE_EDITOR_STORAGE_KEYS.wordWrap, String(wordWrap));
-  }, [wordWrap]);
+    localStorage.setItem(CODE_EDITOR_STORAGE_KEYS.showMinimap, String(minimapEnabled));
+    localStorage.setItem(CODE_EDITOR_STORAGE_KEYS.lineNumbers, String(showLineNumbers));
+    localStorage.setItem(CODE_EDITOR_STORAGE_KEYS.fontSize, String(fontSize));
+    window.dispatchEvent(new Event(CODE_EDITOR_SETTINGS_CHANGED_EVENT));
+  }, [fontSize, isDarkMode, minimapEnabled, showLineNumbers, wordWrap]);
 
   useEffect(() => {
     const refreshFromStorage = () => {

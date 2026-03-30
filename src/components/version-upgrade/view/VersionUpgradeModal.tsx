@@ -1,28 +1,20 @@
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { authenticatedFetch } from "../../../utils/api";
-import { ReleaseInfo } from "../../../types/sharedTypes";
 import { copyTextToClipboard } from "../../../utils/clipboard";
-import type { InstallMode } from "../../../hooks/useVersionCheck";
+import { useVersionCheck } from "../../../hooks/useVersionCheck";
 
 interface VersionUpgradeModalProps {
     isOpen: boolean;
     onClose: () => void;
-    releaseInfo: ReleaseInfo | null;
-    currentVersion: string;
-    latestVersion: string | null;
-    installMode: InstallMode;
 }
 
-export function VersionUpgradeModal({
-    isOpen,
-    onClose,
-    releaseInfo,
-    currentVersion,
-    latestVersion,
-    installMode
-}: VersionUpgradeModalProps) {
+export function VersionUpgradeModal({ isOpen, onClose }: VersionUpgradeModalProps) {
     const { t } = useTranslation('common');
+    const { latestVersion, currentVersion, releaseInfo, installMode } = useVersionCheck(
+        'siteboon',
+        'claudecodeui',
+    );
     const upgradeCommand = installMode === 'npm'
         ? t('versionUpdate.npmUpgradeCommand')
         : 'git checkout main && git pull && npm install';
