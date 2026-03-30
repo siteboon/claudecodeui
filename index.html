@@ -35,7 +35,8 @@
       if ('serviceWorker' in navigator) {
         // Derive base path from the manifest link href which Vite transforms with the correct base
         var m = document.querySelector('link[rel="manifest"]');
-        var base = m ? m.getAttribute('href').replace('/manifest.json', '') || '' : '';
+        var manifestHref = m ? m.getAttribute('href') : '';
+        var base = manifestHref ? manifestHref.replace(/\/manifest\.json(?:[?#].*)?$/, '') : '';
         window.addEventListener('load', function() {
           navigator.serviceWorker.register(base + '/sw.js')
             .then(function(registration) {
