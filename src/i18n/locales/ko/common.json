@@ -114,7 +114,22 @@
     "justNow": "방금 전",
     "minAgo": "{{count}}분 전",
     "hoursAgo": "{{count}}시간 전",
-    "daysAgo": "{{count}}일 전"
+    "daysAgo": "{{count}}일 전",
+    "newFile": "새 파일 (Cmd+N)",
+    "newFolder": "새 폴더 (Cmd+Shift+N)",
+    "refresh": "새로고침",
+    "collapseAll": "모두 접기",
+    "context": {
+      "rename": "이름 변경",
+      "delete": "삭제",
+      "copyPath": "경로 복사",
+      "download": "다운로드",
+      "newFile": "새 파일",
+      "newFolder": "새 폴더",
+      "refresh": "새로 고침",
+      "menuLabel": "파일 컨텍스트 메뉴",
+      "loading": "로딩 중..."
+    }
   },
   "projectWizard": {
     "title": "새 프로젝트 생성",
@@ -189,6 +204,36 @@
       "providePath": "워크스페이스 경로를 입력해주세요",
       "failedToCreate": "워크스페이스 생성 실패",
       "failedToCreateFolder": "폴더 생성 실패"
+    }
+  },
+  "notifications": {
+    "genericTool": "도구",
+    "codes": {
+      "generic": {
+        "info": {
+          "title": "알림"
+        }
+      },
+      "permission": {
+        "required": {
+          "title": "작업 필요",
+          "body": "{{toolName}} 에 대한 결정을 기다리고 있습니다."
+        }
+      },
+      "run": {
+        "stopped": {
+          "title": "실행이 중지되었습니다",
+          "body": "사유: {{reason}}"
+        },
+        "failed": {
+          "title": "실행 실패"
+        }
+      },
+      "agent": {
+        "notification": {
+          "title": "에이전트 알림"
+        }
+      }
     }
   },
   "versionUpdate": {

@@ -4,13 +4,21 @@
     "copied": "Copied",
     "copyCode": "Copy code"
   },
+  "copyMessage": {
+    "copy": "Copy message",
+    "copied": "Message copied",
+    "selectFormat": "Select copy format",
+    "copyAsMarkdown": "Copy as markdown",
+    "copyAsText": "Copy as text"
+  },
   "messageTypes": {
     "user": "U",
     "error": "Error",
     "tool": "Tool",
     "claude": "Claude",
     "cursor": "Cursor",
-    "codex": "Codex"
+    "codex": "Codex",
+    "gemini": "Gemini"
   },
   "tools": {
     "settings": "Tool Settings",
@@ -93,6 +101,24 @@
     },
     "technicalDetails": "Technical details"
   },
+  "gemini": {
+    "permissionMode": "Gemini Permission Mode",
+    "description": "Control how Gemini CLI handles operation approvals.",
+    "modes": {
+      "default": {
+        "title": "Standard (Ask for Approval)",
+        "description": "Gemini will prompt for approval before executing commands, writing files, and fetching web resources."
+      },
+      "autoEdit": {
+        "title": "Auto Edit (Skip File Approvals)",
+        "description": "Gemini will automatically approve file edits and web fetches, but will still prompt for shell commands."
+      },
+      "yolo": {
+        "title": "YOLO (Bypass All Permissions)",
+        "description": "Gemini will execute all operations without asking for approval. Exercise caution."
+      }
+    }
+  },
   "input": {
     "placeholder": "Type / for commands, @ for files, or ask {{provider}} anything...",
     "placeholderDefault": "Type your message...",
@@ -153,12 +179,14 @@
     "providerInfo": {
       "anthropic": "by Anthropic",
       "openai": "by OpenAI",
-      "cursorEditor": "AI Code Editor"
+      "cursorEditor": "AI Code Editor",
+      "google": "by Google"
     },
     "readyPrompt": {
       "claude": "Ready to use Claude with {{model}}. Start typing your message below.",
       "cursor": "Ready to use Cursor with {{model}}. Start typing your message below.",
       "codex": "Ready to use Codex with {{model}}. Start typing your message below.",
+      "gemini": "Ready to use Gemini with {{model}}. Start typing your message below.",
       "default": "Select a provider above to begin"
     }
   },
@@ -207,6 +235,33 @@
     "runCommand": "Run {{command}} in {{projectName}}",
     "startCli": "Starting Claude CLI in {{projectName}}",
     "defaultCommand": "command"
+  },
+  "claudeStatus": {
+    "actions": {
+      "thinking": "Thinking",
+      "processing": "Processing",
+      "analyzing": "Analyzing",
+      "working": "Working",
+      "computing": "Computing",
+      "reasoning": "Reasoning"
+    },
+    "state": {
+      "live": "Live",
+      "paused": "Paused"
+    },
+    "elapsed": {
+      "seconds": "{{count}}s",
+      "minutesSeconds": "{{minutes}}m {{seconds}}s",
+      "label": "{{time}} elapsed",
+      "startingNow": "Starting now"
+    },
+    "controls": {
+      "stopGeneration": "Stop Generation",
+      "pressEscToStop": "Press Esc anytime to stop"
+    },
+    "providers": {
+      "assistant": "Assistant"
+    }
   },
   "projectSelection": {
     "startChatWithProvider": "Select a project to start chatting with {{provider}}"

@@ -1,0 +1,238 @@
+{
+  "buttons": {
+    "save": "Сохранить",
+    "cancel": "Отмена",
+    "delete": "Удалить",
+    "create": "Создать",
+    "edit": "Редактировать",
+    "close": "Закрыть",
+    "confirm": "Подтвердить",
+    "submit": "Отправить",
+    "retry": "Повторить",
+    "refresh": "Обновить",
+    "search": "Поиск",
+    "clear": "Очистить",
+    "copy": "Копировать",
+    "download": "Скачать",
+    "upload": "Загрузить",
+    "browse": "Обзор"
+  },
+  "tabs": {
+    "chat": "Чат",
+    "shell": "Терминал",
+    "files": "Файлы",
+    "git": "Система контроля версий",
+    "tasks": "Задачи"
+  },
+  "status": {
+    "loading": "Загрузка...",
+    "success": "Успешно",
+    "error": "Ошибка",
+    "failed": "Не удалось",
+    "pending": "Ожидание",
+    "completed": "Завершено",
+    "inProgress": "В процессе"
+  },
+  "messages": {
+    "savedSuccessfully": "Успешно сохранено",
+    "deletedSuccessfully": "Успешно удалено",
+    "updatedSuccessfully": "Успешно обновлено",
+    "operationFailed": "Операция не удалась",
+    "networkError": "Ошибка сети. Проверьте подключение.",
+    "unauthorized": "Не авторизован. Пожалуйста, войдите.",
+    "notFound": "Не найдено",
+    "invalidInput": "Неверный ввод",
+    "requiredField": "Это поле обязательно",
+    "unknownError": "Произошла неизвестная ошибка"
+  },
+  "navigation": {
+    "settings": "Настройки",
+    "home": "Главная",
+    "back": "Назад",
+    "next": "Далее",
+    "previous": "Предыдущий",
+    "logout": "Выйти"
+  },
+  "common": {
+    "language": "Язык",
+    "theme": "Тема",
+    "darkMode": "Темная тема",
+    "lightMode": "Светлая тема",
+    "name": "Имя",
+    "description": "Описание",
+    "enabled": "Включено",
+    "disabled": "Отключено",
+    "optional": "Необязательно",
+    "version": "Версия",
+    "select": "Выбрать",
+    "selectAll": "Выбрать все",
+    "deselectAll": "Снять выделение"
+  },
+  "time": {
+    "justNow": "Только что",
+    "minutesAgo": "{{count}} мин. назад",
+    "hoursAgo": "{{count}} ч. назад",
+    "daysAgo": "{{count}} дн. назад",
+    "yesterday": "Вчера"
+  },
+  "fileOperations": {
+    "newFile": "Новый файл",
+    "newFolder": "Новая папка",
+    "rename": "Переименовать",
+    "move": "Переместить",
+    "copyPath": "Копировать путь",
+    "openInEditor": "Открыть в редакторе"
+  },
+  "mainContent": {
+    "loading": "Загрузка Claude Code UI",
+    "settingUpWorkspace": "Настройка рабочего пространства...",
+    "chooseProject": "Выберите проект",
+    "selectProjectDescription": "Выберите проект на боковой панели, чтобы начать работу с Claude. Каждый проект содержит ваши сеансы чата и историю файлов.",
+    "tip": "Совет",
+    "createProjectMobile": "Нажмите кнопку меню выше для доступа к проектам",
+    "createProjectDesktop": "Создайте новый проект, нажав на значок папки на боковой панели",
+    "newSession": "Новый сеанс",
+    "untitledSession": "Безымянный сеанс",
+    "projectFiles": "Файлы проекта"
+  },
+  "fileTree": {
+    "loading": "Загрузка файлов...",
+    "files": "Файлы",
+    "simpleView": "Простой вид",
+    "compactView": "Компактный вид",
+    "detailedView": "Подробный вид",
+    "searchPlaceholder": "Поиск файлов и папок...",
+    "clearSearch": "Очистить поиск",
+    "name": "Имя",
+    "size": "Размер",
+    "modified": "Изменено",
+    "permissions": "Права доступа",
+    "noFilesFound": "Файлы не найдены",
+    "checkProjectPath": "Проверьте доступность пути к проекту",
+    "noMatchesFound": "Совпадений не найдено",
+    "tryDifferentSearch": "Попробуйте другой поисковый запрос или очистите поиск",
+    "justNow": "только что",
+    "minAgo": "{{count}} мин. назад",
+    "hoursAgo": "{{count}} ч. назад",
+    "daysAgo": "{{count}} дн. назад",
+    "newFile": "Новый файл (Cmd+N)",
+    "newFolder": "Новая папка (Cmd+Shift+N)",
+    "refresh": "Обновить",
+    "collapseAll": "Свернуть все",
+    "context": {
+      "rename": "Переименовать",
+      "delete": "Удалить",
+      "copyPath": "Копировать путь",
+      "download": "Скачать",
+      "newFile": "Новый файл",
+      "newFolder": "Новая папка",
+      "refresh": "Обновить",
+      "menuLabel": "Контекстное меню файла",
+      "loading": "Загрузка..."
+    }
+  },
+  "projectWizard": {
+    "title": "Создать новый проект",
+    "steps": {
+      "type": "Тип",
+      "configure": "Настройка",
+      "confirm": "Подтверждение"
+    },
+    "step1": {
+      "question": "У вас уже есть рабочее пространство или вы хотите создать новое?",
+      "existing": {
+        "title": "Существующее рабочее пространство",
+        "description": "У меня уже есть рабочее пространство на сервере, нужно только добавить его в список проектов"
+      },
+      "new": {
+        "title": "Новое рабочее пространство",
+        "description": "Создать новое рабочее пространство, опционально клонировать из репозитория GitHub"
+      }
+    },
+    "step2": {
+      "existingPath": "Путь к рабочему пространству",
+      "newPath": "Путь к рабочему пространству",
+      "existingPlaceholder": "/путь/к/существующему/пространству",
+      "newPlaceholder": "/путь/к/новому/пространству",
+      "existingHelp": "Полный путь к каталогу вашего рабочего пространства",
+      "newHelp": "Полный путь к каталогу вашего рабочего пространства",
+      "githubUrl": "URL GitHub (необязательно)",
+      "githubPlaceholder": "https://github.com/username/repository",
+      "githubHelp": "Необязательно: укажите URL GitHub для клонирования репозитория",
+      "githubAuth": "Аутентификация GitHub (необязательно)",
+      "githubAuthHelp": "Требуется только для приватных репозиториев. Публичные репозитории можно клонировать без аутентификации.",
+      "loadingTokens": "Загрузка сохраненных токенов...",
+      "storedToken": "Сохраненный токен",
+      "newToken": "Новый токен",
+      "nonePublic": "Нет (публичный)",
+      "selectToken": "Выбрать токен",
+      "selectTokenPlaceholder": "-- Выберите токен --",
+      "tokenPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "tokenHelp": "Этот токен будет использован только для этой операции",
+      "publicRepoInfo": "Публичные репозитории не требуют аутентификации. Вы можете пропустить токен при клонировании публичного репозитория.",
+      "noTokensHelp": "Нет доступных сохраненных токенов. Вы можете добавить токены в Настройки → API ключи для удобного повторного использования.",
+      "optionalTokenPublic": "Токен GitHub (необязательно для публичных репозиториев)",
+      "tokenPublicPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (оставьте пустым для публичных репозиториев)"
+    },
+    "step3": {
+      "reviewConfig": "Проверьте вашу конфигурацию",
+      "workspaceType": "Тип рабочего пространства:",
+      "existingWorkspace": "Существующее рабочее пространство",
+      "newWorkspace": "Новое рабочее пространство",
+      "path": "Путь:",
+      "cloneFrom": "Клонировать из:",
+      "authentication": "Аутентификация:",
+      "usingStoredToken": "Использование сохраненного токена:",
+      "usingProvidedToken": "Использование предоставленного токена",
+      "noAuthentication": "Без аутентификации",
+      "sshKey": "SSH ключ",
+      "existingInfo": "Рабочее пространство будет добавлено в список проектов и будет доступно для сеансов Claude/Cursor.",
+      "newWithClone": "Репозиторий будет клонирован в эту папку.",
+      "newEmpty": "Рабочее пространство будет добавлено в список проектов и будет доступно для сеансов Claude/Cursor.",
+      "cloningRepository": "Клонирование репозитория..."
+    },
+    "buttons": {
+      "cancel": "Отмена",
+      "back": "Назад",
+      "next": "Далее",
+      "createProject": "Создать проект",
+      "creating": "Создание...",
+      "cloning": "Клонирование..."
+    },
+    "errors": {
+      "selectType": "Пожалуйста, выберите, есть ли у вас существующее рабочее пространство или вы хотите создать новое",
+      "providePath": "Пожалуйста, укажите путь к рабочему пространству",
+      "failedToCreate": "Не удалось создать рабочее пространство",
+      "failedToCreateFolder": "Не удалось создать папку"
+    }
+  },
+  "versionUpdate": {
+    "title": "Доступно обновление",
+    "newVersionReady": "Новая версия готова",
+    "currentVersion": "Текущая версия",
+    "latestVersion": "Последняя версия",
+    "whatsNew": "Что нового:",
+    "viewFullRelease": "Посмотреть полный релиз",
+    "updateProgress": "Прогресс обновления:",
+    "manualUpgrade": "Ручное обновление:",
+    "npmUpgradeCommand": "npm install -g @siteboon/claude-code-ui@latest",
+    "manualUpgradeHint": "Или нажмите \"Обновить сейчас\" для автоматического обновления.",
+    "updateCompleted": "Обновление успешно завершено!",
+    "restartServer": "Пожалуйста, перезапустите сервер для применения изменений.",
+    "updateFailed": "Обновление не удалось",
+    "buttons": {
+      "close": "Закрыть",
+      "later": "Позже",
+      "copyCommand": "Копировать команду",
+      "updateNow": "Обновить сейчас",
+      "updating": "Обновление..."
+    },
+    "ariaLabels": {
+      "closeModal": "Закрыть модальное окно обновления версии",
+      "showSidebar": "Показать боковую панель",
+      "settings": "Настройки",
+      "updateAvailable": "Доступно обновление",
+      "closeSidebar": "Закрыть боковую панель"
+    }
+  }
+}

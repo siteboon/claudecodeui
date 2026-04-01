@@ -56,7 +56,7 @@ export default function PermissionRequestsBanner({
         return (
           <div
             key={request.requestId}
-            className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-3 shadow-sm"
+            className="rounded-lg border border-amber-200 bg-amber-50 p-3 shadow-sm dark:border-amber-800 dark:bg-amber-900/20"
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -74,10 +74,10 @@ export default function PermissionRequestsBanner({
 
             {rawInput && (
               <details className="mt-2">
-                <summary className="cursor-pointer text-xs text-amber-800 dark:text-amber-200 hover:text-amber-900 dark:hover:text-amber-100">
+                <summary className="cursor-pointer text-xs text-amber-800 hover:text-amber-900 dark:text-amber-200 dark:hover:text-amber-100">
                   View tool input
                 </summary>
-                <pre className="mt-2 max-h-40 overflow-auto rounded-md bg-white/80 dark:bg-gray-900/60 border border-amber-200/60 dark:border-amber-800/60 p-2 text-xs text-amber-900 dark:text-amber-100 whitespace-pre-wrap">
+                <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-md border border-amber-200/60 bg-white/80 p-2 text-xs text-amber-900 dark:border-amber-800/60 dark:bg-gray-900/60 dark:text-amber-100">
                   {rawInput}
                 </pre>
               </details>
@@ -87,7 +87,7 @@ export default function PermissionRequestsBanner({
               <button
                 type="button"
                 onClick={() => handlePermissionDecision(request.requestId, { allow: true })}
-                className="inline-flex items-center gap-2 rounded-md bg-amber-600 text-white text-xs font-medium px-3 py-1.5 hover:bg-amber-700 transition-colors"
+                className="inline-flex items-center gap-2 rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-amber-700"
               >
                 Allow once
               </button>
@@ -99,10 +99,10 @@ export default function PermissionRequestsBanner({
                   }
                   handlePermissionDecision(matchingRequestIds, { allow: true, rememberEntry: permissionEntry });
                 }}
-                className={`inline-flex items-center gap-2 rounded-md text-xs font-medium px-3 py-1.5 border transition-colors ${
+                className={`inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
                   permissionEntry
                     ? 'border-amber-300 text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-100 dark:hover:bg-amber-900/30'
-                    : 'border-gray-300 text-gray-400 cursor-not-allowed'
+                    : 'cursor-not-allowed border-gray-300 text-gray-400'
                 }`}
                 disabled={!permissionEntry}
               >
@@ -111,7 +111,7 @@ export default function PermissionRequestsBanner({
               <button
                 type="button"
                 onClick={() => handlePermissionDecision(request.requestId, { allow: false, message: 'User denied tool use' })}
-                className="inline-flex items-center gap-2 rounded-md text-xs font-medium px-3 py-1.5 border border-red-300 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-200 dark:hover:bg-red-900/30 transition-colors"
+                className="inline-flex items-center gap-2 rounded-md border border-red-300 px-3 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-50 dark:border-red-800 dark:text-red-200 dark:hover:bg-red-900/30"
               >
                 Deny
               </button>

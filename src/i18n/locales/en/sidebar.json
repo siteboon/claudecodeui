@@ -46,7 +46,8 @@
     "editSessionName": "Manually edit session name",
     "deleteSession": "Delete this session permanently",
     "save": "Save",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "clearSearch": "Clear search"
   },
   "navigation": {
     "chat": "Chat",
@@ -63,7 +64,8 @@
     "cancel": "Cancel",
     "save": "Save",
     "delete": "Delete",
-    "rename": "Rename"
+    "rename": "Rename",
+    "joinCommunity": "Join Community"
   },
   "status": {
     "active": "Active",
@@ -92,6 +94,8 @@
     "enterProjectPath": "Please enter a project path",
     "deleteSessionFailed": "Failed to delete session. Please try again.",
     "deleteSessionError": "Error deleting session. Please try again.",
+    "renameSessionFailed": "Failed to rename session. Please try again.",
+    "renameSessionError": "Error renaming session. Please try again.",
     "deleteProjectFailed": "Failed to delete project. Please try again.",
     "deleteProjectError": "Error deleting project. Please try again.",
     "createProjectFailed": "Failed to create project. Please try again.",
@@ -99,6 +103,18 @@
   },
   "version": {
     "updateAvailable": "Update available"
+  },
+  "search": {
+    "modeProjects": "Projects",
+    "modeConversations": "Conversations",
+    "conversationsPlaceholder": "Search in conversations...",
+    "searching": "Searching...",
+    "noResults": "No results found",
+    "tryDifferentQuery": "Try a different search query",
+    "matches_one": "{{count}} match",
+    "matches_other": "{{count}} matches",
+    "projectsScanned_one": "{{count}} project scanned",
+    "projectsScanned_other": "{{count}} projects scanned"
   },
   "deleteConfirmation": {
     "deleteProject": "Delete Project",

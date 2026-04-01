@@ -1,15 +1,17 @@
 import React, { useCallback, useEffect, useRef } from 'react';
-import QuickSettingsPanel from '../../QuickSettingsPanel';
-import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import { useTranslation } from 'react-i18next';
-import ChatMessagesPane from './subcomponents/ChatMessagesPane';
-import ChatComposer from './subcomponents/ChatComposer';
-import type { ChatInterfaceProps } from '../types/types';
+import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
+import { QuickSettingsPanel } from '../../quick-settings-panel';
+import type { ChatInterfaceProps, Provider  } from '../types/types';
+import type { SessionProvider } from '../../../types/app';
 import { useChatProviderState } from '../hooks/useChatProviderState';
 import { useChatSessionState } from '../hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '../hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '../hooks/useChatComposerState';
-import type { Provider } from '../types/types';
+import { useSessionStore } from '../../../stores/useSessionStore';
+import ChatMessagesPane from './subcomponents/ChatMessagesPane';
+import ChatComposer from './subcomponents/ChatComposer';
+
 
 type PendingViewSession = {
   sessionId: string | null;
@@ -43,8 +45,10 @@ function ChatInterface({
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
   const { t } = useTranslation('chat');
 
+  const sessionStore = useSessionStore();
   const streamBufferRef = useRef('');
   const streamTimerRef = useRef<number | null>(null);
+  const accumulatedStreamRef = useRef('');
   const pendingViewSessionRef = useRef<PendingViewSession | null>(null);
 
   const resetStreamingState = useCallback(() => {
@@ -53,6 +57,7 @@ function ChatInterface({
       streamTimerRef.current = null;
     }
     streamBufferRef.current = '';
+    accumulatedStreamRef.current = '';
   }, []);
 
   const {
@@ -64,6 +69,8 @@ function ChatInterface({
     setClaudeModel,
     codexModel,
     setCodexModel,
+    geminiModel,
+    setGeminiModel,
     permissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
@@ -74,19 +81,17 @@ function ChatInterface({
 
   const {
     chatMessages,
-    setChatMessages,
+    addMessage,
+    clearMessages,
+    rewindMessages,
     isLoading,
     setIsLoading,
     currentSessionId,
     setCurrentSessionId,
-    sessionMessages,
-    setSessionMessages,
     isLoadingSessionMessages,
     isLoadingMoreMessages,
     hasMoreMessages,
     totalMessages,
-    isSystemSessionChange,
-    setIsSystemSessionChange,
     canAbortSession,
     setCanAbortSession,
     isUserScrolledUp,
@@ -118,6 +123,7 @@ function ChatInterface({
     processingSessions,
     resetStreamingState,
     pendingViewSessionRef,
+    sessionStore,
   });
 
   const {
@@ -174,25 +180,42 @@ function ChatInterface({
     cursorModel,
     claudeModel,
     codexModel,
+    geminiModel,
     isLoading,
     canAbortSession,
     tokenBudget,
     sendMessage,
     sendByCtrlEnter,
     onSessionActive,
+    onSessionProcessing,
     onInputFocusChange,
     onFileOpen,
     onShowSettings,
     pendingViewSessionRef,
     scrollToBottom,
-    setChatMessages,
-    setSessionMessages,
+    addMessage,
+    clearMessages,
+    rewindMessages,
     setIsLoading,
     setCanAbortSession,
     setClaudeStatus,
     setIsUserScrolledUp,
     setPendingPermissionRequests,
   });
+
+  // On WebSocket reconnect, re-fetch the current session's messages from the server
+  // so missed streaming events are shown. Also reset isLoading.
+  const handleWebSocketReconnect = useCallback(async () => {
+    if (!selectedProject || !selectedSession) return;
+    const providerVal = (localStorage.getItem('selected-provider') as SessionProvider) || 'claude';
+    await sessionStore.refreshFromServer(selectedSession.id, {
+      provider: (selectedSession.__provider || providerVal) as SessionProvider,
+      projectName: selectedProject.name,
+      projectPath: selectedProject.fullPath || selectedProject.path || '',
+    });
+    setIsLoading(false);
+    setCanAbortSession(false);
+  }, [selectedProject, selectedSession, sessionStore, setIsLoading, setCanAbortSession]);
 
   useChatRealtimeHandlers({
     latestMessage,
@@ -201,21 +224,22 @@ function ChatInterface({
     selectedSession,
     currentSessionId,
     setCurrentSessionId,
-    setChatMessages,
     setIsLoading,
     setCanAbortSession,
     setClaudeStatus,
     setTokenBudget,
-    setIsSystemSessionChange,
     setPendingPermissionRequests,
     pendingViewSessionRef,
     streamBufferRef,
     streamTimerRef,
+    accumulatedStreamRef,
     onSessionInactive,
     onSessionProcessing,
     onSessionNotProcessing,
     onReplaceTemporarySession,
     onNavigateToSession,
+    onWebSocketReconnect: handleWebSocketReconnect,
+    sessionStore,
   });
 
   useEffect(() => {
@@ -239,13 +263,6 @@ function ChatInterface({
   }, [canAbortSession, handleAbortSession, isLoading]);
 
   useEffect(() => {
-    const processingSessionId = selectedSession?.id || currentSessionId;
-    if (processingSessionId && isLoading && onSessionProcessing) {
-      onSessionProcessing(processingSessionId);
-    }
-  }, [currentSessionId, isLoading, onSessionProcessing, selectedSession?.id]);
-
-  useEffect(() => {
     return () => {
       resetStreamingState();
     };
@@ -257,10 +274,12 @@ function ChatInterface({
         ? t('messageTypes.cursor')
         : provider === 'codex'
           ? t('messageTypes.codex')
-          : t('messageTypes.claude');
+          : provider === 'gemini'
+            ? t('messageTypes.gemini')
+            : t('messageTypes.claude');
 
     return (
-      <div className="flex items-center justify-center h-full">
+      <div className="flex h-full items-center justify-center">
         <div className="text-center text-muted-foreground">
           <p className="text-sm">
             {t('projectSelection.startChatWithProvider', {
@@ -275,7 +294,7 @@ function ChatInterface({
 
   return (
     <>
-      <div className="h-full flex flex-col">
+      <div className="flex h-full flex-col">
         <ChatMessagesPane
           scrollContainerRef={scrollContainerRef}
           onWheel={handleScroll}
@@ -293,6 +312,8 @@ function ChatInterface({
           setCursorModel={setCursorModel}
           codexModel={codexModel}
           setCodexModel={setCodexModel}
+          geminiModel={geminiModel}
+          setGeminiModel={setGeminiModel}
           tasksEnabled={tasksEnabled}
           isTaskMasterInstalled={isTaskMasterInstalled}
           onShowAllTasks={onShowAllTasks}
@@ -300,7 +321,7 @@ function ChatInterface({
           isLoadingMoreMessages={isLoadingMoreMessages}
           hasMoreMessages={hasMoreMessages}
           totalMessages={totalMessages}
-          sessionMessagesCount={sessionMessages.length}
+          sessionMessagesCount={chatMessages.length}
           visibleMessageCount={visibleMessageCount}
           visibleMessages={visibleMessages}
           loadEarlierMessages={loadEarlierMessages}
@@ -380,8 +401,10 @@ function ChatInterface({
               provider === 'cursor'
                 ? t('messageTypes.cursor')
                 : provider === 'codex'
-                ? t('messageTypes.codex')
-                : t('messageTypes.claude'),
+                  ? t('messageTypes.codex')
+                  : provider === 'gemini'
+                    ? t('messageTypes.gemini')
+                    : t('messageTypes.claude'),
           })}
           isTextareaExpanded={isTextareaExpanded}
           sendByCtrlEnter={sendByCtrlEnter}

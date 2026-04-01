@@ -39,7 +39,7 @@ function parseTaskContent(content: string): TaskItem[] {
 const statusConfig = {
   completed: {
     icon: (
-      <svg className="w-3.5 h-3.5 text-green-500 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg className="h-3.5 w-3.5 text-green-500 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
     ),
@@ -48,7 +48,7 @@ const statusConfig = {
   },
   in_progress: {
     icon: (
-      <svg className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
     ),
@@ -57,7 +57,7 @@ const statusConfig = {
   },
   pending: {
     icon: (
-      <svg className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg className="h-3.5 w-3.5 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <circle cx="12" cy="12" r="9" strokeWidth={2} />
       </svg>
     ),
@@ -76,7 +76,7 @@ export const TaskListContent: React.FC<TaskListContentProps> = ({ content }) => 
   // If we couldn't parse any tasks, fall back to text display
   if (tasks.length === 0) {
     return (
-      <pre className="text-[11px] font-mono text-gray-600 dark:text-gray-400 whitespace-pre-wrap">
+      <pre className="whitespace-pre-wrap font-mono text-[11px] text-gray-600 dark:text-gray-400">
         {content}
       </pre>
     );
@@ -87,13 +87,13 @@ export const TaskListContent: React.FC<TaskListContentProps> = ({ content }) => 
 
   return (
     <div>
-      <div className="flex items-center gap-2 mb-1.5">
+      <div className="mb-1.5 flex items-center gap-2">
         <span className="text-[11px] text-gray-500 dark:text-gray-400">
           {completed}/{total} completed
         </span>
-        <div className="flex-1 h-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+        <div className="h-1 flex-1 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
           <div
-            className="h-full bg-green-500 dark:bg-green-400 rounded-full transition-all"
+            className="h-full rounded-full bg-green-500 transition-all dark:bg-green-400"
             style={{ width: `${total > 0 ? (completed / total) * 100 : 0}%` }}
           />
         </div>
@@ -104,16 +104,16 @@ export const TaskListContent: React.FC<TaskListContentProps> = ({ content }) => 
           return (
             <div
               key={task.id}
-              className="flex items-center gap-1.5 py-0.5 group"
+              className="group flex items-center gap-1.5 py-0.5"
             >
               <span className="flex-shrink-0">{config.icon}</span>
-              <span className="text-[11px] font-mono text-gray-400 dark:text-gray-500 flex-shrink-0">
+              <span className="flex-shrink-0 font-mono text-[11px] text-gray-400 dark:text-gray-500">
                 #{task.id}
               </span>
-              <span className={`text-xs truncate flex-1 ${config.textClass}`}>
+              <span className={`flex-1 truncate text-xs ${config.textClass}`}>
                 {task.subject}
               </span>
-              <span className={`text-[10px] px-1 py-px rounded border flex-shrink-0 ${config.badgeClass}`}>
+              <span className={`flex-shrink-0 rounded border px-1 py-px text-[10px] ${config.badgeClass}`}>
                 {task.status.replace('_', ' ')}
               </span>
             </div>

@@ -114,7 +114,22 @@
     "justNow": "刚刚",
     "minAgo": "{{count}} 分钟前",
     "hoursAgo": "{{count}} 小时前",
-    "daysAgo": "{{count}} 天前"
+    "daysAgo": "{{count}} 天前",
+    "newFile": "新建文件 (Cmd+N)",
+    "newFolder": "新建文件夹 (Cmd+Shift+N)",
+    "refresh": "刷新",
+    "collapseAll": "全部折叠",
+    "context": {
+      "rename": "重命名",
+      "delete": "删除",
+      "copyPath": "复制路径",
+      "download": "下载",
+      "newFile": "新建文件",
+      "newFolder": "新建文件夹",
+      "refresh": "刷新",
+      "menuLabel": "文件上下文菜单",
+      "loading": "加载中..."
+    }
   },
   "projectWizard": {
     "title": "创建新项目",
@@ -189,6 +204,36 @@
       "providePath": "请提供工作区路径",
       "failedToCreate": "创建工作区失败",
       "failedToCreateFolder": "创建文件夹失败"
+    }
+  },
+  "notifications": {
+    "genericTool": "工具",
+    "codes": {
+      "generic": {
+        "info": {
+          "title": "通知"
+        }
+      },
+      "permission": {
+        "required": {
+          "title": "需要处理",
+          "body": "{{toolName}} 正在等待你的决策。"
+        }
+      },
+      "run": {
+        "stopped": {
+          "title": "运行已停止",
+          "body": "原因：{{reason}}"
+        },
+        "failed": {
+          "title": "运行失败"
+        }
+      },
+      "agent": {
+        "notification": {
+          "title": "Agent 通知"
+        }
+      }
     }
   },
   "versionUpdate": {

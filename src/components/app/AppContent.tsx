@@ -1,22 +1,21 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-
 import Sidebar from '../sidebar/view/Sidebar';
 import MainContent from '../main-content/view/MainContent';
-import MobileNav from '../MobileNav';
-
 import { useWebSocket } from '../../contexts/WebSocketContext';
 import { useDeviceSettings } from '../../hooks/useDeviceSettings';
 import { useSessionProtection } from '../../hooks/useSessionProtection';
 import { useProjectsState } from '../../hooks/useProjectsState';
+import MobileNav from './MobileNav';
 
 export default function AppContent() {
   const navigate = useNavigate();
   const { sessionId } = useParams<{ sessionId?: string }>();
   const { t } = useTranslation('common');
   const { isMobile } = useDeviceSettings({ trackPWA: false });
-  const { ws, sendMessage, latestMessage } = useWebSocket();
+  const { ws, sendMessage, latestMessage, isConnected } = useWebSocket();
+  const wasConnectedRef = useRef(false);
 
   const {
     activeSessions,
@@ -41,7 +40,7 @@ export default function AppContent() {
     setIsInputFocused,
     setShowSettings,
     openSettings,
-    fetchProjects,
+    refreshProjectsSilently,
     sidebarSharedProps,
   } = useProjectsState({
     sessionId,
@@ -52,14 +51,16 @@ export default function AppContent() {
   });
 
   useEffect(() => {
-    window.refreshProjects = fetchProjects;
+    // Expose a non-blocking refresh for chat/session flows.
+    // Full loading refreshes are still available through direct fetchProjects calls.
+    window.refreshProjects = refreshProjectsSilently;
 
     return () => {
-      if (window.refreshProjects === fetchProjects) {
+      if (window.refreshProjects === refreshProjectsSilently) {
         delete window.refreshProjects;
       }
     };
-  }, [fetchProjects]);
+  }, [refreshProjectsSilently]);
 
   useEffect(() => {
     window.openSettings = openSettings;
@@ -71,6 +72,58 @@ export default function AppContent() {
     };
   }, [openSettings]);
 
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
+      return undefined;
+    }
+
+    const handleServiceWorkerMessage = (event: MessageEvent) => {
+      const message = event.data;
+      if (!message || message.type !== 'notification:navigate') {
+        return;
+      }
+
+      if (typeof message.provider === 'string' && message.provider.trim()) {
+        localStorage.setItem('selected-provider', message.provider);
+      }
+
+      setActiveTab('chat');
+      setSidebarOpen(false);
+      void refreshProjectsSilently();
+
+      if (typeof message.sessionId === 'string' && message.sessionId) {
+        navigate(`/session/${message.sessionId}`);
+        return;
+      }
+
+      navigate('/');
+    };
+
+    navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage);
+
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
+    };
+  }, [navigate, refreshProjectsSilently, setActiveTab, setSidebarOpen]);
+
+  // Permission recovery: query pending permissions on WebSocket reconnect or session change
+  useEffect(() => {
+    const isReconnect = isConnected && !wasConnectedRef.current;
+
+    if (isReconnect) {
+      wasConnectedRef.current = true;
+    } else if (!isConnected) {
+      wasConnectedRef.current = false;
+    }
+
+    if (isConnected && selectedSession?.id) {
+      sendMessage({
+        type: 'get-pending-permissions',
+        sessionId: selectedSession.id
+      });
+    }
+  }, [isConnected, selectedSession?.id, sendMessage]);
+
   return (
     <div className="fixed inset-0 flex bg-background">
       {!isMobile ? (
@@ -79,7 +132,7 @@ export default function AppContent() {
         </div>
       ) : (
         <div
-          className={`fixed inset-0 z-50 flex transition-all duration-150 ease-out ${sidebarOpen ? 'opacity-100 visible' : 'opacity-0 invisible'
+          className={`fixed inset-0 z-50 flex transition-all duration-150 ease-out ${sidebarOpen ? 'visible opacity-100' : 'invisible opacity-0'
             }`}
         >
           <button
@@ -96,7 +149,7 @@ export default function AppContent() {
             aria-label={t('versionUpdate.ariaLabels.closeSidebar')}
           />
           <div
-            className={`relative w-[85vw] max-w-sm sm:w-80 h-full bg-card border-r border-border/40 transform transition-transform duration-150 ease-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+            className={`relative h-full w-[85vw] max-w-sm transform border-r border-border/40 bg-card transition-transform duration-150 ease-out sm:w-80 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'
               }`}
             onClick={(event) => event.stopPropagation()}
             onTouchStart={(event) => event.stopPropagation()}
@@ -106,7 +159,7 @@ export default function AppContent() {
         </div>
       )}
 
-      <div className={`flex-1 flex flex-col min-w-0 ${isMobile ? 'pb-mobile-nav' : ''}`}>
+      <div className={`flex min-w-0 flex-1 flex-col ${isMobile ? 'pb-mobile-nav' : ''}`}>
         <MainContent
           selectedProject={selectedProject}
           selectedSession={selectedSession}

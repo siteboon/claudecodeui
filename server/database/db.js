@@ -59,6 +59,15 @@ if (DB_PATH !== LEGACY_DB_PATH && !fs.existsSync(DB_PATH) && fs.existsSync(LEGAC
 // Create database connection
 const db = new Database(DB_PATH);
 
+// app_config must exist before any other module imports (auth.js reads the JWT secret at load time).
+// runMigrations() also creates this table, but it runs too late for existing installations
+// where auth.js is imported before initializeDatabase() is called.
+db.exec(`CREATE TABLE IF NOT EXISTS app_config (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
+
 // Show app installation path prominently
 const appInstallPath = path.join(__dirname, '../..');
 console.log('');
@@ -90,6 +99,54 @@ const runMigrations = () => {
       console.log('Running migration: Adding has_completed_onboarding column');
       db.exec('ALTER TABLE users ADD COLUMN has_completed_onboarding BOOLEAN DEFAULT 0');
     }
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS user_notification_preferences (
+        user_id INTEGER PRIMARY KEY,
+        preferences_json TEXT NOT NULL,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS vapid_keys (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        public_key TEXT NOT NULL,
+        private_key TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS push_subscriptions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        endpoint TEXT NOT NULL UNIQUE,
+        keys_p256dh TEXT NOT NULL,
+        keys_auth TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+    // Create app_config table if it doesn't exist (for existing installations)
+    db.exec(`CREATE TABLE IF NOT EXISTS app_config (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    // Create session_names table if it doesn't exist (for existing installations)
+    db.exec(`CREATE TABLE IF NOT EXISTS session_names (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT NOT NULL,
+      provider TEXT NOT NULL DEFAULT 'claude',
+      custom_name TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(session_id, provider)
+    )`);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_session_names_lookup ON session_names(session_id, provider)');
 
     console.log('Database migrations completed successfully');
   } catch (error) {
@@ -348,6 +405,197 @@ const credentialsDb = {
   }
 };
 
+const DEFAULT_NOTIFICATION_PREFERENCES = {
+  channels: {
+    inApp: false,
+    webPush: false
+  },
+  events: {
+    actionRequired: true,
+    stop: true,
+    error: true
+  }
+};
+
+const normalizeNotificationPreferences = (value) => {
+  const source = value && typeof value === 'object' ? value : {};
+
+  return {
+    channels: {
+      inApp: source.channels?.inApp === true,
+      webPush: source.channels?.webPush === true
+    },
+    events: {
+      actionRequired: source.events?.actionRequired !== false,
+      stop: source.events?.stop !== false,
+      error: source.events?.error !== false
+    }
+  };
+};
+
+const notificationPreferencesDb = {
+  getPreferences: (userId) => {
+    try {
+      const row = db.prepare('SELECT preferences_json FROM user_notification_preferences WHERE user_id = ?').get(userId);
+      if (!row) {
+        const defaults = normalizeNotificationPreferences(DEFAULT_NOTIFICATION_PREFERENCES);
+        db.prepare(
+          'INSERT INTO user_notification_preferences (user_id, preferences_json, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)'
+        ).run(userId, JSON.stringify(defaults));
+        return defaults;
+      }
+
+      let parsed;
+      try {
+        parsed = JSON.parse(row.preferences_json);
+      } catch {
+        parsed = DEFAULT_NOTIFICATION_PREFERENCES;
+      }
+      return normalizeNotificationPreferences(parsed);
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  updatePreferences: (userId, preferences) => {
+    try {
+      const normalized = normalizeNotificationPreferences(preferences);
+      db.prepare(
+        `INSERT INTO user_notification_preferences (user_id, preferences_json, updated_at)
+         VALUES (?, ?, CURRENT_TIMESTAMP)
+         ON CONFLICT(user_id) DO UPDATE SET
+           preferences_json = excluded.preferences_json,
+           updated_at = CURRENT_TIMESTAMP`
+      ).run(userId, JSON.stringify(normalized));
+      return normalized;
+    } catch (err) {
+      throw err;
+    }
+  }
+};
+
+const pushSubscriptionsDb = {
+  saveSubscription: (userId, endpoint, keysP256dh, keysAuth) => {
+    try {
+      db.prepare(
+        `INSERT INTO push_subscriptions (user_id, endpoint, keys_p256dh, keys_auth)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(endpoint) DO UPDATE SET
+           user_id = excluded.user_id,
+           keys_p256dh = excluded.keys_p256dh,
+           keys_auth = excluded.keys_auth`
+      ).run(userId, endpoint, keysP256dh, keysAuth);
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  getSubscriptions: (userId) => {
+    try {
+      return db.prepare('SELECT endpoint, keys_p256dh, keys_auth FROM push_subscriptions WHERE user_id = ?').all(userId);
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  removeSubscription: (endpoint) => {
+    try {
+      db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(endpoint);
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  removeAllForUser: (userId) => {
+    try {
+      db.prepare('DELETE FROM push_subscriptions WHERE user_id = ?').run(userId);
+    } catch (err) {
+      throw err;
+    }
+  }
+};
+
+// Session custom names database operations
+const sessionNamesDb = {
+  // Set (insert or update) a custom session name
+  setName: (sessionId, provider, customName) => {
+    db.prepare(`
+      INSERT INTO session_names (session_id, provider, custom_name)
+      VALUES (?, ?, ?)
+      ON CONFLICT(session_id, provider)
+      DO UPDATE SET custom_name = excluded.custom_name, updated_at = CURRENT_TIMESTAMP
+    `).run(sessionId, provider, customName);
+  },
+
+  // Get a single custom session name
+  getName: (sessionId, provider) => {
+    const row = db.prepare(
+      'SELECT custom_name FROM session_names WHERE session_id = ? AND provider = ?'
+    ).get(sessionId, provider);
+    return row?.custom_name || null;
+  },
+
+  // Batch lookup — returns Map<sessionId, customName>
+  getNames: (sessionIds, provider) => {
+    if (!sessionIds.length) return new Map();
+    const placeholders = sessionIds.map(() => '?').join(',');
+    const rows = db.prepare(
+      `SELECT session_id, custom_name FROM session_names
+       WHERE session_id IN (${placeholders}) AND provider = ?`
+    ).all(...sessionIds, provider);
+    return new Map(rows.map(r => [r.session_id, r.custom_name]));
+  },
+
+  // Delete a custom session name
+  deleteName: (sessionId, provider) => {
+    return db.prepare(
+      'DELETE FROM session_names WHERE session_id = ? AND provider = ?'
+    ).run(sessionId, provider).changes > 0;
+  },
+};
+
+// Apply custom session names from the database (overrides CLI-generated summaries)
+function applyCustomSessionNames(sessions, provider) {
+  if (!sessions?.length) return;
+  try {
+    const ids = sessions.map(s => s.id);
+    const customNames = sessionNamesDb.getNames(ids, provider);
+    for (const session of sessions) {
+      const custom = customNames.get(session.id);
+      if (custom) session.summary = custom;
+    }
+  } catch (error) {
+    console.warn(`[DB] Failed to apply custom session names for ${provider}:`, error.message);
+  }
+}
+
+// App config database operations
+const appConfigDb = {
+  get: (key) => {
+    try {
+      const row = db.prepare('SELECT value FROM app_config WHERE key = ?').get(key);
+      return row?.value || null;
+    } catch (err) {
+      return null;
+    }
+  },
+
+  set: (key, value) => {
+    db.prepare(
+      'INSERT INTO app_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
+    ).run(key, value);
+  },
+
+  getOrCreateJwtSecret: () => {
+    let secret = appConfigDb.get('jwt_secret');
+    if (!secret) {
+      secret = crypto.randomBytes(64).toString('hex');
+      appConfigDb.set('jwt_secret', secret);
+    }
+    return secret;
+  }
+};
+
 // Backward compatibility - keep old names pointing to new system
 const githubTokensDb = {
   createGithubToken: (userId, tokenName, githubToken, description = null) => {
@@ -373,5 +621,10 @@ export {
   userDb,
   apiKeysDb,
   credentialsDb,
+  notificationPreferencesDb,
+  pushSubscriptionsDb,
+  sessionNamesDb,
+  applyCustomSessionNames,
+  appConfigDb,
   githubTokensDb // Backward compatibility
 };

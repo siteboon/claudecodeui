@@ -4,6 +4,13 @@
     "copied": "コピーしました",
     "copyCode": "コードをコピー"
   },
+  "copyMessage": {
+    "copy": "メッセージをコピー",
+    "copied": "メッセージをコピーしました",
+    "selectFormat": "コピー形式を選択",
+    "copyAsMarkdown": "Markdownとしてコピー",
+    "copyAsText": "テキストとしてコピー"
+  },
   "messageTypes": {
     "user": "U",
     "error": "エラー",
@@ -201,5 +208,32 @@
     "runCommand": "{{projectName}}で{{command}}を実行",
     "startCli": "{{projectName}}でClaude CLIを起動しています",
     "defaultCommand": "コマンド"
+  },
+  "claudeStatus": {
+    "actions": {
+      "thinking": "Thinking",
+      "processing": "Processing",
+      "analyzing": "Analyzing",
+      "working": "Working",
+      "computing": "Computing",
+      "reasoning": "Reasoning"
+    },
+    "state": {
+      "live": "Live",
+      "paused": "Paused"
+    },
+    "elapsed": {
+      "seconds": "{{count}}s",
+      "minutesSeconds": "{{minutes}}m {{seconds}}s",
+      "label": "{{time}} elapsed",
+      "startingNow": "Starting now"
+    },
+    "controls": {
+      "stopGeneration": "Stop Generation",
+      "pressEscToStop": "Press Esc anytime to stop"
+    },
+    "providers": {
+      "assistant": "Assistant"
+    }
   }
 }

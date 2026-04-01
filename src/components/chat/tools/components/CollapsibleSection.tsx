@@ -23,10 +23,10 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
   className = ''
 }) => {
   return (
-    <details className={`relative group/details ${className}`} open={open}>
-      <summary className="flex items-center gap-1.5 text-xs cursor-pointer py-0.5 select-none group-open/details:sticky group-open/details:top-0 group-open/details:z-10 group-open/details:bg-background group-open/details:-mx-1 group-open/details:px-1">
+    <details className={`group/details relative ${className}`} open={open}>
+      <summary className="flex cursor-pointer select-none items-center gap-1.5 py-0.5 text-xs group-open/details:sticky group-open/details:top-0 group-open/details:z-10 group-open/details:-mx-1 group-open/details:bg-background group-open/details:px-1">
         <svg
-          className="w-3 h-3 text-gray-400 dark:text-gray-500 transition-transform duration-150 group-open/details:rotate-90 flex-shrink-0"
+          className="h-3 w-3 flex-shrink-0 text-gray-400 transition-transform duration-150 group-open/details:rotate-90 dark:text-gray-500"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -34,24 +34,24 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
         </svg>
         {toolName && (
-          <span className="font-medium text-gray-500 dark:text-gray-400 flex-shrink-0">{toolName}</span>
+          <span className="flex-shrink-0 font-medium text-gray-500 dark:text-gray-400">{toolName}</span>
         )}
         {toolName && (
-          <span className="text-gray-300 dark:text-gray-600 text-[10px] flex-shrink-0">/</span>
+          <span className="flex-shrink-0 text-[10px] text-gray-300 dark:text-gray-600">/</span>
         )}
         {onTitleClick ? (
           <button
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); onTitleClick(); }}
-            className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-mono hover:underline truncate flex-1 text-left transition-colors"
+            className="flex-1 truncate text-left font-mono text-blue-600 transition-colors hover:text-blue-700 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
           >
             {title}
           </button>
         ) : (
-          <span className="text-gray-600 dark:text-gray-400 truncate flex-1">
+          <span className="flex-1 truncate text-gray-600 dark:text-gray-400">
             {title}
           </span>
         )}
-        {action && <span className="flex-shrink-0 ml-1">{action}</span>}
+        {action && <span className="ml-1 flex-shrink-0">{action}</span>}
       </summary>
       <div className="mt-1.5 pl-[18px]">
         {children}

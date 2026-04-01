@@ -1,0 +1,474 @@
+{
+  "title": "Einstellungen",
+  "tabs": {
+    "account": "Konto",
+    "permissions": "Berechtigungen",
+    "mcpServers": "MCP-Server",
+    "appearance": "Darstellung"
+  },
+  "account": {
+    "title": "Konto",
+    "language": "Sprache",
+    "languageLabel": "Anzeigesprache",
+    "languageDescription": "Wähl deine bevorzugte Sprache für die Oberfläche",
+    "username": "Benutzername",
+    "email": "E-Mail",
+    "profile": "Profil",
+    "changePassword": "Passwort ändern"
+  },
+  "mcp": {
+    "title": "MCP-Server",
+    "addServer": "Server hinzufügen",
+    "editServer": "Server bearbeiten",
+    "deleteServer": "Server löschen",
+    "serverName": "Servername",
+    "serverType": "Servertyp",
+    "config": "Konfiguration",
+    "testConnection": "Verbindung testen",
+    "status": "Status",
+    "connected": "Verbunden",
+    "disconnected": "Getrennt",
+    "scope": {
+      "label": "Geltungsbereich",
+      "user": "Benutzer:in",
+      "project": "Projekt"
+    }
+  },
+  "appearance": {
+    "title": "Darstellung",
+    "theme": "Design",
+    "codeEditor": "Code-Editor",
+    "editorTheme": "Editor-Design",
+    "wordWrap": "Zeilenumbruch",
+    "showMinimap": "Minimap anzeigen",
+    "lineNumbers": "Zeilennummern",
+    "fontSize": "Schriftgröße"
+  },
+  "actions": {
+    "saveChanges": "Änderungen speichern",
+    "resetToDefaults": "Auf Standardwerte zurücksetzen",
+    "cancelChanges": "Änderungen abbrechen"
+  },
+  "quickSettings": {
+    "title": "Schnelleinstellungen",
+    "sections": {
+      "appearance": "Darstellung",
+      "toolDisplay": "Werkzeuganzeige",
+      "viewOptions": "Anzeigeoptionen",
+      "inputSettings": "Eingabeeinstellungen",
+      "whisperDictation": "Whisper-Diktat"
+    },
+    "darkMode": "Darkmode",
+    "autoExpandTools": "Werkzeuge automatisch erweitern",
+    "showRawParameters": "Rohe Parameter anzeigen",
+    "showThinking": "Denken anzeigen",
+    "autoScrollToBottom": "Automatisch nach unten scrollen",
+    "sendByCtrlEnter": "Mit Strg+Enter senden",
+    "sendByCtrlEnterDescription": "Wenn aktiviert, sendet Strg+Enter die Nachricht anstelle von Enter. Dies ist nützlich für IME-Benutzer:innen, um versehentliches Senden zu vermeiden.",
+    "dragHandle": {
+      "dragging": "Handle wird gezogen",
+      "closePanel": "Einstellungspanel schließen",
+      "openPanel": "Einstellungspanel öffnen",
+      "draggingStatus": "Wird gezogen...",
+      "toggleAndMove": "Klicken zum Umschalten, ziehen zum Verschieben"
+    },
+    "whisper": {
+      "modes": {
+        "default": "Standardmodus",
+        "defaultDescription": "Direkte Transkription deiner Sprache",
+        "prompt": "Prompt-Verbesserung",
+        "promptDescription": "Rohe Ideen in klare, detaillierte KI-Prompts umwandeln",
+        "vibe": "Vibe-Modus",
+        "vibeDescription": "Ideen als klare Agentenanweisungen mit Details formatieren"
+      }
+    }
+  },
+  "terminalShortcuts": {
+    "title": "Terminal-Tastenkürzel",
+    "sectionKeys": "Tasten",
+    "sectionNavigation": "Navigation",
+    "escape": "Escape",
+    "tab": "Tab",
+    "shiftTab": "Shift+Tab",
+    "arrowUp": "Pfeil oben",
+    "arrowDown": "Pfeil unten",
+    "scrollDown": "Nach unten scrollen",
+    "handle": {
+      "closePanel": "Tastenkürzel-Panel schließen",
+      "openPanel": "Tastenkürzel-Panel öffnen"
+    }
+  },
+  "mainTabs": {
+    "label": "Einstellungen",
+    "agents": "Agenten",
+    "appearance": "Darstellung",
+    "git": "Git",
+    "apiTokens": "API & Token",
+    "tasks": "Aufgaben",
+    "plugins": "Plugins"
+  },
+  "appearanceSettings": {
+    "darkMode": {
+      "label": "Darkmode",
+      "description": "Zwischen hellem und dunklem Design wechseln"
+    },
+    "projectSorting": {
+      "label": "Projektsortierung",
+      "description": "Wie Projekte in der Seitenleiste angeordnet werden",
+      "alphabetical": "Alphabetisch",
+      "recentActivity": "Letzte Aktivität"
+    },
+    "codeEditor": {
+      "title": "Code-Editor",
+      "theme": {
+        "label": "Editor-Design",
+        "description": "Standarddesign für den Code-Editor"
+      },
+      "wordWrap": {
+        "label": "Zeilenumbruch",
+        "description": "Zeilenumbruch standardmäßig im Editor aktivieren"
+      },
+      "showMinimap": {
+        "label": "Minimap anzeigen",
+        "description": "Minimap zur einfacheren Navigation in der Diff-Ansicht anzeigen"
+      },
+      "lineNumbers": {
+        "label": "Zeilennummern anzeigen",
+        "description": "Zeilennummern im Editor anzeigen"
+      },
+      "fontSize": {
+        "label": "Schriftgröße",
+        "description": "Editor-Schriftgröße in Pixeln"
+      }
+    }
+  },
+  "mcpForm": {
+    "title": {
+      "add": "MCP-Server hinzufügen",
+      "edit": "MCP-Server bearbeiten"
+    },
+    "importMode": {
+      "form": "Formulareingabe",
+      "json": "JSON-Import"
+    },
+    "scope": {
+      "label": "Geltungsbereich",
+      "userGlobal": "Benutzer:in (Global)",
+      "projectLocal": "Projekt (Lokal)",
+      "userDescription": "Benutzerbereich: Auf allen Projekten deines Computers verfügbar",
+      "projectDescription": "Lokaler Bereich: Nur im ausgewählten Projekt verfügbar",
+      "cannotChange": "Der Geltungsbereich kann beim Bearbeiten eines vorhandenen Servers nicht geändert werden"
+    },
+    "fields": {
+      "serverName": "Servername",
+      "transportType": "Transporttyp",
+      "command": "Befehl",
+      "arguments": "Argumente (eines pro Zeile)",
+      "jsonConfig": "JSON-Konfiguration",
+      "url": "URL",
+      "envVars": "Umgebungsvariablen (SCHLÜSSEL=Wert, eine pro Zeile)",
+      "headers": "Header (SCHLÜSSEL=Wert, eine pro Zeile)",
+      "selectProject": "Projekt auswählen..."
+    },
+    "placeholders": {
+      "serverName": "mein-server"
+    },
+    "validation": {
+      "missingType": "Pflichtfeld fehlt: type",
+      "stdioRequiresCommand": "stdio-Typ erfordert ein Befehlsfeld",
+      "httpRequiresUrl": "{{type}}-Typ erfordert ein URL-Feld",
+      "invalidJson": "Ungültiges JSON-Format",
+      "jsonHelp": "Füge deine MCP-Server-Konfiguration im JSON-Format ein. Beispielformate:",
+      "jsonExampleStdio": "• stdio: {\"type\":\"stdio\",\"command\":\"npx\",\"args\":[\"@upstash/context7-mcp\"]}",
+      "jsonExampleHttp": "• http/sse: {\"type\":\"http\",\"url\":\"https://api.example.com/mcp\"}"
+    },
+    "configDetails": "Konfigurationsdetails (aus {{configFile}})",
+    "projectPath": "Pfad: {{path}}",
+    "actions": {
+      "cancel": "Abbrechen",
+      "saving": "Wird gespeichert...",
+      "addServer": "Server hinzufügen",
+      "updateServer": "Server aktualisieren"
+    }
+  },
+  "saveStatus": {
+    "success": "Einstellungen erfolgreich gespeichert!",
+    "error": "Einstellungen konnten nicht gespeichert werden",
+    "saving": "Wird gespeichert..."
+  },
+  "footerActions": {
+    "save": "Einstellungen speichern",
+    "cancel": "Abbrechen"
+  },
+  "git": {
+    "title": "Git-Konfiguration",
+    "description": "Konfiguriere deine Git-Identität für Commits. Diese Einstellungen werden global über git config --global angewendet",
+    "name": {
+      "label": "Git-Name",
+      "help": "Dein Name für Git-Commits"
+    },
+    "email": {
+      "label": "Git-E-Mail",
+      "help": "Deine E-Mail-Adresse für Git-Commits"
+    },
+    "actions": {
+      "save": "Konfiguration speichern",
+      "saving": "Wird gespeichert..."
+    },
+    "status": {
+      "success": "Erfolgreich gespeichert"
+    }
+  },
+  "apiKeys": {
+    "title": "API-Schlüssel",
+    "description": "Generiere API-Schlüssel, um von anderen Anwendungen auf die externe API zuzugreifen.",
+    "newKey": {
+      "alertTitle": "⚠️ API-Schlüssel speichern",
+      "alertMessage": "Dies ist das einzige Mal, dass du diesen Schlüssel siehst. Speichere ihn sicher.",
+      "iveSavedIt": "Ich habe ihn gespeichert"
+    },
+    "form": {
+      "placeholder": "API-Schlüsselname (z. B. Produktionsserver)",
+      "createButton": "Erstellen",
+      "cancelButton": "Abbrechen"
+    },
+    "newButton": "Neuer API-Schlüssel",
+    "empty": "Noch keine API-Schlüssel erstellt.",
+    "list": {
+      "created": "Erstellt:",
+      "lastUsed": "Zuletzt verwendet:"
+    },
+    "confirmDelete": "Möchtest du diesen API-Schlüssel wirklich löschen?",
+    "status": {
+      "active": "Aktiv",
+      "inactive": "Inaktiv"
+    },
+    "github": {
+      "title": "GitHub-Token",
+      "description": "Füge GitHub Personal Access Tokens hinzu, um private Repositories über die externe API zu klonen.",
+      "descriptionAlt": "Füge GitHub Personal Access Tokens hinzu, um private Repositories zu klonen. Du kannst Token auch direkt in API-Anfragen übergeben, ohne sie zu speichern.",
+      "addButton": "Token hinzufügen",
+      "form": {
+        "namePlaceholder": "Token-Name (z. B. Persönliche Repos)",
+        "tokenPlaceholder": "GitHub Personal Access Token (ghp_...)",
+        "descriptionPlaceholder": "Beschreibung (optional)",
+        "addButton": "Token hinzufügen",
+        "cancelButton": "Abbrechen",
+        "howToCreate": "Wie man einen GitHub Personal Access Token erstellt →"
+      },
+      "empty": "Noch keine GitHub-Token hinzugefügt.",
+      "added": "Hinzugefügt:",
+      "confirmDelete": "Möchtest du diesen GitHub-Token wirklich löschen?"
+    },
+    "apiDocsLink": "API-Dokumentation",
+    "documentation": {
+      "title": "Externe API-Dokumentation",
+      "description": "Erfahre, wie du die externe API nutzen kannst, um Claude/Cursor-Sitzungen aus deinen Anwendungen heraus zu starten.",
+      "viewLink": "API-Dokumentation anzeigen →"
+    },
+    "loading": "Lädt...",
+    "version": {
+      "updateAvailable": "Update verfügbar: v{{version}}"
+    }
+  },
+  "tasks": {
+    "checking": "TaskMaster-Installation wird überprüft...",
+    "notInstalled": {
+      "title": "TaskMaster AI CLI nicht installiert",
+      "description": "TaskMaster CLI ist erforderlich, um Aufgabenverwaltungsfunktionen zu nutzen. Installiere es, um loszulegen:",
+      "installCommand": "npm install -g task-master-ai",
+      "viewOnGitHub": "Auf GitHub anzeigen",
+      "afterInstallation": "Nach der Installation:",
+      "steps": {
+        "restart": "Diese Anwendung neu starten",
+        "autoAvailable": "TaskMaster-Funktionen werden automatisch verfügbar",
+        "initCommand": "task-master init in deinem Projektverzeichnis verwenden"
+      }
+    },
+    "settings": {
+      "enableLabel": "TaskMaster-Integration aktivieren",
+      "enableDescription": "TaskMaster-Aufgaben, Banner und Seitenleisten-Indikatoren in der gesamten Oberfläche anzeigen"
+    }
+  },
+  "agents": {
+    "authStatus": {
+      "checking": "Wird überprüft...",
+      "connected": "Verbunden",
+      "notConnected": "Nicht verbunden",
+      "disconnected": "Getrennt",
+      "checkingAuth": "Authentifizierungsstatus wird überprüft...",
+      "loggedInAs": "Angemeldet als {{email}}",
+      "authenticatedUser": "authentifizierte:r Benutzer:in"
+    },
+    "account": {
+      "claude": {
+        "description": "Anthropic Claude KI-Assistent"
+      },
+      "cursor": {
+        "description": "Cursor KI-gestützter Code-Editor"
+      },
+      "codex": {
+        "description": "OpenAI Codex KI-Assistent"
+      },
+      "gemini": {
+        "description": "Google Gemini KI-Assistent"
+      }
+    },
+    "connectionStatus": "Verbindungsstatus",
+    "login": {
+      "title": "Anmelden",
+      "reAuthenticate": "Erneut authentifizieren",
+      "description": "Meld dich bei deinem {{agent}}-Konto an, um KI-Funktionen zu aktivieren",
+      "reAuthDescription": "Mit einem anderen Konto anmelden oder Anmeldedaten aktualisieren",
+      "button": "Anmelden",
+      "reLoginButton": "Erneut anmelden"
+    },
+    "error": "Fehler: {{error}}"
+  },
+  "permissions": {
+    "title": "Berechtigungseinstellungen",
+    "skipPermissions": {
+      "label": "Berechtigungsaufforderungen überspringen (mit Vorsicht verwenden)",
+      "claudeDescription": "Entspricht dem Flag --dangerously-skip-permissions",
+      "cursorDescription": "Entspricht dem Flag -f in der Cursor CLI"
+    },
+    "allowedTools": {
+      "title": "Erlaubte Werkzeuge",
+      "description": "Werkzeuge, die automatisch ohne Berechtigungsaufforderung erlaubt werden",
+      "placeholder": "z. B. \"Bash(git log:*)\" oder \"Write\"",
+      "quickAdd": "Häufige Werkzeuge schnell hinzufügen:",
+      "empty": "Keine erlaubten Werkzeuge konfiguriert"
+    },
+    "blockedTools": {
+      "title": "Gesperrte Werkzeuge",
+      "description": "Werkzeuge, die automatisch ohne Berechtigungsaufforderung gesperrt werden",
+      "placeholder": "z. B. \"Bash(rm:*)\"",
+      "empty": "Keine gesperrten Werkzeuge konfiguriert"
+    },
+    "allowedCommands": {
+      "title": "Erlaubte Shell-Befehle",
+      "description": "Shell-Befehle, die automatisch ohne Aufforderung erlaubt werden",
+      "placeholder": "z. B. \"Shell(ls)\" oder \"Shell(git status)\"",
+      "quickAdd": "Häufige Befehle schnell hinzufügen:",
+      "empty": "Keine erlaubten Befehle konfiguriert"
+    },
+    "blockedCommands": {
+      "title": "Gesperrte Shell-Befehle",
+      "description": "Shell-Befehle, die automatisch gesperrt werden",
+      "placeholder": "z. B. \"Shell(rm -rf)\" oder \"Shell(sudo)\"",
+      "empty": "Keine gesperrten Befehle konfiguriert"
+    },
+    "toolExamples": {
+      "title": "Werkzeugmuster-Beispiele:",
+      "bashGitLog": "- Alle git log-Befehle erlauben",
+      "bashGitDiff": "- Alle git diff-Befehle erlauben",
+      "write": "- Alle Write-Werkzeugnutzungen erlauben",
+      "bashRm": "- Alle rm-Befehle sperren (gefährlich)"
+    },
+    "shellExamples": {
+      "title": "Shell-Befehl-Beispiele:",
+      "ls": "- ls-Befehl erlauben",
+      "gitStatus": "- git status erlauben",
+      "npmInstall": "- npm install erlauben",
+      "rmRf": "- Rekursives Löschen sperren"
+    },
+    "codex": {
+      "permissionMode": "Berechtigungsmodus",
+      "description": "Steuert, wie Codex Dateiänderungen und Befehlsausführung handhabt",
+      "modes": {
+        "default": {
+          "title": "Standard",
+          "description": "Nur vertrauenswürdige Befehle (ls, cat, grep, git status usw.) werden automatisch ausgeführt. Andere Befehle werden übersprungen. Kann in den Arbeitsbereich schreiben."
+        },
+        "acceptEdits": {
+          "title": "Bearbeitungen akzeptieren",
+          "description": "Alle Befehle werden automatisch innerhalb des Arbeitsbereichs ausgeführt. Vollautomatischer Modus mit isolierter Ausführung."
+        },
+        "bypassPermissions": {
+          "title": "Berechtigungen umgehen",
+          "description": "Vollständiger Systemzugriff ohne Einschränkungen. Alle Befehle werden automatisch mit vollem Festplatten- und Netzwerkzugriff ausgeführt. Mit Vorsicht verwenden."
+        }
+      },
+      "technicalDetails": "Technische Details",
+      "technicalInfo": {
+        "default": "sandboxMode=workspace-write, approvalPolicy=untrusted. Vertrauenswürdige Befehle: cat, cd, grep, head, ls, pwd, tail, git status/log/diff/show, find (ohne -exec) usw.",
+        "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never. Alle Befehle werden automatisch innerhalb des Projektverzeichnisses ausgeführt.",
+        "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never. Vollständiger Systemzugriff, nur in vertrauenswürdigen Umgebungen verwenden.",
+        "overrideNote": "Du kannst dies pro Sitzung über die Modusschaltfläche in der Chat-Oberfläche überschreiben."
+      }
+    },
+    "actions": {
+      "add": "Hinzufügen"
+    }
+  },
+  "mcpServers": {
+    "title": "MCP-Server",
+    "description": {
+      "claude": "Model Context Protocol-Server stellen Claude zusätzliche Werkzeuge und Datenquellen zur Verfügung",
+      "cursor": "Model Context Protocol-Server stellen Cursor zusätzliche Werkzeuge und Datenquellen zur Verfügung",
+      "codex": "Model Context Protocol-Server stellen Codex zusätzliche Werkzeuge und Datenquellen zur Verfügung"
+    },
+    "addButton": "MCP-Server hinzufügen",
+    "empty": "Keine MCP-Server konfiguriert",
+    "serverType": "Typ",
+    "scope": {
+      "local": "lokal",
+      "user": "benutzer"
+    },
+    "config": {
+      "command": "Befehl",
+      "url": "URL",
+      "args": "Argumente",
+      "environment": "Umgebung"
+    },
+    "tools": {
+      "title": "Werkzeuge",
+      "count": "({{count}}):",
+      "more": "+{{count}} weitere"
+    },
+    "actions": {
+      "edit": "Server bearbeiten",
+      "delete": "Server löschen"
+    },
+    "help": {
+      "title": "Über Codex MCP",
+      "description": "Codex unterstützt stdio-basierte MCP-Server. Du kannst Server hinzufügen, die die Fähigkeiten von Codex mit zusätzlichen Werkzeugen und Ressourcen erweitern."
+    }
+  },
+  "pluginSettings": {
+    "title": "Plugins",
+    "description": "Erweitere die Oberfläche mit eigenen Plugins. Installiere sie von Git oder lege einen Ordner in ~/.claude-code-ui/plugins/ ab.",
+    "installPlaceholder": "https://github.com/benutzer/mein-plugin",
+    "installButton": "Installieren",
+    "installing": "Wird installiert…",
+    "securityWarning": "Installiere nur Plugins, deren Quellcode du geprüft hast oder die von Autoren stammen, denen du vertraust.",
+    "scanningPlugins": "Plugins werden durchsucht…",
+    "noPluginsInstalled": "Keine Plugins installiert",
+    "pullLatest": "Neueste Version von Git laden",
+    "noGitRemote": "Kein Git-Remote — Update nicht verfügbar",
+    "uninstallPlugin": "Plugin deinstallieren",
+    "confirmUninstall": "Zum Bestätigen erneut klicken",
+    "confirmUninstallMessage": "{{name}} entfernen? Das kann nicht rückgängig gemacht werden.",
+    "cancel": "Abbrechen",
+    "remove": "Entfernen",
+    "updateFailed": "Update fehlgeschlagen",
+    "installFailed": "Installation fehlgeschlagen",
+    "uninstallFailed": "Deinstallation fehlgeschlagen",
+    "toggleFailed": "Umschalten fehlgeschlagen",
+    "buildYourOwn": "Eigenes Plugin erstellen",
+    "starter": "Starter",
+    "docs": "Dokumentation",
+    "starterPlugin": {
+      "name": "Projektstatistiken",
+      "badge": "starter",
+      "description": "Dateianzahl, Codezeilen, Dateityp-Aufschlüsselung und aktuelle Aktivitäten für dein Projekt.",
+      "install": "Installieren"
+    },
+    "morePlugins": "Mehr",
+    "enable": "Aktivieren",
+    "disable": "Deaktivieren",
+    "installAriaLabel": "Git-Repository-URL des Plugins",
+    "tab": "Tab",
+    "runningStatus": "läuft"
+  }
+}

@@ -1,0 +1,474 @@
+{
+  "title": "Настройки",
+  "tabs": {
+    "account": "Аккаунт",
+    "permissions": "Разрешения",
+    "mcpServers": "MCP серверы",
+    "appearance": "Внешний вид"
+  },
+  "account": {
+    "title": "Аккаунт",
+    "language": "Язык",
+    "languageLabel": "Язык интерфейса",
+    "languageDescription": "Выберите предпочитаемый язык для интерфейса",
+    "username": "Имя пользователя",
+    "email": "Email",
+    "profile": "Профиль",
+    "changePassword": "Изменить пароль"
+  },
+  "mcp": {
+    "title": "MCP серверы",
+    "addServer": "Добавить сервер",
+    "editServer": "Редактировать сервер",
+    "deleteServer": "Удалить сервер",
+    "serverName": "Имя сервера",
+    "serverType": "Тип сервера",
+    "config": "Конфигурация",
+    "testConnection": "Проверить подключение",
+    "status": "Статус",
+    "connected": "Подключен",
+    "disconnected": "Отключен",
+    "scope": {
+      "label": "Область",
+      "user": "Пользователь",
+      "project": "Проект"
+    }
+  },
+  "appearance": {
+    "title": "Внешний вид",
+    "theme": "Тема",
+    "codeEditor": "Редактор кода",
+    "editorTheme": "Тема редактора",
+    "wordWrap": "Перенос слов",
+    "showMinimap": "Показать миникарту",
+    "lineNumbers": "Номера строк",
+    "fontSize": "Размер шрифта"
+  },
+  "actions": {
+    "saveChanges": "Сохранить изменения",
+    "resetToDefaults": "Сбросить к значениям по умолчанию",
+    "cancelChanges": "Отменить изменения"
+  },
+  "quickSettings": {
+    "title": "Быстрые настройки",
+    "sections": {
+      "appearance": "Внешний вид",
+      "toolDisplay": "Отображение инструментов",
+      "viewOptions": "Параметры просмотра",
+      "inputSettings": "Настройки ввода",
+      "whisperDictation": "Диктовка Whisper"
+    },
+    "darkMode": "Темная тема",
+    "autoExpandTools": "Автоматически разворачивать инструменты",
+    "showRawParameters": "Показывать сырые параметры",
+    "showThinking": "Показывать размышления",
+    "autoScrollToBottom": "Автопрокрутка вниз",
+    "sendByCtrlEnter": "Отправка по Ctrl+Enter",
+    "sendByCtrlEnterDescription": "Когда включено, нажатие Ctrl+Enter будет отправлять сообщение вместо просто Enter. Это полезно для пользователей IME, чтобы избежать случайной отправки.",
+    "dragHandle": {
+      "dragging": "Перетаскивание ручки",
+      "closePanel": "Закрыть панель настроек",
+      "openPanel": "Открыть панель настроек",
+      "draggingStatus": "Перетаскивание...",
+      "toggleAndMove": "Нажмите для переключения, перетащите для перемещения"
+    },
+    "whisper": {
+      "modes": {
+        "default": "Режим по умолчанию",
+        "defaultDescription": "Прямая транскрипция вашей речи",
+        "prompt": "Улучшение запроса",
+        "promptDescription": "Преобразование грубых идей в четкие, детальные AI-запросы",
+        "vibe": "Режим Vibe",
+        "vibeDescription": "Форматирование идей как четких инструкций агента с деталями"
+      }
+    }
+  },
+  "terminalShortcuts": {
+    "title": "Горячие клавиши терминала",
+    "sectionKeys": "Клавиши",
+    "sectionNavigation": "Навигация",
+    "escape": "Escape",
+    "tab": "Tab",
+    "shiftTab": "Shift+Tab",
+    "arrowUp": "Стрелка вверх",
+    "arrowDown": "Стрелка вниз",
+    "scrollDown": "Прокрутка вниз",
+    "handle": {
+      "closePanel": "Закрыть панель горячих клавиш",
+      "openPanel": "Открыть панель горячих клавиш"
+    }
+  },
+  "mainTabs": {
+    "label": "Настройки",
+    "agents": "Агенты",
+    "appearance": "Внешний вид",
+    "git": "Git",
+    "apiTokens": "API и токены",
+    "tasks": "Задачи",
+    "plugins": "Плагины"
+  },
+  "appearanceSettings": {
+    "darkMode": {
+      "label": "Темная тема",
+      "description": "Переключение между светлой и темной темами"
+    },
+    "projectSorting": {
+      "label": "Сортировка проектов",
+      "description": "Как проекты упорядочены на боковой панели",
+      "alphabetical": "По алфавиту",
+      "recentActivity": "По недавней активности"
+    },
+    "codeEditor": {
+      "title": "Редактор кода",
+      "theme": {
+        "label": "Тема редактора",
+        "description": "Тема по умолчанию для редактора кода"
+      },
+      "wordWrap": {
+        "label": "Перенос слов",
+        "description": "Включить перенос слов по умолчанию в редакторе"
+      },
+      "showMinimap": {
+        "label": "Показать миникарту",
+        "description": "Отображать миникарту для упрощения навигации в представлении различий"
+      },
+      "lineNumbers": {
+        "label": "Показать номера строк",
+        "description": "Отображать номера строк в редакторе"
+      },
+      "fontSize": {
+        "label": "Размер шрифта",
+        "description": "Размер шрифта редактора в пикселях"
+      }
+    }
+  },
+  "mcpForm": {
+    "title": {
+      "add": "Добавить MCP сервер",
+      "edit": "Редактировать MCP сервер"
+    },
+    "importMode": {
+      "form": "Ввод формы",
+      "json": "Импорт JSON"
+    },
+    "scope": {
+      "label": "Область",
+      "userGlobal": "Пользователь (глобально)",
+      "projectLocal": "Проект (локально)",
+      "userDescription": "Область пользователя: доступно во всех проектах на вашей машине",
+      "projectDescription": "Локальная область: доступно только в выбранном проекте",
+      "cannotChange": "Область не может быть изменена при редактировании существующего сервера"
+    },
+    "fields": {
+      "serverName": "Имя сервера",
+      "transportType": "Тип транспорта",
+      "command": "Команда",
+      "arguments": "Аргументы (по одному на строку)",
+      "jsonConfig": "JSON конфигурация",
+      "url": "URL",
+      "envVars": "Переменные окружения (КЛЮЧ=значение, по одной на строку)",
+      "headers": "Заголовки (КЛЮЧ=значение, по одному на строку)",
+      "selectProject": "Выберите проект..."
+    },
+    "placeholders": {
+      "serverName": "мой-сервер"
+    },
+    "validation": {
+      "missingType": "Отсутствует обязательное поле: type",
+      "stdioRequiresCommand": "тип stdio требует поле command",
+      "httpRequiresUrl": "тип {{type}} требует поле url",
+      "invalidJson": "Неверный формат JSON",
+      "jsonHelp": "Вставьте конфигурацию вашего MCP сервера в формате JSON. Примеры форматов:",
+      "jsonExampleStdio": "• stdio: {\"type\":\"stdio\",\"command\":\"npx\",\"args\":[\"@upstash/context7-mcp\"]}",
+      "jsonExampleHttp": "• http/sse: {\"type\":\"http\",\"url\":\"https://api.example.com/mcp\"}"
+    },
+    "configDetails": "Детали конфигурации (из {{configFile}})",
+    "projectPath": "Путь: {{path}}",
+    "actions": {
+      "cancel": "Отмена",
+      "saving": "Сохранение...",
+      "addServer": "Добавить сервер",
+      "updateServer": "Обновить сервер"
+    }
+  },
+  "saveStatus": {
+    "success": "Настройки успешно сохранены!",
+    "error": "Не удалось сохранить настройки",
+    "saving": "Сохранение..."
+  },
+  "footerActions": {
+    "save": "Сохранить настройки",
+    "cancel": "Отмена"
+  },
+  "git": {
+    "title": "Конфигурация Git",
+    "description": "Настройте вашу git идентичность для коммитов. Эти настройки будут применены глобально через git config --global",
+    "name": {
+      "label": "Имя Git",
+      "help": "Ваше имя для git коммитов"
+    },
+    "email": {
+      "label": "Email Git",
+      "help": "Ваш email для git коммитов"
+    },
+    "actions": {
+      "save": "Сохранить конфигурацию",
+      "saving": "Сохранение..."
+    },
+    "status": {
+      "success": "Успешно сохранено"
+    }
+  },
+  "apiKeys": {
+    "title": "API ключи",
+    "description": "Генерируйте API ключи для доступа к внешнему API из других приложений.",
+    "newKey": {
+      "alertTitle": "⚠️ Сохраните ваш API ключ",
+      "alertMessage": "Это единственный раз, когда вы увидите этот ключ. Сохраните его в безопасном месте.",
+      "iveSavedIt": "Я сохранил его"
+    },
+    "form": {
+      "placeholder": "Имя API ключа (например, Продакшн сервер)",
+      "createButton": "Создать",
+      "cancelButton": "Отмена"
+    },
+    "newButton": "Новый API ключ",
+    "empty": "API ключи еще не созданы.",
+    "list": {
+      "created": "Создан:",
+      "lastUsed": "Последнее использование:"
+    },
+    "confirmDelete": "Вы уверены, что хотите удалить этот API ключ?",
+    "status": {
+      "active": "Активен",
+      "inactive": "Неактивен"
+    },
+    "github": {
+      "title": "GitHub токены",
+      "description": "Добавьте персональные токены доступа GitHub для клонирования приватных репозиториев через внешний API.",
+      "descriptionAlt": "Добавьте персональные токены доступа GitHub для клонирования приватных репозиториев. Вы также можете передавать токены напрямую в API запросах без их сохранения.",
+      "addButton": "Добавить токен",
+      "form": {
+        "namePlaceholder": "Имя токена (например, Личные репозитории)",
+        "tokenPlaceholder": "Персональный токен доступа GitHub (ghp_...)",
+        "descriptionPlaceholder": "Описание (необязательно)",
+        "addButton": "Добавить токен",
+        "cancelButton": "Отмена",
+        "howToCreate": "Как создать персональный токен доступа GitHub →"
+      },
+      "empty": "GitHub токены еще не добавлены.",
+      "added": "Добавлен:",
+      "confirmDelete": "Вы уверены, что хотите удалить этот GitHub токен?"
+    },
+    "apiDocsLink": "Документация API",
+    "documentation": {
+      "title": "Документация внешнего API",
+      "description": "Узнайте, как использовать внешний API для запуска сеансов Claude/Cursor из ваших приложений.",
+      "viewLink": "Просмотр документации API →"
+    },
+    "loading": "Загрузка...",
+    "version": {
+      "updateAvailable": "Доступно обновление: v{{version}}"
+    }
+  },
+  "tasks": {
+    "checking": "Проверка установки TaskMaster...",
+    "notInstalled": {
+      "title": "TaskMaster AI CLI не установлен",
+      "description": "TaskMaster CLI требуется для использования функций управления задачами. Установите его для начала работы:",
+      "installCommand": "npm install -g task-master-ai",
+      "viewOnGitHub": "Посмотреть на GitHub",
+      "afterInstallation": "После установки:",
+      "steps": {
+        "restart": "Перезапустите это приложение",
+        "autoAvailable": "Функции TaskMaster станут автоматически доступны",
+        "initCommand": "Используйте task-master init в каталоге вашего проекта"
+      }
+    },
+    "settings": {
+      "enableLabel": "Включить интеграцию TaskMaster",
+      "enableDescription": "Показывать задачи TaskMaster, баннеры и индикаторы боковой панели в интерфейсе"
+    }
+  },
+  "agents": {
+    "authStatus": {
+      "checking": "Проверка...",
+      "connected": "Подключен",
+      "notConnected": "Не подключен",
+      "disconnected": "Отключен",
+      "checkingAuth": "Проверка статуса аутентификации...",
+      "loggedInAs": "Вошли как {{email}}",
+      "authenticatedUser": "аутентифицированный пользователь"
+    },
+    "account": {
+      "claude": {
+        "description": "AI-ассистент Anthropic Claude"
+      },
+      "cursor": {
+        "description": "Редактор кода с AI Cursor"
+      },
+      "codex": {
+        "description": "AI-ассистент OpenAI Codex"
+      },
+      "gemini": {
+        "description": "AI-ассистент Google Gemini"
+      }
+    },
+    "connectionStatus": "Статус подключения",
+    "login": {
+      "title": "Вход",
+      "reAuthenticate": "Повторная аутентификация",
+      "description": "Войдите в ваш аккаунт {{agent}} для включения AI функций",
+      "reAuthDescription": "Войдите с другим аккаунтом или обновите учетные данные",
+      "button": "Войти",
+      "reLoginButton": "Войти снова"
+    },
+    "error": "Ошибка: {{error}}"
+  },
+  "permissions": {
+    "title": "Настройки разрешений",
+    "skipPermissions": {
+      "label": "Пропускать запросы разрешений (используйте с осторожностью)",
+      "claudeDescription": "Эквивалентно флагу --dangerously-skip-permissions",
+      "cursorDescription": "Эквивалентно флагу -f в Cursor CLI"
+    },
+    "allowedTools": {
+      "title": "Разрешенные инструменты",
+      "description": "Инструменты, которые автоматически разрешены без запроса разрешения",
+      "placeholder": "например, \"Bash(git log:*)\" или \"Write\"",
+      "quickAdd": "Быстро добавить общие инструменты:",
+      "empty": "Разрешенные инструменты не настроены"
+    },
+    "blockedTools": {
+      "title": "Заблокированные инструменты",
+      "description": "Инструменты, которые автоматически блокируются без запроса разрешения",
+      "placeholder": "например, \"Bash(rm:*)\"",
+      "empty": "Заблокированные инструменты не настроены"
+    },
+    "allowedCommands": {
+      "title": "Разрешенные команды оболочки",
+      "description": "Команды оболочки, которые автоматически разрешены без запроса",
+      "placeholder": "например, \"Shell(ls)\" или \"Shell(git status)\"",
+      "quickAdd": "Быстро добавить общие команды:",
+      "empty": "Разрешенные команды не настроены"
+    },
+    "blockedCommands": {
+      "title": "Заблокированные команды оболочки",
+      "description": "Команды оболочки, которые автоматически блокируются",
+      "placeholder": "например, \"Shell(rm -rf)\" или \"Shell(sudo)\"",
+      "empty": "Заблокированные команды не настроены"
+    },
+    "toolExamples": {
+      "title": "Примеры шаблонов инструментов:",
+      "bashGitLog": "- Разрешить все команды git log",
+      "bashGitDiff": "- Разрешить все команды git diff",
+      "write": "- Разрешить все использование инструмента Write",
+      "bashRm": "- Заблокировать все команды rm (опасно)"
+    },
+    "shellExamples": {
+      "title": "Примеры команд оболочки:",
+      "ls": "- Разрешить команду ls",
+      "gitStatus": "- Разрешить git status",
+      "npmInstall": "- Разрешить npm install",
+      "rmRf": "- Заблокировать рекурсивное удаление"
+    },
+    "codex": {
+      "permissionMode": "Режим разрешений",
+      "description": "Управляет тем, как Codex обрабатывает изменения файлов и выполнение команд",
+      "modes": {
+        "default": {
+          "title": "По умолчанию",
+          "description": "Только доверенные команды (ls, cat, grep, git status и т.д.) выполняются автоматически. Другие команды пропускаются. Может записывать в рабочее пространство."
+        },
+        "acceptEdits": {
+          "title": "Принимать правки",
+          "description": "Все команды выполняются автоматически в рабочем пространстве. Полный автоматический режим с изолированным выполнением."
+        },
+        "bypassPermissions": {
+          "title": "Обход разрешений",
+          "description": "Полный системный доступ без ограничений. Все команды выполняются автоматически с полным доступом к диску и сети. Используйте с осторожностью."
+        }
+      },
+      "technicalDetails": "Технические детали",
+      "technicalInfo": {
+        "default": "sandboxMode=workspace-write, approvalPolicy=untrusted. Доверенные команды: cat, cd, grep, head, ls, pwd, tail, git status/log/diff/show, find (без -exec) и т.д.",
+        "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never. Все команды автоматически выполняются в каталоге проекта.",
+        "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never. Полный системный доступ, используйте только в доверенных средах.",
+        "overrideNote": "Вы можете переопределить это для каждого сеанса, используя кнопку режима в интерфейсе чата."
+      }
+    },
+    "actions": {
+      "add": "Добавить"
+    }
+  },
+  "mcpServers": {
+    "title": "MCP серверы",
+    "description": {
+      "claude": "Серверы Model Context Protocol предоставляют дополнительные инструменты и источники данных для Claude",
+      "cursor": "Серверы Model Context Protocol предоставляют дополнительные инструменты и источники данных для Cursor",
+      "codex": "Серверы Model Context Protocol предоставляют дополнительные инструменты и источники данных для Codex"
+    },
+    "addButton": "Добавить MCP сервер",
+    "empty": "MCP серверы не настроены",
+    "serverType": "Тип",
+    "scope": {
+      "local": "локальный",
+      "user": "пользователь"
+    },
+    "config": {
+      "command": "Команда",
+      "url": "URL",
+      "args": "Аргументы",
+      "environment": "Окружение"
+    },
+    "tools": {
+      "title": "Инструменты",
+      "count": "({{count}}):",
+      "more": "+{{count}} еще"
+    },
+    "actions": {
+      "edit": "Редактировать сервер",
+      "delete": "Удалить сервер"
+    },
+    "help": {
+      "title": "О Codex MCP",
+      "description": "Codex поддерживает MCP серверы на основе stdio. Вы можете добавлять серверы, которые расширяют возможности Codex дополнительными инструментами и ресурсами."
+    }
+  },
+  "pluginSettings": {
+    "title": "Плагины",
+    "description": "Расширяйте интерфейс с помощью кастомных плагинов. Установите из git или добавьте папку в ~/.claude-code-ui/plugins/",
+    "installPlaceholder": "https://github.com/user/my-plugin",
+    "installButton": "Установить",
+    "installing": "Установка…",
+    "securityWarning": "Устанавливайте только те плагины, исходный код которых вы проверили или от авторов, которым вы доверяете.",
+    "scanningPlugins": "Сканирование плагинов…",
+    "noPluginsInstalled": "Плагины не установлены",
+    "pullLatest": "Получить обновления из git",
+    "noGitRemote": "Нет удаленного git-репозитория — обновление недоступно",
+    "uninstallPlugin": "Удалить плагин",
+    "confirmUninstall": "Нажмите еще раз для подтверждения",
+    "confirmUninstallMessage": "Удалить {{name}}? Это действие нельзя отменить.",
+    "cancel": "Отмена",
+    "remove": "Удалить",
+    "updateFailed": "Ошибка обновления",
+    "installFailed": "Ошибка установки",
+    "uninstallFailed": "Ошибка удаления",
+    "toggleFailed": "Ошибка переключения",
+    "buildYourOwn": "Создайте свой плагин",
+    "starter": "Шаблон",
+    "docs": "Документация",
+    "starterPlugin": {
+      "name": "Статистика проекта",
+      "badge": "шаблон",
+      "description": "Количество файлов, строк кода, разбивка по типам файлов и недавняя активность в вашем проекте.",
+      "install": "Установить"
+    },
+    "morePlugins": "Ещё",
+    "enable": "Включить",
+    "disable": "Выключить",
+    "installAriaLabel": "URL git-репозитория плагина",
+    "tab": "вкладка",
+    "runningStatus": "запущен"
+  }
+}

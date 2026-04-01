@@ -18,6 +18,10 @@ type UseProjectsStateArgs = {
   activeSessions: Set<string>;
 };
 
+type FetchProjectsOptions = {
+  showLoadingState?: boolean;
+};
+
 const serialize = (value: unknown) => JSON.stringify(value ?? null);
 
 const projectsHaveChanges = (
@@ -40,7 +44,8 @@ const projectsHaveChanges = (
       nextProject.displayName !== prevProject.displayName ||
       nextProject.fullPath !== prevProject.fullPath ||
       serialize(nextProject.sessionMeta) !== serialize(prevProject.sessionMeta) ||
-      serialize(nextProject.sessions) !== serialize(prevProject.sessions);
+      serialize(nextProject.sessions) !== serialize(prevProject.sessions) ||
+      serialize(nextProject.taskmaster) !== serialize(prevProject.taskmaster);
 
     if (baseChanged) {
       return true;
@@ -52,7 +57,8 @@ const projectsHaveChanges = (
 
     return (
       serialize(nextProject.cursorSessions) !== serialize(prevProject.cursorSessions) ||
-      serialize(nextProject.codexSessions) !== serialize(prevProject.codexSessions)
+      serialize(nextProject.codexSessions) !== serialize(prevProject.codexSessions) ||
+      serialize(nextProject.geminiSessions) !== serialize(prevProject.geminiSessions)
     );
   });
 };
@@ -62,6 +68,7 @@ const getProjectSessions = (project: Project): ProjectSession[] => {
     ...(project.sessions ?? []),
     ...(project.codexSessions ?? []),
     ...(project.cursorSessions ?? []),
+    ...(project.geminiSessions ?? []),
   ];
 };
 
@@ -101,6 +108,24 @@ const isUpdateAdditive = (
   );
 };
 
+const VALID_TABS: Set<string> = new Set(['chat', 'files', 'shell', 'git', 'tasks', 'preview']);
+
+const isValidTab = (tab: string): tab is AppTab => {
+  return VALID_TABS.has(tab) || tab.startsWith('plugin:');
+};
+
+const readPersistedTab = (): AppTab => {
+  try {
+    const stored = localStorage.getItem('activeTab');
+    if (stored && isValidTab(stored)) {
+      return stored as AppTab;
+    }
+  } catch {
+    // localStorage unavailable
+  }
+  return 'chat';
+};
+
 export function useProjectsState({
   sessionId,
   navigate,
@@ -111,7 +136,16 @@ export function useProjectsState({
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [selectedSession, setSelectedSession] = useState<ProjectSession | null>(null);
-  const [activeTab, setActiveTab] = useState<AppTab>('chat');
+  const [activeTab, setActiveTab] = useState<AppTab>(readPersistedTab);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('activeTab', activeTab);
+    } catch {
+      // Silently ignore storage errors
+    }
+  }, [activeTab]);
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [loadingProgress, setLoadingProgress] = useState<LoadingProgress | null>(null);
@@ -122,9 +156,11 @@ export function useProjectsState({
 
   const loadingProgressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fetchProjects = useCallback(async () => {
+  const fetchProjects = useCallback(async ({ showLoadingState = true }: FetchProjectsOptions = {}) => {
     try {
-      setIsLoadingProjects(true);
+      if (showLoadingState) {
+        setIsLoadingProjects(true);
+      }
       const response = await api.projects();
       const projectData = (await response.json()) as Project[];
 
@@ -140,9 +176,16 @@ export function useProjectsState({
     } catch (error) {
       console.error('Error fetching projects:', error);
     } finally {
-      setIsLoadingProjects(false);
+      if (showLoadingState) {
+        setIsLoadingProjects(false);
+      }
     }
   }, []);
+
+  const refreshProjectsSilently = useCallback(async () => {
+    // Keep chat view stable while still syncing sidebar/session metadata in background.
+    await fetchProjects({ showLoadingState: false });
+  }, [fetchProjects]);
 
   const openSettings = useCallback((tab = 'tools') => {
     setSettingsInitialTab(tab);
@@ -265,8 +308,6 @@ export function useProjectsState({
       return;
     }
 
-    const shouldSwitchTab = !selectedSession || selectedSession.id !== sessionId;
-
     for (const project of projects) {
       const claudeSession = project.sessions?.find((session) => session.id === sessionId);
       if (claudeSession) {
@@ -279,9 +320,6 @@ export function useProjectsState({
         }
         if (shouldUpdateSession) {
           setSelectedSession({ ...claudeSession, __provider: 'claude' });
-        }
-        if (shouldSwitchTab) {
-          setActiveTab('chat');
         }
         return;
       }
@@ -298,9 +336,6 @@ export function useProjectsState({
         if (shouldUpdateSession) {
           setSelectedSession({ ...cursorSession, __provider: 'cursor' });
         }
-        if (shouldSwitchTab) {
-          setActiveTab('chat');
-        }
         return;
       }
 
@@ -316,8 +351,20 @@ export function useProjectsState({
         if (shouldUpdateSession) {
           setSelectedSession({ ...codexSession, __provider: 'codex' });
         }
-        if (shouldSwitchTab) {
-          setActiveTab('chat');
+        return;
+      }
+
+      const geminiSession = project.geminiSessions?.find((session) => session.id === sessionId);
+      if (geminiSession) {
+        const shouldUpdateProject = selectedProject?.name !== project.name;
+        const shouldUpdateSession =
+          selectedSession?.id !== sessionId || selectedSession.__provider !== 'gemini';
+
+        if (shouldUpdateProject) {
+          setSelectedProject(project);
+        }
+        if (shouldUpdateSession) {
+          setSelectedSession({ ...geminiSession, __provider: 'gemini' });
         }
         return;
       }
@@ -341,7 +388,7 @@ export function useProjectsState({
     (session: ProjectSession) => {
       setSelectedSession(session);
 
-      if (activeTab !== 'git' && activeTab !== 'preview') {
+      if (activeTab === 'tasks' || activeTab === 'preview') {
         setActiveTab('chat');
       }
 
@@ -513,6 +560,7 @@ export function useProjectsState({
     setShowSettings,
     openSettings,
     fetchProjects,
+    refreshProjectsSilently,
     sidebarSharedProps,
     handleProjectSelect,
     handleSessionSelect,

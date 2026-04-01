@@ -1,12 +1,23 @@
 <div align="center">
-  <img src="public/logo.svg" alt="Claude Code UI" width="64" height="64">
-  <h1>Cloud CLI (又名 Claude Code UI)</h1>
+  <img src="public/logo.svg" alt="CloudCLI UI" width="64" height="64">
+  <h1>Cloud CLI（又名 Claude Code UI）</h1>
+  <p><a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a>、<a href="https://docs.cursor.com/en/cli/overview">Cursor CLI</a>、<a href="https://developers.openai.com/codex">Codex</a> 和 <a href="https://geminicli.com/">Gemini-CLI</a> 的桌面和移动端 UI。可在本地或远程使用，从任何地方查看激活的项目与会话。</p>
 </div>
 
+<p align="center">
+  <a href="https://cloudcli.ai">CloudCLI Cloud</a> · <a href="https://cloudcli.ai/docs">文档</a> · <a href="https://discord.gg/buxwujPNRE">Discord</a> · <a href="https://github.com/siteboon/claudecodeui/issues">Bug 报告</a> · <a href="CONTRIBUTING.md">贡献指南</a>
+</p>
 
-[Claude Code](https://docs.anthropic.com/en/docs/claude-code)、[Cursor CLI](https://docs.cursor.com/en/cli/overview) 和 [Codex](https://developers.openai.com/codex) 的桌面端和移动端界面。您可以在本地或远程使用它来查看 Claude Code、Cursor 或 Codex 中的活跃项目和会话,并从任何地方(移动端或桌面端)对它们进行修改。这为您提供了一个在任何地方都能正常使用的合适界面。
+<p align="center">
+  <a href="https://cloudcli.ai"><img src="https://img.shields.io/badge/☁️_CloudCLI_Cloud-Try_Now-0066FF?style=for-the-badge" alt="CloudCLI Cloud"></a>
+  <a href="https://discord.gg/buxwujPNRE"><img src="https://img.shields.io/badge/Discord-Join%20Community-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="加入 Discord 社区"></a>
+  <br><br>
+  <a href="https://trendshift.io/repositories/15586" target="_blank"><img src="https://trendshift.io/api/badge/repositories/15586" alt="siteboon%2Fclaudecodeui | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+</p>
 
-<div align="right"><i><a href="./README.md">English</a> · <a href="./README.ko.md">한국어</a> · <a href="./README.ja.md">日本語</a></i></div>
+<div align="right"><i><a href="./README.md">English</a> · <a href="./README.ru.md">Русский</a> · <a href="./README.de.md">Deutsch</a> · <a href="./README.ko.md">한국어</a> · <b>中文</b> · <a href="./README.ja.md">日本語</a></i></div>
+
+---
 
 ## 截图
 
@@ -16,327 +27,199 @@
 <tr>
 <td align="center">
 <h3>桌面视图</h3>
-<img src="public/screenshots/desktop-main.png" alt="Desktop Interface" width="400">
+<img src="public/screenshots/desktop-main.png" alt="桌面界面" width="400">
 <br>
-<em>显示项目概览和聊天界面的主界面</em>
+<em>显示项目概览和聊天的主界面</em>
 </td>
 <td align="center">
-<h3>移动端体验</h3>
-<img src="public/screenshots/mobile-chat.png" alt="Mobile Interface" width="250">
+<h3>移动体验</h3>
+<img src="public/screenshots/mobile-chat.png" alt="移动界面" width="250">
 <br>
-<em>具有触摸导航的响应式移动设计</em>
+<em>具有触控导航的响应式移动设计</em>
 </td>
 </tr>
 <tr>
 <td align="center" colspan="2">
 <h3>CLI 选择</h3>
-<img src="public/screenshots/cli-selection.png" alt="CLI Selection" width="400">
+<img src="public/screenshots/cli-selection.png" alt="CLI 选择" width="400">
 <br>
-<em>在 Claude Code、Cursor CLI 和 Codex 之间选择</em>
+<em>在 Claude Code、Gemini、Cursor CLI 与 Codex 之间进行选择</em>
 </td>
 </tr>
 </table>
 
-
-
 </div>
 
-## 功能特性
+## 功能
 
-- **响应式设计** - 在桌面、平板和移动设备上无缝运行,您也可以在移动端使用 Claude Code、Cursor 或 Codex
-- **交互式聊天界面** - 内置聊天界面,与 Claude Code、Cursor 或 Codex 无缝通信
-- **集成 Shell 终端** - 通过内置 shell 功能直接访问 Claude Code、Cursor CLI 或 Codex
-- **文件浏览器** - 交互式文件树,支持语法高亮和实时编辑
-- **Git 浏览器** - 查看、暂存和提交您的更改。您还可以切换分支
+- **响应式设计** - 在桌面、平板和移动设备上无缝运行，让您随时随地使用 Agents
+- **交互聊天界面** - 内置聊天 UI，轻松与 Agents 交流
+- **集成 Shell 终端** - 通过内置 shell 功能直接访问 Agents CLI
+- **文件浏览器** - 交互式文件树，支持语法高亮与实时编辑
+- **Git 浏览器** - 查看、暂存并提交更改，还可切换分支
 - **会话管理** - 恢复对话、管理多个会话并跟踪历史记录
-- **TaskMaster AI 集成** *(可选)* - 通过 AI 驱动的任务规划、PRD 解析和工作流自动化实现高级项目管理
-- **模型兼容性** - 适用于 Claude Sonnet 4.5、Opus 4.5 和 GPT-5.2
-
+- **插件系统** - 通过自定义选项卡、后端服务与集成扩展 CloudCLI。 [开始构建 →](https://github.com/cloudcli-ai/cloudcli-plugin-starter)
+- **TaskMaster AI 集成** *(可选)* - 结合 AI 任务规划、PRD 分析与工作流自动化，实现高级项目管理
+- **模型兼容性** - 支持 Claude、GPT、Gemini 模型家族（完整支持列表见 [`shared/modelConstants.js`](shared/modelConstants.js)）
 
 ## 快速开始
 
-### 前置要求
+### CloudCLI Cloud（推荐）
 
-- [Node.js](https://nodejs.org/) v22 或更高版本
-- 已安装并配置 [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code),和/或
-- 已安装并配置 [Cursor CLI](https://docs.cursor.com/en/cli/overview),和/或
-- 已安装并配置 [Codex](https://developers.openai.com/codex)
+无需本地设置即可快速启动。提供可通过网络浏览器、移动应用、API 或喜欢的 IDE 访问的完全集装式托管开发环境。
 
-### 一键操作(推荐)
+**[立即开始 CloudCLI Cloud](https://cloudcli.ai)**
 
-无需安装,直接运行:
+### 自托管（开源）
+
+启动 CloudCLI UI，只需一行 `npx`（需要 Node.js v22+）：
 
 ```bash
 npx @siteboon/claude-code-ui
 ```
 
-服务器将启动并可通过 `http://localhost:3001`(或您配置的 PORT)访问。
-
-**重启**: 停止服务器后只需再次运行相同的 `npx` 命令
-
-### 全局安装(供常规使用)
-
-为了频繁使用,一次性全局安装:
+或进行全局安装，便于日常使用：
 
 ```bash
 npm install -g @siteboon/claude-code-ui
+cloudcli
 ```
 
-然后使用简单命令启动:
+打开 `http://localhost:3001`，系统会自动发现所有现有会话。
 
-```bash
-claude-code-ui
-```
+更多配置选项、PM2、远程服务器设置等，请参阅 **[文档 →](https://cloudcli.ai/docs)**
 
+---
 
-**重启**: 使用 Ctrl+C 停止,然后再次运行 `claude-code-ui`。
+## 哪个选项更适合你？
 
-**更新**:
-```bash
-cloudcli update
-```
+CloudCLI UI 是 CloudCLI Cloud 的开源 UI 层。你可以在本地机器上自托管它，也可以使用提供团队功能与深入集成的 CloudCLI Cloud。
 
-### CLI 使用方法
+| | CloudCLI UI（自托管） | CloudCLI Cloud |
+|---|---|---|
+| **适合对象** | 需要为本地代理会话提供完整 UI 的开发者 | 需要部署在云端，随时从任何地方访问代理的团队与开发者 |
+| **访问方式** | 通过 `[yourip]:port` 在浏览器中访问 | 浏览器、任意 IDE、REST API、n8n |
+| **设置** | `npx @siteboon/claude-code-ui` | 无需设置 |
+| **机器需保持开机吗** | 是 | 否 |
+| **移动端访问** | 网络内任意浏览器 | 任意设备（原生应用即将推出） |
+| **可用会话** | 自动发现 `~/.claude` 中的所有会话 | 云端环境内的会话 |
+| **支持的 Agents** | Claude Code、Cursor CLI、Codex、Gemini CLI | Claude Code、Cursor CLI、Codex、Gemini CLI |
+| **文件浏览与 Git** | 内置于 UI | 内置于 UI |
+| **MCP 配置** | UI 管理，与本地 `~/.claude` 配置同步 | UI 管理 |
+| **IDE 访问** | 本地 IDE | 任何连接到云环境的 IDE |
+| **REST API** | 是 | 是 |
+| **n8n 节点** | 否 | 是 |
+| **团队共享** | 否 | 是 |
+| **平台费用** | 免费开源 | 起价 $7/月 |
 
-全局安装后,您可以访问 `claude-code-ui` 和 `cloudcli` 命令:
+> 两种方式都使用你自己的 AI 订阅（Claude、Cursor 等）— CloudCLI 提供环境，而非 AI。
 
-| 命令 / 选项 | 简写 | 描述 |
-|------------------|-------|-------------|
-| `cloudcli` 或 `claude-code-ui` | | 启动服务器(默认) |
-| `cloudcli start` | | 显式启动服务器 |
-| `cloudcli status` | | 显示配置和数据位置 |
-| `cloudcli update` | | 更新到最新版本 |
-| `cloudcli help` | | 显示帮助信息 |
-| `cloudcli version` | | 显示版本信息 |
-| `--port <port>` | `-p` | 设置服务器端口(默认: 3001) |
-| `--database-path <path>` | | 设置自定义数据库位置 |
-
-**示例:**
-```bash
-cloudcli                          # 使用默认设置启动
-cloudcli -p 8080              # 在自定义端口启动
-cloudcli status                   # 显示当前配置
-```
-
-### 作为后台服务运行(推荐用于生产环境)
-
-在生产环境中,使用 PM2(Process Manager 2)将 Claude Code UI 作为后台服务运行:
-
-#### 安装 PM2
-
-```bash
-npm install -g pm2
-```
-
-#### 作为后台服务启动
-
-```bash
-# 在后台启动服务器
-pm2 start claude-code-ui --name "claude-code-ui"
-
-# 或使用更短的别名
-pm2 start cloudcli --name "claude-code-ui"
-
-# 在自定义端口启动
-pm2 start cloudcli --name "claude-code-ui" -- --port 8080
-```
-
-
-#### 系统启动时自动启动
-
-要使 Claude Code UI 在系统启动时自动启动:
-
-```bash
-# 为您的平台生成启动脚本
-pm2 startup
-
-# 保存当前进程列表
-pm2 save
-```
-
-
-### 本地开发安装
-
-1. **克隆仓库:**
-```bash
-git clone https://github.com/siteboon/claudecodeui.git
-cd claudecodeui
-```
-
-2. **安装依赖:**
-```bash
-npm install
-```
-
-3. **配置环境:**
-```bash
-cp .env.example .env
-# 使用您喜欢的设置编辑 .env
-```
-
-4. **启动应用程序:**
-```bash
-# 开发模式(支持热重载)
-npm run dev
-
-```
-应用程序将在您在 .env 中指定的端口启动
-
-5. **打开浏览器:**
-   - 开发环境: `http://localhost:3001`
+---
 
 ## 安全与工具配置
 
-**🔒 重要提示**: 所有 Claude Code 工具**默认禁用**。这可以防止潜在的有害操作自动运行。
+**🔒 重要提示**: 所有 Claude Code 工具默认**禁用**，可防止潜在的有害操作自动运行。
 
 ### 启用工具
 
-要使用 Claude Code 的完整功能,您需要手动启用工具:
-
-1. **打开工具设置** - 点击侧边栏中的齿轮图标
-3. **选择性启用** - 仅打开您需要的工具
-4. **应用设置** - 您的偏好设置将保存在本地
+1. **打开工具设置** - 点击侧边栏齿轮图标
+2. **选择性启用** - 仅启用所需工具
+3. **应用设置** - 偏好设置保存在本地
 
 <div align="center">
 
-![工具设置模态框](public/screenshots/tools-modal.png)
-*工具设置界面 - 仅启用您需要的内容*
+![工具设置弹窗](public/screenshots/tools-modal.png)
+*工具设置界面 - 只启用你需要的内容*
 
 </div>
 
-**推荐方法**: 首先启用基本工具,然后根据需要添加更多。您可以随时调整这些设置。
+**推荐做法**: 先启用基础工具，再根据需要添加其他工具。随时可以调整。
 
-## TaskMaster AI 集成 *(可选)*
+---
 
-Claude Code UI 支持 **[TaskMaster AI](https://github.com/eyaltoledano/claude-task-master)**(aka claude-task-master)集成,用于高级项目管理和 AI 驱动的任务规划。
+## 插件
 
-它提供
-- 从 PRD(产品需求文档)生成 AI 驱动的任务
-- 智能任务分解和依赖管理
-- 可视化任务板和进度跟踪
+CloudCLI 配备插件系统，允许你添加带自定义前端 UI 和可选 Node.js 后端的选项卡。在 Settings > Plugins 中直接从 Git 仓库安装插件，或自行开发。
 
-**设置与文档**: 访问 [TaskMaster AI GitHub 仓库](https://github.com/eyaltoledano/claude-task-master)获取安装说明、配置指南和使用示例。
-安装后,您应该能够从设置中启用它
+### 可用插件
 
+| 插件 | 描述 |
+|---|---|
+| **[Project Stats](https://github.com/cloudcli-ai/cloudcli-plugin-starter)** | 展示当前项目的文件数、代码行数、文件类型分布、最大文件以及最近修改的文件 |
 
-## 使用指南
+### 自行构建
 
-### 核心功能
+**[Plugin Starter Template →](https://github.com/cloudcli-ai/cloudcli-plugin-starter)** — Fork 该仓库以构建自己的插件。示例包括前端渲染、实时上下文更新和 RPC 通信。
 
-#### 项目管理
-当可用时,它会自动发现 Claude Code、Cursor 或 Codex 会话并将它们分组到项目中
-- **项目操作** - 重命名、删除和组织项目
-- **智能导航** - 快速访问最近的项目和会话
-- **MCP 支持** - 通过 UI 添加您自己的 MCP 服务器
+**[插件文档 →](https://cloudcli.ai/docs/plugin-overview)** — 提供插件 API、清单格式、安全模型等完整指南。
 
-#### 聊天界面
-- **使用响应式聊天或 Claude Code/Cursor CLI/Codex CLI** - 您可以使用自适应聊天界面或使用 shell 按钮连接到您选择的 CLI
-- **实时通信** - 通过 WebSocket 连接从您选择的 CLI(Claude Code/Cursor/Codex)流式传输响应
-- **会话管理** - 恢复之前的对话或启动新会话
-- **消息历史** - 带有时间戳和元数据的完整对话历史
-- **多格式支持** - 文本、代码块和文件引用
+---
 
-#### 文件浏览器与编辑器
-- **交互式文件树** - 使用展开/折叠导航浏览项目结构
-- **实时文件编辑** - 直接在界面中读取、修改和保存文件
-- **语法高亮** - 支持多种编程语言
-- **文件操作** - 创建、重命名、删除文件和目录
+## 常见问题
 
-#### Git 浏览器
+<details>
+<summary>与 Claude Code Remote Control 有何不同？</summary>
 
+Claude Code Remote Control 让你发送消息到本地终端中已经运行的会话。该方式要求你的机器保持开机，终端保持开启，断开网络后约 10 分钟会话会超时。
 
-#### TaskMaster AI 集成 *(可选)*
-- **可视化任务板** - 用于管理开发任务的看板风格界面
-- **PRD 解析器** - 创建产品需求文档并将其解析为结构化任务
-- **进度跟踪** - 实时状态更新和完成跟踪
+CloudCLI UI 与 CloudCLI Cloud 是对 Claude Code 的扩展，而非旁观 — MCP 服务器、权限、设置、会话与 Claude Code 完全一致。
 
-#### 会话管理
-- **会话持久化** - 所有对话自动保存
-- **会话组织** - 按项目和 timestamp 分组会话
-- **会话操作** - 重命名、删除和导出对话历史
-- **跨设备同步** - 从任何设备访问会话
+- **覆盖全部会话** — CloudCLI UI 会自动扫描 `~/.claude` 文件夹中的每个会话。Remote Control 只暴露当前活动的会话。
+- **设置统一** — 在 CloudCLI UI 中修改的 MCP、工具权限等设置会立即写入 Claude Code。
+- **支持更多 Agents** — Claude Code、Cursor CLI、Codex、Gemini CLI。
+- **完整 UI** — 除了聊天界面，还包括文件浏览器、Git 集成、MCP 管理和 Shell 终端。
+- **CloudCLI Cloud 保持运行于云端** — 关闭本地设备也不会中断代理运行，无需监控终端。
 
-### 移动应用
-- **响应式设计** - 针对所有屏幕尺寸进行优化
-- **触摸友好界面** - 滑动手势和触摸导航
-- **移动导航** - 底部选项卡栏,方便拇指导航
-- **自适应布局** - 可折叠侧边栏和智能内容优先级
-- **添加到主屏幕快捷方式** - 添加快捷方式到主屏幕,应用程序将像 PWA 一样运行
+</details>
 
-## 架构
+<details>
+<summary>需要额外购买 AI 订阅吗？</summary>
 
-### 系统概览
+需要。CloudCLI 只提供环境。你仍需自行获取 Claude、Cursor、Codex 或 Gemini 订阅。CloudCLI Cloud 从 $7/月起提供托管环境。
 
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Frontend      │    │   Backend       │    │  Agent     │
-│   (React/Vite)  │◄──►│ (Express/WS)    │◄──►│  Integration    │
-│                 │    │                 │    │                │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-```
+</details>
 
-### 后端 (Node.js + Express)
-- **Express 服务器** - 具有静态文件服务的 RESTful API
-- **WebSocket 服务器** - 用于聊天和项目刷新的通信
-- **Agent 集成 (Claude Code / Cursor CLI / Codex)** - 进程生成和管理
-- **文件系统 API** - 为项目公开文件浏览器
+<details>
+<summary>能在手机上使用 CloudCLI UI 吗？</summary>
 
-### 前端 (React + Vite)
-- **React 18** - 带有 hooks 的现代组件架构
-- **CodeMirror** - 具有语法高亮的高级代码编辑器
+可以。自托管时，在你的设备上运行服务器，然后在网络中的任意浏览器打开 `[yourip]:port`。CloudCLI Cloud 可从任意设备访问，内置原生应用也在开发中。
 
+</details>
 
+<details>
+<summary>UI 中的更改会影响本地 Claude Code 配置吗？</summary>
 
+会的。自托管模式下，CloudCLI UI 读取并写入 Claude Code 使用的 `~/.claude` 配置。通过 UI 添加的 MCP 服务器会立即在 Claude Code 中可见。
 
-### 贡献
+</details>
 
-我们欢迎贡献！有关提交规范、开发流程和发布流程的详细信息,请参阅 [Contributing Guide](CONTRIBUTING.md)。
+---
 
-## 故障排除
+## 社区与支持
 
-### 常见问题与解决方案
-
-
-#### "未找到 Claude 项目"
-**问题**: UI 显示没有项目或项目列表为空
-**解决方案**:
-- 确保已正确安装 [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
-- 至少在一个项目目录中运行 `claude` 命令以进行初始化
-- 验证 `~/.claude/projects/` 目录存在并具有适当的权限
-
-#### 文件浏览器问题
-**问题**: 文件无法加载、权限错误、空目录
-**解决方案**:
-- 检查项目目录权限(在终端中使用 `ls -la`)
-- 验证项目路径存在且可访问
-- 查看服务器控制台日志以获取详细错误消息
-- 确保您未尝试访问项目范围之外的系统目录
-
+- **[文档](https://cloudcli.ai/docs)** — 安装、配置、功能与故障排除指南
+- **[Discord](https://discord.gg/buxwujPNRE)** — 获取帮助并与社区交流
+- **[GitHub Issues](https://github.com/siteboon/claudecodeui/issues)** — 报告 Bug 与建议功能
+- **[贡献指南](CONTRIBUTING.md)** — 如何参与项目贡献
 
 ## 许可证
 
-GNU General Public License v3.0 - 详见 [LICENSE](LICENSE) 文件。
+GNU 通用公共许可证 v3.0 - 详见 [LICENSE](LICENSE) 文件。
 
-本项目是开源的,在 GPL v3 许可下可自由使用、修改和分发。
+该项目为开源软件，在 GPL v3 许可证下可自由使用、修改与分发。
 
 ## 致谢
 
-### 构建工具
-- **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** - Anthropic 的官方 CLI
-- **[Cursor CLI](https://docs.cursor.com/en/cli/overview)** - Cursor 的官方 CLI
+### 使用技术
+- **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** - Anthropic 官方 CLI
+- **[Cursor CLI](https://docs.cursor.com/en/cli/overview)** - Cursor 官方 CLI
 - **[Codex](https://developers.openai.com/codex)** - OpenAI Codex
+- **[Gemini-CLI](https://geminicli.com/)** - Google Gemini CLI
 - **[React](https://react.dev/)** - 用户界面库
-- **[Vite](https://vitejs.dev/)** - 快速构建工具和开发服务器
-- **[Tailwind CSS](https://tailwindcss.com/)** - 实用优先的 CSS 框架
+- **[Vite](https://vitejs.dev/)** - 快速构建工具与开发服务器
+- **[Tailwind CSS](https://tailwindcss.com/)** - 实用先行 CSS 框架
 - **[CodeMirror](https://codemirror.net/)** - 高级代码编辑器
-- **[TaskMaster AI](https://github.com/eyaltoledano/claude-task-master)** *(可选)* - AI 驱动的项目管理和任务规划
-
-## 支持与社区
-
-### 保持更新
-- **Star** 此仓库以表示支持
-- **Watch** 以获取更新和新版本
-- **Follow** 项目以获取公告
+- **[TaskMaster AI](https://github.com/eyaltoledano/claude-task-master)** *(可选)* - AI 驱动的项目管理与任务规划
 
 ### 赞助商
 - [Siteboon - AI powered website builder](https://siteboon.ai)

@@ -114,7 +114,22 @@
     "justNow": "たった今",
     "minAgo": "{{count}}分前",
     "hoursAgo": "{{count}}時間前",
-    "daysAgo": "{{count}}日前"
+    "daysAgo": "{{count}}日前",
+    "newFile": "新規ファイル (Cmd+N)",
+    "newFolder": "新規フォルダ (Cmd+Shift+N)",
+    "refresh": "更新",
+    "collapseAll": "すべて折りたたむ",
+    "context": {
+      "rename": "名前を変更",
+      "delete": "削除",
+      "copyPath": "パスをコピー",
+      "download": "ダウンロード",
+      "newFile": "新しいファイル",
+      "newFolder": "新しいフォルダ",
+      "refresh": "更新",
+      "menuLabel": "ファイルのコンテキストメニュー",
+      "loading": "読み込み中..."
+    }
   },
   "projectWizard": {
     "title": "新規プロジェクトを作成",
@@ -189,6 +204,36 @@
       "providePath": "ワークスペースのパスを入力してください",
       "failedToCreate": "ワークスペースの作成に失敗しました",
       "failedToCreateFolder": "フォルダの作成に失敗しました"
+    }
+  },
+  "notifications": {
+    "genericTool": "ツール",
+    "codes": {
+      "generic": {
+        "info": {
+          "title": "通知"
+        }
+      },
+      "permission": {
+        "required": {
+          "title": "対応が必要です",
+          "body": "{{toolName}} があなたの判断を待っています。"
+        }
+      },
+      "run": {
+        "stopped": {
+          "title": "実行が停止しました",
+          "body": "理由: {{reason}}"
+        },
+        "failed": {
+          "title": "実行に失敗しました"
+        }
+      },
+      "agent": {
+        "notification": {
+          "title": "エージェント通知"
+        }
+      }
     }
   },
   "versionUpdate": {

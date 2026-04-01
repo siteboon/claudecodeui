@@ -14,13 +14,14 @@ router.get('/claude/status', async (req, res) => {
       return res.json({
         authenticated: true,
         email: credentialsResult.email || 'Authenticated',
-        method: 'credentials_file'
+        method: credentialsResult.method  // 'api_key' or 'credentials_file'
       });
     }
 
     return res.json({
       authenticated: false,
       email: null,
+      method: null,
       error: credentialsResult.error || 'Not authenticated'
     });
 
@@ -29,6 +30,7 @@ router.get('/claude/status', async (req, res) => {
     res.status(500).json({
       authenticated: false,
       email: null,
+      method: null,
       error: error.message
     });
   }
@@ -92,7 +94,99 @@ router.get('/codex/status', async (req, res) => {
   }
 });
 
+router.get('/gemini/status', async (req, res) => {
+  try {
+    const result = await checkGeminiCredentials();
+
+    res.json({
+      authenticated: result.authenticated,
+      email: result.email,
+      error: result.error
+    });
+
+  } catch (error) {
+    console.error('Error checking Gemini auth status:', error);
+    res.status(500).json({
+      authenticated: false,
+      email: null,
+      error: error.message
+    });
+  }
+});
+
+async function loadClaudeSettingsEnv() {
+  try {
+    const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+    const content = await fs.readFile(settingsPath, 'utf8');
+    const settings = JSON.parse(content);
+
+    if (settings?.env && typeof settings.env === 'object') {
+      return settings.env;
+    }
+  } catch (error) {
+    // Ignore missing or malformed settings and fall back to other auth sources.
+  }
+
+  return {};
+}
+
+/**
+ * Checks Claude authentication credentials using two methods with priority order:
+ *
+ * Priority 1: ANTHROPIC_API_KEY environment variable
+ * Priority 1b: ~/.claude/settings.json env values
+ * Priority 2: ~/.claude/.credentials.json OAuth tokens
+ *
+ * The Claude Agent SDK prioritizes environment variables over authenticated subscriptions.
+ * This matching behavior ensures consistency with how the SDK authenticates.
+ *
+ * References:
+ * - https://support.claude.com/en/articles/12304248-managing-api-key-environment-variables-in-claude-code
+ *   "Claude Code prioritizes environment variable API keys over authenticated subscriptions"
+ * - https://platform.claude.com/docs/en/agent-sdk/overview
+ *   SDK authentication documentation
+ *
+ * @returns {Promise<Object>} Authentication status with { authenticated, email, method }
+ *   - authenticated: boolean indicating if valid credentials exist
+ *   - email: user email or auth method identifier
+ *   - method: 'api_key' for env var, 'credentials_file' for OAuth tokens
+ */
 async function checkClaudeCredentials() {
+  // Priority 1: Check for ANTHROPIC_API_KEY environment variable
+  // The SDK checks this first and uses it if present, even if OAuth tokens exist.
+  // When set, API calls are charged via pay-as-you-go rates instead of subscription.
+  if (process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY.trim()) {
+    return {
+      authenticated: true,
+      email: 'API Key Auth',
+      method: 'api_key'
+    };
+  }
+
+  // Priority 1b: Check ~/.claude/settings.json env values.
+  // Claude Code can read proxy/auth values from settings.json even when the
+  // CloudCLI server process itself was not started with those env vars exported.
+  const settingsEnv = await loadClaudeSettingsEnv();
+
+  if (typeof settingsEnv.ANTHROPIC_API_KEY === 'string' && settingsEnv.ANTHROPIC_API_KEY.trim()) {
+    return {
+      authenticated: true,
+      email: 'API Key Auth',
+      method: 'api_key'
+    };
+  }
+
+  if (typeof settingsEnv.ANTHROPIC_AUTH_TOKEN === 'string' && settingsEnv.ANTHROPIC_AUTH_TOKEN.trim()) {
+    return {
+      authenticated: true,
+      email: 'Configured via settings.json',
+      method: 'api_key'
+    };
+  }
+
+  // Priority 2: Check ~/.claude/.credentials.json for OAuth tokens
+  // This is the standard authentication method used by Claude CLI after running
+  // 'claude /login' or 'claude setup-token' commands.
   try {
     const credPath = path.join(os.homedir(), '.claude', '.credentials.json');
     const content = await fs.readFile(credPath, 'utf8');
@@ -105,19 +199,22 @@ async function checkClaudeCredentials() {
       if (!isExpired) {
         return {
           authenticated: true,
-          email: creds.email || creds.user || null
+          email: creds.email || creds.user || null,
+          method: 'credentials_file'
         };
       }
     }
 
     return {
       authenticated: false,
-      email: null
+      email: null,
+      method: null
     };
   } catch (error) {
     return {
       authenticated: false,
-      email: null
+      email: null,
+      method: null
     };
   }
 }
@@ -299,6 +396,81 @@ function mapModelToSDKShortname(model) {
 
   // Unknown format — return as-is and let the SDK handle it
   return model;
+}
+
+async function checkGeminiCredentials() {
+  if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim()) {
+    return {
+      authenticated: true,
+      email: 'API Key Auth'
+    };
+  }
+
+  try {
+    const credsPath = path.join(os.homedir(), '.gemini', 'oauth_creds.json');
+    const content = await fs.readFile(credsPath, 'utf8');
+    const creds = JSON.parse(content);
+
+    if (creds.access_token) {
+      let email = 'OAuth Session';
+
+      try {
+        // Validate token against Google API
+        const tokenRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${creds.access_token}`);
+        if (tokenRes.ok) {
+          const tokenInfo = await tokenRes.json();
+          if (tokenInfo.email) {
+            email = tokenInfo.email;
+          }
+        } else if (!creds.refresh_token) {
+          // Token invalid and no refresh token available
+          return {
+            authenticated: false,
+            email: null,
+            error: 'Access token invalid and no refresh token found'
+          };
+        } else {
+          // Token might be expired but we have a refresh token, so CLI will refresh it
+          try {
+            const accPath = path.join(os.homedir(), '.gemini', 'google_accounts.json');
+            const accContent = await fs.readFile(accPath, 'utf8');
+            const accounts = JSON.parse(accContent);
+            if (accounts.active) {
+              email = accounts.active;
+            }
+          } catch (e) { }
+        }
+      } catch (e) {
+        // Network error, fallback to checking local accounts file
+        try {
+          const accPath = path.join(os.homedir(), '.gemini', 'google_accounts.json');
+          const accContent = await fs.readFile(accPath, 'utf8');
+          const accounts = JSON.parse(accContent);
+          if (accounts.active) {
+            email = accounts.active;
+          }
+        } catch (err) { }
+      }
+
+      return {
+        authenticated: true,
+        email: email
+      };
+    }
+
+    return {
+      authenticated: false,
+      email: null,
+      error: 'No valid tokens found in oauth_creds'
+    };
+  } catch (error) {
+    return {
+      authenticated: false,
+      email: null,
+      error: 'Gemini CLI not configured'
+    };
+  }
+}
 }
 
 export default router;

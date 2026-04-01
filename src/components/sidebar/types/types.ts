@@ -1,4 +1,3 @@
-import type React from 'react';
 import type { LoadingProgress, Project, ProjectSession, SessionProvider } from '../../../types/app';
 
 export type ProjectSortOrder = 'name' | 'date';
@@ -44,6 +43,7 @@ export type SidebarProps = {
 export type SessionViewModel = {
   isCursorSession: boolean;
   isCodexSession: boolean;
+  isGeminiSession: boolean;
   isActive: boolean;
   sessionName: string;
   sessionTime: string;
@@ -54,9 +54,5 @@ export type MCPServerStatus = {
   hasMCPServer?: boolean;
   isConfigured?: boolean;
 } | null;
-
-export type TouchHandlerFactory = (
-  callback: () => void,
-) => (event: React.TouchEvent<HTMLElement>) => void;
 
 export type SettingsProject = Pick<Project, 'name' | 'displayName' | 'fullPath' | 'path'>;

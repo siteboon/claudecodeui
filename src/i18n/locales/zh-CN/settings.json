@@ -83,12 +83,50 @@
       }
     }
   },
+  "terminalShortcuts": {
+    "title": "终端快捷键",
+    "sectionKeys": "按键",
+    "sectionNavigation": "导航",
+    "escape": "Escape",
+    "tab": "Tab",
+    "shiftTab": "Shift+Tab",
+    "arrowUp": "上箭头",
+    "arrowDown": "下箭头",
+    "scrollDown": "滚动到底部",
+    "handle": {
+      "closePanel": "关闭快捷键面板",
+      "openPanel": "打开快捷键面板"
+    }
+  },
   "mainTabs": {
+    "label": "设置",
     "agents": "智能体",
     "appearance": "外观",
     "git": "Git",
     "apiTokens": "API 和令牌",
-    "tasks": "任务"
+    "tasks": "任务",
+    "notifications": "通知",
+    "plugins": "插件"
+    
+  },
+  "notifications": {
+    "title": "通知",
+    "description": "控制你希望接收的通知事件。",
+    "webPush": {
+      "title": "Web 推送通知",
+      "enable": "启用推送通知",
+      "disable": "关闭推送通知",
+      "enabled": "推送通知已启用",
+      "loading": "更新中...",
+      "unsupported": "此浏览器不支持推送通知。",
+      "denied": "推送通知已被阻止，请在浏览器设置中允许。"
+    },
+    "events": {
+      "title": "事件类型",
+      "actionRequired": "需要处理",
+      "stop": "运行已停止",
+      "error": "运行失败"
+    }
   },
   "appearanceSettings": {
     "darkMode": {
@@ -292,6 +330,9 @@
       },
       "codex": {
         "description": "OpenAI Codex AI 助手"
+      },
+      "gemini": {
+        "description": "Google Gemini AI 助手"
       }
     },
     "connectionStatus": "连接状态",
@@ -414,5 +455,41 @@
       "title": "关于 Codex MCP",
       "description": "Codex 支持基于 stdio 的 MCP 服务器。您可以添加服务器，通过额外的工具和资源来扩展 Codex 的功能。"
     }
+  },
+  "pluginSettings": {
+    "title": "插件",
+    "description": "通过自定义插件扩展界面。从 git 安装或直接将文件夹放入 ~/.claude-code-ui/plugins/",
+    "installPlaceholder": "https://github.com/user/my-plugin",
+    "installButton": "安装",
+    "installing": "安装中…",
+    "securityWarning": "仅安装您已审查过源代码或信任作者的插件。",
+    "scanningPlugins": "正在扫描插件…",
+    "noPluginsInstalled": "未安装插件",
+    "pullLatest": "从 git 拉取最新内容",
+    "noGitRemote": "无 git 远程仓库 — 无法更新",
+    "uninstallPlugin": "卸载插件",
+    "confirmUninstall": "再次点击确认",
+    "confirmUninstallMessage": "移除 {{name}}？此操作无法撤销。",
+    "cancel": "取消",
+    "remove": "移除",
+    "updateFailed": "更新失败",
+    "installFailed": "安装失败",
+    "uninstallFailed": "卸载失败",
+    "toggleFailed": "切换失败",
+    "buildYourOwn": "构建您自己的插件",
+    "starter": "入门模板",
+    "docs": "文档",
+    "starterPlugin": {
+      "name": "项目统计",
+      "badge": "入门",
+      "description": "查看项目的文件数、代码行数、文件类型分布以及最近活动。",
+      "install": "安装"
+    },
+    "morePlugins": "更多",
+    "enable": "启用",
+    "disable": "禁用",
+    "installAriaLabel": "插件 git 仓库 URL",
+    "tab": "标签",
+    "runningStatus": "运行中"
   }
 }

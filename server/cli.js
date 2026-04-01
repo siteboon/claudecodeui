@@ -110,7 +110,7 @@ function showStatus() {
 
     // Environment variables
     console.log(`\n${c.info('[INFO]')} Configuration:`);
-    console.log(`       PORT: ${c.bright(process.env.PORT || '3001')} ${c.dim(process.env.PORT ? '' : '(default)')}`);
+    console.log(`       SERVER_PORT: ${c.bright(process.env.SERVER_PORT || process.env.PORT || '3001')} ${c.dim(process.env.SERVER_PORT || process.env.PORT ? '' : '(default)')}`);
     console.log(`       DATABASE_PATH: ${c.dim(process.env.DATABASE_PATH || '(using default location)')}`);
     console.log(`       CLAUDE_CLI_PATH: ${c.dim(process.env.CLAUDE_CLI_PATH || 'claude (default)')}`);
     console.log(`       CONTEXT_WINDOW: ${c.dim(process.env.CONTEXT_WINDOW || '160000 (default)')}`);
@@ -134,7 +134,7 @@ function showStatus() {
     console.log(`      ${c.dim('>')} Use ${c.bright('cloudcli --port 8080')} to run on a custom port`);
     console.log(`      ${c.dim('>')} Use ${c.bright('cloudcli --database-path /path/to/db')} for custom database`);
     console.log(`      ${c.dim('>')} Run ${c.bright('cloudcli help')} for all options`);
-    console.log(`      ${c.dim('>')} Access the UI at http://localhost:${process.env.PORT || '3001'}\n`);
+    console.log(`      ${c.dim('>')} Access the UI at http://localhost:${process.env.SERVER_PORT || process.env.PORT || '3001'}\n`);
 }
 
 // Show help
@@ -169,7 +169,8 @@ Examples:
   $ cloudcli status                 # Show configuration
 
 Environment Variables:
-  PORT                Set server port (default: 3001)
+  SERVER_PORT         Set server port (default: 3001)
+  PORT                Set server port (default: 3001) (LEGACY)
   DATABASE_PATH       Set custom database location
   CLAUDE_CLI_PATH     Set custom Claude CLI path
   CONTEXT_WINDOW      Set context window size (default: 160000)
@@ -260,9 +261,9 @@ function parseArgs(args) {
         const arg = args[i];
 
         if (arg === '--port' || arg === '-p') {
-            parsed.options.port = args[++i];
+            parsed.options.serverPort = args[++i];
         } else if (arg.startsWith('--port=')) {
-            parsed.options.port = arg.split('=')[1];
+            parsed.options.serverPort = arg.split('=')[1];
         } else if (arg === '--database-path') {
             parsed.options.databasePath = args[++i];
         } else if (arg.startsWith('--database-path=')) {
@@ -285,8 +286,10 @@ async function main() {
     const { command, options } = parseArgs(args);
 
     // Apply CLI options to environment variables
-    if (options.port) {
-        process.env.PORT = options.port;
+    if (options.serverPort) {
+        process.env.SERVER_PORT = options.serverPort;
+    } else if (!process.env.SERVER_PORT && process.env.PORT) {
+        process.env.SERVER_PORT = process.env.PORT;
     }
     if (options.databasePath) {
         process.env.DATABASE_PATH = options.databasePath;

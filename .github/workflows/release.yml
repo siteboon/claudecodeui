@@ -1,0 +1,50 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      increment:
+        description: 'Version bump: patch, minor, major, or explicit (e.g. 1.27.0)'
+        required: true
+        default: 'patch'
+        type: string
+      release_name:
+        description: 'Custom release name (optional, defaults to "CloudCLI UI vX.Y.Z")'
+        required: false
+        type: string
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PAT }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - name: git config
+        run: |
+          git config user.name "${GITHUB_ACTOR}"
+          git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+
+      - run: npm ci
+
+      - name: Release
+        run: |
+          ARGS="--ci --increment=${{ inputs.increment }}"
+          if [ -n "${{ inputs.release_name }}" ]; then
+            ARGS="$ARGS --github.releaseName=\"${{ inputs.release_name }}\""
+          fi
+          npx release-it $ARGS
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

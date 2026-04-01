@@ -18,6 +18,14 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
 import { CLAUDE_MODELS } from '../shared/modelConstants.js';
+import {
+  createNotificationEvent,
+  notifyRunFailed,
+  notifyRunStopped,
+  notifyUserIfEnabled
+} from './services/notification-orchestrator.js';
+import { claudeAdapter } from './providers/claude/adapter.js';
+import { createNormalizedMessage } from './providers/types.js';
 
 const activeSessions = new Map();
 const pendingToolApprovals = new Map();
@@ -34,7 +42,7 @@ function createRequestId() {
 }
 
 function waitForToolApproval(requestId, options = {}) {
-  const { timeoutMs = TOOL_APPROVAL_TIMEOUT_MS, signal, onCancel } = options;
+  const { timeoutMs = TOOL_APPROVAL_TIMEOUT_MS, signal, onCancel, metadata } = options;
 
   return new Promise(resolve => {
     let settled = false;
@@ -78,9 +86,14 @@ function waitForToolApproval(requestId, options = {}) {
       signal.addEventListener('abort', abortHandler, { once: true });
     }
 
-    pendingToolApprovals.set(requestId, (decision) => {
+    const resolver = (decision) => {
       finalize(decision);
-    });
+    };
+    // Attach metadata for getPendingApprovalsForSession lookup
+    if (metadata) {
+      Object.assign(resolver, metadata);
+    }
+    pendingToolApprovals.set(requestId, resolver);
   });
 }
 
@@ -131,7 +144,7 @@ function matchesToolPermission(entry, toolName, input) {
  * @returns {Object} SDK-compatible options
  */
 function mapCliOptionsToSDK(options = {}) {
-  const { sessionId, cwd, toolsSettings, permissionMode, images } = options;
+  const { sessionId, cwd, toolsSettings, permissionMode } = options;
 
   const sdkOptions = {};
 
@@ -182,7 +195,7 @@ function mapCliOptionsToSDK(options = {}) {
   // Map model (default to sonnet)
   // Valid models: sonnet, opus, haiku, opusplan, sonnet[1m]
   sdkOptions.model = options.model || CLAUDE_MODELS.DEFAULT;
-  console.log(`Using model: ${sdkOptions.model}`);
+  // Model logged at query start below
 
   // Map system prompt configuration
   sdkOptions.systemPrompt = {
@@ -209,13 +222,14 @@ function mapCliOptionsToSDK(options = {}) {
  * @param {Array<string>} tempImagePaths - Temp image file paths for cleanup
  * @param {string} tempDir - Temp directory for cleanup
  */
-function addSession(sessionId, queryInstance, tempImagePaths = [], tempDir = null) {
+function addSession(sessionId, queryInstance, tempImagePaths = [], tempDir = null, writer = null) {
   activeSessions.set(sessionId, {
     instance: queryInstance,
     startTime: Date.now(),
     status: 'active',
     tempImagePaths,
-    tempDir
+    tempDir,
+    writer
   });
 }
 
@@ -292,7 +306,7 @@ function extractTokenBudget(resultMessage) {
   // This is the user's budget limit, not the model's context window
   const contextWindow = parseInt(process.env.CONTEXT_WINDOW) || 160000;
 
-  console.log(`Token calculation: input=${inputTokens}, output=${outputTokens}, cache=${cacheReadTokens + cacheCreationTokens}, total=${totalUsed}/${contextWindow}`);
+  // Token calc logged via token-budget WS event
 
   return {
     used: totalUsed,
@@ -348,7 +362,7 @@ async function handleImages(command, images, cwd) {
       modifiedCommand = command + imageNote;
     }
 
-    console.log(`Processed ${tempImagePaths.length} images to temp directory: ${tempDir}`);
+    // Images processed
     return { modifiedCommand, tempImagePaths, tempDir };
   } catch (error) {
     console.error('Error processing images for SDK:', error);
@@ -381,7 +395,7 @@ async function cleanupTempFiles(tempImagePaths, tempDir) {
       );
     }
 
-    console.log(`Cleaned up ${tempImagePaths.length} temp image files`);
+    // Temp files cleaned
   } catch (error) {
     console.error('Error during temp file cleanup:', error);
   }
@@ -401,7 +415,7 @@ async function loadMcpConfig(cwd) {
       await fs.access(claudeConfigPath);
     } catch (error) {
       // File doesn't exist, return null
-      console.log('No ~/.claude.json found, proceeding without MCP servers');
+      // No config file
       return null;
     }
 
@@ -421,7 +435,7 @@ async function loadMcpConfig(cwd) {
     // Add global MCP servers
     if (claudeConfig.mcpServers && typeof claudeConfig.mcpServers === 'object') {
       mcpServers = { ...claudeConfig.mcpServers };
-      console.log(`Loaded ${Object.keys(mcpServers).length} global MCP servers`);
+      // Global MCP servers loaded
     }
 
     // Add/override with project-specific MCP servers
@@ -429,17 +443,14 @@ async function loadMcpConfig(cwd) {
       const projectConfig = claudeConfig.claudeProjects[cwd];
       if (projectConfig && projectConfig.mcpServers && typeof projectConfig.mcpServers === 'object') {
         mcpServers = { ...mcpServers, ...projectConfig.mcpServers };
-        console.log(`Loaded ${Object.keys(projectConfig.mcpServers).length} project-specific MCP servers`);
+        // Project MCP servers merged
       }
     }
 
     // Return null if no servers found
     if (Object.keys(mcpServers).length === 0) {
-      console.log('No MCP servers configured');
       return null;
     }
-
-    console.log(`Total MCP servers loaded: ${Object.keys(mcpServers).length}`);
     return mcpServers;
   } catch (error) {
     console.error('Error loading MCP config:', error.message);
@@ -455,11 +466,19 @@ async function loadMcpConfig(cwd) {
  * @returns {Promise<void>}
  */
 async function queryClaudeSDK(command, options = {}, ws) {
-  const { sessionId } = options;
+  const { sessionId, sessionSummary } = options;
   let capturedSessionId = sessionId;
   let sessionCreatedSent = false;
   let tempImagePaths = [];
   let tempDir = null;
+
+  const emitNotification = (event) => {
+    notifyUserIfEnabled({
+      userId: ws?.userId || null,
+      writer: ws,
+      event
+    });
+  };
 
   try {
     // Map CLI options to SDK format
@@ -476,6 +495,26 @@ async function queryClaudeSDK(command, options = {}, ws) {
     const finalCommand = imageResult.modifiedCommand;
     tempImagePaths = imageResult.tempImagePaths;
     tempDir = imageResult.tempDir;
+
+    sdkOptions.hooks = {
+      Notification: [{
+        matcher: '',
+        hooks: [async (input) => {
+          const message = typeof input?.message === 'string' ? input.message : 'Claude requires your attention.';
+          emitNotification(createNotificationEvent({
+            provider: 'claude',
+            sessionId: capturedSessionId || sessionId || null,
+            kind: 'action_required',
+            code: 'agent.notification',
+            meta: { message, sessionName: sessionSummary },
+            severity: 'warning',
+            requiresUserAction: true,
+            dedupeKey: `claude:hook:notification:${capturedSessionId || sessionId || 'none'}:${message}`
+          }));
+          return {};
+        }]
+      }]
+    };
 
     sdkOptions.canUseTool = async (toolName, input, context) => {
       const requiresInteraction = TOOLS_REQUIRING_INTERACTION.has(toolName);
@@ -501,24 +540,29 @@ async function queryClaudeSDK(command, options = {}, ws) {
       }
 
       const requestId = createRequestId();
-      ws.send({
-        type: 'claude-permission-request',
-        requestId,
-        toolName,
-        input,
-        sessionId: capturedSessionId || sessionId || null
-      });
+      ws.send(createNormalizedMessage({ kind: 'permission_request', requestId, toolName, input, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+      emitNotification(createNotificationEvent({
+        provider: 'claude',
+        sessionId: capturedSessionId || sessionId || null,
+        kind: 'action_required',
+        code: 'permission.required',
+        meta: { toolName, sessionName: sessionSummary },
+        severity: 'warning',
+        requiresUserAction: true,
+        dedupeKey: `claude:permission:${capturedSessionId || sessionId || 'none'}:${requestId}`
+      }));
 
       const decision = await waitForToolApproval(requestId, {
         timeoutMs: requiresInteraction ? 0 : undefined,
         signal: context?.signal,
+        metadata: {
+          _sessionId: capturedSessionId || sessionId || null,
+          _toolName: toolName,
+          _input: input,
+          _receivedAt: new Date(),
+        },
         onCancel: (reason) => {
-          ws.send({
-            type: 'claude-permission-cancelled',
-            requestId,
-            reason,
-            sessionId: capturedSessionId || sessionId || null
-          });
+          ws.send(createNormalizedMessage({ kind: 'permission_cancelled', requestId, reason, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
         }
       });
       if (!decision) {
@@ -548,10 +592,22 @@ async function queryClaudeSDK(command, options = {}, ws) {
     const prevStreamTimeout = process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT;
     process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT = '300000';
 
-    const queryInstance = query({
-      prompt: finalCommand,
-      options: sdkOptions
-    });
+    let queryInstance;
+    try {
+      queryInstance = query({
+        prompt: finalCommand,
+        options: sdkOptions
+      });
+    } catch (hookError) {
+      // Older/newer SDK versions may not accept hook shapes yet.
+      // Keep notification behavior operational via runtime events even if hook registration fails.
+      console.warn('Failed to initialize Claude query with hooks, retrying without hooks:', hookError?.message || hookError);
+      delete sdkOptions.hooks;
+      queryInstance = query({
+        prompt: finalCommand,
+        options: sdkOptions
+      });
+    }
 
     // Restore immediately — Query constructor already captured the value
     if (prevStreamTimeout !== undefined) {
@@ -562,7 +618,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
     // Track the query instance for abort capability
     if (capturedSessionId) {
-      addSession(capturedSessionId, queryInstance, tempImagePaths, tempDir);
+      addSession(capturedSessionId, queryInstance, tempImagePaths, tempDir, ws);
     }
 
     // Process streaming messages
@@ -572,7 +628,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
       if (message.session_id && !capturedSessionId) {
 
         capturedSessionId = message.session_id;
-        addSession(capturedSessionId, queryInstance, tempImagePaths, tempDir);
+        addSession(capturedSessionId, queryInstance, tempImagePaths, tempDir, ws);
 
         // Set session ID on writer
         if (ws.setSessionId && typeof ws.setSessionId === 'function') {
@@ -582,35 +638,35 @@ async function queryClaudeSDK(command, options = {}, ws) {
         // Send session-created event only once for new sessions
         if (!sessionId && !sessionCreatedSent) {
           sessionCreatedSent = true;
-          ws.send({
-            type: 'session-created',
-            sessionId: capturedSessionId
-          });
-        } else {
-          console.log('Not sending session-created. sessionId:', sessionId, 'sessionCreatedSent:', sessionCreatedSent);
+          ws.send(createNormalizedMessage({ kind: 'session_created', newSessionId: capturedSessionId, sessionId: capturedSessionId, provider: 'claude' }));
         }
       } else {
-        console.log('No session_id in message or already captured. message.session_id:', message.session_id, 'capturedSessionId:', capturedSessionId);
+        // session_id already captured
       }
 
-      // Transform and send message to WebSocket
+      // Transform and normalize message via adapter
       const transformedMessage = transformMessage(message);
-      ws.send({
-        type: 'claude-response',
-        data: transformedMessage,
-        sessionId: capturedSessionId || sessionId || null
-      });
+      const sid = capturedSessionId || sessionId || null;
+
+      // Use adapter to normalize SDK events into NormalizedMessage[]
+      const normalized = claudeAdapter.normalizeMessage(transformedMessage, sid);
+      for (const msg of normalized) {
+        // Preserve parentToolUseId from SDK wrapper for subagent tool grouping
+        if (transformedMessage.parentToolUseId && !msg.parentToolUseId) {
+          msg.parentToolUseId = transformedMessage.parentToolUseId;
+        }
+        ws.send(msg);
+      }
 
       // Extract and send token budget updates from result messages
       if (message.type === 'result') {
-        const tokenBudget = extractTokenBudget(message);
-        if (tokenBudget) {
-          console.log('Token budget from modelUsage:', tokenBudget);
-          ws.send({
-            type: 'token-budget',
-            data: tokenBudget,
-            sessionId: capturedSessionId || sessionId || null
-          });
+        const models = Object.keys(message.modelUsage || {});
+        if (models.length > 0) {
+          // Model info available in result message
+        }
+        const tokenBudgetData = extractTokenBudget(message);
+        if (tokenBudgetData) {
+          ws.send(createNormalizedMessage({ kind: 'status', text: 'token_budget', tokenBudget: tokenBudgetData, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
         }
       }
     }
@@ -624,14 +680,15 @@ async function queryClaudeSDK(command, options = {}, ws) {
     await cleanupTempFiles(tempImagePaths, tempDir);
 
     // Send completion event
-    console.log('Streaming complete, sending claude-complete event');
-    ws.send({
-      type: 'claude-complete',
-      sessionId: capturedSessionId,
-      exitCode: 0,
-      isNewSession: !sessionId && !!command
+    ws.send(createNormalizedMessage({ kind: 'complete', exitCode: 0, isNewSession: !sessionId && !!command, sessionId: capturedSessionId, provider: 'claude' }));
+    notifyRunStopped({
+      userId: ws?.userId || null,
+      provider: 'claude',
+      sessionId: capturedSessionId || sessionId || null,
+      sessionName: sessionSummary,
+      stopReason: 'completed'
     });
-    console.log('claude-complete event sent');
+    // Complete
 
   } catch (error) {
     console.error('SDK query error:', error);
@@ -645,10 +702,13 @@ async function queryClaudeSDK(command, options = {}, ws) {
     await cleanupTempFiles(tempImagePaths, tempDir);
 
     // Send error to WebSocket
-    ws.send({
-      type: 'claude-error',
-      error: error.message,
-      sessionId: capturedSessionId || sessionId || null
+    ws.send(createNormalizedMessage({ kind: 'error', content: error.message, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+    notifyRunFailed({
+      userId: ws?.userId || null,
+      provider: 'claude',
+      sessionId: capturedSessionId || sessionId || null,
+      sessionName: sessionSummary,
+      error
     });
 
     throw error;
@@ -708,11 +768,50 @@ function getActiveClaudeSDKSessions() {
   return getAllSessions();
 }
 
+/**
+ * Get pending tool approvals for a specific session.
+ * @param {string} sessionId - The session ID
+ * @returns {Array} Array of pending permission request objects
+ */
+function getPendingApprovalsForSession(sessionId) {
+  const pending = [];
+  for (const [requestId, resolver] of pendingToolApprovals.entries()) {
+    if (resolver._sessionId === sessionId) {
+      pending.push({
+        requestId,
+        toolName: resolver._toolName || 'UnknownTool',
+        input: resolver._input,
+        context: resolver._context,
+        sessionId,
+        receivedAt: resolver._receivedAt || new Date(),
+      });
+    }
+  }
+  return pending;
+}
+
+/**
+ * Reconnect a session's WebSocketWriter to a new raw WebSocket.
+ * Called when client reconnects (e.g. page refresh) while SDK is still running.
+ * @param {string} sessionId - The session ID
+ * @param {Object} newRawWs - The new raw WebSocket connection
+ * @returns {boolean} True if writer was successfully reconnected
+ */
+function reconnectSessionWriter(sessionId, newRawWs) {
+  const session = getSession(sessionId);
+  if (!session?.writer?.updateWebSocket) return false;
+  session.writer.updateWebSocket(newRawWs);
+  console.log(`[RECONNECT] Writer swapped for session ${sessionId}`);
+  return true;
+}
+
 // Export public API
 export {
   queryClaudeSDK,
   abortClaudeSDKSession,
   isClaudeSDKSessionActive,
   getActiveClaudeSDKSessions,
-  resolveToolApproval
+  resolveToolApproval,
+  getPendingApprovalsForSession,
+  reconnectSessionWriter
 };

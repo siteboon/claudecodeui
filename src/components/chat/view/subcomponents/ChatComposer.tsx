@@ -1,9 +1,3 @@
-import CommandMenu from '../../../CommandMenu';
-import ClaudeStatus from '../../../ClaudeStatus';
-import { MicButton } from '../../../MicButton.jsx';
-import ImageAttachment from './ImageAttachment';
-import PermissionRequestsBanner from './PermissionRequestsBanner';
-import ChatInputControls from './ChatInputControls';
 import { useTranslation } from 'react-i18next';
 import type {
   ChangeEvent,
@@ -17,7 +11,13 @@ import type {
   SetStateAction,
   TouchEvent,
 } from 'react';
+import MicButton from '../../../mic-button/view/MicButton';
 import type { PendingPermissionRequest, PermissionMode, Provider } from '../../types/types';
+import CommandMenu from './CommandMenu';
+import ClaudeStatus from './ClaudeStatus';
+import ImageAttachment from './ImageAttachment';
+import PermissionRequestsBanner from './PermissionRequestsBanner';
+import ChatInputControls from './ChatInputControls';
 
 interface MentionableFile {
   name: string;
@@ -151,7 +151,6 @@ export default function ChatComposer({
   onTranscript,
 }: ChatComposerProps) {
   const { t } = useTranslation('chat');
-  const AnyCommandMenu = CommandMenu as any;
   const textareaRect = textareaRef.current?.getBoundingClientRect();
   const commandMenuPosition = {
     top: textareaRect ? Math.max(16, textareaRect.top - 316) : 0,
@@ -170,7 +169,7 @@ export default function ChatComposer({
     : '';
 
   return (
-    <div className={`p-2 sm:p-4 md:p-4 flex-shrink-0 pb-2 sm:pb-4 md:pb-6 ${mobileFloatingClass}`}>
+    <div className={`flex-shrink-0 p-2 pb-2 sm:p-4 sm:pb-4 md:p-4 md:pb-6 ${mobileFloatingClass}`}>
       {!hasQuestionPanel && (
         <div className="flex-1">
           <ClaudeStatus
@@ -182,7 +181,7 @@ export default function ChatComposer({
         </div>
       )}
 
-      <div className="max-w-4xl mx-auto mb-3">
+      <div className="mx-auto mb-3 max-w-4xl">
         <PermissionRequestsBanner
           pendingPermissionRequests={pendingPermissionRequests}
           handlePermissionDecision={handlePermissionDecision}
@@ -206,11 +205,11 @@ export default function ChatComposer({
         />}
       </div>
 
-      {!hasQuestionPanel && <form onSubmit={onSubmit as (event: FormEvent<HTMLFormElement>) => void} className="relative max-w-4xl mx-auto">
+      {!hasQuestionPanel && <form onSubmit={onSubmit as (event: FormEvent<HTMLFormElement>) => void} className="relative mx-auto max-w-4xl">
         {isDragActive && (
-          <div className="absolute inset-0 bg-primary/15 border-2 border-dashed border-primary/50 rounded-2xl flex items-center justify-center z-50">
-            <div className="bg-card rounded-xl p-4 shadow-lg border border-border/30">
-              <svg className="w-8 h-8 text-primary mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="absolute inset-0 z-50 flex items-center justify-center rounded-2xl border-2 border-dashed border-primary/50 bg-primary/15">
+            <div className="rounded-xl border border-border/30 bg-card p-4 shadow-lg">
+              <svg className="mx-auto mb-2 h-8 w-8 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -224,7 +223,7 @@ export default function ChatComposer({
         )}
 
         {attachedImages.length > 0 && (
-          <div className="mb-2 p-2 bg-muted/40 rounded-xl">
+          <div className="mb-2 rounded-xl bg-muted/40 p-2">
             <div className="flex flex-wrap gap-2">
               {attachedImages.map((file, index) => (
                 <ImageAttachment
@@ -240,14 +239,14 @@ export default function ChatComposer({
         )}
 
         {showFileDropdown && filteredFiles.length > 0 && (
-          <div className="absolute bottom-full left-0 right-0 mb-2 bg-card/95 backdrop-blur-md border border-border/50 rounded-xl shadow-lg max-h-48 overflow-y-auto z-50">
+          <div className="absolute bottom-full left-0 right-0 z-50 mb-2 max-h-48 overflow-y-auto rounded-xl border border-border/50 bg-card/95 shadow-lg backdrop-blur-md">
             {filteredFiles.map((file, index) => (
               <div
                 key={file.path}
-                className={`px-4 py-3 cursor-pointer border-b border-border/30 last:border-b-0 touch-manipulation ${
+                className={`cursor-pointer touch-manipulation border-b border-border/30 px-4 py-3 last:border-b-0 ${
                   index === selectedFileIndex
                     ? 'bg-primary/8 text-primary'
-                    : 'hover:bg-accent/50 text-foreground'
+                    : 'text-foreground hover:bg-accent/50'
                 }`}
                 onMouseDown={(event) => {
                   event.preventDefault();
@@ -259,14 +258,14 @@ export default function ChatComposer({
                   onSelectFile(file);
                 }}
               >
-                <div className="font-medium text-sm">{file.name}</div>
-                <div className="text-xs text-muted-foreground font-mono">{file.path}</div>
+                <div className="text-sm font-medium">{file.name}</div>
+                <div className="font-mono text-xs text-muted-foreground">{file.path}</div>
               </div>
             ))}
           </div>
         )}
 
-        <AnyCommandMenu
+        <CommandMenu
           commands={filteredCommands}
           selectedIndex={selectedCommandIndex}
           onSelect={onCommandSelect}
@@ -278,13 +277,13 @@ export default function ChatComposer({
 
         <div
           {...getRootProps()}
-          className={`relative bg-card/80 backdrop-blur-sm rounded-2xl shadow-sm border border-border/50 focus-within:shadow-md focus-within:border-primary/30 focus-within:ring-1 focus-within:ring-primary/15 transition-all duration-200 overflow-hidden ${
+          className={`relative overflow-hidden rounded-2xl border border-border/50 bg-card/80 shadow-sm backdrop-blur-sm transition-all duration-200 focus-within:border-primary/30 focus-within:shadow-md focus-within:ring-1 focus-within:ring-primary/15 ${
             isTextareaExpanded ? 'chat-input-expanded' : ''
           }`}
         >
           <input {...getInputProps()} />
-          <div ref={inputHighlightRef} aria-hidden="true" className="absolute inset-0 pointer-events-none overflow-hidden rounded-2xl">
-            <div className="chat-input-placeholder block w-full pl-12 pr-20 sm:pr-40 py-1.5 sm:py-4 text-transparent text-base leading-6 whitespace-pre-wrap break-words">
+          <div ref={inputHighlightRef} aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
+            <div className="chat-input-placeholder block w-full whitespace-pre-wrap break-words py-1.5 pl-12 pr-20 text-base leading-6 text-transparent sm:py-4 sm:pr-40">
               {renderInputWithMentions(input)}
             </div>
           </div>
@@ -302,18 +301,17 @@ export default function ChatComposer({
               onBlur={() => onInputFocusChange?.(false)}
               onInput={onTextareaInput}
               placeholder={placeholder}
-              disabled={isLoading}
-              className="chat-input-placeholder block w-full pl-12 pr-20 sm:pr-40 py-1.5 sm:py-4 bg-transparent rounded-2xl focus:outline-none text-foreground placeholder-muted-foreground/50 disabled:opacity-50 resize-none min-h-[50px] sm:min-h-[80px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-base leading-6 transition-all duration-200"
+              className="chat-input-placeholder block max-h-[40vh] min-h-[50px] w-full resize-none overflow-y-auto rounded-2xl bg-transparent py-1.5 pl-12 pr-20 text-base leading-6 text-foreground placeholder-muted-foreground/50 transition-all duration-200 focus:outline-none sm:max-h-[300px] sm:min-h-[80px] sm:py-4 sm:pr-40"
               style={{ height: '50px' }}
             />
 
             <button
               type="button"
               onClick={openImagePicker}
-              className="absolute left-2 top-1/2 transform -translate-y-1/2 p-2 hover:bg-accent/60 rounded-xl transition-colors"
+              className="absolute left-2 top-1/2 -translate-y-1/2 transform rounded-xl p-2 transition-colors hover:bg-accent/60"
               title={t('input.attachImages')}
             >
-              <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="h-5 w-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -323,8 +321,8 @@ export default function ChatComposer({
               </svg>
             </button>
 
-            <div className="absolute right-16 sm:right-16 top-1/2 transform -translate-y-1/2" style={{ display: 'none' }}>
-              <MicButton onTranscript={onTranscript} className="w-10 h-10 sm:w-10 sm:h-10" />
+            <div className="absolute right-16 top-1/2 -translate-y-1/2 transform sm:right-16" style={{ display: 'none' }}>
+              <MicButton onTranscript={onTranscript} className="h-10 w-10 sm:h-10 sm:w-10" />
             </div>
 
             <button
@@ -338,15 +336,15 @@ export default function ChatComposer({
                 event.preventDefault();
                 onSubmit(event);
               }}
-              className="absolute right-2 top-1/2 transform -translate-y-1/2 w-10 h-10 sm:w-11 sm:h-11 bg-primary hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed rounded-xl flex items-center justify-center transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-1 focus:ring-offset-background"
+              className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 transform items-center justify-center rounded-xl bg-primary transition-all duration-200 hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-1 focus:ring-offset-background disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground sm:h-11 sm:w-11"
             >
-              <svg className="w-4 h-4 sm:w-[18px] sm:h-[18px] text-primary-foreground transform rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="h-4 w-4 rotate-90 transform text-primary-foreground sm:h-[18px] sm:w-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
               </svg>
             </button>
 
             <div
-              className={`absolute bottom-1 left-12 right-14 sm:right-40 text-xs text-muted-foreground/50 pointer-events-none hidden sm:block transition-opacity duration-200 ${
+              className={`pointer-events-none absolute bottom-1 left-12 right-14 hidden text-xs text-muted-foreground/50 transition-opacity duration-200 sm:right-40 sm:block ${
                 input.trim() ? 'opacity-0' : 'opacity-100'
               }`}
             >

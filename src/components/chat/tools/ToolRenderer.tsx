@@ -1,8 +1,8 @@
 import React, { memo, useMemo, useCallback } from 'react';
-import { getToolConfig } from './configs/toolConfigs';
-import { OneLineDisplay, CollapsibleDisplay, DiffViewer, MarkdownContent, FileListContent, TodoListContent, TaskListContent, TextContent, QuestionAnswerContent, SubagentContainer } from './components';
 import type { Project } from '../../../types/app';
 import type { SubagentChildTool } from '../types/types';
+import { getToolConfig } from './configs/toolConfigs';
+import { OneLineDisplay, CollapsibleDisplay, ToolDiffViewer, MarkdownContent, FileListContent, TodoListContent, TaskListContent, TextContent, QuestionAnswerContent, SubagentContainer } from './components';
 
 type DiffLine = {
   type: string;
@@ -61,20 +61,6 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
   isSubagentContainer,
   subagentState
 }) => {
-  // Route subagent containers to dedicated component
-  if (isSubagentContainer && subagentState) {
-    if (mode === 'result') {
-      return null;
-    }
-    return (
-      <SubagentContainer
-        toolInput={toolInput}
-        toolResult={toolResult}
-        subagentState={subagentState}
-      />
-    );
-  }
-
   const config = getToolConfig(toolName);
   const displayConfig: any = mode === 'input' ? config.input : config.result;
 
@@ -94,7 +80,20 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
     }
   }, [displayConfig, parsedData, onFileOpen]);
 
-  // Keep hooks above this guard so hook call order stays stable across renders.
+  // Route subagent containers to dedicated component (after hooks to satisfy Rules of Hooks)
+  if (isSubagentContainer && subagentState) {
+    if (mode === 'result') {
+      return null;
+    }
+    return (
+      <SubagentContainer
+        toolInput={toolInput}
+        toolResult={toolResult}
+        subagentState={subagentState}
+      />
+    );
+  }
+
   if (!displayConfig) return null;
 
   if (displayConfig.type === 'one-line') {
@@ -142,7 +141,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
       case 'diff':
         if (createDiff) {
           contentComponent = (
-            <DiffViewer
+            <ToolDiffViewer
               {...contentProps}
               createDiff={createDiff}
               onFileClick={() => onFileOpen?.(contentProps.filePath)}
@@ -202,7 +201,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
         const msg = displayConfig.getMessage?.(parsedData) || 'Success';
         contentComponent = (
           <div className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400">
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
             {msg}

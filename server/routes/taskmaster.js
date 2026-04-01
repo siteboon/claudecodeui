@@ -529,7 +529,7 @@ router.get('/next/:projectName', async (req, res) => {
             
             // Fallback to loading tasks and finding next one locally
             // Use localhost to bypass proxy for internal server-to-server calls
-            const tasksResponse = await fetch(`http://localhost:${process.env.PORT || 3001}/api/taskmaster/tasks/${encodeURIComponent(projectName)}`, {
+            const tasksResponse = await fetch(`http://localhost:${process.env.SERVER_PORT || process.env.PORT || '3001'}/api/taskmaster/tasks/${encodeURIComponent(projectName)}`, {
                 headers: {
                     'Authorization': req.headers.authorization
                 }

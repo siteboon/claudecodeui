@@ -83,12 +83,50 @@
       }
     }
   },
+  "terminalShortcuts": {
+    "title": "ターミナルショートカット",
+    "sectionKeys": "キー",
+    "sectionNavigation": "ナビゲーション",
+    "escape": "Escape",
+    "tab": "Tab",
+    "shiftTab": "Shift+Tab",
+    "arrowUp": "上矢印",
+    "arrowDown": "下矢印",
+    "scrollDown": "下にスクロール",
+    "handle": {
+      "closePanel": "ショートカットパネルを閉じる",
+      "openPanel": "ショートカットパネルを開く"
+    }
+  },
   "mainTabs": {
+    "label": "設定",
     "agents": "エージェント",
     "appearance": "外観",
     "git": "Git",
     "apiTokens": "API & トークン",
-    "tasks": "タスク"
+    "tasks": "タスク",
+    "notifications": "通知",
+    "plugins": "プラグイン"
+
+  },
+  "notifications": {
+    "title": "通知",
+    "description": "受信する通知イベントを設定します。",
+    "webPush": {
+      "title": "Webプッシュ通知",
+      "enable": "プッシュ通知を有効にする",
+      "disable": "プッシュ通知を無効にする",
+      "enabled": "プッシュ通知は有効です",
+      "loading": "更新中...",
+      "unsupported": "このブラウザではプッシュ通知がサポートされていません。",
+      "denied": "プッシュ通知がブロックされています。ブラウザの設定で許可してください。"
+    },
+    "events": {
+      "title": "イベント種別",
+      "actionRequired": "対応が必要",
+      "stop": "実行停止",
+      "error": "実行失敗"
+    }
   },
   "appearanceSettings": {
     "darkMode": {
@@ -292,6 +330,9 @@
       },
       "codex": {
         "description": "OpenAI Codex AIアシスタント"
+      },
+      "gemini": {
+        "description": "Google Gemini AIアシスタント"
       }
     },
     "connectionStatus": "接続状態",
@@ -414,5 +455,41 @@
       "title": "Codex MCPについて",
       "description": "Codexはstdioベースのツールサーバーをサポートしています。追加のツールやリソースでCodexの機能を拡張するサーバーを追加できます。"
     }
+  },
+  "pluginSettings": {
+    "title": "プラグイン",
+    "description": "カスタムプラグインでインターフェースを拡張します。gitからインストールするか、~/.claude-code-ui/plugins/ にフォルダを配置してください。",
+    "installPlaceholder": "https://github.com/user/my-plugin",
+    "installButton": "インストール",
+    "installing": "インストール中…",
+    "securityWarning": "信頼できる作成者のプラグイン、またはソースコードを確認済みのプラグインのみをインストールしてください。",
+    "scanningPlugins": "プラグインをスキャン中…",
+    "noPluginsInstalled": "プラグインがインストールされていません",
+    "pullLatest": "gitから最新を取得",
+    "noGitRemote": "リモートgitリポジトリがありません — アップデート不可",
+    "uninstallPlugin": "プラグインを削除",
+    "confirmUninstall": "クリックして確定",
+    "confirmUninstallMessage": "{{name}} を削除しますか？この操作は取り消せません。",
+    "cancel": "キャンセル",
+    "remove": "削除",
+    "updateFailed": "アップデートに失敗しました",
+    "installFailed": "インストールに失敗しました",
+    "uninstallFailed": "削除に失敗しました",
+    "toggleFailed": "切り替えに失敗しました",
+    "buildYourOwn": "プラグインを自作する",
+    "starter": "スターター",
+    "docs": "ドキュメント",
+    "starterPlugin": {
+      "name": "プロジェクト統計",
+      "badge": "スターター",
+      "description": "プロジェクトのファイル数、コード行数、ファイルタイプの内訳、最近のアクティビティを表示します。",
+      "install": "インストール"
+    },
+    "morePlugins": "詳細",
+    "enable": "有効にする",
+    "disable": "無効にする",
+    "installAriaLabel": "プラグインのgitリポジトリURL",
+    "tab": "タブ",
+    "runningStatus": "実行中"
   }
 }

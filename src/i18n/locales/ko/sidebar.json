@@ -63,7 +63,8 @@
     "cancel": "취소",
     "save": "저장",
     "delete": "삭제",
-    "rename": "이름 변경"
+    "rename": "이름 변경",
+    "joinCommunity": "커뮤니티 참여"
   },
   "status": {
     "active": "활성",
@@ -92,6 +93,8 @@
     "enterProjectPath": "프로젝트 경로를 입력해주세요",
     "deleteSessionFailed": "세션 삭제 실패. 다시 시도해주세요.",
     "deleteSessionError": "세션 삭제 오류. 다시 시도해주세요.",
+    "renameSessionFailed": "세션 이름 변경 실패. 다시 시도해주세요.",
+    "renameSessionError": "세션 이름 변경 오류. 다시 시도해주세요.",
     "deleteProjectFailed": "프로젝트 삭제 실패. 다시 시도해주세요.",
     "deleteProjectError": "프로젝트 삭제 오류. 다시 시도해주세요.",
     "createProjectFailed": "프로젝트 생성 실패. 다시 시도해주세요.",

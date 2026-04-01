@@ -1,10 +1,10 @@
+import { useEffect } from 'react';
 import type { TFunction } from 'i18next';
 import type { LoadingProgress, Project, ProjectSession, SessionProvider } from '../../../../types/app';
 import type {
   LoadingSessionsByProject,
   MCPServerStatus,
   SessionWithProvider,
-  TouchHandlerFactory,
 } from '../../types/types';
 import SidebarProjectItem from './SidebarProjectItem';
 import SidebarProjectsState from './SidebarProjectsState';
@@ -49,8 +49,7 @@ export type SidebarProjectListProps = {
   onEditingSessionNameChange: (value: string) => void;
   onStartEditingSession: (sessionId: string, initialName: string) => void;
   onCancelEditingSession: () => void;
-  onSaveEditingSession: (projectName: string, sessionId: string, summary: string) => void;
-  touchHandlerFactory: TouchHandlerFactory;
+  onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: SessionProvider) => void;
   t: TFunction;
 };
 
@@ -90,7 +89,6 @@ export default function SidebarProjectList({
   onStartEditingSession,
   onCancelEditingSession,
   onSaveEditingSession,
-  touchHandlerFactory,
   t,
 }: SidebarProjectListProps) {
   const state = (
@@ -103,10 +101,19 @@ export default function SidebarProjectList({
     />
   );
 
+  useEffect(() => {
+    let baseTitle = 'CloudCLI UI';
+    const displayName = selectedProject?.displayName?.trim();
+    if (displayName) {
+      baseTitle = `${displayName} - ${baseTitle}`;
+    }
+    document.title = baseTitle;
+  }, [selectedProject]);
+
   const showProjects = !isLoading && projects.length > 0 && filteredProjects.length > 0;
 
   return (
-    <div className="md:space-y-1 pb-safe-area-inset-bottom">
+    <div className="pb-safe-area-inset-bottom md:space-y-1">
       {!showProjects
         ? state
         : filteredProjects.map((project) => (
@@ -144,7 +151,6 @@ export default function SidebarProjectList({
               onStartEditingSession={onStartEditingSession}
               onCancelEditingSession={onCancelEditingSession}
               onSaveEditingSession={onSaveEditingSession}
-              touchHandlerFactory={touchHandlerFactory}
               t={t}
             />
           ))}

@@ -29,6 +29,16 @@ export const languages = [
     label: 'Japanese',
     nativeName: '日本語',
   },
+  {
+    value: 'ru',
+    label: 'Russian',
+    nativeName: 'Русский',
+  },
+  {
+    value: 'de',
+    label: 'German',
+    nativeName: 'Deutsch',
+  },
 ];
 
 /**

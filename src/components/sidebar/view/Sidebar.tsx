@@ -6,12 +6,12 @@ import { useUiPreferences } from '../../../hooks/useUiPreferences';
 import { useSidebarController } from '../hooks/useSidebarController';
 import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
+import type { Project, SessionProvider } from '../../../types/app';
+import type { MCPServerStatus, SidebarProps } from '../types/types';
 import SidebarCollapsed from './subcomponents/SidebarCollapsed';
 import SidebarContent from './subcomponents/SidebarContent';
 import SidebarModals from './subcomponents/SidebarModals';
-import type { Project } from '../../../types/app';
 import type { SidebarProjectListProps } from './subcomponents/SidebarProjectList';
-import type { MCPServerStatus, SidebarProps } from '../types/types';
 
 type TaskMasterSidebarContext = {
   setCurrentProject: (project: Project) => void;
@@ -60,12 +60,17 @@ function Sidebar({
     editingSession,
     editingSessionName,
     searchFilter,
+    searchMode,
+    setSearchMode,
+    conversationResults,
+    isSearching,
+    searchProgress,
+    clearConversationResults,
     deletingProjects,
     deleteConfirmation,
     sessionDeleteConfirmation,
     showVersionModal,
     filteredProjects,
-    handleTouchClick,
     toggleProject,
     handleSessionClick,
     toggleStarProject,
@@ -172,10 +177,9 @@ function Sidebar({
       setEditingSession(null);
       setEditingSessionName('');
     },
-    onSaveEditingSession: (projectName, sessionId, summary) => {
-      void updateSessionSummary(projectName, sessionId, summary);
+    onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: SessionProvider) => {
+      void updateSessionSummary(projectName, sessionId, summary, provider);
     },
-    touchHandlerFactory: handleTouchClick,
     t,
   };
 
@@ -222,6 +226,37 @@ function Sidebar({
             searchFilter={searchFilter}
             onSearchFilterChange={setSearchFilter}
             onClearSearchFilter={() => setSearchFilter('')}
+            searchMode={searchMode}
+            onSearchModeChange={(mode: 'projects' | 'conversations') => {
+              setSearchMode(mode);
+              if (mode === 'projects') clearConversationResults();
+            }}
+            conversationResults={conversationResults}
+            isSearching={isSearching}
+            searchProgress={searchProgress}
+            onConversationResultClick={(projectName: string, sessionId: string, provider: string, messageTimestamp?: string | null, messageSnippet?: string | null) => {
+              const resolvedProvider = (provider || 'claude') as SessionProvider;
+              const project = projects.find(p => p.name === projectName);
+              const searchTarget = { __searchTargetTimestamp: messageTimestamp || null, __searchTargetSnippet: messageSnippet || null };
+              const sessionObj = {
+                id: sessionId,
+                __provider: resolvedProvider,
+                __projectName: projectName,
+                ...searchTarget,
+              };
+              if (project) {
+                handleProjectSelect(project);
+                const sessions = getProjectSessions(project);
+                const existing = sessions.find(s => s.id === sessionId);
+                if (existing) {
+                  handleSessionClick({ ...existing, ...searchTarget }, projectName);
+                } else {
+                  handleSessionClick(sessionObj, projectName);
+                }
+              } else {
+                handleSessionClick(sessionObj, projectName);
+              }
+            }}
             onRefresh={() => {
               void refreshProjects();
             }}

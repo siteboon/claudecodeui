@@ -1,17 +1,18 @@
-import React, { memo, useMemo } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import SessionProviderLogo from '../../../SessionProviderLogo';
+import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
 import type {
   ChatMessage,
   ClaudePermissionSuggestion,
   PermissionGrantResult,
   Provider,
 } from '../../types/types';
-import { Markdown } from './Markdown';
 import { formatUsageLimitText } from '../../utils/chatFormatting';
 import { getClaudePermissionSuggestion } from '../../utils/chatPermissions';
 import type { Project } from '../../../../types/app';
 import { ToolRenderer, shouldHideToolResult } from '../../tools';
+import { Markdown } from './Markdown';
+import MessageCopyControl from './MessageCopyControl';
 
 type DiffLine = {
   type: string;
@@ -19,9 +20,8 @@ type DiffLine = {
   lineNum: number;
 };
 
-interface MessageComponentProps {
+type MessageComponentProps = {
   message: ChatMessage;
-  index: number;
   prevMessage: ChatMessage | null;
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
@@ -32,7 +32,7 @@ interface MessageComponentProps {
   showThinking?: boolean;
   selectedProject?: Project | null;
   provider: Provider | string;
-}
+};
 
 type InteractiveOption = {
   number: string;
@@ -41,25 +41,41 @@ type InteractiveOption = {
 };
 
 type PermissionGrantState = 'idle' | 'granted' | 'error';
+const COPY_HIDDEN_TOOL_NAMES = new Set(['Bash', 'Edit', 'Write', 'ApplyPatch']);
 
-const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFileOpen, onShowSettings, onGrantToolPermission, autoExpandTools, showRawParameters, showThinking, selectedProject, provider }: MessageComponentProps) => {
+const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, onShowSettings, onGrantToolPermission, autoExpandTools, showRawParameters, showThinking, selectedProject, provider }: MessageComponentProps) => {
   const { t } = useTranslation('chat');
   const isGrouped = prevMessage && prevMessage.type === message.type &&
-                   ((prevMessage.type === 'assistant') ||
-                    (prevMessage.type === 'user') ||
-                    (prevMessage.type === 'tool') ||
-                    (prevMessage.type === 'error'));
-  const messageRef = React.useRef<HTMLDivElement | null>(null);
-  const [isExpanded, setIsExpanded] = React.useState(false);
+    ((prevMessage.type === 'assistant') ||
+      (prevMessage.type === 'user') ||
+      (prevMessage.type === 'tool') ||
+      (prevMessage.type === 'error'));
+  const messageRef = useRef<HTMLDivElement | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
   const permissionSuggestion = getClaudePermissionSuggestion(message, provider);
-  const [permissionGrantState, setPermissionGrantState] = React.useState<PermissionGrantState>('idle');
+  const [permissionGrantState, setPermissionGrantState] = useState<PermissionGrantState>('idle');
+  const userCopyContent = String(message.content || '');
+  const formattedMessageContent = useMemo(
+    () => formatUsageLimitText(String(message.content || '')),
+    [message.content]
+  );
+  const assistantCopyContent = message.isToolUse
+    ? String(message.displayText || message.content || '')
+    : formattedMessageContent;
+  const isCommandOrFileEditToolResponse = Boolean(
+    message.isToolUse && COPY_HIDDEN_TOOL_NAMES.has(String(message.toolName || ''))
+  );
+  const shouldShowUserCopyControl = message.type === 'user' && userCopyContent.trim().length > 0;
+  const shouldShowAssistantCopyControl = message.type === 'assistant' &&
+    assistantCopyContent.trim().length > 0 &&
+    !isCommandOrFileEditToolResponse;
 
 
-  React.useEffect(() => {
+  useEffect(() => {
     setPermissionGrantState('idle');
   }, [permissionSuggestion?.entry, message.toolId]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const node = messageRef.current;
     if (!autoExpandTools || !node || !message.isToolUse) return;
 
@@ -95,13 +111,14 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
   return (
     <div
       ref={messageRef}
+      data-message-timestamp={message.timestamp || undefined}
       className={`chat-message ${message.type} ${isGrouped ? 'grouped' : ''} ${message.type === 'user' ? 'flex justify-end px-3 sm:px-0' : 'px-3 sm:px-0'}`}
     >
       {message.type === 'user' ? (
         /* User message bubble on the right */
-        <div className="flex items-end space-x-0 sm:space-x-3 w-full sm:w-auto sm:max-w-[85%] md:max-w-md lg:max-w-lg xl:max-w-xl">
-          <div className="bg-blue-600 text-white rounded-2xl rounded-br-md px-3 sm:px-4 py-2 shadow-sm flex-1 sm:flex-initial">
-            <div className="text-sm whitespace-pre-wrap break-words">
+        <div className="flex w-full items-end space-x-0 sm:w-auto sm:max-w-[85%] sm:space-x-3 md:max-w-md lg:max-w-lg xl:max-w-xl">
+          <div className="group flex-1 rounded-2xl rounded-br-md bg-blue-600 px-3 py-2 text-white shadow-sm sm:flex-initial sm:px-4">
+            <div className="whitespace-pre-wrap break-words text-sm">
               {message.content}
             </div>
             {message.images && message.images.length > 0 && (
@@ -111,18 +128,21 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     key={img.name || idx}
                     src={img.data}
                     alt={img.name}
-                    className="rounded-lg max-w-full h-auto cursor-pointer hover:opacity-90 transition-opacity"
+                    className="h-auto max-w-full cursor-pointer rounded-lg transition-opacity hover:opacity-90"
                     onClick={() => window.open(img.data, '_blank')}
                   />
                 ))}
               </div>
             )}
-            <div className="text-xs text-blue-100 mt-1 text-right">
-              {formattedTime}
+            <div className="mt-1 flex items-center justify-end gap-1 text-xs text-blue-100">
+              {shouldShowUserCopyControl && (
+                <MessageCopyControl content={userCopyContent} messageType="user" />
+              )}
+              <span>{formattedTime}</span>
             </div>
           </div>
           {!isGrouped && (
-            <div className="hidden sm:flex w-8 h-8 bg-blue-600 rounded-full items-center justify-center text-white text-sm flex-shrink-0">
+            <div className="hidden h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm text-white sm:flex">
               U
             </div>
           )}
@@ -131,7 +151,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
         /* Compact task notification on the left */
         <div className="w-full">
           <div className="flex items-center gap-2 py-0.5">
-            <span className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${message.taskStatus === 'completed' ? 'bg-green-400 dark:bg-green-500' : 'bg-amber-400 dark:bg-amber-500'}`} />
+            <span className={`inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full ${message.taskStatus === 'completed' ? 'bg-green-400 dark:bg-green-500' : 'bg-amber-400 dark:bg-amber-500'}`} />
             <span className="text-xs text-gray-500 dark:text-gray-400">{message.content}</span>
           </div>
         </div>
@@ -139,26 +159,26 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
         /* Claude/Error/Tool messages on the left */
         <div className="w-full">
           {!isGrouped && (
-            <div className="flex items-center space-x-3 mb-2">
+            <div className="mb-2 flex items-center space-x-3">
               {message.type === 'error' ? (
-                <div className="w-8 h-8 bg-red-600 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0">
+                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-red-600 text-sm text-white">
                   !
                 </div>
               ) : message.type === 'tool' ? (
-                <div className="w-8 h-8 bg-gray-600 dark:bg-gray-700 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0">
+                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gray-600 text-sm text-white dark:bg-gray-700">
                   🔧
                 </div>
               ) : (
-                <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0 p-1">
-                  <SessionProviderLogo provider={provider} className="w-full h-full" />
+                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full p-1 text-sm text-white">
+                  <SessionProviderLogo provider={provider} className="h-full w-full" />
                 </div>
               )}
               <div className="text-sm font-medium text-gray-900 dark:text-white">
-                {message.type === 'error' ? t('messageTypes.error') : message.type === 'tool' ? t('messageTypes.tool') : (provider === 'cursor' ? t('messageTypes.cursor') : provider === 'codex' ? t('messageTypes.codex') : t('messageTypes.claude'))}
+                {message.type === 'error' ? t('messageTypes.error') : message.type === 'tool' ? t('messageTypes.tool') : (provider === 'cursor' ? t('messageTypes.cursor') : provider === 'codex' ? t('messageTypes.codex') : provider === 'gemini' ? t('messageTypes.gemini') : t('messageTypes.claude'))}
               </div>
             </div>
           )}
-          
+
           <div className="w-full">
 
             {message.isToolUse ? (
@@ -188,27 +208,27 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                     subagentState={message.subagentState}
                   />
                 )}
-                
+
                 {/* Tool Result Section */}
                 {message.toolResult && !shouldHideToolResult(message.toolName || 'UnknownTool', message.toolResult) && (
                   message.toolResult.isError ? (
                     // Error results - red error box with content
                     <div
                       id={`tool-result-${message.toolId}`}
-                      className="relative mt-2 p-3 rounded border scroll-mt-4 bg-red-50/50 dark:bg-red-950/10 border-red-200/60 dark:border-red-800/40"
+                      className="relative mt-2 scroll-mt-4 rounded border border-red-200/60 bg-red-50/50 p-3 dark:border-red-800/40 dark:bg-red-950/10"
                     >
-                      <div className="relative flex items-center gap-1.5 mb-2">
-                        <svg className="w-4 h-4 text-red-500 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <div className="relative mb-2 flex items-center gap-1.5">
+                        <svg className="h-4 w-4 text-red-500 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                         </svg>
                         <span className="text-xs font-medium text-red-700 dark:text-red-300">{t('messageTypes.error')}</span>
                       </div>
                       <div className="relative text-sm text-red-900 dark:text-red-100">
-                        <Markdown className="prose prose-sm max-w-none prose-red dark:prose-invert">
+                        <Markdown className="prose prose-sm prose-red max-w-none dark:prose-invert">
                           {String(message.toolResult.content || '')}
                         </Markdown>
                         {permissionSuggestion && (
-                          <div className="mt-4 border-t border-red-200/60 dark:border-red-800/60 pt-3">
+                          <div className="mt-4 border-t border-red-200/60 pt-3 dark:border-red-800/60">
                             <div className="flex flex-wrap items-center gap-2">
                               <button
                                 type="button"
@@ -222,11 +242,10 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                                   }
                                 }}
                                 disabled={permissionSuggestion.isAllowed || permissionGrantState === 'granted'}
-                                className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${
-                                  permissionSuggestion.isAllowed || permissionGrantState === 'granted'
-                                    ? 'bg-green-100 dark:bg-green-900/30 border-green-300/70 dark:border-green-800/60 text-green-800 dark:text-green-200 cursor-default'
-                                    : 'bg-white/80 dark:bg-gray-900/40 border-red-300/70 dark:border-red-800/60 text-red-700 dark:text-red-200 hover:bg-white dark:hover:bg-gray-900/70'
-                                }`}
+                                className={`inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${permissionSuggestion.isAllowed || permissionGrantState === 'granted'
+                                  ? 'cursor-default border-green-300/70 bg-green-100 text-green-800 dark:border-green-800/60 dark:bg-green-900/30 dark:text-green-200'
+                                  : 'border-red-300/70 bg-white/80 text-red-700 hover:bg-white dark:border-red-800/60 dark:bg-gray-900/40 dark:text-red-200 dark:hover:bg-gray-900/70'
+                                  }`}
                               >
                                 {permissionSuggestion.isAllowed || permissionGrantState === 'granted'
                                   ? t('permissions.added')
@@ -236,7 +255,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                                 <button
                                   type="button"
                                   onClick={(e) => { e.stopPropagation(); onShowSettings(); }}
-                                  className="text-xs text-red-700 dark:text-red-200 underline hover:text-red-800 dark:hover:text-red-100"
+                                  className="text-xs text-red-700 underline hover:text-red-800 dark:text-red-200 dark:hover:text-red-100"
                                 >
                                   {t('permissions.openSettings')}
                                 </button>
@@ -279,22 +298,22 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
               </>
             ) : message.isInteractivePrompt ? (
               // Special handling for interactive prompts
-              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/20">
                 <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 bg-amber-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-amber-500">
+                    <svg className="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
                   <div className="flex-1">
-                    <h4 className="font-semibold text-amber-900 dark:text-amber-100 text-base mb-3">
+                    <h4 className="mb-3 text-base font-semibold text-amber-900 dark:text-amber-100">
                       {t('interactive.title')}
                     </h4>
                     {(() => {
                       const lines = (message.content || '').split('\n').filter((line) => line.trim());
                       const questionLine = lines.find((line) => line.includes('?')) || lines[0] || '';
                       const options: InteractiveOption[] = [];
-                      
+
                       // Parse the menu options
                       lines.forEach((line) => {
                         // Match lines like "❯ 1. Yes" or "  2. No"
@@ -308,34 +327,32 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                           });
                         }
                       });
-                      
+
                       return (
                         <>
-                          <p className="text-sm text-amber-800 dark:text-amber-200 mb-4">
+                          <p className="mb-4 text-sm text-amber-800 dark:text-amber-200">
                             {questionLine}
                           </p>
-                          
+
                           {/* Option buttons */}
-                          <div className="space-y-2 mb-4">
+                          <div className="mb-4 space-y-2">
                             {options.map((option) => (
                               <button
                                 key={option.number}
-                                className={`w-full text-left px-4 py-3 rounded-lg border-2 transition-all ${
-                                  option.isSelected
-                                    ? 'bg-amber-600 dark:bg-amber-700 text-white border-amber-600 dark:border-amber-700 shadow-md'
-                                    : 'bg-white dark:bg-gray-800 text-amber-900 dark:text-amber-100 border-amber-300 dark:border-amber-700'
-                                } cursor-not-allowed opacity-75`}
+                                className={`w-full rounded-lg border-2 px-4 py-3 text-left transition-all ${option.isSelected
+                                  ? 'border-amber-600 bg-amber-600 text-white shadow-md dark:border-amber-700 dark:bg-amber-700'
+                                  : 'border-amber-300 bg-white text-amber-900 dark:border-amber-700 dark:bg-gray-800 dark:text-amber-100'
+                                  } cursor-not-allowed opacity-75`}
                                 disabled
                               >
                                 <div className="flex items-center gap-3">
-                                  <span className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                                    option.isSelected
-                                      ? 'bg-white/20'
-                                      : 'bg-amber-100 dark:bg-amber-800/50'
-                                  }`}>
+                                  <span className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold ${option.isSelected
+                                    ? 'bg-white/20'
+                                    : 'bg-amber-100 dark:bg-amber-800/50'
+                                    }`}>
                                     {option.number}
                                   </span>
-                                  <span className="text-sm sm:text-base font-medium flex-1">
+                                  <span className="flex-1 text-sm font-medium sm:text-base">
                                     {option.text}
                                   </span>
                                   {option.isSelected && (
@@ -345,12 +362,12 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                               </button>
                             ))}
                           </div>
-                          
-                          <div className="bg-amber-100 dark:bg-amber-800/30 rounded-lg p-3">
-                            <p className="text-amber-900 dark:text-amber-100 text-sm font-medium mb-1">
+
+                          <div className="rounded-lg bg-amber-100 p-3 dark:bg-amber-800/30">
+                            <p className="mb-1 text-sm font-medium text-amber-900 dark:text-amber-100">
                               {t('interactive.waiting')}
                             </p>
-                            <p className="text-amber-800 dark:text-amber-200 text-xs">
+                            <p className="text-xs text-amber-800 dark:text-amber-200">
                               {t('interactive.instruction')}
                             </p>
                           </div>
@@ -364,14 +381,14 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
               /* Thinking messages - collapsible by default */
               <div className="text-sm text-gray-700 dark:text-gray-300">
                 <details className="group">
-                  <summary className="cursor-pointer text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 font-medium flex items-center gap-2">
-                    <svg className="w-3 h-3 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <summary className="flex cursor-pointer items-center gap-2 font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                    <svg className="h-3 w-3 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                     </svg>
                     <span>{t('thinking.emoji')}</span>
                   </summary>
-                  <div className="mt-2 pl-4 border-l-2 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 text-sm">
-                    <Markdown className="prose prose-sm max-w-none dark:prose-invert prose-gray">
+                  <div className="mt-2 border-l-2 border-gray-300 pl-4 text-sm text-gray-600 dark:border-gray-600 dark:text-gray-400">
+                    <Markdown className="prose prose-sm prose-gray max-w-none dark:prose-invert">
                       {message.content}
                     </Markdown>
                   </div>
@@ -382,10 +399,10 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 {/* Thinking accordion for reasoning */}
                 {showThinking && message.reasoning && (
                   <details className="mb-3">
-                    <summary className="cursor-pointer text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 font-medium">
+                    <summary className="cursor-pointer font-medium text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
                       {t('thinking.emoji')}
                     </summary>
-                    <div className="mt-2 pl-4 border-l-2 border-gray-300 dark:border-gray-600 italic text-gray-600 dark:text-gray-400 text-sm">
+                    <div className="mt-2 border-l-2 border-gray-300 pl-4 text-sm italic text-gray-600 dark:border-gray-600 dark:text-gray-400">
                       <div className="whitespace-pre-wrap">
                         {message.reasoning}
                       </div>
@@ -394,27 +411,27 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 )}
 
                 {(() => {
-                  const content = formatUsageLimitText(String(message.content || ''));
+                  const content = formattedMessageContent;
 
                   // Detect if content is pure JSON (starts with { or [)
                   const trimmedContent = content.trim();
                   if ((trimmedContent.startsWith('{') || trimmedContent.startsWith('[')) &&
-                      (trimmedContent.endsWith('}') || trimmedContent.endsWith(']'))) {
+                    (trimmedContent.endsWith('}') || trimmedContent.endsWith(']'))) {
                     try {
                       const parsed = JSON.parse(trimmedContent);
                       const formatted = JSON.stringify(parsed, null, 2);
 
                       return (
                         <div className="my-2">
-                          <div className="flex items-center gap-2 mb-2 text-sm text-gray-600 dark:text-gray-400">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <div className="mb-2 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                             </svg>
                             <span className="font-medium">{t('json.response')}</span>
                           </div>
-                          <div className="bg-gray-800 dark:bg-gray-900 border border-gray-600/30 dark:border-gray-700 rounded-lg overflow-hidden">
-                            <pre className="p-4 overflow-x-auto">
-                              <code className="text-gray-100 dark:text-gray-200 text-sm font-mono block whitespace-pre">
+                          <div className="overflow-hidden rounded-lg border border-gray-600/30 bg-gray-800 dark:border-gray-700 dark:bg-gray-900">
+                            <pre className="overflow-x-auto p-4">
+                              <code className="block whitespace-pre font-mono text-sm text-gray-100 dark:text-gray-200">
                                 {formatted}
                               </code>
                             </pre>
@@ -428,7 +445,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
 
                   // Normal rendering for non-JSON content
                   return message.type === 'assistant' ? (
-                    <Markdown className="prose prose-sm max-w-none dark:prose-invert prose-gray">
+                    <Markdown className="prose prose-sm prose-gray max-w-none dark:prose-invert">
                       {content}
                     </Markdown>
                   ) : (
@@ -439,10 +456,13 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 })()}
               </div>
             )}
-            
-            {!isGrouped && (
-              <div className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
-                {formattedTime}
+
+            {(shouldShowAssistantCopyControl || !isGrouped) && (
+              <div className="mt-1 flex w-full items-center gap-2 text-[11px] text-gray-400 dark:text-gray-500">
+                {shouldShowAssistantCopyControl && (
+                  <MessageCopyControl content={assistantCopyContent} messageType="assistant" />
+                )}
+                {!isGrouped && <span>{formattedTime}</span>}
               </div>
             )}
           </div>
