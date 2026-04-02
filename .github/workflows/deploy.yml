@@ -60,4 +60,4 @@ jobs:
 
             # Health check
             sleep 3
-            curl -sf -o /dev/null http://127.0.0.1:3001/api/health && echo "Claude Code UI healthy" || echo "Health check failed (may need a moment to start)"
+            curl -sf -o /dev/null http://127.0.0.1:8040/api/health && echo "Claude Code UI healthy" || echo "Health check failed (may need a moment to start)"
