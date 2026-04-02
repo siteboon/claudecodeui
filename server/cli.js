@@ -114,6 +114,7 @@ function showStatus() {
     console.log(`       DATABASE_PATH: ${c.dim(process.env.DATABASE_PATH || '(using default location)')}`);
     console.log(`       CLAUDE_CLI_PATH: ${c.dim(process.env.CLAUDE_CLI_PATH || 'claude (default)')}`);
     console.log(`       CONTEXT_WINDOW: ${c.dim(process.env.CONTEXT_WINDOW || '160000 (default)')}`);
+    console.log(`       CLAUDE_SETTINGS_PATH: ${c.dim(process.env.CLAUDE_SETTINGS_PATH || '(not set, using defaults)')}`);
 
     // Claude projects folder
     const claudeProjectsPath = path.join(os.homedir(), '.claude', 'projects');
@@ -158,6 +159,8 @@ Commands:
 Options:
   -p, --port <port>           Set server port (default: 3001)
   --database-path <path>      Set custom database location
+  --settings <path>           Path to a custom Claude settings JSON file
+                              (same structure as ~/.claude/settings.json)
   -h, --help                  Show this help information
   -v, --version               Show version information
 
@@ -169,11 +172,12 @@ Examples:
   $ cloudcli status                 # Show configuration
 
 Environment Variables:
-  SERVER_PORT         Set server port (default: 3001)
-  PORT                Set server port (default: 3001) (LEGACY)
-  DATABASE_PATH       Set custom database location
-  CLAUDE_CLI_PATH     Set custom Claude CLI path
-  CONTEXT_WINDOW      Set context window size (default: 160000)
+  SERVER_PORT           Set server port (default: 3001)
+  PORT                  Set server port (default: 3001) (LEGACY)
+  DATABASE_PATH         Set custom database location
+  CLAUDE_CLI_PATH       Set custom Claude CLI path
+  CONTEXT_WINDOW        Set context window size (default: 160000)
+  CLAUDE_SETTINGS_PATH  Path to a custom Claude settings JSON file
 
 Documentation:
   ${packageJson.homepage || 'https://github.com/siteboon/claudecodeui'}
@@ -268,6 +272,10 @@ function parseArgs(args) {
             parsed.options.databasePath = args[++i];
         } else if (arg.startsWith('--database-path=')) {
             parsed.options.databasePath = arg.split('=')[1];
+        } else if (arg === '--settings') {
+            parsed.options.settingsPath = args[++i];
+        } else if (arg.startsWith('--settings=')) {
+            parsed.options.settingsPath = arg.split('=').slice(1).join('=');
         } else if (arg === '--help' || arg === '-h') {
             parsed.command = 'help';
         } else if (arg === '--version' || arg === '-v') {
@@ -293,6 +301,9 @@ async function main() {
     }
     if (options.databasePath) {
         process.env.DATABASE_PATH = options.databasePath;
+    }
+    if (options.settingsPath) {
+        process.env.CLAUDE_SETTINGS_PATH = options.settingsPath;
     }
 
     switch (command) {
