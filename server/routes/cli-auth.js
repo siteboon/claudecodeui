@@ -471,6 +471,5 @@ async function checkGeminiCredentials() {
     };
   }
 }
-}
 
 export default router;
