@@ -18,6 +18,7 @@ export const CLAUDE_MODELS = {
     { value: "haiku", label: "Haiku" },
     { value: "opusplan", label: "Opus Plan" },
     { value: "sonnet[1m]", label: "Sonnet [1M]" },
+    { value: "opus[1m]", label: "Opus [1M]" },
   ],
 
   DEFAULT: "sonnet",
