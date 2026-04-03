@@ -18,7 +18,11 @@ export default defineConfig(({ mode }) => {
   const serverPort = env.SERVER_PORT || env.PORT || 3001
 
   // Application base path — configurable via BASE_PATH env var, defaults to /
-  const basePath = (env.BASE_PATH || '/').replace(/\/+$/, '')
+  const rawBasePath = (env.BASE_PATH || '/').trim()
+  const basePath =
+    rawBasePath === '/'
+      ? ''
+      : `/${rawBasePath.replace(/^\/+|\/+$/g, '')}`
   const base = `${basePath}/`
 
   return {

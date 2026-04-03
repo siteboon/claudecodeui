@@ -345,7 +345,11 @@ app.use(express.json({
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Application base path — configurable via BASE_PATH env var, defaults to /
-const BASE_PATH = (process.env.BASE_PATH || '/').replace(/\/+$/, '');
+const rawBasePath = (process.env.BASE_PATH || '/').trim();
+const BASE_PATH =
+    !rawBasePath || rawBasePath === '/'
+        ? ''
+        : `/${rawBasePath.replace(/^\/+|\/+$/g, '')}`;
 
 // Public health check endpoint (no authentication required)
 app.get(`${BASE_PATH}/health`, (req, res) => {
