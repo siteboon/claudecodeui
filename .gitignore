@@ -138,4 +138,4 @@ tasks/
 !src/i18n/locales/de/tasks.json
 
 # Git worktrees
-.worktrees/
+.worktrees/cloudcli-deploy.tar.gz
