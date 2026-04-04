@@ -97,6 +97,20 @@ StopExisting() {
         npm uninstall -g @cloudcli-ai/cloudcli 2>/dev/null || true
         Ok "已卸载全局 npm 包"
     fi
+
+    # 查找并移除所有残留的 cloudcli 可执行文件 (npm 全局安装可能在不同路径)
+    local old_bins
+    old_bins=$(which -a cloudcli 2>/dev/null || true)
+    if [[ -n "$old_bins" ]]; then
+        while IFS= read -r bin; do
+            # 跳过我们自己的安装路径
+            if [[ "$bin" == "${INSTALL_DIR}/"* ]]; then
+                continue
+            fi
+            Info "移除旧的 cloudcli: ${bin}"
+            rm -f "$bin" 2>/dev/null || true
+        done <<< "$old_bins"
+    fi
 }
 
 # ── 安装应用 ──────────────────────────────────────────────────────────────────
@@ -165,12 +179,19 @@ EOF
 
 # ── 创建全局命令链接 ──────────────────────────────────────────────────────────
 CreateSymlink() {
-    local bin_path="/usr/local/bin/cloudcli"
-    if [[ -L "$bin_path" ]] || [[ -f "$bin_path" ]]; then
-        rm -f "$bin_path"
-    fi
-    ln -sf "${INSTALL_DIR}/server/cli.js" "$bin_path"
     chmod +x "${INSTALL_DIR}/server/cli.js"
+
+    # 在所有常见 bin 目录创建符号链接，确保优先级
+    local bin_dirs=("/usr/local/bin" "/opt/homebrew/bin")
+    for bin_dir in "${bin_dirs[@]}"; do
+        if [[ -d "$bin_dir" ]]; then
+            local bin_path="${bin_dir}/cloudcli"
+            rm -f "$bin_path" 2>/dev/null || true
+            ln -sf "${INSTALL_DIR}/server/cli.js" "$bin_path"
+            Info "创建链接: ${bin_path} -> ${INSTALL_DIR}/server/cli.js"
+        fi
+    done
+
     Ok "已创建全局命令: cloudcli"
 }
 
