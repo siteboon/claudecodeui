@@ -56,11 +56,19 @@ function MapProviderKey(owned_by: string): string {
 function BuildClaudeOptions(
   grouped: Record<string, ModelOption[]>,
 ): ModelConfig {
-  const anthropic_models = grouped['anthropic'] || [];
-  if (anthropic_models.length === 0) return CLAUDE_MODELS;
+  // Merge all provider models into Claude Code's dropdown since copilot-api
+  // proxy routes requests to the correct backend regardless of provider.
+  const all_models: ModelOption[] = [];
+  // Anthropic models first
+  if (grouped['anthropic']) all_models.push(...grouped['anthropic']);
+  // Then other providers
+  for (const [key, models] of Object.entries(grouped)) {
+    if (key !== 'anthropic') all_models.push(...models);
+  }
+  if (all_models.length === 0) return CLAUDE_MODELS;
   return {
-    OPTIONS: anthropic_models,
-    DEFAULT: anthropic_models[0]?.value || CLAUDE_MODELS.DEFAULT,
+    OPTIONS: all_models,
+    DEFAULT: all_models[0]?.value || CLAUDE_MODELS.DEFAULT,
   };
 }
 
