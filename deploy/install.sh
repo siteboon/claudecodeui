@@ -124,13 +124,18 @@ InstallApp() {
 
     Info "安装生产依赖 (含原生模块编译，可能需要几分钟)..."
     cd "$INSTALL_DIR"
-    npm ci --omit=dev 2>&1 | tail -5
+    # --ignore-scripts: 跳过 prepare (husky) 等仅开发时需要的生命周期脚本
+    npm ci --omit=dev --ignore-scripts 2>&1 | tail -5
 
-    # 修复 node-pty 权限 (macOS 已知问题)
+    # 手动执行 postinstall: 修复 node-pty spawn-helper 权限 (macOS 已知问题)
     if [[ -f "${INSTALL_DIR}/scripts/fix-node-pty.js" ]]; then
         Info "修复 node-pty 权限..."
         node "${INSTALL_DIR}/scripts/fix-node-pty.js" 2>/dev/null || true
     fi
+
+    # 重新编译原生模块 (--ignore-scripts 跳过了自动编译)
+    Info "编译原生模块..."
+    npm rebuild 2>&1 | tail -5
 
     Ok "应用安装完成"
 }
