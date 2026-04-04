@@ -2,14 +2,9 @@ import React from "react";
 import { Check, ChevronDown } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import SessionProviderLogo from "../../../llm-logo-provider/SessionProviderLogo";
-import {
-  CLAUDE_MODELS,
-  CURSOR_MODELS,
-  CODEX_MODELS,
-  GEMINI_MODELS,
-} from "../../../../../shared/modelConstants";
 import type { ProjectSession, SessionProvider } from "../../../../types/app";
 import { NextTaskBanner } from "../../../task-master";
+import { UseDynamicModels } from "../../../../hooks/useDynamicModels";
 
 type ProviderSelectionEmptyStateProps = {
   selectedSession: ProjectSession | null;
@@ -75,13 +70,6 @@ const PROVIDERS: ProviderDef[] = [
   },
 ];
 
-function getModelConfig(p: SessionProvider) {
-  if (p === "claude") return CLAUDE_MODELS;
-  if (p === "codex") return CODEX_MODELS;
-  if (p === "gemini") return GEMINI_MODELS;
-  return CURSOR_MODELS;
-}
-
 function getModelValue(
   p: SessionProvider,
   c: string,
@@ -115,6 +103,7 @@ export default function ProviderSelectionEmptyState({
   setInput,
 }: ProviderSelectionEmptyStateProps) {
   const { t } = useTranslation("chat");
+  const { GetModelsForProvider } = UseDynamicModels();
   const nextTaskPrompt = t("tasks.nextTaskPrompt", {
     defaultValue: "Start the next task",
   });
@@ -141,7 +130,7 @@ export default function ProviderSelectionEmptyState({
     }
   };
 
-  const modelConfig = getModelConfig(provider);
+  const modelConfig = GetModelsForProvider(provider);
   const currentModel = getModelValue(
     provider,
     claudeModel,

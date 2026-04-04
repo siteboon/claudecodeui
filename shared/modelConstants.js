@@ -1,17 +1,21 @@
 /**
  * Centralized Model Definitions
- * Single source of truth for all supported AI models
+ * Single source of truth for all supported AI models.
+ *
+ * Static OPTIONS serve as fallback defaults. When the copilot-api proxy is
+ * reachable, the frontend dynamically fetches the full list from /api/models
+ * and merges it with these defaults.
  */
 
 /**
  * Claude (Anthropic) Models
  *
- * Note: Claude uses two different formats:
- * - SDK format ('sonnet', 'opus') - used by the UI and claude-sdk.js
- * - API format ('claude-sonnet-4.5') - used by slash commands for display
+ * Note: When using copilot-api proxy, model IDs come from the proxy directly
+ * (e.g. "claude-opus-4.6") and are passed through to the SDK as-is.
+ * The legacy short names ("sonnet", "opus") are kept as static fallback.
  */
 export const CLAUDE_MODELS = {
-  // Models in SDK format (what the actual SDK accepts)
+  // Static fallback models (SDK short names)
   OPTIONS: [
     { value: "sonnet", label: "Sonnet" },
     { value: "opus", label: "Opus" },

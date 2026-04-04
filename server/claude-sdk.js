@@ -192,8 +192,8 @@ function mapCliOptionsToSDK(options = {}) {
 
   sdkOptions.disallowedTools = settings.disallowedTools || [];
 
-  // Map model (default to sonnet)
-  // Valid models: sonnet, opus, haiku, opusplan, sonnet[1m]
+  // Map model — accepts both SDK short names (sonnet, opus, haiku) and
+  // full model IDs from the copilot-api proxy (e.g. claude-opus-4.6).
   sdkOptions.model = options.model || CLAUDE_MODELS.DEFAULT;
   // Model logged at query start below
 
