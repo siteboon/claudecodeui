@@ -438,7 +438,7 @@ app.post('/api/system/update', authenticateToken, async (req, res) => {
         // Run the update command based on install mode
         const updateCommand = installMode === 'git'
             ? 'git checkout main && git pull && npm install'
-            : 'npm install -g @siteboon/claude-code-ui@latest';
+            : 'npm install -g @cloudcli-ai/cloudcli@latest';
 
         const child = spawn('sh', ['-c', updateCommand], {
             cwd: installMode === 'git' ? projectRoot : os.homedir(),

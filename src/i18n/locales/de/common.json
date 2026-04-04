@@ -215,7 +215,7 @@
     "viewFullRelease": "Vollständige Version anzeigen",
     "updateProgress": "Update-Fortschritt:",
     "manualUpgrade": "Manuelles Upgrade:",
-    "npmUpgradeCommand": "npm install -g @siteboon/claude-code-ui@latest",
+    "npmUpgradeCommand": "npm install -g @cloudcli-ai/cloudcli@latest",
     "manualUpgradeHint": "Oder klick auf \"Jetzt aktualisieren\", um das Update automatisch durchzuführen.",
     "updateCompleted": "Update erfolgreich abgeschlossen!",
     "restartServer": "Bitte starte den Server neu, um die Änderungen anzuwenden.",
