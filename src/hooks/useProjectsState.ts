@@ -58,7 +58,8 @@ const projectsHaveChanges = (
     return (
       serialize(nextProject.cursorSessions) !== serialize(prevProject.cursorSessions) ||
       serialize(nextProject.codexSessions) !== serialize(prevProject.codexSessions) ||
-      serialize(nextProject.geminiSessions) !== serialize(prevProject.geminiSessions)
+      serialize(nextProject.geminiSessions) !== serialize(prevProject.geminiSessions) ||
+      serialize(nextProject.kiroSessions) !== serialize(prevProject.kiroSessions)
     );
   });
 };
@@ -69,6 +70,7 @@ const getProjectSessions = (project: Project): ProjectSession[] => {
     ...(project.codexSessions ?? []),
     ...(project.cursorSessions ?? []),
     ...(project.geminiSessions ?? []),
+    ...(project.kiroSessions ?? []),
   ];
 };
 
@@ -365,6 +367,21 @@ export function useProjectsState({
         }
         if (shouldUpdateSession) {
           setSelectedSession({ ...geminiSession, __provider: 'gemini' });
+        }
+        return;
+      }
+
+      const kiroSession = project.kiroSessions?.find((session) => session.id === sessionId);
+      if (kiroSession) {
+        const shouldUpdateProject = selectedProject?.name !== project.name;
+        const shouldUpdateSession =
+          selectedSession?.id !== sessionId || selectedSession.__provider !== 'kiro';
+
+        if (shouldUpdateProject) {
+          setSelectedProject(project);
+        }
+        if (shouldUpdateSession) {
+          setSelectedSession({ ...kiroSession, __provider: 'kiro' });
         }
         return;
       }

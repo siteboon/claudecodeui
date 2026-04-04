@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { authenticatedFetch } from '../../../utils/api';
-import { CLAUDE_MODELS, CODEX_MODELS, CURSOR_MODELS, GEMINI_MODELS } from '../../../../shared/modelConstants';
+import { CLAUDE_MODELS, CODEX_MODELS, CURSOR_MODELS, GEMINI_MODELS, KIRO_MODELS } from '../../../../shared/modelConstants';
 import type { PendingPermissionRequest, PermissionMode } from '../types/types';
 import type { ProjectSession, SessionProvider } from '../../../types/app';
 
@@ -25,6 +25,9 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
   });
   const [geminiModel, setGeminiModel] = useState<string>(() => {
     return localStorage.getItem('gemini-model') || GEMINI_MODELS.DEFAULT;
+  });
+  const [kiroModel, setKiroModel] = useState<string>(() => {
+    return localStorage.getItem('kiro-model') || KIRO_MODELS.DEFAULT;
   });
 
   const lastProviderRef = useRef(provider);
@@ -83,6 +86,10 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
       });
   }, [provider]);
 
+  useEffect(() => {
+    localStorage.setItem('kiro-model', kiroModel);
+  }, [kiroModel]);
+
   const cyclePermissionMode = useCallback(() => {
     const modes: PermissionMode[] =
       provider === 'codex'
@@ -110,6 +117,8 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
     setCodexModel,
     geminiModel,
     setGeminiModel,
+    kiroModel,
+    setKiroModel,
     permissionMode,
     setPermissionMode,
     pendingPermissionRequests,

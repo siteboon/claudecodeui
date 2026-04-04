@@ -333,6 +333,9 @@
       },
       "gemini": {
         "description": "Google Gemini AIアシスタント"
+      },
+      "kiro": {
+        "description": "Amazon Kiro agentic IDE"
       }
     },
     "connectionStatus": "接続状態",
