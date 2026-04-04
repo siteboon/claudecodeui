@@ -475,6 +475,7 @@ class SSEStreamWriter {
 
   setSessionId(sessionId) {
     this.sessionId = sessionId;
+    this.send({ type: 'session-id', sessionId });
   }
 
   getSessionId() {
@@ -839,7 +840,7 @@ class ResponseCollector {
  *   }
  */
 router.post('/', validateExternalApiKey, async (req, res) => {
-  const { githubUrl, projectPath, message, provider = 'claude', model, githubToken, branchName } = req.body;
+  const { githubUrl, projectPath, message, provider = 'claude', model, githubToken, branchName, sessionId } = req.body;
 
   // Parse stream and cleanup as booleans (handle string "true"/"false" from curl)
   const stream = req.body.stream === undefined ? true : (req.body.stream === true || req.body.stream === 'true');
@@ -949,7 +950,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       await queryClaudeSDK(message.trim(), {
         projectPath: finalProjectPath,
         cwd: finalProjectPath,
-        sessionId: null, // New session
+        sessionId: sessionId || null,
         model: model,
         permissionMode: 'bypassPermissions' // Bypass all permissions for API calls
       }, writer);
@@ -960,7 +961,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       await spawnCursor(message.trim(), {
         projectPath: finalProjectPath,
         cwd: finalProjectPath,
-        sessionId: null, // New session
+        sessionId: sessionId || null,
         model: model || undefined,
         skipPermissions: true // Bypass permissions for Cursor
       }, writer);
@@ -970,7 +971,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       await queryCodex(message.trim(), {
         projectPath: finalProjectPath,
         cwd: finalProjectPath,
-        sessionId: null,
+        sessionId: sessionId || null,
         model: model || CODEX_MODELS.DEFAULT,
         permissionMode: 'bypassPermissions'
       }, writer);
@@ -980,7 +981,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       await spawnGemini(message.trim(), {
         projectPath: finalProjectPath,
         cwd: finalProjectPath,
-        sessionId: null,
+        sessionId: sessionId || null,
         model: model,
         skipPermissions: true // CLI mode bypasses permissions
       }, writer);
