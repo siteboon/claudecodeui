@@ -676,6 +676,9 @@ async function queryClaudeSDK(command, options = {}, ws) {
       removeSession(capturedSessionId);
     }
 
+    // Send explicit completion signal so frontend knows the stream ended
+    ws.send(createNormalizedMessage({ kind: 'status', text: 'stream_complete', sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+
     // Clean up temporary image files
     await cleanupTempFiles(tempImagePaths, tempDir);
 

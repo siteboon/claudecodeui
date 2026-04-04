@@ -1619,11 +1619,29 @@ function handleChatConnection(ws, request) {
         }
     });
 
-    ws.on('close', () => {
-        console.log('🔌 Chat client disconnected');
-        // Remove from connected clients
+    ws.on('close', (code, reason) => {
+        console.log(`🔌 Chat client disconnected (code=${code}, reason=${reason || 'none'})`);
         connectedClients.delete(ws);
+        if (ws.__pingInterval) clearInterval(ws.__pingInterval);
     });
+
+    ws.on('error', (error) => {
+        console.error('[ERROR] Chat WebSocket error:', error.message);
+        connectedClients.delete(ws);
+        if (ws.__pingInterval) clearInterval(ws.__pingInterval);
+    });
+
+    // Ping-pong keepalive: detect dead connections
+    ws.isAlive = true;
+    ws.on('pong', () => { ws.isAlive = true; });
+    ws.__pingInterval = setInterval(() => {
+        if (!ws.isAlive) {
+            console.log('[WARN] Chat WebSocket ping timeout, terminating');
+            return ws.terminate();
+        }
+        ws.isAlive = false;
+        if (ws.readyState === 1) ws.ping();
+    }, 30000);
 }
 
 // Handle shell WebSocket connections

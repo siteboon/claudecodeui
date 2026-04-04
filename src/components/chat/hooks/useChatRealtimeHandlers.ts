@@ -120,6 +120,17 @@ export function useChatRealtimeHandlers({
 
       switch (messageType) {
         case 'websocket-reconnected':
+          // Connection was lost and recovered — any in-flight stream is gone.
+          // Reset loading state so the UI doesn't stay stuck.
+          setIsLoading(false);
+          setCanAbortSession(false);
+          setClaudeStatus(null);
+          if (streamTimerRef.current) {
+            clearTimeout(streamTimerRef.current);
+            streamTimerRef.current = null;
+          }
+          accumulatedStreamRef.current = '';
+          streamBufferRef.current = '';
           onWebSocketReconnect?.();
           return;
 
