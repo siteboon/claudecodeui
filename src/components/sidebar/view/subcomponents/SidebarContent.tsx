@@ -8,6 +8,7 @@ import type { ConversationSearchResults, SearchProgress } from '../../hooks/useS
 import SidebarFooter from './SidebarFooter';
 import SidebarHeader from './SidebarHeader';
 import SidebarProjectList, { type SidebarProjectListProps } from './SidebarProjectList';
+import WorkspaceFileBrowser from './WorkspaceFileBrowser';
 
 type SearchMode = 'projects' | 'conversations';
 
@@ -40,6 +41,7 @@ type SidebarContentProps = {
   isMobile: boolean;
   isLoading: boolean;
   projects: Project[];
+  selectedProject: Project | null;
   searchFilter: string;
   onSearchFilterChange: (value: string) => void;
   onClearSearchFilter: () => void;
@@ -67,6 +69,7 @@ export default function SidebarContent({
   isMobile,
   isLoading,
   projects,
+  selectedProject,
   searchFilter,
   onSearchFilterChange,
   onClearSearchFilter,
@@ -212,6 +215,8 @@ export default function SidebarContent({
           <SidebarProjectList {...projectListProps} />
         )}
       </ScrollArea>
+
+      <WorkspaceFileBrowser selectedProject={selectedProject} />
 
       <SidebarFooter
         updateAvailable={updateAvailable}

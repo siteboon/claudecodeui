@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import type {
   ChangeEvent,
@@ -168,6 +169,28 @@ export default function ChatComposer({
     ? 'max-sm:fixed max-sm:bottom-0 max-sm:left-0 max-sm:right-0 max-sm:z-50 max-sm:bg-background max-sm:shadow-[0_-4px_20px_rgba(0,0,0,0.15)]'
     : '';
 
+  // Handle file reference drops from the sidebar file browser
+  const HandleFileReferenceDrop = useCallback(
+    (e: React.DragEvent) => {
+      const file_path = e.dataTransfer.getData('application/x-file-reference');
+      if (!file_path) return;
+      e.preventDefault();
+      e.stopPropagation();
+      onSelectFile({ name: file_path.split('/').pop() || file_path, path: file_path });
+    },
+    [onSelectFile],
+  );
+
+  const HandleFileReferenceDragOver = useCallback(
+    (e: React.DragEvent) => {
+      if (e.dataTransfer.types.includes('application/x-file-reference')) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+      }
+    },
+    [],
+  );
+
   return (
     <div className={`flex-shrink-0 p-2 pb-2 sm:p-4 sm:pb-4 md:p-4 md:pb-6 ${mobileFloatingClass}`}>
       {!hasQuestionPanel && (
@@ -277,6 +300,8 @@ export default function ChatComposer({
 
         <div
           {...getRootProps()}
+          onDrop={HandleFileReferenceDrop}
+          onDragOver={HandleFileReferenceDragOver}
           className={`relative overflow-hidden rounded-2xl border border-border/50 bg-card/80 shadow-sm backdrop-blur-sm transition-all duration-200 focus-within:border-primary/30 focus-within:shadow-md focus-within:ring-1 focus-within:ring-primary/15 ${
             isTextareaExpanded ? 'chat-input-expanded' : ''
           }`}
