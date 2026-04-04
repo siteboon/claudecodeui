@@ -83,6 +83,15 @@ const createFakeSubmitEvent = () => {
 const isTemporarySessionId = (sessionId: string | null | undefined) =>
   Boolean(sessionId && sessionId.startsWith('new-session-'));
 
+const THINKING_MODE_STORAGE_KEY = 'chat-thinking-mode';
+
+const getInitialThinkingMode = () => {
+  const savedMode = safeLocalStorage.getItem(THINKING_MODE_STORAGE_KEY);
+  return typeof savedMode === 'string' && thinkingModes.some((mode) => mode.id === savedMode)
+    ? savedMode
+    : 'none';
+};
+
 const getNotificationSessionSummary = (
   selectedSession: ProjectSession | null,
   fallbackInput: string,
@@ -143,7 +152,7 @@ export function useChatComposerState({
   const [uploadingImages, setUploadingImages] = useState<Map<string, number>>(new Map());
   const [imageErrors, setImageErrors] = useState<Map<string, string>>(new Map());
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
-  const [thinkingMode, setThinkingMode] = useState('none');
+  const [thinkingMode, setThinkingMode] = useState(getInitialThinkingMode);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputHighlightRef = useRef<HTMLDivElement>(null);
@@ -663,7 +672,6 @@ export function useChatComposerState({
       setUploadingImages(new Map());
       setImageErrors(new Map());
       setIsTextareaExpanded(false);
-      setThinkingMode('none');
 
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
@@ -707,6 +715,10 @@ export function useChatComposerState({
   useEffect(() => {
     inputValueRef.current = input;
   }, [input]);
+
+  useEffect(() => {
+    safeLocalStorage.setItem(THINKING_MODE_STORAGE_KEY, thinkingMode);
+  }, [thinkingMode]);
 
   useEffect(() => {
     if (!selectedProject) {
