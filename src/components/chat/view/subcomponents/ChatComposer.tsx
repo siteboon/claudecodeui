@@ -169,26 +169,37 @@ export default function ChatComposer({
     ? 'max-sm:fixed max-sm:bottom-0 max-sm:left-0 max-sm:right-0 max-sm:z-50 max-sm:bg-background max-sm:shadow-[0_-4px_20px_rgba(0,0,0,0.15)]'
     : '';
 
-  // Handle file reference drops from the sidebar file browser
-  const HandleFileReferenceDrop = useCallback(
+  // Handle file reference drops from the sidebar file browser.
+  // Must compose with react-dropzone's handlers since getRootProps() also sets onDrop/onDragOver.
+  const rootProps = getRootProps() as Record<string, unknown>;
+  const dropzoneOnDrop = rootProps.onDrop as ((e: React.DragEvent) => void) | undefined;
+  const dropzoneOnDragOver = rootProps.onDragOver as ((e: React.DragEvent) => void) | undefined;
+
+  const HandleComposedDrop = useCallback(
     (e: React.DragEvent) => {
       const file_path = e.dataTransfer.getData('application/x-file-reference');
-      if (!file_path) return;
-      e.preventDefault();
-      e.stopPropagation();
-      onSelectFile({ name: file_path.split('/').pop() || file_path, path: file_path });
+      if (file_path) {
+        e.preventDefault();
+        e.stopPropagation();
+        onSelectFile({ name: file_path.split('/').pop() || file_path, path: file_path });
+        return;
+      }
+      // Fall through to react-dropzone for image drops
+      dropzoneOnDrop?.(e);
     },
-    [onSelectFile],
+    [onSelectFile, dropzoneOnDrop],
   );
 
-  const HandleFileReferenceDragOver = useCallback(
+  const HandleComposedDragOver = useCallback(
     (e: React.DragEvent) => {
-      if (e.dataTransfer.types.includes('application/x-file-reference')) {
+      if (Array.from(e.dataTransfer.types).includes('application/x-file-reference')) {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'copy';
+        return;
       }
+      dropzoneOnDragOver?.(e);
     },
-    [],
+    [dropzoneOnDragOver],
   );
 
   return (
@@ -299,9 +310,9 @@ export default function ChatComposer({
         />
 
         <div
-          {...getRootProps()}
-          onDrop={HandleFileReferenceDrop}
-          onDragOver={HandleFileReferenceDragOver}
+          {...rootProps}
+          onDrop={HandleComposedDrop}
+          onDragOver={HandleComposedDragOver}
           className={`relative overflow-hidden rounded-2xl border border-border/50 bg-card/80 shadow-sm backdrop-blur-sm transition-all duration-200 focus-within:border-primary/30 focus-within:shadow-md focus-within:ring-1 focus-within:ring-primary/15 ${
             isTextareaExpanded ? 'chat-input-expanded' : ''
           }`}
