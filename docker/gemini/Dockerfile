@@ -1,0 +1,11 @@
+FROM docker/sandbox-templates:gemini
+
+USER root
+COPY shared/install-cloudcli.sh /tmp/install-cloudcli.sh
+RUN chmod +x /tmp/install-cloudcli.sh && /tmp/install-cloudcli.sh
+
+USER agent
+RUN npm install -g @cloudcli-ai/cloudcli
+
+COPY shared/start-cloudcli.sh /home/agent/.cloudcli-start.sh
+RUN echo '. ~/.cloudcli-start.sh' >> /home/agent/.bashrc
