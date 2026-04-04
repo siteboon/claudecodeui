@@ -41,6 +41,9 @@ DATA_DIR="/var/lib/cloudcli"
 REAL_USER="${SUDO_USER:-$(whoami)}"
 REAL_HOME=$(eval echo "~${REAL_USER}")
 
+# sudo 环境下 PATH 可能不含 homebrew 等路径，主动补充
+export PATH="/opt/homebrew/bin:/usr/local/bin:${PATH}"
+
 # ── 前置检查 ─────────────────────────────────────────────────────────────────
 if [[ $EUID -ne 0 ]]; then
     Error "请使用 sudo 运行此脚本"
@@ -51,16 +54,41 @@ fi
 Info "安装用户: ${REAL_USER}, HOME: ${REAL_HOME}"
 
 # ── 检测 Node.js ─────────────────────────────────────────────────────────────
+# sudo 环境下 PATH 可能不含 homebrew 路径，主动搜索
+FindNode() {
+    local search_paths=(
+        /opt/homebrew/bin/node
+        /usr/local/bin/node
+        /usr/bin/node
+    )
+    # 优先用 PATH 里能找到的
+    if command -v node &>/dev/null; then
+        command -v node
+        return
+    fi
+    for p in "${search_paths[@]}"; do
+        if [[ -x "$p" ]]; then
+            echo "$p"
+            return
+        fi
+    done
+    return 1
+}
+
 CheckNode() {
-    if ! command -v node &>/dev/null; then
+    local node_bin
+    node_bin=$(FindNode) || {
         Error "未检测到 Node.js，请先安装 Node.js >= 20"
         echo "  推荐: brew install node"
         echo "  或:   https://nodejs.org/"
         exit 1
-    fi
+    }
+
+    # 导出供后续函数使用
+    NODE_BIN="$node_bin"
 
     local node_version
-    node_version=$(node -v | sed 's/^v//')
+    node_version=$("$NODE_BIN" -v | sed 's/^v//')
     local major
     major=$(echo "$node_version" | cut -d. -f1)
 
@@ -69,7 +97,7 @@ CheckNode() {
         exit 1
     fi
 
-    Ok "Node.js v${node_version}"
+    Ok "Node.js v${node_version} (${NODE_BIN})"
 }
 
 # ── 停止并卸载已有的 cloudcli ──────────────────────────────────────────────
@@ -160,6 +188,9 @@ SetupEnvironment() {
     mkdir -p "$DATA_DIR"
     mkdir -p "${REAL_HOME}/.cloudcli"
 
+    # 日志目录需要运行用户可写 (launchd 以 REAL_USER 身份运行)
+    chown -R "${REAL_USER}" "$LOG_DIR"
+
     # 创建 .env (如果不存在)
     local env_file="${INSTALL_DIR}/.env"
     if [[ ! -f "$env_file" ]]; then
@@ -199,8 +230,8 @@ CreateSymlink() {
 SetupLaunchd() {
     Info "配置 launchd 开机自启动..."
 
-    local node_path
-    node_path=$(which node)
+    # NODE_BIN 由 CheckNode() 设置，是绝对路径
+    local node_path="${NODE_BIN}"
 
     cat > "$LAUNCHD_PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -266,7 +297,13 @@ EOF
 # ── 启动服务 ──────────────────────────────────────────────────────────────────
 StartService() {
     Info "启动 cloudcli 服务..."
-    launchctl bootstrap system "$LAUNCHD_PLIST"
+    Info "Node 路径: ${NODE_BIN}"
+
+    # 确保日志文件存在且有写入权限
+    touch "${LOG_DIR}/cloudcli.log" "${LOG_DIR}/cloudcli-error.log" 2>/dev/null || true
+    chown "${REAL_USER}" "${LOG_DIR}/cloudcli.log" "${LOG_DIR}/cloudcli-error.log" 2>/dev/null || true
+
+    launchctl bootstrap system "$LAUNCHD_PLIST" 2>&1 || true
 
     # 等待启动
     sleep 3
