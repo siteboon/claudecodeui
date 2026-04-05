@@ -93,6 +93,27 @@ export function validateManifest(manifest) {
   return { valid: true };
 }
 
+/**
+ * Fix permissions on prebuild binaries shipped without execute bits.
+ * Scans all packages with a prebuilds/ directory for the current platform
+ * and ensures helper binaries (e.g. spawn-helper) are executable.
+ */
+function fixPrebuildPermissions(dir) {
+  const nodeModules = path.join(dir, 'node_modules');
+  let packages;
+  try { packages = fs.readdirSync(nodeModules); } catch { return; }
+  const platform = `${process.platform}-${process.arch}`;
+  for (const pkg of packages) {
+    const archDir = path.join(nodeModules, pkg, 'prebuilds', platform);
+    let files;
+    try { files = fs.readdirSync(archDir); } catch { continue; }
+    for (const file of files) {
+      if (file.endsWith('.node')) continue; // .node files don't need +x
+      try { fs.chmodSync(path.join(archDir, file), 0o755); } catch { /* ignore */ }
+    }
+  }
+}
+
 const BUILD_TIMEOUT_MS = 60_000;
 
 /** Run `npm run build` if the plugin's package.json declares a build script. */
@@ -335,10 +356,9 @@ export function installPluginFromGit(url) {
       }
 
       // Run npm install if package.json exists.
-      // --ignore-scripts prevents postinstall hooks from executing arbitrary code.
       const packageJsonPath = path.join(tempDir, 'package.json');
       if (fs.existsSync(packageJsonPath)) {
-        const npmProcess = spawn('npm', ['install', '--ignore-scripts'], {
+        const npmProcess = spawn('npm', ['install'], {
           cwd: tempDir,
           stdio: ['ignore', 'pipe', 'pipe'],
         });
@@ -348,22 +368,8 @@ export function installPluginFromGit(url) {
             cleanupTemp();
             return reject(new Error(`npm install for ${repoName} failed (exit code ${npmCode})`));
           }
-          // Rebuild native addons that were skipped by --ignore-scripts
-          const rebuildProcess = spawn('npm', ['rebuild'], {
-            cwd: tempDir,
-            stdio: ['ignore', 'pipe', 'pipe'],
-          });
-          rebuildProcess.on('close', (rebuildCode) => {
-            if (rebuildCode !== 0) {
-              cleanupTemp();
-              return reject(new Error(`npm rebuild for ${repoName} failed (exit code ${rebuildCode})`));
-            }
-            runBuildIfNeeded(tempDir, packageJsonPath, () => finalize(manifest), (err) => { cleanupTemp(); reject(err); });
-          });
-          rebuildProcess.on('error', (err) => {
-            cleanupTemp();
-            reject(err);
-          });
+          fixPrebuildPermissions(tempDir);
+          runBuildIfNeeded(tempDir, packageJsonPath, () => finalize(manifest), (err) => { cleanupTemp(); reject(err); });
         });
 
         npmProcess.on('error', (err) => {
@@ -420,7 +426,7 @@ export function updatePluginFromGit(name) {
       // Re-run npm install if package.json exists
       const packageJsonPath = path.join(pluginDir, 'package.json');
       if (fs.existsSync(packageJsonPath)) {
-        const npmProcess = spawn('npm', ['install', '--ignore-scripts'], {
+        const npmProcess = spawn('npm', ['install'], {
           cwd: pluginDir,
           stdio: ['ignore', 'pipe', 'pipe'],
         });
@@ -428,18 +434,8 @@ export function updatePluginFromGit(name) {
           if (npmCode !== 0) {
             return reject(new Error(`npm install for ${name} failed (exit code ${npmCode})`));
           }
-          // Rebuild native addons that were skipped by --ignore-scripts
-          const rebuildProcess = spawn('npm', ['rebuild'], {
-            cwd: pluginDir,
-            stdio: ['ignore', 'pipe', 'pipe'],
-          });
-          rebuildProcess.on('close', (rebuildCode) => {
-            if (rebuildCode !== 0) {
-              return reject(new Error(`npm rebuild for ${name} failed (exit code ${rebuildCode})`));
-            }
-            runBuildIfNeeded(pluginDir, packageJsonPath, () => resolve(manifest), (err) => reject(err));
-          });
-          rebuildProcess.on('error', (err) => reject(err));
+          fixPrebuildPermissions(pluginDir);
+          runBuildIfNeeded(pluginDir, packageJsonPath, () => resolve(manifest), (err) => reject(err));
         });
         npmProcess.on('error', (err) => reject(err));
       } else {
