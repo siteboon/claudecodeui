@@ -123,11 +123,5 @@ export type CursorPermissionsState = {
   skipPermissions: boolean;
 };
 
-export type SettingsProps = {
-  isOpen: boolean;
-  onClose: () => void;
-  projects?: SettingsProject[];
-  initialTab?: string;
-};
 
 export type SetState<T> = Dispatch<SetStateAction<T>>;

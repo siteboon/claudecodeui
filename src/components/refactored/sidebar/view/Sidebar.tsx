@@ -1,4 +1,5 @@
 import { PanelRightOpen } from 'lucide-react';
+import SidebarFooter from './SidebarFooter';
 import { useSidebarSettings } from '@/components/refactored/sidebar/hooks/useSidebarSettings';
 import { useSidebarModals } from '@/components/refactored/sidebar/hooks/useSidebarModals';
 import { useWorkspaces } from '@/components/refactored/sidebar/hooks/useWorkspaces';
@@ -8,6 +9,8 @@ import { SidebarWorkspaceList } from '@/components/refactored/sidebar/view/Sideb
 import { cn } from '@/lib/utils';
 import { Button } from '@/shared/view/ui';
 import ProjectCreationWizard from '@/components/project-creation-wizard';
+import VersionUpgradeModal from '@/components/version-upgrade/view';
+import Settings from '@/components/settings/view/Settings';
 
 export function Sidebar() {
   const { isCollapsed, toggleCollapse, setCollapsed } = useSidebarSettings();
@@ -50,7 +53,18 @@ export function Sidebar() {
     cancelSessionDelete,
     confirmSessionDelete,
   } = useWorkspaces();
-  const { showNewProject, openNewProject, closeNewProject } = useSidebarModals();
+
+  const {
+    showNewProject,
+    openNewProject,
+    closeNewProject,
+    showSettingsModal,
+    openSettingsModal,
+    closeSettingsModal,
+    showVersionModal,
+    openVersionModal,
+    closeVersionModal,
+  } = useSidebarModals();
 
   const handleSessionDeleteRequest = (workspacePath: string, sessionId: string) => {
     const workspace = workspaces.find(
@@ -77,7 +91,7 @@ export function Sidebar() {
 
         <aside
           className={cn(
-            "flex flex-col bg-background/80 backdrop-blur-sm transition-all duration-300 border-r border-border h-full",
+            "flex h-full min-h-0 flex-col overflow-hidden border-r border-border bg-background/80 backdrop-blur-sm transition-all duration-300",
             "fixed inset-y-0 left-0 z-50 md:relative md:z-0", // Make it fixed drawer on mobile, relative on desktop
             isCollapsed
               ? "-translate-x-full md:translate-x-0 md:w-0 md:opacity-0 md:overflow-hidden md:border-none" // Hide fully on mobile if collapsed
@@ -96,34 +110,40 @@ export function Sidebar() {
             onSearchFilterChange={setSearchFilter}
           />
           {!isCollapsed && (
-            <div className="flex-1 overflow-y-auto overscroll-contain">
-              <SidebarWorkspaceList
-                workspacesCount={workspaces.length}
-                searchFilter={searchFilter}
-                starredWorkspaces={starredWorkspaces}
-                unstarredWorkspaces={unstarredWorkspaces}
-                expandedWorkspaces={expandedWorkspaces}
-                selectedSessionId={selectedSessionId}
-                editingWorkspacePath={editingWorkspacePath}
-                editingWorkspaceName={editingWorkspaceName}
-                isSavingWorkspaceName={isSavingWorkspaceName}
-                editingSessionId={editingSessionId}
-                editingSessionName={editingSessionName}
-                isSavingSessionName={isSavingSessionName}
-                onEditingWorkspaceNameChange={setEditingWorkspaceName}
-                onEditingSessionNameChange={setEditingSessionName}
-                onToggleWorkspace={toggleWorkspace}
-                onToggleWorkspaceStar={toggleWorkspaceStar}
-                onStartWorkspaceRename={startWorkspaceRename}
-                onCancelWorkspaceRename={cancelWorkspaceRename}
-                onSaveWorkspaceRename={saveWorkspaceRename}
-                onStartSessionRename={startSessionRename}
-                onCancelSessionRename={cancelSessionRename}
-                onSaveSessionRename={saveSessionRename}
-                onDeleteWorkspace={requestWorkspaceDelete}
-                onSessionSelect={openSession}
-                onSessionDelete={handleSessionDeleteRequest}
-                onNewSession={openNewSession}
+            <div className="flex min-h-0 flex-1 flex-col">
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                <SidebarWorkspaceList
+                  workspacesCount={workspaces.length}
+                  searchFilter={searchFilter}
+                  starredWorkspaces={starredWorkspaces}
+                  unstarredWorkspaces={unstarredWorkspaces}
+                  expandedWorkspaces={expandedWorkspaces}
+                  selectedSessionId={selectedSessionId}
+                  editingWorkspacePath={editingWorkspacePath}
+                  editingWorkspaceName={editingWorkspaceName}
+                  isSavingWorkspaceName={isSavingWorkspaceName}
+                  editingSessionId={editingSessionId}
+                  editingSessionName={editingSessionName}
+                  isSavingSessionName={isSavingSessionName}
+                  onEditingWorkspaceNameChange={setEditingWorkspaceName}
+                  onEditingSessionNameChange={setEditingSessionName}
+                  onToggleWorkspace={toggleWorkspace}
+                  onToggleWorkspaceStar={toggleWorkspaceStar}
+                  onStartWorkspaceRename={startWorkspaceRename}
+                  onCancelWorkspaceRename={cancelWorkspaceRename}
+                  onSaveWorkspaceRename={saveWorkspaceRename}
+                  onStartSessionRename={startSessionRename}
+                  onCancelSessionRename={cancelSessionRename}
+                  onSaveSessionRename={saveSessionRename}
+                  onDeleteWorkspace={requestWorkspaceDelete}
+                  onSessionSelect={openSession}
+                  onSessionDelete={handleSessionDeleteRequest}
+                  onNewSession={openNewSession}
+                />
+              </div>
+              <SidebarFooter
+                onOpenSettings={openSettingsModal}
+                onOpenVersionModal={openVersionModal}
               />
             </div>
           )}
@@ -160,6 +180,12 @@ export function Sidebar() {
         onConfirmWorkspaceDelete={confirmWorkspaceDelete}
         onCancelSessionDelete={cancelSessionDelete}
         onConfirmSessionDelete={confirmSessionDelete}
+      />
+      <VersionUpgradeModal isOpen={showVersionModal} onClose={closeVersionModal} />
+      <Settings
+        isOpen={showSettingsModal}
+        onClose={closeSettingsModal}
+        initialTab="agents"
       />
     </>
   );

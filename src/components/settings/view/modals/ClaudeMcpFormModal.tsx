@@ -3,15 +3,21 @@ import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Input } from '../../../../shared/view/ui';
+import { authenticatedFetch } from '../../../../utils/api';
 import { DEFAULT_CLAUDE_MCP_FORM } from '../../constants/constants';
-import type { ClaudeMcpFormState, McpServer, McpScope, McpTransportType, SettingsProject } from '../../types/types';
+import type { ClaudeMcpFormState, McpServer, McpScope, McpTransportType } from '../../types/types';
 
 type ClaudeMcpFormModalProps = {
   isOpen: boolean;
   editingServer: McpServer | null;
-  projects: SettingsProject[];
   onClose: () => void;
   onSubmit: (formData: ClaudeMcpFormState, editingServer: McpServer | null) => Promise<void>;
+};
+
+type ProjectApiRecord = {
+  workspaceOriginalPath?: string;
+  workspaceCustomName?: string | null;
+  workspaceDisplayName?: string;
 };
 
 const getSafeTransportType = (value: unknown): McpTransportType => {
@@ -49,7 +55,6 @@ const createFormStateFromServer = (server: McpServer): ClaudeMcpFormState => ({
 export default function ClaudeMcpFormModal({
   isOpen,
   editingServer,
-  projects,
   onClose,
   onSubmit,
 }: ClaudeMcpFormModalProps) {
@@ -57,6 +62,9 @@ export default function ClaudeMcpFormModal({
   const [formData, setFormData] = useState<ClaudeMcpFormState>(DEFAULT_CLAUDE_MCP_FORM);
   const [jsonValidationError, setJsonValidationError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [projects, setProjects] = useState<ProjectApiRecord[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(false);
+  const [projectsError, setProjectsError] = useState<string | null>(null);
 
   const isEditing = Boolean(editingServer);
 
@@ -73,6 +81,51 @@ export default function ClaudeMcpFormModal({
 
     setFormData(DEFAULT_CLAUDE_MCP_FORM);
   }, [editingServer, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const fetchProjects = async () => {
+      setProjectsLoading(true);
+      setProjectsError(null);
+
+      try {
+        const response = await authenticatedFetch('/api/sidebar/get-workspaces-sessions');
+        const data = (await response.json()) as unknown;
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch projects');
+        }
+
+        const rawProjects = Array.isArray((data as { workspaces?: unknown }).workspaces)
+          ? (data as { workspaces: ProjectApiRecord[] }).workspaces
+          : [];
+
+        if (!cancelled) {
+          setProjects(rawProjects);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setProjects([]);
+          setProjectsError(getErrorMessage(error));
+        }
+      } finally {
+        if (!cancelled) {
+          setProjectsLoading(false);
+        }
+      }
+    };
+
+    void fetchProjects();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
 
   const canSubmit = useMemo(() => {
     if (!formData.name.trim()) {
@@ -147,7 +200,7 @@ export default function ClaudeMcpFormModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4">
+    <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/50 p-4">
       <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-border bg-background">
         <div className="flex items-center justify-between border-b border-border p-4">
           <h3 className="text-lg font-medium text-foreground">
@@ -260,13 +313,19 @@ export default function ClaudeMcpFormModal({
                     className="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                     required
                   >
-                    <option value="">{t('mcpForm.fields.selectProject')}...</option>
+                    <option value="">{projectsLoading ? 'Loading projects...' : `${t('mcpForm.fields.selectProject')}...`}</option>
                     {projects.map((project) => (
-                      <option key={project.name} value={project.path || project.fullPath}>
-                        {project.displayName || project.name}
+                      <option key={project.workspaceOriginalPath} value={project.workspaceOriginalPath}>
+                        {project.workspaceDisplayName}
                       </option>
                     ))}
                   </select>
+                  {projectsError && (
+                    <p className="mt-1 text-xs text-red-500">{projectsError}</p>
+                  )}
+                  {!projectsLoading && !projectsError && projects.length === 0 && (
+                    <p className="mt-1 text-xs text-muted-foreground">No projects found.</p>
+                  )}
                   {formData.projectPath && (
                     <p className="mt-1 text-xs text-muted-foreground">
                       {t('mcpForm.projectPath', { path: formData.projectPath })}

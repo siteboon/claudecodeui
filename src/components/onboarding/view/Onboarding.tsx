@@ -11,8 +11,8 @@ import {
   createInitialProviderStatuses,
   gitEmailPattern,
   readErrorMessageFromResponse,
-  selectedProject,
 } from './utils';
+import { DEFAULT_PROJECT_FOR_EMPTY_SHELL } from '@/constants/config.js';
 
 type OnboardingProps = {
   onComplete?: () => void | Promise<void>;
@@ -279,7 +279,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           isOpen={Boolean(activeLoginProvider)}
           onClose={() => setActiveLoginProvider(null)}
           provider={activeLoginProvider}
-          project={selectedProject}
+          project={DEFAULT_PROJECT_FOR_EMPTY_SHELL}
           onComplete={handleLoginComplete}
         />
       )}

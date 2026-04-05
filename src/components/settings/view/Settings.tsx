@@ -14,9 +14,15 @@ import TasksSettingsTab from '../view/tabs/tasks-settings/TasksSettingsTab';
 import PluginSettingsTab from '../../plugins/view/PluginSettingsTab';
 import { useSettingsController } from '../hooks/useSettingsController';
 import { useWebPush } from '../../../hooks/useWebPush';
-import type { SettingsProps } from '../types/types';
+import { DEFAULT_PROJECT_FOR_EMPTY_SHELL } from '@/constants/config.js';
 
-function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: SettingsProps) {
+type SettingsProps = {
+  isOpen: boolean;
+  onClose: () => void;
+  initialTab?: string;
+};
+
+function Settings({ isOpen, onClose, initialTab = 'agents' }: SettingsProps) {
   const { t } = useTranslation('settings');
   const {
     activeTab,
@@ -61,12 +67,10 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     showLoginModal,
     setShowLoginModal,
     loginProvider,
-    selectedProject,
     handleLoginComplete,
   } = useSettingsController({
     isOpen,
     initialTab,
-    projects,
     onClose,
   });
 
@@ -116,7 +120,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
           <h2 className="text-base font-semibold text-foreground">{t('title')}</h2>
           <div className="flex items-center gap-2">
             {saveStatus === 'success' && (
-              <span className="text-xs text-muted-foreground animate-in fade-in">{t('saveStatus.success')}</span>
+              <span className="animate-in fade-in text-xs text-muted-foreground">{t('saveStatus.success')}</span>
             )}
             <Button
               variant="ghost"
@@ -201,7 +205,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
         isOpen={showLoginModal}
         onClose={() => setShowLoginModal(false)}
         provider={loginProvider || 'claude'}
-        project={selectedProject}
+        project={DEFAULT_PROJECT_FOR_EMPTY_SHELL}
         onComplete={handleLoginComplete}
         isAuthenticated={isAuthenticated}
       />
@@ -209,7 +213,6 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
       <ClaudeMcpFormModal
         isOpen={showMcpForm}
         editingServer={editingMcpServer}
-        projects={projects}
         onClose={closeMcpForm}
         onSubmit={submitMcpForm}
       />
