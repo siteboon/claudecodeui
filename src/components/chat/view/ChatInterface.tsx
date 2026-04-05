@@ -170,7 +170,6 @@ function ChatInterface({
     handleGrantToolPermission,
     handleInputFocusChange,
     isInputFocused,
-    SubmitCommand,
   } = useChatComposerState({
     selectedProject,
     selectedSession,
@@ -246,8 +245,50 @@ function ChatInterface({
   });
 
   const handleCompact = useCallback(() => {
-    SubmitCommand('/compact');
-  }, [SubmitCommand]);
+    if (!selectedProject || isLoading) return;
+
+    const effectiveSessionId =
+      currentSessionId || selectedSession?.id || sessionStorage.getItem('cursorSessionId');
+
+    if (!effectiveSessionId) return;
+
+    const resolvedProjectPath = selectedProject.fullPath || selectedProject.path || '';
+
+    // Load tools settings
+    let toolsSettings = { allowedTools: [], disallowedTools: [], skipPermissions: false };
+    try {
+      const savedSettings = localStorage.getItem('claude-settings');
+      if (savedSettings) {
+        toolsSettings = JSON.parse(savedSettings);
+      }
+    } catch { /* ignore */ }
+
+    setIsLoading(true);
+    setCanAbortSession(true);
+
+    // Send /compact directly via WebSocket, bypassing thinking mode prefix
+    sendMessage({
+      type: 'claude-command',
+      command: '/compact',
+      options: {
+        projectPath: resolvedProjectPath,
+        cwd: resolvedProjectPath,
+        sessionId: effectiveSessionId,
+        resume: true,
+        toolsSettings,
+        permissionMode,
+      },
+    });
+  }, [
+    selectedProject,
+    selectedSession,
+    currentSessionId,
+    isLoading,
+    permissionMode,
+    sendMessage,
+    setIsLoading,
+    setCanAbortSession,
+  ]);
 
   useEffect(() => {
     if (!isLoading || !canAbortSession) {

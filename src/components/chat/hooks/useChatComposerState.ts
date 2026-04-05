@@ -493,8 +493,11 @@ export function useChatComposerState({
       }
 
       let messageContent = currentInput;
+      // Skip thinking mode prefix for CLI slash commands (e.g., /compact)
+      // that are not handled as UI slash commands above
+      const isCliSlashCommand = trimmedInput.startsWith('/') && !trimmedInput.includes(' ');
       const selectedThinkingMode = thinkingModes.find((mode: { id: string; prefix?: string }) => mode.id === thinkingMode);
-      if (selectedThinkingMode && selectedThinkingMode.prefix) {
+      if (selectedThinkingMode && selectedThinkingMode.prefix && !isCliSlashCommand) {
         messageContent = `${selectedThinkingMode.prefix}: ${currentInput}`;
       }
 
