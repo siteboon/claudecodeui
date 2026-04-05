@@ -28,11 +28,13 @@ function FileNodeItem({
   depth,
   expanded_dirs,
   onToggle,
+  onFileClick,
 }: {
   node: FileTreeNode;
   depth: number;
   expanded_dirs: Set<string>;
   onToggle: (path: string) => void;
+  onFileClick: (path: string) => void;
 }) {
   const is_dir = node.type === 'directory';
   const is_expanded = expanded_dirs.has(node.path);
@@ -63,7 +65,11 @@ function FileNodeItem({
         draggable={!is_dir}
         onDragStart={HandleDragStart}
         onClick={() => {
-          if (is_dir) onToggle(node.path);
+          if (is_dir) {
+            onToggle(node.path);
+          } else {
+            onFileClick(node.path);
+          }
         }}
       >
         {is_dir ? (
@@ -94,6 +100,7 @@ function FileNodeItem({
           depth={depth + 1}
           expanded_dirs={expanded_dirs}
           onToggle={onToggle}
+          onFileClick={onFileClick}
         />
       )}
     </>
@@ -105,11 +112,13 @@ function FileNodeList({
   depth,
   expanded_dirs,
   onToggle,
+  onFileClick,
 }: {
   nodes: FileTreeNode[];
   depth: number;
   expanded_dirs: Set<string>;
   onToggle: (path: string) => void;
+  onFileClick: (path: string) => void;
 }) {
   // Sort: directories first, then files, alphabetical
   const sorted = [...nodes].sort((a, b) => {
@@ -127,6 +136,7 @@ function FileNodeList({
           depth={depth}
           expanded_dirs={expanded_dirs}
           onToggle={onToggle}
+          onFileClick={onFileClick}
         />
       ))}
     </>
@@ -199,6 +209,12 @@ export default function WorkspaceFileBrowser({
       }
       return next;
     });
+  }, []);
+
+  const HandleFileClick = useCallback((file_path: string) => {
+    window.dispatchEvent(
+      new CustomEvent('workspace-file-open', { detail: { filePath: file_path } }),
+    );
   }, []);
 
   if (!selectedProject) return null;
@@ -287,6 +303,7 @@ export default function WorkspaceFileBrowser({
                 depth={0}
                 expanded_dirs={expanded_dirs}
                 onToggle={HandleToggle}
+                onFileClick={HandleFileClick}
               />
             )}
           </ScrollArea>

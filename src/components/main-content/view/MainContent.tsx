@@ -87,6 +87,18 @@ function MainContent({
     }
   }, [shouldShowTasksTab, activeTab, setActiveTab]);
 
+  // Listen for file-open events dispatched from the sidebar WorkspaceFileBrowser.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const filePath = (e as CustomEvent<{ filePath: string }>).detail?.filePath;
+      if (filePath) {
+        handleFileOpen(filePath);
+      }
+    };
+    window.addEventListener('workspace-file-open', handler);
+    return () => window.removeEventListener('workspace-file-open', handler);
+  }, [handleFileOpen]);
+
   if (isLoading) {
     return <MainContentStateView mode="loading" isMobile={isMobile} onMenuClick={onMenuClick} />;
   }
