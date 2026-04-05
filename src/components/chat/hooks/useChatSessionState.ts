@@ -327,12 +327,20 @@ export function useChatSessionState({
     const provider = (selectedSession.__provider || localStorage.getItem('selected-provider') as Provider) || 'claude';
     const sessionKey = `${selectedSession.id}:${selectedProject.name}:${provider}`;
 
+    // Always keep currentSessionId in sync with selectedSession
+    const sessionChanged = currentSessionId !== null && currentSessionId !== selectedSession.id;
+    if (sessionChanged || currentSessionId === null) {
+      setCurrentSessionId(selectedSession.id);
+    }
+    if (provider === 'cursor') {
+      sessionStorage.setItem('cursorSessionId', selectedSession.id);
+    }
+
     // Skip if already loaded and fresh
     if (lastLoadedSessionKeyRef.current === sessionKey && sessionStore.has(selectedSession.id) && !sessionStore.isStale(selectedSession.id)) {
       return;
     }
 
-    const sessionChanged = currentSessionId !== null && currentSessionId !== selectedSession.id;
     if (sessionChanged) {
       resetStreamingState();
       pendingViewSessionRef.current = null;
@@ -357,11 +365,6 @@ export function useChatSessionState({
     if (sessionChanged) {
       setTokenBudget(null);
       setIsLoading(false);
-    }
-
-    setCurrentSessionId(selectedSession.id);
-    if (provider === 'cursor') {
-      sessionStorage.setItem('cursorSessionId', selectedSession.id);
     }
 
     // Check session status

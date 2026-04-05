@@ -335,7 +335,10 @@ export function useChatRealtimeHandlers({
 
       case 'status': {
         if (msg.text === 'token_budget' && msg.tokenBudget) {
-          setTokenBudget(msg.tokenBudget as Record<string, unknown>);
+          // Only accept token_budget for the currently viewed session
+          if (!sid || sid === activeViewSessionId) {
+            setTokenBudget(msg.tokenBudget as Record<string, unknown>);
+          }
         } else if (msg.text) {
           setClaudeStatus({
             text: msg.text,
