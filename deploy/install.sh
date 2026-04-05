@@ -188,7 +188,9 @@ SetupEnvironment() {
     mkdir -p "$DATA_DIR"
     mkdir -p "${REAL_HOME}/.cloudcli"
 
-    # 日志目录需要运行用户可写 (launchd 以 REAL_USER 身份运行)
+    # 预先创建日志文件并设置正确权限 (launchd 以 REAL_USER 身份运行)
+    # 如果日志文件不存在，daemon 启动时无法写入会导致进程立即退出 (exit 78)
+    touch "${LOG_DIR}/cloudcli.log" "${LOG_DIR}/cloudcli-error.log"
     chown -R "${REAL_USER}" "$LOG_DIR"
 
     # 创建 .env (如果不存在)

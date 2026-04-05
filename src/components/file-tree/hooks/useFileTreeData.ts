@@ -3,6 +3,8 @@ import { api } from '../../../utils/api';
 import type { Project } from '../../../types/app';
 import type { FileTreeNode } from '../types/types';
 
+const AUTO_REFRESH_INTERVAL_MS = 1000;
+
 type UseFileTreeDataResult = {
   files: FileTreeNode[];
   loading: boolean;
@@ -14,11 +16,13 @@ export function useFileTreeData(selectedProject: Project | null): UseFileTreeDat
   const [loading, setLoading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const pollAbortControllerRef = useRef<AbortController | null>(null);
 
   const refreshFiles = useCallback(() => {
     setRefreshKey((prev) => prev + 1);
   }, []);
 
+  // Primary fetch: triggered on project change or manual refresh. Shows loading state.
   useEffect(() => {
     const projectName = selectedProject?.name;
 
@@ -80,6 +84,43 @@ export function useFileTreeData(selectedProject: Project | null): UseFileTreeDat
       abortControllerRef.current?.abort();
     };
   }, [selectedProject?.name, refreshKey]);
+
+  // Auto-refresh: silently poll every second without showing loading indicator.
+  useEffect(() => {
+    const projectName = selectedProject?.name;
+    if (!projectName) {
+      return;
+    }
+
+    const pollFiles = async () => {
+      // Abort any previous poll still in flight
+      if (pollAbortControllerRef.current) {
+        pollAbortControllerRef.current.abort();
+      }
+      const controller = new AbortController();
+      pollAbortControllerRef.current = controller;
+
+      try {
+        const response = await api.getFiles(projectName, { signal: controller.signal });
+        if (!response.ok) {
+          return;
+        }
+        const data = (await response.json()) as FileTreeNode[];
+        if (!controller.signal.aborted) {
+          setFiles(data);
+        }
+      } catch {
+        // Silently ignore poll errors (abort, network, etc.)
+      }
+    };
+
+    const intervalId = setInterval(pollFiles, AUTO_REFRESH_INTERVAL_MS);
+
+    return () => {
+      clearInterval(intervalId);
+      pollAbortControllerRef.current?.abort();
+    };
+  }, [selectedProject?.name]);
 
   return {
     files,
