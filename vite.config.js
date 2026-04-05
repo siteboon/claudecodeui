@@ -45,7 +45,20 @@ export default defineConfig(({ mode }) => {
           target: `ws://${proxyHost}:${serverPort}`,
           ws: true,
           rewrite: (path) => path
-        }
+        },
+        [`${basePath}/plugin-ws`]: {
+          target: `ws://${proxyHost}:${serverPort}`,
+          ws: true,
+          rewrite: (path) => path
+        },
+        // Plugins may connect to /plugin-ws without the base path prefix
+        ...(basePath ? {
+          '/plugin-ws': {
+            target: `ws://${proxyHost}:${serverPort}`,
+            ws: true,
+            rewrite: (path) => path
+          }
+        } : {})
       }
     },
     build: {

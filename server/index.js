@@ -1392,8 +1392,11 @@ app.post(`${BASE_PATH}/api/projects/:projectName/files/upload`, authenticateToke
  * Auth is enforced by verifyClient before this function is reached.
  */
 function handlePluginWsProxy(clientWs, pathname) {
-    const pluginName = pathname.replace(`${BASE_PATH}/plugin-ws/`, '');
-    if (!pluginName || /[^a-zA-Z0-9_-]/.test(pluginName)) {
+    // Extract plugin name — works with or without BASE_PATH prefix
+    // (third-party plugins may omit the base path in their WebSocket URLs)
+    const match = pathname.match(/\/plugin-ws\/([a-zA-Z0-9_-]+)/);
+    const pluginName = match?.[1];
+    if (!pluginName) {
         clientWs.close(4400, 'Invalid plugin name');
         return;
     }
@@ -1444,7 +1447,7 @@ wss.on('connection', (ws, request) => {
         handleShellConnection(ws);
     } else if (pathname === `${BASE_PATH}/ws`) {
         handleChatConnection(ws, request);
-    } else if (pathname.startsWith(`${BASE_PATH}/plugin-ws/`)) {
+    } else if (pathname.startsWith(`${BASE_PATH}/plugin-ws/`) || pathname.startsWith('/plugin-ws/')) {
         handlePluginWsProxy(ws, pathname);
     } else {
         console.log('[WARN] Unknown WebSocket path:', pathname);

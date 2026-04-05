@@ -348,7 +348,22 @@ export function installPluginFromGit(url) {
             cleanupTemp();
             return reject(new Error(`npm install for ${repoName} failed (exit code ${npmCode})`));
           }
-          runBuildIfNeeded(tempDir, packageJsonPath, () => finalize(manifest), (err) => { cleanupTemp(); reject(err); });
+          // Rebuild native addons that were skipped by --ignore-scripts
+          const rebuildProcess = spawn('npm', ['rebuild'], {
+            cwd: tempDir,
+            stdio: ['ignore', 'pipe', 'pipe'],
+          });
+          rebuildProcess.on('close', (rebuildCode) => {
+            if (rebuildCode !== 0) {
+              cleanupTemp();
+              return reject(new Error(`npm rebuild for ${repoName} failed (exit code ${rebuildCode})`));
+            }
+            runBuildIfNeeded(tempDir, packageJsonPath, () => finalize(manifest), (err) => { cleanupTemp(); reject(err); });
+          });
+          rebuildProcess.on('error', (err) => {
+            cleanupTemp();
+            reject(err);
+          });
         });
 
         npmProcess.on('error', (err) => {
@@ -413,7 +428,18 @@ export function updatePluginFromGit(name) {
           if (npmCode !== 0) {
             return reject(new Error(`npm install for ${name} failed (exit code ${npmCode})`));
           }
-          runBuildIfNeeded(pluginDir, packageJsonPath, () => resolve(manifest), (err) => reject(err));
+          // Rebuild native addons that were skipped by --ignore-scripts
+          const rebuildProcess = spawn('npm', ['rebuild'], {
+            cwd: pluginDir,
+            stdio: ['ignore', 'pipe', 'pipe'],
+          });
+          rebuildProcess.on('close', (rebuildCode) => {
+            if (rebuildCode !== 0) {
+              return reject(new Error(`npm rebuild for ${name} failed (exit code ${rebuildCode})`));
+            }
+            runBuildIfNeeded(pluginDir, packageJsonPath, () => resolve(manifest), (err) => reject(err));
+          });
+          rebuildProcess.on('error', (err) => reject(err));
         });
         npmProcess.on('error', (err) => reject(err));
       } else {
