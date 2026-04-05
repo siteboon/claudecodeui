@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { SetStateAction } from 'react';
 import { authenticatedFetch } from '../../../utils/api';
 import { CURSOR_MODELS } from '../../../../shared/modelConstants';
 import { UseDynamicModels } from '../../../hooks/useDynamicModels';
@@ -12,6 +13,7 @@ interface UseChatProviderStateArgs {
 export function useChatProviderState({ selectedSession }: UseChatProviderStateArgs) {
   const { claude, codex, gemini } = UseDynamicModels();
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('default');
+  const [thinkingMode, setThinkingMode] = useState('none');
   const [pendingPermissionRequests, setPendingPermissionRequests] = useState<PendingPermissionRequest[]>([]);
   const [provider, setProvider] = useState<SessionProvider>(() => {
     return (localStorage.getItem('selected-provider') as SessionProvider) || 'claude';
@@ -38,6 +40,9 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
 
     const savedMode = localStorage.getItem(`permissionMode-${selectedSession.id}`);
     setPermissionMode((savedMode as PermissionMode) || 'default');
+
+    const savedThinking = localStorage.getItem(`thinkingMode-${selectedSession.id}`);
+    setThinkingMode(savedThinking || 'none');
   }, [selectedSession?.id]);
 
   useEffect(() => {
@@ -101,6 +106,14 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
     }
   }, [permissionMode, provider, selectedSession?.id]);
 
+  const updateThinkingMode = useCallback((mode: SetStateAction<string>) => {
+    const resolved = typeof mode === 'function' ? mode(thinkingMode) : mode;
+    setThinkingMode(resolved);
+    if (selectedSession?.id) {
+      localStorage.setItem(`thinkingMode-${selectedSession.id}`, resolved);
+    }
+  }, [selectedSession?.id, thinkingMode]);
+
   return {
     provider,
     setProvider,
@@ -117,5 +130,7 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
     pendingPermissionRequests,
     setPendingPermissionRequests,
     cyclePermissionMode,
+    thinkingMode,
+    setThinkingMode: updateThinkingMode,
   };
 }

@@ -51,6 +51,7 @@ interface ChatComposerProps {
   thinkingMode: string;
   setThinkingMode: Dispatch<SetStateAction<string>>;
   tokenBudget: { used?: number; total?: number } | null;
+  onCompact: () => void;
   slashCommandsCount: number;
   onToggleCommandMenu: () => void;
   hasInput: boolean;
@@ -108,6 +109,7 @@ export default function ChatComposer({
   thinkingMode,
   setThinkingMode,
   tokenBudget,
+  onCompact,
   slashCommandsCount,
   onToggleCommandMenu,
   hasInput,
@@ -229,6 +231,7 @@ export default function ChatComposer({
           thinkingMode={thinkingMode}
           setThinkingMode={setThinkingMode}
           tokenBudget={tokenBudget}
+          onCompact={onCompact}
           slashCommandsCount={slashCommandsCount}
           onToggleCommandMenu={onToggleCommandMenu}
           hasInput={hasInput}

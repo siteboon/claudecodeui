@@ -1,9 +1,10 @@
 type TokenUsagePieProps = {
   used: number;
   total: number;
+  onClick?: () => void;
 };
 
-export default function TokenUsagePie({ used, total }: TokenUsagePieProps) {
+export default function TokenUsagePie({ used, total, onClick }: TokenUsagePieProps) {
   // Token usage visualization component
   // Only bail out on missing values or non‐positive totals; allow used===0 to render 0%
   if (used == null || total == null || total <= 0) return null;
@@ -21,7 +22,12 @@ export default function TokenUsagePie({ used, total }: TokenUsagePieProps) {
   };
 
   return (
-    <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/50 px-2.5 py-1 text-xs text-gray-600 transition-all duration-200 hover:bg-muted dark:text-gray-400 sm:px-3 sm:py-1.5"
+      title={`${used.toLocaleString()} / ${total.toLocaleString()} tokens — Click to compact context`}
+    >
       <svg width="24" height="24" viewBox="0 0 24 24" className="-rotate-90 transform">
         {/* Background circle */}
         <circle
@@ -46,9 +52,9 @@ export default function TokenUsagePie({ used, total }: TokenUsagePieProps) {
           strokeLinecap="round"
         />
       </svg>
-      <span title={`${used.toLocaleString()} / ${total.toLocaleString()} tokens`}>
+      <span>
         {percentage.toFixed(1)}%
       </span>
-    </div>
+    </button>
   );
 }

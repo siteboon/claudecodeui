@@ -75,6 +75,8 @@ function ChatInterface({
     pendingPermissionRequests,
     setPendingPermissionRequests,
     cyclePermissionMode,
+    thinkingMode,
+    setThinkingMode,
   } = useChatProviderState({
     selectedSession,
   });
@@ -132,8 +134,6 @@ function ChatInterface({
     textareaRef,
     inputHighlightRef,
     isTextareaExpanded,
-    thinkingMode,
-    setThinkingMode,
     slashCommandsCount,
     filteredCommands,
     frequentCommands,
@@ -170,6 +170,7 @@ function ChatInterface({
     handleGrantToolPermission,
     handleInputFocusChange,
     isInputFocused,
+    SubmitCommand,
   } = useChatComposerState({
     selectedProject,
     selectedSession,
@@ -177,6 +178,8 @@ function ChatInterface({
     provider,
     permissionMode,
     cyclePermissionMode,
+    thinkingMode,
+    setThinkingMode,
     cursorModel,
     claudeModel,
     codexModel,
@@ -241,6 +244,10 @@ function ChatInterface({
     onWebSocketReconnect: handleWebSocketReconnect,
     sessionStore,
   });
+
+  const handleCompact = useCallback(() => {
+    SubmitCommand('/compact');
+  }, [SubmitCommand]);
 
   useEffect(() => {
     if (!isLoading || !canAbortSession) {
@@ -354,6 +361,7 @@ function ChatInterface({
           thinkingMode={thinkingMode}
           setThinkingMode={setThinkingMode}
           tokenBudget={tokenBudget}
+          onCompact={handleCompact}
           slashCommandsCount={slashCommandsCount}
           onToggleCommandMenu={handleToggleCommandMenu}
           hasInput={Boolean(input.trim())}

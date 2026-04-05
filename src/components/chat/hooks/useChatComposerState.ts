@@ -36,6 +36,8 @@ interface UseChatComposerStateArgs {
   provider: SessionProvider;
   permissionMode: PermissionMode | string;
   cyclePermissionMode: () => void;
+  thinkingMode: string;
+  setThinkingMode: (mode: string) => void;
   cursorModel: string;
   claudeModel: string;
   codexModel: string;
@@ -108,6 +110,8 @@ export function useChatComposerState({
   provider,
   permissionMode,
   cyclePermissionMode,
+  thinkingMode,
+  setThinkingMode,
   cursorModel,
   claudeModel,
   codexModel,
@@ -143,7 +147,6 @@ export function useChatComposerState({
   const [uploadingImages, setUploadingImages] = useState<Map<string, number>>(new Map());
   const [imageErrors, setImageErrors] = useState<Map<string, string>>(new Map());
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
-  const [thinkingMode, setThinkingMode] = useState('none');
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputHighlightRef = useRef<HTMLDivElement>(null);
@@ -663,7 +666,6 @@ export function useChatComposerState({
       setUploadingImages(new Map());
       setImageErrors(new Map());
       setIsTextareaExpanded(false);
-      setThinkingMode('none');
 
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
@@ -947,6 +949,15 @@ export function useChatComposerState({
 
   const [isInputFocused, setIsInputFocused] = useState(false);
 
+  const SubmitCommand = useCallback(
+    (command: string) => {
+      inputValueRef.current = command;
+      setInput(command);
+      handleSubmit({ preventDefault: () => {} } as FormEvent<HTMLFormElement>);
+    },
+    [handleSubmit],
+  );
+
   const handleInputFocusChange = useCallback(
     (focused: boolean) => {
       setIsInputFocused(focused);
@@ -999,5 +1010,6 @@ export function useChatComposerState({
     handleGrantToolPermission,
     handleInputFocusChange,
     isInputFocused,
+    SubmitCommand,
   };
 }

@@ -11,6 +11,7 @@ interface ChatInputControlsProps {
   thinkingMode: string;
   setThinkingMode: React.Dispatch<React.SetStateAction<string>>;
   tokenBudget: { used?: number; total?: number } | null;
+  onCompact: () => void;
   slashCommandsCount: number;
   onToggleCommandMenu: () => void;
   hasInput: boolean;
@@ -27,6 +28,7 @@ export default function ChatInputControls({
   thinkingMode,
   setThinkingMode,
   tokenBudget,
+  onCompact,
   slashCommandsCount,
   onToggleCommandMenu,
   hasInput,
@@ -78,7 +80,7 @@ export default function ChatInputControls({
         <ThinkingModeSelector selectedMode={thinkingMode} onModeChange={setThinkingMode} onClose={() => {}} className="" />
       )}
 
-      <TokenUsagePie used={tokenBudget?.used || 0} total={tokenBudget?.total || parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 160000} />
+      <TokenUsagePie used={tokenBudget?.used || 0} total={tokenBudget?.total || parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 160000} onClick={onCompact} />
 
       <button
         type="button"
