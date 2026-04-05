@@ -154,7 +154,11 @@ function mapCliOptionsToSDK(options = {}) {
   }
 
   // Map permission mode
-  if (permissionMode && permissionMode !== 'default') {
+  // Always pass permissionMode to SDK so that the default behavior matches
+  // running `claude` directly in the terminal (no sandbox).  When the caller
+  // does not specify a mode we leave it unset so the SDK falls back to its
+  // own default, which is the same as the bare CLI experience.
+  if (permissionMode) {
     sdkOptions.permissionMode = permissionMode;
   }
 
