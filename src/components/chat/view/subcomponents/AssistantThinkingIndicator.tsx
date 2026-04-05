@@ -7,6 +7,8 @@ type AssistantThinkingIndicatorProps = {
 
 
 export default function AssistantThinkingIndicator({ selectedProvider }: AssistantThinkingIndicatorProps) {
+  const providerName = selectedProvider === 'cursor' ? 'Cursor' : selectedProvider === 'codex' ? 'Codex' : selectedProvider === 'gemini' ? 'Gemini' : 'Claude';
+
   return (
     <div className="chat-message assistant">
       <div className="w-full">
@@ -15,18 +17,14 @@ export default function AssistantThinkingIndicator({ selectedProvider }: Assista
             <SessionProviderLogo provider={selectedProvider} className="h-full w-full" />
           </div>
           <div className="text-sm font-medium text-gray-900 dark:text-white">
-            {selectedProvider === 'cursor' ? 'Cursor' : selectedProvider === 'codex' ? 'Codex' : selectedProvider === 'gemini' ? 'Gemini' : 'Claude'}
+            {providerName}
           </div>
         </div>
         <div className="w-full pl-3 text-sm text-gray-500 dark:text-gray-400 sm:pl-0">
           <div className="flex items-center space-x-1">
             <div className="animate-pulse">.</div>
-            <div className="animate-pulse" style={{ animationDelay: '0.2s' }}>
-              .
-            </div>
-            <div className="animate-pulse" style={{ animationDelay: '0.4s' }}>
-              .
-            </div>
+            <div className="animate-pulse" style={{ animationDelay: '0.2s' }}>.</div>
+            <div className="animate-pulse" style={{ animationDelay: '0.4s' }}>.</div>
             <span className="ml-2">Thinking...</span>
           </div>
         </div>

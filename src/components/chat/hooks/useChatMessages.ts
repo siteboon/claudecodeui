@@ -31,6 +31,9 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
         const content = msg.content || '';
         if (!content.trim()) continue;
 
+        // Hide internal system tags not meant for display
+        if (content.includes('<local-command-caveat>')) continue;
+
         if (msg.role === 'user') {
           // Parse task notifications
           const taskNotifRegex = /<task-notification>\s*<task-id>[^<]*<\/task-id>\s*<output-file>[^<]*<\/output-file>\s*<status>([^<]*)<\/status>\s*<summary>([^<]*)<\/summary>\s*<\/task-notification>/g;
@@ -44,6 +47,15 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
               taskStatus: taskNotifMatch[1]?.trim() || 'completed',
             });
           } else {
+            // Filter out system-generated content injected into user messages
+            // (e.g., skill definitions, base directory paths, ARGUMENTS blocks)
+            if (
+              content.includes('Base directory for this skill:') ||
+              content.includes('ARGUMENTS:') ||
+              content.startsWith('# ') && content.includes('SKILL')
+            ) {
+              continue;
+            }
             converted.push({
               type: 'user',
               content: unescapeWithMathProtection(decodeHtmlEntities(content)),
