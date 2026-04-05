@@ -35,6 +35,8 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
 
   useEffect(() => {
     if (!selectedSession?.id) {
+      setPermissionMode('default');
+      setThinkingMode('none');
       return;
     }
 

@@ -139,3 +139,4 @@ tasks/
 
 # Git worktrees
 .worktrees/cloudcli-deploy.tar.gz
+cloudcli-deploy.tar.gz
