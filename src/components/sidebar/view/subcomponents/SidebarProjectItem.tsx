@@ -95,6 +95,7 @@ export default function SidebarProjectItem({
 }: SidebarProjectItemProps) {
   const isSelected = selectedProject?.name === project.name;
   const isEditing = editingProject === project.name;
+  const isRemovable = project.isManuallyAdded === true;
   const hasMoreSessions = project.sessionMeta?.hasMore === true;
   const sessionCountDisplay = getSessionCountDisplay(sessions, hasMoreSessions);
   const sessionCountLabel = `${sessionCountDisplay} session${sessions.length === 1 ? '' : 's'}`;
@@ -236,13 +237,23 @@ export default function SidebarProjectItem({
                     </button>
 
                     <button
-                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-500/10 active:scale-90 dark:border-red-800 dark:bg-red-900/30"
+                      className={cn(
+                        'flex h-8 w-8 items-center justify-center rounded-lg active:scale-90',
+                        isRemovable
+                          ? 'border border-border bg-muted/50'
+                          : 'border border-red-200 bg-red-500/10 dark:border-red-800 dark:bg-red-900/30',
+                      )}
                       onClick={(event) => {
                         event.stopPropagation();
                         onDeleteProject(project);
                       }}
+                      title={isRemovable ? t('tooltips.removeProject') : t('tooltips.deleteProject')}
                     >
-                      <Trash2 className="h-4 w-4 text-red-600 dark:text-red-400" />
+                      {isRemovable ? (
+                        <X className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <Trash2 className="h-4 w-4 text-red-600 dark:text-red-400" />
+                      )}
                     </button>
 
                     <button
@@ -383,14 +394,21 @@ export default function SidebarProjectItem({
                   <Edit3 className="h-3 w-3" />
                 </div>
                 <div
-                  className="touch:opacity-100 flex h-6 w-6 cursor-pointer items-center justify-center rounded opacity-0 transition-all duration-200 hover:bg-red-50 group-hover:opacity-100 dark:hover:bg-red-900/20"
+                  className={cn(
+                    'touch:opacity-100 flex h-6 w-6 cursor-pointer items-center justify-center rounded opacity-0 transition-all duration-200 group-hover:opacity-100',
+                    isRemovable ? 'hover:bg-accent' : 'hover:bg-red-50 dark:hover:bg-red-900/20',
+                  )}
                   onClick={(event) => {
                     event.stopPropagation();
                     onDeleteProject(project);
                   }}
-                  title={t('tooltips.deleteProject')}
+                  title={isRemovable ? t('tooltips.removeProject') : t('tooltips.deleteProject')}
                 >
-                  <Trash2 className="h-3 w-3 text-red-600 dark:text-red-400" />
+                  {isRemovable ? (
+                    <X className="h-3 w-3 text-muted-foreground" />
+                  ) : (
+                    <Trash2 className="h-3 w-3 text-red-600 dark:text-red-400" />
+                  )}
                 </div>
                 {isExpanded ? (
                   <ChevronDown className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground" />

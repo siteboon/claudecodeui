@@ -445,6 +445,7 @@ export function useSidebarController({
   const requestProjectDelete = useCallback(
     (project: Project) => {
       setDeleteConfirmation({
+        action: project.isManuallyAdded ? 'remove' : 'delete',
         project,
         sessionCount: getProjectSessions(project).length,
       });
@@ -457,24 +458,29 @@ export function useSidebarController({
       return;
     }
 
-    const { project, sessionCount } = deleteConfirmation;
+    const { action, project, sessionCount } = deleteConfirmation;
     const isEmpty = sessionCount === 0;
 
     setDeleteConfirmation(null);
     setDeletingProjects((prev) => new Set([...prev, project.name]));
 
     try {
-      const response = await api.deleteProject(project.name, !isEmpty);
+      const response = action === 'remove'
+        ? await api.removeProject(project.name)
+        : await api.deleteProject(project.name, !isEmpty);
 
       if (response.ok) {
         onProjectDelete?.(project.name);
       } else {
         const error = (await response.json()) as { error?: string };
-        alert(error.error || t('messages.deleteProjectFailed'));
+        const fallbackMessage = action === 'remove'
+          ? t('messages.removeProjectFailed')
+          : t('messages.deleteProjectFailed');
+        alert(error.error || fallbackMessage);
       }
     } catch (error) {
-      console.error('Error deleting project:', error);
-      alert(t('messages.deleteProjectError'));
+      console.error(`Error ${action === 'remove' ? 'removing' : 'deleting'} project:`, error);
+      alert(action === 'remove' ? t('messages.removeProjectError') : t('messages.deleteProjectError'));
     } finally {
       setDeletingProjects((prev) => {
         const next = new Set(prev);

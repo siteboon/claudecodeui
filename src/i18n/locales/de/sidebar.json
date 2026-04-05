@@ -41,6 +41,7 @@
     "refresh": "Projekte und Sitzungen aktualisieren (Strg+R)",
     "renameProject": "Projekt umbenennen (F2)",
     "deleteProject": "Leeres Projekt löschen (Entf)",
+    "removeProject": "Manuell hinzugefügtes Projekt aus der Liste entfernen",
     "addToFavorites": "Zu Favoriten hinzufügen",
     "removeFromFavorites": "Aus Favoriten entfernen",
     "editSessionName": "Sitzungsname manuell bearbeiten",
@@ -64,6 +65,7 @@
     "cancel": "Abbrechen",
     "save": "Speichern",
     "delete": "Löschen",
+    "remove": "Entfernen",
     "rename": "Umbenennen",
     "joinCommunity": "Community beitreten"
   },
@@ -98,6 +100,8 @@
     "renameSessionError": "Fehler beim Umbenennen der Sitzung. Bitte erneut versuchen.",
     "deleteProjectFailed": "Projekt konnte nicht gelöscht werden. Bitte erneut versuchen.",
     "deleteProjectError": "Fehler beim Löschen des Projekts. Bitte erneut versuchen.",
+    "removeProjectFailed": "Projekt konnte nicht aus der Liste entfernt werden. Bitte erneut versuchen.",
+    "removeProjectError": "Fehler beim Entfernen des Projekts aus der Liste. Bitte erneut versuchen.",
     "createProjectFailed": "Projekt konnte nicht erstellt werden. Bitte erneut versuchen.",
     "createProjectError": "Fehler beim Erstellen des Projekts. Bitte erneut versuchen."
   },
@@ -124,5 +128,11 @@
     "sessionCount_other": "Dieses Projekt enthält {{count}} Unterhaltungen.",
     "allConversationsDeleted": "Alle Unterhaltungen werden dauerhaft gelöscht.",
     "cannotUndo": "Diese Aktion kann nicht rückgängig gemacht werden."
+  },
+  "removeConfirmation": {
+    "removeProject": "Projekt entfernen",
+    "confirmRemove": "Möchtest du wirklich entfernen",
+    "notDeleted": "Projektordner und vorhandene Sitzungen werden nicht gelöscht.",
+    "canReadd": "Du kannst das Projekt später wieder zur Liste hinzufügen."
   }
 }

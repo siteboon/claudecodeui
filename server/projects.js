@@ -1101,6 +1101,32 @@ async function renameProject(projectName, newDisplayName) {
   return true;
 }
 
+// Remove a manually added project from the UI list without deleting project files or sessions.
+async function removeProjectFromList(projectName) {
+  const config = await loadProjectConfig();
+  const projectConfig = config[projectName];
+
+  if (!projectConfig?.manuallyAdded) {
+    throw new Error('Only manually added projects can be removed from the project list');
+  }
+
+  const projectDir = path.join(os.homedir(), '.claude', 'projects', projectName);
+
+  try {
+    await fs.access(projectDir);
+    throw new Error('Projects with local Claude history cannot be removed from the project list');
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      throw error;
+    }
+  }
+
+  delete config[projectName];
+  await saveProjectConfig(config);
+  clearProjectDirectoryCache();
+  return true;
+}
+
 // Delete a session from a project
 async function deleteSession(projectName, sessionId) {
   const projectDir = path.join(os.homedir(), '.claude', 'projects', projectName);
@@ -2544,6 +2570,7 @@ export {
   getSessionMessages,
   parseJsonlSessions,
   renameProject,
+  removeProjectFromList,
   deleteSession,
   isProjectEmpty,
   deleteProject,

@@ -10,6 +10,7 @@ export type AdditionalSessionsByProject = Record<string, ProjectSession[]>;
 export type LoadingSessionsByProject = Record<string, boolean>;
 
 export type DeleteProjectConfirmation = {
+  action: 'delete' | 'remove';
   project: Project;
   sessionCount: number;
 };

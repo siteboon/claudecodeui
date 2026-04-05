@@ -41,6 +41,7 @@
     "refresh": "プロジェクトとセッションを更新 (Ctrl+R)",
     "renameProject": "プロジェクト名を変更 (F2)",
     "deleteProject": "空のプロジェクトを削除 (Delete)",
+    "removeProject": "手動で追加したプロジェクトを一覧から外す",
     "addToFavorites": "お気に入りに追加",
     "removeFromFavorites": "お気に入りから削除",
     "editSessionName": "セッション名を手動で編集",
@@ -63,6 +64,7 @@
     "cancel": "キャンセル",
     "save": "保存",
     "delete": "削除",
+    "remove": "外す",
     "rename": "名前の変更",
     "joinCommunity": "コミュニティに参加"
   },
@@ -97,6 +99,8 @@
     "renameSessionError": "セッション名の変更でエラーが発生しました。もう一度お試しください。",
     "deleteProjectFailed": "プロジェクトの削除に失敗しました。もう一度お試しください。",
     "deleteProjectError": "プロジェクトの削除でエラーが発生しました。もう一度お試しください。",
+    "removeProjectFailed": "プロジェクトを一覧から外せませんでした。もう一度お試しください。",
+    "removeProjectError": "プロジェクトを一覧から外すときにエラーが発生しました。もう一度お試しください。",
     "createProjectFailed": "プロジェクトの作成に失敗しました。もう一度お試しください。",
     "createProjectError": "プロジェクトの作成でエラーが発生しました。もう一度お試しください。"
   },
@@ -110,5 +114,11 @@
     "sessionCount": "このプロジェクトには{{count}}件の会話があります。",
     "allConversationsDeleted": "すべての会話が完全に削除されます。",
     "cannotUndo": "この操作は取り消せません。"
+  },
+  "removeConfirmation": {
+    "removeProject": "プロジェクトを一覧から外す",
+    "confirmRemove": "本当に外しますか",
+    "notDeleted": "プロジェクトフォルダや既存のセッションは削除されません。",
+    "canReadd": "あとでこのプロジェクトを再び一覧に追加できます。"
   }
 }

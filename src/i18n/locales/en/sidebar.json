@@ -41,6 +41,7 @@
     "refresh": "Refresh projects and sessions (Ctrl+R)",
     "renameProject": "Rename project (F2)",
     "deleteProject": "Delete empty project (Delete)",
+    "removeProject": "Remove manually added project from list",
     "addToFavorites": "Add to favorites",
     "removeFromFavorites": "Remove from favorites",
     "editSessionName": "Manually edit session name",
@@ -64,6 +65,7 @@
     "cancel": "Cancel",
     "save": "Save",
     "delete": "Delete",
+    "remove": "Remove",
     "rename": "Rename",
     "joinCommunity": "Join Community"
   },
@@ -98,6 +100,8 @@
     "renameSessionError": "Error renaming session. Please try again.",
     "deleteProjectFailed": "Failed to delete project. Please try again.",
     "deleteProjectError": "Error deleting project. Please try again.",
+    "removeProjectFailed": "Failed to remove project from the list. Please try again.",
+    "removeProjectError": "Error removing project from the list. Please try again.",
     "createProjectFailed": "Failed to create project. Please try again.",
     "createProjectError": "Error creating project. Please try again."
   },
@@ -124,5 +128,11 @@
     "sessionCount_other": "This project contains {{count}} conversations.",
     "allConversationsDeleted": "All conversations will be permanently deleted.",
     "cannotUndo": "This action cannot be undone."
+  },
+  "removeConfirmation": {
+    "removeProject": "Remove Project",
+    "confirmRemove": "Are you sure you want to remove",
+    "notDeleted": "The project folder and existing sessions will not be deleted.",
+    "canReadd": "You can add this project back to the list later."
   }
 }

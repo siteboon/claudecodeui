@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import ReactDOM from 'react-dom';
-import { AlertTriangle, Trash2 } from 'lucide-react';
+import { AlertTriangle, Trash2, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
 import { Button } from '../../../../shared/view/ui';
 import Settings from '../../../settings/view/Settings';
@@ -75,6 +75,7 @@ export default function SidebarModals({
     () => projects.map(normalizeProjectForSettings),
     [projects],
   );
+  const isRemoveConfirmation = deleteConfirmation?.action === 'remove';
 
   return (
     <>
@@ -105,20 +106,24 @@ export default function SidebarModals({
               <div className="p-6">
                 <div className="flex items-start gap-4">
                   <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
-                    <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400" />
+                    {isRemoveConfirmation ? (
+                      <X className="h-6 w-6 text-muted-foreground" />
+                    ) : (
+                      <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400" />
+                    )}
                   </div>
                   <div className="min-w-0 flex-1">
                     <h3 className="mb-2 text-lg font-semibold text-foreground">
-                      {t('deleteConfirmation.deleteProject')}
+                      {isRemoveConfirmation ? t('removeConfirmation.removeProject') : t('deleteConfirmation.deleteProject')}
                     </h3>
                     <p className="mb-1 text-sm text-muted-foreground">
-                      {t('deleteConfirmation.confirmDelete')}{' '}
+                      {isRemoveConfirmation ? t('removeConfirmation.confirmRemove') : t('deleteConfirmation.confirmDelete')}{' '}
                       <span className="font-medium text-foreground">
                         {deleteConfirmation.project.displayName || deleteConfirmation.project.name}
                       </span>
                       ?
                     </p>
-                    {deleteConfirmation.sessionCount > 0 && (
+                    {!isRemoveConfirmation && deleteConfirmation.sessionCount > 0 && (
                       <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/20">
                         <p className="text-sm font-medium text-red-700 dark:text-red-300">
                           {t('deleteConfirmation.sessionCount', { count: deleteConfirmation.sessionCount })}
@@ -128,9 +133,20 @@ export default function SidebarModals({
                         </p>
                       </div>
                     )}
-                    <p className="mt-3 text-xs text-muted-foreground">
-                      {t('deleteConfirmation.cannotUndo')}
-                    </p>
+                    {isRemoveConfirmation ? (
+                      <>
+                        <p className="mt-3 text-xs text-muted-foreground">
+                          {t('removeConfirmation.notDeleted')}
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {t('removeConfirmation.canReadd')}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="mt-3 text-xs text-muted-foreground">
+                        {t('deleteConfirmation.cannotUndo')}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -139,12 +155,16 @@ export default function SidebarModals({
                   {t('actions.cancel')}
                 </Button>
                 <Button
-                  variant="destructive"
-                  className="flex-1 bg-red-600 text-white hover:bg-red-700"
+                  variant={isRemoveConfirmation ? 'outline' : 'destructive'}
+                  className={isRemoveConfirmation ? 'flex-1' : 'flex-1 bg-red-600 text-white hover:bg-red-700'}
                   onClick={onConfirmDeleteProject}
                 >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  {t('actions.delete')}
+                  {isRemoveConfirmation ? (
+                    <X className="mr-2 h-4 w-4" />
+                  ) : (
+                    <Trash2 className="mr-2 h-4 w-4" />
+                  )}
+                  {isRemoveConfirmation ? t('actions.remove') : t('actions.delete')}
                 </Button>
               </div>
             </div>

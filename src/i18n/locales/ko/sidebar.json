@@ -41,6 +41,7 @@
     "refresh": "프로젝트 및 세션 새로고침 (Ctrl+R)",
     "renameProject": "프로젝트 이름 변경 (F2)",
     "deleteProject": "빈 프로젝트 삭제 (Delete)",
+    "removeProject": "수동으로 추가한 프로젝트를 목록에서 제거",
     "addToFavorites": "즐겨찾기에 추가",
     "removeFromFavorites": "즐겨찾기에서 제거",
     "editSessionName": "세션 이름 직접 편집",
@@ -63,6 +64,7 @@
     "cancel": "취소",
     "save": "저장",
     "delete": "삭제",
+    "remove": "제거",
     "rename": "이름 변경",
     "joinCommunity": "커뮤니티 참여"
   },
@@ -97,6 +99,8 @@
     "renameSessionError": "세션 이름 변경 오류. 다시 시도해주세요.",
     "deleteProjectFailed": "프로젝트 삭제 실패. 다시 시도해주세요.",
     "deleteProjectError": "프로젝트 삭제 오류. 다시 시도해주세요.",
+    "removeProjectFailed": "프로젝트를 목록에서 제거하지 못했습니다. 다시 시도해주세요.",
+    "removeProjectError": "프로젝트를 목록에서 제거하는 중 오류가 발생했습니다. 다시 시도해주세요.",
     "createProjectFailed": "프로젝트 생성 실패. 다시 시도해주세요.",
     "createProjectError": "프로젝트 생성 오류. 다시 시도해주세요."
   },
@@ -111,5 +115,11 @@
     "sessionCount_other": "이 프로젝트에는 {{count}}개의 대화가 있습니다.",
     "allConversationsDeleted": "모든 대화가 영구적으로 삭제됩니다.",
     "cannotUndo": "이 작업은 취소할 수 없습니다."
+  },
+  "removeConfirmation": {
+    "removeProject": "프로젝트 제거",
+    "confirmRemove": "정말 제거하시겠습니까",
+    "notDeleted": "프로젝트 폴더와 기존 세션은 삭제되지 않습니다.",
+    "canReadd": "나중에 이 프로젝트를 다시 목록에 추가할 수 있습니다."
   }
 }
