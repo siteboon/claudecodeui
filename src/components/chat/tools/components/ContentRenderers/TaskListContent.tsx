@@ -1,4 +1,5 @@
 import React from 'react';
+import { LinkifyText } from '../../../utils/linkify';
 
 interface TaskItem {
   id: string;
@@ -77,7 +78,7 @@ export const TaskListContent: React.FC<TaskListContentProps> = ({ content }) => 
   if (tasks.length === 0) {
     return (
       <pre className="whitespace-pre-wrap font-mono text-[11px] text-gray-600 dark:text-gray-400">
-        {content}
+        <LinkifyText text={content} />
       </pre>
     );
   }

@@ -65,7 +65,14 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     },
     result: {
       hideOnSuccess: true,
-      type: 'special'
+      type: 'collapsible',
+      title: 'Output',
+      defaultOpen: true,
+      contentType: 'text' as const,
+      getContentProps: (result: any) => ({
+        content: typeof result === 'string' ? result : result?.content || '',
+        format: 'code',
+      }),
     }
   },
 
@@ -589,6 +596,8 @@ export function getToolConfig(toolName: string): ToolDisplayConfig {
 /**
  * Check if a tool result should be hidden
  */
+const AUTH_URL_PATTERN = /https?:\/\/[^\s<>"')\]]*(?:oauth|auth|login|verify|authorize|consent|approval|callback)[^\s<>"')\]]*/i;
+
 export function shouldHideToolResult(toolName: string, toolResult: any): boolean {
   const config = getToolConfig(toolName);
 
@@ -597,8 +606,13 @@ export function shouldHideToolResult(toolName: string, toolResult: any): boolean
   // Always hidden
   if (config.result.hidden) return true;
 
-  // Hide on success only
+  // Hide on success only — but keep visible if the output contains auth/verification URLs
+  // so the user can click them to complete authorization flows.
   if (config.result.hideOnSuccess && toolResult && !toolResult.isError) {
+    const content = typeof toolResult === 'string' ? toolResult : toolResult.content;
+    if (typeof content === 'string' && AUTH_URL_PATTERN.test(content)) {
+      return false;
+    }
     return true;
   }
 

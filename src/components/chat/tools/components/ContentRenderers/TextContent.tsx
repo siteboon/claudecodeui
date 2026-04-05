@@ -1,4 +1,5 @@
 import React from 'react';
+import { LinkifyText } from '../../../utils/linkify';
 
 interface TextContentProps {
   content: string;
@@ -35,7 +36,7 @@ export const TextContent: React.FC<TextContentProps> = ({
   if (format === 'code') {
     return (
       <pre className={`mt-1 overflow-hidden whitespace-pre-wrap break-words rounded border border-gray-200/50 bg-gray-50 p-2 font-mono text-xs text-gray-700 dark:border-gray-700/50 dark:bg-gray-800/50 dark:text-gray-300 ${className}`}>
-        {content}
+        <LinkifyText text={content} />
       </pre>
     );
   }
@@ -43,7 +44,7 @@ export const TextContent: React.FC<TextContentProps> = ({
   // Plain text
   return (
     <div className={`mt-1 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300 ${className}`}>
-      {content}
+      <LinkifyText text={content} />
     </div>
   );
 };
