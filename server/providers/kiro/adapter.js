@@ -104,12 +104,12 @@ export const kiroAdapter = {
     const { limit = null, offset = 0 } = opts;
     let rawMessages;
     try {
-      rawMessages = sessionManager.getSessionMessages(sessionId);
+      // For Kiro, prefer disk sessions (JSONL files) as they contain the full conversation
+      rawMessages = await getKiroCliSessionMessages(sessionId);
 
-      // Fallback to Kiro CLI sessions on disk
-      // TODO: verify actual Kiro session storage path (~/.kiro/sessions/ or similar)
+      // Fall back to in-memory sessionManager (for live ACP sessions)
       if (rawMessages.length === 0) {
-        rawMessages = await getKiroCliSessionMessages(sessionId);
+        rawMessages = sessionManager.getSessionMessages(sessionId);
       }
     } catch (error) {
       console.warn(`[KiroAdapter] Failed to load session ${sessionId}:`, error.message);
@@ -117,9 +117,11 @@ export const kiroAdapter = {
     }
 
     const normalized = [];
+    // Use incrementing synthetic timestamps to preserve file order when real timestamps are absent
+    const baseTime = Date.now();
     for (let i = 0; i < rawMessages.length; i++) {
       const raw = rawMessages[i];
-      const ts = raw.timestamp || new Date().toISOString();
+      const ts = raw.timestamp || new Date(baseTime + i).toISOString();
       const baseId = raw.uuid || generateMessageId('kiro');
 
       // sessionManager format: { type: 'message', message: { role, content }, timestamp }

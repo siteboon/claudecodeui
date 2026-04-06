@@ -1,0 +1,27 @@
+{
+  "name": "kiro-sdk",
+  "version": "0.1.0",
+  "description": "Node.js SDK for Kiro CLI via Agent Client Protocol (ACP)",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist"
+  },
+  "keywords": ["kiro", "acp", "agent", "cli", "sdk", "ai"],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

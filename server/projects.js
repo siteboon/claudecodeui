@@ -2617,7 +2617,7 @@ async function getKiroSessions(projectPath) {
       // Kiro uses 'cwd' for the project path; normalize to projectPath
       const sessionProjectPath = session.projectPath || session.cwd;
 
-      // If session has a project path, filter by it
+      // If session has a project path, filter by exact match
       if (sessionProjectPath && normalizedProjectPath) {
         if (normalizeComparablePath(sessionProjectPath) !== normalizedProjectPath) {
           continue;
@@ -2674,7 +2674,34 @@ async function getKiroCliSessionMessages(sessionId) {
     const data = await fs.readFile(jsonlPath, 'utf8');
     const lines = data.split('\n').filter(l => l.trim());
     const messages = [];
+    // Collect tool results keyed by toolUseId for later attachment
+    const toolResultsMap = new Map();
 
+    // First pass: collect ToolResults
+    for (const line of lines) {
+      let entry;
+      try { entry = JSON.parse(line); } catch { continue; }
+      if (entry.kind !== 'ToolResults') continue;
+      const results = entry.data?.results || {};
+      for (const [toolUseId, result] of Object.entries(results)) {
+        let output = '';
+        const success = result?.result?.Success;
+        if (success?.items) {
+          output = success.items.map(item => {
+            if (item.Json) return typeof item.Json === 'string' ? item.Json : JSON.stringify(item.Json);
+            if (item.Text) return item.Text;
+            return '';
+          }).filter(Boolean).join('\n');
+        }
+        const error = result?.result?.Error;
+        if (error) {
+          output = typeof error === 'string' ? error : JSON.stringify(error);
+        }
+        toolResultsMap.set(toolUseId, { output, isError: !!error });
+      }
+    }
+
+    // Second pass: build messages
     for (const line of lines) {
       let entry;
       try { entry = JSON.parse(line); } catch { continue; }
@@ -2684,21 +2711,36 @@ async function getKiroCliSessionMessages(sessionId) {
 
       const role = kind === 'Prompt' ? 'user' : 'assistant';
       const contentBlocks = entry.data?.content || [];
-      const textParts = [];
+      const parts = [];
 
       for (const block of contentBlocks) {
         if (block.kind === 'text' && typeof block.data === 'string') {
-          textParts.push(block.data);
+          parts.push({ type: 'text', text: block.data });
         } else if (block.kind === 'toolUse') {
-          textParts.push(`[Tool: ${block.data?.name || 'unknown'}]`);
+          const toolUseId = block.data?.toolUseId || '';
+          const toolResult = toolResultsMap.get(toolUseId);
+          parts.push({
+            type: 'tool_use',
+            id: toolUseId,
+            name: block.data?.name || 'unknown',
+            input: block.data?.input || {},
+          });
+          if (toolResult) {
+            parts.push({
+              type: 'tool_result',
+              tool_use_id: toolUseId,
+              content: toolResult.output,
+              is_error: toolResult.isError,
+            });
+          }
         }
       }
 
-      if (textParts.length > 0) {
+      if (parts.length > 0) {
         messages.push({
           type: 'message',
-          message: { role, content: textParts.join('\n') },
-          timestamp: entry.data?.timestamp || null
+          message: { role, content: parts },
+          timestamp: null
         });
       }
     }
