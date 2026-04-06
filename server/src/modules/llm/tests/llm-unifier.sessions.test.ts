@@ -66,36 +66,32 @@ test('llmSessionsService.synchronizeSessions aggregates processed counts and fai
   }
 });
 
-// This test covers provider-specific sync behavior for both incremental and full-rescan modes.
-test('llmSessionsService.synchronizeProvider honors fullRescan option', { concurrency: false }, async () => {
-  const observedScanDates: Array<Date | null> = [];
-  const restoreScanDate = patchMethod(scanStateDb, 'getLastScannedAt', () => new Date('2026-04-02T00:00:00.000Z'));
-  const restoreUpdateScanDate = patchMethod(scanStateDb, 'updateLastScannedAt', () => {});
+// This test covers single-file indexing delegation used by the watcher (no full provider rescan).
+test('llmSessionsService.synchronizeProviderFile delegates to provider indexer file sync', { concurrency: false }, async () => {
+  let synchronizeCalls = 0;
+  let synchronizeFilePath: string | null = null;
   const restoreIndexers = patchIndexers([
     {
-      provider: 'cursor',
-      async synchronize(lastScanAt) {
-        observedScanDates.push(lastScanAt);
-        return 7;
+      provider: 'claude',
+      async synchronize() {
+        synchronizeCalls += 1;
+        return 0;
+      },
+      async synchronizeFile(filePath: string) {
+        synchronizeFilePath = filePath;
+        return true;
       },
     },
   ]);
 
   try {
-    const incremental = await llmSessionsService.synchronizeProvider('cursor');
-    const fullRescan = await llmSessionsService.synchronizeProvider('cursor', { fullRescan: true });
-
-    assert.equal(incremental.provider, 'cursor');
-    assert.equal(incremental.processed, 7);
-    assert.equal(fullRescan.provider, 'cursor');
-    assert.equal(fullRescan.processed, 7);
-    assert.equal(observedScanDates.length, 2);
-    assert.ok(observedScanDates[0] instanceof Date);
-    assert.equal(observedScanDates[1], null);
+    const result = await llmSessionsService.synchronizeProviderFile('claude', '/tmp/claude-session.jsonl');
+    assert.equal(result.provider, 'claude');
+    assert.equal(result.indexed, true);
+    assert.equal(synchronizeFilePath, '/tmp/claude-session.jsonl');
+    assert.equal(synchronizeCalls, 0);
   } finally {
     restoreIndexers();
-    restoreUpdateScanDate();
-    restoreScanDate();
   }
 });
 

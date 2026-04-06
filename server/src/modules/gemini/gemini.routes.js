@@ -1,6 +1,6 @@
 import express from 'express';
 import sessionManager from '../../../sessionManager.js';
-import { llmSessionsService } from '@/modules/llm/sessions.service.js';
+import { llmSessionsService } from '@/modules/llm/services/sessions.service.js';
 
 const router = express.Router();
 

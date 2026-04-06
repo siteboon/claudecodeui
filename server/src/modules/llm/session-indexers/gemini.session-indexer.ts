@@ -21,19 +21,19 @@ type ParsedSession = {
  */
 export class GeminiSessionIndexer implements ISessionIndexer {
   readonly provider = 'gemini' as const;
+  private readonly geminiHome = path.join(os.homedir(), '.gemini');
 
   /**
    * Scans Gemini session JSON files and upserts discovered sessions into DB.
    */
   async synchronize(lastScanAt: Date | null): Promise<number> {
-    const geminiHome = path.join(os.homedir(), '.gemini');
     const legacySessionFiles = await findFilesRecursivelyCreatedAfter(
-      path.join(geminiHome, 'sessions'),
+      path.join(this.geminiHome, 'sessions'),
       '.json',
       lastScanAt,
     );
     const tempFiles = await findFilesRecursivelyCreatedAfter(
-      path.join(geminiHome, 'tmp'),
+      path.join(this.geminiHome, 'tmp'),
       '.json',
       lastScanAt,
     );
@@ -42,7 +42,7 @@ export class GeminiSessionIndexer implements ISessionIndexer {
     let processed = 0;
     for (const filePath of files) {
       if (
-        filePath.startsWith(path.join(geminiHome, 'tmp')) &&
+        filePath.startsWith(path.join(this.geminiHome, 'tmp')) &&
         !filePath.includes(`${path.sep}chats${path.sep}`)
       ) {
         continue;
@@ -67,6 +67,40 @@ export class GeminiSessionIndexer implements ISessionIndexer {
     }
 
     return processed;
+  }
+
+  /**
+   * Parses and upserts one Gemini session JSON file.
+   */
+  async synchronizeFile(filePath: string): Promise<boolean> {
+    if (!filePath.endsWith('.json')) {
+      return false;
+    }
+
+    if (
+      filePath.startsWith(path.join(this.geminiHome, 'tmp')) &&
+      !filePath.includes(`${path.sep}chats${path.sep}`)
+    ) {
+      return false;
+    }
+
+    const parsed = await this.processSessionFile(filePath);
+    if (!parsed) {
+      return false;
+    }
+
+    const timestamps = await readFileTimestamps(filePath);
+    sessionsDb.createSession(
+      parsed.sessionId,
+      this.provider,
+      parsed.workspacePath,
+      parsed.sessionName,
+      timestamps.createdAt,
+      timestamps.updatedAt,
+      filePath,
+    );
+
+    return true;
   }
 
   /**

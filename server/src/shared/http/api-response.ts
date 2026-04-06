@@ -4,13 +4,6 @@ import type {
   ApiSuccessShape,
 } from '@/shared/types/http.js';
 
-export function createApiMeta(requestId?: string, startedAt?: string): ApiMeta {
-  return {
-    requestId,
-    startedAt,
-  };
-}
-
 export function createApiSuccessResponse<TData>(
   data: TData,
   meta?: ApiMeta

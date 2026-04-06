@@ -53,11 +53,15 @@ async function onUpdate(
   filePath: string,
   provider: LLMProvider,
 ): Promise<void> {
+  if (!isWatcherTargetFile(provider, filePath)) {
+    return;
+  }
+
   try {
-    const result = await llmSessionsService.synchronizeProvider(provider, { fullRescan: true });
+    const result = await llmSessionsService.synchronizeProviderFile(provider, filePath);
     logger.info(`LLM watcher sync complete for provider "${provider}" after ${eventType}`, {
       filePath,
-      processed: result.processed,
+      indexed: result.indexed,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -67,6 +71,17 @@ async function onUpdate(
       error: message,
     });
   }
+}
+
+/**
+ * Filters watcher events to provider-specific transcript artifact file types.
+ */
+function isWatcherTargetFile(provider: LLMProvider, filePath: string): boolean {
+  if (provider === 'gemini') {
+    return filePath.endsWith('.json');
+  }
+
+  return filePath.endsWith('.jsonl');
 }
 
 /**

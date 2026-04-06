@@ -25,13 +25,13 @@ type ParsedSession = {
  */
 export class CursorSessionIndexer implements ISessionIndexer {
   readonly provider = 'cursor' as const;
+  private readonly cursorHome = path.join(os.homedir(), '.cursor');
 
   /**
    * Scans Cursor chats and upserts discovered sessions into DB.
    */
   async synchronize(lastScanAt: Date | null): Promise<number> {
-    const cursorHome = path.join(os.homedir(), '.cursor');
-    const projectsDir = path.join(cursorHome, 'projects');
+    const projectsDir = path.join(this.cursorHome, 'projects');
     const projectEntries = await listDirectoryEntriesSafe(projectsDir);
     const seenWorkspacePaths = new Set<string>();
 
@@ -49,7 +49,7 @@ export class CursorSessionIndexer implements ISessionIndexer {
 
       seenWorkspacePaths.add(workspacePath);
       const workspaceHash = this.md5(workspacePath);
-      const chatsDir = path.join(cursorHome, 'chats', workspaceHash);
+      const chatsDir = path.join(this.cursorHome, 'chats', workspaceHash);
       const files = await findFilesRecursivelyCreatedAfter(chatsDir, '.jsonl', lastScanAt);
 
       for (const filePath of files) {
@@ -73,6 +73,33 @@ export class CursorSessionIndexer implements ISessionIndexer {
     }
 
     return processed;
+  }
+
+  /**
+   * Parses and upserts one Cursor session JSONL file.
+   */
+  async synchronizeFile(filePath: string): Promise<boolean> {
+    if (!filePath.endsWith('.jsonl')) {
+      return false;
+    }
+
+    const parsed = await this.processSessionFile(filePath);
+    if (!parsed) {
+      return false;
+    }
+
+    const timestamps = await readFileTimestamps(filePath);
+    sessionsDb.createSession(
+      parsed.sessionId,
+      this.provider,
+      parsed.workspacePath,
+      parsed.sessionName,
+      timestamps.createdAt,
+      timestamps.updatedAt,
+      filePath,
+    );
+
+    return true;
   }
 
   /**

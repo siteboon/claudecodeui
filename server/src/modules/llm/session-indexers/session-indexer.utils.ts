@@ -74,6 +74,7 @@ export async function findFilesRecursivelyCreatedAfter(
   fileList: string[] = [],
 ): Promise<string[]> {
   try {
+    console.log("HEY THERE!")
     const entries = await fsp.readdir(rootDir, { withFileTypes: true });
     for (const entry of entries) {
       const fullPath = path.join(rootDir, entry.name);

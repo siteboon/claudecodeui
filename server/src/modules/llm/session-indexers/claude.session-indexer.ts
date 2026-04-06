@@ -22,15 +22,15 @@ type ParsedSession = {
  */
 export class ClaudeSessionIndexer implements ISessionIndexer {
   readonly provider = 'claude' as const;
+  private readonly claudeHome = path.join(os.homedir(), '.claude');
 
   /**
    * Scans ~/.claude projects and upserts discovered sessions into DB.
    */
   async synchronize(lastScanAt: Date | null): Promise<number> {
-    const claudeHome = path.join(os.homedir(), '.claude');
-    const nameMap = await buildLookupMap(path.join(claudeHome, 'history.jsonl'), 'sessionId', 'display');
+    const nameMap = await buildLookupMap(path.join(this.claudeHome, 'history.jsonl'), 'sessionId', 'display');
     const files = await findFilesRecursivelyCreatedAfter(
-      path.join(claudeHome, 'projects'),
+      path.join(this.claudeHome, 'projects'),
       '.jsonl',
       lastScanAt,
     );
@@ -56,6 +56,34 @@ export class ClaudeSessionIndexer implements ISessionIndexer {
     }
 
     return processed;
+  }
+
+  /**
+   * Parses and upserts one Claude session JSONL file.
+   */
+  async synchronizeFile(filePath: string): Promise<boolean> {
+    if (!filePath.endsWith('.jsonl')) {
+      return false;
+    }
+
+    const nameMap = await buildLookupMap(path.join(this.claudeHome, 'history.jsonl'), 'sessionId', 'display');
+    const parsed = await this.processSessionFile(filePath, nameMap);
+    if (!parsed) {
+      return false;
+    }
+
+    const timestamps = await readFileTimestamps(filePath);
+    sessionsDb.createSession(
+      parsed.sessionId,
+      this.provider,
+      parsed.workspacePath,
+      parsed.sessionName,
+      timestamps.createdAt,
+      timestamps.updatedAt,
+      filePath,
+    );
+
+    return true;
   }
 
   /**

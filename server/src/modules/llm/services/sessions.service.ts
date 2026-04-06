@@ -145,12 +145,12 @@ export const llmSessionsService = {
   },
 
   /**
-   * Runs one provider indexer and updates `scan_state.last_scanned_at`.
+   * Indexes one provider artifact file without running a full provider rescan.
    */
-  async synchronizeProvider(
+  async synchronizeProviderFile(
     provider: LLMProvider,
-    options: { fullRescan?: boolean } = {},
-  ): Promise<{ provider: LLMProvider; processed: number }> {
+    filePath: string,
+  ): Promise<{ provider: LLMProvider; indexed: boolean }> {
     const indexer = sessionIndexers.find((entry) => entry.provider === provider);
     if (!indexer) {
       throw new AppError(`No session indexer registered for provider "${provider}".`, {
@@ -159,11 +159,12 @@ export const llmSessionsService = {
       });
     }
 
-    const lastScanAt = options.fullRescan ? null : scanStateDb.getLastScannedAt();
-    const processed = await indexer.synchronize(lastScanAt);
-    scanStateDb.updateLastScannedAt();
+    if (!indexer.synchronizeFile) {
+      return { provider, indexed: false };
+    }
 
-    return { provider, processed };
+    const indexed = await indexer.synchronizeFile(filePath);
+    return { provider, indexed };
   },
 
   updateSessionCustomName(sessionId: string, sessionCustomName: string): void {

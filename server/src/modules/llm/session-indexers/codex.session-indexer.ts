@@ -22,15 +22,15 @@ type ParsedSession = {
  */
 export class CodexSessionIndexer implements ISessionIndexer {
   readonly provider = 'codex' as const;
+  private readonly codexHome = path.join(os.homedir(), '.codex');
 
   /**
    * Scans ~/.codex sessions and upserts discovered sessions into DB.
    */
   async synchronize(lastScanAt: Date | null): Promise<number> {
-    const codexHome = path.join(os.homedir(), '.codex');
-    const nameMap = await buildLookupMap(path.join(codexHome, 'session_index.jsonl'), 'id', 'thread_name');
+    const nameMap = await buildLookupMap(path.join(this.codexHome, 'session_index.jsonl'), 'id', 'thread_name');
     const files = await findFilesRecursivelyCreatedAfter(
-      path.join(codexHome, 'sessions'),
+      path.join(this.codexHome, 'sessions'),
       '.jsonl',
       lastScanAt,
     );
@@ -56,6 +56,34 @@ export class CodexSessionIndexer implements ISessionIndexer {
     }
 
     return processed;
+  }
+
+  /**
+   * Parses and upserts one Codex session JSONL file.
+   */
+  async synchronizeFile(filePath: string): Promise<boolean> {
+    if (!filePath.endsWith('.jsonl')) {
+      return false;
+    }
+
+    const nameMap = await buildLookupMap(path.join(this.codexHome, 'session_index.jsonl'), 'id', 'thread_name');
+    const parsed = await this.processSessionFile(filePath, nameMap);
+    if (!parsed) {
+      return false;
+    }
+
+    const timestamps = await readFileTimestamps(filePath);
+    sessionsDb.createSession(
+      parsed.sessionId,
+      this.provider,
+      parsed.workspacePath,
+      parsed.sessionName,
+      timestamps.createdAt,
+      timestamps.updatedAt,
+      filePath,
+    );
+
+    return true;
   }
 
   /**
