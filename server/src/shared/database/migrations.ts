@@ -56,6 +56,7 @@ export const runMigrations = (db: Database) => {
         const sessionColumnNames = sessionsTableInfo.map((col) => col.name);
         addColumnToTableIfNotExists(db, "sessions", sessionColumnNames, "created_at", "DATETIME");
         addColumnToTableIfNotExists(db, "sessions", sessionColumnNames, "updated_at", "DATETIME");
+        addColumnToTableIfNotExists(db, "sessions", sessionColumnNames, "jsonl_path", "TEXT");
         db.exec("UPDATE sessions SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP)");
         db.exec("UPDATE sessions SET updated_at = COALESCE(updated_at, CURRENT_TIMESTAMP)");
 

@@ -174,6 +174,7 @@ export async function processCursorSessions() {
                         result.sessionName,
                         createdAt,
                         updatedAt,
+                        file,
                     );
                 }
             }

@@ -121,6 +121,7 @@ const onUpdate = async (
                         sessionName,
                         createdAt,
                         updatedAt,
+                        filePath,
                     );
                 }
                 break;

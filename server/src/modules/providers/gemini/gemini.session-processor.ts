@@ -100,6 +100,7 @@ export async function processGeminiSessions() {
                 result.sessionName,
                 createdAt,
                 updatedAt,
+                file,
             );
         }
     }

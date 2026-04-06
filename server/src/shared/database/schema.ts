@@ -75,6 +75,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     provider TEXT NOT NULL,
     custom_name TEXT,
     workspace_path TEXT NOT NULL,
+    jsonl_path TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (workspace_path) REFERENCES workspace_original_paths(workspace_path)

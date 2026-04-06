@@ -14,7 +14,7 @@ type SessionNameLookupRow = {
 
 type SessionMetadataLookupRow = Pick<
     SessionsRow,
-    'session_id' | 'provider' | 'workspace_path' | 'created_at' | 'updated_at'
+    'session_id' | 'provider' | 'workspace_path' | 'jsonl_path' | 'created_at' | 'updated_at'
 >;
 
 function normalizeTimestamp(value?: string): string | null {
@@ -65,6 +65,7 @@ export const sessionsDb = {
         customName?: string,
         createdAt?: string,
         updatedAt?: string,
+        jsonlPath?: string | null,
     ): void {
         const db = getConnection();
         const createdAtValue = normalizeTimestamp(createdAt);
@@ -76,13 +77,22 @@ export const sessionsDb = {
         workspaceOriginalPathsDb.createWorkspacePath(normalizedWorkspacePath);
 
         db.prepare(
-            `INSERT INTO sessions (session_id, provider, custom_name, workspace_path, created_at, updated_at)
-             VALUES (?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))
+            `INSERT INTO sessions (session_id, provider, custom_name, workspace_path, jsonl_path, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))
              ON CONFLICT(session_id) DO UPDATE SET
                updated_at = excluded.updated_at,
-               workspace_path = excluded.workspace_path
+               workspace_path = excluded.workspace_path,
+               jsonl_path = excluded.jsonl_path
              WHERE sessions.provider = excluded.provider`
-        ).run(session_id, provider, customName, normalizedWorkspacePath, createdAtValue, updatedAtValue);
+        ).run(
+            session_id,
+            provider,
+            customName,
+            normalizedWorkspacePath,
+            jsonlPath ?? null,
+            createdAtValue,
+            updatedAtValue,
+        );
     },
 
     /** Updates a custom session name by session id, regardless of provider. */
@@ -109,7 +119,7 @@ export const sessionsDb = {
         const db = getConnection();
         const row = db
             .prepare(
-                `SELECT session_id, provider, workspace_path, created_at, updated_at
+                `SELECT session_id, provider, workspace_path, jsonl_path, created_at, updated_at
                  FROM sessions
                  WHERE session_id = ?`
             )
@@ -122,7 +132,7 @@ export const sessionsDb = {
         const db = getConnection();
         return db
             .prepare(
-                `SELECT session_id, provider, workspace_path, custom_name, created_at, updated_at
+                `SELECT session_id, provider, workspace_path, jsonl_path, custom_name, created_at, updated_at
                  FROM sessions`
             )
             .all() as SessionsRow[];
@@ -132,7 +142,7 @@ export const sessionsDb = {
         const db = getConnection();
         return db
             .prepare(
-                `SELECT session_id, provider, workspace_path, custom_name, created_at, updated_at
+                `SELECT session_id, provider, workspace_path, jsonl_path, custom_name, created_at, updated_at
                  FROM sessions
                  WHERE workspace_path = ?`
             )

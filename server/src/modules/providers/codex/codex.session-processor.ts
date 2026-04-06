@@ -46,6 +46,7 @@ export async function processCodexSessions() {
                 result.sessionName,
                 createdAt,
                 updatedAt,
+                file,
             );
         }
     }

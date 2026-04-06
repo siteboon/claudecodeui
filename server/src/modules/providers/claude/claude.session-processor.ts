@@ -45,6 +45,7 @@ export async function processClaudeSessions() {
                 result.sessionName,
                 createdAt,
                 updatedAt,
+                file,
             );
         }
     }

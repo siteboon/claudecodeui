@@ -100,6 +100,7 @@ export type SessionsRow = {
   session_id: string;
   provider: LLMProvider;
   workspace_path: string;
+  jsonl_path: string | null;
   custom_name: string | null;
   created_at: string;
   updated_at: string;
