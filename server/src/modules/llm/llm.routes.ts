@@ -1,13 +1,27 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
+import multer from 'multer';
+import path from 'node:path';
 
 import { asyncHandler } from '@/shared/http/async-handler.js';
 import { AppError } from '@/shared/utils/app-error.js';
 import { createApiErrorResponse, createApiSuccessResponse } from '@/shared/http/api-response.js';
 import { llmService } from '@/modules/llm/llm.service.js';
 import { llmSessionsService } from '@/modules/llm/sessions.service.js';
+import { llmAssetsService } from '@/modules/llm/assets.service.js';
+import type { McpScope, McpTransport, UpsertMcpServerInput } from '@/modules/llm/mcp.service.js';
+import { llmMcpService } from '@/modules/llm/mcp.service.js';
+import { llmSkillsService } from '@/modules/llm/skills.service.js';
+import type { LLMProvider } from '@/shared/types/app.js';
 import { logger } from '@/shared/utils/logger.js';
 
 const router = express.Router();
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    files: 10,
+    fileSize: 20 * 1024 * 1024,
+  },
+});
 
 /**
  * Safely reads an Express path parameter that may arrive as string or string[].
@@ -68,6 +82,139 @@ const parseRenamePayload = (payload: unknown): { summary: string } => {
   return { summary };
 };
 
+/**
+ * Reads optional query values and trims surrounding whitespace.
+ */
+const readOptionalQueryString = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : undefined;
+};
+
+/**
+ * Validates MCP scope query/body values.
+ */
+const parseMcpScope = (value: unknown): McpScope | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const normalized = readOptionalQueryString(value);
+  if (!normalized) {
+    return undefined;
+  }
+
+  if (normalized === 'user' || normalized === 'local' || normalized === 'project') {
+    return normalized;
+  }
+
+  throw new AppError(`Unsupported MCP scope "${normalized}".`, {
+    code: 'INVALID_MCP_SCOPE',
+    statusCode: 400,
+  });
+};
+
+/**
+ * Validates MCP transport query/body values.
+ */
+const parseMcpTransport = (value: unknown): McpTransport => {
+  const normalized = readOptionalQueryString(value);
+  if (!normalized) {
+    throw new AppError('transport is required.', {
+      code: 'MCP_TRANSPORT_REQUIRED',
+      statusCode: 400,
+    });
+  }
+
+  if (normalized === 'stdio' || normalized === 'http' || normalized === 'sse') {
+    return normalized;
+  }
+
+  throw new AppError(`Unsupported MCP transport "${normalized}".`, {
+    code: 'INVALID_MCP_TRANSPORT',
+    statusCode: 400,
+  });
+};
+
+/**
+ * Parses and validates MCP upsert payload.
+ */
+const parseMcpUpsertPayload = (payload: unknown): UpsertMcpServerInput => {
+  if (!payload || typeof payload !== 'object') {
+    throw new AppError('Request body must be an object.', {
+      code: 'INVALID_REQUEST_BODY',
+      statusCode: 400,
+    });
+  }
+
+  const body = payload as Record<string, unknown>;
+  const name = readOptionalQueryString(body.name);
+  if (!name) {
+    throw new AppError('name is required.', {
+      code: 'MCP_NAME_REQUIRED',
+      statusCode: 400,
+    });
+  }
+
+  const transport = parseMcpTransport(body.transport);
+  const scope = parseMcpScope(body.scope);
+  const workspacePath = readOptionalQueryString(body.workspacePath);
+
+  return {
+    name,
+    transport,
+    scope,
+    workspacePath,
+    command: readOptionalQueryString(body.command),
+    args: Array.isArray(body.args) ? body.args.filter((entry): entry is string => typeof entry === 'string') : undefined,
+    env: typeof body.env === 'object' && body.env !== null
+      ? Object.fromEntries(
+          Object.entries(body.env as Record<string, unknown>).filter(
+            (entry): entry is [string, string] => typeof entry[1] === 'string',
+          ),
+        )
+      : undefined,
+    cwd: readOptionalQueryString(body.cwd),
+    url: readOptionalQueryString(body.url),
+    headers: typeof body.headers === 'object' && body.headers !== null
+      ? Object.fromEntries(
+          Object.entries(body.headers as Record<string, unknown>).filter(
+            (entry): entry is [string, string] => typeof entry[1] === 'string',
+          ),
+        )
+      : undefined,
+    envVars: Array.isArray(body.envVars)
+      ? body.envVars.filter((entry): entry is string => typeof entry === 'string')
+      : undefined,
+    bearerTokenEnvVar: readOptionalQueryString(body.bearerTokenEnvVar),
+    envHttpHeaders: typeof body.envHttpHeaders === 'object' && body.envHttpHeaders !== null
+      ? Object.fromEntries(
+          Object.entries(body.envHttpHeaders as Record<string, unknown>).filter(
+            (entry): entry is [string, string] => typeof entry[1] === 'string',
+          ),
+        )
+      : undefined,
+  };
+};
+
+/**
+ * Converts any provider route parameter into the strongly typed provider union.
+ */
+const parseProvider = (value: unknown): LLMProvider => {
+  const normalized = normalizeProviderParam(value);
+  if (normalized === 'claude' || normalized === 'codex' || normalized === 'cursor' || normalized === 'gemini') {
+    return normalized;
+  }
+
+  throw new AppError(`Unsupported provider "${normalized}".`, {
+    code: 'UNSUPPORTED_PROVIDER',
+    statusCode: 400,
+  });
+};
+
 router.get(
   '/providers',
   asyncHandler(async (_req: Request, res: Response) => {
@@ -78,7 +225,7 @@ router.get(
 router.get(
   '/providers/:provider/models',
   asyncHandler(async (req: Request, res: Response) => {
-    const provider = normalizeProviderParam(req.params.provider);
+    const provider = parseProvider(req.params.provider);
     const models = await llmService.listModels(provider);
     res.json(createApiSuccessResponse({ provider, models }));
   }),
@@ -87,7 +234,7 @@ router.get(
 router.get(
   '/providers/:provider/sessions',
   asyncHandler(async (req: Request, res: Response) => {
-    const provider = normalizeProviderParam(req.params.provider);
+    const provider = parseProvider(req.params.provider);
     const sessions = llmService.listSessions(provider);
     res.json(createApiSuccessResponse({ provider, sessions }));
   }),
@@ -96,7 +243,7 @@ router.get(
 router.get(
   '/providers/:provider/sessions/:sessionId',
   asyncHandler(async (req: Request, res: Response) => {
-    const provider = normalizeProviderParam(req.params.provider);
+    const provider = parseProvider(req.params.provider);
     const sessionId = readPathParam(req.params.sessionId, 'sessionId');
     const session = llmService.getSession(provider, sessionId);
     if (!session) {
@@ -113,7 +260,7 @@ router.get(
 router.post(
   '/providers/:provider/sessions/start',
   asyncHandler(async (req: Request, res: Response) => {
-    const provider = normalizeProviderParam(req.params.provider);
+    const provider = parseProvider(req.params.provider);
     const snapshot = await llmService.startSession(provider, req.body);
 
     const waitForCompletion = parseWaitForCompletion(req);
@@ -135,7 +282,7 @@ router.post(
 router.post(
   '/providers/:provider/sessions/:sessionId/resume',
   asyncHandler(async (req: Request, res: Response) => {
-    const provider = normalizeProviderParam(req.params.provider);
+    const provider = parseProvider(req.params.provider);
     const sessionId = readPathParam(req.params.sessionId, 'sessionId');
 
     const snapshot = await llmService.resumeSession(provider, sessionId, req.body);
@@ -154,7 +301,7 @@ router.post(
 router.post(
   '/providers/:provider/sessions/:sessionId/stop',
   asyncHandler(async (req: Request, res: Response) => {
-    const provider = normalizeProviderParam(req.params.provider);
+    const provider = parseProvider(req.params.provider);
     const sessionId = readPathParam(req.params.sessionId, 'sessionId');
     const stopped = await llmService.stopSession(provider, sessionId);
     res.json(createApiSuccessResponse({ provider, sessionId, stopped }));
@@ -164,7 +311,7 @@ router.post(
 router.patch(
   '/providers/:provider/sessions/:sessionId/model',
   asyncHandler(async (req: Request, res: Response) => {
-    const provider = normalizeProviderParam(req.params.provider);
+    const provider = parseProvider(req.params.provider);
     const sessionId = readPathParam(req.params.sessionId, 'sessionId');
     const model = typeof req.body?.model === 'string' ? req.body.model.trim() : '';
     if (!model) {
@@ -188,7 +335,7 @@ router.patch(
 router.patch(
   '/providers/:provider/sessions/:sessionId/thinking',
   asyncHandler(async (req: Request, res: Response) => {
-    const provider = normalizeProviderParam(req.params.provider);
+    const provider = parseProvider(req.params.provider);
     const sessionId = readPathParam(req.params.sessionId, 'sessionId');
     const thinkingMode =
       typeof req.body?.thinkingMode === 'string' ? req.body.thinkingMode.trim() : '';
@@ -208,6 +355,180 @@ router.patch(
         thinkingMode,
       }),
     );
+  }),
+);
+
+/**
+ * Uploads one or more images into `.cloudcli/assets` so providers can reuse file paths.
+ */
+router.post(
+  '/assets/images',
+  upload.array('images', 10),
+  asyncHandler(async (req: Request, res: Response) => {
+    const workspacePath = readOptionalQueryString((req.body as Record<string, unknown> | undefined)?.workspacePath);
+    const filesValue = (req as Request & { files?: unknown }).files;
+    const files = Array.isArray(filesValue) ? filesValue as Array<{
+      originalname: string;
+      mimetype: string;
+      size: number;
+      buffer: Buffer;
+    }> : [];
+    const images = await llmAssetsService.storeUploadedImages(files, { workspacePath });
+    res.status(201).json(createApiSuccessResponse({ images }));
+  }),
+);
+
+/**
+ * Lists MCP servers for one provider grouped by user/local/project scopes.
+ */
+router.get(
+  '/providers/:provider/mcp/servers',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const workspacePath = readOptionalQueryString(req.query.workspacePath);
+    const scope = parseMcpScope(req.query.scope);
+
+    if (scope) {
+      const servers = await llmMcpService.listProviderServersForScope(
+        provider,
+        scope,
+        path.resolve(workspacePath ?? process.cwd()),
+      );
+      res.json(createApiSuccessResponse({ provider, scope, servers }));
+      return;
+    }
+
+    const groupedServers = await llmMcpService.listProviderServers(provider, { workspacePath });
+    res.json(createApiSuccessResponse({ provider, scopes: groupedServers }));
+  }),
+);
+
+/**
+ * Adds one MCP server for one provider and scope.
+ */
+router.post(
+  '/providers/:provider/mcp/servers',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const payload = parseMcpUpsertPayload(req.body);
+    const server = await llmMcpService.upsertProviderServer(provider, payload);
+    res.status(201).json(createApiSuccessResponse({ server }));
+  }),
+);
+
+/**
+ * Updates one provider MCP server definition.
+ */
+router.put(
+  '/providers/:provider/mcp/servers/:name',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const payload = parseMcpUpsertPayload({
+      ...((req.body && typeof req.body === 'object') ? req.body as Record<string, unknown> : {}),
+      name: readPathParam(req.params.name, 'name'),
+    });
+    const server = await llmMcpService.upsertProviderServer(provider, payload);
+    res.json(createApiSuccessResponse({ server }));
+  }),
+);
+
+/**
+ * Removes one provider MCP server from its configured scope.
+ */
+router.delete(
+  '/providers/:provider/mcp/servers/:name',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const scope = parseMcpScope(req.query.scope);
+    const workspacePath = readOptionalQueryString(req.query.workspacePath);
+    const result = await llmMcpService.removeProviderServer(provider, {
+      name: readPathParam(req.params.name, 'name'),
+      scope,
+      workspacePath,
+    });
+    res.json(createApiSuccessResponse(result));
+  }),
+);
+
+/**
+ * Executes a lightweight startup/connectivity probe for one provider MCP server.
+ */
+router.post(
+  '/providers/:provider/mcp/servers/:name/run',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const body = (req.body as Record<string, unknown> | undefined) ?? {};
+    const scope = parseMcpScope(body.scope ?? req.query.scope);
+    const workspacePath = readOptionalQueryString(body.workspacePath ?? req.query.workspacePath);
+    const result = await llmMcpService.runProviderServer({
+      provider,
+      name: readPathParam(req.params.name, 'name'),
+      scope,
+      workspacePath,
+    });
+    res.json(createApiSuccessResponse(result));
+  }),
+);
+
+/**
+ * Adds one HTTP/stdio MCP server to every provider.
+ */
+router.post(
+  '/mcp/servers/global',
+  asyncHandler(async (req: Request, res: Response) => {
+    const payload = parseMcpUpsertPayload(req.body);
+    if (payload.scope === 'local') {
+      throw new AppError('Global MCP add supports only "user" or "project" scopes.', {
+        code: 'INVALID_GLOBAL_MCP_SCOPE',
+        statusCode: 400,
+      });
+    }
+    const results = await llmMcpService.addServerToAllProviders({
+      ...payload,
+      scope: payload.scope === 'user' ? 'user' : 'project',
+    });
+    res.status(201).json(createApiSuccessResponse({ results }));
+  }),
+);
+
+/**
+ * Lists provider-specific skills from all documented skill directories.
+ */
+router.get(
+  '/providers/:provider/skills',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const workspacePath = readOptionalQueryString(req.query.workspacePath);
+    const skills = await llmSkillsService.listProviderSkills(provider, { workspacePath });
+    res.json(createApiSuccessResponse({ provider, skills }));
+  }),
+);
+
+/**
+ * Lists skills for one provider or for all providers in a single response.
+ */
+router.get(
+  '/skills',
+  asyncHandler(async (req: Request, res: Response) => {
+    const providerQuery = readOptionalQueryString(req.query.provider);
+    const workspacePath = readOptionalQueryString(req.query.workspacePath);
+    if (providerQuery) {
+      const provider = parseProvider(providerQuery);
+      const skills = await llmSkillsService.listProviderSkills(provider, { workspacePath });
+      res.json(createApiSuccessResponse({ provider, skills }));
+      return;
+    }
+
+    const providers: LLMProvider[] = ['claude', 'codex', 'cursor', 'gemini'];
+    const byProvider = Object.fromEntries(
+      await Promise.all(
+        providers.map(async (provider) => ([
+          provider,
+          await llmSkillsService.listProviderSkills(provider, { workspacePath }),
+        ])),
+      ),
+    );
+    res.json(createApiSuccessResponse({ providers: byProvider }));
   }),
 );
 

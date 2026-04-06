@@ -4,6 +4,8 @@ import {
   type ModelInfo,
   type Options,
 } from '@anthropic-ai/claude-agent-sdk';
+import path from 'node:path';
+import { readFile } from 'node:fs/promises';
 
 import { BaseSdkProvider } from '@/modules/llm/providers/base-sdk.provider.js';
 import type {
@@ -19,6 +21,36 @@ type ClaudeExecutionInput = StartSessionInput & {
 };
 
 const CLAUDE_THINKING_LEVELS = new Set(['low', 'medium', 'high', 'max']);
+const SUPPORTED_CLAUDE_IMAGE_TYPES = new Map<string, 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'>([
+  ['.jpg', 'image/jpeg'],
+  ['.jpeg', 'image/jpeg'],
+  ['.png', 'image/png'],
+  ['.gif', 'image/gif'],
+  ['.webp', 'image/webp'],
+]);
+
+type ClaudeUserPromptMessage = {
+  type: 'user';
+  message: {
+    role: 'user';
+    content: Array<
+      | {
+          type: 'text';
+          text: string;
+        }
+      | {
+          type: 'image';
+          source: {
+            type: 'base64';
+            media_type: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+            data: string;
+          };
+        }
+    >;
+  };
+  parent_tool_use_id: null;
+  timestamp: string;
+};
 
 /**
  * Claude SDK provider implementation.
@@ -74,8 +106,9 @@ export class ClaudeProvider extends BaseSdkProvider {
       options.sessionId = input.sessionId;
     }
 
+    const promptInput = await this.buildPromptInput(input.prompt, input.imagePaths, input.workspacePath);
     const queryInstance = query({
-      prompt: input.prompt,
+      prompt: promptInput as any,
       options,
     });
 
@@ -89,6 +122,58 @@ export class ClaudeProvider extends BaseSdkProvider {
         await queryInstance.setModel(model);
       },
     };
+  }
+
+  /**
+   * Builds a Claude prompt payload. When images are present, this returns an async iterable user message.
+   */
+  private async buildPromptInput(
+    prompt: string,
+    imagePaths?: string[],
+    workspacePath?: string,
+  ): Promise<string | AsyncIterable<ClaudeUserPromptMessage>> {
+    if (!imagePaths || imagePaths.length === 0) {
+      return prompt;
+    }
+
+    const content: ClaudeUserPromptMessage['message']['content'] = [
+      { type: 'text', text: prompt },
+    ];
+
+    for (const imagePath of imagePaths) {
+      const resolvedPath = path.isAbsolute(imagePath)
+        ? imagePath
+        : path.resolve(workspacePath ?? process.cwd(), imagePath);
+      const extension = path.extname(resolvedPath).toLowerCase();
+      const mediaType = SUPPORTED_CLAUDE_IMAGE_TYPES.get(extension);
+      if (!mediaType) {
+        continue;
+      }
+
+      const imageBytes = await readFile(resolvedPath);
+      content.push({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: mediaType,
+          data: imageBytes.toString('base64'),
+        },
+      });
+    }
+
+    const sdkPrompt = (async function* (): AsyncIterable<ClaudeUserPromptMessage> {
+      yield {
+        type: 'user',
+        message: {
+          role: 'user',
+          content,
+        },
+        parent_tool_use_id: null,
+        timestamp: new Date().toISOString(),
+      };
+    })();
+
+    return sdkPrompt;
   }
 
   /**

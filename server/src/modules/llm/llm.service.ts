@@ -21,6 +21,35 @@ const normalizeOptionalString = (value: unknown): string | undefined => {
 };
 
 /**
+ * Validates and normalizes optional image path arrays.
+ */
+const normalizeImagePaths = (value: unknown): string[] | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value)) {
+    throw new AppError('imagePaths must be an array of strings.', {
+      code: 'INVALID_IMAGE_PATHS',
+      statusCode: 400,
+    });
+  }
+
+  const normalizedPaths = value
+    .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+    .filter((entry) => entry.length > 0);
+
+  if (normalizedPaths.length !== value.length) {
+    throw new AppError('imagePaths must contain non-empty strings only.', {
+      code: 'INVALID_IMAGE_PATHS',
+      statusCode: 400,
+    });
+  }
+
+  return normalizedPaths;
+};
+
+/**
  * Validates and normalizes runtime permission mode.
  */
 const normalizePermissionMode = (value: unknown): RuntimePermissionMode | undefined => {
@@ -145,6 +174,7 @@ function parseStartPayload(payload: unknown): StartSessionInput {
     sessionId: normalizeOptionalString(body.sessionId),
     model: normalizeOptionalString(body.model),
     thinkingMode: normalizeOptionalString(body.thinkingMode),
+    imagePaths: normalizeImagePaths(body.imagePaths),
     runtimePermissionMode: normalizePermissionMode(body.runtimePermissionMode),
     allowYolo: body.allowYolo === true,
   };

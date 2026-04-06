@@ -49,6 +49,7 @@ export type StartSessionInput = {
   sessionId?: string;
   model?: string;
   thinkingMode?: string;
+  imagePaths?: string[];
   runtimePermissionMode?: RuntimePermissionMode;
   allowYolo?: boolean;
 };

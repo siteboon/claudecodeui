@@ -64,6 +64,17 @@ export abstract class BaseCliProvider extends AbstractProvider {
   protected abstract createCliInvocation(input: CreateCliInvocationInput): CliInvocation;
 
   /**
+   * Appends uploaded image paths to prompt text for CLI providers that only accept string prompts.
+   */
+  protected appendImagePathsToPrompt(prompt: string, imagePaths?: string[]): string {
+    if (!imagePaths || imagePaths.length === 0) {
+      return prompt;
+    }
+
+    return `${prompt}\n\n${JSON.stringify(imagePaths)}`;
+  }
+
+  /**
    * Maps one stdout/stderr line into either JSON or plain-text event shapes.
    */
   protected mapCliOutputLine(line: string, channel: 'stdout' | 'stderr'): ProviderSessionEvent {

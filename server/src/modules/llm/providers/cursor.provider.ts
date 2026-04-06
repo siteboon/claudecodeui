@@ -40,6 +40,7 @@ export class CursorProvider extends BaseCliProvider {
     args: string[];
     cwd?: string;
   } {
+    const promptWithImagePaths = this.appendImagePathsToPrompt(input.prompt, input.imagePaths);
     const args = ['--print', '--trust', '--output-format', 'stream-json'];
 
     if (input.allowYolo) {
@@ -54,7 +55,7 @@ export class CursorProvider extends BaseCliProvider {
       args.push('--resume', input.sessionId);
     }
 
-    args.push(input.prompt);
+    args.push(promptWithImagePaths);
 
     return {
       command: 'cursor-agent',

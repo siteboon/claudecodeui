@@ -47,7 +47,8 @@ export class GeminiProvider extends BaseCliProvider {
     args: string[];
     cwd?: string;
   } {
-    const args = ['--prompt', input.prompt, '--output-format', 'stream-json'];
+    const promptWithImagePaths = this.appendImagePathsToPrompt(input.prompt, input.imagePaths);
+    const args = ['--prompt', promptWithImagePaths, '--output-format', 'stream-json'];
 
     if (input.model) {
       args.push('--model', input.model);

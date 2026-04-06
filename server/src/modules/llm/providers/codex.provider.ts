@@ -29,7 +29,18 @@ type CodexSdkClient = {
 
 type CodexThread = {
   runStreamed: (
-    prompt: string,
+    prompt:
+      | string
+      | Array<
+          | {
+              type: 'text';
+              text: string;
+            }
+          | {
+              type: 'local_image';
+              path: string;
+            }
+        >,
     options?: {
       signal?: AbortSignal;
     },
@@ -114,7 +125,8 @@ export class CodexProvider extends BaseSdkProvider {
       : client.startThread(threadOptions);
 
     const abortController = new AbortController();
-    const streamedTurn = await thread.runStreamed(input.prompt, {
+    const promptInput = this.buildPromptInput(input.prompt, input.imagePaths, input.workspacePath);
+    const streamedTurn = await thread.runStreamed(promptInput, {
       signal: abortController.signal,
     });
 
@@ -125,6 +137,33 @@ export class CodexProvider extends BaseSdkProvider {
         return true;
       },
     };
+  }
+
+  /**
+   * Builds Codex prompt items. Images are sent as `local_image` entries for SDK-native image support.
+   */
+  private buildPromptInput(
+    prompt: string,
+    imagePaths?: string[],
+    workspacePath?: string,
+  ): string | Array<{ type: 'text'; text: string } | { type: 'local_image'; path: string }> {
+    if (!imagePaths || imagePaths.length === 0) {
+      return prompt;
+    }
+
+    const resolvedImagePaths = imagePaths.map((imagePath) => (
+      path.isAbsolute(imagePath)
+        ? imagePath
+        : path.resolve(workspacePath ?? process.cwd(), imagePath)
+    ));
+
+    return [
+      { type: 'text', text: prompt },
+      ...resolvedImagePaths.map((resolvedPath) => ({
+        type: 'local_image' as const,
+        path: resolvedPath,
+      })),
+    ];
   }
 
   /**
