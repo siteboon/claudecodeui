@@ -4,13 +4,13 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { AppError } from '../../shared/utils/app-error.js';
-import { llmAssetsService } from './assets.service.js';
-import { ClaudeProvider } from './providers/claude.provider.js';
-import { CodexProvider } from './providers/codex.provider.js';
-import { CursorProvider } from './providers/cursor.provider.js';
-import { GeminiProvider } from './providers/gemini.provider.js';
-import { llmService } from './llm.service.js';
+import { AppError } from '@/shared/utils/app-error.js';
+import { llmAssetsService } from '@/modules/llm/services/assets.service.js';
+import { ClaudeProvider } from '@/modules/llm/providers/claude.provider.js';
+import { CodexProvider } from '@/modules/llm/providers/codex.provider.js';
+import { CursorProvider } from '@/modules/llm/providers/cursor.provider.js';
+import { GeminiProvider } from '@/modules/llm/providers/gemini.provider.js';
+import { llmService } from '@/modules/llm/services/llm.service.js';
 
 const asyncEvents = async function* (events: unknown[]) {
   for (const event of events) {

@@ -6,7 +6,7 @@ import { sessionsDb } from '@/shared/database/repositories/sessions.db.js';
 import type { LLMProvider } from '@/shared/types/app.js';
 import { AppError } from '@/shared/utils/app-error.js';
 import { sessionIndexers } from '@/modules/llm/session-indexers/index.js';
-import { llmMessagesUnifier, type UnifiedChatMessage } from '@/modules/llm/messages-unifier.service.js';
+import { llmMessagesUnifier, type UnifiedChatMessage } from '@/modules/llm/services/messages-unifier.service.js';
 
 type SyncResult = {
   processedByProvider: Record<LLMProvider, number>;

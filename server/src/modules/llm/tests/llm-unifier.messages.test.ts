@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { llmMessagesUnifier } from './messages-unifier.service.js';
+import { llmMessagesUnifier } from '@/modules/llm/services/messages-unifier.service.js';
 
 /**
  * This test covers helper-3 Claude normalization: user/assistant/thinking/tool-use/tool-result/error.

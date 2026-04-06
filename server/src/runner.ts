@@ -8,7 +8,7 @@ import { dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 import { initializeDatabase } from '@/shared/database/init-db.js';
-import { initializeWatcher } from '@/modules/llm/sessions.watcher.js';
+import { initializeWatcher } from '@/modules/llm/services/sessions-watcher.service.js';
 import { configureWebPush } from '@/modules/push-sub/push-sub.services.js';
 import { getConnectableHost } from '@/shared/utils/networkHosts.js';
 import { logger } from '@/shared/utils/logger.js';

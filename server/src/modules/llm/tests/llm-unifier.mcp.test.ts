@@ -7,8 +7,8 @@ import test from 'node:test';
 
 import TOML from '@iarna/toml';
 
-import { AppError } from '../../shared/utils/app-error.js';
-import { llmMcpService } from './mcp.service.js';
+import { AppError } from '@/shared/utils/app-error.js';
+import { llmMcpService } from '@/modules/llm/services/mcp.service.js';
 
 const patchHomeDir = (nextHomeDir: string) => {
   const original = os.homedir;

@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { llmSkillsService } from './skills.service.js';
+import { llmSkillsService } from '@/modules/llm/services/skills.service.js';
 
 const patchHomeDir = (nextHomeDir: string) => {
   const original = os.homedir;

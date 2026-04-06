@@ -4,13 +4,13 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { AppError } from '../../shared/utils/app-error.js';
-import { scanStateDb } from '../../shared/database/repositories/scan-state.db.js';
-import { sessionsDb } from '../../shared/database/repositories/sessions.db.js';
-import { llmSessionsService } from './sessions.service.js';
-import { sessionIndexers } from './session-indexers/index.js';
-import { conversationSearchService } from '../conversations/conversation-search.service.js';
-import type { ISessionIndexer } from './session-indexers/session-indexer.interface.js';
+import { AppError } from '@/shared/utils/app-error.js';
+import { scanStateDb } from '@/shared/database/repositories/scan-state.db.js';
+import { sessionsDb } from '@/shared/database/repositories/sessions.db.js';
+import { llmSessionsService } from '@/modules/llm/services/sessions.service.js';
+import { sessionIndexers } from '@/modules/llm/session-indexers/index.js';
+import { conversationSearchService } from '@/modules/conversations/conversation-search.service.js';
+import type { ISessionIndexer } from '@/modules/llm/session-indexers/session-indexer.interface.js';
 
 const patchMethod = <T extends object, K extends keyof T>(target: T, key: K, replacement: T[K]) => {
   const original = target[key];

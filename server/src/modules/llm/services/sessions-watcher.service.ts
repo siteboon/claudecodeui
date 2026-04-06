@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { promises as fsPromises } from 'node:fs';
 
-import { llmSessionsService } from '@/modules/llm/sessions.service.js';
+import { llmSessionsService } from '@/modules/llm/services/sessions.service.js';
 import type { LLMProvider } from '@/shared/types/app.js';
 import { logger } from '@/shared/utils/logger.js';
 

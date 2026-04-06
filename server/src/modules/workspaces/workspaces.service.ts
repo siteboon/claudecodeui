@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-import { llmSessionsService } from '@/modules/llm/sessions.service.js';
+import { llmSessionsService } from '@/modules/llm/services/sessions.service.js';
 import { sessionsDb } from '@/shared/database/repositories/sessions.db.js';
 import { workspaceOriginalPathsDb } from '@/shared/database/repositories/workspace-original-paths.db.js';
 import type { SessionsRow } from '@/shared/database/types.js';
