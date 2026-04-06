@@ -125,6 +125,7 @@ export abstract class BaseSdkProvider extends AbstractProvider {
         }
       }
 
+      // after stream completion, only update status if not already stopped by user
       if (session.status === 'running') {
         this.updateSessionStatus(session, 'completed');
         this.appendEvent(session, {
