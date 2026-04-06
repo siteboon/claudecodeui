@@ -94,15 +94,17 @@ export default function ClaudeMcpFormModal({
       setProjectsError(null);
 
       try {
-        const response = await authenticatedFetch('/api/sidebar/get-workspaces-sessions');
+        const response = await authenticatedFetch('/api/workspaces');
         const data = (await response.json()) as unknown;
 
         if (!response.ok) {
           throw new Error('Failed to fetch projects');
         }
 
-        const rawProjects = Array.isArray((data as { workspaces?: unknown }).workspaces)
-          ? (data as { workspaces: ProjectApiRecord[] }).workspaces
+        const rawProjects = Array.isArray(
+          (data as { data?: { workspaces?: unknown } }).data?.workspaces,
+        )
+          ? ((data as { data: { workspaces: ProjectApiRecord[] } }).data.workspaces)
           : [];
 
         if (!cancelled) {

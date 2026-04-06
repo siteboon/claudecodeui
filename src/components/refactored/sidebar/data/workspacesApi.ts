@@ -2,12 +2,10 @@ import type { WorkspaceRecord } from '@/components/refactored/sidebar/types';
 import { authenticatedFetch } from '@/utils/api';
 
 const SIDEBAR_ENDPOINTS = {
-  getWorkspaceSessions: '/api/sidebar/get-workspaces-sessions',
-  updateWorkspaceStar: '/api/sidebar/update-workspace-star',
-  updateWorkspaceCustomName: '/api/sidebar/update-workspace-custom-name',
-  updateSessionCustomName: '/api/sidebar/update-session-custom-name',
-  deleteWorkspace: '/api/sidebar/delete-workspace',
-  deleteSession: '/api/sidebar/delete-session',
+  getWorkspaceSessions: '/api/workspaces',
+  updateWorkspaceStar: '/api/workspaces/star',
+  updateWorkspaceCustomName: '/api/workspaces/name',
+  deleteWorkspace: '/api/workspaces',
 } as const;
 
 const parseJsonSafely = async <T>(response: Response): Promise<T | null> => {
@@ -28,40 +26,62 @@ const getErrorMessage = (fallbackMessage: string, payload: unknown): string => {
     return (payload as { error: string }).error;
   }
 
+  if (
+    payload &&
+    typeof payload === 'object' &&
+    'error' in payload &&
+    typeof (payload as { error?: { message?: unknown } }).error?.message === 'string'
+  ) {
+    return (payload as { error: { message: string } }).error.message;
+  }
+
   return fallbackMessage;
 };
 
 export const getWorkspaceSessions = async (): Promise<WorkspaceRecord[]> => {
   const response = await authenticatedFetch(SIDEBAR_ENDPOINTS.getWorkspaceSessions);
-  const payload = await parseJsonSafely<{ workspaces?: WorkspaceRecord[]; error?: string }>(response);
+  const payload = await parseJsonSafely<{
+    success?: boolean;
+    data?: { workspaces?: WorkspaceRecord[] };
+    error?: { message?: string };
+  }>(response);
 
   if (!response.ok) {
-    throw new Error(getErrorMessage('Failed to fetch workspaces', payload));
+    throw new Error(
+      payload?.error?.message ||
+        getErrorMessage('Failed to fetch workspaces', payload),
+    );
   }
 
-  return payload?.workspaces || [];
+  return payload?.data?.workspaces || [];
 };
 
 export const updateWorkspaceStar = async (
   workspacePath: string,
 ): Promise<{ workspacePath: string; isStarred: boolean }> => {
   const response = await authenticatedFetch(SIDEBAR_ENDPOINTS.updateWorkspaceStar, {
-    method: 'PUT',
+    method: 'PATCH',
     body: JSON.stringify({ workspacePath }),
   });
   const payload = await parseJsonSafely<{
-    workspacePath?: string;
-    isStarred?: boolean;
-    error?: string;
+    success?: boolean;
+    data?: {
+      workspacePath?: string;
+      isStarred?: boolean;
+    };
+    error?: { message?: string };
   }>(response);
 
   if (!response.ok) {
-    throw new Error(getErrorMessage('Failed to update workspace star', payload));
+    throw new Error(
+      payload?.error?.message ||
+        getErrorMessage('Failed to update workspace star', payload),
+    );
   }
 
   return {
-    workspacePath: payload?.workspacePath || workspacePath,
-    isStarred: Boolean(payload?.isStarred),
+    workspacePath: payload?.data?.workspacePath || workspacePath,
+    isStarred: Boolean(payload?.data?.isStarred),
   };
 };
 
@@ -70,13 +90,16 @@ export const updateWorkspaceCustomName = async (
   workspaceCustomName: string | null,
 ): Promise<void> => {
   const response = await authenticatedFetch(SIDEBAR_ENDPOINTS.updateWorkspaceCustomName, {
-    method: 'PUT',
+    method: 'PATCH',
     body: JSON.stringify({ workspacePath, workspaceCustomName }),
   });
-  const payload = await parseJsonSafely<{ error?: string }>(response);
+  const payload = await parseJsonSafely<{ error?: { message?: string } }>(response);
 
   if (!response.ok) {
-    throw new Error(getErrorMessage('Failed to update workspace name', payload));
+    throw new Error(
+      payload?.error?.message ||
+        getErrorMessage('Failed to update workspace name', payload),
+    );
   }
 };
 
@@ -85,10 +108,13 @@ export const deleteWorkspaceByPath = async (workspacePath: string): Promise<void
     method: 'DELETE',
     body: JSON.stringify({ workspacePath }),
   });
-  const payload = await parseJsonSafely<{ error?: string }>(response);
+  const payload = await parseJsonSafely<{ error?: { message?: string } }>(response);
 
   if (!response.ok) {
-    throw new Error(getErrorMessage('Failed to delete workspace', payload));
+    throw new Error(
+      payload?.error?.message ||
+        getErrorMessage('Failed to delete workspace', payload),
+    );
   }
 };
 
@@ -96,25 +122,30 @@ export const updateSessionCustomName = async (
   sessionId: string,
   sessionCustomName: string,
 ): Promise<void> => {
-  const response = await authenticatedFetch(SIDEBAR_ENDPOINTS.updateSessionCustomName, {
+  const response = await authenticatedFetch(`/api/llm/sessions/${encodeURIComponent(sessionId)}/rename`, {
     method: 'PUT',
-    body: JSON.stringify({ sessionId, sessionCustomName }),
+    body: JSON.stringify({ summary: sessionCustomName }),
   });
-  const payload = await parseJsonSafely<{ error?: string }>(response);
+  const payload = await parseJsonSafely<{ error?: { message?: string } }>(response);
 
   if (!response.ok) {
-    throw new Error(getErrorMessage('Failed to update session name', payload));
+    throw new Error(
+      payload?.error?.message ||
+        getErrorMessage('Failed to update session name', payload),
+    );
   }
 };
 
 export const deleteSessionById = async (sessionId: string): Promise<void> => {
-  const response = await authenticatedFetch(SIDEBAR_ENDPOINTS.deleteSession, {
+  const response = await authenticatedFetch(`/api/llm/sessions/${encodeURIComponent(sessionId)}`, {
     method: 'DELETE',
-    body: JSON.stringify({ sessionId }),
   });
-  const payload = await parseJsonSafely<{ error?: string }>(response);
+  const payload = await parseJsonSafely<{ error?: { message?: string } }>(response);
 
   if (!response.ok) {
-    throw new Error(getErrorMessage('Failed to delete session', payload));
+    throw new Error(
+      payload?.error?.message ||
+        getErrorMessage('Failed to delete session', payload),
+    );
   }
 };

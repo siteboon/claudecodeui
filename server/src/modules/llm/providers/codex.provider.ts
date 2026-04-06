@@ -1,0 +1,171 @@
+import os from 'node:os';
+import path from 'node:path';
+import { readFile } from 'node:fs/promises';
+
+import { BaseSdkProvider } from '@/modules/llm/providers/base-sdk.provider.js';
+import type { ProviderModel, ProviderSessionEvent, StartSessionInput } from '@/modules/llm/providers/provider.interface.js';
+import { AppError } from '@/shared/utils/app-error.js';
+
+type CodexExecutionInput = StartSessionInput & {
+  sessionId: string;
+  isResume: boolean;
+};
+
+type CodexModelCacheEntry = {
+  slug?: string;
+  display_name?: string;
+  description?: string;
+  supported_reasoning_levels?: Array<{
+    effort?: string;
+    description?: string;
+  }>;
+  priority?: number;
+};
+
+type CodexSdkClient = {
+  startThread: (options?: Record<string, unknown>) => CodexThread;
+  resumeThread: (sessionId: string, options?: Record<string, unknown>) => CodexThread;
+};
+
+type CodexThread = {
+  runStreamed: (
+    prompt: string,
+    options?: {
+      signal?: AbortSignal;
+    },
+  ) => Promise<{
+    events: AsyncIterable<unknown>;
+  }>;
+};
+
+type CodexSdkModule = {
+  Codex: new () => CodexSdkClient;
+};
+
+/**
+ * Codex SDK provider implementation.
+ */
+export class CodexProvider extends BaseSdkProvider {
+  constructor() {
+    super('codex', {
+      supportsRuntimePermissionRequests: false,
+      supportsThinkingModeControl: true,
+      supportsModelSwitching: true,
+      supportsSessionResume: true,
+      supportsSessionStop: true,
+    });
+  }
+
+  /**
+   * Reads codex models from ~/.codex/models_cache.json.
+   */
+  async listModels(): Promise<ProviderModel[]> {
+    const modelCachePath = path.join(os.homedir(), '.codex', 'models_cache.json');
+    let content: string;
+    try {
+      content = await readFile(modelCachePath, 'utf8');
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException)?.code;
+      if (code === 'ENOENT') {
+        throw new AppError('Codex model cache was not found. Expected ~/.codex/models_cache.json.', {
+          code: 'CODEX_MODEL_CACHE_NOT_FOUND',
+          statusCode: 404,
+        });
+      }
+
+      throw error;
+    }
+
+    const parsed = JSON.parse(content) as { models?: CodexModelCacheEntry[] };
+
+    const models = parsed.models ?? [];
+    return models
+      .filter((entry) => Boolean(entry.slug))
+      .map((entry) => ({
+        value: entry.slug as string,
+        displayName: entry.display_name ?? entry.slug ?? 'unknown',
+        description: entry.description,
+        default: entry.priority === 1,
+        supportsThinkingModes: Boolean(entry.supported_reasoning_levels?.length),
+        supportedThinkingModes: entry.supported_reasoning_levels
+          ?.map((level) => level.effort)
+          .filter((effort): effort is string => typeof effort === 'string'),
+      }));
+  }
+
+  /**
+   * Creates a Codex thread execution and wires abort support.
+   */
+  protected async createSdkExecution(input: CodexExecutionInput): Promise<{
+    stream: AsyncIterable<unknown>;
+    stop: () => Promise<boolean>;
+  }> {
+    const sdkModule = await this.loadCodexSdkModule();
+    const client = new sdkModule.Codex();
+
+    const threadOptions: Record<string, unknown> = {
+      model: input.model,
+      workingDirectory: input.workspacePath,
+      modelReasoningEffort: input.thinkingMode,
+    };
+
+    const thread = input.isResume
+      ? client.resumeThread(input.sessionId, threadOptions)
+      : client.startThread(threadOptions);
+
+    const abortController = new AbortController();
+    const streamedTurn = await thread.runStreamed(input.prompt, {
+      signal: abortController.signal,
+    });
+
+    return {
+      stream: streamedTurn.events,
+      stop: async () => {
+        abortController.abort('Session stop requested');
+        return true;
+      },
+    };
+  }
+
+  /**
+   * Normalizes Codex stream events into the shared event shape.
+   */
+  protected mapSdkEvent(rawEvent: unknown): ProviderSessionEvent | null {
+    if (typeof rawEvent !== 'object' || rawEvent === null) {
+      return {
+        timestamp: new Date().toISOString(),
+        channel: 'sdk',
+        message: String(rawEvent),
+      };
+    }
+
+    const record = rawEvent as Record<string, unknown>;
+    const message = typeof record.type === 'string' ? record.type : 'codex_event';
+
+    return {
+      timestamp: new Date().toISOString(),
+      channel: 'sdk',
+      message,
+      data: rawEvent,
+    };
+  }
+
+  /**
+   * Dynamically imports the Codex SDK to support environments where it is optional.
+   */
+  private async loadCodexSdkModule(): Promise<CodexSdkModule> {
+    try {
+      const sdkModule = (await import('@openai/codex-sdk')) as unknown as CodexSdkModule;
+      if (!sdkModule?.Codex) {
+        throw new Error('Codex SDK did not export "Codex".');
+      }
+      return sdkModule;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to import Codex SDK';
+      throw new AppError(`Codex SDK is unavailable: ${message}`, {
+        code: 'CODEX_SDK_UNAVAILABLE',
+        statusCode: 503,
+      });
+    }
+  }
+}

@@ -8,7 +8,7 @@ import { dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 import { initializeDatabase } from '@/shared/database/init-db.js';
-import { initializeWatcher } from '@/modules/sessions/sessions.watcher.js';
+import { initializeWatcher } from '@/modules/llm/sessions.watcher.js';
 import { configureWebPush } from '@/modules/push-sub/push-sub.services.js';
 import { getConnectableHost } from '@/shared/utils/networkHosts.js';
 import { logger } from '@/shared/utils/logger.js';
@@ -61,10 +61,11 @@ const [
     geminiRoutes,
     pluginsRoutes,
     messagesRoutes,
-    sidebarRoutes,
+    conversationsRoutes,
+    workspacesRoutes,
     projectsInlineRoutes,
     filesRoutes,
-    sessionsInlineRoutes,
+    llmRoutes,
 ] = await Promise.all([
     importRoute('./modules/health/health.routes.js'),
     importRoute('./modules/system/system.routes.js'),
@@ -86,10 +87,11 @@ const [
     importRoute('./modules/gemini/gemini.routes.js'),
     importRoute('./modules/plugins/plugins.routes.js'),
     importRoute('./modules/messages/messages.routes.js'),
-    importRoute('./modules/sidebar/sidebar.routes.js'),
+    importRoute('./modules/conversations/conversations.routes.js'),
+    importRoute('./modules/workspaces/workspaces.routes.js'),
     importRoute('./modules/projects/projects.inline.routes.js'),
     importRoute('./modules/files/files.routes.js'),
-    importRoute('./modules/sessions/sessions.inline.routes.js'),
+    importRoute('./modules/llm/llm.routes.js'),
 ]);
 
 // ---------- MIDDLEWARES ----------------
@@ -176,8 +178,14 @@ app.use('/api/plugins', authenticateToken, pluginsRoutes);
 // Unified session messages route (protected)
 app.use('/api/sessions', authenticateToken, messagesRoutes);
 
-// Refactored sidebar routes (protected)
-app.use(sidebarRoutes);
+// Conversation search routes (protected)
+app.use('/api/conversations', authenticateToken, conversationsRoutes);
+
+// Workspace catalog routes (protected)
+app.use('/api/workspaces', authenticateToken, workspacesRoutes);
+
+// Unified LLM provider API routes (protected)
+app.use('/api/llm', authenticateToken, llmRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
@@ -186,7 +194,6 @@ app.use('/api/agent', agentRoutes);
 app.use(systemRoutes);
 app.use(projectsInlineRoutes);
 app.use(filesRoutes);
-app.use(sessionsInlineRoutes);
 
 // This matches files found in the root public folder (like api-docs.html when we run `/api-docs.html`).
 // If the file is found, it's automatically sent. If it is not, it passes it to the next route checker.

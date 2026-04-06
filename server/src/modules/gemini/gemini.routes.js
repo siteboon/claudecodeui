@@ -1,6 +1,6 @@
 import express from 'express';
 import sessionManager from '../../../sessionManager.js';
-import { deleteSession as deleteSessionFromProviders } from '@/modules/sessions/sessions.service.js';
+import { llmSessionsService } from '@/modules/llm/sessions.service.js';
 
 const router = express.Router();
 
@@ -13,7 +13,7 @@ router.delete('/sessions/:sessionId', async (req, res) => {
         }
 
         await sessionManager.deleteSession(sessionId);
-        await deleteSessionFromProviders(sessionId);
+        await llmSessionsService.deleteSessionArtifacts(sessionId);
         res.json({ success: true });
     } catch (error) {
         console.error(`Error deleting Gemini session ${req.params.sessionId}:`, error);

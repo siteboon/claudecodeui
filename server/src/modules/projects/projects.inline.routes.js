@@ -11,7 +11,7 @@ import {
 } from '../../../projects.js';
 import { sessionsDb } from '@/shared/database/repositories/sessions.db.js';
 import { workspaceOriginalPathsDb } from '@/shared/database/repositories/workspace-original-paths.db.js';
-import { deleteSession as deleteSessionFromProviders } from '@/modules/sessions/sessions.service.js';
+import { llmSessionsService } from '@/modules/llm/sessions.service.js';
 import { authenticateToken } from '../auth/auth.middleware.js';
 import { getWorkspaceNameFromPath, WORKSPACES_ROOT, validateWorkspacePath } from './projects.utils.js';
 
@@ -69,7 +69,7 @@ router.delete('/api/projects/:projectName/sessions/:sessionId', authenticateToke
     try {
         const { projectName, sessionId } = req.params;
         console.log(`[API] Deleting session: ${sessionId} from project: ${projectName}`);
-        await deleteSessionFromProviders(sessionId);
+        await llmSessionsService.deleteSessionArtifacts(sessionId);
         console.log(`[API] Session ${sessionId} deleted successfully`);
         res.json({ success: true });
     } catch (error) {
