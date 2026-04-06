@@ -11,17 +11,28 @@
       "types": "./dist/index.d.ts"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "test": "vitest run"
   },
-  "keywords": ["kiro", "acp", "agent", "cli", "sdk", "ai"],
+  "keywords": [
+    "kiro",
+    "acp",
+    "agent",
+    "cli",
+    "sdk",
+    "ai"
+  ],
   "license": "MIT",
   "engines": {
     "node": ">=18"
   },
   "devDependencies": {
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "vitest": "^4.1.2"
   }
 }
