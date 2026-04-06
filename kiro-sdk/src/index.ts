@@ -92,11 +92,11 @@ export function query(params: { prompt: string; options?: Options }): Query {
     router.register(acpSessionId);
 
     try {
-      // Send the prompt
-      await t.sendRpc('session/prompt', {
+      // Send the prompt — response may arrive after streaming notifications
+      t.sendRpc('session/prompt', {
         sessionId: acpSessionId,
         content: [{ type: 'text', text: prompt }],
-      });
+      }).catch(() => {});
 
       // Yield messages until TurnEnd
       yield* router.iterate(acpSessionId);
