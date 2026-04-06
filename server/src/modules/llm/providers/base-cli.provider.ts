@@ -240,6 +240,15 @@ export abstract class BaseCliProvider extends AbstractProvider {
 
     if (code === 0) {
       this.updateSessionStatus(session, 'completed');
+      this.appendEvent(session, {
+        timestamp: new Date().toISOString(),
+        channel: 'system',
+        message: 'Session completed.',
+        data: {
+          sessionId: session.sessionId,
+          sessionStatus: 'COMPLETED',
+        },
+      });
       return;
     }
 

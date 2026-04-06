@@ -18,6 +18,7 @@ import type {
 type ClaudeExecutionInput = StartSessionInput & {
   sessionId: string;
   isResume: boolean;
+  emitEvent?: (event: ProviderSessionEvent) => void;
 };
 
 const CLAUDE_THINKING_LEVELS = new Set(['low', 'medium', 'high', 'max']);
@@ -50,6 +51,18 @@ type ClaudeUserPromptMessage = {
   };
   parent_tool_use_id: null;
   timestamp: string;
+};
+
+/**
+ * Safely reads one optional string value from unknown data.
+ */
+const readString = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const normalized = value.trim();
+  return normalized.length ? normalized : undefined;
 };
 
 /**
@@ -97,7 +110,7 @@ export class ClaudeProvider extends BaseSdkProvider {
       cwd: input.workspacePath,
       model: input.model,
       effort: this.resolveClaudeEffort(input.thinkingMode),
-      canUseTool: this.resolvePermissionHandler(input.runtimePermissionMode),
+      canUseTool: this.resolvePermissionHandler(input.runtimePermissionMode, input.emitEvent),
     };
 
     if (input.isResume) {
@@ -232,20 +245,59 @@ export class ClaudeProvider extends BaseSdkProvider {
   /**
    * Builds a runtime permission callback when explicit allow/deny is requested.
    */
-  private resolvePermissionHandler(mode?: RuntimePermissionMode): CanUseTool | undefined {
+  private resolvePermissionHandler(
+    mode?: RuntimePermissionMode,
+    emitEvent?: (event: ProviderSessionEvent) => void,
+  ): CanUseTool | undefined {
     if (!mode || mode === 'ask') {
       return undefined;
     }
 
     if (mode === 'allow') {
-      return async () => ({ behavior: 'allow' });
+      return async (toolName, input, options) => {
+        const optionsRecord = options as Record<string, unknown>;
+        emitEvent?.({
+          timestamp: new Date().toISOString(),
+          channel: 'system',
+          message: `Tool permission requested for "${toolName}".`,
+          data: {
+            type: 'tool_use_request',
+            toolName,
+            input,
+            toolUseID: options.toolUseID,
+            title: readString(optionsRecord.title),
+            displayName: readString(optionsRecord.displayName),
+            description: readString(optionsRecord.description),
+            blockedPath: options.blockedPath,
+          },
+        });
+        return { behavior: 'allow' };
+      };
     }
 
-    return async () => ({
-      behavior: 'deny',
-      message: 'Permission denied by runtime permission mode.',
-      interrupt: false,
-    });
+    return async (toolName, input, options) => {
+      const optionsRecord = options as Record<string, unknown>;
+      emitEvent?.({
+        timestamp: new Date().toISOString(),
+        channel: 'system',
+        message: `Tool permission denied for "${toolName}".`,
+        data: {
+          type: 'tool_use_request',
+          toolName,
+          input,
+          toolUseID: options.toolUseID,
+          title: readString(optionsRecord.title),
+          displayName: readString(optionsRecord.displayName),
+          description: readString(optionsRecord.description),
+          blockedPath: options.blockedPath,
+        },
+      });
+      return {
+        behavior: 'deny',
+        message: 'Permission denied by runtime permission mode.',
+        interrupt: false,
+      };
+    };
   }
 
   /**

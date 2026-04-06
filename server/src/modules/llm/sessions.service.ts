@@ -6,6 +6,7 @@ import { sessionsDb } from '@/shared/database/repositories/sessions.db.js';
 import type { LLMProvider } from '@/shared/types/app.js';
 import { AppError } from '@/shared/utils/app-error.js';
 import { sessionIndexers } from '@/modules/llm/session-indexers/index.js';
+import { llmMessagesUnifier, type UnifiedChatMessage } from '@/modules/llm/messages-unifier.service.js';
 
 type SyncResult = {
   processedByProvider: Record<LLMProvider, number>;
@@ -19,6 +20,7 @@ type SessionHistoryPayload = {
   filePath: string;
   fileType: 'jsonl' | 'json';
   entries: unknown[];
+  messages: UnifiedChatMessage[];
 };
 
 const SESSION_ID_PATTERN = /^[a-zA-Z0-9._-]{1,120}$/;
@@ -223,6 +225,7 @@ export const llmSessionsService = {
     const fileContent = await readFile(filePath, 'utf8');
     const extension = path.extname(filePath).toLowerCase();
     const isGeminiJson = session.provider === 'gemini' || extension === '.json';
+    const entries = isGeminiJson ? parseJson(fileContent) : parseJsonl(fileContent);
 
     return {
       sessionId: session.session_id,
@@ -230,7 +233,12 @@ export const llmSessionsService = {
       workspacePath: session.workspace_path,
       filePath,
       fileType: isGeminiJson ? 'json' : 'jsonl',
-      entries: isGeminiJson ? parseJson(fileContent) : parseJsonl(fileContent),
+      entries,
+      messages: llmMessagesUnifier.normalizeHistoryEntries(
+        session.provider as LLMProvider,
+        session.session_id,
+        entries,
+      ),
     };
   },
 };

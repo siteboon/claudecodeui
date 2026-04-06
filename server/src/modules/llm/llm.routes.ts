@@ -11,6 +11,7 @@ import { llmAssetsService } from '@/modules/llm/assets.service.js';
 import type { McpScope, McpTransport, UpsertMcpServerInput } from '@/modules/llm/mcp.service.js';
 import { llmMcpService } from '@/modules/llm/mcp.service.js';
 import { llmSkillsService } from '@/modules/llm/skills.service.js';
+import { llmMessagesUnifier } from '@/modules/llm/messages-unifier.service.js';
 import type { LLMProvider } from '@/shared/types/app.js';
 import { logger } from '@/shared/utils/logger.js';
 
@@ -215,6 +216,25 @@ const parseProvider = (value: unknown): LLMProvider => {
   });
 };
 
+/**
+ * Enriches provider session snapshots with normalized message types for frontend rendering.
+ */
+const formatSessionSnapshot = (
+  provider: LLMProvider,
+  snapshot: {
+    sessionId: string;
+    events: Array<{
+      timestamp: string;
+      channel: 'sdk' | 'stdout' | 'stderr' | 'json' | 'system' | 'error';
+      message?: string;
+      data?: unknown;
+    }>;
+  },
+) => ({
+  ...snapshot,
+  messages: llmMessagesUnifier.normalizeSessionEvents(provider, snapshot.sessionId, snapshot.events),
+});
+
 router.get(
   '/providers',
   asyncHandler(async (_req: Request, res: Response) => {
@@ -235,7 +255,7 @@ router.get(
   '/providers/:provider/sessions',
   asyncHandler(async (req: Request, res: Response) => {
     const provider = parseProvider(req.params.provider);
-    const sessions = llmService.listSessions(provider);
+    const sessions = llmService.listSessions(provider).map((session) => formatSessionSnapshot(provider, session));
     res.json(createApiSuccessResponse({ provider, sessions }));
   }),
 );
@@ -253,7 +273,7 @@ router.get(
       });
     }
 
-    res.json(createApiSuccessResponse({ provider, session }));
+    res.json(createApiSuccessResponse({ provider, session: formatSessionSnapshot(provider, session) }));
   }),
 );
 
@@ -265,17 +285,19 @@ router.post(
 
     const waitForCompletion = parseWaitForCompletion(req);
     if (!waitForCompletion) {
+      const formattedSnapshot = formatSessionSnapshot(provider, snapshot);
       res.status(202).json(
         createApiSuccessResponse({
           provider,
-          session: snapshot,
+          session: formattedSnapshot,
         }),
       );
       return;
     }
 
     const completedSnapshot = await llmService.waitForSession(provider, snapshot.sessionId);
-    res.json(createApiSuccessResponse({ provider, session: completedSnapshot ?? snapshot }));
+    const finalSnapshot = completedSnapshot ?? snapshot;
+    res.json(createApiSuccessResponse({ provider, session: formatSessionSnapshot(provider, finalSnapshot) }));
   }),
 );
 
@@ -289,12 +311,13 @@ router.post(
 
     const waitForCompletion = parseWaitForCompletion(req);
     if (!waitForCompletion) {
-      res.status(202).json(createApiSuccessResponse({ provider, session: snapshot }));
+      res.status(202).json(createApiSuccessResponse({ provider, session: formatSessionSnapshot(provider, snapshot) }));
       return;
     }
 
     const completedSnapshot = await llmService.waitForSession(provider, sessionId);
-    res.json(createApiSuccessResponse({ provider, session: completedSnapshot ?? snapshot }));
+    const finalSnapshot = completedSnapshot ?? snapshot;
+    res.json(createApiSuccessResponse({ provider, session: formatSessionSnapshot(provider, finalSnapshot) }));
   }),
 );
 
@@ -529,6 +552,19 @@ router.get(
       ),
     );
     res.json(createApiSuccessResponse({ providers: byProvider }));
+  }),
+);
+
+router.get(
+  '/sessions/:sessionId/messages',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = readPathParam(req.params.sessionId, 'sessionId');
+    const history = await llmSessionsService.getSessionHistory(sessionId);
+    res.json(createApiSuccessResponse({
+      sessionId,
+      provider: history.provider,
+      messages: history.messages,
+    }));
   }),
 );
 

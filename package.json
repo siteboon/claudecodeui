@@ -34,7 +34,7 @@
     "preview": "vite preview",
     "typecheck:client": "tsc --noEmit -p tsconfig.json",
     "typecheck:server": "tsc --noEmit -p server/tsconfig.json",
-    "test:server": "tsx --tsconfig server/tsconfig.json --test server/src/modules/llm/llm-session-processor.service.test.ts server/src/modules/llm/llm-unifier.providers.test.ts server/src/modules/llm/llm-unifier.sessions.test.ts server/src/modules/llm/llm-unifier.images.test.ts server/src/modules/llm/llm-unifier.mcp.test.ts server/src/modules/llm/llm-unifier.skills.test.ts",
+    "test:server": "tsx --tsconfig server/tsconfig.json --test server/src/modules/llm/llm-session-processor.service.test.ts server/src/modules/llm/llm-unifier.providers.test.ts server/src/modules/llm/llm-unifier.sessions.test.ts server/src/modules/llm/llm-unifier.images.test.ts server/src/modules/llm/llm-unifier.mcp.test.ts server/src/modules/llm/llm-unifier.skills.test.ts server/src/modules/llm/llm-unifier.messages.test.ts",
     "verify:server": "npm run typecheck:server && npm run test:server && npm run server:build",
     "typecheck": "npm run typecheck:client && npm run typecheck:server",
     "lint": "eslint src/",

@@ -93,6 +93,10 @@ export abstract class AbstractProvider implements IProvider {
         timestamp: new Date().toISOString(),
         channel: 'system',
         message: 'Session stop requested.',
+        data: {
+          sessionId,
+          sessionStatus: 'SESSION_ABORTED',
+        },
       });
     }
 
@@ -218,6 +222,16 @@ export abstract class AbstractProvider implements IProvider {
     this.rememberSessionPreference(sessionId, {
       model: input.model,
       thinkingMode: input.thinkingMode,
+    });
+
+    this.appendEvent(session, {
+      timestamp: session.startedAt,
+      channel: 'system',
+      message: 'Session started.',
+      data: {
+        sessionId,
+        sessionStatus: 'STARTED',
+      },
     });
 
     return session;

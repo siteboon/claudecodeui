@@ -13,6 +13,7 @@ import type { LLMProvider } from '@/shared/types/app.js';
 type CreateSdkExecutionInput = StartSessionInput & {
   sessionId: string;
   isResume: boolean;
+  emitEvent?: (event: ProviderSessionEvent) => void;
 };
 
 type SdkExecution = {
@@ -86,6 +87,9 @@ export abstract class BaseSdkProvider extends AbstractProvider {
         ...input,
         model: effectiveModel,
         thinkingMode: effectiveThinking,
+        emitEvent: (event) => {
+          this.appendEvent(session, event);
+        },
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to start SDK session';
@@ -123,6 +127,15 @@ export abstract class BaseSdkProvider extends AbstractProvider {
 
       if (session.status === 'running') {
         this.updateSessionStatus(session, 'completed');
+        this.appendEvent(session, {
+          timestamp: new Date().toISOString(),
+          channel: 'system',
+          message: 'Session completed.',
+          data: {
+            sessionId: session.sessionId,
+            sessionStatus: 'COMPLETED',
+          },
+        });
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown SDK execution failure';
