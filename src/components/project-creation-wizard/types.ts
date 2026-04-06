@@ -1,6 +1,6 @@
 export type WizardStep = 1 | 2 | 3;
 
-export type WorkspaceType = 'existing' | 'new';
+export type WorkspaceType = 'existing' | 'new' | 'remote';
 
 export type TokenMode = 'stored' | 'new' | 'none';
 
@@ -8,17 +8,6 @@ export type FolderSuggestion = {
   name: string;
   path: string;
   type?: string;
-};
-
-export type GithubTokenCredential = {
-  id: number;
-  credential_name: string;
-  is_active: boolean;
-};
-
-export type CredentialsResponse = {
-  credentials?: GithubTokenCredential[];
-  error?: string;
 };
 
 export type BrowseFilesystemResponse = {
@@ -31,7 +20,17 @@ export type CreateFolderResponse = {
   success?: boolean;
   path?: string;
   error?: string;
-  details?: string;
+};
+
+export type GithubTokenCredential = {
+  id: number;
+  credential_name: string;
+  is_active: boolean;
+};
+
+export type CredentialsResponse = {
+  credentials?: GithubTokenCredential[];
+  error?: string;
 };
 
 export type CreateWorkspacePayload = {
@@ -59,4 +58,12 @@ export type WizardFormState = {
   tokenMode: TokenMode;
   selectedGithubToken: string;
   newGithubToken: string;
+  remoteHostName: string;
+  remoteHostname: string;
+  remotePort: number;
+  remoteUsername: string;
+  remotePrivateKeyPath: string;
+  remoteHostId: string;
+  remoteConnectionTested: boolean;
+  remotePath: string;
 };

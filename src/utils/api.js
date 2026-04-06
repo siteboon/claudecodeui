@@ -1,5 +1,7 @@
 import { IS_PLATFORM } from "../constants/config";
 
+const encodeProjectName = (projectName) => encodeURIComponent(projectName);
+
 // Utility function for authenticated API calls
 export const authenticatedFetch = (url, options = {}) => {
   const token = localStorage.getItem('auth-token');
@@ -53,7 +55,7 @@ export const api = {
   // config endpoint removed - no longer needed (frontend uses window.location)
   projects: () => authenticatedFetch('/api/projects'),
   sessions: (projectName, limit = 5, offset = 0) =>
-    authenticatedFetch(`/api/projects/${projectName}/sessions?limit=${limit}&offset=${offset}`),
+    authenticatedFetch(`/api/projects/${encodeProjectName(projectName)}/sessions?limit=${limit}&offset=${offset}`),
   // Unified endpoint — all providers through one URL
   unifiedSessionMessages: (sessionId, provider = 'claude', { projectName = '', projectPath = '', limit = null, offset = 0 } = {}) => {
     const params = new URLSearchParams();
@@ -68,12 +70,12 @@ export const api = {
     return authenticatedFetch(`/api/sessions/${encodeURIComponent(sessionId)}/messages${queryString ? `?${queryString}` : ''}`);
   },
   renameProject: (projectName, displayName) =>
-    authenticatedFetch(`/api/projects/${projectName}/rename`, {
+    authenticatedFetch(`/api/projects/${encodeProjectName(projectName)}/rename`, {
       method: 'PUT',
       body: JSON.stringify({ displayName }),
     }),
   deleteSession: (projectName, sessionId) =>
-    authenticatedFetch(`/api/projects/${projectName}/sessions/${sessionId}`, {
+    authenticatedFetch(`/api/projects/${encodeProjectName(projectName)}/sessions/${sessionId}`, {
       method: 'DELETE',
     }),
   renameSession: (sessionId, summary, provider) =>
@@ -90,7 +92,7 @@ export const api = {
       method: 'DELETE',
     }),
   deleteProject: (projectName, force = false) =>
-    authenticatedFetch(`/api/projects/${projectName}${force ? '?force=true' : ''}`, {
+    authenticatedFetch(`/api/projects/${encodeProjectName(projectName)}${force ? '?force=true' : ''}`, {
       method: 'DELETE',
     }),
   searchConversationsUrl: (query, limit = 50) => {
@@ -110,36 +112,36 @@ export const api = {
       body: JSON.stringify(workspaceData),
     }),
   readFile: (projectName, filePath) =>
-    authenticatedFetch(`/api/projects/${projectName}/file?filePath=${encodeURIComponent(filePath)}`),
+    authenticatedFetch(`/api/projects/${encodeProjectName(projectName)}/file?filePath=${encodeURIComponent(filePath)}`),
   saveFile: (projectName, filePath, content) =>
-    authenticatedFetch(`/api/projects/${projectName}/file`, {
+    authenticatedFetch(`/api/projects/${encodeProjectName(projectName)}/file`, {
       method: 'PUT',
       body: JSON.stringify({ filePath, content }),
     }),
   getFiles: (projectName, options = {}) =>
-    authenticatedFetch(`/api/projects/${projectName}/files`, options),
+    authenticatedFetch(`/api/projects/${encodeProjectName(projectName)}/files`, options),
 
   // File operations
   createFile: (projectName, { path, type, name }) =>
-    authenticatedFetch(`/api/projects/${projectName}/files/create`, {
+    authenticatedFetch(`/api/projects/${encodeProjectName(projectName)}/files/create`, {
       method: 'POST',
       body: JSON.stringify({ path, type, name }),
     }),
 
   renameFile: (projectName, { oldPath, newName }) =>
-    authenticatedFetch(`/api/projects/${projectName}/files/rename`, {
+    authenticatedFetch(`/api/projects/${encodeProjectName(projectName)}/files/rename`, {
       method: 'PUT',
       body: JSON.stringify({ oldPath, newName }),
     }),
 
   deleteFile: (projectName, { path, type }) =>
-    authenticatedFetch(`/api/projects/${projectName}/files`, {
+    authenticatedFetch(`/api/projects/${encodeProjectName(projectName)}/files`, {
       method: 'DELETE',
       body: JSON.stringify({ path, type }),
     }),
 
   uploadFiles: (projectName, formData) =>
-    authenticatedFetch(`/api/projects/${projectName}/files/upload`, {
+    authenticatedFetch(`/api/projects/${encodeProjectName(projectName)}/files/upload`, {
       method: 'POST',
       body: formData,
       headers: {}, // Let browser set Content-Type for FormData
@@ -193,12 +195,30 @@ export const api = {
       }),
   },
 
-  // Browse filesystem for project suggestions
-  browseFilesystem: (dirPath = null) => {
-    const params = new URLSearchParams();
-    if (dirPath) params.append('path', dirPath);
-
-    return authenticatedFetch(`/api/browse-filesystem?${params}`);
+  // Remote host endpoints
+  remoteHosts: {
+    list: () => authenticatedFetch('/api/remote-hosts'),
+    create: (config) => authenticatedFetch('/api/remote-hosts', {
+      method: 'POST',
+      body: JSON.stringify(config),
+    }),
+    test: (config) => authenticatedFetch('/api/remote-hosts/test', {
+      method: 'POST',
+      body: JSON.stringify(config),
+    }),
+    connect: (hostId) => authenticatedFetch(`/api/remote-hosts/${hostId}/connect`, {
+      method: 'POST',
+    }),
+    status: (hostId) => authenticatedFetch(`/api/remote-hosts/${hostId}/status`),
+    allConnectionStates: () => authenticatedFetch('/api/remote-hosts/connections'),
+    disconnect: (hostId) => authenticatedFetch(`/api/remote-hosts/${hostId}/disconnect`, {
+      method: 'POST',
+    }),
+    browse: (hostId, path) => authenticatedFetch(`/api/remote-hosts/${hostId}/browse?path=${encodeURIComponent(path)}`),
+    addProject: (hostId, remotePath) => authenticatedFetch(`/api/remote-hosts/${hostId}/add-project`, {
+      method: 'POST',
+      body: JSON.stringify({ remotePath }),
+    }),
   },
 
   createFolder: (folderPath) =>

@@ -1,4 +1,4 @@
-import { FolderPlus, GitBranch } from 'lucide-react';
+import { FolderPlus, GitBranch, Server } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { WorkspaceType } from '../types';
 
@@ -19,7 +19,7 @@ export default function StepTypeSelection({
         {t('projectWizard.step1.question')}
       </h4>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3">
         <button
           onClick={() => onWorkspaceTypeChange('existing')}
           className={`rounded-lg border-2 p-4 text-left transition-all ${
@@ -61,6 +61,29 @@ export default function StepTypeSelection({
               </h5>
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 {t('projectWizard.step1.new.description')}
+              </p>
+            </div>
+          </div>
+        </button>
+
+        <button
+          onClick={() => onWorkspaceTypeChange('remote')}
+          className={`rounded-lg border-2 p-4 text-left transition-all ${
+            workspaceType === 'remote'
+              ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+              : 'border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600'
+          }`}
+        >
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-indigo-100 dark:bg-indigo-900/50">
+              <Server className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+            </div>
+            <div className="flex-1">
+              <h5 className="mb-1 font-semibold text-gray-900 dark:text-white">
+                {t('projectWizard.step1.remote.title')}
+              </h5>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                {t('projectWizard.step1.remote.description')}
               </p>
             </div>
           </div>

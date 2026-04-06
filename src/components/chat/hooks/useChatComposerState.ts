@@ -23,6 +23,7 @@ import type { Project, ProjectSession, SessionProvider } from '../../../types/ap
 import { escapeRegExp } from '../utils/chatFormatting';
 import { useFileMentions } from './useFileMentions';
 import { type SlashCommand, useSlashCommands } from './useSlashCommands';
+import { extractHostId } from '../../../utils/remote';
 
 type PendingViewSession = {
   sessionId: string | null;
@@ -503,7 +504,7 @@ export function useChatComposerState({
         });
 
         try {
-          const response = await authenticatedFetch(`/api/projects/${selectedProject.name}/upload-images`, {
+          const response = await authenticatedFetch(`/api/projects/${encodeURIComponent(selectedProject.name)}/upload-images`, {
             method: 'POST',
             headers: {},
             body: formData,
@@ -529,6 +530,7 @@ export function useChatComposerState({
 
       const effectiveSessionId =
         currentSessionId || selectedSession?.id || sessionStorage.getItem('cursorSessionId');
+      const backendSessionId = isTemporarySessionId(effectiveSessionId) ? null : effectiveSessionId;
       const sessionToActivate = effectiveSessionId || `new-session-${Date.now()}`;
 
       const userMessage: ChatMessage = {
@@ -590,17 +592,18 @@ export function useChatComposerState({
       const toolsSettings = getToolsSettings();
       const resolvedProjectPath = selectedProject.fullPath || selectedProject.path || '';
       const sessionSummary = getNotificationSessionSummary(selectedSession, currentInput);
+      const remoteHostId = extractHostId(selectedProject) || undefined;
 
       if (provider === 'cursor') {
         sendMessage({
           type: 'cursor-command',
           command: messageContent,
-          sessionId: effectiveSessionId,
+          sessionId: backendSessionId,
           options: {
             cwd: resolvedProjectPath,
             projectPath: resolvedProjectPath,
-            sessionId: effectiveSessionId,
-            resume: Boolean(effectiveSessionId),
+            sessionId: backendSessionId,
+            resume: Boolean(backendSessionId),
             model: cursorModel,
             skipPermissions: toolsSettings?.skipPermissions || false,
             sessionSummary,
@@ -611,12 +614,12 @@ export function useChatComposerState({
         sendMessage({
           type: 'codex-command',
           command: messageContent,
-          sessionId: effectiveSessionId,
+          sessionId: backendSessionId,
           options: {
             cwd: resolvedProjectPath,
             projectPath: resolvedProjectPath,
-            sessionId: effectiveSessionId,
-            resume: Boolean(effectiveSessionId),
+            sessionId: backendSessionId,
+            resume: Boolean(backendSessionId),
             model: codexModel,
             sessionSummary,
             permissionMode: permissionMode === 'plan' ? 'default' : permissionMode,
@@ -626,12 +629,12 @@ export function useChatComposerState({
         sendMessage({
           type: 'gemini-command',
           command: messageContent,
-          sessionId: effectiveSessionId,
+          sessionId: backendSessionId,
           options: {
             cwd: resolvedProjectPath,
             projectPath: resolvedProjectPath,
-            sessionId: effectiveSessionId,
-            resume: Boolean(effectiveSessionId),
+            sessionId: backendSessionId,
+            resume: Boolean(backendSessionId),
             model: geminiModel,
             sessionSummary,
             permissionMode,
@@ -645,13 +648,14 @@ export function useChatComposerState({
           options: {
             projectPath: resolvedProjectPath,
             cwd: resolvedProjectPath,
-            sessionId: effectiveSessionId,
-            resume: Boolean(effectiveSessionId),
+            sessionId: backendSessionId,
+            resume: Boolean(backendSessionId),
             toolsSettings,
             permissionMode,
             model: claudeModel,
             sessionSummary,
             images: uploadedImages,
+            ...(remoteHostId && { hostId: remoteHostId }),
           },
         });
       }
@@ -871,12 +875,15 @@ export function useChatComposerState({
       return;
     }
 
+    const remoteHostId = selectedProject ? extractHostId(selectedProject) || undefined : undefined;
+
     sendMessage({
       type: 'abort-session',
       sessionId: targetSessionId,
       provider,
+      ...(remoteHostId && { hostId: remoteHostId }),
     });
-  }, [canAbortSession, currentSessionId, pendingViewSessionRef, provider, selectedSession?.id, sendMessage]);
+  }, [canAbortSession, currentSessionId, pendingViewSessionRef, provider, selectedProject, selectedSession?.id, sendMessage]);
 
   const handleTranscript = useCallback((text: string) => {
     if (!text.trim()) {
@@ -923,6 +930,7 @@ export function useChatComposerState({
         return;
       }
 
+      const remoteHostId = selectedProject ? extractHostId(selectedProject) || undefined : undefined;
       validIds.forEach((requestId) => {
         sendMessage({
           type: 'claude-permission-response',
@@ -931,6 +939,7 @@ export function useChatComposerState({
           updatedInput: decision?.updatedInput,
           message: decision?.message,
           rememberEntry: decision?.rememberEntry,
+          ...(remoteHostId && { hostId: remoteHostId }),
         });
       });
 
@@ -942,7 +951,7 @@ export function useChatComposerState({
         return next;
       });
     },
-    [sendMessage, setClaudeStatus, setPendingPermissionRequests],
+    [selectedProject, sendMessage, setClaudeStatus, setPendingPermissionRequests],
   );
 
   const [isInputFocused, setIsInputFocused] = useState(false);

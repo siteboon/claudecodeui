@@ -6,6 +6,7 @@ import type {
   MCPServerStatus,
   SessionWithProvider,
 } from '../../types/types';
+import type { ConnectionState } from './ConnectionStatusIndicator';
 import SidebarProjectItem from './SidebarProjectItem';
 import SidebarProjectsState from './SidebarProjectsState';
 
@@ -27,6 +28,7 @@ export type SidebarProjectListProps = {
   deletingProjects: Set<string>;
   tasksEnabled: boolean;
   mcpServerStatus: MCPServerStatus;
+  remoteConnectionStates: Record<string, ConnectionState>;
   getProjectSessions: (project: Project) => SessionWithProvider[];
   isProjectStarred: (projectName: string) => boolean;
   onEditingNameChange: (value: string) => void;
@@ -71,6 +73,7 @@ export default function SidebarProjectList({
   deletingProjects,
   tasksEnabled,
   mcpServerStatus,
+  remoteConnectionStates,
   getProjectSessions,
   isProjectStarred,
   onEditingNameChange,
@@ -135,6 +138,7 @@ export default function SidebarProjectList({
               editingSessionName={editingSessionName}
               tasksEnabled={tasksEnabled}
               mcpServerStatus={mcpServerStatus}
+              remoteConnectionStates={remoteConnectionStates}
               onEditingNameChange={onEditingNameChange}
               onToggleProject={onToggleProject}
               onProjectSelect={onProjectSelect}

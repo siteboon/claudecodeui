@@ -91,6 +91,22 @@ CREATE TABLE IF NOT EXISTS session_names (
 
 CREATE INDEX IF NOT EXISTS idx_session_names_lookup ON session_names(session_id, provider);
 
+-- Remote SSH host configurations
+CREATE TABLE IF NOT EXISTS remote_hosts (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    hostname TEXT NOT NULL,
+    port INTEGER NOT NULL DEFAULT 22,
+    username TEXT NOT NULL,
+    private_key_path TEXT NOT NULL,
+    daemon_version TEXT,
+    last_connected_at INTEGER,
+    created_at INTEGER DEFAULT (unixepoch()),
+    updated_at INTEGER DEFAULT (unixepoch())
+);
+
+CREATE INDEX IF NOT EXISTS idx_remote_hosts_name ON remote_hosts(name);
+
 -- App configuration table (auto-generated secrets, settings, etc.)
 CREATE TABLE IF NOT EXISTS app_config (
     key TEXT PRIMARY KEY,

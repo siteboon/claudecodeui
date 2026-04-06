@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Load environment variables before other imports execute
 import './load-env.js';
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -44,7 +45,7 @@ import pty from 'node-pty';
 import fetch from 'node-fetch';
 import mime from 'mime-types';
 
-import { getProjects, getSessions, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache, searchConversations } from './projects.js';
+import { getProjects, getSessions, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache, searchConversations, loadProjectConfig } from './projects.js';
 import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions, resolveToolApproval, getPendingApprovalsForSession, reconnectSessionWriter } from './claude-sdk.js';
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
 import { queryCodex, abortCodexSession, isCodexSessionActive, getActiveCodexSessions } from './openai-codex.js';
@@ -66,6 +67,10 @@ import codexRoutes from './routes/codex.js';
 import geminiRoutes from './routes/gemini.js';
 import pluginsRoutes from './routes/plugins.js';
 import messagesRoutes from './routes/messages.js';
+import remoteHostsRoutes from './routes/remote-hosts.js';
+import createRemoteConnectionRoutes from './routes/remote-connections.js';
+import { getOperationsForProject } from './remote/operations.js';
+import { getConnection, setOnConnectionCreated } from './remote/connection-manager.js';
 import { createNormalizedMessage } from './providers/types.js';
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
 import { initializeDatabase, sessionNamesDb, applyCustomSessionNames } from './database/db.js';
@@ -98,6 +103,146 @@ let projectsWatchers = [];
 let projectsWatcherDebounceTimer = null;
 const connectedClients = new Set();
 let isGetProjectsRunning = false; // Flag to prevent reentrant calls
+
+// ============================================================================
+// REMOTE FILE WATCH RELAY
+// ============================================================================
+
+/** @type {Map<string, Set<string>>} hostId -> Set of watched paths */
+const remoteWatchedPaths = new Map();
+/** @type {Map<string, Function>} hostId -> notification cleanup function */
+const remoteWatchCleanups = new Map();
+
+/**
+ * Start watching a remote project root for file changes via daemon.
+ * Registers a notification listener (once per host) that relays watch/change
+ * events to all connected frontend WebSocket clients.
+ * @param {string} hostId
+ * @param {string} projectRoot
+ */
+function setupRemoteFileWatch(hostId, projectRoot) {
+  const conn = getConnection(hostId);
+  if (!conn || !conn.isReady) return;
+
+  // Track the watched path
+  if (!remoteWatchedPaths.has(hostId)) {
+    remoteWatchedPaths.set(hostId, new Set());
+  }
+  const paths = remoteWatchedPaths.get(hostId);
+  if (paths.has(projectRoot)) return; // Already watching
+  paths.add(projectRoot);
+
+  // Start watching on daemon
+  conn.transport.request('watch/start', {
+    path: projectRoot,
+    options: { depth: 10 },
+  }).catch(err => {
+    console.error('[RemoteWatch] Failed to start watch on', projectRoot, err.message);
+    paths.delete(projectRoot);
+  });
+
+  // Set up notification listener (only once per host)
+  if (!remoteWatchCleanups.has(hostId)) {
+    const cleanup = conn.transport.onNotification((msg) => {
+      if (msg.method !== 'watch/change') return;
+      const { watchPath, events } = msg.params;
+
+      // Broadcast to all connected WebSocket clients
+      const update = JSON.stringify({
+        type: 'file_tree_updated',
+        hostId,
+        projectRoot: watchPath,
+        events,
+        timestamp: new Date().toISOString(),
+      });
+      connectedClients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(update);
+        }
+      });
+    });
+    remoteWatchCleanups.set(hostId, cleanup);
+  }
+}
+
+/**
+ * Stop watching a remote project root.
+ * @param {string} hostId
+ * @param {string} projectRoot
+ */
+function stopRemoteFileWatch(hostId, projectRoot) {
+  const conn = getConnection(hostId);
+  if (conn?.isReady) {
+    conn.transport.request('watch/stop', { path: projectRoot }).catch(() => {});
+  }
+  const paths = remoteWatchedPaths.get(hostId);
+  if (paths) paths.delete(projectRoot);
+}
+
+/**
+ * Re-establish all file watchers for a host after SSH reconnection.
+ * Cleans up old notification listener, creates a new one on the new transport,
+ * re-sends watch/start RPCs for all tracked paths, and broadcasts a
+ * remote_reconnected event to frontend clients.
+ * @param {string} hostId
+ */
+async function reestablishRemoteWatches(hostId) {
+  const paths = remoteWatchedPaths.get(hostId);
+  if (!paths || paths.size === 0) return;
+
+  const conn = getConnection(hostId);
+  if (!conn?.isReady) return;
+
+  // Clean up old notification listener
+  const oldCleanup = remoteWatchCleanups.get(hostId);
+  if (oldCleanup) {
+    oldCleanup();
+    remoteWatchCleanups.delete(hostId);
+  }
+
+  // Set up new notification listener on new transport
+  const cleanup = conn.transport.onNotification((msg) => {
+    if (msg.method !== 'watch/change') return;
+    const { watchPath, events } = msg.params;
+    const update = JSON.stringify({
+      type: 'file_tree_updated',
+      hostId,
+      projectRoot: watchPath,
+      events,
+      timestamp: new Date().toISOString(),
+    });
+    connectedClients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(update);
+      }
+    });
+  });
+  remoteWatchCleanups.set(hostId, cleanup);
+
+  // Re-start watchers on new daemon instance
+  for (const watchPath of paths) {
+    try {
+      await conn.transport.request('watch/start', {
+        path: watchPath,
+        options: { depth: 10 },
+      });
+    } catch (err) {
+      console.error('[RemoteWatch] Failed to re-establish watch on', watchPath, err.message);
+    }
+  }
+
+  // Broadcast refresh event so frontend reloads file trees
+  const refreshMsg = JSON.stringify({
+    type: 'remote_reconnected',
+    hostId,
+    timestamp: new Date().toISOString(),
+  });
+  connectedClients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(refreshMsg);
+    }
+  });
+}
 
 // Broadcast progress to all connected WebSocket clients
 function broadcastProgress(progress) {
@@ -224,6 +369,64 @@ const app = express();
 const server = http.createServer(app);
 
 const ptySessionsMap = new Map();
+/** @type {Map<string, { hostId: string, writer: WebSocketWriter, startedAt: number, hasText: boolean }>} */
+const remoteClaudeSessions = new Map();
+/** @type {Map<string, Array<{ requestId: string, toolName: string, input: any, context: any, sessionId: string, receivedAt: Date }>>} */
+const remoteClaudePendingPermissions = new Map();
+/** @type {Map<string, { cleanup: Function, transport: any }>} */
+const remoteClaudeHostRelays = new Map();
+
+async function resolveRemoteHostIdFromProjectPath(projectPath) {
+    if (!projectPath || typeof projectPath !== 'string') {
+        return null;
+    }
+
+    try {
+        const config = await loadProjectConfig();
+        for (const [projectName, projectConfig] of Object.entries(config || {})) {
+            if (!projectConfig?.isRemote) continue;
+
+            if (projectConfig.originalPath !== projectPath) continue;
+
+            if (typeof projectConfig.hostId === 'string' && projectConfig.hostId) {
+                return projectConfig.hostId;
+            }
+
+            if (typeof projectName === 'string' && projectName.startsWith('remote:')) {
+                return projectName.split(':')[1] || null;
+            }
+        }
+    } catch {
+        // Ignore config lookup failures; caller will fall back to local behavior.
+    }
+
+    return null;
+}
+
+function findRemotePermissionSessionByRequestId(requestId) {
+    if (!requestId) return null;
+
+    for (const [sessionId, pendingList] of remoteClaudePendingPermissions.entries()) {
+        if (!Array.isArray(pendingList)) continue;
+        if (pendingList.some((item) => item.requestId === requestId)) {
+            return sessionId;
+        }
+    }
+
+    return null;
+}
+
+function removeRemotePendingPermission(sessionId, requestId) {
+    if (!sessionId || !requestId) return;
+    const pendingList = remoteClaudePendingPermissions.get(sessionId) || [];
+    const next = pendingList.filter((item) => item.requestId !== requestId);
+    if (next.length > 0) {
+        remoteClaudePendingPermissions.set(sessionId, next);
+    } else {
+        remoteClaudePendingPermissions.delete(sessionId);
+    }
+}
+
 const PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
 const SHELL_URL_PARSE_BUFFER_LIMIT = 32768;
 const ANSI_ESCAPE_SEQUENCE_REGEX = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1B\\))/g;
@@ -401,6 +604,108 @@ app.use('/api/plugins', authenticateToken, pluginsRoutes);
 // Unified session messages route (protected)
 app.use('/api/sessions', authenticateToken, messagesRoutes);
 
+// Remote SSH host management routes (protected)
+app.use('/api/remote-hosts', authenticateToken, remoteHostsRoutes);
+
+// Register global connection lifecycle hook so ALL connections (including
+// those created on-demand by ensureConnection) get broadcast listeners attached.
+setOnConnectionCreated((mgr, hostId) => {
+  // Re-establish file watchers after SSH reconnection
+  mgr.on('reconnected', async ({ hostId: reconnectedHostId }) => {
+    try {
+      console.log('[RemoteWatch] Reconnected to', reconnectedHostId, '-- re-establishing watchers');
+      await reestablishRemoteWatches(reconnectedHostId);
+    } catch (error) {
+      console.error('[RemoteWatch] Failed to re-establish watchers for', reconnectedHostId, error.message);
+    }
+  });
+
+  // Broadcast all connection state changes to frontend clients
+  mgr.on('state', ({ state }) => {
+    if (state === 'failed' || state === 'disconnected') {
+      const cleanup = remoteWatchCleanups.get(hostId);
+      if (cleanup) {
+        cleanup();
+        remoteWatchCleanups.delete(hostId);
+      }
+      // Keep remoteWatchedPaths so reconnection can re-establish them
+
+      // Clean up active remote Claude sessions for this host —
+      // notify writers so the UI shows an error instead of hanging
+      for (const [sessionId, session] of remoteClaudeSessions.entries()) {
+        if (session.hostId !== hostId) continue;
+        try {
+          session.writer.send(createNormalizedMessage({
+            kind: 'error',
+            content: 'Remote host disconnected',
+            provider: 'claude',
+            sessionId,
+          }));
+          session.writer.send(createNormalizedMessage({
+            kind: 'complete',
+            exitCode: 1,
+            provider: 'claude',
+            sessionId,
+          }));
+        } catch {
+          // Writer may already be closed
+        }
+        remoteClaudeSessions.delete(sessionId);
+        remoteClaudePendingPermissions.delete(sessionId);
+      }
+
+      // Clean up stale relay for this host
+      const relay = remoteClaudeHostRelays.get(hostId);
+      if (relay) {
+        try { relay.cleanup(); } catch { /* ignore */ }
+        remoteClaudeHostRelays.delete(hostId);
+      }
+    }
+
+    // Notify frontend about every state transition
+    const msg = JSON.stringify({
+      type: 'remote_connection_state',
+      hostId,
+      state,
+      timestamp: new Date().toISOString(),
+    });
+    connectedClients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(msg);
+      }
+    });
+
+    // When a remote connection becomes ready, refresh the project list so
+    // sessions are populated without requiring user interaction first.
+    if (state === 'ready') {
+      setTimeout(async () => {
+        try {
+          clearProjectDirectoryCache();
+          const updatedProjects = await getProjects(broadcastProgress);
+          const update = JSON.stringify({
+            type: 'projects_updated',
+            projects: updatedProjects,
+            timestamp: new Date().toISOString(),
+            changeType: 'remote_ready',
+            watchProvider: 'claude',
+          });
+          connectedClients.forEach(client => {
+            if (client.readyState === WebSocket.OPEN) {
+              client.send(update);
+            }
+          });
+        } catch (err) {
+          console.error('[RemoteReady] Failed to refresh projects:', err.message);
+        }
+      }, 500);
+    }
+  });
+});
+
+// Remote SSH connection lifecycle routes (protected)
+const remoteConnectionRoutes = createRemoteConnectionRoutes();
+app.use('/api/remote-hosts', authenticateToken, remoteConnectionRoutes);
+
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
 
@@ -505,8 +810,37 @@ app.get('/api/projects', authenticateToken, async (req, res) => {
 
 app.get('/api/projects/:projectName/sessions', authenticateToken, async (req, res) => {
     try {
+        const projectName = req.params.projectName;
         const { limit = 5, offset = 0 } = req.query;
-        const result = await getSessions(req.params.projectName, parseInt(limit), parseInt(offset));
+
+        // Remote projects: fetch sessions from daemon via JSON-RPC
+        if (projectName.startsWith('remote:')) {
+            try {
+                const { getOperationsForProject } = await import('./remote/operations.js');
+                const { ops, projectRoot, hostId } = await getOperationsForProject(projectName);
+                const { ensureConnection } = await import('./remote/connection-manager.js');
+                const conn = await ensureConnection(hostId);
+                const result = await conn.transport.request('claude/list-sessions', { cwd: projectRoot }, 15000);
+                const sessions = (result.sessions || []).map(s => ({
+                    id: s.session_id || s.id,
+                    summary: s.title || s.name || 'New Session',
+                    messageCount: s.messageCount || 0,
+                    lastActivity: new Date(s.updated_at || s.updated || s.created_at || s.created || Date.now()),
+                    created: s.created_at || s.created || new Date().toISOString(),
+                    updated: s.updated_at || s.updated || new Date().toISOString(),
+                    __provider: 'claude',
+                }));
+                applyCustomSessionNames(sessions, 'claude');
+                // Apply pagination
+                const total = sessions.length;
+                const paged = sessions.slice(parseInt(offset), parseInt(offset) + parseInt(limit));
+                return res.json({ sessions: paged, hasMore: parseInt(offset) + parseInt(limit) < total, total });
+            } catch (err) {
+                return res.json({ sessions: [], hasMore: false, total: 0 });
+            }
+        }
+
+        const result = await getSessions(projectName, parseInt(limit), parseInt(offset));
         applyCustomSessionNames(result.sessions, 'claude');
         res.json(result);
     } catch (error) {
@@ -534,6 +868,29 @@ app.delete('/api/projects/:projectName/sessions/:sessionId', authenticateToken, 
         sessionNamesDb.deleteName(sessionId, 'claude');
         console.log(`[API] Session ${sessionId} deleted successfully`);
         res.json({ success: true });
+
+        // For remote projects, broadcast updated project list so all clients
+        // reflect the deletion instead of re-showing stale sessions on refresh.
+        if (projectName.startsWith('remote:')) {
+            setTimeout(async () => {
+                try {
+                    clearProjectDirectoryCache();
+                    const updatedProjects = await getProjects(broadcastProgress);
+                    const update = JSON.stringify({
+                        type: 'projects_updated',
+                        projects: updatedProjects,
+                        timestamp: new Date().toISOString(),
+                        changeType: 'session_deleted',
+                        watchProvider: 'claude',
+                    });
+                    connectedClients.forEach(client => {
+                        if (client.readyState === WebSocket.OPEN) {
+                            client.send(update);
+                        }
+                    });
+                } catch { /* best-effort refresh */ }
+            }, 200);
+        }
     } catch (error) {
         console.error(`[API] Error deleting session ${req.params.sessionId}:`, error);
         res.status(500).json({ error: error.message });
@@ -617,6 +974,7 @@ app.get('/api/search/conversations', authenticateToken, async (req, res) => {
     req.on('close', () => { closed = true; abortController.abort(); });
 
     try {
+        // Search local projects
         await searchConversations(query, limit, ({ projectResult, totalMatches, scannedProjects, totalProjects }) => {
             if (closed) return;
             if (projectResult) {
@@ -625,6 +983,47 @@ app.get('/api/search/conversations', authenticateToken, async (req, res) => {
                 res.write(`event: progress\ndata: ${JSON.stringify({ totalMatches, scannedProjects, totalProjects })}\n\n`);
             }
         }, abortController.signal);
+
+        // Search remote projects via daemon
+        if (!closed && !abortController.signal.aborted) {
+            try {
+                const config = await loadProjectConfig();
+                const remoteProjects = Object.entries(config || {}).filter(
+                    ([name, cfg]) => cfg?.isRemote && name.startsWith('remote:'),
+                );
+                for (const [projectName, projectConfig] of remoteProjects) {
+                    if (closed || abortController.signal.aborted) break;
+                    try {
+                        const parts = projectName.split(':');
+                        const hostId = parts[1];
+                        const projectRoot = Buffer.from(parts.slice(2).join(':'), 'base64').toString('utf8');
+                        const conn = getConnection(hostId);
+                        if (!conn?.isReady) continue;
+                        const result = await conn.transport.request(
+                            'claude/search-conversations',
+                            { cwd: projectRoot, query, limit },
+                            15000,
+                        );
+                        if (result?.results?.length > 0) {
+                            const displayName = projectConfig.displayName || projectRoot.split('/').pop() || projectRoot;
+                            const projectResult = {
+                                projectName,
+                                projectDisplayName: displayName + ' (remote)',
+                                sessions: result.results,
+                            };
+                            if (!closed) {
+                                res.write(`event: result\ndata: ${JSON.stringify({ projectResult, totalMatches: result.totalMatches, scannedProjects: 0, totalProjects: 0 })}\n\n`);
+                            }
+                        }
+                    } catch {
+                        // Skip failed remote searches
+                    }
+                }
+            } catch {
+                // Skip remote search errors entirely
+            }
+        }
+
         if (!closed) {
             res.write(`event: done\ndata: {}\n\n`);
         }
@@ -650,87 +1049,6 @@ const expandWorkspacePath = (inputPath) => {
     }
     return inputPath;
 };
-
-// Browse filesystem endpoint for project suggestions - uses existing getFileTree
-app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
-    try {
-        const { path: dirPath } = req.query;
-
-        console.log('[API] Browse filesystem request for path:', dirPath);
-        console.log('[API] WORKSPACES_ROOT is:', WORKSPACES_ROOT);
-        // Default to home directory if no path provided
-        const defaultRoot = WORKSPACES_ROOT;
-        let targetPath = dirPath ? expandWorkspacePath(dirPath) : defaultRoot;
-
-        // Resolve and normalize the path
-        targetPath = path.resolve(targetPath);
-
-        // Security check - ensure path is within allowed workspace root
-        const validation = await validateWorkspacePath(targetPath);
-        if (!validation.valid) {
-            return res.status(403).json({ error: validation.error });
-        }
-        const resolvedPath = validation.resolvedPath || targetPath;
-
-        // Security check - ensure path is accessible
-        try {
-            await fs.promises.access(resolvedPath);
-            const stats = await fs.promises.stat(resolvedPath);
-
-            if (!stats.isDirectory()) {
-                return res.status(400).json({ error: 'Path is not a directory' });
-            }
-        } catch (err) {
-            return res.status(404).json({ error: 'Directory not accessible' });
-        }
-
-        // Use existing getFileTree function with shallow depth (only direct children)
-        const fileTree = await getFileTree(resolvedPath, 1, 0, false); // maxDepth=1, showHidden=false
-
-        // Filter only directories and format for suggestions
-        const directories = fileTree
-            .filter(item => item.type === 'directory')
-            .map(item => ({
-                path: item.path,
-                name: item.name,
-                type: 'directory'
-            }))
-            .sort((a, b) => {
-                const aHidden = a.name.startsWith('.');
-                const bHidden = b.name.startsWith('.');
-                if (aHidden && !bHidden) return 1;
-                if (!aHidden && bHidden) return -1;
-                return a.name.localeCompare(b.name);
-            });
-
-        // Add common directories if browsing home directory
-        const suggestions = [];
-        let resolvedWorkspaceRoot = defaultRoot;
-        try {
-            resolvedWorkspaceRoot = await fsPromises.realpath(defaultRoot);
-        } catch (error) {
-            // Use default root as-is if realpath fails
-        }
-        if (resolvedPath === resolvedWorkspaceRoot) {
-            const commonDirs = ['Desktop', 'Documents', 'Projects', 'Development', 'Dev', 'Code', 'workspace'];
-            const existingCommon = directories.filter(dir => commonDirs.includes(dir.name));
-            const otherDirs = directories.filter(dir => !commonDirs.includes(dir.name));
-
-            suggestions.push(...existingCommon, ...otherDirs);
-        } else {
-            suggestions.push(...directories);
-        }
-
-        res.json({
-            path: resolvedPath,
-            suggestions: suggestions
-        });
-
-    } catch (error) {
-        console.error('Error browsing filesystem:', error);
-        res.status(500).json({ error: 'Failed to browse filesystem' });
-    }
-});
 
 app.post('/api/create-folder', authenticateToken, async (req, res) => {
     try {
@@ -778,27 +1096,31 @@ app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) =
         const { projectName } = req.params;
         const { filePath } = req.query;
 
-
-        // Security: ensure the requested path is inside the project root
         if (!filePath) {
             return res.status(400).json({ error: 'Invalid file path' });
         }
 
-        const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
-        if (!projectRoot) {
+        const { ops, projectRoot, isRemote } = await getOperationsForProject(projectName).catch(() => ({ ops: null }));
+        if (!ops) {
             return res.status(404).json({ error: 'Project not found' });
         }
 
-        // Handle both absolute and relative paths
-        const resolved = path.isAbsolute(filePath)
-            ? path.resolve(filePath)
-            : path.resolve(projectRoot, filePath);
-        const normalizedRoot = path.resolve(projectRoot) + path.sep;
-        if (!resolved.startsWith(normalizedRoot)) {
-            return res.status(403).json({ error: 'Path must be under project root' });
+        let resolved;
+        if (isRemote) {
+            // Remote: send path as-is to daemon (daemon validates)
+            resolved = filePath;
+        } else {
+            // Local: validate path is within project root
+            resolved = path.isAbsolute(filePath)
+                ? path.resolve(filePath)
+                : path.resolve(projectRoot, filePath);
+            const normalizedRoot = path.resolve(projectRoot) + path.sep;
+            if (!resolved.startsWith(normalizedRoot)) {
+                return res.status(403).json({ error: 'Path must be under project root' });
+            }
         }
 
-        const content = await fsPromises.readFile(resolved, 'utf8');
+        const content = await ops.readFile(resolved);
         res.json({ content, path: resolved });
     } catch (error) {
         console.error('Error reading file:', error);
@@ -818,15 +1140,18 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
         const { projectName } = req.params;
         const { path: filePath } = req.query;
 
-
-        // Security: ensure the requested path is inside the project root
         if (!filePath) {
             return res.status(400).json({ error: 'Invalid file path' });
         }
 
-        const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
-        if (!projectRoot) {
+        const { ops, projectRoot, isRemote } = await getOperationsForProject(projectName).catch(() => ({ ops: null }));
+        if (!ops) {
             return res.status(404).json({ error: 'Project not found' });
+        }
+
+        // Binary streaming over JSON-RPC is deferred for remote projects
+        if (isRemote) {
+            return res.status(501).json({ error: 'Binary file preview not available for remote projects' });
         }
 
         const resolved = path.resolve(filePath);
@@ -871,8 +1196,6 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
         const { projectName } = req.params;
         const { filePath, content } = req.body;
 
-
-        // Security: ensure the requested path is inside the project root
         if (!filePath) {
             return res.status(400).json({ error: 'Invalid file path' });
         }
@@ -881,22 +1204,27 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
             return res.status(400).json({ error: 'Content is required' });
         }
 
-        const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
-        if (!projectRoot) {
+        const { ops, projectRoot, isRemote } = await getOperationsForProject(projectName).catch(() => ({ ops: null }));
+        if (!ops) {
             return res.status(404).json({ error: 'Project not found' });
         }
 
-        // Handle both absolute and relative paths
-        const resolved = path.isAbsolute(filePath)
-            ? path.resolve(filePath)
-            : path.resolve(projectRoot, filePath);
-        const normalizedRoot = path.resolve(projectRoot) + path.sep;
-        if (!resolved.startsWith(normalizedRoot)) {
-            return res.status(403).json({ error: 'Path must be under project root' });
+        let resolved;
+        if (isRemote) {
+            // Remote: send path as-is to daemon (daemon validates)
+            resolved = filePath;
+        } else {
+            // Local: validate path is within project root
+            resolved = path.isAbsolute(filePath)
+                ? path.resolve(filePath)
+                : path.resolve(projectRoot, filePath);
+            const normalizedRoot = path.resolve(projectRoot) + path.sep;
+            if (!resolved.startsWith(normalizedRoot)) {
+                return res.status(403).json({ error: 'Path must be under project root' });
+            }
         }
 
-        // Write the new content
-        await fsPromises.writeFile(resolved, content, 'utf8');
+        await ops.writeFile(resolved, content);
 
         res.json({
             success: true,
@@ -917,27 +1245,26 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
 
 app.get('/api/projects/:projectName/files', authenticateToken, async (req, res) => {
     try {
-
-        // Using fsPromises from import
-
-        // Use extractProjectDirectory to get the actual project path
-        let actualPath;
-        try {
-            actualPath = await extractProjectDirectory(req.params.projectName);
-        } catch (error) {
-            console.error('Error extracting project directory:', error);
-            // Fallback to simple dash replacement
-            actualPath = req.params.projectName.replace(/-/g, '/');
+        const { ops, projectRoot, isRemote, hostId } = await getOperationsForProject(req.params.projectName).catch(() => ({ ops: null }));
+        if (!ops) {
+            // Fallback for backward compat: try dash replacement
+            let actualPath = req.params.projectName.replace(/-/g, '/');
+            try {
+                await fsPromises.access(actualPath);
+            } catch {
+                return res.status(404).json({ error: `Project path not found: ${actualPath}` });
+            }
+            const files = await getFileTree(actualPath, 10, 0, true);
+            return res.json(files);
         }
 
-        // Check if path exists
-        try {
-            await fsPromises.access(actualPath);
-        } catch (e) {
-            return res.status(404).json({ error: `Project path not found: ${actualPath}` });
+        const files = await ops.listFiles(projectRoot, { maxDepth: 10, showHidden: true });
+
+        // Auto-start remote file watching on first file tree load
+        if (isRemote && hostId) {
+            setupRemoteFileWatch(hostId, projectRoot);
         }
 
-        const files = await getFileTree(actualPath, 10, 0, true);
         res.json(files);
     } catch (error) {
         console.error('[ERROR] File tree error:', error.message);
@@ -1012,13 +1339,26 @@ app.post('/api/projects/:projectName/files/create', authenticateToken, async (re
             return res.status(400).json({ error: nameValidation.error });
         }
 
-        // Get project root
-        const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
-        if (!projectRoot) {
+        const { ops, projectRoot, isRemote } = await getOperationsForProject(projectName).catch(() => ({ ops: null }));
+        if (!ops) {
             return res.status(404).json({ error: 'Project not found' });
         }
 
-        // Build and validate target path
+        if (isRemote) {
+            // Remote: delegate to daemon (daemon validates paths and handles creation)
+            const resolvedParent = parentPath || projectRoot;
+            const result = await ops.createItem(resolvedParent, name, type);
+            return res.json({
+                success: true,
+                path: result.path,
+                name: result.name,
+                type: result.type,
+                message: `${type === 'file' ? 'File' : 'Directory'} created successfully`
+            });
+        }
+
+        // Local: validate path within project root
+        const resolvedParent = parentPath || projectRoot;
         const targetDir = parentPath || '';
         const targetPath = targetDir ? path.join(targetDir, name) : name;
         const validation = validatePathInProject(projectRoot, targetPath);
@@ -1026,35 +1366,22 @@ app.post('/api/projects/:projectName/files/create', authenticateToken, async (re
             return res.status(403).json({ error: validation.error });
         }
 
-        const resolvedPath = validation.resolved;
-
         // Check if already exists
         try {
-            await fsPromises.access(resolvedPath);
+            await fsPromises.access(validation.resolved);
             return res.status(409).json({ error: `${type === 'file' ? 'File' : 'Directory'} already exists` });
         } catch {
             // Doesn't exist, which is what we want
         }
 
-        // Create file or directory
-        if (type === 'directory') {
-            await fsPromises.mkdir(resolvedPath, { recursive: false });
-        } else {
-            // Ensure parent directory exists
-            const parentDir = path.dirname(resolvedPath);
-            try {
-                await fsPromises.access(parentDir);
-            } catch {
-                await fsPromises.mkdir(parentDir, { recursive: true });
-            }
-            await fsPromises.writeFile(resolvedPath, '', 'utf8');
-        }
+        // Delegate to ProjectOperations
+        const result = await ops.createItem(resolvedParent, name, type);
 
         res.json({
             success: true,
-            path: resolvedPath,
-            name,
-            type,
+            path: result.path,
+            name: result.name,
+            type: result.type,
             message: `${type === 'file' ? 'File' : 'Directory'} created successfully`
         });
     } catch (error) {
@@ -1063,6 +1390,8 @@ app.post('/api/projects/:projectName/files/create', authenticateToken, async (re
             res.status(403).json({ error: 'Permission denied' });
         } else if (error.code === 'ENOENT') {
             res.status(404).json({ error: 'Parent directory not found' });
+        } else if (error.code === 'EEXIST') {
+            res.status(409).json({ error: 'Already exists' });
         } else {
             res.status(500).json({ error: error.message });
         }
@@ -1085,13 +1414,24 @@ app.put('/api/projects/:projectName/files/rename', authenticateToken, async (req
             return res.status(400).json({ error: nameValidation.error });
         }
 
-        // Get project root
-        const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
-        if (!projectRoot) {
+        const { ops, projectRoot, isRemote } = await getOperationsForProject(projectName).catch(() => ({ ops: null }));
+        if (!ops) {
             return res.status(404).json({ error: 'Project not found' });
         }
 
-        // Validate old path
+        if (isRemote) {
+            // Remote: delegate to daemon (daemon validates paths)
+            const result = await ops.renameItem(oldPath, newName);
+            return res.json({
+                success: true,
+                oldPath: result.oldPath,
+                newPath: result.newPath,
+                newName: result.newName,
+                message: 'Renamed successfully'
+            });
+        }
+
+        // Local: validate paths within project root
         const oldValidation = validatePathInProject(projectRoot, oldPath);
         if (!oldValidation.valid) {
             return res.status(403).json({ error: oldValidation.error });
@@ -1122,14 +1462,14 @@ app.put('/api/projects/:projectName/files/rename', authenticateToken, async (req
             // Doesn't exist, which is what we want
         }
 
-        // Rename
-        await fsPromises.rename(resolvedOldPath, resolvedNewPath);
+        // Delegate to ProjectOperations
+        const result = await ops.renameItem(resolvedOldPath, newName);
 
         res.json({
             success: true,
-            oldPath: resolvedOldPath,
-            newPath: resolvedNewPath,
-            newName,
+            oldPath: result.oldPath,
+            newPath: result.newPath,
+            newName: result.newName,
             message: 'Renamed successfully'
         });
     } catch (error) {
@@ -1157,13 +1497,23 @@ app.delete('/api/projects/:projectName/files', authenticateToken, async (req, re
             return res.status(400).json({ error: 'Path is required' });
         }
 
-        // Get project root
-        const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
-        if (!projectRoot) {
+        const { ops, projectRoot, isRemote } = await getOperationsForProject(projectName).catch(() => ({ ops: null }));
+        if (!ops) {
             return res.status(404).json({ error: 'Project not found' });
         }
 
-        // Validate path
+        if (isRemote) {
+            // Remote: delegate to daemon (daemon handles stat + delete)
+            await ops.deleteItem(targetPath);
+            return res.json({
+                success: true,
+                path: targetPath,
+                type: type || 'file',
+                message: 'Deleted successfully'
+            });
+        }
+
+        // Local: validate path within project root
         const validation = validatePathInProject(projectRoot, targetPath);
         if (!validation.valid) {
             return res.status(403).json({ error: validation.error });
@@ -1171,7 +1521,7 @@ app.delete('/api/projects/:projectName/files', authenticateToken, async (req, re
 
         const resolvedPath = validation.resolved;
 
-        // Check if path exists and get stats
+        // Check if path exists
         let stats;
         try {
             stats = await fsPromises.stat(resolvedPath);
@@ -1184,12 +1534,8 @@ app.delete('/api/projects/:projectName/files', authenticateToken, async (req, re
             return res.status(403).json({ error: 'Cannot delete project root directory' });
         }
 
-        // Delete based on type
-        if (stats.isDirectory()) {
-            await fsPromises.rm(resolvedPath, { recursive: true, force: true });
-        } else {
-            await fsPromises.unlink(resolvedPath);
-        }
+        // Delegate to ProjectOperations
+        await ops.deleteItem(resolvedPath);
 
         res.json({
             success: true,
@@ -1252,6 +1598,18 @@ const uploadFilesHandler = async (req, res) => {
         try {
             const { projectName } = req.params;
             const { targetPath, relativePaths } = req.body;
+
+            // File upload not available for remote projects (requires local filesystem)
+            const { isRemote } = await getOperationsForProject(projectName).catch(() => ({}));
+            if (isRemote) {
+                // Clean up temp files from multer
+                if (req.files) {
+                    for (const file of req.files) {
+                        await fsPromises.unlink(file.path).catch(() => {});
+                    }
+                }
+                return res.status(501).json({ error: 'File upload not available for remote projects' });
+            }
 
             // Parse relative paths if provided (for folder uploads)
             let filePaths = [];
@@ -1474,6 +1832,399 @@ class WebSocketWriter {
     }
 }
 
+/**
+ * Translate a Claude CLI stream-json event to NormalizedMessage array.
+ * @param {object} event - Event from Claude CLI stdout
+ * @param {string} sessionId - Session identifier
+ * @returns {Array} Array of NormalizedMessage objects
+ */
+function extractTextFromClaudePayload(payload) {
+    if (!payload) return '';
+
+    if (typeof payload === 'string') {
+        return payload;
+    }
+
+    if (Array.isArray(payload)) {
+        return payload
+            .map((item) => extractTextFromClaudePayload(item))
+            .filter(Boolean)
+            .join('')
+            .trim();
+    }
+
+    if (typeof payload !== 'object') {
+        return '';
+    }
+
+    if (typeof payload.text === 'string') {
+        return payload.text;
+    }
+
+    if (typeof payload.thinking === 'string') {
+        return payload.thinking;
+    }
+
+    if (payload.type === 'text' && typeof payload.text === 'string') {
+        return payload.text;
+    }
+
+    if (payload.message) {
+        const nestedMessageText = extractTextFromClaudePayload(payload.message);
+        if (nestedMessageText) return nestedMessageText;
+    }
+
+    if (payload.content) {
+        const nestedContentText = extractTextFromClaudePayload(payload.content);
+        if (nestedContentText) return nestedContentText;
+    }
+
+    if (payload.result) {
+        const nestedResultText = extractTextFromClaudePayload(payload.result);
+        if (nestedResultText) return nestedResultText;
+    }
+
+    return '';
+}
+
+function translateClaudeCliEvent(event, sessionId) {
+    if (!event) return [];
+
+    // Handle exit event — may include accumulatedText as fallback when
+    // individual assistant/message notifications were lost in transit
+    if (event.type === 'exit') {
+        // accumulatedText is a fallback from the daemon — only use it if no
+        // assistant/text events were delivered (checked by the relay handler
+        // via session.hasText before calling this function).
+        const messages = [];
+        if (event.accumulatedText) {
+            messages.push(createNormalizedMessage({
+                kind: 'text',
+                role: 'assistant',
+                content: event.accumulatedText,
+                sessionId,
+                provider: 'claude',
+            }));
+        }
+        messages.push(createNormalizedMessage({
+            kind: 'complete',
+            exitCode: event.code || 0,
+            sessionId,
+            provider: 'claude',
+        }));
+        return messages;
+    }
+
+    // Handle raw text (non-JSON output from CLI)
+    if (event.type === 'raw') {
+        return [createNormalizedMessage({
+            kind: 'text',
+            role: 'assistant',
+            content: event.text,
+            sessionId,
+            provider: 'claude',
+        })];
+    }
+
+    // Handle stderr -- relay errors, ignore debug noise
+    if (event.type === 'stderr') {
+        if (event.text && !event.text.includes('Debugger') && !event.text.includes('Warning')) {
+            return [createNormalizedMessage({
+                kind: 'status',
+                text: event.text,
+                sessionId,
+                provider: 'claude',
+            })];
+        }
+        return [];
+    }
+
+    // Handle Claude CLI structured assistant/message payloads.
+    if ((event.type === 'assistant' || event.type === 'message') && event.message?.content) {
+        const structuredMessages = event.message.content.map(block => {
+            if (block.type === 'text') {
+                return createNormalizedMessage({
+                    kind: 'text',
+                    role: 'assistant',
+                    content: block.text,
+                    sessionId,
+                    provider: 'claude',
+                });
+            }
+            if (block.type === 'tool_use') {
+                return createNormalizedMessage({
+                    kind: 'tool_use',
+                    toolName: block.name,
+                    toolInput: block.input,
+                    toolId: block.id,
+                    sessionId,
+                    provider: 'claude',
+                });
+            }
+            if (block.type === 'thinking') {
+                return createNormalizedMessage({
+                    kind: 'thinking',
+                    content: block.thinking || block.text,
+                    sessionId,
+                    provider: 'claude',
+                });
+            }
+            return null;
+        }).filter(Boolean);
+
+        if (structuredMessages.length > 0) {
+            return structuredMessages;
+        }
+
+        const fallbackText = extractTextFromClaudePayload(event.message?.content);
+        if (fallbackText) {
+            return [createNormalizedMessage({
+                kind: 'text',
+                role: 'assistant',
+                content: fallbackText,
+                sessionId,
+                provider: 'claude',
+            })];
+        }
+
+        return [];
+    }
+
+    // Handle final result event from Claude CLI.
+    // Text is delivered via assistant events; the exit event's accumulatedText
+    // serves as fallback when those are lost.  The result event only emits complete.
+    if (event.type === 'result') {
+        return [createNormalizedMessage({
+            kind: 'complete',
+            exitCode: event.is_error ? 1 : 0,
+            sessionId,
+            provider: 'claude',
+        })];
+    }
+
+    // Handle tool_result events
+    if (event.type === 'tool_result') {
+        return [createNormalizedMessage({
+            kind: 'tool_result',
+            toolId: event.tool_use_id,
+            content: typeof event.content === 'string' ? event.content : JSON.stringify(event.content),
+            isError: event.is_error || false,
+            sessionId,
+            provider: 'claude',
+        })];
+    }
+
+    // Handle permission request events from Claude CLI
+    if (event.type === 'permission_request' || event.type === 'tool_permission_request') {
+        return [createNormalizedMessage({
+            kind: 'permission_request',
+            requestId: event.request_id || event.id,
+            toolName: event.tool_name || event.tool,
+            input: event.input,
+            context: event.context,
+            sessionId,
+            provider: 'claude',
+        })];
+    }
+
+    // Handle system/status messages
+    if (event.type === 'system' || event.type === 'status') {
+        return [createNormalizedMessage({
+            kind: 'status',
+            text: event.message || event.text || JSON.stringify(event),
+            sessionId,
+            provider: 'claude',
+        })];
+    }
+
+    return [];
+}
+
+function ensureRemoteClaudeRelay(hostId) {
+    const conn = getConnection(hostId);
+    if (!conn?.isReady || !conn.transport) {
+        return false;
+    }
+
+    const existingRelay = remoteClaudeHostRelays.get(hostId);
+    if (existingRelay && existingRelay.transport === conn.transport) {
+        return true;
+    }
+
+    if (existingRelay) {
+        try {
+            existingRelay.cleanup();
+        } catch {
+            // Ignore cleanup failures for stale relays
+        }
+        remoteClaudeHostRelays.delete(hostId);
+    }
+
+    const cleanup = conn.transport.onNotification((msg) => {
+        if (msg.method !== 'claude/output') return;
+        const { sessionId, event } = msg.params || {};
+        if (!sessionId || !event) return;
+
+        const session = remoteClaudeSessions.get(sessionId);
+        if (!session) return;
+
+        // Strip accumulatedText fallback if text was already delivered via
+        // assistant/message events — prevents duplicate messages
+        if (event.type === 'exit' && event.accumulatedText && session.hasText) {
+            delete event.accumulatedText;
+        }
+
+        const messages = translateClaudeCliEvent(event, sessionId);
+
+        // Send messages with staggered timing to prevent React 18's automatic
+        // batching from merging rapid setLatestMessage calls.  When a 'result'
+        // event produces both 'text' and 'complete', sending them synchronously
+        // causes the client to only see the last one.
+        let delay = 0;
+        for (const normalized of messages) {
+            if (normalized.kind === 'permission_request' && normalized.requestId) {
+                const pending = remoteClaudePendingPermissions.get(sessionId) || [];
+                if (!pending.some((item) => item.requestId === normalized.requestId)) {
+                    pending.push({
+                        requestId: normalized.requestId,
+                        toolName: normalized.toolName || 'UnknownTool',
+                        input: normalized.input,
+                        context: normalized.context,
+                        sessionId,
+                        receivedAt: new Date(),
+                    });
+                    remoteClaudePendingPermissions.set(sessionId, pending);
+                }
+            }
+
+            if (normalized.kind === 'permission_cancelled' && normalized.requestId) {
+                const pending = remoteClaudePendingPermissions.get(sessionId) || [];
+                remoteClaudePendingPermissions.set(
+                    sessionId,
+                    pending.filter((item) => item.requestId !== normalized.requestId),
+                );
+            }
+
+            // Track when text has been sent so the exit fallback can be skipped
+            if (normalized.kind === 'text' || normalized.kind === 'thinking') {
+                session.hasText = true;
+            }
+
+            if (delay === 0) {
+                session.writer.send(normalized);
+            } else {
+                const msg = normalized;
+                const sess = session;
+                setTimeout(() => sess.writer.send(msg), delay);
+            }
+
+            if (normalized.kind === 'complete') {
+                const sid = sessionId;
+                setTimeout(() => {
+                    remoteClaudePendingPermissions.delete(sid);
+                    remoteClaudeSessions.delete(sid);
+                }, delay + 10);
+            }
+
+            delay += 50;
+        }
+    });
+
+    remoteClaudeHostRelays.set(hostId, { cleanup, transport: conn.transport });
+    return true;
+}
+
+/**
+ * Handle a remote Claude chat command by delegating to the daemon via JSON-RPC.
+ * @param {object} data - WebSocket message data
+ * @param {string} hostId - Remote host identifier
+ * @param {WebSocketWriter} writer - WebSocket writer instance
+ */
+async function handleRemoteClaudeCommand(data, hostId, writer) {
+    let conn;
+    try {
+        const { ensureConnection } = await import('./remote/connection-manager.js');
+        conn = await ensureConnection(hostId);
+    } catch (connErr) {
+        writer.send(createNormalizedMessage({
+            kind: 'error',
+            content: 'Remote host not connected: ' + connErr.message,
+            provider: 'claude',
+        }));
+        return;
+    }
+
+    if (!ensureRemoteClaudeRelay(hostId)) {
+        writer.send(createNormalizedMessage({
+            kind: 'error',
+            content: 'Remote host transport is not ready',
+            provider: 'claude',
+        }));
+        return;
+    }
+
+    try {
+        const requestedSessionId = data.options?.sessionId;
+        const resumeSessionId = (
+            typeof requestedSessionId === 'string' &&
+            requestedSessionId.trim() &&
+            !requestedSessionId.startsWith('new-session-')
+        ) ? requestedSessionId : undefined;
+
+        // Generate session ID upfront so we can register BEFORE sending the
+        // request.  The daemon's claude/output notifications may arrive in the
+        // same data chunk as the response — if the session isn't registered yet,
+        // the relay handler silently drops them.
+        const sessionId = resumeSessionId || crypto.randomUUID();
+
+        // Pre-register so the notification relay can find the writer immediately
+        remoteClaudeSessions.set(sessionId, {
+            hostId,
+            writer,
+            startedAt: Date.now(),
+            hasText: false,
+        });
+
+        // Start or resume the remote Claude session
+        const result = await conn.transport.request('claude/start', {
+            cwd: data.options?.projectPath || data.options?.cwd,
+            sessionId,
+            resume: !!resumeSessionId,
+            command: data.command,
+            options: {
+                model: data.options?.model,
+                permissionMode: data.options?.permissionMode,
+            },
+        }, 120000); // 2 minute timeout for claude startup
+
+        if (result.error) {
+            remoteClaudeSessions.delete(sessionId);
+            writer.send(createNormalizedMessage({
+                kind: 'error',
+                content: result.error.message || 'Failed to start remote Claude session',
+                provider: 'claude',
+            }));
+            return;
+        }
+
+        // Send session_created message
+        writer.send(createNormalizedMessage({
+            kind: 'session_created',
+            newSessionId: result.sessionId,
+            provider: 'claude',
+            sessionId: result.sessionId,
+        }));
+        writer.setSessionId(result.sessionId);
+
+    } catch (err) {
+        writer.send(createNormalizedMessage({
+            kind: 'error',
+            content: 'Remote Claude session failed: ' + err.message,
+            provider: 'claude',
+        }));
+    }
+}
+
 // Handle chat WebSocket connections
 function handleChatConnection(ws, request) {
     console.log('[INFO] Chat WebSocket connected');
@@ -1493,8 +2244,16 @@ function handleChatConnection(ws, request) {
                 console.log('📁 Project:', data.options?.projectPath || 'Unknown');
                 console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
 
-                // Use Claude Agents SDK
-                await queryClaudeSDK(data.command, data.options, writer);
+                const hostId = data.options?.hostId || await resolveRemoteHostIdFromProjectPath(data.options?.projectPath || data.options?.cwd);
+                if (hostId) {
+                    // Remote Claude session -- delegate to daemon
+                    if (!data.options) data.options = {};
+                    data.options.hostId = hostId;
+                    await handleRemoteClaudeCommand(data, hostId, writer);
+                } else {
+                    // Local Claude session -- existing behavior
+                    await queryClaudeSDK(data.command, data.options, writer);
+                }
             } else if (data.type === 'cursor-command') {
                 console.log('[DEBUG] Cursor message:', data.command || '[Continue/Resume]');
                 console.log('📁 Project:', data.options?.cwd || 'Unknown');
@@ -1525,8 +2284,24 @@ function handleChatConnection(ws, request) {
                 console.log('[DEBUG] Abort session request:', data.sessionId);
                 const provider = data.provider || 'claude';
                 let success;
+                const remoteHostId = data.hostId || (data.sessionId ? remoteClaudeSessions.get(data.sessionId)?.hostId : null);
 
-                if (provider === 'cursor') {
+                if (remoteHostId) {
+                    // Remote abort -- delegate to daemon
+                    const conn = getConnection(remoteHostId);
+                    if (conn?.isReady) {
+                        try {
+                            await conn.transport.request('claude/abort', { sessionId: data.sessionId });
+                            remoteClaudeSessions.delete(data.sessionId);
+                            remoteClaudePendingPermissions.delete(data.sessionId);
+                            success = true;
+                        } catch {
+                            success = false;
+                        }
+                    } else {
+                        success = false;
+                    }
+                } else if (provider === 'cursor') {
                     success = abortCursorSession(data.sessionId);
                 } else if (provider === 'codex') {
                     success = abortCodexSession(data.sessionId);
@@ -1543,12 +2318,32 @@ function handleChatConnection(ws, request) {
                 // This does not persist permissions; it only resolves the in-flight request,
                 // introduced so the SDK can resume once the user clicks Allow/Deny.
                 if (data.requestId) {
-                    resolveToolApproval(data.requestId, {
-                        allow: Boolean(data.allow),
-                        updatedInput: data.updatedInput,
-                        message: data.message,
-                        rememberEntry: data.rememberEntry
-                    });
+                    const remoteSessionId = data.sessionId || findRemotePermissionSessionByRequestId(data.requestId);
+                    const remoteHostId = data.hostId || (remoteSessionId ? remoteClaudeSessions.get(remoteSessionId)?.hostId : null);
+
+                    if (remoteHostId && remoteSessionId) {
+                        // Remote permission response -- send to daemon
+                        const conn = getConnection(remoteHostId);
+                        if (conn?.isReady) {
+                            try {
+                                await conn.transport.request('claude/input', {
+                                    sessionId: remoteSessionId,
+                                    text: data.allow ? 'y' : 'n',
+                                });
+                                removeRemotePendingPermission(remoteSessionId, data.requestId);
+                            } catch (err) {
+                                console.error('[ERROR] Remote permission response failed:', err.message);
+                            }
+                        }
+                    } else {
+                        // Local permission response -- existing behavior
+                        resolveToolApproval(data.requestId, {
+                            allow: Boolean(data.allow),
+                            updatedInput: data.updatedInput,
+                            message: data.message,
+                            rememberEntry: data.rememberEntry
+                        });
+                    }
                 }
             } else if (data.type === 'cursor-abort') {
                 console.log('[DEBUG] Abort Cursor session:', data.sessionId);
@@ -1559,6 +2354,7 @@ function handleChatConnection(ws, request) {
                 const provider = data.provider || 'claude';
                 const sessionId = data.sessionId;
                 let isActive;
+                const remoteHostId = data.hostId || (sessionId ? remoteClaudeSessions.get(sessionId)?.hostId : null);
 
                 if (provider === 'cursor') {
                     isActive = isCursorSessionActive(sessionId);
@@ -1566,6 +2362,14 @@ function handleChatConnection(ws, request) {
                     isActive = isCodexSessionActive(sessionId);
                 } else if (provider === 'gemini') {
                     isActive = isGeminiSessionActive(sessionId);
+                } else if (provider === 'claude' && remoteHostId) {
+                    const remoteSession = remoteClaudeSessions.get(sessionId);
+                    isActive = Boolean(remoteSession && remoteSession.hostId === remoteHostId);
+                    if (isActive) {
+                        remoteSession.writer = writer;
+                        writer.setSessionId(sessionId);
+                        ensureRemoteClaudeRelay(remoteHostId);
+                    }
                 } else {
                     // Use Claude Agents SDK
                     isActive = isClaudeSDKSessionActive(sessionId);
@@ -1585,7 +2389,17 @@ function handleChatConnection(ws, request) {
             } else if (data.type === 'get-pending-permissions') {
                 // Return pending permission requests for a session
                 const sessionId = data.sessionId;
-                if (sessionId && isClaudeSDKSessionActive(sessionId)) {
+                const remoteHostId = data.hostId || (sessionId ? remoteClaudeSessions.get(sessionId)?.hostId : null);
+                if (sessionId && remoteHostId) {
+                    const remoteSession = remoteClaudeSessions.get(sessionId);
+                    if (remoteSession && remoteSession.hostId === remoteHostId) {
+                        writer.send({
+                            type: 'pending-permissions-response',
+                            sessionId,
+                            data: remoteClaudePendingPermissions.get(sessionId) || []
+                        });
+                    }
+                } else if (sessionId && isClaudeSDKSessionActive(sessionId)) {
                     const pending = getPendingApprovalsForSession(sessionId);
                     writer.send({
                         type: 'pending-permissions-response',
@@ -1601,6 +2415,18 @@ function handleChatConnection(ws, request) {
                     codex: getActiveCodexSessions(),
                     gemini: getActiveGeminiSessions()
                 };
+                // Include remote sessions if a hostId is specified
+                if (data.hostId) {
+                    const conn = getConnection(data.hostId);
+                    if (conn?.isReady) {
+                        try {
+                            const remoteSessions = await conn.transport.request('claude/list-sessions', {
+                                cwd: data.cwd || data.projectPath,
+                            });
+                            activeSessions.remote = remoteSessions.sessions || [];
+                        } catch { /* ignore */ }
+                    }
+                }
                 writer.send({
                     type: 'active-sessions',
                     sessions: activeSessions
@@ -1644,6 +2470,180 @@ function handleShellConnection(ws) {
                 const isPlainShell = data.isPlainShell || (!!initialCommand && !hasSession) || provider === 'plain-shell';
                 urlDetectionBuffer = '';
                 announcedAuthUrls.clear();
+
+                // Detect if this is a remote project
+                if (data.hostId) {
+                  const remoteHostId = data.hostId;
+
+                  // Build the shell command from provider/sessionId, matching local PTY logic
+                  let remoteShellCommand = initialCommand || null;
+                  if (!isPlainShell && !remoteShellCommand) {
+                    if (provider === 'cursor') {
+                      remoteShellCommand = hasSession && sessionId
+                        ? `cursor-agent --resume="${sessionId}"`
+                        : 'cursor-agent';
+                    } else if (provider === 'codex') {
+                      remoteShellCommand = hasSession && sessionId
+                        ? `codex resume "${sessionId}" || codex`
+                        : 'codex';
+                    } else if (provider === 'gemini') {
+                      remoteShellCommand = hasSession && sessionId
+                        ? `gemini --resume "${sessionId}"`
+                        : 'gemini';
+                    } else {
+                      // Claude (default)
+                      remoteShellCommand = hasSession && sessionId
+                        ? `claude --resume "${sessionId}" || claude`
+                        : 'claude';
+                    }
+                  }
+
+                  // Include command in cache key for parity with local PTY keys
+                  const cmdSuffix = isPlainShell && initialCommand
+                    ? `_cmd_${Buffer.from(initialCommand).toString('base64').slice(0, 16)}`
+                    : '';
+                  const remoteSessionKey = `remote:${remoteHostId}:${sessionId || data.projectPath || 'default'}${cmdSuffix}`;
+                  ptySessionKey = remoteSessionKey;
+
+                  // Check for existing cached session
+                  const existingRemoteSession = ptySessionsMap.get(remoteSessionKey);
+                  if (existingRemoteSession) {
+                    console.log('[Shell] Reconnecting to remote session:', remoteSessionKey);
+                    existingRemoteSession.ws = ws;
+                    existingRemoteSession.lastActivity = Date.now();
+                    shellProcess = existingRemoteSession.process;
+
+                    // Replay buffered output
+                    if (existingRemoteSession.outputBuffer) {
+                      ws.send(JSON.stringify({ type: 'output', data: existingRemoteSession.outputBuffer }));
+                    }
+
+                    // Clear any pending timeout
+                    if (existingRemoteSession.timeoutId) {
+                      clearTimeout(existingRemoteSession.timeoutId);
+                      existingRemoteSession.timeoutId = null;
+                    }
+
+                    return;
+                  }
+
+                  // Get or establish ssh2 connection
+                  let conn;
+                  try {
+                    const { ensureConnection } = await import('./remote/connection-manager.js');
+                    conn = await ensureConnection(remoteHostId);
+                  } catch (connErr) {
+                    console.error('[Shell] Failed to connect to remote host:', connErr.message);
+                    ws.send(JSON.stringify({ type: 'error', error: 'Remote host not connected: ' + connErr.message }));
+                    ws.close();
+                    return;
+                  }
+                  if (!conn.client) {
+                    ws.send(JSON.stringify({ type: 'error', error: 'Remote host not connected' }));
+                    ws.close();
+                    return;
+                  }
+
+                  const sshClient = conn.client;
+                  const window = {
+                    cols: data.cols || 80,
+                    rows: data.rows || 24,
+                    term: 'xterm-256color',
+                  };
+
+                  const shellOptions = {
+                    env: { COLORTERM: 'truecolor', FORCE_COLOR: '3' },
+                  };
+
+                  sshClient.shell(window, shellOptions, (err, stream) => {
+                    if (err) {
+                      console.error('[Shell] Remote shell error:', err.message);
+                      ws.send(JSON.stringify({ type: 'error', error: 'Failed to open remote shell: ' + err.message }));
+                      ws.close();
+                      return;
+                    }
+
+                    console.log('[Shell] Remote shell opened for host:', remoteHostId);
+
+                    // Create ShellSession-compatible wrapper
+                    let outputBuffer = '';
+                    const MAX_BUFFER = 100000;
+
+                    shellProcess = {
+                      write(inputData) { stream.write(inputData); },
+                      // CRITICAL: ssh2 setWindow takes (rows, cols, height, width) -- rows FIRST
+                      // node-pty resize takes (cols, rows) -- cols FIRST
+                      // External API always uses (cols, rows) matching xterm.js
+                      resize(cols, rows) { stream.setWindow(rows, cols, 0, 0); },
+                      kill() { stream.close(); },
+                      pid: null,
+                    };
+
+                    // Data from remote -> client
+                                        stream.on('data', (chunk) => {
+                      const text = chunk.toString();
+                      outputBuffer += text;
+                      if (outputBuffer.length > MAX_BUFFER) {
+                        outputBuffer = outputBuffer.slice(-MAX_BUFFER);
+                      }
+
+                      const session = ptySessionsMap.get(remoteSessionKey);
+                      if (session) {
+                        session.outputBuffer = outputBuffer;
+                        session.lastActivity = Date.now();
+                      }
+
+                                            // Always route output to the currently attached client socket.
+                                            const targetWs = session?.ws;
+                                            if (targetWs && targetWs.readyState === WebSocket.OPEN) {
+                                                targetWs.send(JSON.stringify({ type: 'output', data: text }));
+                      }
+                    });
+
+                    stream.on('close', () => {
+                      console.log('[Shell] Remote shell closed for host:', remoteHostId);
+                                            const session = ptySessionsMap.get(remoteSessionKey);
+                                            const targetWs = session?.ws;
+                                            if (targetWs && targetWs.readyState === WebSocket.OPEN) {
+                                                targetWs.send(JSON.stringify({ type: 'exit', exitCode: 0 }));
+                      }
+                      ptySessionsMap.delete(remoteSessionKey);
+                    });
+
+                    stream.on('error', (streamErr) => {
+                      console.error('[Shell] Remote stream error:', streamErr.message);
+                    });
+
+                    // cd into the project directory
+                    if (data.projectPath) {
+                      stream.write('cd ' + JSON.stringify(data.projectPath) + ' && clear\n');
+                    }
+
+                    // Launch provider session or initial command
+                    if (remoteShellCommand) {
+                      stream.write(remoteShellCommand + '\n');
+                    }
+
+                    // Cache the session
+                    ptySessionsMap.set(remoteSessionKey, {
+                      process: shellProcess,
+                      pty: shellProcess,
+                      outputBuffer,
+                      lastActivity: Date.now(),
+                      ws,
+                      projectPath: data.projectPath || '',
+                      isRemote: true,
+                      hostId: remoteHostId,
+                      stream,
+                      timeoutId: null,
+                    });
+
+                    // Send ready signal
+                    ws.send(JSON.stringify({ type: 'ready' }));
+                  });
+
+                  return; // Skip local PTY logic
+                }
 
                 // Login commands (Claude/Cursor auth) should never reuse cached sessions
                 const isLoginCommand = initialCommand && (
@@ -1967,6 +2967,10 @@ function handleShellConnection(ws) {
 
                 session.timeoutId = setTimeout(() => {
                     console.log('⏰ PTY session timeout, killing process:', ptySessionKey);
+                    // When cleaning up expired sessions, also close remote streams
+                    if (session.isRemote && session.stream) {
+                        session.stream.close();
+                    }
                     if (session.pty && session.pty.kill) {
                         session.pty.kill();
                     }
@@ -2318,6 +3322,29 @@ app.get('/api/projects/:projectName/sessions/:sessionId/token-usage', authentica
                 used: totalTokens,
                 total: contextWindow
             });
+        }
+
+        // Remote projects: delegate token usage to daemon
+        if (typeof projectName === 'string' && projectName.startsWith('remote:')) {
+            try {
+                const parts = projectName.split(':');
+                const hostId = parts[1];
+                const projectRoot = Buffer.from(parts.slice(2).join(':'), 'base64').toString('utf8');
+                const { ensureConnection } = await import('./remote/connection-manager.js');
+                const conn = await ensureConnection(hostId);
+                const result = await conn.transport.request(
+                    'claude/get-token-usage',
+                    { sessionId: safeSessionId, cwd: projectRoot },
+                    15000,
+                );
+                return res.json(result);
+            } catch {
+                return res.json({
+                    used: 0,
+                    total: 160000,
+                    breakdown: { input: 0, cacheCreation: 0, cacheRead: 0 },
+                });
+            }
         }
 
         // Handle Claude sessions (default)

@@ -4,6 +4,7 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { migrateRemoteHosts } from '../remote/remote-hosts-db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -147,6 +148,9 @@ const runMigrations = () => {
       UNIQUE(session_id, provider)
     )`);
     db.exec('CREATE INDEX IF NOT EXISTS idx_session_names_lookup ON session_names(session_id, provider)');
+
+    // Remote SSH host configurations
+    migrateRemoteHosts();
 
     console.log('Database migrations completed successfully');
   } catch (error) {

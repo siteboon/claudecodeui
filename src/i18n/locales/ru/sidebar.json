@@ -17,7 +17,8 @@
     "projects": "проекты",
     "noMatchingProjects": "Нет подходящих проектов",
     "tryDifferentSearch": "Попробуйте изменить поисковый запрос",
-    "runClaudeCli": "Запустите Claude CLI в каталоге проекта для начала работы"
+    "runClaudeCli": "Запустите Claude CLI в каталоге проекта для начала работы",
+    "remoteProject": "Remote Project"
   },
   "app": {
     "title": "Claude Code UI",
@@ -119,6 +120,16 @@
     "projectsScanned_few": "{{count}} проекта просканировано",
     "projectsScanned_many": "{{count}} проектов просканировано",
     "projectsScanned_other": "{{count}} проектов просканировано"
+  },
+  "connectionStatus": {
+    "connected": "Connected",
+    "connecting": "Connecting...",
+    "deploying": "Deploying daemon...",
+    "initializing": "Initializing...",
+    "reconnecting": "Reconnecting...",
+    "disconnected": "Disconnected",
+    "error": "Connection Error",
+    "failed": "Connection Failed"
   },
   "deleteConfirmation": {
     "deleteProject": "Удалить проект",

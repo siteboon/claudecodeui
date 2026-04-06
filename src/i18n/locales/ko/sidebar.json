@@ -17,7 +17,8 @@
     "projects": "프로젝트",
     "noMatchingProjects": "일치하는 프로젝트 없음",
     "tryDifferentSearch": "검색어를 변경해보세요",
-    "runClaudeCli": "프로젝트 디렉토리에서 Claude CLI를 실행하여 시작하세요"
+    "runClaudeCli": "프로젝트 디렉토리에서 Claude CLI를 실행하여 시작하세요",
+    "remoteProject": "Remote Project"
   },
   "app": {
     "title": "Claude Code UI",
@@ -102,6 +103,16 @@
   },
   "version": {
     "updateAvailable": "업데이트 가능"
+  },
+  "connectionStatus": {
+    "connected": "Connected",
+    "connecting": "Connecting...",
+    "deploying": "Deploying daemon...",
+    "initializing": "Initializing...",
+    "reconnecting": "Reconnecting...",
+    "disconnected": "Disconnected",
+    "error": "Connection Error",
+    "failed": "Connection Failed"
   },
   "deleteConfirmation": {
     "deleteProject": "프로젝트 삭제",

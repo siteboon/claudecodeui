@@ -1,11 +1,14 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDeviceSettings } from '../../../hooks/useDeviceSettings';
 import { useVersionCheck } from '../../../hooks/useVersionCheck';
 import { useUiPreferences } from '../../../hooks/useUiPreferences';
 import { useSidebarController } from '../hooks/useSidebarController';
+import { useRemoteConnectionStates } from '../hooks/useRemoteConnectionStates';
+import { useWebSocket } from '../../../contexts/WebSocketContext';
 import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
+import { isRemoteProject } from '../../../utils/remote';
 import type { Project, SessionProvider } from '../../../types/app';
 import type { MCPServerStatus, SidebarProps } from '../types/types';
 import SidebarCollapsed from './subcomponents/SidebarCollapsed';
@@ -46,6 +49,9 @@ function Sidebar({
   const { sidebarVisible } = preferences;
   const { setCurrentProject, mcpServerStatus } = useTaskMaster() as TaskMasterSidebarContext;
   const { tasksEnabled } = useTasksSettings();
+  const { latestMessage } = useWebSocket();
+  const hasRemoteProjects = useMemo(() => projects.some(isRemoteProject), [projects]);
+  const remoteConnectionStates = useRemoteConnectionStates(latestMessage, hasRemoteProjects);
 
   const {
     isSidebarCollapsed,
@@ -150,6 +156,7 @@ function Sidebar({
     deletingProjects,
     tasksEnabled,
     mcpServerStatus,
+    remoteConnectionStates,
     getProjectSessions,
     isProjectStarred,
     onEditingNameChange: setEditingName,

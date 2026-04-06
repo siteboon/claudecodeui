@@ -147,6 +147,10 @@
       "new": {
         "title": "Neuer Arbeitsbereich",
         "description": "Einen neuen Arbeitsbereich erstellen, optional aus einem GitHub-Repository klonen"
+      },
+      "remote": {
+        "title": "Remote Server",
+        "description": "Connect to a project on a remote server via SSH"
       }
     },
     "step2": {
@@ -172,7 +176,25 @@
       "publicRepoInfo": "Öffentliche Repositories benötigen keine Authentifizierung. Du kannst das Token beim Klonen eines öffentlichen Repos weglassen.",
       "noTokensHelp": "Keine gespeicherten Token verfügbar. Du kannst Token unter Einstellungen → API-Schlüssel für einfachere Wiederverwendung hinzufügen.",
       "optionalTokenPublic": "GitHub-Token (Optional für öffentliche Repos)",
-      "tokenPublicPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (leer lassen für öffentliche Repos)"
+      "tokenPublicPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (leer lassen für öffentliche Repos)",
+      "remote": {
+        "title": "SSH Connection",
+        "connectionName": "Connection Name",
+        "connectionNamePlaceholder": "My Server",
+        "connectionNameHelp": "A friendly name for this connection",
+        "hostname": "Hostname",
+        "hostnamePlaceholder": "192.168.1.100 or myserver.example.com",
+        "port": "Port",
+        "username": "Username",
+        "usernamePlaceholder": "ubuntu",
+        "privateKeyPath": "SSH Private Key Path",
+        "privateKeyPathPlaceholder": "~/.ssh/id_rsa",
+        "privateKeyHelp": "Path to your SSH private key file on this machine",
+        "testConnection": "Test Connection",
+        "testing": "Testing...",
+        "connectionSuccess": "Connection successful!",
+        "connectionFailed": "Connection failed"
+      }
     },
     "step3": {
       "reviewConfig": "Konfiguration überprüfen",
@@ -189,7 +211,15 @@
       "existingInfo": "Der Arbeitsbereich wird zur Projektliste hinzugefügt und steht für Claude/Cursor-Sitzungen zur Verfügung.",
       "newWithClone": "Das Repository wird aus diesem Ordner geklont.",
       "newEmpty": "Der Arbeitsbereich wird zur Projektliste hinzugefügt und steht für Claude/Cursor-Sitzungen zur Verfügung.",
-      "cloningRepository": "Repository wird geklont..."
+      "cloningRepository": "Repository wird geklont...",
+      "remote": {
+        "title": "Select Remote Directory",
+        "selectDirectory": "Select a directory on the remote server",
+        "remoteHost": "Remote Host",
+        "remotePath": "Remote Path",
+        "connectionName": "Connection Name",
+        "noDirectorySelected": "No directory selected"
+      }
     },
     "buttons": {
       "cancel": "Abbrechen",
@@ -197,13 +227,20 @@
       "next": "Weiter",
       "createProject": "Projekt erstellen",
       "creating": "Wird erstellt...",
-      "cloning": "Wird geklont..."
+      "cloning": "Wird geklont...",
+      "addRemoteProject": "Add Remote Project"
     },
     "errors": {
       "selectType": "Bitte wähl aus, ob du einen vorhandenen Arbeitsbereich hast oder einen neuen erstellen möchtest",
       "providePath": "Bitte gib einen Arbeitsbereichspfad an",
       "failedToCreate": "Arbeitsbereich konnte nicht erstellt werden",
-      "failedToCreateFolder": "Ordner konnte nicht erstellt werden"
+      "failedToCreateFolder": "Ordner konnte nicht erstellt werden",
+      "testConnectionFirst": "Please test the connection before proceeding",
+      "selectRemoteDirectory": "Please select a remote directory",
+      "connectionTestFailed": "Connection test failed. Please check your SSH settings.",
+      "failedToBrowseRemote": "Failed to browse remote filesystem",
+      "failedToAddRemoteProject": "Failed to add remote project",
+      "remoteConnectionNotReady": "Remote connection did not become ready. Please try again."
     }
   },
   "versionUpdate": {

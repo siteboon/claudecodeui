@@ -147,6 +147,10 @@
       "new": {
         "title": "New Workspace",
         "description": "Create a new workspace, optionally clone from a GitHub repository"
+      },
+      "remote": {
+        "title": "Remote Server",
+        "description": "Connect to a project on a remote server via SSH"
       }
     },
     "step2": {
@@ -172,7 +176,25 @@
       "publicRepoInfo": "Public repositories don't require authentication. You can skip providing a token if cloning a public repo.",
       "noTokensHelp": "No stored tokens available. You can add tokens in Settings → API Keys for easier reuse.",
       "optionalTokenPublic": "GitHub Token (Optional for Public Repos)",
-      "tokenPublicPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (leave empty for public repos)"
+      "tokenPublicPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (leave empty for public repos)",
+      "remote": {
+        "title": "SSH Connection",
+        "connectionName": "Connection Name",
+        "connectionNamePlaceholder": "My Server",
+        "connectionNameHelp": "A friendly name for this connection",
+        "hostname": "Hostname",
+        "hostnamePlaceholder": "192.168.1.100 or myserver.example.com",
+        "port": "Port",
+        "username": "Username",
+        "usernamePlaceholder": "ubuntu",
+        "privateKeyPath": "SSH Private Key Path",
+        "privateKeyPathPlaceholder": "~/.ssh/id_rsa",
+        "privateKeyHelp": "Path to your SSH private key file on this machine",
+        "testConnection": "Test Connection",
+        "testing": "Testing...",
+        "connectionSuccess": "Connection successful!",
+        "connectionFailed": "Connection failed"
+      }
     },
     "step3": {
       "reviewConfig": "Review Your Configuration",
@@ -189,7 +211,15 @@
       "existingInfo": "The workspace will be added to your project list and will be available for Claude/Cursor sessions.",
       "newWithClone": "The repository will be cloned from this folder.",
       "newEmpty": "The workspace will be added to your project list and will be available for Claude/Cursor sessions.",
-      "cloningRepository": "Cloning repository..."
+      "cloningRepository": "Cloning repository...",
+      "remote": {
+        "title": "Select Remote Directory",
+        "selectDirectory": "Select a directory on the remote server",
+        "remoteHost": "Remote Host",
+        "remotePath": "Remote Path",
+        "connectionName": "Connection Name",
+        "noDirectorySelected": "No directory selected"
+      }
     },
     "buttons": {
       "cancel": "Cancel",
@@ -197,13 +227,20 @@
       "next": "Next",
       "createProject": "Create Project",
       "creating": "Creating...",
-      "cloning": "Cloning..."
+      "cloning": "Cloning...",
+      "addRemoteProject": "Add Remote Project"
     },
     "errors": {
       "selectType": "Please select whether you have an existing workspace or want to create a new one",
       "providePath": "Please provide a workspace path",
       "failedToCreate": "Failed to create workspace",
-      "failedToCreateFolder": "Failed to create folder"
+      "failedToCreateFolder": "Failed to create folder",
+      "testConnectionFirst": "Please test the connection before proceeding",
+      "selectRemoteDirectory": "Please select a remote directory",
+      "connectionTestFailed": "Connection test failed. Please check your SSH settings.",
+      "failedToBrowseRemote": "Failed to browse remote filesystem",
+      "failedToAddRemoteProject": "Failed to add remote project",
+      "remoteConnectionNotReady": "Remote connection did not become ready. Please try again."
     }
   },
   "notifications": {

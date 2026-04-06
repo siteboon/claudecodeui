@@ -8,6 +8,7 @@ import { useDeviceSettings } from '../../hooks/useDeviceSettings';
 import { useSessionProtection } from '../../hooks/useSessionProtection';
 import { useProjectsState } from '../../hooks/useProjectsState';
 import MobileNav from './MobileNav';
+import { extractHostId } from '../../utils/remote';
 
 export default function AppContent() {
   const navigate = useNavigate();
@@ -117,12 +118,14 @@ export default function AppContent() {
     }
 
     if (isConnected && selectedSession?.id) {
+      const remoteHostId = selectedProject ? extractHostId(selectedProject) || undefined : undefined;
       sendMessage({
         type: 'get-pending-permissions',
-        sessionId: selectedSession.id
+        sessionId: selectedSession.id,
+        ...(remoteHostId && { hostId: remoteHostId }),
       });
     }
-  }, [isConnected, selectedSession?.id, sendMessage]);
+  }, [isConnected, selectedProject, selectedSession?.id, sendMessage]);
 
   return (
     <div className="fixed inset-0 flex bg-background">

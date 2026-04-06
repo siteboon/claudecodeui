@@ -1,0 +1,12 @@
+{
+  "name": "ccud",
+  "version": "1.5.0",
+  "private": true,
+  "type": "module",
+  "description": "Claude Code UI Daemon - JSON-RPC server for remote host operations",
+  "main": "src/index.js",
+  "dependencies": {
+    "chokidar": "^5.0.0",
+    "jsonrpc-lite": "^2.2.0"
+  }
+}

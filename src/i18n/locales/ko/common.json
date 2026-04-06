@@ -147,6 +147,10 @@
       "new": {
         "title": "새 워크스페이스",
         "description": "새 워크스페이스를 생성하고, 선택적으로 GitHub 저장소에서 clone합니다"
+      },
+      "remote": {
+        "title": "Remote Server",
+        "description": "Connect to a project on a remote server via SSH"
       }
     },
     "step2": {
@@ -172,7 +176,25 @@
       "publicRepoInfo": "공개 저장소는 인증이 필요하지 않습니다. 공개 저장소를 clone하는 경우 토큰을 생략할 수 있습니다.",
       "noTokensHelp": "저장된 토큰이 없습니다. 설정 → API Keys에서 토큰을 추가하면 재사용이 편리합니다.",
       "optionalTokenPublic": "GitHub 토큰 (공개 저장소는 선택사항)",
-      "tokenPublicPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (공개 저장소는 비워두세요)"
+      "tokenPublicPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (공개 저장소는 비워두세요)",
+      "remote": {
+        "title": "SSH Connection",
+        "connectionName": "Connection Name",
+        "connectionNamePlaceholder": "My Server",
+        "connectionNameHelp": "A friendly name for this connection",
+        "hostname": "Hostname",
+        "hostnamePlaceholder": "192.168.1.100 or myserver.example.com",
+        "port": "Port",
+        "username": "Username",
+        "usernamePlaceholder": "ubuntu",
+        "privateKeyPath": "SSH Private Key Path",
+        "privateKeyPathPlaceholder": "~/.ssh/id_rsa",
+        "privateKeyHelp": "Path to your SSH private key file on this machine",
+        "testConnection": "Test Connection",
+        "testing": "Testing...",
+        "connectionSuccess": "Connection successful!",
+        "connectionFailed": "Connection failed"
+      }
     },
     "step3": {
       "reviewConfig": "설정 검토",
@@ -189,7 +211,15 @@
       "existingInfo": "워크스페이스가 프로젝트 목록에 추가되며 Claude/Cursor 세션에서 사용할 수 있습니다.",
       "newWithClone": "이 폴더에 저장소가 clone됩니다.",
       "newEmpty": "워크스페이스가 프로젝트 목록에 추가되며 Claude/Cursor 세션에서 사용할 수 있습니다.",
-      "cloningRepository": "저장소 clone 중..."
+      "cloningRepository": "저장소 clone 중...",
+      "remote": {
+        "title": "Select Remote Directory",
+        "selectDirectory": "Select a directory on the remote server",
+        "remoteHost": "Remote Host",
+        "remotePath": "Remote Path",
+        "connectionName": "Connection Name",
+        "noDirectorySelected": "No directory selected"
+      }
     },
     "buttons": {
       "cancel": "취소",
@@ -197,13 +227,20 @@
       "next": "다음",
       "createProject": "프로젝트 생성",
       "creating": "생성 중...",
-      "cloning": "Clone 중..."
+      "cloning": "Clone 중...",
+      "addRemoteProject": "Add Remote Project"
     },
     "errors": {
       "selectType": "기존 워크스페이스를 사용할지 새로 생성할지 선택해주세요",
       "providePath": "워크스페이스 경로를 입력해주세요",
       "failedToCreate": "워크스페이스 생성 실패",
-      "failedToCreateFolder": "폴더 생성 실패"
+      "failedToCreateFolder": "폴더 생성 실패",
+      "testConnectionFirst": "Please test the connection before proceeding",
+      "selectRemoteDirectory": "Please select a remote directory",
+      "connectionTestFailed": "Connection test failed. Please check your SSH settings.",
+      "failedToBrowseRemote": "Failed to browse remote filesystem",
+      "failedToAddRemoteProject": "Failed to add remote project",
+      "remoteConnectionNotReady": "Remote connection did not become ready. Please try again."
     }
   },
   "notifications": {

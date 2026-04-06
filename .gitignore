@@ -137,5 +137,8 @@ tasks/
 !src/i18n/locales/ru/tasks.json
 !src/i18n/locales/de/tasks.json
 
+# Daemon dependencies (installed locally for esbuild resolution)
+ccud/node_modules/
+
 # Git worktrees
 .worktrees/

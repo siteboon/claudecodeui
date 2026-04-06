@@ -147,6 +147,10 @@
       "new": {
         "title": "Новое рабочее пространство",
         "description": "Создать новое рабочее пространство, опционально клонировать из репозитория GitHub"
+      },
+      "remote": {
+        "title": "Remote Server",
+        "description": "Connect to a project on a remote server via SSH"
       }
     },
     "step2": {
@@ -172,7 +176,25 @@
       "publicRepoInfo": "Публичные репозитории не требуют аутентификации. Вы можете пропустить токен при клонировании публичного репозитория.",
       "noTokensHelp": "Нет доступных сохраненных токенов. Вы можете добавить токены в Настройки → API ключи для удобного повторного использования.",
       "optionalTokenPublic": "Токен GitHub (необязательно для публичных репозиториев)",
-      "tokenPublicPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (оставьте пустым для публичных репозиториев)"
+      "tokenPublicPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (оставьте пустым для публичных репозиториев)",
+      "remote": {
+        "title": "SSH Connection",
+        "connectionName": "Connection Name",
+        "connectionNamePlaceholder": "My Server",
+        "connectionNameHelp": "A friendly name for this connection",
+        "hostname": "Hostname",
+        "hostnamePlaceholder": "192.168.1.100 or myserver.example.com",
+        "port": "Port",
+        "username": "Username",
+        "usernamePlaceholder": "ubuntu",
+        "privateKeyPath": "SSH Private Key Path",
+        "privateKeyPathPlaceholder": "~/.ssh/id_rsa",
+        "privateKeyHelp": "Path to your SSH private key file on this machine",
+        "testConnection": "Test Connection",
+        "testing": "Testing...",
+        "connectionSuccess": "Connection successful!",
+        "connectionFailed": "Connection failed"
+      }
     },
     "step3": {
       "reviewConfig": "Проверьте вашу конфигурацию",
@@ -189,7 +211,15 @@
       "existingInfo": "Рабочее пространство будет добавлено в список проектов и будет доступно для сеансов Claude/Cursor.",
       "newWithClone": "Репозиторий будет клонирован в эту папку.",
       "newEmpty": "Рабочее пространство будет добавлено в список проектов и будет доступно для сеансов Claude/Cursor.",
-      "cloningRepository": "Клонирование репозитория..."
+      "cloningRepository": "Клонирование репозитория...",
+      "remote": {
+        "title": "Select Remote Directory",
+        "selectDirectory": "Select a directory on the remote server",
+        "remoteHost": "Remote Host",
+        "remotePath": "Remote Path",
+        "connectionName": "Connection Name",
+        "noDirectorySelected": "No directory selected"
+      }
     },
     "buttons": {
       "cancel": "Отмена",
@@ -197,13 +227,20 @@
       "next": "Далее",
       "createProject": "Создать проект",
       "creating": "Создание...",
-      "cloning": "Клонирование..."
+      "cloning": "Клонирование...",
+      "addRemoteProject": "Add Remote Project"
     },
     "errors": {
       "selectType": "Пожалуйста, выберите, есть ли у вас существующее рабочее пространство или вы хотите создать новое",
       "providePath": "Пожалуйста, укажите путь к рабочему пространству",
       "failedToCreate": "Не удалось создать рабочее пространство",
-      "failedToCreateFolder": "Не удалось создать папку"
+      "failedToCreateFolder": "Не удалось создать папку",
+      "testConnectionFirst": "Please test the connection before proceeding",
+      "selectRemoteDirectory": "Please select a remote directory",
+      "connectionTestFailed": "Connection test failed. Please check your SSH settings.",
+      "failedToBrowseRemote": "Failed to browse remote filesystem",
+      "failedToAddRemoteProject": "Failed to add remote project",
+      "remoteConnectionNotReady": "Remote connection did not become ready. Please try again."
     }
   },
   "versionUpdate": {

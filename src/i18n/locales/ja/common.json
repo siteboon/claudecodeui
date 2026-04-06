@@ -147,6 +147,10 @@
       "new": {
         "title": "新しいワークスペース",
         "description": "新しいワークスペースを作成し、必要に応じてGitHubリポジトリからクローンする"
+      },
+      "remote": {
+        "title": "Remote Server",
+        "description": "Connect to a project on a remote server via SSH"
       }
     },
     "step2": {
@@ -172,7 +176,25 @@
       "publicRepoInfo": "パブリックリポジトリには認証は不要です。パブリックリポジトリをクローンする場合、トークンは省略できます。",
       "noTokensHelp": "保存済みトークンがありません。設定 → APIキーでトークンを追加すると再利用が簡単になります。",
       "optionalTokenPublic": "GitHubトークン（パブリックリポジトリの場合は任意）",
-      "tokenPublicPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx（パブリックリポジトリの場合は空欄可）"
+      "tokenPublicPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx（パブリックリポジトリの場合は空欄可）",
+      "remote": {
+        "title": "SSH Connection",
+        "connectionName": "Connection Name",
+        "connectionNamePlaceholder": "My Server",
+        "connectionNameHelp": "A friendly name for this connection",
+        "hostname": "Hostname",
+        "hostnamePlaceholder": "192.168.1.100 or myserver.example.com",
+        "port": "Port",
+        "username": "Username",
+        "usernamePlaceholder": "ubuntu",
+        "privateKeyPath": "SSH Private Key Path",
+        "privateKeyPathPlaceholder": "~/.ssh/id_rsa",
+        "privateKeyHelp": "Path to your SSH private key file on this machine",
+        "testConnection": "Test Connection",
+        "testing": "Testing...",
+        "connectionSuccess": "Connection successful!",
+        "connectionFailed": "Connection failed"
+      }
     },
     "step3": {
       "reviewConfig": "設定の確認",
@@ -189,7 +211,15 @@
       "existingInfo": "ワークスペースがプロジェクト一覧に追加され、Claude/Cursorセッションで使用できるようになります。",
       "newWithClone": "このフォルダからリポジトリがクローンされます。",
       "newEmpty": "ワークスペースがプロジェクト一覧に追加され、Claude/Cursorセッションで使用できるようになります。",
-      "cloningRepository": "リポジトリをクローンしています..."
+      "cloningRepository": "リポジトリをクローンしています...",
+      "remote": {
+        "title": "Select Remote Directory",
+        "selectDirectory": "Select a directory on the remote server",
+        "remoteHost": "Remote Host",
+        "remotePath": "Remote Path",
+        "connectionName": "Connection Name",
+        "noDirectorySelected": "No directory selected"
+      }
     },
     "buttons": {
       "cancel": "キャンセル",
@@ -197,13 +227,20 @@
       "next": "次へ",
       "createProject": "プロジェクトを作成",
       "creating": "作成中...",
-      "cloning": "クローン中..."
+      "cloning": "クローン中...",
+      "addRemoteProject": "Add Remote Project"
     },
     "errors": {
       "selectType": "既存のワークスペースか新規作成かを選択してください",
       "providePath": "ワークスペースのパスを入力してください",
       "failedToCreate": "ワークスペースの作成に失敗しました",
-      "failedToCreateFolder": "フォルダの作成に失敗しました"
+      "failedToCreateFolder": "フォルダの作成に失敗しました",
+      "testConnectionFirst": "Please test the connection before proceeding",
+      "selectRemoteDirectory": "Please select a remote directory",
+      "connectionTestFailed": "Connection test failed. Please check your SSH settings.",
+      "failedToBrowseRemote": "Failed to browse remote filesystem",
+      "failedToAddRemoteProject": "Failed to add remote project",
+      "remoteConnectionNotReady": "Remote connection did not become ready. Please try again."
     }
   },
   "notifications": {

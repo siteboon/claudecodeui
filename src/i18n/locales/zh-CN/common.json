@@ -147,6 +147,10 @@
       "new": {
         "title": "新建工作区",
         "description": "创建一个新工作区，可选择从 GitHub 仓库克隆"
+      },
+      "remote": {
+        "title": "Remote Server",
+        "description": "Connect to a project on a remote server via SSH"
       }
     },
     "step2": {
@@ -172,7 +176,25 @@
       "publicRepoInfo": "公共仓库不需要身份验证。如果克隆公共仓库，可以跳过提供令牌。",
       "noTokensHelp": "没有可用的已保存令牌。您可以在 设置 → API 密钥 中添加令牌以便重复使用。",
       "optionalTokenPublic": "GitHub 令牌（公共仓库可选）",
-      "tokenPublicPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx（公共仓库可留空）"
+      "tokenPublicPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx（公共仓库可留空）",
+      "remote": {
+        "title": "SSH Connection",
+        "connectionName": "Connection Name",
+        "connectionNamePlaceholder": "My Server",
+        "connectionNameHelp": "A friendly name for this connection",
+        "hostname": "Hostname",
+        "hostnamePlaceholder": "192.168.1.100 or myserver.example.com",
+        "port": "Port",
+        "username": "Username",
+        "usernamePlaceholder": "ubuntu",
+        "privateKeyPath": "SSH Private Key Path",
+        "privateKeyPathPlaceholder": "~/.ssh/id_rsa",
+        "privateKeyHelp": "Path to your SSH private key file on this machine",
+        "testConnection": "Test Connection",
+        "testing": "Testing...",
+        "connectionSuccess": "Connection successful!",
+        "connectionFailed": "Connection failed"
+      }
     },
     "step3": {
       "reviewConfig": "查看您的配置",
@@ -189,7 +211,15 @@
       "existingInfo": "工作区将被添加到您的项目列表中，并可用于 Claude/Cursor 会话。",
       "newWithClone": "仓库将从此文件夹克隆。",
       "newEmpty": "工作区将被添加到您的项目列表中，并可用于 Claude/Cursor 会话。",
-      "cloningRepository": "正在克隆仓库..."
+      "cloningRepository": "正在克隆仓库...",
+      "remote": {
+        "title": "Select Remote Directory",
+        "selectDirectory": "Select a directory on the remote server",
+        "remoteHost": "Remote Host",
+        "remotePath": "Remote Path",
+        "connectionName": "Connection Name",
+        "noDirectorySelected": "No directory selected"
+      }
     },
     "buttons": {
       "cancel": "取消",
@@ -197,13 +227,20 @@
       "next": "下一步",
       "createProject": "创建项目",
       "creating": "创建中...",
-      "cloning": "正在克隆..."
+      "cloning": "正在克隆...",
+      "addRemoteProject": "Add Remote Project"
     },
     "errors": {
       "selectType": "请选择您已有现有工作区还是想创建新工作区",
       "providePath": "请提供工作区路径",
       "failedToCreate": "创建工作区失败",
-      "failedToCreateFolder": "创建文件夹失败"
+      "failedToCreateFolder": "创建文件夹失败",
+      "testConnectionFirst": "Please test the connection before proceeding",
+      "selectRemoteDirectory": "Please select a remote directory",
+      "connectionTestFailed": "Connection test failed. Please check your SSH settings.",
+      "failedToBrowseRemote": "Failed to browse remote filesystem",
+      "failedToAddRemoteProject": "Failed to add remote project",
+      "remoteConnectionNotReady": "Remote connection did not become ready. Please try again."
     }
   },
   "notifications": {

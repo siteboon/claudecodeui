@@ -6,6 +6,7 @@ import type { Project, ProjectSession, SessionProvider } from '../../../types/ap
 import { createCachedDiffCalculator, type DiffCalculator } from '../utils/messageTransforms';
 import { normalizedToChatMessages } from './useChatMessages';
 import type { SessionStore, NormalizedMessage } from '../../../stores/useSessionStore';
+import { extractHostId } from '../../../utils/remote';
 
 const MESSAGES_PER_PAGE = 20;
 const INITIAL_VISIBLE_MESSAGES = 100;
@@ -366,7 +367,13 @@ export function useChatSessionState({
 
     // Check session status
     if (ws) {
-      sendMessage({ type: 'check-session-status', sessionId: selectedSession.id, provider });
+      const remoteHostId = extractHostId(selectedProject) || undefined;
+      sendMessage({
+        type: 'check-session-status',
+        sessionId: selectedSession.id,
+        provider,
+        ...(remoteHostId && { hostId: remoteHostId }),
+      });
     }
 
     lastLoadedSessionKeyRef.current = sessionKey;
@@ -550,7 +557,7 @@ export function useChatSessionState({
 
     const fetchInitialTokenUsage = async () => {
       try {
-        const url = `/api/projects/${selectedProject.name}/sessions/${selectedSession.id}/token-usage`;
+        const url = `/api/projects/${encodeURIComponent(selectedProject.name)}/sessions/${selectedSession.id}/token-usage`;
         const response = await authenticatedFetch(url);
         if (response.ok) {
           setTokenBudget(await response.json());

@@ -3,6 +3,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { PendingPermissionRequest } from '../types/types';
 import type { Project, ProjectSession, SessionProvider } from '../../../types/app';
 import type { SessionStore, NormalizedMessage } from '../../../stores/useSessionStore';
+import { isRemoteProject } from '../../../utils/remote';
 
 type PendingViewSession = {
   sessionId: string | null;
@@ -239,7 +240,13 @@ export function useChatRealtimeHandlers({
             prev.map((r) => (r.sessionId ? r : { ...r, sessionId: newSessionId })),
           );
         }
-        onNavigateToSession?.(newSessionId);
+        // Skip navigation for remote projects — remote sessions don't exist
+        // on the local filesystem, so navigating to /session/<id> triggers a
+        // session lookup that fails, which resets currentSessionId to null and
+        // causes all subsequent realtime messages to be lost.
+        if (!isRemoteProject(selectedProject)) {
+          onNavigateToSession?.(newSessionId);
+        }
         break;
       }
 
@@ -273,14 +280,20 @@ export function useChatRealtimeHandlers({
 
         // Clear pending session
         const pendingSessionId = sessionStorage.getItem('pendingSessionId');
-        if (pendingSessionId && !currentSessionId && msg.exitCode === 0) {
+        if (pendingSessionId && msg.exitCode === 0) {
           const actualId = msg.actualSessionId || pendingSessionId;
+
           setCurrentSessionId(actualId);
-          if (msg.actualSessionId) {
+          if (msg.actualSessionId && !isRemoteProject(selectedProject)) {
             onNavigateToSession?.(actualId);
           }
+
           sessionStorage.removeItem('pendingSessionId');
-          if (window.refreshProjects) {
+
+          // Remote Claude sessions do not participate in local filesystem watchers,
+          // so refresh projects explicitly after a successful run to surface the
+          // newly persisted session in the sidebar.
+          if (isRemoteProject(selectedProject) && window.refreshProjects) {
             setTimeout(() => window.refreshProjects?.(), 500);
           }
         }
