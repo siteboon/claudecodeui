@@ -89,7 +89,6 @@ export interface IProvider {
 
   getSession(sessionId: string): ProviderSessionSnapshot | null;
   listSessions(): ProviderSessionSnapshot[];
-  waitForSession(sessionId: string): Promise<ProviderSessionSnapshot | null>;
 }
 
 /**

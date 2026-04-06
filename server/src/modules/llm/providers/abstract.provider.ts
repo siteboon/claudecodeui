@@ -65,19 +65,6 @@ export abstract class AbstractProvider implements IProvider {
   }
 
   /**
-   * Waits for a running session to complete and returns the final snapshot.
-   */
-  async waitForSession(sessionId: string): Promise<ProviderSessionSnapshot | null> {
-    const session = this.sessions.get(sessionId);
-    if (!session) {
-      return null;
-    }
-
-    await session.completion;
-    return this.toSnapshot(session);
-  }
-
-  /**
    * Requests a graceful session stop.
    */
   async stopSession(sessionId: string): Promise<boolean> {

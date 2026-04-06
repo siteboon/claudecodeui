@@ -123,11 +123,6 @@ export const llmService = {
     return provider.resumeSession({ ...input, sessionId });
   },
 
-  async waitForSession(providerName: string, sessionId: string): Promise<ProviderSessionSnapshot | null> {
-    const provider = llmProviderRegistry.resolveProvider(providerName);
-    return provider.waitForSession(sessionId);
-  },
-
   async stopSession(providerName: string, sessionId: string): Promise<boolean> {
     const provider = llmProviderRegistry.resolveProvider(providerName);
     return provider.stopSession(sessionId);

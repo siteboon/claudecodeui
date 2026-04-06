@@ -46,14 +46,6 @@ const normalizeProviderParam = (value: unknown): string =>
   readPathParam(value, 'provider').trim().toLowerCase();
 
 /**
- * Allows callers to block until a launched/resumed session reaches a final state.
- */
-const parseWaitForCompletion = (req: Request): boolean => {
-  const value = (req.body as Record<string, unknown> | undefined)?.waitForCompletion;
-  return value === true;
-};
-
-/**
  * Validates and normalizes rename payload.
  */
 const parseRenamePayload = (payload: unknown): { summary: string } => {
@@ -282,22 +274,13 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const provider = parseProvider(req.params.provider);
     const snapshot = await llmService.startSession(provider, req.body);
-
-    const waitForCompletion = parseWaitForCompletion(req);
-    if (!waitForCompletion) {
-      const formattedSnapshot = formatSessionSnapshot(provider, snapshot);
-      res.status(202).json(
-        createApiSuccessResponse({
-          provider,
-          session: formattedSnapshot,
-        }),
-      );
-      return;
-    }
-
-    const completedSnapshot = await llmService.waitForSession(provider, snapshot.sessionId);
-    const finalSnapshot = completedSnapshot ?? snapshot;
-    res.json(createApiSuccessResponse({ provider, session: formatSessionSnapshot(provider, finalSnapshot) }));
+    const formattedSnapshot = formatSessionSnapshot(provider, snapshot);
+    res.status(202).json(
+      createApiSuccessResponse({
+        provider,
+        session: formattedSnapshot,
+      }),
+    );
   }),
 );
 
@@ -308,16 +291,7 @@ router.post(
     const sessionId = readPathParam(req.params.sessionId, 'sessionId');
 
     const snapshot = await llmService.resumeSession(provider, sessionId, req.body);
-
-    const waitForCompletion = parseWaitForCompletion(req);
-    if (!waitForCompletion) {
-      res.status(202).json(createApiSuccessResponse({ provider, session: formatSessionSnapshot(provider, snapshot) }));
-      return;
-    }
-
-    const completedSnapshot = await llmService.waitForSession(provider, sessionId);
-    const finalSnapshot = completedSnapshot ?? snapshot;
-    res.json(createApiSuccessResponse({ provider, session: formatSessionSnapshot(provider, finalSnapshot) }));
+    res.status(202).json(createApiSuccessResponse({ provider, session: formatSessionSnapshot(provider, snapshot) }));
   }),
 );
 
