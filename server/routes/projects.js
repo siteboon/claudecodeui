@@ -12,8 +12,11 @@ function sanitizeGitError(message, token) {
   return message.replace(new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), '***');
 }
 
-// Configure allowed workspace root (defaults to user's home directory)
+// Configure allowed workspace roots (defaults to user's home directory)
+// Supports comma-separated paths, e.g. WORKSPACES_ROOT=/Users/xuzhi,/Volumes/workplace
 export const WORKSPACES_ROOT = process.env.WORKSPACES_ROOT || os.homedir();
+const WORKSPACES_ROOTS = WORKSPACES_ROOT.split(',').map(p => p.trim()).filter(Boolean);
+const ALLOW_SYMLINKS = process.env.ALLOW_SYMLINKS === 'true';
 
 // System-critical paths that should never be used as workspace directories
 export const FORBIDDEN_PATHS = [
@@ -110,12 +113,23 @@ export async function validateWorkspacePath(requestedPath) {
       }
     }
 
-    // Resolve the workspace root to its real path
-    const resolvedWorkspaceRoot = await fs.realpath(WORKSPACES_ROOT);
+    // Resolve all workspace roots to their real paths
+    const resolvedRoots = [];
+    for (const root of WORKSPACES_ROOTS) {
+      try {
+        resolvedRoots.push(await fs.realpath(root));
+      } catch {
+        resolvedRoots.push(path.resolve(root));
+      }
+    }
 
-    // Ensure the resolved path is contained within the allowed workspace root
-    if (!realPath.startsWith(resolvedWorkspaceRoot + path.sep) &&
-        realPath !== resolvedWorkspaceRoot) {
+    const isWithinRoots = (p) => resolvedRoots.some(root =>
+      p === root || p.startsWith(root + path.sep)
+    );
+
+    // Ensure the resolved path is contained within any allowed workspace root
+    // When symlinks are allowed, also check the original absolute path
+    if (!isWithinRoots(realPath) && !(ALLOW_SYMLINKS && isWithinRoots(absolutePath))) {
       return {
         valid: false,
         error: `Workspace path must be within the allowed workspace root: ${WORKSPACES_ROOT}`
@@ -123,29 +137,28 @@ export async function validateWorkspacePath(requestedPath) {
     }
 
     // Additional symlink check for existing paths
-    try {
-      await fs.access(absolutePath);
-      const stats = await fs.lstat(absolutePath);
+    if (!ALLOW_SYMLINKS) {
+      try {
+        await fs.access(absolutePath);
+        const stats = await fs.lstat(absolutePath);
 
-      if (stats.isSymbolicLink()) {
-        // Verify symlink target is also within allowed root
-        const linkTarget = await fs.readlink(absolutePath);
-        const resolvedTarget = path.resolve(path.dirname(absolutePath), linkTarget);
-        const realTarget = await fs.realpath(resolvedTarget);
+        if (stats.isSymbolicLink()) {
+          const linkTarget = await fs.readlink(absolutePath);
+          const resolvedTarget = path.resolve(path.dirname(absolutePath), linkTarget);
+          const realTarget = await fs.realpath(resolvedTarget);
 
-        if (!realTarget.startsWith(resolvedWorkspaceRoot + path.sep) &&
-            realTarget !== resolvedWorkspaceRoot) {
-          return {
-            valid: false,
-            error: 'Symlink target is outside the allowed workspace root'
-          };
+          if (!isWithinRoots(realTarget)) {
+            return {
+              valid: false,
+              error: 'Symlink target is outside the allowed workspace root'
+            };
+          }
+        }
+      } catch (error) {
+        if (error.code !== 'ENOENT') {
+          throw error;
         }
       }
-    } catch (error) {
-      if (error.code !== 'ENOENT') {
-        throw error;
-      }
-      // Path doesn't exist - that's fine for new workspace creation
     }
 
     return {

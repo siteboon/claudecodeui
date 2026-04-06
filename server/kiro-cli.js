@@ -28,17 +28,9 @@ async function spawnKiro(command, options = {}, ws) {
     // Real Kiro CLI interface: kiro chat --no-interactive [--resume <id>] [--agent <name>] <message>
     const args = ['chat', '--no-interactive'];
 
-    // If we have a sessionId, attempt to resume
+    // If we have a sessionId, attempt to resume the most recent session in the project dir
     if (sessionId) {
-        const session = sessionManager.getSession(sessionId);
-        if (session && session.cliSessionId) {
-            args.push('--resume', session.cliSessionId);
-        } else {
-            // TODO: verify native Kiro session ID format to confirm direct resume is valid
-            // Sessions discovered from disk by getKiroSessions() are not in sessionManager,
-            // so use sessionId directly as the resume value for disk-discovered sessions.
-            args.push('--resume', sessionId);
-        }
+        args.push('--resume');
     }
 
     // Use cwd (actual project directory) instead of projectPath (metadata directory)
@@ -46,9 +38,9 @@ async function spawnKiro(command, options = {}, ws) {
     const cleanPath = (cwd || projectPath || process.cwd()).replace(/[^\x20-\x7E]/g, '').trim();
     const workingDir = cleanPath;
 
-    // Use --agent flag if a model/agent name is specified
-    if (options.model) {
-        args.push('--agent', options.model);
+    // Use --model flag if a model name is specified (skip for 'auto')
+    if (options.model && options.model !== 'auto') {
+        args.push('--model', options.model);
     }
 
     // Pass the user message as a positional argument
@@ -57,7 +49,7 @@ async function spawnKiro(command, options = {}, ws) {
     }
 
     // Try to find kiro in PATH first, then fall back to environment variable
-    const kiroPath = process.env.KIRO_PATH || 'kiro';
+    const kiroPath = process.env.KIRO_PATH || 'kiro-cli';
     console.log('Spawning Kiro CLI:', kiroPath, args.join(' '));
     console.log('Working directory:', workingDir);
 

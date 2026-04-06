@@ -87,7 +87,7 @@ const PROVIDER_WATCH_PATHS = [
     { provider: 'gemini_sessions', rootPath: path.join(os.homedir(), '.gemini', 'sessions') },
     // TODO: verify actual Kiro session storage path (~/.kiro/sessions/ is best guess)
     // optional: true — skip mkdir on startup so we don't create ~/.kiro/sessions for users who don't have Kiro installed
-    { provider: 'kiro', rootPath: path.join(os.homedir(), '.kiro', 'sessions'), optional: true }
+    { provider: 'kiro', rootPath: path.join(os.homedir(), '.kiro', 'sessions', 'cli'), optional: true }
 ];
 const WATCHER_IGNORED_PATTERNS = [
     '**/node_modules/**',
@@ -664,11 +664,12 @@ app.get('/api/search/conversations', authenticateToken, async (req, res) => {
 
 const expandWorkspacePath = (inputPath) => {
     if (!inputPath) return inputPath;
+    const primaryRoot = WORKSPACES_ROOT.split(',')[0].trim();
     if (inputPath === '~') {
-        return WORKSPACES_ROOT;
+        return primaryRoot;
     }
     if (inputPath.startsWith('~/') || inputPath.startsWith('~\\')) {
-        return path.join(WORKSPACES_ROOT, inputPath.slice(2));
+        return path.join(primaryRoot, inputPath.slice(2));
     }
     return inputPath;
 };
@@ -681,7 +682,7 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
         console.log('[API] Browse filesystem request for path:', dirPath);
         console.log('[API] WORKSPACES_ROOT is:', WORKSPACES_ROOT);
         // Default to home directory if no path provided
-        const defaultRoot = WORKSPACES_ROOT;
+        const defaultRoot = WORKSPACES_ROOT.split(',')[0].trim();
         let targetPath = dirPath ? expandWorkspacePath(dirPath) : defaultRoot;
 
         // Resolve and normalize the path

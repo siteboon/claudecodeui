@@ -2573,7 +2573,7 @@ async function getGeminiCliSessionMessages(sessionId) {
  */
 async function getKiroSessions(projectPath) {
   // TODO: verify actual Kiro session storage path — this is a best-effort stub
-  const kiroSessionsDir = path.join(os.homedir(), '.kiro', 'sessions');
+  const kiroSessionsDir = path.join(os.homedir(), '.kiro', 'sessions', 'cli');
   try {
     await fs.access(kiroSessionsDir);
   } catch {
@@ -2614,23 +2614,25 @@ async function getKiroSessions(projectPath) {
         continue;
       }
 
-      // If session has a projectPath field, filter by it
-      if (session.projectPath && normalizedProjectPath) {
-        if (normalizeComparablePath(session.projectPath) !== normalizedProjectPath) {
+      // Kiro uses 'cwd' for the project path; normalize to projectPath
+      const sessionProjectPath = session.projectPath || session.cwd;
+
+      // If session has a project path, filter by it
+      if (sessionProjectPath && normalizedProjectPath) {
+        if (normalizeComparablePath(sessionProjectPath) !== normalizedProjectPath) {
           continue;
         }
       }
 
-      // Skip sessions with no projectPath — they can't be associated with a specific project.
-      // TODO: include unscoped sessions in a global bucket once project association is confirmed
-      if (!session.projectPath) {
+      // Skip sessions with no project path — they can't be associated with a specific project.
+      if (!sessionProjectPath) {
         continue;
       }
 
-      const sessionId = session.sessionId || session.id || sessionFile.replace(/\.(json|jsonl)$/, '');
+      const sessionId = session.session_id || session.sessionId || session.id || sessionFile.replace(/\.(json|jsonl)$/, '');
       const messages = session.messages || [];
       const firstUserMsg = messages.find(m => m.role === 'user' || m.type === 'user');
-      let summary = 'Kiro Session';
+      let summary = session.title || 'Kiro Session';
       if (firstUserMsg) {
         const text = typeof firstUserMsg.content === 'string'
           ? firstUserMsg.content
@@ -2646,7 +2648,7 @@ async function getKiroSessions(projectPath) {
         id: sessionId,
         summary,
         messageCount: messages.length,
-        lastActivity: session.lastUpdated || session.updatedAt || session.startTime || null,
+        lastActivity: session.updated_at || session.created_at || null,
         provider: 'kiro'
       });
     } catch {
@@ -2665,57 +2667,46 @@ async function getKiroSessions(projectPath) {
  * TODO: verify actual Kiro session file format and storage path.
  */
 async function getKiroCliSessionMessages(sessionId) {
-  // TODO: verify actual Kiro session storage path (~/.kiro/sessions/ or similar)
-  const kiroSessionsDir = path.join(os.homedir(), '.kiro', 'sessions');
-  let sessionFiles;
+  const kiroSessionsDir = path.join(os.homedir(), '.kiro', 'sessions', 'cli');
+  const jsonlPath = path.join(kiroSessionsDir, `${sessionId}.jsonl`);
+
   try {
-    sessionFiles = await fs.readdir(kiroSessionsDir);
+    const data = await fs.readFile(jsonlPath, 'utf8');
+    const lines = data.split('\n').filter(l => l.trim());
+    const messages = [];
+
+    for (const line of lines) {
+      let entry;
+      try { entry = JSON.parse(line); } catch { continue; }
+
+      const kind = entry.kind;
+      if (kind !== 'Prompt' && kind !== 'AssistantMessage') continue;
+
+      const role = kind === 'Prompt' ? 'user' : 'assistant';
+      const contentBlocks = entry.data?.content || [];
+      const textParts = [];
+
+      for (const block of contentBlocks) {
+        if (block.kind === 'text' && typeof block.data === 'string') {
+          textParts.push(block.data);
+        } else if (block.kind === 'toolUse') {
+          textParts.push(`[Tool: ${block.data?.name || 'unknown'}]`);
+        }
+      }
+
+      if (textParts.length > 0) {
+        messages.push({
+          type: 'message',
+          message: { role, content: textParts.join('\n') },
+          timestamp: entry.data?.timestamp || null
+        });
+      }
+    }
+
+    return messages;
   } catch {
     return [];
   }
-
-  for (const sessionFile of sessionFiles) {
-    if (!sessionFile.endsWith('.json') && !sessionFile.endsWith('.jsonl')) continue;
-    try {
-      const filePath = path.join(kiroSessionsDir, sessionFile);
-      const data = await fs.readFile(filePath, 'utf8');
-      // Parse the file: .jsonl files are line-delimited JSON, .json files are a single blob.
-      let session;
-      if (sessionFile.endsWith('.jsonl')) {
-        const lines = data.split('\n').filter(l => l.trim());
-        const parsed = lines.map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
-        session = parsed.length === 1 ? parsed[0] : { messages: parsed };
-      } else {
-        session = JSON.parse(data);
-      }
-      const fileSessionId = session.sessionId || session.id || sessionFile.replace(/\.(json|jsonl)$/, '');
-      if (fileSessionId !== sessionId) continue;
-
-      // TODO: verify actual Kiro message format field names
-      return (session.messages || []).map(msg => {
-        const role = msg.role === 'user' ? 'user'
-          : (msg.role === 'assistant' || msg.type === 'assistant') ? 'assistant'
-          : msg.role || msg.type;
-
-        let content = '';
-        if (typeof msg.content === 'string') {
-          content = msg.content;
-        } else if (Array.isArray(msg.content)) {
-          content = msg.content.filter(p => p.text).map(p => p.text).join('\n');
-        }
-
-        return {
-          type: 'message',
-          message: { role, content },
-          timestamp: msg.timestamp || null
-        };
-      });
-    } catch {
-      continue;
-    }
-  }
-
-  return [];
 }
 
 export {

@@ -993,7 +993,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         projectPath: finalProjectPath,
         cwd: finalProjectPath,
         sessionId: null,
-        model: model || KIRO_MODELS.DEFAULT,
+        model: model || 'auto',
         skipPermissions: true // CLI mode bypasses permissions
       }, writer);
     }

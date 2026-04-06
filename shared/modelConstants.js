@@ -81,14 +81,18 @@ export const CODEX_MODELS = {
  */
 export const KIRO_MODELS = {
   OPTIONS: [
-    { value: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
-    { value: "claude-opus-4-5", label: "Claude Opus 4.5" },
+    { value: "auto", label: "Auto" },
+    { value: "claude-sonnet-4.6", label: "Claude Sonnet 4.6" },
+    { value: "claude-sonnet-4.6-1m", label: "Claude Sonnet 4.6 (1M)" },
+    { value: "claude-opus-4.6", label: "Claude Opus 4.6" },
+    { value: "claude-opus-4.6-1m", label: "Claude Opus 4.6 (1M)" },
+    { value: "claude-opus-4.5", label: "Claude Opus 4.5" },
+    { value: "claude-sonnet-4.5", label: "Claude Sonnet 4.5" },
     { value: "claude-sonnet-4", label: "Claude Sonnet 4" },
-    { value: "claude-opus-4", label: "Claude Opus 4" },
-    { value: "claude-haiku-4", label: "Claude Haiku 4" },
+    { value: "claude-haiku-4.5", label: "Claude Haiku 4.5" },
   ],
 
-  DEFAULT: "claude-sonnet-4-5",
+  DEFAULT: "auto",
 };
 
 /**
