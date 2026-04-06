@@ -57,6 +57,8 @@ type CodexSdkModule = {
  * Codex SDK provider implementation.
  */
 export class CodexProvider extends BaseSdkProvider {
+  private codexClientPromise: Promise<CodexSdkClient> | null = null;
+
   constructor() {
     super('codex', {
       supportsRuntimePermissionRequests: false,
@@ -111,8 +113,7 @@ export class CodexProvider extends BaseSdkProvider {
     stream: AsyncIterable<unknown>;
     stop: () => Promise<boolean>;
   }> {
-    const sdkModule = await this.loadCodexSdkModule();
-    const client = new sdkModule.Codex();
+    const client = await this.getCodexClient();
 
     const threadOptions: Record<string, unknown> = {
       model: input.model,
@@ -137,6 +138,22 @@ export class CodexProvider extends BaseSdkProvider {
         return true;
       },
     };
+  }
+
+  /**
+   * Returns a shared Codex SDK client instance for this provider.
+   */
+  private async getCodexClient(): Promise<CodexSdkClient> {
+    if (!this.codexClientPromise) {
+      this.codexClientPromise = this.loadCodexSdkModule()
+        .then((sdkModule) => new sdkModule.Codex())
+        .catch((error) => {
+          this.codexClientPromise = null;
+          throw error;
+        });
+    }
+
+    return this.codexClientPromise;
   }
 
   /**
