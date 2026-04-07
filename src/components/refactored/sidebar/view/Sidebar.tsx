@@ -1,4 +1,3 @@
-import { PanelRightOpen } from 'lucide-react';
 import SidebarFooter from './SidebarFooter';
 import { useSidebarSettings } from '@/components/refactored/sidebar/hooks/useSidebarSettings';
 import { useSidebarModals } from '@/components/refactored/sidebar/hooks/useSidebarModals';
@@ -6,8 +5,8 @@ import { useWorkspaces } from '@/components/refactored/sidebar/hooks/useWorkspac
 import SidebarHeader from '@/components/refactored/sidebar/view/SidebarHeader';
 import { SidebarDeleteModals } from '@/components/refactored/sidebar/view/SidebarDeleteModals';
 import { SidebarWorkspaceList } from '@/components/refactored/sidebar/view/SidebarWorkspaceList';
+import { SidebarCollapsed } from '@/components/refactored/sidebar/view/SidebarCollapsed';
 import { cn } from '@/lib/utils';
-import { Button } from '@/shared/view/ui';
 import ProjectCreationWizard from '@/components/project-creation-wizard';
 import VersionUpgradeModal from '@/components/version-upgrade/view';
 import Settings from '@/components/settings/view/Settings';
@@ -149,18 +148,13 @@ export function Sidebar() {
           )}
         </aside>
 
-        {/* Collapsed view handle - Only show on desktop since mobile hides it completely behind a toggle usually, but let's keep it consistent or standard. */}
         {isCollapsed && (
-          <aside className="fixed inset-y-0 left-0 z-40 flex h-full flex-col items-center border-r border-border bg-background/80 px-2 py-4 md:relative">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-9 w-9 rounded-lg p-0 text-muted-foreground hover:bg-accent/80 hover:text-foreground"
-              onClick={() => setCollapsed(false)}
-              title="Show Sidebar"
-            >
-              <PanelRightOpen className="h-4 w-4" />
-            </Button>
+          <aside className="fixed inset-y-0 left-0 z-40 h-full border-r border-border md:relative">
+            <SidebarCollapsed
+              onExpand={() => setCollapsed(false)}
+              onShowSettings={openSettingsModal}
+              onShowVersionModal={openVersionModal}
+            />
           </aside>
         )}
       </>
