@@ -9,11 +9,15 @@ import { readFile } from 'node:fs/promises';
 
 import { BaseSdkProvider } from '@/modules/llm/providers/base-sdk.provider.js';
 import type {
+  IProviderMcpRuntime,
+  IProviderSkillsRuntime,
   ProviderModel,
   ProviderSessionEvent,
   RuntimePermissionMode,
   StartSessionInput,
 } from '@/modules/llm/providers/provider.interface.js';
+import { ClaudeMcpRuntime } from '@/modules/llm/providers/runtimes/claude-mcp.runtime.js';
+import { ClaudeSkillsRuntime } from '@/modules/llm/providers/runtimes/claude-skills.runtime.js';
 
 type ClaudeExecutionInput = StartSessionInput & {
   sessionId: string;
@@ -69,6 +73,9 @@ const readString = (value: unknown): string | undefined => {
  * Claude SDK provider implementation.
  */
 export class ClaudeProvider extends BaseSdkProvider {
+  readonly mcp: IProviderMcpRuntime = new ClaudeMcpRuntime();
+  readonly skills: IProviderSkillsRuntime = new ClaudeSkillsRuntime();
+
   constructor() {
     super('claude', {
       supportsRuntimePermissionRequests: true,

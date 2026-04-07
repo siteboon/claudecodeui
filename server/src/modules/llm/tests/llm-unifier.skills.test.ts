@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { llmSkillsService } from '@/modules/llm/services/skills.service.js';
+import { llmService } from '@/modules/llm/services/llm.service.js';
 
 const patchHomeDir = (nextHomeDir: string) => {
   const original = os.homedir;
@@ -34,7 +34,7 @@ const createSkill = async (
 /**
  * This test covers Claude skills fetching from user/project/plugin locations and plugin namespace invocation.
  */
-test('llmSkillsService lists claude user/project/plugin skills with proper invocation names', { concurrency: false }, async () => {
+test('llmService lists claude user/project/plugin skills with proper invocation names', { concurrency: false }, async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-skills-claude-'));
   const workspacePath = path.join(tempRoot, 'workspace');
   const pluginInstallPath = path.join(tempRoot, 'plugin-install');
@@ -80,7 +80,7 @@ test('llmSkillsService lists claude user/project/plugin skills with proper invoc
       'utf8',
     );
 
-    const skills = await llmSkillsService.listProviderSkills('claude', { workspacePath });
+    const skills = await llmService.listProviderSkills('claude', { workspacePath });
     assert.ok(skills.some((skill) => skill.scope === 'user' && skill.invocation === '/user-helper'));
     assert.ok(skills.some((skill) => skill.scope === 'project' && skill.invocation === '/project-helper'));
     assert.ok(skills.some((skill) => skill.scope === 'plugin' && skill.invocation === '/example-skills:plugin-helper'));
@@ -93,7 +93,7 @@ test('llmSkillsService lists claude user/project/plugin skills with proper invoc
 /**
  * This test covers Codex skills discovery across repo/user/system locations and `$` invocation prefix.
  */
-test('llmSkillsService lists codex skills from repo/user/system locations with dollar invocation', { concurrency: false }, async () => {
+test('llmService lists codex skills from repo/user/system locations with dollar invocation', { concurrency: false }, async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-skills-codex-'));
   const repoRoot = path.join(tempRoot, 'repo');
   const workspacePath = path.join(repoRoot, 'packages', 'app');
@@ -123,7 +123,7 @@ test('llmSkillsService lists codex skills from repo/user/system locations with d
       description: 'system skill',
     });
 
-    const skills = await llmSkillsService.listProviderSkills('codex', { workspacePath });
+    const skills = await llmService.listProviderSkills('codex', { workspacePath });
     assert.ok(skills.some((skill) => skill.name === 'cwd-skill' && skill.invocation === '$cwd-skill'));
     assert.ok(skills.some((skill) => skill.name === 'parent-skill' && skill.invocation === '$parent-skill'));
     assert.ok(skills.some((skill) => skill.name === 'repo-root-skill' && skill.invocation === '$repo-root-skill'));
@@ -138,7 +138,7 @@ test('llmSkillsService lists codex skills from repo/user/system locations with d
 /**
  * This test covers Gemini skill fetch locations and slash-based invocation format.
  */
-test('llmSkillsService lists gemini skills from documented directories', { concurrency: false }, async () => {
+test('llmService lists gemini skills from documented directories', { concurrency: false }, async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-skills-gemini-'));
   const workspacePath = path.join(tempRoot, 'workspace');
   await fs.mkdir(workspacePath, { recursive: true });
@@ -162,7 +162,7 @@ test('llmSkillsService lists gemini skills from documented directories', { concu
       description: 'project agents skill',
     });
 
-    const skills = await llmSkillsService.listProviderSkills('gemini', { workspacePath });
+    const skills = await llmService.listProviderSkills('gemini', { workspacePath });
     assert.ok(skills.some((skill) => skill.invocation === '/home-gemini'));
     assert.ok(skills.some((skill) => skill.invocation === '/home-agents'));
     assert.ok(skills.some((skill) => skill.invocation === '/project-gemini'));
@@ -176,7 +176,7 @@ test('llmSkillsService lists gemini skills from documented directories', { concu
 /**
  * This test covers Cursor skill fetch locations and slash-based invocation format.
  */
-test('llmSkillsService lists cursor skills from documented directories', { concurrency: false }, async () => {
+test('llmService lists cursor skills from documented directories', { concurrency: false }, async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-skills-cursor-'));
   const workspacePath = path.join(tempRoot, 'workspace');
   await fs.mkdir(workspacePath, { recursive: true });
@@ -196,7 +196,7 @@ test('llmSkillsService lists cursor skills from documented directories', { concu
       description: 'user cursor skill',
     });
 
-    const skills = await llmSkillsService.listProviderSkills('cursor', { workspacePath });
+    const skills = await llmService.listProviderSkills('cursor', { workspacePath });
     assert.ok(skills.some((skill) => skill.invocation === '/project-agents'));
     assert.ok(skills.some((skill) => skill.invocation === '/project-cursor'));
     assert.ok(skills.some((skill) => skill.invocation === '/user-cursor'));

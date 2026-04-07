@@ -3,7 +3,15 @@ import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 
 import { BaseSdkProvider } from '@/modules/llm/providers/base-sdk.provider.js';
-import type { ProviderModel, ProviderSessionEvent, StartSessionInput } from '@/modules/llm/providers/provider.interface.js';
+import type {
+  IProviderMcpRuntime,
+  IProviderSkillsRuntime,
+  ProviderModel,
+  ProviderSessionEvent,
+  StartSessionInput,
+} from '@/modules/llm/providers/provider.interface.js';
+import { CodexMcpRuntime } from '@/modules/llm/providers/runtimes/codex-mcp.runtime.js';
+import { CodexSkillsRuntime } from '@/modules/llm/providers/runtimes/codex-skills.runtime.js';
 import { AppError } from '@/shared/utils/app-error.js';
 
 type CodexExecutionInput = StartSessionInput & {
@@ -57,6 +65,9 @@ type CodexSdkModule = {
  * Codex SDK provider implementation.
  */
 export class CodexProvider extends BaseSdkProvider {
+  readonly mcp: IProviderMcpRuntime = new CodexMcpRuntime();
+  readonly skills: IProviderSkillsRuntime = new CodexSkillsRuntime();
+
   private codexClientPromise: Promise<CodexSdkClient> | null = null;
 
   constructor() {

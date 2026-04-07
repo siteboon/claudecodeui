@@ -1,5 +1,12 @@
 import { BaseCliProvider } from '@/modules/llm/providers/base-cli.provider.js';
-import type { ProviderModel, StartSessionInput } from '@/modules/llm/providers/provider.interface.js';
+import type {
+  IProviderMcpRuntime,
+  IProviderSkillsRuntime,
+  ProviderModel,
+  StartSessionInput,
+} from '@/modules/llm/providers/provider.interface.js';
+import { CursorMcpRuntime } from '@/modules/llm/providers/runtimes/cursor-mcp.runtime.js';
+import { CursorSkillsRuntime } from '@/modules/llm/providers/runtimes/cursor-skills.runtime.js';
 
 type CursorExecutionInput = StartSessionInput & {
   sessionId: string;
@@ -14,6 +21,9 @@ const ANSI_REGEX =
  * Cursor CLI provider implementation.
  */
 export class CursorProvider extends BaseCliProvider {
+  readonly mcp: IProviderMcpRuntime = new CursorMcpRuntime();
+  readonly skills: IProviderSkillsRuntime = new CursorSkillsRuntime();
+
   constructor() {
     super('cursor', {
       supportsRuntimePermissionRequests: false,

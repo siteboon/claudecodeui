@@ -1,5 +1,12 @@
 import { BaseCliProvider } from '@/modules/llm/providers/base-cli.provider.js';
-import type { ProviderModel, StartSessionInput } from '@/modules/llm/providers/provider.interface.js';
+import type {
+  IProviderMcpRuntime,
+  IProviderSkillsRuntime,
+  ProviderModel,
+  StartSessionInput,
+} from '@/modules/llm/providers/provider.interface.js';
+import { GeminiMcpRuntime } from '@/modules/llm/providers/runtimes/gemini-mcp.runtime.js';
+import { GeminiSkillsRuntime } from '@/modules/llm/providers/runtimes/gemini-skills.runtime.js';
 
 type GeminiExecutionInput = StartSessionInput & {
   sessionId: string;
@@ -22,6 +29,9 @@ const GEMINI_MODELS: ProviderModel[] = [
  * Gemini CLI provider implementation.
  */
 export class GeminiProvider extends BaseCliProvider {
+  readonly mcp: IProviderMcpRuntime = new GeminiMcpRuntime();
+  readonly skills: IProviderSkillsRuntime = new GeminiSkillsRuntime();
+
   constructor() {
     super('gemini', {
       supportsRuntimePermissionRequests: false,
