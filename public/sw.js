@@ -5,7 +5,8 @@
 // Derive base path from service worker URL (e.g. /prefix/sw.js → /prefix)
 const BASE_PATH = new URL('.', self.location).pathname.replace(/\/$/, '');
 
-const CACHE_NAME = 'claude-ui-v2';
+const CACHE_PREFIX = 'claude-ui';
+const CACHE_NAME = `${CACHE_PREFIX}:${encodeURIComponent(BASE_PATH || '/')}:v2`;
 const urlsToCache = [
   `${BASE_PATH}/manifest.json`
 ];
@@ -67,7 +68,7 @@ self.addEventListener('activate', event => {
     caches.keys().then(cacheNames =>
       Promise.all(
         cacheNames
-          .filter(name => name !== CACHE_NAME)
+          .filter(name => name.startsWith(CACHE_PREFIX) && name !== CACHE_NAME)
           .map(name => caches.delete(name))
       )
     )

@@ -18,7 +18,11 @@ export default defineConfig(({ mode }) => {
   const serverPort = env.SERVER_PORT || env.PORT || 3001
 
   // Application base path — configurable via BASE_PATH env var, defaults to /
-  const basePath = (env.BASE_PATH || '/').replace(/\/+$/, '')
+  const rawBasePath = (env.BASE_PATH || '/').trim()
+  const basePath =
+    rawBasePath === '/'
+      ? ''
+      : `/${rawBasePath.replace(/^\/+|\/+$/g, '')}`
   const base = `${basePath}/`
 
   return {
@@ -41,7 +45,20 @@ export default defineConfig(({ mode }) => {
           target: `ws://${proxyHost}:${serverPort}`,
           ws: true,
           rewrite: (path) => path
-        }
+        },
+        [`${basePath}/plugin-ws`]: {
+          target: `ws://${proxyHost}:${serverPort}`,
+          ws: true,
+          rewrite: (path) => path
+        },
+        // Plugins may connect to /plugin-ws without the base path prefix
+        ...(basePath ? {
+          '/plugin-ws': {
+            target: `ws://${proxyHost}:${serverPort}`,
+            ws: true,
+            rewrite: (path) => path
+          }
+        } : {})
       }
     },
     build: {
