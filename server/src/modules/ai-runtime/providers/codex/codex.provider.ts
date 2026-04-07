@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { BaseSdkProvider } from '@/modules/ai-runtime/providers/base/base-sdk.provider.js';
 import type {
   IProviderMcpRuntime,
+  IProviderSessionSynchronizerRuntime,
   IProviderSkillsRuntime,
   ProviderModel,
   ProviderSessionEvent,
@@ -12,6 +13,7 @@ import type {
 } from '@/modules/ai-runtime/types/index.js';
 import { CodexMcpRuntime } from '@/modules/ai-runtime/providers/codex/codex-mcp.runtime.js';
 import { CodexSkillsRuntime } from '@/modules/ai-runtime/providers/codex/codex-skills.runtime.js';
+import { CodexSessionSynchronizerRuntime } from '@/modules/ai-runtime/providers/codex/codex-session-synchronizer.runtime.js';
 import { AppError } from '@/shared/utils/app-error.js';
 
 type CodexExecutionInput = StartSessionInput & {
@@ -67,6 +69,7 @@ type CodexSdkModule = {
 export class CodexProvider extends BaseSdkProvider {
   readonly mcp: IProviderMcpRuntime = new CodexMcpRuntime();
   readonly skills: IProviderSkillsRuntime = new CodexSkillsRuntime();
+  readonly sessionSynchronizer: IProviderSessionSynchronizerRuntime = new CodexSessionSynchronizerRuntime();
 
   private codexClientPromise: Promise<CodexSdkClient> | null = null;
 

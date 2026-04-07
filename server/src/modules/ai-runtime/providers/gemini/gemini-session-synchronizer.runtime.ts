@@ -7,8 +7,8 @@ import {
   findFilesRecursivelyCreatedAfter,
   normalizeSessionName,
   readFileTimestamps,
-} from '@/modules/ai-runtime/session-indexers/session-indexer.utils.js';
-import type { ISessionIndexer } from '@/modules/ai-runtime/session-indexers/session-indexer.interface.js';
+} from '@/modules/ai-runtime/providers/shared/session-synchronizer/session-synchronizer.utils.js';
+import type { IProviderSessionSynchronizerRuntime } from '@/modules/ai-runtime/types/index.js';
 
 type ParsedSession = {
   sessionId: string;
@@ -19,23 +19,23 @@ type ParsedSession = {
 /**
  * Session indexer for Gemini transcript artifacts.
  */
-export class GeminiSessionIndexer implements ISessionIndexer {
-  readonly provider = 'gemini' as const;
+export class GeminiSessionSynchronizerRuntime implements IProviderSessionSynchronizerRuntime {
+  private readonly provider = 'gemini' as const;
   private readonly geminiHome = path.join(os.homedir(), '.gemini');
 
   /**
    * Scans Gemini session JSON files and upserts discovered sessions into DB.
    */
-  async synchronize(lastScanAt: Date | null): Promise<number> {
+  async synchronize(since?: Date): Promise<number> {
     const legacySessionFiles = await findFilesRecursivelyCreatedAfter(
       path.join(this.geminiHome, 'sessions'),
       '.json',
-      lastScanAt,
+      since ?? null,
     );
     const tempFiles = await findFilesRecursivelyCreatedAfter(
       path.join(this.geminiHome, 'tmp'),
       '.json',
-      lastScanAt,
+      since ?? null,
     );
     const files = [...legacySessionFiles, ...tempFiles];
 

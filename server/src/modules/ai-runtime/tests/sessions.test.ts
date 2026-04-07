@@ -7,24 +7,15 @@ import test from 'node:test';
 import { AppError } from '@/shared/utils/app-error.js';
 import { scanStateDb } from '@/shared/database/repositories/scan-state.db.js';
 import { sessionsDb } from '@/shared/database/repositories/sessions.db.js';
+import { llmProviderRegistry } from '@/modules/ai-runtime/ai-runtime.registry.js';
 import { llmSessionsService } from '@/modules/ai-runtime/services/sessions.service.js';
-import { sessionIndexers } from '@/modules/ai-runtime/session-indexers/index.js';
 import { conversationSearchService } from '@/modules/conversations/conversation-search.service.js';
-import type { ISessionIndexer } from '@/modules/ai-runtime/session-indexers/session-indexer.interface.js';
 
 const patchMethod = <T extends object, K extends keyof T>(target: T, key: K, replacement: T[K]) => {
   const original = target[key];
   (target as any)[key] = replacement;
   return () => {
     (target as any)[key] = original;
-  };
-};
-
-const patchIndexers = (nextIndexers: ISessionIndexer[]) => {
-  const originalIndexers = [...sessionIndexers];
-  sessionIndexers.splice(0, sessionIndexers.length, ...nextIndexers);
-  return () => {
-    sessionIndexers.splice(0, sessionIndexers.length, ...originalIndexers);
   };
 };
 
@@ -35,20 +26,24 @@ test('llmSessionsService.synchronizeSessions aggregates processed counts and fai
   const restoreUpdateScanDate = patchMethod(scanStateDb, 'updateLastScannedAt', () => {
     updateLastScannedAtCalls += 1;
   });
-  const restoreIndexers = patchIndexers([
+  const restoreProviders = patchMethod(llmProviderRegistry, 'listProviders', () => ([
     {
-      provider: 'claude',
-      async synchronize() {
-        return 3;
+      id: 'claude',
+      sessionSynchronizer: {
+        async synchronize() {
+          return 3;
+        },
       },
     },
     {
-      provider: 'codex',
-      async synchronize() {
-        throw new Error('codex index failed');
+      id: 'codex',
+      sessionSynchronizer: {
+        async synchronize() {
+          throw new Error('codex index failed');
+        },
       },
     },
-  ]);
+  ] as any));
 
   try {
     const result = await llmSessionsService.synchronizeSessions();
@@ -60,7 +55,7 @@ test('llmSessionsService.synchronizeSessions aggregates processed counts and fai
     assert.equal(result.failures[0], 'codex index failed');
     assert.equal(updateLastScannedAtCalls, 1);
   } finally {
-    restoreIndexers();
+    restoreProviders();
     restoreUpdateScanDate();
     restoreScanDate();
   }
@@ -70,19 +65,21 @@ test('llmSessionsService.synchronizeSessions aggregates processed counts and fai
 test('llmSessionsService.synchronizeProviderFile delegates to provider indexer file sync', { concurrency: false }, async () => {
   let synchronizeCalls = 0;
   let synchronizeFilePath: string | null = null;
-  const restoreIndexers = patchIndexers([
+  const restoreProviders = patchMethod(llmProviderRegistry, 'listProviders', () => ([
     {
-      provider: 'claude',
-      async synchronize() {
-        synchronizeCalls += 1;
-        return 0;
-      },
-      async synchronizeFile(filePath: string) {
-        synchronizeFilePath = filePath;
-        return true;
+      id: 'claude',
+      sessionSynchronizer: {
+        async synchronize() {
+          synchronizeCalls += 1;
+          return 0;
+        },
+        async synchronizeFile(filePath: string) {
+          synchronizeFilePath = filePath;
+          return true;
+        },
       },
     },
-  ]);
+  ] as any));
 
   try {
     const result = await llmSessionsService.synchronizeProviderFile('claude', '/tmp/claude-session.jsonl');
@@ -91,7 +88,7 @@ test('llmSessionsService.synchronizeProviderFile delegates to provider indexer f
     assert.equal(synchronizeFilePath, '/tmp/claude-session.jsonl');
     assert.equal(synchronizeCalls, 0);
   } finally {
-    restoreIndexers();
+    restoreProviders();
   }
 });
 

@@ -1,6 +1,7 @@
 import type {
   IProvider,
   IProviderMcpRuntime,
+  IProviderSessionSynchronizerRuntime,
   IProviderSkillsRuntime,
   MutableProviderSession,
   ProviderCapabilities,
@@ -23,6 +24,7 @@ export abstract class AbstractProvider implements IProvider {
   readonly capabilities: ProviderCapabilities;
   abstract readonly mcp: IProviderMcpRuntime;
   abstract readonly skills: IProviderSkillsRuntime;
+  abstract readonly sessionSynchronizer: IProviderSessionSynchronizerRuntime;
 
   protected readonly sessions = new Map<string, MutableProviderSession>();
 

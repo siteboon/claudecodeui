@@ -1,12 +1,14 @@
 import { BaseCliProvider } from '@/modules/ai-runtime/providers/base/base-cli.provider.js';
 import type {
   IProviderMcpRuntime,
+  IProviderSessionSynchronizerRuntime,
   IProviderSkillsRuntime,
   ProviderModel,
   StartSessionInput,
 } from '@/modules/ai-runtime/types/index.js';
 import { GeminiMcpRuntime } from '@/modules/ai-runtime/providers/gemini/gemini-mcp.runtime.js';
 import { GeminiSkillsRuntime } from '@/modules/ai-runtime/providers/gemini/gemini-skills.runtime.js';
+import { GeminiSessionSynchronizerRuntime } from '@/modules/ai-runtime/providers/gemini/gemini-session-synchronizer.runtime.js';
 
 type GeminiExecutionInput = StartSessionInput & {
   sessionId: string;
@@ -31,6 +33,7 @@ const GEMINI_MODELS: ProviderModel[] = [
 export class GeminiProvider extends BaseCliProvider {
   readonly mcp: IProviderMcpRuntime = new GeminiMcpRuntime();
   readonly skills: IProviderSkillsRuntime = new GeminiSkillsRuntime();
+  readonly sessionSynchronizer: IProviderSessionSynchronizerRuntime = new GeminiSessionSynchronizerRuntime();
 
   constructor() {
     super('gemini', {

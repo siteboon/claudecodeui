@@ -8,8 +8,8 @@ import {
   findFilesRecursivelyCreatedAfter,
   normalizeSessionName,
   readFileTimestamps,
-} from '@/modules/ai-runtime/session-indexers/session-indexer.utils.js';
-import type { ISessionIndexer } from '@/modules/ai-runtime/session-indexers/session-indexer.interface.js';
+} from '@/modules/ai-runtime/providers/shared/session-synchronizer/session-synchronizer.utils.js';
+import type { IProviderSessionSynchronizerRuntime } from '@/modules/ai-runtime/types/index.js';
 
 type ParsedSession = {
   sessionId: string;
@@ -18,21 +18,21 @@ type ParsedSession = {
 };
 
 /**
- * Session indexer for Codex transcript artifacts.
+ * Session indexer for Claude transcript artifacts.
  */
-export class CodexSessionIndexer implements ISessionIndexer {
-  readonly provider = 'codex' as const;
-  private readonly codexHome = path.join(os.homedir(), '.codex');
+export class ClaudeSessionSynchronizerRuntime implements IProviderSessionSynchronizerRuntime {
+  private readonly provider = 'claude' as const;
+  private readonly claudeHome = path.join(os.homedir(), '.claude');
 
   /**
-   * Scans ~/.codex sessions and upserts discovered sessions into DB.
+   * Scans ~/.claude projects and upserts discovered sessions into DB.
    */
-  async synchronize(lastScanAt: Date | null): Promise<number> {
-    const nameMap = await buildLookupMap(path.join(this.codexHome, 'session_index.jsonl'), 'id', 'thread_name');
+  async synchronize(since?: Date): Promise<number> {
+    const nameMap = await buildLookupMap(path.join(this.claudeHome, 'history.jsonl'), 'sessionId', 'display');
     const files = await findFilesRecursivelyCreatedAfter(
-      path.join(this.codexHome, 'sessions'),
+      path.join(this.claudeHome, 'projects'),
       '.jsonl',
-      lastScanAt,
+      since ?? null,
     );
 
     let processed = 0;
@@ -59,14 +59,14 @@ export class CodexSessionIndexer implements ISessionIndexer {
   }
 
   /**
-   * Parses and upserts one Codex session JSONL file.
+   * Parses and upserts one Claude session JSONL file.
    */
   async synchronizeFile(filePath: string): Promise<boolean> {
     if (!filePath.endsWith('.jsonl')) {
       return false;
     }
 
-    const nameMap = await buildLookupMap(path.join(this.codexHome, 'session_index.jsonl'), 'id', 'thread_name');
+    const nameMap = await buildLookupMap(path.join(this.claudeHome, 'history.jsonl'), 'sessionId', 'display');
     const parsed = await this.processSessionFile(filePath, nameMap);
     if (!parsed) {
       return false;
@@ -87,7 +87,7 @@ export class CodexSessionIndexer implements ISessionIndexer {
   }
 
   /**
-   * Extracts session metadata from one Codex JSONL session file.
+   * Extracts session metadata from one Claude JSONL session file.
    */
   private async processSessionFile(
     filePath: string,
@@ -95,9 +95,8 @@ export class CodexSessionIndexer implements ISessionIndexer {
   ): Promise<ParsedSession | null> {
     return extractFirstValidJsonlData(filePath, (rawData) => {
       const data = rawData as Record<string, unknown>;
-      const payload = data.payload as Record<string, unknown> | undefined;
-      const sessionId = typeof payload?.id === 'string' ? payload.id : undefined;
-      const workspacePath = typeof payload?.cwd === 'string' ? payload.cwd : undefined;
+      const sessionId = typeof data.sessionId === 'string' ? data.sessionId : undefined;
+      const workspacePath = typeof data.cwd === 'string' ? data.cwd : undefined;
 
       if (!sessionId || !workspacePath) {
         return null;
@@ -106,7 +105,7 @@ export class CodexSessionIndexer implements ISessionIndexer {
       return {
         sessionId,
         workspacePath,
-        sessionName: normalizeSessionName(nameMap.get(sessionId), 'Untitled Codex Session'),
+        sessionName: normalizeSessionName(nameMap.get(sessionId), 'Untitled Claude Session'),
       };
     });
   }

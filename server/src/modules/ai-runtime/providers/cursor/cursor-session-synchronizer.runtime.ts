@@ -11,8 +11,8 @@ import {
   listDirectoryEntriesSafe,
   normalizeSessionName,
   readFileTimestamps,
-} from '@/modules/ai-runtime/session-indexers/session-indexer.utils.js';
-import type { ISessionIndexer } from '@/modules/ai-runtime/session-indexers/session-indexer.interface.js';
+} from '@/modules/ai-runtime/providers/shared/session-synchronizer/session-synchronizer.utils.js';
+import type { IProviderSessionSynchronizerRuntime } from '@/modules/ai-runtime/types/index.js';
 
 type ParsedSession = {
   sessionId: string;
@@ -23,14 +23,14 @@ type ParsedSession = {
 /**
  * Session indexer for Cursor transcript artifacts.
  */
-export class CursorSessionIndexer implements ISessionIndexer {
-  readonly provider = 'cursor' as const;
+export class CursorSessionSynchronizerRuntime implements IProviderSessionSynchronizerRuntime {
+  private readonly provider = 'cursor' as const;
   private readonly cursorHome = path.join(os.homedir(), '.cursor');
 
   /**
    * Scans Cursor chats and upserts discovered sessions into DB.
    */
-  async synchronize(lastScanAt: Date | null): Promise<number> {
+  async synchronize(since?: Date): Promise<number> {
     const projectsDir = path.join(this.cursorHome, 'projects');
     const projectEntries = await listDirectoryEntriesSafe(projectsDir);
     const seenWorkspacePaths = new Set<string>();
@@ -50,7 +50,7 @@ export class CursorSessionIndexer implements ISessionIndexer {
       seenWorkspacePaths.add(workspacePath);
       const workspaceHash = this.md5(workspacePath);
       const chatsDir = path.join(this.cursorHome, 'chats', workspaceHash);
-      const files = await findFilesRecursivelyCreatedAfter(chatsDir, '.jsonl', lastScanAt);
+      const files = await findFilesRecursivelyCreatedAfter(chatsDir, '.jsonl', since ?? null);
 
       for (const filePath of files) {
         const parsed = await this.processSessionFile(filePath);

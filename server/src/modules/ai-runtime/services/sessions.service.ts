@@ -5,7 +5,7 @@ import { scanStateDb } from '@/shared/database/repositories/scan-state.db.js';
 import { sessionsDb } from '@/shared/database/repositories/sessions.db.js';
 import type { LLMProvider } from '@/shared/types/app.js';
 import { AppError } from '@/shared/utils/app-error.js';
-import { sessionIndexers } from '@/modules/ai-runtime/session-indexers/index.js';
+import { llmProviderRegistry } from '@/modules/ai-runtime/ai-runtime.registry.js';
 import { llmMessagesUnifier, type UnifiedChatMessage } from '@/modules/ai-runtime/services/messages-unifier.service.js';
 
 type SyncResult = {
@@ -119,12 +119,11 @@ export const llmSessionsService = {
     };
     const failures: string[] = [];
 
-    const results = await Promise.allSettled(
-      sessionIndexers.map(async (indexer) => ({
-        provider: indexer.provider,
-        processed: await indexer.synchronize(lastScanAt),
-      })),
-    );
+    // Provider-specific session indexers used by the sync orchestrator.
+    const results = await Promise.allSettled(llmProviderRegistry.listProviders().map(async (provider) => ({
+      provider: provider.id,
+      processed: await provider.sessionSynchronizer.synchronize(lastScanAt ?? undefined),
+    })));
 
     for (const result of results) {
       if (result.status === 'fulfilled') {
@@ -151,19 +150,15 @@ export const llmSessionsService = {
     provider: LLMProvider,
     filePath: string,
   ): Promise<{ provider: LLMProvider; indexed: boolean }> {
-    const indexer = sessionIndexers.find((entry) => entry.provider === provider);
-    if (!indexer) {
+    const resolvedProvider = llmProviderRegistry.listProviders().find((entry) => entry.id === provider);
+    if (!resolvedProvider) {
       throw new AppError(`No session indexer registered for provider "${provider}".`, {
         code: 'SESSION_INDEXER_NOT_FOUND',
         statusCode: 500,
       });
     }
 
-    if (!indexer.synchronizeFile) {
-      return { provider, indexed: false };
-    }
-
-    const indexed = await indexer.synchronizeFile(filePath);
+    const indexed = await resolvedProvider.sessionSynchronizer.synchronizeFile(filePath);
     return { provider, indexed };
   },
 
