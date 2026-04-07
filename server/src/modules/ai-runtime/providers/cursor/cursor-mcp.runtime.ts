@@ -1,0 +1,127 @@
+import os from 'node:os';
+import path from 'node:path';
+
+import { AppError } from '@/shared/utils/app-error.js';
+import type {
+  McpScope,
+  ProviderMcpServer,
+  UpsertProviderMcpServerInput,
+} from '@/modules/ai-runtime/types/index.js';
+import { BaseProviderMcpRuntime } from '@/modules/ai-runtime/providers/shared/mcp/base-provider-mcp.runtime.js';
+import {
+  readJsonConfig,
+  readObjectRecord,
+  readOptionalString,
+  readStringArray,
+  readStringRecord,
+  writeJsonConfig,
+} from '@/modules/ai-runtime/providers/shared/mcp/mcp-runtime.utils.js';
+
+/**
+ * Cursor MCP runtime backed by user/project `.cursor/mcp.json`.
+ */
+export class CursorMcpRuntime extends BaseProviderMcpRuntime {
+  constructor() {
+    super('cursor', ['user', 'project'], ['stdio', 'http', 'sse']);
+  }
+
+  /**
+   * Reads Cursor MCP servers from user/project config files.
+   */
+  protected async readScopedServers(scope: McpScope, workspacePath: string): Promise<Record<string, unknown>> {
+    const filePath = scope === 'user'
+      ? path.join(os.homedir(), '.cursor', 'mcp.json')
+      : path.join(workspacePath, '.cursor', 'mcp.json');
+    const config = await readJsonConfig(filePath);
+    return readObjectRecord(config.mcpServers) ?? {};
+  }
+
+  /**
+   * Writes Cursor MCP servers to user/project config files.
+   */
+  protected async writeScopedServers(
+    scope: McpScope,
+    workspacePath: string,
+    servers: Record<string, unknown>,
+  ): Promise<void> {
+    const filePath = scope === 'user'
+      ? path.join(os.homedir(), '.cursor', 'mcp.json')
+      : path.join(workspacePath, '.cursor', 'mcp.json');
+    const config = await readJsonConfig(filePath);
+    config.mcpServers = servers;
+    await writeJsonConfig(filePath, config);
+  }
+
+  /**
+   * Builds one Cursor-native server object from the unified input payload.
+   */
+  protected buildServerConfig(input: UpsertProviderMcpServerInput): Record<string, unknown> {
+    if (input.transport === 'stdio') {
+      if (!input.command?.trim()) {
+        throw new AppError('command is required for stdio MCP servers.', {
+          code: 'MCP_COMMAND_REQUIRED',
+          statusCode: 400,
+        });
+      }
+
+      return {
+        command: input.command,
+        args: input.args ?? [],
+        env: input.env ?? {},
+        cwd: input.cwd,
+      };
+    }
+
+    if (!input.url?.trim()) {
+      throw new AppError('url is required for http/sse MCP servers.', {
+        code: 'MCP_URL_REQUIRED',
+        statusCode: 400,
+      });
+    }
+
+    return {
+      url: input.url,
+      headers: input.headers ?? {},
+    };
+  }
+
+  /**
+   * Normalizes one Cursor server object.
+   */
+  protected normalizeServerConfig(
+    scope: McpScope,
+    name: string,
+    rawConfig: unknown,
+  ): ProviderMcpServer | null {
+    if (!rawConfig || typeof rawConfig !== 'object') {
+      return null;
+    }
+
+    const config = rawConfig as Record<string, unknown>;
+    if (typeof config.command === 'string') {
+      return {
+        provider: 'cursor',
+        name,
+        scope,
+        transport: 'stdio',
+        command: config.command,
+        args: readStringArray(config.args),
+        env: readStringRecord(config.env),
+        cwd: readOptionalString(config.cwd),
+      };
+    }
+
+    if (typeof config.url === 'string') {
+      return {
+        provider: 'cursor',
+        name,
+        scope,
+        transport: 'http',
+        url: config.url,
+        headers: readStringRecord(config.headers),
+      };
+    }
+
+    return null;
+  }
+}

@@ -11,7 +11,7 @@ import {
 } from '../../../projects.js';
 import { sessionsDb } from '@/shared/database/repositories/sessions.db.js';
 import { workspaceOriginalPathsDb } from '@/shared/database/repositories/workspace-original-paths.db.js';
-import { llmSessionsService } from '@/modules/llm/services/sessions.service.js';
+import { llmSessionsService } from '@/modules/ai-runtime/services/sessions.service.js';
 import { authenticateToken } from '../auth/auth.middleware.js';
 import { getWorkspaceNameFromPath, WORKSPACES_ROOT, validateWorkspacePath } from './projects.utils.js';
 

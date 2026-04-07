@@ -8,7 +8,7 @@ import { dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 import { initializeDatabase } from '@/shared/database/init-db.js';
-import { initializeWatcher } from '@/modules/llm/services/sessions-watcher.service.js';
+import { initializeWatcher } from '@/modules/ai-runtime/services/sessions-watcher.service.js';
 import { configureWebPush } from '@/modules/push-sub/push-sub.services.js';
 import { getConnectableHost } from '@/shared/utils/networkHosts.js';
 import { logger } from '@/shared/utils/logger.js';
@@ -92,7 +92,7 @@ const [
     importRoute('./modules/workspaces/workspaces.routes.js'),
     importRoute('./modules/projects/projects.inline.routes.js'),
     importRoute('./modules/files/files.routes.js'),
-    importRoute('./modules/llm/llm.routes.js'),
+    importRoute('./modules/ai-runtime/ai-runtime.routes.js'),
     importRoute('./modules/assets/assets.routes.js'),
 ]);
 

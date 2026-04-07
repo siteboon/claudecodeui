@@ -6,7 +6,7 @@ import os from 'os';
 import TOML from '@iarna/toml';
 import { getCodexSessions } from '../../../projects.js';
 import { sessionsDb } from '@/shared/database/repositories/sessions.db.js';
-import { llmSessionsService } from '@/modules/llm/services/sessions.service.js';
+import { llmSessionsService } from '@/modules/ai-runtime/services/sessions.service.js';
 
 const router = express.Router();
 
