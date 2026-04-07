@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 
 import {
   deleteSessionById,
-  deleteWorkspaceByPath,
+  deleteWorkspaceById,
   getWorkspaceSessions,
   updateSessionCustomName,
   updateWorkspaceCustomName,
@@ -95,7 +95,7 @@ export const useWorkspaces = () => {
     [filteredWorkspaces],
   );
 
-  const toggleWorkspace = useCallback((workspacePath: string) => {
+  const toggleWorkspace = useCallback((workspaceId: string, workspacePath: string) => {
     setExpandedWorkspaces((previousSet) => {
       const nextSet = new Set(previousSet);
 
@@ -107,7 +107,8 @@ export const useWorkspaces = () => {
 
       return nextSet;
     });
-  }, []);
+    navigate(`/workspace/${encodeURIComponent(workspaceId)}`);
+  }, [navigate]);
 
   const openSession = useCallback(
     (workspacePath: string, sessionId: string) => {
@@ -125,9 +126,9 @@ export const useWorkspaces = () => {
     navigate('/');
   }, [navigate]);
 
-  const toggleWorkspaceStar = useCallback(async (workspacePath: string) => {
+  const toggleWorkspaceStar = useCallback(async (workspaceId: string) => {
     try {
-      await updateWorkspaceStar(workspacePath);
+      await updateWorkspaceStar(workspaceId);
       await refreshWorkspaces();
     } catch (error) {
       console.error('Failed to update workspace star:', error);
@@ -149,10 +150,17 @@ export const useWorkspaces = () => {
       return;
     }
 
+    const editingWorkspace = workspaces.find(
+      (workspace) => workspace.workspaceOriginalPath === editingWorkspacePath,
+    );
+    if (!editingWorkspace) {
+      return;
+    }
+
     setIsSavingWorkspaceName(true);
     try {
       const trimmedName = editingWorkspaceName.trim();
-      await updateWorkspaceCustomName(editingWorkspacePath, trimmedName || null);
+      await updateWorkspaceCustomName(editingWorkspace.workspaceId, trimmedName || null);
       await refreshWorkspaces();
       cancelWorkspaceRename();
     } catch (error) {
@@ -165,10 +173,12 @@ export const useWorkspaces = () => {
     editingWorkspaceName,
     editingWorkspacePath,
     refreshWorkspaces,
+    workspaces,
   ]);
 
   const requestWorkspaceDelete = useCallback((workspace: WorkspaceRecord) => {
     setWorkspaceDeleteTarget({
+      workspaceId: workspace.workspaceId,
       workspacePath: workspace.workspaceOriginalPath,
       workspaceName: getWorkspaceDisplayName(workspace),
       sessionCount: workspace.sessions.length,
@@ -184,10 +194,11 @@ export const useWorkspaces = () => {
       return;
     }
 
+    const deletingWorkspaceId = workspaceDeleteTarget.workspaceId;
     const deletingWorkspacePath = workspaceDeleteTarget.workspacePath;
     setWorkspaceDeleteTarget(null);
     try {
-      await deleteWorkspaceByPath(deletingWorkspacePath);
+      await deleteWorkspaceById(deletingWorkspaceId);
 
       // If the current session belonged to the deleted workspace, reset to root.
       const hadSelectedSession = workspaces.some(

@@ -7,6 +7,7 @@ import { RootLayout } from '@/components/refactored/shared/RootLayout';
 
 // Mock page components
 const Home = () => <div className="p-8"><h1>Home Page</h1><p>Select a session or create a new project.</p></div>;
+const WorkspaceContent = () => <div className="p-8"><h1>Workspace View</h1><p>Select a session or start a new one.</p></div>;
 const SessionContent = () => <div className="p-8"><h1>Session View</h1><p>Chat interface goes here.</p></div>;
 
 const router = createBrowserRouter([
@@ -25,6 +26,10 @@ const router = createBrowserRouter([
       {
         path: "/sessions/:sessionId",
         element: <SessionContent />,
+      },
+      {
+        path: "/workspace/:workspaceId",
+        element: <WorkspaceContent />,
       },
     ],
   },

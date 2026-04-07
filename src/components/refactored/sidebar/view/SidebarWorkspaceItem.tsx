@@ -29,8 +29,8 @@ type SidebarWorkspaceItemProps = {
   isSavingSessionName: boolean;
   onEditingWorkspaceNameChange: (name: string) => void;
   onEditingSessionNameChange: (name: string) => void;
-  onToggleWorkspace: (workspacePath: string) => void;
-  onToggleWorkspaceStar: (workspacePath: string) => void;
+  onToggleWorkspace: (workspaceId: string, workspacePath: string) => void;
+  onToggleWorkspaceStar: (workspaceId: string) => void;
   onStartWorkspaceRename: (workspace: WorkspaceRecord) => void;
   onCancelWorkspaceRename: () => void;
   onSaveWorkspaceRename: () => void;
@@ -95,7 +95,7 @@ export function SidebarWorkspaceItem({
                 !hasSelectedSession &&
                 'border-yellow-200/30 bg-yellow-50/50 dark:border-yellow-800/30 dark:bg-yellow-900/5',
             )}
-            onClick={() => onToggleWorkspace(workspace.workspaceOriginalPath)}
+            onClick={() => onToggleWorkspace(workspace.workspaceId, workspace.workspaceOriginalPath)}
           >
             <div className="flex items-center justify-between">
               <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -179,7 +179,7 @@ export function SidebarWorkspaceItem({
                       )}
                       onClick={(event) => {
                         event.stopPropagation();
-                        onToggleWorkspaceStar(workspace.workspaceOriginalPath);
+                        onToggleWorkspaceStar(workspace.workspaceId);
                       }}
                       title={workspace.isStarred ? 'Remove from Starred' : 'Add to Starred'}
                     >
@@ -236,7 +236,7 @@ export function SidebarWorkspaceItem({
               !hasSelectedSession &&
               'bg-yellow-50/50 hover:bg-yellow-100/50 dark:bg-yellow-900/10 dark:hover:bg-yellow-900/20',
           )}
-          onClick={() => onToggleWorkspace(workspace.workspaceOriginalPath)}
+          onClick={() => onToggleWorkspace(workspace.workspaceId, workspace.workspaceOriginalPath)}
         >
           <div className="flex min-w-0 flex-1 items-center gap-3">
             {isExpanded ? (
@@ -318,7 +318,7 @@ export function SidebarWorkspaceItem({
                   )}
                   onClick={(event) => {
                     event.stopPropagation();
-                    onToggleWorkspaceStar(workspace.workspaceOriginalPath);
+                    onToggleWorkspaceStar(workspace.workspaceId);
                   }}
                   title={workspace.isStarred ? 'Remove from Starred' : 'Add to Starred'}
                 >

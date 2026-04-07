@@ -10,6 +10,14 @@ import {
 } from "@/shared/database/schema.js";
 import { logger } from "@/shared/utils/logger.js";
 
+const SQLITE_UUID_SQL = `
+lower(hex(randomblob(4))) || '-' ||
+lower(hex(randomblob(2))) || '-' ||
+lower(hex(randomblob(2))) || '-' ||
+lower(hex(randomblob(2))) || '-' ||
+lower(hex(randomblob(6)))
+`;
+
 const addColumnToTableIfNotExists = (
     db: Database,
     tableName: string,
@@ -61,7 +69,9 @@ export const runMigrations = (db: Database) => {
         db.exec("UPDATE sessions SET updated_at = COALESCE(updated_at, CURRENT_TIMESTAMP)");
 
         db.exec(WORK_SPACE_PATH_SQL);
-        const workspaceOriginalPathsTableInfo = db.prepare("PRAGMA table_info(workspace_original_paths)").all() as { name: string }[];
+        const workspaceOriginalPathsTableInfo = db
+            .prepare("PRAGMA table_info(workspace_original_paths)")
+            .all() as { name: string; pk: number }[];
         const workspaceOriginalPathsColumnNames = workspaceOriginalPathsTableInfo.map((col) => col.name);
         addColumnToTableIfNotExists(
             db,
@@ -74,12 +84,71 @@ export const runMigrations = (db: Database) => {
             db,
             "workspace_original_paths",
             workspaceOriginalPathsColumnNames,
+            "workspace_id",
+            "TEXT",
+        );
+        addColumnToTableIfNotExists(
+            db,
+            "workspace_original_paths",
+            workspaceOriginalPathsColumnNames,
             "isStarred",
             "BOOLEAN DEFAULT 0",
         );
+        db.exec(`
+            UPDATE workspace_original_paths
+            SET workspace_id = ${SQLITE_UUID_SQL}
+            WHERE workspace_id IS NULL OR trim(workspace_id) = ''
+        `);
+        const workspaceOriginalPathsPrimaryKeyColumn =
+            workspaceOriginalPathsTableInfo.find((column) => column.pk === 1)?.name ?? null;
+        if (workspaceOriginalPathsPrimaryKeyColumn !== "workspace_id") {
+            logger.info(
+                "Running migration: Rebuilding workspace_original_paths to set workspace_id as primary key",
+            );
+            db.exec("PRAGMA foreign_keys = OFF");
+            try {
+                db.exec("BEGIN TRANSACTION");
+                db.exec("DROP TABLE IF EXISTS workspace_original_paths__new");
+                db.exec(`
+                    CREATE TABLE workspace_original_paths__new (
+                        workspace_id TEXT PRIMARY KEY NOT NULL,
+                        workspace_path TEXT NOT NULL UNIQUE,
+                        custom_workspace_name TEXT DEFAULT NULL,
+                        isStarred BOOLEAN DEFAULT 0
+                    )
+                `);
+                db.exec(`
+                    INSERT INTO workspace_original_paths__new (
+                        workspace_id,
+                        workspace_path,
+                        custom_workspace_name,
+                        isStarred
+                    )
+                    SELECT
+                        CASE
+                            WHEN workspace_id IS NULL OR trim(workspace_id) = ''
+                            THEN ${SQLITE_UUID_SQL}
+                            ELSE workspace_id
+                        END,
+                        workspace_path,
+                        custom_workspace_name,
+                        COALESCE(isStarred, 0)
+                    FROM workspace_original_paths
+                `);
+                db.exec("DROP TABLE workspace_original_paths");
+                db.exec("ALTER TABLE workspace_original_paths__new RENAME TO workspace_original_paths");
+                db.exec("COMMIT");
+            } catch (migrationError) {
+                db.exec("ROLLBACK");
+                throw migrationError;
+            } finally {
+                db.exec("PRAGMA foreign_keys = ON");
+            }
+        }
         db.exec(
             "CREATE INDEX IF NOT EXISTS idx_workspace_original_paths_is_starred ON workspace_original_paths(isStarred)"
         );
+        db.exec("DROP INDEX IF EXISTS idx_workspace_original_paths_workspace_id");
 
         db.exec(LAST_SCANNED_AT_SQL);
 

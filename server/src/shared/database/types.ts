@@ -129,6 +129,7 @@ export type SessionWithSummary = {
 };
 
 export type WorkspaceOriginalPathRow = {
+  workspace_id: string;
   workspace_path: string;
   custom_workspace_name: string | null;
   isStarred: number; // SQLite boolean: 0 | 1

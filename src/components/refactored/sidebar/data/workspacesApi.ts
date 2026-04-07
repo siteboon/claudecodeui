@@ -57,16 +57,16 @@ export const getWorkspaceSessions = async (): Promise<WorkspaceRecord[]> => {
 };
 
 export const updateWorkspaceStar = async (
-  workspacePath: string,
-): Promise<{ workspacePath: string; isStarred: boolean }> => {
+  workspaceId: string,
+): Promise<{ workspaceId: string; isStarred: boolean }> => {
   const response = await authenticatedFetch(SIDEBAR_ENDPOINTS.updateWorkspaceStar, {
     method: 'PATCH',
-    body: JSON.stringify({ workspacePath }),
+    body: JSON.stringify({ workspaceId }),
   });
   const payload = await parseJsonSafely<{
     success?: boolean;
     data?: {
-      workspacePath?: string;
+      workspaceId?: string;
       isStarred?: boolean;
     };
     error?: { message?: string };
@@ -80,18 +80,18 @@ export const updateWorkspaceStar = async (
   }
 
   return {
-    workspacePath: payload?.data?.workspacePath || workspacePath,
+    workspaceId: payload?.data?.workspaceId || workspaceId,
     isStarred: Boolean(payload?.data?.isStarred),
   };
 };
 
 export const updateWorkspaceCustomName = async (
-  workspacePath: string,
+  workspaceId: string,
   workspaceCustomName: string | null,
 ): Promise<void> => {
   const response = await authenticatedFetch(SIDEBAR_ENDPOINTS.updateWorkspaceCustomName, {
     method: 'PATCH',
-    body: JSON.stringify({ workspacePath, workspaceCustomName }),
+    body: JSON.stringify({ workspaceId, workspaceCustomName }),
   });
   const payload = await parseJsonSafely<{ error?: { message?: string } }>(response);
 
@@ -103,10 +103,10 @@ export const updateWorkspaceCustomName = async (
   }
 };
 
-export const deleteWorkspaceByPath = async (workspacePath: string): Promise<void> => {
+export const deleteWorkspaceById = async (workspaceId: string): Promise<void> => {
   const response = await authenticatedFetch(SIDEBAR_ENDPOINTS.deleteWorkspace, {
     method: 'DELETE',
-    body: JSON.stringify({ workspacePath }),
+    body: JSON.stringify({ workspaceId }),
   });
   const payload = await parseJsonSafely<{ error?: { message?: string } }>(response);
 

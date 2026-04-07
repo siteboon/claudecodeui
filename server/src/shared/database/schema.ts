@@ -86,7 +86,8 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 export const WORK_SPACE_PATH_SQL = `
 CREATE TABLE IF NOT EXISTS workspace_original_paths (
-    workspace_path TEXT PRIMARY KEY NOT NULL,
+    workspace_id TEXT PRIMARY KEY NOT NULL,
+    workspace_path TEXT NOT NULL UNIQUE,
     custom_workspace_name TEXT DEFAULT NULL,
     isStarred BOOLEAN DEFAULT 0
 );

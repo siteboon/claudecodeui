@@ -15,6 +15,7 @@ export type WorkspaceSession = {
 };
 
 export type WorkspaceRecord = {
+  workspaceId: string;
   workspaceOriginalPath: string;
   workspaceCustomName: string | null;
   workspaceDisplayName: string;
@@ -24,6 +25,7 @@ export type WorkspaceRecord = {
 };
 
 export type WorkspaceDeleteTarget = {
+  workspaceId: string;
   workspacePath: string;
   workspaceName: string;
   sessionCount: number;

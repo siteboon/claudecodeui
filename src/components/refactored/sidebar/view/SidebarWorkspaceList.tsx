@@ -16,8 +16,8 @@ type SidebarWorkspaceListProps = {
   isSavingSessionName: boolean;
   onEditingWorkspaceNameChange: (name: string) => void;
   onEditingSessionNameChange: (name: string) => void;
-  onToggleWorkspace: (workspacePath: string) => void;
-  onToggleWorkspaceStar: (workspacePath: string) => void;
+  onToggleWorkspace: (workspaceId: string, workspacePath: string) => void;
+  onToggleWorkspaceStar: (workspaceId: string) => void;
   onStartWorkspaceRename: (workspace: WorkspaceRecord) => void;
   onCancelWorkspaceRename: () => void;
   onSaveWorkspaceRename: () => void;

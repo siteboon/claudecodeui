@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { getConnection } from '@/shared/database/connection.js';
 import type { WorkspaceOriginalPathRow } from '@/shared/database/types.js';
 
@@ -5,21 +7,21 @@ export const workspaceOriginalPathsDb = {
     createWorkspacePath(workspacePath: string, customWorkspaceName: string | null = null): void {
         const db = getConnection();
         db.prepare(`
-            INSERT INTO workspace_original_paths (workspace_path, custom_workspace_name)
-            VALUES (?, ?)
+            INSERT INTO workspace_original_paths (workspace_id, workspace_path, custom_workspace_name)
+            VALUES (?, ?, ?)
             ON CONFLICT(workspace_path) DO UPDATE SET
               custom_workspace_name = CASE
                 WHEN workspace_original_paths.custom_workspace_name IS NULL OR workspace_original_paths.custom_workspace_name = ''
                 THEN excluded.custom_workspace_name
                 ELSE workspace_original_paths.custom_workspace_name
               END
-        `).run(workspacePath, customWorkspaceName);
+        `).run(randomUUID(), workspacePath, customWorkspaceName);
     },
 
     getWorkspacePath(workspacePath: string): WorkspaceOriginalPathRow | null {
         const db = getConnection();
         const row = db.prepare(`
-            SELECT workspace_path, custom_workspace_name, isStarred
+            SELECT workspace_id, workspace_path, custom_workspace_name, isStarred
             FROM workspace_original_paths
             WHERE workspace_path = ?
         `).get(workspacePath) as WorkspaceOriginalPathRow | undefined;
@@ -27,10 +29,21 @@ export const workspaceOriginalPathsDb = {
         return row ?? null;
     },
 
+    getWorkspaceById(workspaceId: string): WorkspaceOriginalPathRow | null {
+        const db = getConnection();
+        const row = db.prepare(`
+            SELECT workspace_id, workspace_path, custom_workspace_name, isStarred
+            FROM workspace_original_paths
+            WHERE workspace_id = ?
+        `).get(workspaceId) as WorkspaceOriginalPathRow | undefined;
+
+        return row ?? null;
+    },
+
     getWorkspacePaths(): WorkspaceOriginalPathRow[] {
         const db = getConnection();
         return db.prepare(`
-            SELECT workspace_path, custom_workspace_name, isStarred
+            SELECT workspace_id, workspace_path, custom_workspace_name, isStarred
             FROM workspace_original_paths
         `).all() as WorkspaceOriginalPathRow[];
     },
@@ -49,10 +62,19 @@ export const workspaceOriginalPathsDb = {
     updateCustomWorkspaceName(workspacePath: string, customWorkspaceName: string | null): void {
         const db = getConnection();
         db.prepare(`
-            INSERT INTO workspace_original_paths (workspace_path, custom_workspace_name)
-            VALUES (?, ?)
+            INSERT INTO workspace_original_paths (workspace_id, workspace_path, custom_workspace_name)
+            VALUES (?, ?, ?)
             ON CONFLICT(workspace_path) DO UPDATE SET custom_workspace_name = excluded.custom_workspace_name
-        `).run(workspacePath, customWorkspaceName);
+        `).run(randomUUID(), workspacePath, customWorkspaceName);
+    },
+
+    updateCustomWorkspaceNameById(workspaceId: string, customWorkspaceName: string | null): void {
+        const db = getConnection();
+        db.prepare(`
+            UPDATE workspace_original_paths
+            SET custom_workspace_name = ?
+            WHERE workspace_id = ?
+        `).run(customWorkspaceName, workspaceId);
     },
 
     updateWorkspaceIsStarred(workspacePath: string, isStarred: boolean): void {
@@ -64,11 +86,28 @@ export const workspaceOriginalPathsDb = {
         `).run(isStarred ? 1 : 0, workspacePath);
     },
 
+    updateWorkspaceIsStarredById(workspaceId: string, isStarred: boolean): void {
+        const db = getConnection();
+        db.prepare(`
+            UPDATE workspace_original_paths
+            SET isStarred = ?
+            WHERE workspace_id = ?
+        `).run(isStarred ? 1 : 0, workspaceId);
+    },
+
     deleteWorkspacePath(workspacePath: string): void {
         const db = getConnection();
         db.prepare(`
             DELETE FROM workspace_original_paths
             WHERE workspace_path = ?
         `).run(workspacePath);
+    },
+
+    deleteWorkspaceById(workspaceId: string): void {
+        const db = getConnection();
+        db.prepare(`
+            DELETE FROM workspace_original_paths
+            WHERE workspace_id = ?
+        `).run(workspaceId);
     },
 };

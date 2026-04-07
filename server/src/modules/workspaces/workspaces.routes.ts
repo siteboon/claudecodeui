@@ -16,17 +16,17 @@ const getTrimmedString = (value: unknown): string => {
   return value.trim();
 };
 
-const parseWorkspacePathFromBody = (req: Request): string => {
+const parseWorkspaceIdFromBody = (req: Request): string => {
   const body = req.body as Record<string, unknown> | undefined;
-  const workspacePath = getTrimmedString(body?.workspacePath);
-  if (!workspacePath) {
-    throw new AppError('workspacePath is required.', {
-      code: 'WORKSPACE_PATH_REQUIRED',
+  const workspaceId = getTrimmedString(body?.workspaceId);
+  if (!workspaceId) {
+    throw new AppError('workspaceId is required.', {
+      code: 'WORKSPACE_ID_REQUIRED',
       statusCode: 400,
     });
   }
 
-  return workspacePath;
+  return workspaceId;
 };
 
 const parseWorkspaceCustomNameFromBody = (req: Request): string | null => {
@@ -46,27 +46,27 @@ router.get(
 router.patch(
   '/star',
   asyncHandler(async (req: Request, res: Response) => {
-    const workspacePath = parseWorkspacePathFromBody(req);
-    const isStarred = workspaceService.toggleWorkspaceStar(workspacePath);
-    res.json(createApiSuccessResponse({ workspacePath, isStarred }));
+    const workspaceId = parseWorkspaceIdFromBody(req);
+    const isStarred = workspaceService.toggleWorkspaceStar(workspaceId);
+    res.json(createApiSuccessResponse({ workspaceId, isStarred }));
   }),
 );
 
 router.patch(
   '/name',
   asyncHandler(async (req: Request, res: Response) => {
-    const workspacePath = parseWorkspacePathFromBody(req);
+    const workspaceId = parseWorkspaceIdFromBody(req);
     const workspaceCustomName = parseWorkspaceCustomNameFromBody(req);
-    workspaceService.updateWorkspaceCustomName(workspacePath, workspaceCustomName);
-    res.json(createApiSuccessResponse({ workspacePath, workspaceCustomName }));
+    workspaceService.updateWorkspaceCustomName(workspaceId, workspaceCustomName);
+    res.json(createApiSuccessResponse({ workspaceId, workspaceCustomName }));
   }),
 );
 
 router.delete(
   '/',
   asyncHandler(async (req: Request, res: Response) => {
-    const workspacePath = parseWorkspacePathFromBody(req);
-    const result = await workspaceService.deleteWorkspace(workspacePath);
+    const workspaceId = parseWorkspaceIdFromBody(req);
+    const result = await workspaceService.deleteWorkspace(workspaceId);
     res.json(createApiSuccessResponse(result));
   }),
 );

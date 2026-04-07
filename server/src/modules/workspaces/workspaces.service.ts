@@ -19,6 +19,7 @@ export type WorkspaceSessionRecord = {
 };
 
 export type WorkspaceRecord = {
+  workspaceId: string;
   workspaceOriginalPath: string;
   workspaceCustomName: string | null;
   workspaceDisplayName: string;
@@ -107,6 +108,7 @@ const buildWorkspaceSessionCollection = (): WorkspaceRecord[] => {
     const lastActivity = sessions[0]?.lastActivity || null;
 
     return {
+      workspaceId: workspaceRow.workspace_id,
       workspaceOriginalPath: workspaceRow.workspace_path,
       workspaceCustomName: workspaceRow.custom_workspace_name,
       workspaceDisplayName:
@@ -130,8 +132,8 @@ export const workspaceService = {
     return buildWorkspaceSessionCollection();
   },
 
-  toggleWorkspaceStar(workspacePath: string): boolean {
-    const workspaceRow = workspaceOriginalPathsDb.getWorkspacePath(workspacePath);
+  toggleWorkspaceStar(workspaceId: string): boolean {
+    const workspaceRow = workspaceOriginalPathsDb.getWorkspaceById(workspaceId);
     if (!workspaceRow) {
       throw new AppError('Workspace not found.', {
         code: 'WORKSPACE_NOT_FOUND',
@@ -140,22 +142,40 @@ export const workspaceService = {
     }
 
     const nextIsStarred = workspaceRow.isStarred !== 1;
-    workspaceOriginalPathsDb.updateWorkspaceIsStarred(workspacePath, nextIsStarred);
+    workspaceOriginalPathsDb.updateWorkspaceIsStarredById(workspaceId, nextIsStarred);
 
     return nextIsStarred;
   },
 
-  updateWorkspaceCustomName(workspacePath: string, workspaceCustomName: string | null): void {
-    workspaceOriginalPathsDb.updateCustomWorkspaceName(workspacePath, workspaceCustomName);
+  updateWorkspaceCustomName(workspaceId: string, workspaceCustomName: string | null): void {
+    const workspaceRow = workspaceOriginalPathsDb.getWorkspaceById(workspaceId);
+    if (!workspaceRow) {
+      throw new AppError('Workspace not found.', {
+        code: 'WORKSPACE_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    workspaceOriginalPathsDb.updateCustomWorkspaceNameById(workspaceId, workspaceCustomName);
   },
 
-  async deleteWorkspace(workspacePath: string): Promise<{
+  async deleteWorkspace(workspaceId: string): Promise<{
+    workspaceId: string;
     workspacePath: string;
     deletedWorkspace: boolean;
     deletedSessionCount: number;
     jsonlDeletedCount: number;
     failedSessionFileDeletes: string[];
   }> {
+    const workspaceRow = workspaceOriginalPathsDb.getWorkspaceById(workspaceId);
+    if (!workspaceRow) {
+      throw new AppError('Workspace not found.', {
+        code: 'WORKSPACE_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    const workspacePath = workspaceRow.workspace_path;
     const sessionRows = sessionsDb.getSessionsByWorkspacePath(workspacePath);
     const failedSessionFileDeletes: string[] = [];
     let jsonlDeletedCount = 0;
@@ -175,9 +195,10 @@ export const workspaceService = {
       }
     }
 
-    workspaceOriginalPathsDb.deleteWorkspacePath(workspacePath);
+    workspaceOriginalPathsDb.deleteWorkspaceById(workspaceId);
 
     return {
+      workspaceId,
       workspacePath,
       deletedWorkspace: true,
       deletedSessionCount: sessionRows.length,
