@@ -1,18 +1,23 @@
 import SidebarFooter from './SidebarFooter';
-import { useSidebarSettings } from '@/components/refactored/sidebar/hooks/useSidebarSettings';
 import { useSidebarModals } from '@/components/refactored/sidebar/hooks/useSidebarModals';
 import { useWorkspaces } from '@/components/refactored/sidebar/hooks/useWorkspaces';
 import SidebarHeader from '@/components/refactored/sidebar/view/SidebarHeader';
 import { SidebarDeleteModals } from '@/components/refactored/sidebar/view/SidebarDeleteModals';
 import { SidebarWorkspaceList } from '@/components/refactored/sidebar/view/SidebarWorkspaceList';
 import { SidebarCollapsed } from '@/components/refactored/sidebar/view/SidebarCollapsed';
+import { useSystemUI } from '@/components/refactored/shared/contexts/system-ui-context/useSystemUI';
+import { useDeviceSettings } from '@/hooks/useDeviceSettings';
 import { cn } from '@/lib/utils';
 import ProjectCreationWizard from '@/components/project-creation-wizard';
 import VersionUpgradeModal from '@/components/version-upgrade/view';
 import Settings from '@/components/settings/view/Settings';
 
 export function Sidebar() {
-  const { isCollapsed, toggleCollapse, setCollapsed } = useSidebarSettings();
+  const { isMobile } = useDeviceSettings({ trackPWA: false });
+  const { sidebarIsCollapsed, setSidebarIsCollapsed } = useSystemUI();
+  const isCollapsed = sidebarIsCollapsed;
+  const toggleCollapse = () => setSidebarIsCollapsed((previousValue) => !previousValue);
+  const setCollapsed = (value: boolean) => setSidebarIsCollapsed(value);
   const {
     workspaces,
     starredWorkspaces,
@@ -148,7 +153,8 @@ export function Sidebar() {
           )}
         </aside>
 
-        {isCollapsed && (
+        {/* Keep collapsed rail desktop-only; mobile uses the header hamburger to reopen. */}
+        {isCollapsed && !isMobile && (
           <aside className="fixed inset-y-0 left-0 z-40 h-full border-r border-border md:relative">
             <SidebarCollapsed
               onExpand={() => setCollapsed(false)}

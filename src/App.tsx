@@ -1,54 +1,152 @@
-import { RouterProvider, createBrowserRouter } from 'react-router-dom';
 import { I18nextProvider } from 'react-i18next';
-import { ThemeProvider } from './contexts/ThemeContext';
+import {
+  Navigate,
+  Outlet,
+  RouterProvider,
+  createBrowserRouter,
+  useParams,
+} from 'react-router-dom';
 import { AuthProvider, ProtectedRoute } from './components/auth';
+import { ThemeProvider } from './contexts/ThemeContext';
+import { PluginsProvider } from './contexts/PluginsContext';
+import { TaskMasterProvider } from './contexts/TaskMasterContext';
+import { TasksSettingsProvider } from './contexts/TasksSettingsContext';
+import { WebSocketProvider } from './contexts/WebSocketContext';
 import i18n from './i18n/config.js';
-import { RootLayout } from '@/components/refactored/shared/RootLayout';
+import { SystemUIProvider } from '@/components/refactored/shared/contexts/system-ui-context/SystemUIProvider';
+import { RootLayout } from '@/components/refactored/shared/layout/RootLayout';
 
-// Mock page components
-const Home = () => <div className="p-8"><h1>Home Page</h1><p>Select a session or create a new project.</p></div>;
-const WorkspaceContent = () => <div className="p-8"><h1>Workspace View</h1><p>Select a session or start a new one.</p></div>;
-const SessionContent = () => <div className="p-8"><h1>Session View</h1><p>Chat interface goes here.</p></div>;
+const isValidRouteTab = (value: string | undefined): boolean => {
+  if (!value) {
+    return false;
+  }
 
-const router = createBrowserRouter([
-  {
-    path: "/",
-    element: <RootLayout />, // The layout wraps all children
-    children: [
-      { 
-        path: "/",
-        element: <Home />,
-      },
-      {
-        path: "/session/:sessionId",
-        element: <SessionContent />,
-      },
-      {
-        path: "/sessions/:sessionId",
-        element: <SessionContent />,
-      },
-      {
-        path: "/workspace/:workspaceId",
-        element: <WorkspaceContent />,
-      },
-    ],
-  },
-]);
+  const normalizedValue = decodeURIComponent(value);
+  return (
+    normalizedValue === 'chat' ||
+    normalizedValue === 'shell' ||
+    normalizedValue === 'files' ||
+    normalizedValue === 'git' ||
+    normalizedValue === 'tasks' ||
+    normalizedValue === 'preview' ||
+    normalizedValue.startsWith('plugin:')
+  );
+};
+
+function NoWorkspaceRoute() {
+  return (
+    <div className="flex h-full items-center justify-center p-8">
+      <div className="max-w-md space-y-2 text-center">
+        <h1 className="text-2xl font-semibold">Choose Your Project</h1>
+        <p className="text-sm text-muted-foreground">
+          This is the root route (`/`) empty state. Select a workspace from the sidebar to continue.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function WorkspaceLayout() {
+  const { workspaceId } = useParams<{ workspaceId: string }>();
+  if (!workspaceId) {
+    return <Navigate to="/" replace />;
+  }
+
+  return (
+    <div className="min-h-0 flex-1 overflow-auto">
+      <Outlet />
+    </div>
+  );
+}
+
+function WorkspaceTabRoute() {
+  const { workspaceId, sessionId, tab } = useParams<{
+    workspaceId: string;
+    sessionId?: string;
+    tab: string;
+  }>();
+
+  if (!workspaceId) {
+    return <Navigate to="/" replace />;
+  }
+
+  if (!isValidRouteTab(tab)) {
+    return <Navigate to="../chat" replace />;
+  }
+
+  const decodedWorkspaceId = decodeURIComponent(workspaceId);
+  const decodedSessionId = sessionId ? decodeURIComponent(sessionId) : null;
+  const decodedTab = tab ? decodeURIComponent(tab) : 'chat';
+
+  return (
+    <div className="h-full p-6">
+      <div className="rounded-xl border border-border/70 bg-card/30 p-5">
+        <h2 className="text-lg font-semibold">{decodedTab} view</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Workspace: <span className="font-medium text-foreground">{decodedWorkspaceId}</span>
+        </p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Session:{' '}
+          <span className="font-medium text-foreground">
+            {decodedSessionId || 'none (workspace-level tab)'}
+          </span>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+const router = createBrowserRouter(
+  [
+    {
+      path: '/',
+      element: <RootLayout />,
+      children: [
+        { index: true, element: <NoWorkspaceRoute /> },
+        {
+          path: 'workspaces/:workspaceId',
+          element: <WorkspaceLayout />,
+          children: [
+            { index: true, element: <Navigate to="chat" replace /> },
+            { path: ':tab', element: <WorkspaceTabRoute /> },
+            {
+              path: 'sessions/:sessionId',
+              children: [
+                { index: true, element: <Navigate to="chat" replace /> },
+                { path: ':tab', element: <WorkspaceTabRoute /> },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+  { basename: window.__ROUTER_BASENAME__ || '' },
+);
 
 export default function App() {
   return (
     <I18nextProvider i18n={i18n}>
       <ThemeProvider>
         <AuthProvider>
-          <ProtectedRoute>
-              <RouterProvider router={router} />
-          </ProtectedRoute>
+          <WebSocketProvider>
+            <PluginsProvider>
+              <TasksSettingsProvider>
+                <TaskMasterProvider>
+                  <SystemUIProvider>
+                    <ProtectedRoute>
+                      <RouterProvider router={router} />
+                    </ProtectedRoute>
+                  </SystemUIProvider>
+                </TaskMasterProvider>
+              </TasksSettingsProvider>
+            </PluginsProvider>
+          </WebSocketProvider>
         </AuthProvider>
       </ThemeProvider>
     </I18nextProvider>
   );
 }
-
 
 // import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 // import { I18nextProvider } from 'react-i18next';
