@@ -66,6 +66,7 @@ const [
     projectsInlineRoutes,
     filesRoutes,
     llmRoutes,
+    assetsRoutes,
 ] = await Promise.all([
     importRoute('./modules/health/health.routes.js'),
     importRoute('./modules/system/system.routes.js'),
@@ -92,6 +93,7 @@ const [
     importRoute('./modules/projects/projects.inline.routes.js'),
     importRoute('./modules/files/files.routes.js'),
     importRoute('./modules/llm/llm.routes.js'),
+    importRoute('./modules/assets/assets.routes.js'),
 ]);
 
 // ---------- MIDDLEWARES ----------------
@@ -186,6 +188,9 @@ app.use('/api/workspaces', authenticateToken, workspacesRoutes);
 
 // Unified LLM provider API routes (protected)
 app.use('/api/llm', authenticateToken, llmRoutes);
+
+// Shared assets API routes (protected)
+app.use('/api/assets', authenticateToken, assetsRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);

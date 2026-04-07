@@ -1,5 +1,4 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
-import multer from 'multer';
 import path from 'node:path';
 
 import { asyncHandler } from '@/shared/http/async-handler.js';
@@ -7,7 +6,6 @@ import { AppError } from '@/shared/utils/app-error.js';
 import { createApiErrorResponse, createApiSuccessResponse } from '@/shared/http/api-response.js';
 import { llmService } from '@/modules/llm/services/llm.service.js';
 import { llmSessionsService } from '@/modules/llm/services/sessions.service.js';
-import { llmAssetsService } from '@/modules/llm/services/assets.service.js';
 import type { McpScope, McpTransport, UpsertMcpServerInput } from '@/modules/llm/services/mcp.service.js';
 import { llmMcpService } from '@/modules/llm/services/mcp.service.js';
 import { llmSkillsService } from '@/modules/llm/services/skills.service.js';
@@ -16,13 +14,6 @@ import type { LLMProvider } from '@/shared/types/app.js';
 import { logger } from '@/shared/utils/logger.js';
 
 const router = express.Router();
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    files: 10,
-    fileSize: 20 * 1024 * 1024,
-  },
-});
 
 /**
  * Safely reads an Express path parameter that may arrive as string or string[].
@@ -302,26 +293,6 @@ router.post(
     const sessionId = readPathParam(req.params.sessionId, 'sessionId');
     const stopped = await llmService.stopSession(provider, sessionId);
     res.json(createApiSuccessResponse({ provider, sessionId, stopped }));
-  }),
-);
-
-/**
- * Uploads one or more images into `.cloudcli/assets` so providers can reuse file paths.
- */
-router.post(
-  '/assets/images',
-  upload.array('images', 10),
-  asyncHandler(async (req: Request, res: Response) => {
-    const workspacePath = readOptionalQueryString((req.body as Record<string, unknown> | undefined)?.workspacePath);
-    const filesValue = (req as Request & { files?: unknown }).files;
-    const files = Array.isArray(filesValue) ? filesValue as Array<{
-      originalname: string;
-      mimetype: string;
-      size: number;
-      buffer: Buffer;
-    }> : [];
-    const images = await llmAssetsService.storeUploadedImages(files, { workspacePath });
-    res.status(201).json(createApiSuccessResponse({ images }));
   }),
 );
 

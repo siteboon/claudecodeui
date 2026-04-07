@@ -5,7 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { AppError } from '@/shared/utils/app-error.js';
-import { llmAssetsService } from '@/modules/llm/services/assets.service.js';
+import { llmAssetsService } from '@/modules/assets/assets.service.js';
 import { ClaudeProvider } from '@/modules/llm/providers/claude.provider.js';
 import { CodexProvider } from '@/modules/llm/providers/codex.provider.js';
 import { CursorProvider } from '@/modules/llm/providers/cursor.provider.js';
