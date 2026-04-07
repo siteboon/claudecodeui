@@ -3,13 +3,16 @@ import { SystemUIContext, type SystemUIContextValue } from '@/components/refacto
 
 export function SystemUIProvider({ children }: { children: ReactNode }) {
   const [sidebarIsCollapsed, setSidebarIsCollapsed] = useState(false);
+  const [isChatInputFocused, setIsChatInputFocused] = useState(false);
 
   const value = useMemo<SystemUIContextValue>(
     () => ({
       sidebarIsCollapsed,
       setSidebarIsCollapsed,
+      isChatInputFocused,
+      setIsChatInputFocused,
     }),
-    [sidebarIsCollapsed],
+    [isChatInputFocused, sidebarIsCollapsed],
   );
 
   return (
