@@ -23,18 +23,12 @@ import {
   splitWorkspacesByStarred,
 } from '@/components/refactored/sidebar/utils/workspaceTransforms';
 
-const SESSION_ROUTE_PATTERN = /^\/session\/([^/]+)$/;
-const LEGACY_SESSION_ROUTE_PATTERN = /^\/sessions\/([^/]+)$/;
+const SESSION_ROUTE_PATTERN = /^\/workspaces\/[^/]+\/sessions\/([^/]+)(?:\/[^/]+)?$/;
 
 const extractSessionIdFromPathname = (pathname: string): string | null => {
   const sessionMatch = pathname.match(SESSION_ROUTE_PATTERN);
   if (sessionMatch?.[1]) {
     return decodeURIComponent(sessionMatch[1]);
-  }
-
-  const legacySessionMatch = pathname.match(LEGACY_SESSION_ROUTE_PATTERN);
-  if (legacySessionMatch?.[1]) {
-    return decodeURIComponent(legacySessionMatch[1]);
   }
 
   return null;
@@ -116,9 +110,20 @@ export const useWorkspaces = () => {
         nextSet.add(workspacePath);
         return nextSet;
       });
-      navigate(`/session/${encodeURIComponent(sessionId)}`);
+
+      const matchedWorkspace = workspaces.find(
+        (workspace) => workspace.workspaceOriginalPath === workspacePath,
+      );
+
+      if (!matchedWorkspace) {
+        return;
+      }
+
+      navigate(
+        `/workspaces/${encodeURIComponent(matchedWorkspace.workspaceId)}/sessions/${encodeURIComponent(sessionId)}`,
+      );
     },
-    [navigate],
+    [navigate, workspaces],
   );
 
   const openNewSession = useCallback(() => {
