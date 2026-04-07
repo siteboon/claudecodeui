@@ -19,8 +19,6 @@ type CreateSdkExecutionInput = StartSessionInput & {
 type SdkExecution = {
   stream: AsyncIterable<unknown>;
   stop: () => Promise<boolean>;
-  setModel?: (model: string) => Promise<void>;
-  setThinkingMode?: (thinkingMode: string) => Promise<void>;
 };
 
 /**
@@ -72,21 +70,15 @@ export abstract class BaseSdkProvider extends AbstractProvider {
    * Initializes one SDK execution and wires it to the internal session record.
    */
   private async startSessionInternal(input: CreateSdkExecutionInput): Promise<ProviderSessionSnapshot> {
-    const preferred = this.getSessionPreference(input.sessionId);
-    const effectiveModel = input.model ?? preferred.model;
-    const effectiveThinking = input.thinkingMode ?? preferred.thinkingMode;
-
     const session = this.createSessionRecord(input.sessionId, {
-      model: effectiveModel,
-      thinkingMode: effectiveThinking,
+      model: input.model,
+      thinkingMode: input.thinkingMode,
     });
 
     let execution: SdkExecution;
     try {
       execution = await this.createSdkExecution({
         ...input,
-        model: effectiveModel,
-        thinkingMode: effectiveThinking,
         emitEvent: (event) => {
           this.appendEvent(session, event);
         },
@@ -103,8 +95,6 @@ export abstract class BaseSdkProvider extends AbstractProvider {
     }
 
     session.stop = execution.stop;
-    session.setModel = execution.setModel;
-    session.setThinkingMode = execution.setThinkingMode;
 
     session.completion = this.consumeStream(session, execution.stream);
     return this.toSnapshot(session);

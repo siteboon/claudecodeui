@@ -305,56 +305,6 @@ router.post(
   }),
 );
 
-router.patch(
-  '/providers/:provider/sessions/:sessionId/model',
-  asyncHandler(async (req: Request, res: Response) => {
-    const provider = parseProvider(req.params.provider);
-    const sessionId = readPathParam(req.params.sessionId, 'sessionId');
-    const model = typeof req.body?.model === 'string' ? req.body.model.trim() : '';
-    if (!model) {
-      throw new AppError('model is required.', {
-        code: 'MODEL_REQUIRED',
-        statusCode: 400,
-      });
-    }
-
-    await llmService.setSessionModel(provider, sessionId, model);
-    res.json(
-      createApiSuccessResponse({
-        provider,
-        sessionId,
-        model,
-      }),
-    );
-  }),
-);
-
-router.patch(
-  '/providers/:provider/sessions/:sessionId/thinking',
-  asyncHandler(async (req: Request, res: Response) => {
-    const provider = parseProvider(req.params.provider);
-    const sessionId = readPathParam(req.params.sessionId, 'sessionId');
-    const thinkingMode =
-      typeof req.body?.thinkingMode === 'string' ? req.body.thinkingMode.trim() : '';
-
-    if (!thinkingMode) {
-      throw new AppError('thinkingMode is required.', {
-        code: 'THINKING_MODE_REQUIRED',
-        statusCode: 400,
-      });
-    }
-
-    await llmService.setSessionThinkingMode(provider, sessionId, thinkingMode);
-    res.json(
-      createApiSuccessResponse({
-        provider,
-        sessionId,
-        thinkingMode,
-      }),
-    );
-  }),
-);
-
 /**
  * Uploads one or more images into `.cloudcli/assets` so providers can reuse file paths.
  */

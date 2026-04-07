@@ -1,4 +1,3 @@
-import { AppError } from '@/shared/utils/app-error.js';
 import type {
   IProvider,
   MutableProviderSession,
@@ -11,11 +10,6 @@ import type {
 } from '@/modules/llm/providers/provider.interface.js';
 import type { LLMProvider } from '@/shared/types/app.js';
 
-type SessionPreference = {
-  model?: string;
-  thinkingMode?: string;
-};
-
 const MAX_EVENT_BUFFER_SIZE = 2_000;
 
 /**
@@ -27,7 +21,6 @@ export abstract class AbstractProvider implements IProvider {
   readonly capabilities: ProviderCapabilities;
 
   protected readonly sessions = new Map<string, MutableProviderSession>();
-  protected readonly sessionPreferences = new Map<string, SessionPreference>();
 
   protected constructor(
     id: LLMProvider,
@@ -91,98 +84,6 @@ export abstract class AbstractProvider implements IProvider {
   }
 
   /**
-   * Validates/supports model switching and updates both live and persisted state.
-   */
-  async setSessionModel(sessionId: string, model: string): Promise<void> {
-    if (!this.capabilities.supportsModelSwitching) {
-      throw new AppError(`Provider "${this.id}" does not support model switching.`, {
-        code: 'MODEL_SWITCH_NOT_SUPPORTED',
-        statusCode: 400,
-      });
-    }
-
-    const trimmedModel = model.trim();
-    if (!trimmedModel) {
-      throw new AppError('Model cannot be empty.', {
-        code: 'INVALID_MODEL',
-        statusCode: 400,
-      });
-    }
-
-    const session = this.sessions.get(sessionId);
-    if (session?.setModel) {
-      await session.setModel(trimmedModel);
-    }
-
-    const currentPreference = this.sessionPreferences.get(sessionId) ?? {};
-    this.sessionPreferences.set(sessionId, { ...currentPreference, model: trimmedModel });
-
-    if (session) {
-      session.model = trimmedModel;
-      this.appendEvent(session, {
-        timestamp: new Date().toISOString(),
-        channel: 'system',
-        message: `Model updated to "${trimmedModel}".`,
-      });
-    }
-  }
-
-  /**
-   * Validates/supports thinking mode updates and applies them to live/persisted state.
-   */
-  async setSessionThinkingMode(sessionId: string, thinkingMode: string): Promise<void> {
-    if (!this.capabilities.supportsThinkingModeControl) {
-      throw new AppError(`Provider "${this.id}" does not support thinking mode control.`, {
-        code: 'THINKING_MODE_NOT_SUPPORTED',
-        statusCode: 400,
-      });
-    }
-
-    const trimmedMode = thinkingMode.trim();
-    if (!trimmedMode) {
-      throw new AppError('Thinking mode cannot be empty.', {
-        code: 'INVALID_THINKING_MODE',
-        statusCode: 400,
-      });
-    }
-
-    const session = this.sessions.get(sessionId);
-    if (session?.setThinkingMode) {
-      await session.setThinkingMode(trimmedMode);
-    }
-
-    const currentPreference = this.sessionPreferences.get(sessionId) ?? {};
-    this.sessionPreferences.set(sessionId, { ...currentPreference, thinkingMode: trimmedMode });
-
-    if (session) {
-      session.thinkingMode = trimmedMode;
-      this.appendEvent(session, {
-        timestamp: new Date().toISOString(),
-        channel: 'system',
-        message: `Thinking mode updated to "${trimmedMode}".`,
-      });
-    }
-  }
-
-  /**
-   * Reads saved preferences for resumed sessions.
-   */
-  protected getSessionPreference(sessionId: string): SessionPreference {
-    return this.sessionPreferences.get(sessionId) ?? {};
-  }
-
-  /**
-   * Stores session preferences for subsequent resume/start operations.
-   */
-  protected rememberSessionPreference(sessionId: string, preference: SessionPreference): void {
-    const currentPreference = this.sessionPreferences.get(sessionId) ?? {};
-    this.sessionPreferences.set(sessionId, {
-      ...currentPreference,
-      ...preference,
-    });
-  }
-
-  /**
    * Creates mutable internal session state and registers it in memory.
    */
   protected createSessionRecord(
@@ -206,10 +107,6 @@ export abstract class AbstractProvider implements IProvider {
     };
 
     this.sessions.set(sessionId, session);
-    this.rememberSessionPreference(sessionId, {
-      model: input.model,
-      thinkingMode: input.thinkingMode,
-    });
 
     this.appendEvent(session, {
       timestamp: session.startedAt,

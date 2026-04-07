@@ -220,15 +220,15 @@ test('codex provider reads models_cache.json and maps model metadata', async () 
   }
 });
 
-// This test covers persisted session-level model/thinking preferences flowing into Codex thread options.
-test('codex provider applies saved model/thinking preferences on subsequent launch', async () => {
+// This test covers explicit start/resume payload control for model/thinking without implicit persistence.
+test('codex provider does not persist model/thinking between launches', async () => {
   const provider = new CodexProvider() as any;
-  let threadOptions: Record<string, unknown> | null = null;
+  const threadOptionsHistory: Record<string, unknown>[] = [];
 
   provider.loadCodexSdkModule = async () => ({
     Codex: class {
       startThread(options?: Record<string, unknown>) {
-        threadOptions = options ?? null;
+        threadOptionsHistory.push(options ?? {});
         return {
           async runStreamed() {
             return { events: asyncEvents([]) };
@@ -246,17 +246,23 @@ test('codex provider applies saved model/thinking preferences on subsequent laun
     },
   });
 
-  await provider.setSessionModel('codex-pref-1', 'gpt-5.4');
-  await provider.setSessionThinkingMode('codex-pref-1', 'xhigh');
+  await provider.launchSession({
+    prompt: 'explicit launch options',
+    sessionId: 'codex-pref-1',
+    model: 'gpt-5.4',
+    thinkingMode: 'xhigh',
+  });
 
   await provider.launchSession({
-    prompt: 'use stored preferences',
+    prompt: 'follow-up launch without options',
     sessionId: 'codex-pref-1',
   });
 
-  assert.ok(threadOptions);
-  assert.equal((threadOptions as { model?: string }).model, 'gpt-5.4');
-  assert.equal((threadOptions as { modelReasoningEffort?: string }).modelReasoningEffort, 'xhigh');
+  assert.equal(threadOptionsHistory.length, 2);
+  assert.equal((threadOptionsHistory[0] as { model?: string }).model, 'gpt-5.4');
+  assert.equal((threadOptionsHistory[0] as { modelReasoningEffort?: string }).modelReasoningEffort, 'xhigh');
+  assert.equal((threadOptionsHistory[1] as { model?: string }).model, undefined);
+  assert.equal((threadOptionsHistory[1] as { modelReasoningEffort?: string }).modelReasoningEffort, undefined);
 });
 
 // This test covers Claude thinking-level mapping, runtime permission handlers, and model/event normalization.
@@ -317,22 +323,4 @@ test('llmService rejects unsupported runtime permission and thinking mode combin
       error.code === 'THINKING_MODE_NOT_SUPPORTED' &&
       error.statusCode === 400,
   );
-});
-
-// This test covers model/thinking capability gates on providers before any external process/SDK usage.
-test('providers enforce capability gates for model/thinking updates', async () => {
-  const claudeProvider = new ClaudeProvider();
-  const cursorProvider = new CursorProvider();
-
-  await assert.rejects(
-    cursorProvider.setSessionThinkingMode('cursor-session', 'high'),
-    (error: unknown) =>
-      error instanceof AppError &&
-      error.code === 'THINKING_MODE_NOT_SUPPORTED' &&
-      error.statusCode === 400,
-  );
-
-  await claudeProvider.setSessionModel('claude-session', 'sonnet');
-  const preference = (claudeProvider as any).getSessionPreference('claude-session');
-  assert.equal(preference.model, 'sonnet');
 });

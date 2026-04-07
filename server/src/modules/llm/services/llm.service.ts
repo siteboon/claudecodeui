@@ -127,20 +127,6 @@ export const llmService = {
     const provider = llmProviderRegistry.resolveProvider(providerName);
     return provider.stopSession(sessionId);
   },
-
-  async setSessionModel(providerName: string, sessionId: string, model: string): Promise<void> {
-    const provider = llmProviderRegistry.resolveProvider(providerName);
-    await provider.setSessionModel(sessionId, model);
-  },
-
-  async setSessionThinkingMode(
-    providerName: string,
-    sessionId: string,
-    thinkingMode: string,
-  ): Promise<void> {
-    const provider = llmProviderRegistry.resolveProvider(providerName);
-    await provider.setSessionThinkingMode(sessionId, thinkingMode);
-  },
 };
 
 /**

@@ -104,7 +104,6 @@ export class ClaudeProvider extends BaseSdkProvider {
   protected async createSdkExecution(input: ClaudeExecutionInput): Promise<{
     stream: AsyncIterable<unknown>;
     stop: () => Promise<boolean>;
-    setModel: (model: string) => Promise<void>;
   }> {
     const options: Options = {
       cwd: input.workspacePath,
@@ -130,9 +129,6 @@ export class ClaudeProvider extends BaseSdkProvider {
       stop: async () => {
         await queryInstance.interrupt();
         return true;
-      },
-      setModel: async (model: string) => {
-        await queryInstance.setModel(model);
       },
     };
   }

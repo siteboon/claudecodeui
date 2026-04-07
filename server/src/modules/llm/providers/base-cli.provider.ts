@@ -133,20 +133,12 @@ export abstract class BaseCliProvider extends AbstractProvider {
    * Boots one CLI child process and wires stream handlers to the session buffer.
    */
   private async startSessionInternal(input: CreateCliInvocationInput): Promise<ProviderSessionSnapshot> {
-    const preferred = this.getSessionPreference(input.sessionId);
-    const effectiveModel = input.model ?? preferred.model;
-    const effectiveThinking = input.thinkingMode ?? preferred.thinkingMode;
-
     const session = this.createSessionRecord(input.sessionId, {
-      model: effectiveModel,
-      thinkingMode: effectiveThinking,
+      model: input.model,
+      thinkingMode: input.thinkingMode,
     });
 
-    const invocation = this.createCliInvocation({
-      ...input,
-      model: effectiveModel,
-      thinkingMode: effectiveThinking,
-    });
+    const invocation = this.createCliInvocation(input);
 
     const child = spawn(invocation.command, invocation.args, {
       cwd: invocation.cwd ?? input.workspacePath ?? process.cwd(),
