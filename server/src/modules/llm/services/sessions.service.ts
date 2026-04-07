@@ -236,7 +236,7 @@ export const llmSessionsService = {
       fileType: isGeminiJson ? 'json' : 'jsonl',
       entries,
       messages: llmMessagesUnifier.normalizeHistoryEntries(
-        session.provider as LLMProvider,
+        session.provider,
         session.session_id,
         entries,
       ),
