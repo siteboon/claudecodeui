@@ -20,6 +20,7 @@ type SearchInput = {
   provider?: string;
   caseSensitive?: boolean;
   limit?: number;
+  signal?: AbortSignal;
 };
 
 /**
@@ -43,6 +44,9 @@ export const conversationSearchService = {
         statusCode: 400,
       });
     }
+    if (input.signal?.aborted) {
+      return [];
+    }
 
     const limit = Math.min(Math.max(input.limit ?? 50, 1), 500);
     const allSessions = sessionsDb
@@ -64,6 +68,7 @@ export const conversationSearchService = {
     const rgResults = await runRipgrepSearch(query, uniqueDirectories, {
       caseSensitive: input.caseSensitive ?? false,
       limit,
+      signal: input.signal,
     });
 
     if (rgResults.length > 0) {
@@ -94,6 +99,7 @@ export const conversationSearchService = {
     return fallbackFileSearch(query, sessionByFile, {
       caseSensitive: input.caseSensitive ?? false,
       limit,
+      signal: input.signal,
     });
   },
 };
@@ -107,8 +113,13 @@ async function runRipgrepSearch(
   options: {
     caseSensitive: boolean;
     limit: number;
+    signal?: AbortSignal;
   },
 ): Promise<Array<{ filePath: string; lineNumber: number; lineText: string }>> {
+  if (options.signal?.aborted) {
+    return [];
+  }
+
   const args = ['--json', '--line-number', '--no-heading'];
 
   if (!options.caseSensitive) {
@@ -122,6 +133,12 @@ async function runRipgrepSearch(
     cwd: process.cwd(),
     env: process.env,
   });
+  const abortListener = () => {
+    if (!child.killed && child.exitCode === null) {
+      child.kill('SIGTERM');
+    }
+  };
+  options.signal?.addEventListener('abort', abortListener, { once: true });
 
   let stdout = '';
   child.stdout?.on('data', (chunk) => {
@@ -135,10 +152,15 @@ async function runRipgrepSearch(
     });
     await Promise.race([closePromise, errorPromise]);
   } catch {
+    options.signal?.removeEventListener('abort', abortListener);
     return [];
   }
+  options.signal?.removeEventListener('abort', abortListener);
 
   if (child.exitCode !== 0 && child.exitCode !== 1) {
+    return [];
+  }
+  if (options.signal?.aborted) {
     return [];
   }
 
@@ -195,12 +217,17 @@ async function fallbackFileSearch(
   options: {
     caseSensitive: boolean;
     limit: number;
+    signal?: AbortSignal;
   },
 ): Promise<SearchResult[]> {
   const results: SearchResult[] = [];
   const queryForMatch = options.caseSensitive ? query : query.toLowerCase();
 
   for (const [, session] of sessionByFile) {
+    if (options.signal?.aborted) {
+      return results;
+    }
+
     if (!session.jsonl_path) {
       continue;
     }
@@ -208,6 +235,10 @@ async function fallbackFileSearch(
     const content = await readFile(session.jsonl_path, 'utf8');
     const lines = content.split(/\r?\n/);
     for (let index = 0; index < lines.length; index += 1) {
+      if (options.signal?.aborted) {
+        return results;
+      }
+
       const line = lines[index];
       const source = options.caseSensitive ? line : line.toLowerCase();
 
