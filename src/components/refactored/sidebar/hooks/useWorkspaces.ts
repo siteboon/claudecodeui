@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-
 import {
   deleteSessionById,
   deleteWorkspaceById,
@@ -107,7 +106,7 @@ export const useWorkspaces = () => {
 
       return nextSet;
     });
-    navigate(`/workspace/${encodeURIComponent(workspaceId)}`);
+    navigate(`/workspaces/${encodeURIComponent(workspaceId)}`);
   }, [navigate]);
 
   const openSession = useCallback(
