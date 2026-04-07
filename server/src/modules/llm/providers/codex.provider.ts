@@ -74,9 +74,6 @@ export class CodexProvider extends BaseSdkProvider {
     super('codex', {
       supportsRuntimePermissionRequests: false,
       supportsThinkingModeControl: true,
-      supportsModelSwitching: true,
-      supportsSessionResume: true,
-      supportsSessionStop: true,
     });
   }
 

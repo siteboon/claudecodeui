@@ -18,9 +18,6 @@ export type ProviderSkillScope = 'user' | 'project' | 'plugin' | 'repo' | 'admin
 export type ProviderCapabilities = {
   supportsRuntimePermissionRequests: boolean;
   supportsThinkingModeControl: boolean;
-  supportsModelSwitching: boolean;
-  supportsSessionResume: boolean;
-  supportsSessionStop: boolean;
 };
 
 /**

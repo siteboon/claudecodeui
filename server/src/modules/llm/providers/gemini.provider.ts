@@ -36,9 +36,6 @@ export class GeminiProvider extends BaseCliProvider {
     super('gemini', {
       supportsRuntimePermissionRequests: false,
       supportsThinkingModeControl: false,
-      supportsModelSwitching: true,
-      supportsSessionResume: true,
-      supportsSessionStop: true,
     });
   }
 

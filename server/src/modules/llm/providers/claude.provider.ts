@@ -80,9 +80,6 @@ export class ClaudeProvider extends BaseSdkProvider {
     super('claude', {
       supportsRuntimePermissionRequests: true,
       supportsThinkingModeControl: true,
-      supportsModelSwitching: true,
-      supportsSessionResume: true,
-      supportsSessionStop: true,
     });
   }
 

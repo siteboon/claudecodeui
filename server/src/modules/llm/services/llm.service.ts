@@ -82,15 +82,15 @@ export const llmService = {
     capabilities: {
       supportsRuntimePermissionRequests: boolean;
       supportsThinkingModeControl: boolean;
-      supportsModelSwitching: boolean;
-      supportsSessionResume: boolean;
-      supportsSessionStop: boolean;
     };
   }> {
     return llmProviderRegistry.listProviders().map((provider) => ({
       id: provider.id,
       family: provider.family,
-      capabilities: provider.capabilities,
+      capabilities: {
+        supportsRuntimePermissionRequests: provider.capabilities.supportsRuntimePermissionRequests,
+        supportsThinkingModeControl: provider.capabilities.supportsThinkingModeControl,
+      },
     }));
   },
 

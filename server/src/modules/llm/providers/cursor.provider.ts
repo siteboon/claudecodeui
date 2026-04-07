@@ -28,9 +28,6 @@ export class CursorProvider extends BaseCliProvider {
     super('cursor', {
       supportsRuntimePermissionRequests: false,
       supportsThinkingModeControl: false,
-      supportsModelSwitching: true,
-      supportsSessionResume: true,
-      supportsSessionStop: true,
     });
   }
 
