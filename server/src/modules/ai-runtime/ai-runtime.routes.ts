@@ -5,6 +5,8 @@ import { AppError } from '@/shared/utils/app-error.js';
 import { createApiErrorResponse, createApiSuccessResponse } from '@/shared/http/api-response.js';
 import { llmService } from '@/modules/ai-runtime/services/ai-runtime.service.js';
 import { llmSessionsService } from '@/modules/ai-runtime/services/sessions.service.js';
+import { llmMcpService } from '@/modules/ai-runtime/services/mcp.service.js';
+import { llmSkillsService } from '@/modules/ai-runtime/services/skills.service.js';
 import type { McpScope, McpTransport, UpsertProviderMcpServerInput } from '@/modules/ai-runtime/types/index.js';
 import { llmMessagesUnifier } from '@/modules/ai-runtime/services/messages-unifier.service.js';
 import type { LLMProvider } from '@/shared/types/app.js';
@@ -304,12 +306,12 @@ router.get(
     const scope = parseMcpScope(req.query.scope);
 
     if (scope) {
-      const servers = await llmService.listProviderMcpServersForScope(provider, scope, { workspacePath });
+      const servers = await llmMcpService.listProviderMcpServersForScope(provider, scope, { workspacePath });
       res.json(createApiSuccessResponse({ provider, scope, servers }));
       return;
     }
 
-    const groupedServers = await llmService.listProviderMcpServers(provider, { workspacePath });
+    const groupedServers = await llmMcpService.listProviderMcpServers(provider, { workspacePath });
     res.json(createApiSuccessResponse({ provider, scopes: groupedServers }));
   }),
 );
@@ -322,7 +324,7 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const provider = parseProvider(req.params.provider);
     const payload = parseMcpUpsertPayload(req.body);
-    const server = await llmService.upsertProviderMcpServer(provider, payload);
+    const server = await llmMcpService.upsertProviderMcpServer(provider, payload);
     res.status(201).json(createApiSuccessResponse({ server }));
   }),
 );
@@ -338,7 +340,7 @@ router.put(
       ...((req.body && typeof req.body === 'object') ? req.body as Record<string, unknown> : {}),
       name: readPathParam(req.params.name, 'name'),
     });
-    const server = await llmService.upsertProviderMcpServer(provider, payload);
+    const server = await llmMcpService.upsertProviderMcpServer(provider, payload);
     res.json(createApiSuccessResponse({ server }));
   }),
 );
@@ -352,7 +354,7 @@ router.delete(
     const provider = parseProvider(req.params.provider);
     const scope = parseMcpScope(req.query.scope);
     const workspacePath = readOptionalQueryString(req.query.workspacePath);
-    const result = await llmService.removeProviderMcpServer(provider, {
+    const result = await llmMcpService.removeProviderMcpServer(provider, {
       name: readPathParam(req.params.name, 'name'),
       scope,
       workspacePath,
@@ -371,7 +373,7 @@ router.post(
     const body = (req.body as Record<string, unknown> | undefined) ?? {};
     const scope = parseMcpScope(body.scope ?? req.query.scope);
     const workspacePath = readOptionalQueryString(body.workspacePath ?? req.query.workspacePath);
-    const result = await llmService.runProviderMcpServer(provider, {
+    const result = await llmMcpService.runProviderMcpServer(provider, {
       name: readPathParam(req.params.name, 'name'),
       scope,
       workspacePath,
@@ -393,7 +395,7 @@ router.post(
         statusCode: 400,
       });
     }
-    const results = await llmService.addMcpServerToAllProviders({
+    const results = await llmMcpService.addMcpServerToAllProviders({
       ...payload,
       scope: payload.scope === 'user' ? 'user' : 'project',
     });
@@ -409,7 +411,7 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const provider = parseProvider(req.params.provider);
     const workspacePath = readOptionalQueryString(req.query.workspacePath);
-    const skills = await llmService.listProviderSkills(provider, { workspacePath });
+    const skills = await llmSkillsService.listProviderSkills(provider, { workspacePath });
     res.json(createApiSuccessResponse({ provider, skills }));
   }),
 );
@@ -424,7 +426,7 @@ router.get(
     const workspacePath = readOptionalQueryString(req.query.workspacePath);
     if (providerQuery) {
       const provider = parseProvider(providerQuery);
-      const skills = await llmService.listProviderSkills(provider, { workspacePath });
+      const skills = await llmSkillsService.listProviderSkills(provider, { workspacePath });
       res.json(createApiSuccessResponse({ provider, skills }));
       return;
     }
@@ -434,7 +436,7 @@ router.get(
       await Promise.all(
         providers.map(async (provider) => ([
           provider,
-          await llmService.listProviderSkills(provider, { workspacePath }),
+          await llmSkillsService.listProviderSkills(provider, { workspacePath }),
         ])),
       ),
     );

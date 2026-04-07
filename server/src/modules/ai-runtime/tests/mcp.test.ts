@@ -8,7 +8,7 @@ import test from 'node:test';
 import TOML from '@iarna/toml';
 
 import { AppError } from '@/shared/utils/app-error.js';
-import { llmService } from '@/modules/ai-runtime/services/ai-runtime.service.js';
+import { llmMcpService } from '@/modules/ai-runtime/services/mcp.service.js';
 
 const patchHomeDir = (nextHomeDir: string) => {
   const original = os.homedir;
@@ -27,14 +27,14 @@ const readJson = async (filePath: string): Promise<Record<string, unknown>> => {
  * This test covers Claude MCP support for all scopes (user/local/project) and all transports (stdio/http/sse),
  * including add, update/list, and remove operations.
  */
-test('llmService handles claude MCP scopes/transports with file-backed persistence', { concurrency: false }, async () => {
+test('llmMcpService handles claude MCP scopes/transports with file-backed persistence', { concurrency: false }, async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-mcp-claude-'));
   const workspacePath = path.join(tempRoot, 'workspace');
   await fs.mkdir(workspacePath, { recursive: true });
 
   const restoreHomeDir = patchHomeDir(tempRoot);
   try {
-    await llmService.upsertProviderMcpServer('claude', {
+    await llmMcpService.upsertProviderMcpServer('claude', {
       name: 'claude-user-stdio',
       scope: 'user',
       transport: 'stdio',
@@ -43,7 +43,7 @@ test('llmService handles claude MCP scopes/transports with file-backed persisten
       env: { API_KEY: 'secret' },
     });
 
-    await llmService.upsertProviderMcpServer('claude', {
+    await llmMcpService.upsertProviderMcpServer('claude', {
       name: 'claude-local-http',
       scope: 'local',
       transport: 'http',
@@ -52,7 +52,7 @@ test('llmService handles claude MCP scopes/transports with file-backed persisten
       workspacePath,
     });
 
-    await llmService.upsertProviderMcpServer('claude', {
+    await llmMcpService.upsertProviderMcpServer('claude', {
       name: 'claude-project-sse',
       scope: 'project',
       transport: 'sse',
@@ -61,13 +61,13 @@ test('llmService handles claude MCP scopes/transports with file-backed persisten
       workspacePath,
     });
 
-    const grouped = await llmService.listProviderMcpServers('claude', { workspacePath });
+    const grouped = await llmMcpService.listProviderMcpServers('claude', { workspacePath });
     assert.ok(grouped.user.some((server) => server.name === 'claude-user-stdio' && server.transport === 'stdio'));
     assert.ok(grouped.local.some((server) => server.name === 'claude-local-http' && server.transport === 'http'));
     assert.ok(grouped.project.some((server) => server.name === 'claude-project-sse' && server.transport === 'sse'));
 
     // update behavior is the same upsert route with same name
-    await llmService.upsertProviderMcpServer('claude', {
+    await llmMcpService.upsertProviderMcpServer('claude', {
       name: 'claude-project-sse',
       scope: 'project',
       transport: 'sse',
@@ -81,7 +81,7 @@ test('llmService handles claude MCP scopes/transports with file-backed persisten
     const projectServer = projectServers['claude-project-sse'] as Record<string, unknown>;
     assert.equal(projectServer.url, 'https://example.com/sse-updated');
 
-    const removeResult = await llmService.removeProviderMcpServer('claude', {
+    const removeResult = await llmMcpService.removeProviderMcpServer('claude', {
       name: 'claude-local-http',
       scope: 'local',
       workspacePath,
@@ -97,14 +97,14 @@ test('llmService handles claude MCP scopes/transports with file-backed persisten
  * This test covers Codex MCP support for user/project scopes, stdio/http formats,
  * and validation for unsupported scope/transport combinations.
  */
-test('llmService handles codex MCP TOML config and capability validation', { concurrency: false }, async () => {
+test('llmMcpService handles codex MCP TOML config and capability validation', { concurrency: false }, async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-mcp-codex-'));
   const workspacePath = path.join(tempRoot, 'workspace');
   await fs.mkdir(workspacePath, { recursive: true });
 
   const restoreHomeDir = patchHomeDir(tempRoot);
   try {
-    await llmService.upsertProviderMcpServer('codex', {
+    await llmMcpService.upsertProviderMcpServer('codex', {
       name: 'codex-user-stdio',
       scope: 'user',
       transport: 'stdio',
@@ -115,7 +115,7 @@ test('llmService handles codex MCP TOML config and capability validation', { con
       cwd: '/tmp',
     });
 
-    await llmService.upsertProviderMcpServer('codex', {
+    await llmMcpService.upsertProviderMcpServer('codex', {
       name: 'codex-project-http',
       scope: 'project',
       transport: 'http',
@@ -139,7 +139,7 @@ test('llmService handles codex MCP TOML config and capability validation', { con
     assert.equal(projectHttp.url, 'https://codex.example.com/mcp');
 
     await assert.rejects(
-      llmService.upsertProviderMcpServer('codex', {
+      llmMcpService.upsertProviderMcpServer('codex', {
         name: 'codex-local',
         scope: 'local',
         transport: 'stdio',
@@ -152,7 +152,7 @@ test('llmService handles codex MCP TOML config and capability validation', { con
     );
 
     await assert.rejects(
-      llmService.upsertProviderMcpServer('codex', {
+      llmMcpService.upsertProviderMcpServer('codex', {
         name: 'codex-sse',
         scope: 'project',
         transport: 'sse',
@@ -173,14 +173,14 @@ test('llmService handles codex MCP TOML config and capability validation', { con
 /**
  * This test covers Gemini/Cursor MCP JSON formats and user/project scope persistence.
  */
-test('llmService handles gemini and cursor MCP JSON config formats', { concurrency: false }, async () => {
+test('llmMcpService handles gemini and cursor MCP JSON config formats', { concurrency: false }, async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-mcp-gc-'));
   const workspacePath = path.join(tempRoot, 'workspace');
   await fs.mkdir(workspacePath, { recursive: true });
 
   const restoreHomeDir = patchHomeDir(tempRoot);
   try {
-    await llmService.upsertProviderMcpServer('gemini', {
+    await llmMcpService.upsertProviderMcpServer('gemini', {
       name: 'gemini-stdio',
       scope: 'user',
       transport: 'stdio',
@@ -190,7 +190,7 @@ test('llmService handles gemini and cursor MCP JSON config formats', { concurren
       cwd: './server',
     });
 
-    await llmService.upsertProviderMcpServer('gemini', {
+    await llmMcpService.upsertProviderMcpServer('gemini', {
       name: 'gemini-http',
       scope: 'project',
       transport: 'http',
@@ -199,7 +199,7 @@ test('llmService handles gemini and cursor MCP JSON config formats', { concurren
       workspacePath,
     });
 
-    await llmService.upsertProviderMcpServer('cursor', {
+    await llmMcpService.upsertProviderMcpServer('cursor', {
       name: 'cursor-stdio',
       scope: 'project',
       transport: 'stdio',
@@ -209,7 +209,7 @@ test('llmService handles gemini and cursor MCP JSON config formats', { concurren
       workspacePath,
     });
 
-    await llmService.upsertProviderMcpServer('cursor', {
+    await llmMcpService.upsertProviderMcpServer('cursor', {
       name: 'cursor-http',
       scope: 'user',
       transport: 'http',
@@ -240,14 +240,14 @@ test('llmService handles gemini and cursor MCP JSON config formats', { concurren
  * This test covers the global MCP adder requirement: only http/stdio are allowed and
  * one payload is written to all providers.
  */
-test('llmService global adder writes to all providers and rejects unsupported transports', { concurrency: false }, async () => {
+test('llmMcpService global adder writes to all providers and rejects unsupported transports', { concurrency: false }, async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-mcp-global-'));
   const workspacePath = path.join(tempRoot, 'workspace');
   await fs.mkdir(workspacePath, { recursive: true });
 
   const restoreHomeDir = patchHomeDir(tempRoot);
   try {
-    const globalResult = await llmService.addMcpServerToAllProviders({
+    const globalResult = await llmMcpService.addMcpServerToAllProviders({
       name: 'global-http',
       scope: 'project',
       transport: 'http',
@@ -271,7 +271,7 @@ test('llmService global adder writes to all providers and rejects unsupported tr
     assert.ok((cursorProject.mcpServers as Record<string, unknown>)['global-http']);
 
     await assert.rejects(
-      llmService.addMcpServerToAllProviders({
+      llmMcpService.addMcpServerToAllProviders({
         name: 'global-sse',
         scope: 'project',
         transport: 'sse',
@@ -292,7 +292,7 @@ test('llmService global adder writes to all providers and rejects unsupported tr
 /**
  * This test covers "run" behavior for both stdio and http MCP servers.
  */
-test('llmService runProviderServer probes stdio and http MCP servers', { concurrency: false }, async () => {
+test('llmMcpService runProviderServer probes stdio and http MCP servers', { concurrency: false }, async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-mcp-run-'));
   const workspacePath = path.join(tempRoot, 'workspace');
   await fs.mkdir(workspacePath, { recursive: true });
@@ -309,7 +309,7 @@ test('llmService runProviderServer probes stdio and http MCP servers', { concurr
     assert.ok(address && typeof address === 'object');
     const url = `http://127.0.0.1:${address.port}/mcp`;
 
-    await llmService.upsertProviderMcpServer('gemini', {
+    await llmMcpService.upsertProviderMcpServer('gemini', {
       name: 'probe-http',
       scope: 'project',
       transport: 'http',
@@ -317,7 +317,7 @@ test('llmService runProviderServer probes stdio and http MCP servers', { concurr
       workspacePath,
     });
 
-    await llmService.upsertProviderMcpServer('cursor', {
+    await llmMcpService.upsertProviderMcpServer('cursor', {
       name: 'probe-stdio',
       scope: 'project',
       transport: 'stdio',
@@ -326,7 +326,7 @@ test('llmService runProviderServer probes stdio and http MCP servers', { concurr
       workspacePath,
     });
 
-    const httpProbe = await llmService.runProviderMcpServer('gemini', {
+    const httpProbe = await llmMcpService.runProviderMcpServer('gemini', {
       name: 'probe-http',
       scope: 'project',
       workspacePath,
@@ -334,7 +334,7 @@ test('llmService runProviderServer probes stdio and http MCP servers', { concurr
     assert.equal(httpProbe.reachable, true);
     assert.equal(httpProbe.transport, 'http');
 
-    const stdioProbe = await llmService.runProviderMcpServer('cursor', {
+    const stdioProbe = await llmMcpService.runProviderMcpServer('cursor', {
       name: 'probe-stdio',
       scope: 'project',
       workspacePath,
@@ -347,3 +347,4 @@ test('llmService runProviderServer probes stdio and http MCP servers', { concurr
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
 });
+
