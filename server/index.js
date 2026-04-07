@@ -344,8 +344,15 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+// Application base path — configurable via BASE_PATH env var, defaults to /
+const rawBasePath = (process.env.BASE_PATH || '/').trim();
+const BASE_PATH =
+    !rawBasePath || rawBasePath === '/'
+        ? ''
+        : `/${rawBasePath.replace(/^\/+|\/+$/g, '')}`;
+
 // Public health check endpoint (no authentication required)
-app.get('/health', (req, res) => {
+app.get(`${BASE_PATH}/health`, (req, res) => {
     res.json({
         status: 'ok',
         timestamp: new Date().toISOString(),
@@ -353,63 +360,68 @@ app.get('/health', (req, res) => {
     });
 });
 
+// Redirect root to base path (only when a non-root base path is configured)
+if (BASE_PATH) {
+    app.get('/', (req, res) => res.redirect(`${BASE_PATH}/`));
+}
+
 // Optional API key validation (if configured)
-app.use('/api', validateApiKey);
+app.use(`${BASE_PATH}/api`, validateApiKey);
 
 // Authentication routes (public)
-app.use('/api/auth', authRoutes);
+app.use(`${BASE_PATH}/api/auth`, authRoutes);
 
 // Projects API Routes (protected)
-app.use('/api/projects', authenticateToken, projectsRoutes);
+app.use(`${BASE_PATH}/api/projects`, authenticateToken, projectsRoutes);
 
 // Git API Routes (protected)
-app.use('/api/git', authenticateToken, gitRoutes);
+app.use(`${BASE_PATH}/api/git`, authenticateToken, gitRoutes);
 
 // MCP API Routes (protected)
-app.use('/api/mcp', authenticateToken, mcpRoutes);
+app.use(`${BASE_PATH}/api/mcp`, authenticateToken, mcpRoutes);
 
 // Cursor API Routes (protected)
-app.use('/api/cursor', authenticateToken, cursorRoutes);
+app.use(`${BASE_PATH}/api/cursor`, authenticateToken, cursorRoutes);
 
 // TaskMaster API Routes (protected)
-app.use('/api/taskmaster', authenticateToken, taskmasterRoutes);
+app.use(`${BASE_PATH}/api/taskmaster`, authenticateToken, taskmasterRoutes);
 
 // MCP utilities
-app.use('/api/mcp-utils', authenticateToken, mcpUtilsRoutes);
+app.use(`${BASE_PATH}/api/mcp-utils`, authenticateToken, mcpUtilsRoutes);
 
 // Commands API Routes (protected)
-app.use('/api/commands', authenticateToken, commandsRoutes);
+app.use(`${BASE_PATH}/api/commands`, authenticateToken, commandsRoutes);
 
 // Settings API Routes (protected)
-app.use('/api/settings', authenticateToken, settingsRoutes);
+app.use(`${BASE_PATH}/api/settings`, authenticateToken, settingsRoutes);
 
 // CLI Authentication API Routes (protected)
-app.use('/api/cli', authenticateToken, cliAuthRoutes);
+app.use(`${BASE_PATH}/api/cli`, authenticateToken, cliAuthRoutes);
 
 // User API Routes (protected)
-app.use('/api/user', authenticateToken, userRoutes);
+app.use(`${BASE_PATH}/api/user`, authenticateToken, userRoutes);
 
 // Codex API Routes (protected)
-app.use('/api/codex', authenticateToken, codexRoutes);
+app.use(`${BASE_PATH}/api/codex`, authenticateToken, codexRoutes);
 
 // Gemini API Routes (protected)
-app.use('/api/gemini', authenticateToken, geminiRoutes);
+app.use(`${BASE_PATH}/api/gemini`, authenticateToken, geminiRoutes);
 
 // Plugins API Routes (protected)
-app.use('/api/plugins', authenticateToken, pluginsRoutes);
+app.use(`${BASE_PATH}/api/plugins`, authenticateToken, pluginsRoutes);
 
 // Unified session messages route (protected)
-app.use('/api/sessions', authenticateToken, messagesRoutes);
+app.use(`${BASE_PATH}/api/sessions`, authenticateToken, messagesRoutes);
 
 // Agent API Routes (uses API key authentication)
-app.use('/api/agent', agentRoutes);
+app.use(`${BASE_PATH}/api/agent`, agentRoutes);
 
 // Serve public files (like api-docs.html)
-app.use(express.static(path.join(__dirname, '../public')));
+app.use(`${BASE_PATH}`, express.static(path.join(__dirname, '../public')));
 
 // Static files served after API routes
 // Add cache control: HTML files should not be cached, but assets can be cached
-app.use(express.static(path.join(__dirname, '../dist'), {
+app.use(`${BASE_PATH}`, express.static(path.join(__dirname, '../dist'), {
     setHeaders: (res, filePath) => {
         if (filePath.endsWith('.html')) {
             // Prevent HTML caching to avoid service worker issues after builds
@@ -428,7 +440,7 @@ app.use(express.static(path.join(__dirname, '../dist'), {
 // Frontend now uses window.location for WebSocket URLs
 
 // System update endpoint
-app.post('/api/system/update', authenticateToken, async (req, res) => {
+app.post(`${BASE_PATH}/api/system/update`, authenticateToken, async (req, res) => {
     try {
         // Get the project root directory (parent of server directory)
         const projectRoot = path.join(__dirname, '..');
@@ -494,7 +506,7 @@ app.post('/api/system/update', authenticateToken, async (req, res) => {
     }
 });
 
-app.get('/api/projects', authenticateToken, async (req, res) => {
+app.get(`${BASE_PATH}/api/projects`, authenticateToken, async (req, res) => {
     try {
         const projects = await getProjects(broadcastProgress);
         res.json(projects);
@@ -503,7 +515,7 @@ app.get('/api/projects', authenticateToken, async (req, res) => {
     }
 });
 
-app.get('/api/projects/:projectName/sessions', authenticateToken, async (req, res) => {
+app.get(`${BASE_PATH}/api/projects/:projectName/sessions`, authenticateToken, async (req, res) => {
     try {
         const { limit = 5, offset = 0 } = req.query;
         const result = await getSessions(req.params.projectName, parseInt(limit), parseInt(offset));
@@ -515,7 +527,7 @@ app.get('/api/projects/:projectName/sessions', authenticateToken, async (req, re
 });
 
 // Rename project endpoint
-app.put('/api/projects/:projectName/rename', authenticateToken, async (req, res) => {
+app.put(`${BASE_PATH}/api/projects/:projectName/rename`, authenticateToken, async (req, res) => {
     try {
         const { displayName } = req.body;
         await renameProject(req.params.projectName, displayName);
@@ -526,7 +538,7 @@ app.put('/api/projects/:projectName/rename', authenticateToken, async (req, res)
 });
 
 // Delete session endpoint
-app.delete('/api/projects/:projectName/sessions/:sessionId', authenticateToken, async (req, res) => {
+app.delete(`${BASE_PATH}/api/projects/:projectName/sessions/:sessionId`, authenticateToken, async (req, res) => {
     try {
         const { projectName, sessionId } = req.params;
         console.log(`[API] Deleting session: ${sessionId} from project: ${projectName}`);
@@ -541,7 +553,7 @@ app.delete('/api/projects/:projectName/sessions/:sessionId', authenticateToken, 
 });
 
 // Rename session endpoint
-app.put('/api/sessions/:sessionId/rename', authenticateToken, async (req, res) => {
+app.put(`${BASE_PATH}/api/sessions/:sessionId/rename`, authenticateToken, async (req, res) => {
     try {
         const { sessionId } = req.params;
         const safeSessionId = String(sessionId).replace(/[^a-zA-Z0-9._-]/g, '');
@@ -567,7 +579,7 @@ app.put('/api/sessions/:sessionId/rename', authenticateToken, async (req, res) =
 });
 
 // Delete project endpoint (force=true to delete with sessions)
-app.delete('/api/projects/:projectName', authenticateToken, async (req, res) => {
+app.delete(`${BASE_PATH}/api/projects/:projectName`, authenticateToken, async (req, res) => {
     try {
         const { projectName } = req.params;
         const force = req.query.force === 'true';
@@ -579,7 +591,7 @@ app.delete('/api/projects/:projectName', authenticateToken, async (req, res) => 
 });
 
 // Create project endpoint
-app.post('/api/projects/create', authenticateToken, async (req, res) => {
+app.post(`${BASE_PATH}/api/projects/create`, authenticateToken, async (req, res) => {
     try {
         const { path: projectPath } = req.body;
 
@@ -596,7 +608,7 @@ app.post('/api/projects/create', authenticateToken, async (req, res) => {
 });
 
 // Search conversations content (SSE streaming)
-app.get('/api/search/conversations', authenticateToken, async (req, res) => {
+app.get(`${BASE_PATH}/api/search/conversations`, authenticateToken, async (req, res) => {
     const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
     const parsedLimit = Number.parseInt(String(req.query.limit), 10);
     const limit = Number.isNaN(parsedLimit) ? 50 : Math.max(1, Math.min(parsedLimit, 100));
@@ -652,7 +664,7 @@ const expandWorkspacePath = (inputPath) => {
 };
 
 // Browse filesystem endpoint for project suggestions - uses existing getFileTree
-app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
+app.get(`${BASE_PATH}/api/browse-filesystem`, authenticateToken, async (req, res) => {
     try {
         const { path: dirPath } = req.query;
 
@@ -732,7 +744,7 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
     }
 });
 
-app.post('/api/create-folder', authenticateToken, async (req, res) => {
+app.post(`${BASE_PATH}/api/create-folder`, authenticateToken, async (req, res) => {
     try {
         const { path: folderPath } = req.body;
         if (!folderPath) {
@@ -773,7 +785,7 @@ app.post('/api/create-folder', authenticateToken, async (req, res) => {
 });
 
 // Read file content endpoint
-app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) => {
+app.get(`${BASE_PATH}/api/projects/:projectName/file`, authenticateToken, async (req, res) => {
     try {
         const { projectName } = req.params;
         const { filePath } = req.query;
@@ -813,7 +825,7 @@ app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) =
 });
 
 // Serve binary file content endpoint (for images, etc.)
-app.get('/api/projects/:projectName/files/content', authenticateToken, async (req, res) => {
+app.get(`${BASE_PATH}/api/projects/:projectName/files/content`, authenticateToken, async (req, res) => {
     try {
         const { projectName } = req.params;
         const { path: filePath } = req.query;
@@ -866,7 +878,7 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
 });
 
 // Save file content endpoint
-app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) => {
+app.put(`${BASE_PATH}/api/projects/:projectName/file`, authenticateToken, async (req, res) => {
     try {
         const { projectName } = req.params;
         const { filePath, content } = req.body;
@@ -915,7 +927,7 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
     }
 });
 
-app.get('/api/projects/:projectName/files', authenticateToken, async (req, res) => {
+app.get(`${BASE_PATH}/api/projects/:projectName/files`, authenticateToken, async (req, res) => {
     try {
 
         // Using fsPromises from import
@@ -993,7 +1005,7 @@ function validateFilename(name) {
 }
 
 // POST /api/projects/:projectName/files/create - Create new file or directory
-app.post('/api/projects/:projectName/files/create', authenticateToken, async (req, res) => {
+app.post(`${BASE_PATH}/api/projects/:projectName/files/create`, authenticateToken, async (req, res) => {
     try {
         const { projectName } = req.params;
         const { path: parentPath, type, name } = req.body;
@@ -1070,7 +1082,7 @@ app.post('/api/projects/:projectName/files/create', authenticateToken, async (re
 });
 
 // PUT /api/projects/:projectName/files/rename - Rename file or directory
-app.put('/api/projects/:projectName/files/rename', authenticateToken, async (req, res) => {
+app.put(`${BASE_PATH}/api/projects/:projectName/files/rename`, authenticateToken, async (req, res) => {
     try {
         const { projectName } = req.params;
         const { oldPath, newName } = req.body;
@@ -1147,7 +1159,7 @@ app.put('/api/projects/:projectName/files/rename', authenticateToken, async (req
 });
 
 // DELETE /api/projects/:projectName/files - Delete file or directory
-app.delete('/api/projects/:projectName/files', authenticateToken, async (req, res) => {
+app.delete(`${BASE_PATH}/api/projects/:projectName/files`, authenticateToken, async (req, res) => {
     try {
         const { projectName } = req.params;
         const { path: targetPath, type } = req.body;
@@ -1373,15 +1385,18 @@ const uploadFilesHandler = async (req, res) => {
     });
 };
 
-app.post('/api/projects/:projectName/files/upload', authenticateToken, uploadFilesHandler);
+app.post(`${BASE_PATH}/api/projects/:projectName/files/upload`, authenticateToken, uploadFilesHandler);
 
 /**
  * Proxy an authenticated client WebSocket to a plugin's internal WS server.
  * Auth is enforced by verifyClient before this function is reached.
  */
 function handlePluginWsProxy(clientWs, pathname) {
-    const pluginName = pathname.replace('/plugin-ws/', '');
-    if (!pluginName || /[^a-zA-Z0-9_-]/.test(pluginName)) {
+    // Extract plugin name — works with or without BASE_PATH prefix
+    // (third-party plugins may omit the base path in their WebSocket URLs)
+    const match = pathname.match(/\/plugin-ws\/([a-zA-Z0-9_-]+)/);
+    const pluginName = match?.[1];
+    if (!pluginName) {
         clientWs.close(4400, 'Invalid plugin name');
         return;
     }
@@ -1428,11 +1443,11 @@ wss.on('connection', (ws, request) => {
     const urlObj = new URL(url, 'http://localhost');
     const pathname = urlObj.pathname;
 
-    if (pathname === '/shell') {
+    if (pathname === `${BASE_PATH}/shell`) {
         handleShellConnection(ws);
-    } else if (pathname === '/ws') {
+    } else if (pathname === `${BASE_PATH}/ws`) {
         handleChatConnection(ws, request);
-    } else if (pathname.startsWith('/plugin-ws/')) {
+    } else if (pathname.startsWith(`${BASE_PATH}/plugin-ws/`) || pathname.startsWith('/plugin-ws/')) {
         handlePluginWsProxy(ws, pathname);
     } else {
         console.log('[WARN] Unknown WebSocket path:', pathname);
@@ -1981,7 +1996,7 @@ function handleShellConnection(ws) {
     });
 }
 // Audio transcription endpoint
-app.post('/api/transcribe', authenticateToken, async (req, res) => {
+app.post(`${BASE_PATH}/api/transcribe`, authenticateToken, async (req, res) => {
     try {
         const multer = (await import('multer')).default;
         const upload = multer({ storage: multer.memoryStorage() });
@@ -2130,7 +2145,7 @@ Agent instructions:`;
 });
 
 // Image upload endpoint
-app.post('/api/projects/:projectName/upload-images', authenticateToken, async (req, res) => {
+app.post(`${BASE_PATH}/api/projects/:projectName/upload-images`, authenticateToken, async (req, res) => {
     try {
         const multer = (await import('multer')).default;
         const path = (await import('path')).default;
@@ -2215,7 +2230,7 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
 });
 
 // Get token usage for a specific session
-app.get('/api/projects/:projectName/sessions/:sessionId/token-usage', authenticateToken, async (req, res) => {
+app.get(`${BASE_PATH}/api/projects/:projectName/sessions/:sessionId/token-usage`, authenticateToken, async (req, res) => {
     try {
         const { projectName, sessionId } = req.params;
         const { provider = 'claude' } = req.query;
@@ -2402,8 +2417,8 @@ app.get('/api/projects/:projectName/sessions/:sessionId/token-usage', authentica
     }
 });
 
-// Serve React app for all other routes (excluding static files)
-app.get('*', (req, res) => {
+// Serve React app for all other routes under BASE_PATH (excluding static files)
+app.get(`${BASE_PATH}/*`, (req, res) => {
     // Skip requests for static assets (files with extensions)
     if (path.extname(req.path)) {
         return res.status(404).send('Not found');
@@ -2534,10 +2549,10 @@ async function startServer() {
         console.log('');
 
         if (isProduction) {
-            console.log(`${c.info('[INFO]')} To run in production mode, go to http://${DISPLAY_HOST}:${SERVER_PORT}`);            
+            console.log(`${c.info('[INFO]')} To run in production mode, go to http://${DISPLAY_HOST}:${SERVER_PORT}${BASE_PATH}/`);
         }
 
-        console.log(`${c.info('[INFO]')} To run in development mode with hot-module replacement, go to http://${DISPLAY_HOST}:${VITE_PORT}`);
+        console.log(`${c.info('[INFO]')} To run in development mode with hot-module replacement, go to http://${DISPLAY_HOST}:${VITE_PORT}${BASE_PATH}/`);
    
         server.listen(SERVER_PORT, HOST, async () => {
             const appInstallPath = path.join(__dirname, '..');

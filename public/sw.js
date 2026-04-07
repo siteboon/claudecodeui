@@ -1,9 +1,14 @@
 // Service Worker for Claude Code UI PWA
 // Cache only manifest (needed for PWA install). HTML and JS are never pre-cached
 // so a rebuild + refresh always picks up the latest assets.
-const CACHE_NAME = 'claude-ui-v2';
+
+// Derive base path from service worker URL (e.g. /prefix/sw.js → /prefix)
+const BASE_PATH = new URL('.', self.location).pathname.replace(/\/$/, '');
+
+const CACHE_PREFIX = 'claude-ui';
+const CACHE_NAME = `${CACHE_PREFIX}:${encodeURIComponent(BASE_PATH || '/')}:v2`;
 const urlsToCache = [
-  '/manifest.json'
+  `${BASE_PATH}/manifest.json`
 ];
 
 // Install event
@@ -20,24 +25,24 @@ self.addEventListener('fetch', event => {
   const url = event.request.url;
 
   // Never intercept API requests or WebSocket upgrades
-  if (url.includes('/api/') || url.includes('/ws')) {
+  if (url.includes(`${BASE_PATH}/api/`) || url.includes(`${BASE_PATH}/ws`)) {
     return;
   }
 
   // Navigation requests (HTML) — always go to network, no caching
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request).catch(() => caches.match('/manifest.json').then(() =>
+      fetch(event.request).catch(() =>
         new Response('<h1>Offline</h1><p>Please check your connection.</p>', {
           headers: { 'Content-Type': 'text/html' }
         })
-      ))
+      )
     );
     return;
   }
 
   // Hashed assets (JS/CSS in /assets/) — cache-first since filenames change per build
-  if (url.includes('/assets/')) {
+  if (url.includes(`${BASE_PATH}/assets/`)) {
     event.respondWith(
       caches.match(event.request).then(cached => {
         if (cached) return cached;
@@ -63,7 +68,7 @@ self.addEventListener('activate', event => {
     caches.keys().then(cacheNames =>
       Promise.all(
         cacheNames
-          .filter(name => name !== CACHE_NAME)
+          .filter(name => name.startsWith(CACHE_PREFIX) && name !== CACHE_NAME)
           .map(name => caches.delete(name))
       )
     )
@@ -84,8 +89,8 @@ self.addEventListener('push', event => {
 
   const options = {
     body: payload.body || '',
-    icon: '/logo-256.png',
-    badge: '/logo-128.png',
+    icon: `${BASE_PATH}/logo-256.png`,
+    badge: `${BASE_PATH}/logo-128.png`,
     data: payload.data || {},
     tag: payload.data?.tag || `${payload.data?.sessionId || 'global'}:${payload.data?.code || 'default'}`,
     renotify: true
@@ -102,7 +107,7 @@ self.addEventListener('notificationclick', event => {
 
   const sessionId = event.notification.data?.sessionId;
   const provider = event.notification.data?.provider || null;
-  const urlPath = sessionId ? `/session/${sessionId}` : '/';
+  const urlPath = sessionId ? `${BASE_PATH}/session/${sessionId}` : `${BASE_PATH}/`;
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async clientList => {

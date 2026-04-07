@@ -29,16 +29,20 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
-    
+
     <!-- Service Worker Registration -->
     <script>
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
-            .then(registration => {
+        // Derive base path from the manifest link href which Vite transforms with the correct base
+        var m = document.querySelector('link[rel="manifest"]');
+        var manifestHref = m ? m.getAttribute('href') : '';
+        var base = manifestHref ? manifestHref.replace(/\/manifest\.json(?:[?#].*)?$/, '') : '';
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register(base + '/sw.js')
+            .then(function(registration) {
               console.log('SW registered: ', registration);
             })
-            .catch(registrationError => {
+            .catch(function(registrationError) {
               console.log('SW registration failed: ', registrationError);
             });
         });

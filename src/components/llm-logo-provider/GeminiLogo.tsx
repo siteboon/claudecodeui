@@ -1,6 +1,8 @@
+import { BASE_PATH } from '../../utils/api';
+
 const GeminiLogo = ({className = 'w-5 h-5'}) => {
   return (
-    <img src="/icons/gemini-ai-icon.svg" alt="Gemini" className={className} />
+    <img src={`${BASE_PATH}/icons/gemini-ai-icon.svg`} alt="Gemini" className={className} />
   );
 };
 

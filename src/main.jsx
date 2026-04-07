@@ -9,7 +9,7 @@ import './i18n/config.js'
 
 // Register service worker for PWA + Web Push support
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').catch(err => {
+  navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(err => {
     console.warn('Service worker registration failed:', err);
   });
 }

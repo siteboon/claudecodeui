@@ -1,5 +1,16 @@
 import { IS_PLATFORM } from "../constants/config";
 
+// Derived from Vite's base config (which reads the BASE_PATH env var, defaulting to /)
+export const BASE_PATH = import.meta.env.BASE_URL.replace(/\/+$/, '');
+
+// Prefix relative URLs with the application base path
+const prefixUrl = (url) => {
+  if (typeof url === 'string' && url.startsWith('/')) {
+    return `${BASE_PATH}${url}`;
+  }
+  return url;
+};
+
 // Utility function for authenticated API calls
 export const authenticatedFetch = (url, options = {}) => {
   const token = localStorage.getItem('auth-token');
@@ -15,7 +26,7 @@ export const authenticatedFetch = (url, options = {}) => {
     defaultHeaders['Authorization'] = `Bearer ${token}`;
   }
 
-  return fetch(url, {
+  return fetch(prefixUrl(url), {
     ...options,
     headers: {
       ...defaultHeaders,
@@ -34,13 +45,13 @@ export const authenticatedFetch = (url, options = {}) => {
 export const api = {
   // Auth endpoints (no token required)
   auth: {
-    status: () => fetch('/api/auth/status'),
-    login: (username, password) => fetch('/api/auth/login', {
+    status: () => fetch(prefixUrl('/api/auth/status')),
+    login: (username, password) => fetch(prefixUrl('/api/auth/login'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
     }),
-    register: (username, password) => fetch('/api/auth/register', {
+    register: (username, password) => fetch(prefixUrl('/api/auth/register'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
@@ -97,7 +108,7 @@ export const api = {
     const token = localStorage.getItem('auth-token');
     const params = new URLSearchParams({ q: query, limit: String(limit) });
     if (token) params.set('token', token);
-    return `/api/search/conversations?${params.toString()}`;
+    return `${BASE_PATH}/api/search/conversations?${params.toString()}`;
   },
   createProject: (path) =>
     authenticatedFetch('/api/projects/create', {
