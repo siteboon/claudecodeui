@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type { AppTab } from '@/types/app';
 import { usePlugins } from '@/contexts/PluginsContext';
@@ -56,6 +56,7 @@ export function MainHeading() {
   const { isMobile } = useDeviceSettings({ trackPWA: false });
   const { sidebarIsCollapsed, setSidebarIsCollapsed } = useSystemUI();
   const { workspaceId, sessionId, tab } = useParams<MainHeadingRouteParams>();
+  const location = useLocation();
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -63,10 +64,18 @@ export function MainHeading() {
 
   const decodedWorkspaceId = useMemo(() => decodeValue(workspaceId), [workspaceId]);
   const decodedSessionId = useMemo(() => decodeValue(sessionId), [sessionId]);
+  const pluginName = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return decodeValue(params.get('name') ?? undefined);
+  }, [location.search]);
   const activeTab = useMemo<AppTab>(() => {
     const routeTab = decodeValue(tab);
+    if (routeTab === 'plugins' && pluginName) {
+      return `plugin:${pluginName}` as AppTab;
+    }
+
     return (routeTab || 'chat') as AppTab;
-  }, [tab]);
+  }, [pluginName, tab]);
 
   const pluginDisplayName = useMemo(
     () =>
@@ -117,15 +126,19 @@ export function MainHeading() {
 
   const handleTabSelect = (nextTab: AppTab) => {
     // Preserve route context while switching only the active tab path segment.
-    const encodedTab = encodeURIComponent(nextTab);
+    const isPluginTab = nextTab.startsWith('plugin:');
+    const pluginTabName = isPluginTab ? nextTab.replace('plugin:', '') : '';
+    const targetTab = isPluginTab ? 'plugins' : nextTab;
+    const encodedTargetTab = encodeURIComponent(targetTab);
+    const pluginQuery = isPluginTab ? `?name=${encodeURIComponent(pluginTabName)}` : '';
 
     if (decodedSessionId) {
-      navigate(`/sessions/${encodeURIComponent(decodedSessionId)}/${encodedTab}`);
+      navigate(`/sessions/${encodeURIComponent(decodedSessionId)}/${encodedTargetTab}${pluginQuery}`);
       return;
     }
 
     const encodedWorkspaceId = encodeURIComponent(decodedWorkspaceId);
-    navigate(`/workspaces/${encodedWorkspaceId}/${encodedTab}`);
+    navigate(`/workspaces/${encodedWorkspaceId}/${encodedTargetTab}${pluginQuery}`);
   };
 
   return (

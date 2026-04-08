@@ -4,6 +4,7 @@ import {
   Outlet,
   RouterProvider,
   createBrowserRouter,
+  useLocation,
   useParams,
 } from 'react-router-dom';
 import { AuthProvider, ProtectedRoute } from './components/auth';
@@ -28,6 +29,7 @@ const isValidRouteTab = (value: string | undefined): boolean => {
     normalizedValue === 'files' ||
     normalizedValue === 'git' ||
     normalizedValue === 'tasks' ||
+    normalizedValue === 'plugins' ||
     normalizedValue === 'preview' ||
     normalizedValue.startsWith('plugin:')
   );
@@ -60,6 +62,7 @@ function WorkspaceLayout() {
 }
 
 function WorkspaceTabRoute() {
+  const location = useLocation();
   const { workspaceId, sessionId, tab } = useParams<{
     workspaceId: string;
     sessionId?: string;
@@ -77,11 +80,13 @@ function WorkspaceTabRoute() {
   const decodedWorkspaceId = workspaceId ? decodeURIComponent(workspaceId) : null;
   const decodedSessionId = sessionId ? decodeURIComponent(sessionId) : null;
   const decodedTab = tab ? decodeURIComponent(tab) : 'chat';
+  const pluginName = decodeURIComponent(new URLSearchParams(location.search).get('name') || '');
+  const tabLabel = decodedTab === 'plugins' && pluginName ? `plugin:${pluginName}` : decodedTab;
 
   return (
     <div className="h-full p-6">
       <div className="rounded-xl border border-border/70 bg-card/30 p-5">
-        <h2 className="text-lg font-semibold">{decodedTab} view</h2>
+        <h2 className="text-lg font-semibold">{tabLabel} view</h2>
         <p className="mt-2 text-sm text-muted-foreground">
           Workspace:{' '}
           <span className="font-medium text-foreground">

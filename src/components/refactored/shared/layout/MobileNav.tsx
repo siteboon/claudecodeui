@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   MessageSquare,
@@ -58,6 +58,7 @@ export function MobileNav() {
   const { isMobile } = useDeviceSettings({ trackPWA: false });
   const { isChatInputFocused } = useSystemUI();
   const { workspaceId, sessionId, tab } = useParams<MobileNavRouteParams>();
+  const location = useLocation();
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
   const shouldShowTasksTab = Boolean(tasksEnabled && isTaskMasterInstalled);
   const { plugins } = usePlugins();
@@ -66,10 +67,18 @@ export function MobileNav() {
 
   const enabledPlugins = plugins.filter((plugin) => plugin.enabled);
   const hasPlugins = enabledPlugins.length > 0;
+  const pluginName = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return decodeValue(params.get('name') ?? undefined);
+  }, [location.search]);
   const activeTab = useMemo<AppTab>(() => {
     const routeTab = decodeValue(tab);
+    if (routeTab === 'plugins' && pluginName) {
+      return `plugin:${pluginName}` as AppTab;
+    }
+
     return (routeTab || 'chat') as AppTab;
-  }, [tab]);
+  }, [pluginName, tab]);
   const isPluginActive = activeTab.startsWith('plugin:');
 
   useEffect(() => {
@@ -93,16 +102,20 @@ export function MobileNav() {
       return;
     }
 
-    const encodedTab = encodeURIComponent(nextTab);
+    const isPluginTab = nextTab.startsWith('plugin:');
+    const pluginTabName = isPluginTab ? nextTab.replace('plugin:', '') : '';
+    const targetTab = isPluginTab ? 'plugins' : nextTab;
+    const encodedTargetTab = encodeURIComponent(targetTab);
+    const pluginQuery = isPluginTab ? `?name=${encodeURIComponent(pluginTabName)}` : '';
     const decodedSessionId = decodeValue(sessionId);
 
     if (decodedSessionId) {
-      navigate(`/sessions/${encodeURIComponent(decodedSessionId)}/${encodedTab}`);
+      navigate(`/sessions/${encodeURIComponent(decodedSessionId)}/${encodedTargetTab}${pluginQuery}`);
       return;
     }
 
     const encodedWorkspaceId = encodeURIComponent(decodeValue(workspaceId));
-    navigate(`/workspaces/${encodedWorkspaceId}/${encodedTab}`);
+    navigate(`/workspaces/${encodedWorkspaceId}/${encodedTargetTab}${pluginQuery}`);
   };
 
   const selectPlugin = (name: string) => {
