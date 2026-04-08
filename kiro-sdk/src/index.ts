@@ -18,21 +18,25 @@ function getTransport(): AcpTransport {
   if (!transport) {
     transport = new AcpTransport();
     transport.setNotificationHandler((method, params) => {
-      if (method !== 'session/notification') return;
+      if (method !== 'session/update') return;
 
       const sessionId = params.sessionId as string;
       if (!sessionId || !router.has(sessionId)) return;
 
       const update = (params.update || params) as Record<string, unknown>;
-      const type = (update.type || update.kind) as string;
+      const type = (update.sessionUpdate || update.type || update.kind) as string;
 
-      if (type === 'AgentMessageChunk') {
-        router.push(sessionId, {
-          type: 'assistant',
-          content: (update.text || update.content || '') as string,
-          session_id: sessionId,
-        });
-      } else if (type === 'ToolCall') {
+      if (type === 'agent_message_chunk') {
+        const content = update.content as Record<string, unknown> | undefined;
+        const text = (content?.text || '') as string;
+        if (text) {
+          router.push(sessionId, {
+            type: 'assistant',
+            content: text,
+            session_id: sessionId,
+          });
+        }
+      } else if (type === 'tool_call') {
         router.push(sessionId, {
           type: 'tool_use',
           name: (update.name || update.toolName || 'unknown') as string,
@@ -41,14 +45,15 @@ function getTransport(): AcpTransport {
           status: (update.status || 'running') as 'running' | 'completed' | 'error',
           session_id: sessionId,
         });
-      } else if (type === 'ToolCallUpdate') {
+      } else if (type === 'tool_call_update') {
+        const content = update.content as Record<string, unknown> | undefined;
         router.push(sessionId, {
           type: 'tool_progress',
-          content: (update.text || update.content || '') as string,
+          content: (content?.text || update.text || '') as string,
           tool_id: (update.id || update.toolUseId || '') as string,
           session_id: sessionId,
         });
-      } else if (type === 'TurnEnd') {
+      } else if (type === 'turn_end') {
         router.finish(sessionId);
       }
     });
@@ -92,11 +97,16 @@ export function query(params: { prompt: string; options?: Options }): Query {
     router.register(acpSessionId);
 
     try {
-      // Send the prompt — response may arrive after streaming notifications
-      t.sendRpc('session/prompt', {
+      // Send the prompt — response arrives after streaming completes
+      const promptResult = await t.sendRpc('session/prompt', {
         sessionId: acpSessionId,
-        content: [{ type: 'text', text: prompt }],
-      }).catch(() => {});
+        prompt: [{ type: 'text', text: prompt }],
+      }) as Record<string, unknown>;
+
+      // If turn already ended (stopReason in response), finish the session
+      if (promptResult?.stopReason) {
+        router.finish(acpSessionId);
+      }
 
       // Yield messages until TurnEnd
       yield* router.iterate(acpSessionId);

@@ -71,25 +71,25 @@ function handleNotification(method, params) {
 
     if (!ws) return;
 
-    if (method === 'session/notification') {
+    if (method === 'session/update') {
         const update = params.update || params;
-        const type = update.type || update.kind;
+        const type = update.sessionUpdate || update.type;
 
-        if (type === 'AgentMessageChunk') {
-            const content = update.text || update.content || '';
+        if (type === 'agent_message_chunk') {
+            const content = update.content?.text || '';
             if (content) {
                 ws.send(createNormalizedMessage({ kind: 'stream_delta', content, sessionId: wsSessionId, provider: 'kiro' }));
             }
-        } else if (type === 'ToolCall') {
+        } else if (type === 'tool_call') {
             const toolName = update.name || update.toolName || 'unknown';
             const status = update.status || 'running';
             ws.send(createNormalizedMessage({ kind: 'tool_use', toolName, toolInput: update.parameters || update.input || {}, status, sessionId: wsSessionId, provider: 'kiro' }));
-        } else if (type === 'ToolCallUpdate') {
-            const content = update.text || update.content || '';
+        } else if (type === 'tool_call_update') {
+            const content = update.content?.text || '';
             if (content) {
                 ws.send(createNormalizedMessage({ kind: 'stream_delta', content, sessionId: wsSessionId, provider: 'kiro' }));
             }
-        } else if (type === 'TurnEnd') {
+        } else if (type === 'turn_end') {
             ws.send(createNormalizedMessage({ kind: 'complete', exitCode: 0, isNewSession: session?.isNew || false, sessionId: wsSessionId, provider: 'kiro' }));
             notifyRunStopped({ userId: ws?.userId || null, provider: 'kiro', sessionId: wsSessionId, sessionName: session?.sessionSummary, stopReason: 'completed' });
             activeSessions.delete(wsSessionId);
@@ -234,11 +234,17 @@ async function spawnKiro(command, options = {}, ws) {
 
         // Send the prompt
         if (command && command.trim()) {
-            await sendRpc('session/prompt', {
+            const promptResult = await sendRpc('session/prompt', {
                 sessionId: acpSessionId,
-                content: [{ type: 'text', text: command }]
+                prompt: [{ type: 'text', text: command }]
             });
-            // TurnEnd notification will trigger completion
+            // If turn already ended (stopReason in response), send complete
+            if (promptResult?.stopReason && activeSessions.has(wsSessionId)) {
+                const session = activeSessions.get(wsSessionId);
+                ws.send(createNormalizedMessage({ kind: 'complete', exitCode: 0, isNewSession: session?.isNew || false, sessionId: wsSessionId, provider: 'kiro' }));
+                notifyRunStopped({ userId: ws?.userId || null, provider: 'kiro', sessionId: wsSessionId, sessionName: session?.sessionSummary, stopReason: 'completed' });
+                activeSessions.delete(wsSessionId);
+            }
         }
 
     } catch (err) {

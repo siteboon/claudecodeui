@@ -101,12 +101,12 @@ describe('AcpTransport', () => {
 
     // Simulate a notification (no id)
     mockProc.stdout.emit('data', JSON.stringify({
-      jsonrpc: '2.0', method: 'session/notification',
-      params: { sessionId: 's1', update: { type: 'AgentMessageChunk', text: 'hi' } }
+      jsonrpc: '2.0', method: 'session/update',
+      params: { sessionId: 's1', update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'hi' } } }
     }) + '\n');
 
     expect(notifications).toHaveLength(1);
-    expect(notifications[0].method).toBe('session/notification');
+    expect(notifications[0].method).toBe('session/update');
   });
 
   it('handles partial lines across data chunks', async () => {

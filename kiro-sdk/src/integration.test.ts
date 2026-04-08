@@ -12,7 +12,7 @@
 import { describe, it, expect, afterAll } from 'vitest';
 import { spawn, type ChildProcess } from 'child_process';
 
-const TIMEOUT = 30_000;
+const TIMEOUT = 45_000;
 
 function spawnAcp(): ChildProcess {
   return spawn('kiro-cli', ['acp', '--trust-all-tools'], {
@@ -131,8 +131,43 @@ describe('integration: kiro-cli acp', () => {
     expect(cmdNotifs.length).toBeGreaterThan(0);
   }, TIMEOUT);
 
-  // TODO: Enable once kiro-cli acp supports session/prompt without crashing
-  it.skip('session/prompt streams agent response', async () => {
-    // kiro-cli 1.29.3: session/prompt causes process exit(0)
-  });
+  // session/prompt now works with kiro-cli >= 1.29.5 using 'prompt' field
+  it('session/prompt streams agent response', async () => {
+    const proc = spawnAcp();
+    const lines = collectLines(proc);
+
+    sendRpc(proc, 1, 'initialize', {
+      protocolVersion: 1,
+      clientCapabilities: { fs: { readTextFile: true, writeTextFile: true }, terminal: true },
+      clientInfo: { name: 'kiro-sdk-test', version: '0.1.0' },
+    });
+
+    await new Promise(r => setTimeout(r, 4000));
+    sendRpc(proc, 2, 'session/new', { cwd: '/tmp', mcpServers: [] });
+    await new Promise(r => setTimeout(r, 12000));
+
+    const sessionResp = findResponse(lines, 2);
+    const sessionId = (sessionResp?.result as Record<string, unknown>)?.sessionId as string;
+    expect(sessionId).toBeTruthy();
+
+    sendRpc(proc, 3, 'session/prompt', { sessionId, prompt: [{ type: 'text', text: 'Say exactly: KIRO_SDK_TEST_OK' }] });
+    await new Promise(r => setTimeout(r, 15000));
+    proc.kill();
+
+    // Should have session/update notifications with agent_message_chunk
+    const updates = lines.filter(l => {
+      try { const m = JSON.parse(l); return m.method === 'session/update'; } catch { return false; }
+    }).map(l => JSON.parse(l));
+
+    const textChunks = updates.filter(u => u.params?.update?.sessionUpdate === 'agent_message_chunk');
+    expect(textChunks.length).toBeGreaterThan(0);
+
+    const fullText = textChunks.map(u => u.params?.update?.content?.text || '').join('');
+    expect(fullText).toContain('KIRO_SDK_TEST_OK');
+
+    // Should get a prompt response with stopReason
+    const promptResp = findResponse(lines, 3);
+    expect(promptResp).not.toBeNull();
+    expect((promptResp!.result as Record<string, unknown>)?.stopReason).toBe('end_turn');
+  }, TIMEOUT);
 });

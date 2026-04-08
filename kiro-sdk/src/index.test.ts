@@ -63,20 +63,20 @@ describe('query()', () => {
     // Simulate streaming notifications
     await new Promise(r => setTimeout(r, 20));
     mockProc.stdout.emit('data', JSON.stringify({
-      jsonrpc: '2.0', method: 'session/notification',
-      params: { sessionId: 'sess-1', update: { type: 'AgentMessageChunk', text: 'Hi there' } }
+      jsonrpc: '2.0', method: 'session/update',
+      params: { sessionId: 'sess-1', update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Hi there' } } }
     }) + '\n');
 
     await new Promise(r => setTimeout(r, 10));
     mockProc.stdout.emit('data', JSON.stringify({
-      jsonrpc: '2.0', method: 'session/notification',
-      params: { sessionId: 'sess-1', update: { type: 'ToolCall', name: 'shell', parameters: { command: 'ls' }, id: 't1', status: 'running' } }
+      jsonrpc: '2.0', method: 'session/update',
+      params: { sessionId: 'sess-1', update: { sessionUpdate: 'tool_call', name: 'shell', parameters: { command: 'ls' }, id: 't1', status: 'running' } }
     }) + '\n');
 
     await new Promise(r => setTimeout(r, 10));
     mockProc.stdout.emit('data', JSON.stringify({
-      jsonrpc: '2.0', method: 'session/notification',
-      params: { sessionId: 'sess-1', update: { type: 'TurnEnd' } }
+      jsonrpc: '2.0', method: 'session/update',
+      params: { sessionId: 'sess-1', update: { sessionUpdate: 'turn_end' } }
     }) + '\n');
 
     await done;
@@ -109,8 +109,8 @@ describe('query()', () => {
 
     await new Promise(r => setTimeout(r, 10));
     mockProc.stdout.emit('data', JSON.stringify({
-      jsonrpc: '2.0', method: 'session/notification',
-      params: { sessionId: 'old-sess', update: { type: 'TurnEnd' } }
+      jsonrpc: '2.0', method: 'session/update',
+      params: { sessionId: 'old-sess', update: { sessionUpdate: 'turn_end' } }
     }) + '\n');
 
     await done;
@@ -134,8 +134,8 @@ describe('query()', () => {
     // Push one message then interrupt
     await new Promise(r => setTimeout(r, 10));
     mockProc.stdout.emit('data', JSON.stringify({
-      jsonrpc: '2.0', method: 'session/notification',
-      params: { sessionId: 'sess-2', update: { type: 'AgentMessageChunk', text: 'partial' } }
+      jsonrpc: '2.0', method: 'session/update',
+      params: { sessionId: 'sess-2', update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'partial' } } }
     }) + '\n');
 
     await new Promise(r => setTimeout(r, 10));
@@ -175,8 +175,8 @@ describe('query()', () => {
 
     await new Promise(r => setTimeout(r, 10));
     mockProc.stdout.emit('data', JSON.stringify({
-      jsonrpc: '2.0', method: 'session/notification',
-      params: { sessionId: 'sess-3', update: { type: 'TurnEnd' } }
+      jsonrpc: '2.0', method: 'session/update',
+      params: { sessionId: 'sess-3', update: { sessionUpdate: 'turn_end' } }
     }) + '\n');
 
     await done;
