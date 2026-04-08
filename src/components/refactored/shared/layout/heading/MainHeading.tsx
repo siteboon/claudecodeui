@@ -5,7 +5,7 @@ import type { AppTab } from '@/types/app';
 import { usePlugins } from '@/contexts/PluginsContext';
 import { useDeviceSettings } from '@/hooks/useDeviceSettings';
 import { useSystemUI } from '@/components/refactored/shared/contexts/system-ui-context/useSystemUI';
-import { MainHeadingTabSwitcher } from '@/components/refactored/shared/layout/MainHeadingTabSwitcher';
+import { MainHeadingTabSwitcher } from '@/components/refactored/shared/layout/heading/MainHeadingTabSwitcher';
 
 type MainHeadingRouteParams = {
   workspaceId?: string;

@@ -1,6 +1,6 @@
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from '@/components/refactored/sidebar/view/Sidebar';
-import { MainHeading } from '@/components/refactored/shared/layout/MainHeading';
+import { MainHeading } from '@/components/refactored/shared/layout/heading/MainHeading';
 import { MobileNav } from '@/components/refactored/shared/layout/MobileNav';
 import EditorSidebarRouterAdapter from '@/components/code-editor/view/EditorSidebarRouterAdapter';
 import { useDeviceSettings } from '@/hooks/useDeviceSettings';
