@@ -22,6 +22,7 @@ import GitPanelRouterAdapter from '@/components/git-panel/view/GitPanelRouterAda
 import { TaskMasterPanel } from '@/components/task-master/index.js';
 import PluginContentRouterAdapter from '@/components/plugins/view/PluginContentRouterAdapter.js';
 import ChatInterface from '@/components/refactored/chat/view/ChatInterface.js';
+import ChooseWorkspaceView from '@/components/refactored/shared/view/ChooseWorkspaceView.js';
 
 const isValidRouteTab = (value: string | undefined): boolean => {
   if (!value) {
@@ -116,7 +117,7 @@ const router = createBrowserRouter(
       path: '/',
       element: <RootLayout />,
       children: [
-        { index: true, element: <NoWorkspaceRoute /> }, // TODO: Show empty state component loader here.
+        { index: true, element: <ChooseWorkspaceView /> }, // TODO: Show empty state component loader here.
         {
           path: 'workspaces/:workspaceId',
           element: <WorkspaceLayout />,
