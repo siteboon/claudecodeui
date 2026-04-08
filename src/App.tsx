@@ -20,6 +20,7 @@ import StandaloneShellRouterAdapter from '@/components/standalone-shell/view/Sta
 import FileTreeRouterAdapter from '@/components/file-tree/view/FileTreeRouterAdapter.js';
 import GitPanelRouterAdapter from '@/components/git-panel/view/GitPanelRouterAdapter.js';
 import { TaskMasterPanel } from '@/components/task-master/index.js';
+import PluginContentRouterAdapter from '@/components/plugins/view/PluginContentRouterAdapter.js';
 
 const isValidRouteTab = (value: string | undefined): boolean => {
   if (!value) {
@@ -124,6 +125,7 @@ const router = createBrowserRouter(
             { path: 'files', element: <FileTreeRouterAdapter /> },
             { path: 'git', element: <GitPanelRouterAdapter /> },
             { path: 'tasks', element: <TaskMasterPanel isVisible={true} /> },
+            { path: 'plugins', element: <PluginContentRouterAdapter /> },
             { path: ':tab', element: <WorkspaceTabRoute /> },
           ],
         },
