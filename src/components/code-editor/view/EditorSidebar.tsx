@@ -2,10 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import type { MouseEvent, MutableRefObject } from 'react';
 import CodeEditor from './CodeEditor';
 import { CodeEditorFile } from '@/hooks/code-editor-sidebar/types.js';
+import { useDeviceSettings } from '@/hooks/useDeviceSettings.js';
 
 type EditorSidebarProps = {
   editingFile: CodeEditorFile | null;
-  isMobile: boolean;
   editorExpanded: boolean;
   editorWidth: number;
   hasManualWidth: boolean;
@@ -24,7 +24,6 @@ const MIN_EDITOR_WIDTH = 280;
 
 export default function EditorSidebar({
   editingFile,
-  isMobile,
   editorExpanded,
   editorWidth,
   hasManualWidth,
@@ -38,6 +37,8 @@ export default function EditorSidebar({
   const [poppedOut, setPoppedOut] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [effectiveWidth, setEffectiveWidth] = useState(editorWidth);
+
+  const { isMobile } = useDeviceSettings({ trackPWA: false });
 
   // Adjust editor width when container size changes to ensure buttons are always visible
   useEffect(() => {

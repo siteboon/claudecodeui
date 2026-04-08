@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import ChatInterface from '../../chat/view/ChatInterface';
 import FileTree from '../../file-tree/view/FileTree';
 import StandaloneShell from '../../standalone-shell/view/StandaloneShell';
@@ -8,13 +8,14 @@ import type { MainContentProps } from '../types/types';
 import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import { useUiPreferences } from '../../../hooks/useUiPreferences';
-import { useEditorSidebar } from '../../../hooks/code-editor-sidebar/useEditorSidebar';
 import EditorSidebar from '../../code-editor/view/EditorSidebar';
 import type { Project } from '../../../types/app';
 import { TaskMasterPanel } from '../../task-master';
 import MainContentHeader from './subcomponents/MainContentHeader';
 import MainContentStateView from './subcomponents/MainContentStateView';
 import ErrorBoundary from './ErrorBoundary';
+import { useSystemUI } from '@/components/refactored/shared/contexts/system-ui-context/useSystemUI';
+import type { OpenEditorFileHandler } from '@/hooks/code-editor-sidebar/useEditorSidebar';
 
 type TaskMasterContextValue = {
   currentProject?: Project | null;
@@ -54,20 +55,28 @@ function MainContent({
 
   const { currentProject, setCurrentProject } = useTaskMaster() as TaskMasterContextValue;
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings() as TasksSettingsContextValue;
+  const {
+    codeEditorSidebar: {
+      editingFile,
+      editorWidth,
+      editorExpanded,
+      hasManualWidth,
+      resizeHandleRef,
+      handleFileOpen,
+      handleCloseEditor,
+      handleToggleEditorExpand,
+      handleResizeStart,
+    },
+  } = useSystemUI();
 
   const shouldShowTasksTab = Boolean(tasksEnabled && isTaskMasterInstalled);
 
-  const {
-    editingFile,
-    editorWidth,
-    editorExpanded,
-    hasManualWidth,
-    resizeHandleRef,
-    handleFileOpen,
-    handleCloseEditor,
-    handleToggleEditorExpand,
-    handleResizeStart,
-  } = useEditorSidebar({});
+  const handleProjectFileOpen = useCallback<OpenEditorFileHandler>(
+    (filePath, diffInfo = null) => {
+      handleFileOpen(filePath, diffInfo, selectedProject?.name);
+    },
+    [handleFileOpen, selectedProject?.name],
+  );
 
   useEffect(() => {
     const selectedProjectName = selectedProject?.name;
@@ -114,7 +123,7 @@ function MainContent({
                 ws={ws}
                 sendMessage={sendMessage}
                 latestMessage={latestMessage}
-                onFileOpen={handleFileOpen}
+                onFileOpen={handleProjectFileOpen}
                 onInputFocusChange={onInputFocusChange}
                 onSessionActive={onSessionActive}
                 onSessionInactive={onSessionInactive}
@@ -137,7 +146,7 @@ function MainContent({
 
           {activeTab === 'files' && (
             <div className="h-full overflow-hidden">
-              <FileTree selectedProject={selectedProject} onFileOpen={handleFileOpen} />
+              <FileTree selectedProject={selectedProject} onFileOpen={(filePath) => handleFileOpen(filePath, null, selectedProject.name)} />
             </div>
           )}
 
@@ -154,7 +163,7 @@ function MainContent({
 
           {activeTab === 'git' && (
             <div className="h-full overflow-hidden">
-              <GitPanel selectedProject={selectedProject} isMobile={isMobile} onFileOpen={handleFileOpen} />
+              <GitPanel selectedProject={selectedProject} onFileOpen={(filePath, diffInfo) => handleFileOpen(filePath, diffInfo, selectedProject.name)} />
             </div>
           )}
 
@@ -175,7 +184,6 @@ function MainContent({
 
         <EditorSidebar
           editingFile={editingFile}
-          isMobile={isMobile}
           editorExpanded={editorExpanded}
           editorWidth={editorWidth}
           hasManualWidth={hasManualWidth}

@@ -6,24 +6,34 @@
  * TODO: This adapter can be removed once all tabs use the updated projects and sessions format.
  */
 
-import { useParams } from "react-router-dom";
-import { useCallback, useEffect, useState } from "react";
+import { useLocation, useParams } from "react-router-dom";
+import { useEffect, useState } from "react";
 import {
     getProjectsInLegacyFormat,
     getSessionInLegacyFormat,
 } from "@/components/refactored/sidebar/data/legacy-response-format-api.js";
 import { Project } from "@/types/app.js";
-import FileTree from "@/components/file-tree/view/FileTree.js";
 import { useSystemUI } from "@/components/refactored/shared/contexts/system-ui-context/useSystemUI";
+import EditorSidebar from "@/components/code-editor/view/EditorSidebar.js";
 
-export default function FileTreeRouterAdapter() {
+export default function EditorSidebarRouterAdapter() {
     const { sessionId, workspaceId } = useParams<{
         sessionId?: string;
         workspaceId?: string;
     }>();
+    const { pathname } = useLocation();
 
     const {
-        codeEditorSidebar: { handleFileOpen },
+        codeEditorSidebar: {
+            editingFile,
+            editorWidth,
+            editorExpanded,
+            hasManualWidth,
+            resizeHandleRef,
+            handleCloseEditor,
+            handleToggleEditorExpand,
+            handleResizeStart,
+        },
     } = useSystemUI();
 
     const [project, setProject] = useState<Project | null>(null);
@@ -81,18 +91,24 @@ export default function FileTreeRouterAdapter() {
         };
     }, [sessionId, workspaceId]);
 
-    const handleProjectFileOpen = useCallback(
-        (filePath: string) => {
-            handleFileOpen(filePath, null, project?.name);
-        },
-        [handleFileOpen, project?.name],
-    );
+    const fillSpace = pathname.replace(/\/+$/, "").endsWith("/files");
 
     if (loading) {
-        return <div>Loading...</div>;
+        return null;
     }
 
     return (
-        <FileTree onFileOpen={handleProjectFileOpen} selectedProject={project} />
+        <EditorSidebar
+            editingFile={editingFile}
+            editorExpanded={editorExpanded}
+            editorWidth={editorWidth}
+            hasManualWidth={hasManualWidth}
+            resizeHandleRef={resizeHandleRef}
+            onResizeStart={handleResizeStart}
+            onCloseEditor={handleCloseEditor}
+            onToggleEditorExpand={handleToggleEditorExpand}
+            projectPath={project?.fullPath}
+            fillSpace={fillSpace}
+        />
     );
 }

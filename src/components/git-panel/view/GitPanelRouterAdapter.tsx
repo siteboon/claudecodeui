@@ -13,10 +13,11 @@ import {
     getSessionInLegacyFormat,
 } from "@/components/refactored/sidebar/data/legacy-response-format-api.js";
 import { Project } from "@/types/app.js";
-import FileTree from "@/components/file-tree/view/FileTree.js";
+import GitPanel from "@/components/git-panel/view/GitPanel.js";
 import { useSystemUI } from "@/components/refactored/shared/contexts/system-ui-context/useSystemUI";
+import type { FileDiffInfo } from "@/components/git-panel/types/types";
 
-export default function FileTreeRouterAdapter() {
+export default function GitPanelRouterAdapter() {
     const { sessionId, workspaceId } = useParams<{
         sessionId?: string;
         workspaceId?: string;
@@ -82,8 +83,8 @@ export default function FileTreeRouterAdapter() {
     }, [sessionId, workspaceId]);
 
     const handleProjectFileOpen = useCallback(
-        (filePath: string) => {
-            handleFileOpen(filePath, null, project?.name);
+        (filePath: string, diffInfo?: FileDiffInfo) => {
+            handleFileOpen(filePath, diffInfo, project?.name);
         },
         [handleFileOpen, project?.name],
     );
@@ -93,6 +94,6 @@ export default function FileTreeRouterAdapter() {
     }
 
     return (
-        <FileTree onFileOpen={handleProjectFileOpen} selectedProject={project} />
+        <GitPanel selectedProject={project} onFileOpen={handleProjectFileOpen} />
     );
 }

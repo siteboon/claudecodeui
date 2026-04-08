@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useGitPanelController } from '../hooks/useGitPanelController';
 import { useRevertLocalCommit } from '../hooks/useRevertLocalCommit';
-import type { ConfirmationRequest, GitPanelProps, GitPanelView } from '../types/types';
+import type { ConfirmationRequest, FileOpenHandler, GitPanelView } from '../types/types';
 import { getChangedFileCount } from '../utils/gitPanelUtils';
 import ChangesView from '../view/changes/ChangesView';
 import HistoryView from '../view/history/HistoryView';
@@ -10,12 +10,21 @@ import GitPanelHeader from '../view/GitPanelHeader';
 import GitRepositoryErrorState from '../view/GitRepositoryErrorState';
 import GitViewTabs from '../view/GitViewTabs';
 import ConfirmActionModal from '../view/modals/ConfirmActionModal';
+import { useDeviceSettings } from '@/hooks/useDeviceSettings.js';
+import { Project } from '@/types/app.js';
 
-export default function GitPanel({ selectedProject, isMobile = false, onFileOpen }: GitPanelProps) {
+type GitPanelProps = {
+  selectedProject: Project | null;
+  onFileOpen?: FileOpenHandler;
+};
+
+export default function GitPanel({ selectedProject, onFileOpen }: GitPanelProps) {
   const [activeView, setActiveView] = useState<GitPanelView>('changes');
   const [wrapText, setWrapText] = useState(true);
   const [hasExpandedFiles, setHasExpandedFiles] = useState(false);
   const [confirmAction, setConfirmAction] = useState<ConfirmationRequest | null>(null);
+
+  const { isMobile } = useDeviceSettings();
 
   const {
     gitStatus,

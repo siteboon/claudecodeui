@@ -1,11 +1,29 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { MouseEvent as ReactMouseEvent } from 'react';
+import type { MouseEvent as ReactMouseEvent, MutableRefObject } from 'react';
 import { CodeEditorFile, CodeEditorDiffInfo } from '@/hooks/code-editor-sidebar/types.js';
 import { useDeviceSettings } from '@/hooks/useDeviceSettings.js';
 
 
 type UseEditorSidebarOptions = {
   initialWidth?: number;
+};
+
+export type OpenEditorFileHandler = (
+  filePath: string,
+  diffInfo?: CodeEditorDiffInfo | null,
+  projectName?: string,
+) => void;
+
+export type UseEditorSidebarReturn = {
+  editingFile: CodeEditorFile | null;
+  editorWidth: number;
+  editorExpanded: boolean;
+  hasManualWidth: boolean;
+  resizeHandleRef: MutableRefObject<HTMLDivElement | null>;
+  handleFileOpen: OpenEditorFileHandler;
+  handleCloseEditor: () => void;
+  handleToggleEditorExpand: () => void;
+  handleResizeStart: (event: ReactMouseEvent<HTMLDivElement>) => void;
 };
 
 // TODO: Remove every parameter here (except initial width)
@@ -15,7 +33,7 @@ type UseEditorSidebarOptions = {
 // 
 export const useEditorSidebar = ({
   initialWidth = 600,
-}: UseEditorSidebarOptions) => {
+}: UseEditorSidebarOptions): UseEditorSidebarReturn => {
   const [editingFile, setEditingFile] = useState<CodeEditorFile | null>(null);
   const [editorWidth, setEditorWidth] = useState(initialWidth);
   const [editorExpanded, setEditorExpanded] = useState(false);
@@ -25,14 +43,15 @@ export const useEditorSidebar = ({
 
   const { isMobile } = useDeviceSettings({ trackPWA: false });
 
-  const handleFileOpen = useCallback(
-    (filePath: string, diffInfo: CodeEditorDiffInfo | null = null) => {
+  const handleFileOpen = useCallback<OpenEditorFileHandler>(
+    (filePath, diffInfo = null, projectName) => {
       const normalizedPath = filePath.replace(/\\/g, '/');
       const fileName = normalizedPath.split('/').pop() || filePath;
 
       setEditingFile({
         name: fileName,
         path: filePath,
+        projectName,
         diffInfo,
       });
     },

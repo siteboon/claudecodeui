@@ -18,6 +18,8 @@ import { SystemUIProvider } from '@/components/refactored/shared/contexts/system
 import { RootLayout } from '@/components/refactored/shared/layout/RootLayout';
 import StandaloneShellRouterAdapter from '@/components/standalone-shell/view/StandaloneShellRouterAdapter';
 import FileTreeRouterAdapter from '@/components/file-tree/view/FileTreeRouterAdapter.js';
+import GitPanelRouterAdapter from '@/components/git-panel/view/GitPanelRouterAdapter.js';
+import { TaskMasterPanel } from '@/components/task-master/index.js';
 
 const isValidRouteTab = (value: string | undefined): boolean => {
   if (!value) {
@@ -120,6 +122,8 @@ const router = createBrowserRouter(
             { index: true, element: <Navigate to="chat" replace /> },
             { path: 'shell', element: <StandaloneShellRouterAdapter /> },
             { path: 'files', element: <FileTreeRouterAdapter /> },
+            { path: 'git', element: <GitPanelRouterAdapter /> },
+            { path: 'tasks', element: <TaskMasterPanel isVisible={true} /> },
             { path: ':tab', element: <WorkspaceTabRoute /> },
           ],
         },

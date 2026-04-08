@@ -7,6 +7,7 @@ export type CodeEditorDiffInfo = {
 export type CodeEditorFile = {
   name: string;
   path: string;
+  projectName?: string;
   diffInfo?: CodeEditorDiffInfo | null;
   [key: string]: unknown;
 };

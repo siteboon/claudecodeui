@@ -12,12 +12,6 @@ export type FileDiffInfo = {
 
 export type FileOpenHandler = (filePath: string, diffInfo?: FileDiffInfo) => void;
 
-export type GitPanelProps = {
-  selectedProject: Project | null;
-  isMobile?: boolean;
-  onFileOpen?: FileOpenHandler;
-};
-
 export type GitStatusResponse = {
   branch?: string;
   hasCommits?: boolean;
