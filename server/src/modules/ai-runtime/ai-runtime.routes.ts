@@ -493,6 +493,18 @@ router.get(
 );
 
 /**
+ * Returns one DB-indexed session metadata row.
+ */
+router.get(
+  '/sessions/:sessionId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = readPathParam(req.params.sessionId, 'sessionId');
+    const session = llmSessionsService.getIndexedSession(sessionId);
+    res.json(createApiSuccessResponse({ session }));
+  }),
+);
+
+/**
  * Triggers provider disk scans and refreshes the shared sessions table.
  */
 router.post(

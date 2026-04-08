@@ -107,6 +107,21 @@ export const llmSessionsService = {
   },
 
   /**
+   * Reads one indexed session metadata row.
+   */
+  getIndexedSession(sessionId: string) {
+    const session = sessionsDb.getSessionById(sessionId);
+    if (!session) {
+      throw new AppError(`Session "${sessionId}" was not found.`, {
+        code: 'SESSION_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    return session;
+  },
+
+  /**
    * Runs all provider indexers and updates `scan_state.last_scanned_at`.
    */
   async synchronizeSessions(): Promise<SyncResult> {

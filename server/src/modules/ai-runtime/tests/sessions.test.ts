@@ -131,6 +131,44 @@ test('llmSessionsService.updateSessionCustomName validates existence before upda
   }
 });
 
+// This test covers fetching one indexed DB session metadata row from getSessionById.
+test('llmSessionsService.getIndexedSession returns DB session metadata', { concurrency: false }, () => {
+  const restoreGetById = patchMethod(sessionsDb, 'getSessionById', (sessionId: string) => (
+    sessionId === 'known-session'
+      ? {
+          session_id: 'known-session',
+          provider: 'claude',
+          workspace_path: '/tmp/workspace',
+          jsonl_path: '/tmp/workspace/session.jsonl',
+          created_at: '2026-04-01T00:00:00.000Z',
+          updated_at: '2026-04-02T00:00:00.000Z',
+        }
+      : null
+  ));
+
+  try {
+    const session = llmSessionsService.getIndexedSession('known-session');
+    assert.deepEqual(session, {
+      session_id: 'known-session',
+      provider: 'claude',
+      workspace_path: '/tmp/workspace',
+      jsonl_path: '/tmp/workspace/session.jsonl',
+      created_at: '2026-04-01T00:00:00.000Z',
+      updated_at: '2026-04-02T00:00:00.000Z',
+    });
+
+    assert.throws(
+      () => llmSessionsService.getIndexedSession('missing-session'),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'SESSION_NOT_FOUND' &&
+        error.statusCode === 404,
+    );
+  } finally {
+    restoreGetById();
+  }
+});
+
 // This test covers delete behavior using only DB jsonl_path, including invalid id validation.
 test('llmSessionsService.deleteSessionArtifacts validates ids and deletes disk/db artifacts', { concurrency: false }, async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-delete-session-'));
