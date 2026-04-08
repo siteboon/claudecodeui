@@ -52,6 +52,17 @@ const decodeValue = (value?: string): string => {
   }
 };
 
+const resolveTabFromPathname = (pathname: string): string => {
+  const normalizedPath = pathname.replace(/\/+$/, '');
+  const segments = normalizedPath.split('/').filter(Boolean);
+
+  if (segments.length >= 3 && (segments[0] === 'workspaces' || segments[0] === 'sessions')) {
+    return decodeValue(segments[2]);
+  }
+
+  return '';
+};
+
 export function MobileNav() {
   const navigate = useNavigate();
   const { t } = useTranslation(['common', 'settings']);
@@ -72,13 +83,13 @@ export function MobileNav() {
     return decodeValue(params.get('name') ?? undefined);
   }, [location.search]);
   const activeTab = useMemo<AppTab>(() => {
-    const routeTab = decodeValue(tab);
+    const routeTab = decodeValue(tab) || resolveTabFromPathname(location.pathname);
     if (routeTab === 'plugins' && pluginName) {
       return `plugin:${pluginName}` as AppTab;
     }
 
     return (routeTab || 'chat') as AppTab;
-  }, [pluginName, tab]);
+  }, [location.pathname, pluginName, tab]);
   const isPluginActive = activeTab.startsWith('plugin:');
 
   useEffect(() => {
