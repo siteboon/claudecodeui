@@ -126,8 +126,8 @@ export const useWorkspaces = () => {
     [navigate, workspaces],
   );
 
-  const openNewSession = useCallback(() => {
-    navigate('/');
+  const openNewSession = useCallback((workspaceId: string) => {
+    navigate(`/workspaces/${encodeURIComponent(workspaceId)}/chat`);
   }, [navigate]);
 
   const toggleWorkspaceStar = useCallback(async (workspaceId: string) => {

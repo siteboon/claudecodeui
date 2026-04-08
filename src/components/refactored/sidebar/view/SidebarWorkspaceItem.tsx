@@ -40,7 +40,7 @@ type SidebarWorkspaceItemProps = {
   onDeleteWorkspace: (workspace: WorkspaceRecord) => void;
   onSessionSelect: (workspacePath: string, sessionId: string) => void;
   onSessionDelete: (workspacePath: string, sessionId: string) => void;
-  onNewSession: () => void;
+  onNewSession: (workspaceId: string) => void;
 };
 
 export function SidebarWorkspaceItem({
@@ -396,7 +396,7 @@ export function SidebarWorkspaceItem({
               className="flex h-8 w-full items-center justify-center gap-2 rounded-md bg-primary text-xs font-medium text-primary-foreground transition-all duration-150 hover:bg-primary/90 active:scale-[0.98]"
               onClick={(event) => {
                 event.stopPropagation();
-                onNewSession();
+                onNewSession(workspace.workspaceId);
               }}
             >
               <Plus className="h-3 w-3" />
@@ -408,7 +408,7 @@ export function SidebarWorkspaceItem({
             variant="default"
             size="sm"
             className="mt-1 hidden h-8 w-full justify-start gap-2 bg-primary text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 md:flex"
-            onClick={onNewSession}
+            onClick={() => onNewSession(workspace.workspaceId)}
           >
             <Plus className="h-3 w-3" />
             New Session

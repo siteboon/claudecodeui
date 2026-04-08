@@ -27,7 +27,7 @@ type SidebarWorkspaceListProps = {
   onDeleteWorkspace: (workspace: WorkspaceRecord) => void;
   onSessionSelect: (workspacePath: string, sessionId: string) => void;
   onSessionDelete: (workspacePath: string, sessionId: string) => void;
-  onNewSession: () => void;
+  onNewSession: (workspaceId: string) => void;
 };
 
 const SectionHeading = ({ title }: { title: string }) => (
