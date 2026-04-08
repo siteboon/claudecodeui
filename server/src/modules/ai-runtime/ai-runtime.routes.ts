@@ -4,6 +4,7 @@ import { asyncHandler } from '@/shared/http/async-handler.js';
 import { AppError } from '@/shared/utils/app-error.js';
 import { createApiErrorResponse, createApiSuccessResponse } from '@/shared/http/api-response.js';
 import { llmService } from '@/modules/ai-runtime/services/ai-runtime.service.js';
+import { llmAuthService } from '@/modules/ai-runtime/services/auth.service.js';
 import { llmSessionsService } from '@/modules/ai-runtime/services/sessions.service.js';
 import { llmMcpService } from '@/modules/ai-runtime/services/mcp.service.js';
 import { llmSkillsService } from '@/modules/ai-runtime/services/skills.service.js';
@@ -230,6 +231,15 @@ router.get(
     const provider = parseProvider(req.params.provider);
     const models = await llmService.listModels(provider);
     res.json(createApiSuccessResponse({ provider, models }));
+  }),
+);
+
+router.get(
+  '/providers/:provider/auth/status',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const auth = await llmAuthService.getProviderAuthStatus(provider);
+    res.json(createApiSuccessResponse({ provider, auth }));
   }),
 );
 

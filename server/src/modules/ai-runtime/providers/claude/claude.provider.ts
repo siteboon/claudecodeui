@@ -9,6 +9,7 @@ import { readFile } from 'node:fs/promises';
 
 import { BaseSdkProvider } from '@/modules/ai-runtime/providers/base/base-sdk.provider.js';
 import type {
+  IProviderAuthRuntime,
   IProviderMcpRuntime,
   IProviderSessionSynchronizerRuntime,
   IProviderSkillsRuntime,
@@ -18,6 +19,7 @@ import type {
   StartSessionInput,
 } from '@/modules/ai-runtime/types/index.js';
 import { ClaudeMcpRuntime } from '@/modules/ai-runtime/providers/claude/claude-mcp.runtime.js';
+import { ClaudeAuthRuntime } from '@/modules/ai-runtime/providers/claude/claude-auth.runtime.js';
 import { ClaudeSkillsRuntime } from '@/modules/ai-runtime/providers/claude/claude-skills.runtime.js';
 import { ClaudeSessionSynchronizerRuntime } from '@/modules/ai-runtime/providers/claude/claude-session-synchronizer.runtime.js';
 
@@ -75,6 +77,7 @@ const readString = (value: unknown): string | undefined => {
  * Claude SDK provider implementation.
  */
 export class ClaudeProvider extends BaseSdkProvider {
+  readonly auth: IProviderAuthRuntime = new ClaudeAuthRuntime();
   readonly mcp: IProviderMcpRuntime = new ClaudeMcpRuntime();
   readonly skills: IProviderSkillsRuntime = new ClaudeSkillsRuntime();
   readonly sessionSynchronizer: IProviderSessionSynchronizerRuntime = new ClaudeSessionSynchronizerRuntime();

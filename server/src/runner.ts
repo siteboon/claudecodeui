@@ -56,7 +56,6 @@ const [
     pushSubRoutes,
     agentRoutes,
     projectsRoutes,
-    cliAuthRoutes,
     codexRoutes,
     geminiRoutes,
     pluginsRoutes,
@@ -83,7 +82,6 @@ const [
     importRoute('./modules/push-sub/push-sub.routes.js'),
     importRoute('./modules/agent/agent.routes.js'),
     importRoute('./modules/projects/projects.routes.js'),
-    importRoute('./modules/cli-auth/cli-auth.routes.js'),
     importRoute('./modules/codex/codex.routes.js'),
     importRoute('./modules/gemini/gemini.routes.js'),
     importRoute('./modules/plugins/plugins.routes.js'),
@@ -161,9 +159,6 @@ app.use('/api/api-keys', authenticateToken, apiKeysRoutes);
 app.use('/api/credentials', authenticateToken, credentialsRoutes);
 app.use('/api/notification-preferences', authenticateToken, notificationPreferencesRoutes);
 app.use('/api/push-sub', authenticateToken, pushSubRoutes);
-
-// CLI Authentication API Routes (protected)
-app.use('/api/cli', authenticateToken, cliAuthRoutes);
 
 // User API Routes (protected)
 app.use('/api/user', authenticateToken, userRoutes);

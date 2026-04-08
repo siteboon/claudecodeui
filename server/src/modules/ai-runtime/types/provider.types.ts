@@ -2,6 +2,7 @@ import type { LLMProvider } from '@/shared/types/app.js';
 import type { IProviderMcpRuntime } from '@/modules/ai-runtime/types/mcp.types.js';
 import type { IProviderSkillsRuntime } from '@/modules/ai-runtime/types/skills.types.js';
 import type { IProviderSessionSynchronizerRuntime } from '@/modules/ai-runtime/types/session-synchronizer.types.js';
+import type { IProviderAuthRuntime } from '@/modules/ai-runtime/types/auth.types.js';
 
 export type ProviderExecutionFamily = 'sdk' | 'cli';
 
@@ -80,6 +81,7 @@ export interface IProvider {
   readonly mcp: IProviderMcpRuntime;
   readonly skills: IProviderSkillsRuntime;
   readonly sessionSynchronizer: IProviderSessionSynchronizerRuntime;
+  readonly auth: IProviderAuthRuntime;
 
   listModels(): Promise<ProviderModel[]>;
 

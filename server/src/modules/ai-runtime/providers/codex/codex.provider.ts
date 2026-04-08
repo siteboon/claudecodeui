@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 import { BaseSdkProvider } from '@/modules/ai-runtime/providers/base/base-sdk.provider.js';
 import type {
+  IProviderAuthRuntime,
   IProviderMcpRuntime,
   IProviderSessionSynchronizerRuntime,
   IProviderSkillsRuntime,
@@ -12,6 +13,7 @@ import type {
   StartSessionInput,
 } from '@/modules/ai-runtime/types/index.js';
 import { CodexMcpRuntime } from '@/modules/ai-runtime/providers/codex/codex-mcp.runtime.js';
+import { CodexAuthRuntime } from '@/modules/ai-runtime/providers/codex/codex-auth.runtime.js';
 import { CodexSkillsRuntime } from '@/modules/ai-runtime/providers/codex/codex-skills.runtime.js';
 import { CodexSessionSynchronizerRuntime } from '@/modules/ai-runtime/providers/codex/codex-session-synchronizer.runtime.js';
 import { AppError } from '@/shared/utils/app-error.js';
@@ -67,6 +69,7 @@ type CodexSdkModule = {
  * Codex SDK provider implementation.
  */
 export class CodexProvider extends BaseSdkProvider {
+  readonly auth: IProviderAuthRuntime = new CodexAuthRuntime();
   readonly mcp: IProviderMcpRuntime = new CodexMcpRuntime();
   readonly skills: IProviderSkillsRuntime = new CodexSkillsRuntime();
   readonly sessionSynchronizer: IProviderSessionSynchronizerRuntime = new CodexSessionSynchronizerRuntime();

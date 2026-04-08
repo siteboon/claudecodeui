@@ -80,8 +80,8 @@ export const DEFAULT_CURSOR_PERMISSIONS: CursorPermissionsState = {
 };
 
 export const AUTH_STATUS_ENDPOINTS: Record<AgentProvider, string> = {
-  claude: '/api/cli/claude/status',
-  cursor: '/api/cli/cursor/status',
-  codex: '/api/cli/codex/status',
-  gemini: '/api/cli/gemini/status',
+  claude: '/api/llm/providers/claude/auth/status',
+  cursor: '/api/llm/providers/cursor/auth/status',
+  codex: '/api/llm/providers/codex/auth/status',
+  gemini: '/api/llm/providers/gemini/auth/status',
 };

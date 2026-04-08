@@ -33,11 +33,22 @@ type UseSettingsControllerArgs = {
   onClose: () => void;
 };
 
-type StatusApiResponse = {
+type AuthStatusPayload = {
   authenticated?: boolean;
   email?: string | null;
   error?: string | null;
-  method?: string;
+  method?: string | null;
+};
+
+type StatusApiResponse = {
+  success?: boolean;
+  data?: {
+    provider?: AgentProvider;
+    auth?: AuthStatusPayload;
+  };
+  error?: {
+    message?: string;
+  };
 };
 
 type JsonResult = {
@@ -249,13 +260,24 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
         return;
       }
 
-      const data = await toResponseJson<StatusApiResponse>(response);
+      const payload = await toResponseJson<StatusApiResponse>(response);
+      const data = payload.data?.auth;
+      if (!payload.success || !data) {
+        setAuthStatusByProvider(provider, {
+          authenticated: false,
+          email: null,
+          loading: false,
+          error: payload.error?.message || 'Failed to parse authentication status',
+        });
+        return;
+      }
+
       setAuthStatusByProvider(provider, {
         authenticated: Boolean(data.authenticated),
         email: data.email || null,
         loading: false,
         error: data.error || null,
-        method: data.method,
+        method: data.method ?? undefined,
       });
     } catch (error) {
       console.error(`Error checking ${provider} auth status:`, error);

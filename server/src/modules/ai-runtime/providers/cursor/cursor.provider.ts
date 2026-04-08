@@ -1,5 +1,6 @@
 import { BaseCliProvider } from '@/modules/ai-runtime/providers/base/base-cli.provider.js';
 import type {
+  IProviderAuthRuntime,
   IProviderMcpRuntime,
   IProviderSessionSynchronizerRuntime,
   IProviderSkillsRuntime,
@@ -7,6 +8,7 @@ import type {
   StartSessionInput,
 } from '@/modules/ai-runtime/types/index.js';
 import { CursorMcpRuntime } from '@/modules/ai-runtime/providers/cursor/cursor-mcp.runtime.js';
+import { CursorAuthRuntime } from '@/modules/ai-runtime/providers/cursor/cursor-auth.runtime.js';
 import { CursorSkillsRuntime } from '@/modules/ai-runtime/providers/cursor/cursor-skills.runtime.js';
 import { CursorSessionSynchronizerRuntime } from '@/modules/ai-runtime/providers/cursor/cursor-session-synchronizer.runtime.js';
 
@@ -23,6 +25,7 @@ const ANSI_REGEX =
  * Cursor CLI provider implementation.
  */
 export class CursorProvider extends BaseCliProvider {
+  readonly auth: IProviderAuthRuntime = new CursorAuthRuntime();
   readonly mcp: IProviderMcpRuntime = new CursorMcpRuntime();
   readonly skills: IProviderSkillsRuntime = new CursorSkillsRuntime();
   readonly sessionSynchronizer: IProviderSessionSynchronizerRuntime = new CursorSessionSynchronizerRuntime();

@@ -31,7 +31,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
 
   const checkProviderAuthStatus = useCallback(async (provider: CliProvider) => {
     try {
-      const response = await authenticatedFetch(`/api/cli/${provider}/status`);
+      const response = await authenticatedFetch(`/api/llm/providers/${provider}/auth/status`);
       if (!response.ok) {
         setProviderStatuses((previous) => ({
           ...previous,
@@ -46,18 +46,39 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
       }
 
       const payload = (await response.json()) as {
-        authenticated?: boolean;
-        email?: string | null;
-        error?: string | null;
+        success?: boolean;
+        data?: {
+          auth?: {
+            authenticated?: boolean;
+            email?: string | null;
+            error?: string | null;
+          };
+        };
+        error?: {
+          message?: string;
+        };
       };
+      const auth = payload.data?.auth;
+      if (!payload.success || !auth) {
+        setProviderStatuses((previous) => ({
+          ...previous,
+          [provider]: {
+            authenticated: false,
+            email: null,
+            loading: false,
+            error: payload.error?.message ?? 'Failed to parse authentication status',
+          },
+        }));
+        return;
+      }
 
       setProviderStatuses((previous) => ({
         ...previous,
         [provider]: {
-          authenticated: Boolean(payload.authenticated),
-          email: payload.email ?? null,
+          authenticated: Boolean(auth.authenticated),
+          email: auth.email ?? null,
           loading: false,
-          error: payload.error ?? null,
+          error: auth.error ?? null,
         },
       }));
     } catch (caughtError) {
