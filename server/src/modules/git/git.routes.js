@@ -2,9 +2,16 @@ import express from 'express';
 import spawn from 'cross-spawn';
 import path from 'path';
 import { promises as fs } from 'fs';
-import { extractProjectDirectory } from '../../../projects.js';
 import { queryClaudeSDK } from '../../../claude-sdk.js';
 import { spawnCursor } from '../../../cursor-cli.js';
+
+const extractProjectDirectory = (projectName) => {
+    return new Promise((resolve, reject) => {
+        //  just return the original project name for now, since we are no longer encoding the path in the project name
+        resolve(projectName);
+    });
+}
+
 
 const router = express.Router();
 const COMMIT_DIFF_CHARACTER_LIMIT = 500_000;

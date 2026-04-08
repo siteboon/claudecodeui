@@ -117,29 +117,29 @@ export const api = {
       body: JSON.stringify({ filePath, content }),
     }),
   getFiles: (projectName, options = {}) =>
-    authenticatedFetch(`/api/projects/${projectName}/files`, options),
+    authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/files`, options),
 
   // File operations
   createFile: (projectName, { path, type, name }) =>
-    authenticatedFetch(`/api/projects/${projectName}/files/create`, {
+    authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/files/create`, {
       method: 'POST',
       body: JSON.stringify({ path, type, name }),
     }),
 
   renameFile: (projectName, { oldPath, newName }) =>
-    authenticatedFetch(`/api/projects/${projectName}/files/rename`, {
+    authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/files/rename`, {
       method: 'PUT',
       body: JSON.stringify({ oldPath, newName }),
     }),
 
   deleteFile: (projectName, { path, type }) =>
-    authenticatedFetch(`/api/projects/${projectName}/files`, {
+    authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/files`, {
       method: 'DELETE',
       body: JSON.stringify({ path, type }),
     }),
 
   uploadFiles: (projectName, formData) =>
-    authenticatedFetch(`/api/projects/${projectName}/files/upload`, {
+    authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/files/upload`, {
       method: 'POST',
       body: formData,
       headers: {}, // Let browser set Content-Type for FormData
@@ -156,20 +156,20 @@ export const api = {
   taskmaster: {
     // Initialize TaskMaster in a project
     init: (projectName) =>
-      authenticatedFetch(`/api/taskmaster/init/${projectName}`, {
+      authenticatedFetch(`/api/taskmaster/init/${encodeURIComponent(projectName)}`, {
         method: 'POST',
       }),
 
     // Add a new task
     addTask: (projectName, { prompt, title, description, priority, dependencies }) =>
-      authenticatedFetch(`/api/taskmaster/add-task/${projectName}`, {
+      authenticatedFetch(`/api/taskmaster/add-task/${encodeURIComponent(projectName)}`, {
         method: 'POST',
         body: JSON.stringify({ prompt, title, description, priority, dependencies }),
       }),
 
     // Parse PRD to generate tasks
     parsePRD: (projectName, { fileName, numTasks, append }) =>
-      authenticatedFetch(`/api/taskmaster/parse-prd/${projectName}`, {
+      authenticatedFetch(`/api/taskmaster/parse-prd/${encodeURIComponent(projectName)}`, {
         method: 'POST',
         body: JSON.stringify({ fileName, numTasks, append }),
       }),
@@ -180,14 +180,14 @@ export const api = {
 
     // Apply a PRD template
     applyTemplate: (projectName, { templateId, fileName, customizations }) =>
-      authenticatedFetch(`/api/taskmaster/apply-template/${projectName}`, {
+      authenticatedFetch(`/api/taskmaster/apply-template/${encodeURIComponent(projectName)}`, {
         method: 'POST',
         body: JSON.stringify({ templateId, fileName, customizations }),
       }),
 
     // Update a task
     updateTask: (projectName, taskId, updates) =>
-      authenticatedFetch(`/api/taskmaster/update-task/${projectName}/${taskId}`, {
+      authenticatedFetch(`/api/taskmaster/update-task/${encodeURIComponent(projectName)}/${taskId}`, {
         method: 'PUT',
         body: JSON.stringify(updates),
       }),

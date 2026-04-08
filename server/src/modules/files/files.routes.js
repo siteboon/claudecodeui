@@ -5,10 +5,16 @@ import os from 'os';
 import mime from 'mime-types';
 import fetch from 'node-fetch';
 import { promises as fsPromises } from 'fs';
-import { extractProjectDirectory } from '../../../projects.js';
 import { authenticateToken } from '../auth/auth.middleware.js';
 
 const router = express.Router();
+
+const extractProjectDirectory = (projectName) => {
+    return new Promise((resolve, reject) => {
+        //  just return the original project name for now, since we are no longer encoding the path in the project name
+        resolve(projectName);
+    });
+}
 
 /**
  * Validate that a path is within the project root
@@ -149,7 +155,9 @@ router.get('/api/projects/:projectName/file', authenticateToken, async (req, res
             return res.status(400).json({ error: 'Invalid file path' });
         }
 
+        console.log("PROJECT NAME IS: ", projectName);
         const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+        console.log("PROJECT ROOT IS: ", projectRoot);
         if (!projectRoot) {
             return res.status(404).json({ error: 'Project not found' });
         }
@@ -288,7 +296,9 @@ router.get('/api/projects/:projectName/files', authenticateToken, async (req, re
         // Use extractProjectDirectory to get the actual project path
         let actualPath;
         try {
+            console.log("Extracting project directory for:", req.params.projectName);
             actualPath = await extractProjectDirectory(req.params.projectName);
+            console.log("Extracted project directory:", actualPath);
         } catch (error) {
             console.error('Error extracting project directory:', error);
             // Fallback to simple dash replacement

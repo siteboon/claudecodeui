@@ -16,6 +16,8 @@ import { WebSocketProvider } from './contexts/WebSocketContext';
 import i18n from './i18n/config.js';
 import { SystemUIProvider } from '@/components/refactored/shared/contexts/system-ui-context/SystemUIProvider';
 import { RootLayout } from '@/components/refactored/shared/layout/RootLayout';
+import StandaloneShellRouterAdapter from '@/components/standalone-shell/view/StandaloneShellRouterAdapter';
+import FileTreeRouterAdapter from '@/components/file-tree/view/FileTreeRouterAdapter.js';
 
 const isValidRouteTab = (value: string | undefined): boolean => {
   if (!value) {
@@ -116,6 +118,8 @@ const router = createBrowserRouter(
           element: <WorkspaceLayout />,
           children: [
             { index: true, element: <Navigate to="chat" replace /> },
+            { path: 'shell', element: <StandaloneShellRouterAdapter /> },
+            { path: 'files', element: <FileTreeRouterAdapter /> },
             { path: ':tab', element: <WorkspaceTabRoute /> },
           ],
         },
@@ -123,6 +127,7 @@ const router = createBrowserRouter(
           path: 'sessions/:sessionId',
           children: [
             { index: true, element: <Navigate to="chat" replace /> },
+            { path: 'shell', element: <StandaloneShellRouterAdapter /> },
             { path: ':tab', element: <WorkspaceTabRoute /> },
           ],
         },

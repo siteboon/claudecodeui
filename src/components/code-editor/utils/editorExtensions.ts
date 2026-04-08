@@ -8,7 +8,7 @@ import { python } from '@codemirror/lang-python';
 import { getChunks } from '@codemirror/merge';
 import { EditorView, ViewPlugin } from '@codemirror/view';
 import { showMinimap } from '@replit/codemirror-minimap';
-import type { CodeEditorFile } from '../types/types';
+import { CodeEditorFile } from '@/hooks/code-editor-sidebar/types.js';
 
 // Lightweight lexer for `.env` files (including `.env.*` variants).
 const envLanguage = StreamLanguage.define({

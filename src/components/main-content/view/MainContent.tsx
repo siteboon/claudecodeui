@@ -8,7 +8,7 @@ import type { MainContentProps } from '../types/types';
 import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import { useUiPreferences } from '../../../hooks/useUiPreferences';
-import { useEditorSidebar } from '../../code-editor/hooks/useEditorSidebar';
+import { useEditorSidebar } from '../../../hooks/code-editor-sidebar/useEditorSidebar';
 import EditorSidebar from '../../code-editor/view/EditorSidebar';
 import type { Project } from '../../../types/app';
 import { TaskMasterPanel } from '../../task-master';
@@ -67,10 +67,7 @@ function MainContent({
     handleCloseEditor,
     handleToggleEditorExpand,
     handleResizeStart,
-  } = useEditorSidebar({
-    selectedProject,
-    isMobile,
-  });
+  } = useEditorSidebar({});
 
   useEffect(() => {
     const selectedProjectName = selectedProject?.name;

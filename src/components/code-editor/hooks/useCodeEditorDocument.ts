@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../../utils/api';
-import type { CodeEditorFile } from '../types/types';
 import { isBinaryFile } from '../utils/binaryFile';
+import { CodeEditorFile } from '@/hooks/code-editor-sidebar/types.js';
 
 type UseCodeEditorDocumentParams = {
   file: CodeEditorFile;

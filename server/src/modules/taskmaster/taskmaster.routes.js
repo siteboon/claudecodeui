@@ -13,15 +13,17 @@ import fs from 'fs';
 import path from 'path';
 import { promises as fsPromises } from 'fs';
 import spawn from 'cross-spawn';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
-import os from 'os';
-import { extractProjectDirectory } from '../../../projects.js';
+
 import { detectTaskMasterMCPServer } from '../../../utils/mcp-detector.js';
 import { broadcastTaskMasterProjectUpdate, broadcastTaskMasterTasksUpdate } from '../../../utils/taskmaster-websocket.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const extractProjectDirectory = (projectName) => {
+    return new Promise((resolve, reject) => {
+        //  just return the original project name for now, since we are no longer encoding the path in the project name
+        resolve(projectName);
+    });
+}
+
 
 const router = express.Router();
 

@@ -46,6 +46,8 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
   }, [toast]);
 
   const { files, loading, refreshFiles } = useFileTreeData(selectedProject);
+
+  console.log("Files are: ", files)
   const { viewMode, changeViewMode } = useFileTreeViewMode();
   const { expandedDirs, toggleDirectory, expandDirectories, collapseAll } = useExpandedDirectories();
   const { searchQuery, setSearchQuery, filteredFiles } = useFileTreeSearch({

@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
-import type { Project } from '../../../types/app';
-import type { CodeEditorDiffInfo, CodeEditorFile } from '../types/types';
+import { CodeEditorFile, CodeEditorDiffInfo } from '@/hooks/code-editor-sidebar/types.js';
+import { useDeviceSettings } from '@/hooks/useDeviceSettings.js';
+
 
 type UseEditorSidebarOptions = {
-  selectedProject: Project | null;
-  isMobile: boolean;
   initialWidth?: number;
 };
 
+// TODO: Remove every parameter here (except initial width)
+// selectedProject is only used to set projectName on the file being edited. It turns out that projectName 
+// isn't actually used anywhere in the code editor, so it can be removed without affecting functionality. If we do want to keep track of projectName for some reason, we can set it in the MainContent component where the file is opened instead of here.
+// isMobile should be found from useDeviceSettings hook
+// 
 export const useEditorSidebar = ({
-  selectedProject,
-  isMobile,
   initialWidth = 600,
 }: UseEditorSidebarOptions) => {
   const [editingFile, setEditingFile] = useState<CodeEditorFile | null>(null);
@@ -21,6 +23,8 @@ export const useEditorSidebar = ({
   const [hasManualWidth, setHasManualWidth] = useState(false);
   const resizeHandleRef = useRef<HTMLDivElement | null>(null);
 
+  const { isMobile } = useDeviceSettings({ trackPWA: false });
+
   const handleFileOpen = useCallback(
     (filePath: string, diffInfo: CodeEditorDiffInfo | null = null) => {
       const normalizedPath = filePath.replace(/\\/g, '/');
@@ -29,11 +33,10 @@ export const useEditorSidebar = ({
       setEditingFile({
         name: fileName,
         path: filePath,
-        projectName: selectedProject?.name,
         diffInfo,
       });
     },
-    [selectedProject?.name],
+    [],
   );
 
   const handleCloseEditor = useCallback(() => {

@@ -1,4 +1,4 @@
-import type { CodeEditorFile } from '../../types/types';
+import { CodeEditorFile } from "@/hooks/code-editor-sidebar/types.js";
 
 type CodeEditorBinaryFileProps = {
   file: CodeEditorFile;

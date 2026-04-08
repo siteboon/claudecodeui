@@ -1,5 +1,5 @@
 import { Code2, Download, Eye, Maximize2, Minimize2, Save, Settings as SettingsIcon, X } from 'lucide-react';
-import type { CodeEditorFile } from '../../types/types';
+import { CodeEditorFile } from '@/hooks/code-editor-sidebar/types.js';
 
 type CodeEditorHeaderProps = {
   file: CodeEditorFile;

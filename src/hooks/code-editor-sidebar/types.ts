@@ -1,0 +1,12 @@
+export type CodeEditorDiffInfo = {
+  old_string?: string;
+  new_string?: string;
+  [key: string]: unknown;
+};
+
+export type CodeEditorFile = {
+  name: string;
+  path: string;
+  diffInfo?: CodeEditorDiffInfo | null;
+  [key: string]: unknown;
+};
