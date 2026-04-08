@@ -21,6 +21,7 @@ import FileTreeRouterAdapter from '@/components/file-tree/view/FileTreeRouterAda
 import GitPanelRouterAdapter from '@/components/git-panel/view/GitPanelRouterAdapter.js';
 import { TaskMasterPanel } from '@/components/task-master/index.js';
 import PluginContentRouterAdapter from '@/components/plugins/view/PluginContentRouterAdapter.js';
+import ChatInterface from '@/components/refactored/chat/view/ChatInterface.js';
 
 const isValidRouteTab = (value: string | undefined): boolean => {
   if (!value) {
@@ -121,6 +122,7 @@ const router = createBrowserRouter(
           element: <WorkspaceLayout />,
           children: [
             { index: true, element: <Navigate to="chat" replace /> },
+            { path: 'chat', element: <ChatInterface /> },
             { path: 'shell', element: <StandaloneShellRouterAdapter /> },
             { path: 'files', element: <FileTreeRouterAdapter /> },
             { path: 'git', element: <GitPanelRouterAdapter /> },

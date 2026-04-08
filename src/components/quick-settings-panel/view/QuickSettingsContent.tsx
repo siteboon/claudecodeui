@@ -5,8 +5,6 @@ import LanguageSelector from '../../../shared/view/ui/LanguageSelector';
 import {
   INPUT_SETTING_TOGGLES,
   SETTING_ROW_CLASS,
-  TOOL_DISPLAY_TOGGLES,
-  VIEW_OPTION_TOGGLES,
 } from '../constants';
 import type {
   PreferenceToggleItem,
@@ -59,14 +57,6 @@ export default function QuickSettingsContent({
           <DarkModeToggle />
         </div>
         <LanguageSelector compact />
-      </QuickSettingsSection>
-
-      <QuickSettingsSection title={t('quickSettings.sections.toolDisplay')}>
-        {renderToggleRows(TOOL_DISPLAY_TOGGLES)}
-      </QuickSettingsSection>
-
-      <QuickSettingsSection title={t('quickSettings.sections.viewOptions')}>
-        {renderToggleRows(VIEW_OPTION_TOGGLES)}
       </QuickSettingsSection>
 
       <QuickSettingsSection title={t('quickSettings.sections.inputSettings')}>
