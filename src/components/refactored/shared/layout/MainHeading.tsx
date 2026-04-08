@@ -111,22 +111,20 @@ export function MainHeading() {
     return () => observer.disconnect();
   }, [isMobile, updateScrollState]);
 
-  if (!workspaceId) {
+  if (!workspaceId && !sessionId) {
     return null;
   }
 
   const handleTabSelect = (nextTab: AppTab) => {
-    // Preserve workspace/session context while switching only the active tab path segment.
-    const encodedWorkspaceId = encodeURIComponent(decodedWorkspaceId);
+    // Preserve route context while switching only the active tab path segment.
     const encodedTab = encodeURIComponent(nextTab);
 
     if (decodedSessionId) {
-      navigate(
-        `/workspaces/${encodedWorkspaceId}/sessions/${encodeURIComponent(decodedSessionId)}/${encodedTab}`,
-      );
+      navigate(`/sessions/${encodeURIComponent(decodedSessionId)}/${encodedTab}`);
       return;
     }
 
+    const encodedWorkspaceId = encodeURIComponent(decodedWorkspaceId);
     navigate(`/workspaces/${encodedWorkspaceId}/${encodedTab}`);
   };
 
@@ -158,7 +156,7 @@ export function MainHeading() {
                 {title}
               </h2>
               <div className="truncate text-[11px] leading-tight text-muted-foreground">
-                {decodedWorkspaceId}
+                {decodedWorkspaceId || t('mainContent.newSession')}
               </div>
             </div>
           </div>

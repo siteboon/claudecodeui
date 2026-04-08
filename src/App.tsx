@@ -66,7 +66,7 @@ function WorkspaceTabRoute() {
     tab: string;
   }>();
 
-  if (!workspaceId) {
+  if (!workspaceId && !sessionId) {
     return <Navigate to="/" replace />;
   }
 
@@ -74,7 +74,7 @@ function WorkspaceTabRoute() {
     return <Navigate to="../chat" replace />;
   }
 
-  const decodedWorkspaceId = decodeURIComponent(workspaceId);
+  const decodedWorkspaceId = workspaceId ? decodeURIComponent(workspaceId) : null;
   const decodedSessionId = sessionId ? decodeURIComponent(sessionId) : null;
   const decodedTab = tab ? decodeURIComponent(tab) : 'chat';
 
@@ -83,7 +83,10 @@ function WorkspaceTabRoute() {
       <div className="rounded-xl border border-border/70 bg-card/30 p-5">
         <h2 className="text-lg font-semibold">{decodedTab} view</h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          Workspace: <span className="font-medium text-foreground">{decodedWorkspaceId}</span>
+          Workspace:{' '}
+          <span className="font-medium text-foreground">
+            {decodedWorkspaceId || 'none (session-level route)'}
+          </span>
         </p>
         <p className="mt-1 text-sm text-muted-foreground">
           Session:{' '}
@@ -102,20 +105,20 @@ const router = createBrowserRouter(
       path: '/',
       element: <RootLayout />,
       children: [
-        { index: true, element: <NoWorkspaceRoute /> },
+        { index: true, element: <NoWorkspaceRoute /> }, // TODO: Show empty state component loader here.
         {
           path: 'workspaces/:workspaceId',
           element: <WorkspaceLayout />,
           children: [
             { index: true, element: <Navigate to="chat" replace /> },
             { path: ':tab', element: <WorkspaceTabRoute /> },
-            {
-              path: 'sessions/:sessionId',
-              children: [
-                { index: true, element: <Navigate to="chat" replace /> },
-                { path: ':tab', element: <WorkspaceTabRoute /> },
-              ],
-            },
+          ],
+        },
+        {
+          path: 'sessions/:sessionId',
+          children: [
+            { index: true, element: <Navigate to="chat" replace /> },
+            { path: ':tab', element: <WorkspaceTabRoute /> },
           ],
         },
       ],

@@ -23,7 +23,7 @@ import {
   splitWorkspacesByStarred,
 } from '@/components/refactored/sidebar/utils/workspaceTransforms';
 
-const SESSION_ROUTE_PATTERN = /^\/workspaces\/[^/]+\/sessions\/([^/]+)(?:\/[^/]+)?$/;
+const SESSION_ROUTE_PATTERN = /^\/sessions\/([^/]+)(?:\/[^/]+)?$/;
 
 const extractSessionIdFromPathname = (pathname: string): string | null => {
   const sessionMatch = pathname.match(SESSION_ROUTE_PATTERN);
@@ -120,7 +120,7 @@ export const useWorkspaces = () => {
       }
 
       navigate(
-        `/workspaces/${encodeURIComponent(matchedWorkspace.workspaceId)}/sessions/${encodeURIComponent(sessionId)}`,
+        `/sessions/${encodeURIComponent(sessionId)}`,
       );
     },
     [navigate, workspaces],

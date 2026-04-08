@@ -89,21 +89,19 @@ export function MobileNav() {
   }, [moreOpen]);
 
   const navigateToTab = (nextTab: AppTab) => {
-    if (!workspaceId) {
+    if (!workspaceId && !sessionId) {
       return;
     }
 
-    const encodedWorkspaceId = encodeURIComponent(decodeValue(workspaceId));
     const encodedTab = encodeURIComponent(nextTab);
     const decodedSessionId = decodeValue(sessionId);
 
     if (decodedSessionId) {
-      navigate(
-        `/workspaces/${encodedWorkspaceId}/sessions/${encodeURIComponent(decodedSessionId)}/${encodedTab}`,
-      );
+      navigate(`/sessions/${encodeURIComponent(decodedSessionId)}/${encodedTab}`);
       return;
     }
 
+    const encodedWorkspaceId = encodeURIComponent(decodeValue(workspaceId));
     navigate(`/workspaces/${encodedWorkspaceId}/${encodedTab}`);
   };
 
