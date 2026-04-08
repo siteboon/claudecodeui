@@ -3,6 +3,7 @@ import fsp, { readFile } from 'node:fs/promises';
 
 import { scanStateDb } from '@/shared/database/repositories/scan-state.db.js';
 import { sessionsDb } from '@/shared/database/repositories/sessions.db.js';
+import { workspaceOriginalPathsDb } from '@/shared/database/repositories/workspace-original-paths.db.js';
 import type { LLMProvider } from '@/shared/types/app.js';
 import { AppError } from '@/shared/utils/app-error.js';
 import { llmProviderRegistry } from '@/modules/ai-runtime/ai-runtime.registry.js';
@@ -118,7 +119,11 @@ export const llmSessionsService = {
       });
     }
 
-    return session;
+    const workspace = workspaceOriginalPathsDb.getWorkspacePath(session.workspace_path);
+    return {
+      ...session,
+      workspace_id: workspace?.workspace_id ?? null,
+    };
   },
 
   /**

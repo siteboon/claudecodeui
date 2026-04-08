@@ -29,6 +29,18 @@ const parseWorkspaceIdFromBody = (req: Request): string => {
   return workspaceId;
 };
 
+const parseWorkspaceIdFromParams = (req: Request): string => {
+  const workspaceId = getTrimmedString(req.params.workspaceId);
+  if (!workspaceId) {
+    throw new AppError('workspaceId is required.', {
+      code: 'WORKSPACE_ID_REQUIRED',
+      statusCode: 400,
+    });
+  }
+
+  return workspaceId;
+};
+
 const parseWorkspaceCustomNameFromBody = (req: Request): string | null => {
   const body = req.body as Record<string, unknown> | undefined;
   const customName = getTrimmedString(body?.workspaceCustomName);
@@ -40,6 +52,15 @@ router.get(
   asyncHandler(async (_req: Request, res: Response) => {
     const workspaces = workspaceService.listWorkspaces();
     res.json(createApiSuccessResponse({ workspaces }));
+  }),
+);
+
+router.get(
+  '/:workspaceId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const workspaceId = parseWorkspaceIdFromParams(req);
+    const workspace = workspaceService.getWorkspaceById(workspaceId);
+    res.json(createApiSuccessResponse({ workspace }));
   }),
 );
 

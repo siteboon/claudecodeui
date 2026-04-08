@@ -1,4 +1,4 @@
-import type { WorkspaceRecord } from '@/components/refactored/sidebar/types';
+import type { SessionMetadataRecord, WorkspaceRecord } from '@/components/refactored/sidebar/types';
 import { authenticatedFetch } from '@/utils/api';
 
 const SIDEBAR_ENDPOINTS = {
@@ -54,6 +54,54 @@ export const getWorkspaceSessions = async (): Promise<WorkspaceRecord[]> => {
   }
 
   return payload?.data?.workspaces || [];
+};
+
+export const getWorkspaceById = async (workspaceId: string): Promise<WorkspaceRecord> => {
+  const response = await authenticatedFetch(
+    `${SIDEBAR_ENDPOINTS.getWorkspaceSessions}/${encodeURIComponent(workspaceId)}`,
+  );
+  const payload = await parseJsonSafely<{
+    success?: boolean;
+    data?: { workspace?: WorkspaceRecord };
+    error?: { message?: string };
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(
+      payload?.error?.message ||
+        getErrorMessage('Failed to fetch workspace', payload),
+    );
+  }
+
+  const workspace = payload?.data?.workspace;
+  if (!workspace) {
+    throw new Error('Workspace not found in response payload');
+  }
+
+  return workspace;
+};
+
+export const getSessionById = async (sessionId: string): Promise<SessionMetadataRecord> => {
+  const response = await authenticatedFetch(`/api/llm/sessions/${encodeURIComponent(sessionId)}`);
+  const payload = await parseJsonSafely<{
+    success?: boolean;
+    data?: { session?: SessionMetadataRecord };
+    error?: { message?: string };
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(
+      payload?.error?.message ||
+        getErrorMessage('Failed to fetch session', payload),
+    );
+  }
+
+  const session = payload?.data?.session;
+  if (!session) {
+    throw new Error('Session not found in response payload');
+  }
+
+  return session;
 };
 
 export const updateWorkspaceStar = async (

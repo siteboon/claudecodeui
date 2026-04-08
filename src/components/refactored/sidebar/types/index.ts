@@ -41,3 +41,16 @@ export type WorkspaceGroups = {
   starred: WorkspaceRecord[];
   unstarred: WorkspaceRecord[];
 };
+
+
+// -------- SESSION TYPES --------
+export type SessionMetadataRecord = {
+  session_id: string;
+  provider: SessionProvider;
+  workspace_path: string;
+  workspace_id: string | null;
+  custom_name: string | null;
+  jsonl_path: string | null;
+  created_at: string;
+  updated_at: string;
+};

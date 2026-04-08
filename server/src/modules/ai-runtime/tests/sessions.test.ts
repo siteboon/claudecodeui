@@ -7,6 +7,7 @@ import test from 'node:test';
 import { AppError } from '@/shared/utils/app-error.js';
 import { scanStateDb } from '@/shared/database/repositories/scan-state.db.js';
 import { sessionsDb } from '@/shared/database/repositories/sessions.db.js';
+import { workspaceOriginalPathsDb } from '@/shared/database/repositories/workspace-original-paths.db.js';
 import { llmProviderRegistry } from '@/modules/ai-runtime/ai-runtime.registry.js';
 import { llmSessionsService } from '@/modules/ai-runtime/services/sessions.service.js';
 import { conversationSearchService } from '@/modules/conversations/conversation-search.service.js';
@@ -102,6 +103,7 @@ test('llmSessionsService.updateSessionCustomName validates existence before upda
           provider: 'claude',
           workspace_path: '/tmp/workspace',
           jsonl_path: null,
+          custom_name: null,
           created_at: '2026-04-01T00:00:00.000Z',
           updated_at: '2026-04-01T00:00:00.000Z',
         }
@@ -140,8 +142,19 @@ test('llmSessionsService.getIndexedSession returns DB session metadata', { concu
           provider: 'claude',
           workspace_path: '/tmp/workspace',
           jsonl_path: '/tmp/workspace/session.jsonl',
+          custom_name: 'Custom Session Name',
           created_at: '2026-04-01T00:00:00.000Z',
           updated_at: '2026-04-02T00:00:00.000Z',
+        }
+      : null
+  ));
+  const restoreGetWorkspacePath = patchMethod(workspaceOriginalPathsDb, 'getWorkspacePath', (workspacePath: string) => (
+    workspacePath === '/tmp/workspace'
+      ? {
+          workspace_id: 'workspace-123',
+          workspace_path: workspacePath,
+          custom_workspace_name: 'Workspace Custom Name',
+          isStarred: 0,
         }
       : null
   ));
@@ -153,8 +166,10 @@ test('llmSessionsService.getIndexedSession returns DB session metadata', { concu
       provider: 'claude',
       workspace_path: '/tmp/workspace',
       jsonl_path: '/tmp/workspace/session.jsonl',
+      custom_name: 'Custom Session Name',
       created_at: '2026-04-01T00:00:00.000Z',
       updated_at: '2026-04-02T00:00:00.000Z',
+      workspace_id: 'workspace-123',
     });
 
     assert.throws(
@@ -165,6 +180,7 @@ test('llmSessionsService.getIndexedSession returns DB session metadata', { concu
         error.statusCode === 404,
     );
   } finally {
+    restoreGetWorkspacePath();
     restoreGetById();
   }
 });
@@ -183,6 +199,7 @@ test('llmSessionsService.deleteSessionArtifacts validates ids and deletes disk/d
           provider: 'cursor',
           workspace_path: '/tmp/workspace',
           jsonl_path: transcriptPath,
+          custom_name: null,
           created_at: '2026-04-01T00:00:00.000Z',
           updated_at: '2026-04-01T00:00:00.000Z',
         }
@@ -233,6 +250,7 @@ test('llmSessionsService.getSessionHistory parses JSONL and Gemini JSON correctl
         provider: 'cursor',
         workspace_path: '/tmp/workspace',
         jsonl_path: jsonlPath,
+        custom_name: null,
         created_at: '2026-04-01T00:00:00.000Z',
         updated_at: '2026-04-01T00:00:00.000Z',
       };
@@ -244,6 +262,7 @@ test('llmSessionsService.getSessionHistory parses JSONL and Gemini JSON correctl
         provider: 'gemini',
         workspace_path: '/tmp/workspace',
         jsonl_path: jsonPath,
+        custom_name: null,
         created_at: '2026-04-01T00:00:00.000Z',
         updated_at: '2026-04-01T00:00:00.000Z',
       };
@@ -255,6 +274,7 @@ test('llmSessionsService.getSessionHistory parses JSONL and Gemini JSON correctl
         provider: 'claude',
         workspace_path: '/tmp/workspace',
         jsonl_path: null,
+        custom_name: null,
         created_at: '2026-04-01T00:00:00.000Z',
         updated_at: '2026-04-01T00:00:00.000Z',
       };

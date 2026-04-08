@@ -86,6 +86,30 @@ const sortWorkspacesByLastActivity = (
     return left.workspaceDisplayName.localeCompare(right.workspaceDisplayName);
   });
 
+const toWorkspaceRecord = (
+  workspaceId: string,
+  workspacePath: string,
+  workspaceCustomName: string | null,
+  isStarred: boolean,
+  sessions: WorkspaceSessionRecord[],
+): WorkspaceRecord => {
+  const sortedSessions = sortSessionsByLastActivity(sessions);
+  const lastActivity = sortedSessions[0]?.lastActivity || null;
+
+  return {
+    workspaceId,
+    workspaceOriginalPath: workspacePath,
+    workspaceCustomName,
+    workspaceDisplayName:
+      workspaceCustomName ||
+      path.basename(workspacePath) ||
+      workspacePath,
+    isStarred,
+    lastActivity,
+    sessions: sortedSessions,
+  };
+};
+
 /**
  * Groups indexed sessions by workspace and returns a deterministic catalog shape.
  */
@@ -102,23 +126,14 @@ const buildWorkspaceSessionCollection = (): WorkspaceRecord[] => {
   }
 
   const workspaceRecords = workspaceRows.map((workspaceRow) => {
-    const sessions = sortSessionsByLastActivity(
-      sessionsByWorkspace.get(workspaceRow.workspace_path) || [],
-    );
-    const lastActivity = sessions[0]?.lastActivity || null;
-
-    return {
-      workspaceId: workspaceRow.workspace_id,
-      workspaceOriginalPath: workspaceRow.workspace_path,
-      workspaceCustomName: workspaceRow.custom_workspace_name,
-      workspaceDisplayName:
-        workspaceRow.custom_workspace_name ||
-        path.basename(workspaceRow.workspace_path) ||
-        workspaceRow.workspace_path,
-      isStarred: workspaceRow.isStarred === 1,
-      lastActivity,
+    const sessions = sessionsByWorkspace.get(workspaceRow.workspace_path) || [];
+    return toWorkspaceRecord(
+      workspaceRow.workspace_id,
+      workspaceRow.workspace_path,
+      workspaceRow.custom_workspace_name,
+      workspaceRow.isStarred === 1,
       sessions,
-    };
+    );
   });
 
   return sortWorkspacesByLastActivity(workspaceRecords);
@@ -130,6 +145,28 @@ const buildWorkspaceSessionCollection = (): WorkspaceRecord[] => {
 export const workspaceService = {
   listWorkspaces(): WorkspaceRecord[] {
     return buildWorkspaceSessionCollection();
+  },
+
+  getWorkspaceById(workspaceId: string): WorkspaceRecord {
+    const workspaceRow = workspaceOriginalPathsDb.getWorkspaceById(workspaceId);
+    if (!workspaceRow) {
+      throw new AppError('Workspace not found.', {
+        code: 'WORKSPACE_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    const sessions = sessionsDb
+      .getSessionsByWorkspacePath(workspaceRow.workspace_path)
+      .map(toWorkspaceSessionRecord);
+
+    return toWorkspaceRecord(
+      workspaceRow.workspace_id,
+      workspaceRow.workspace_path,
+      workspaceRow.custom_workspace_name,
+      workspaceRow.isStarred === 1,
+      sessions,
+    );
   },
 
   toggleWorkspaceStar(workspaceId: string): boolean {
