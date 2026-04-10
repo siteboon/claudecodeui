@@ -111,6 +111,8 @@ export const api = {
     }),
   readFile: (projectName, filePath) =>
     authenticatedFetch(`/api/projects/${projectName}/file?filePath=${encodeURIComponent(filePath)}`),
+  readFileBlob: (projectName, filePath) =>
+    authenticatedFetch(`/api/projects/${projectName}/files/content?path=${encodeURIComponent(filePath)}`),
   saveFile: (projectName, filePath, content) =>
     authenticatedFetch(`/api/projects/${projectName}/file`, {
       method: 'PUT',

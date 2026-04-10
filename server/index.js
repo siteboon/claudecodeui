@@ -812,7 +812,7 @@ app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) =
     }
 });
 
-// Serve binary file content endpoint (for images, etc.)
+// Serve raw file bytes for previews and downloads.
 app.get('/api/projects/:projectName/files/content', authenticateToken, async (req, res) => {
     try {
         const { projectName } = req.params;
@@ -829,7 +829,11 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
             return res.status(404).json({ error: 'Project not found' });
         }
 
-        const resolved = path.resolve(filePath);
+        // Match the text reader endpoint so callers can pass either project-relative
+        // or absolute paths without changing how the bytes are served.
+        const resolved = path.isAbsolute(filePath)
+            ? path.resolve(filePath)
+            : path.resolve(projectRoot, filePath);
         const normalizedRoot = path.resolve(projectRoot) + path.sep;
         if (!resolved.startsWith(normalizedRoot)) {
             return res.status(403).json({ error: 'Path must be under project root' });
