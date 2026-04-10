@@ -39,7 +39,7 @@ import os from 'os';
 import http from 'http';
 import cors from 'cors';
 import { promises as fsPromises } from 'fs';
-import { spawn } from 'child_process';
+import { spawn } from 'cross-spawn';
 import pty from 'node-pty';
 import fetch from 'node-fetch';
 import mime from 'mime-types';

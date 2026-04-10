@@ -2,7 +2,7 @@ import express from 'express';
 import { userDb } from '../database/db.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { getSystemGitConfig } from '../utils/gitConfig.js';
-import { spawn } from 'child_process';
+import { spawn } from 'cross-spawn';
 
 const router = express.Router();
 

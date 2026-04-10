@@ -1,4 +1,4 @@
-import { spawn } from 'child_process';
+import { spawn } from 'cross-spawn';
 import crossSpawn from 'cross-spawn';
 
 // Use cross-spawn on Windows for correct .cmd resolution (same pattern as cursor-cli.js)

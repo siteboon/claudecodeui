@@ -1,4 +1,4 @@
-import { spawn } from 'child_process';
+import { spawn } from 'cross-spawn';
 import path from 'path';
 import { scanPlugins, getPluginsConfig, getPluginDir } from './plugin-loader.js';
 
