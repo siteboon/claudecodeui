@@ -1,8 +1,4 @@
 import { spawn } from 'cross-spawn';
-import crossSpawn from 'cross-spawn';
-
-// Use cross-spawn on Windows for correct .cmd resolution (same pattern as cursor-cli.js)
-const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
 import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
@@ -168,7 +164,7 @@ async function spawnGemini(command, options = {}, ws) {
     }
 
     return new Promise((resolve, reject) => {
-        const geminiProcess = spawnFunction(spawnCmd, spawnArgs, {
+        const geminiProcess = spawn(spawnCmd, spawnArgs, {
             cwd: workingDir,
             stdio: ['pipe', 'pipe', 'pipe'],
             env: { ...process.env } // Inherit all environment variables
