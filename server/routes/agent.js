@@ -546,7 +546,12 @@ class ResponseCollector {
           const parsed = JSON.parse(msg);
           // Only include claude-response messages with assistant type
           if (parsed.type === 'claude-response' && parsed.data && parsed.data.type === 'assistant') {
-            assistantMessages.push(parsed.data);
+            const assistantMessage = { ...parsed.data };
+            if (assistantMessage.message?.usage) {
+              assistantMessage.message = { ...assistantMessage.message };
+              delete assistantMessage.message.usage;
+            }
+            assistantMessages.push(assistantMessage);
           }
         } catch (e) {
           // Not JSON, skip
@@ -555,49 +560,6 @@ class ResponseCollector {
     }
 
     return assistantMessages;
-  }
-
-  /**
-   * Calculate total tokens from all messages
-   */
-  getTotalTokens() {
-    let totalInput = 0;
-    let totalOutput = 0;
-    let totalCacheRead = 0;
-    let totalCacheCreation = 0;
-
-    for (const msg of this.messages) {
-      let data = msg;
-
-      // Parse if string
-      if (typeof msg === 'string') {
-        try {
-          data = JSON.parse(msg);
-        } catch (e) {
-          continue;
-        }
-      }
-
-      // Extract usage from claude-response messages
-      if (data && data.type === 'claude-response' && data.data) {
-        const msgData = data.data;
-        if (msgData.message && msgData.message.usage) {
-          const usage = msgData.message.usage;
-          totalInput += usage.input_tokens || 0;
-          totalOutput += usage.output_tokens || 0;
-          totalCacheRead += usage.cache_read_input_tokens || 0;
-          totalCacheCreation += usage.cache_creation_input_tokens || 0;
-        }
-      }
-    }
-
-    return {
-      inputTokens: totalInput,
-      outputTokens: totalOutput,
-      cacheReadTokens: totalCacheRead,
-      cacheCreationTokens: totalCacheCreation,
-      totalTokens: totalInput + totalOutput + totalCacheRead + totalCacheCreation
-    };
   }
 }
 
@@ -789,13 +751,6 @@ class ResponseCollector {
  *     success: true,
  *     sessionId: "session-123",
  *     messages: [...],        // Assistant messages only (filtered)
- *     tokens: {
- *       inputTokens: 150,
- *       outputTokens: 50,
- *       cacheReadTokens: 0,
- *       cacheCreationTokens: 0,
- *       totalTokens: 200
- *     },
  *     projectPath: "/path/to/project",
  *     branch: {               // Only if createBranch=true
  *       name: "feature/xyz",
@@ -1173,15 +1128,13 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       // Streaming mode: end the SSE stream
       writer.end();
     } else {
-      // Non-streaming mode: send filtered messages and token summary as JSON
+      // Non-streaming mode: send filtered messages as JSON
       const assistantMessages = writer.getAssistantMessages();
-      const tokenSummary = writer.getTotalTokens();
 
       const response = {
         success: true,
         sessionId: writer.getSessionId(),
         messages: assistantMessages,
-        tokens: tokenSummary,
         projectPath: finalProjectPath
       };
 

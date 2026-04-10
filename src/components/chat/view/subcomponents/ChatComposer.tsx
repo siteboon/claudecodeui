@@ -41,7 +41,7 @@ interface ChatComposerProps {
     decision: { allow?: boolean; message?: string; rememberEntry?: string | null; updatedInput?: unknown },
   ) => void;
   handleGrantToolPermission: (suggestion: { entry: string; toolName: string }) => { success: boolean };
-  claudeStatus: { text: string; tokens: number; can_interrupt: boolean } | null;
+  claudeStatus: { text: string; can_interrupt: boolean } | null;
   isLoading: boolean;
   onAbortSession: () => void;
   provider: Provider | string;
@@ -49,7 +49,6 @@ interface ChatComposerProps {
   onModeSwitch: () => void;
   thinkingMode: string;
   setThinkingMode: Dispatch<SetStateAction<string>>;
-  tokenBudget: { used?: number; total?: number } | null;
   slashCommandsCount: number;
   onToggleCommandMenu: () => void;
   hasInput: boolean;
@@ -106,7 +105,6 @@ export default function ChatComposer({
   onModeSwitch,
   thinkingMode,
   setThinkingMode,
-  tokenBudget,
   slashCommandsCount,
   onToggleCommandMenu,
   hasInput,
@@ -194,7 +192,6 @@ export default function ChatComposer({
           provider={provider}
           thinkingMode={thinkingMode}
           setThinkingMode={setThinkingMode}
-          tokenBudget={tokenBudget}
           slashCommandsCount={slashCommandsCount}
           onToggleCommandMenu={onToggleCommandMenu}
           hasInput={hasInput}

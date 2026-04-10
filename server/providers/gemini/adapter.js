@@ -53,14 +53,7 @@ export function normalizeMessage(raw, sessionId) {
   }
 
   if (raw.type === 'result') {
-    const msgs = [createNormalizedMessage({ sessionId, timestamp: ts, provider: PROVIDER, kind: 'stream_end' })];
-    if (raw.stats?.total_tokens) {
-      msgs.push(createNormalizedMessage({
-        sessionId, timestamp: ts, provider: PROVIDER,
-        kind: 'status', text: 'Complete', tokens: raw.stats.total_tokens, canInterrupt: false,
-      }));
-    }
-    return msgs;
+    return [createNormalizedMessage({ sessionId, timestamp: ts, provider: PROVIDER, kind: 'stream_end' })];
   }
 
   if (raw.type === 'error') {

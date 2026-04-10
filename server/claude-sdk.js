@@ -275,46 +275,6 @@ function transformMessage(sdkMessage) {
 }
 
 /**
- * Extracts token usage from SDK result messages
- * @param {Object} resultMessage - SDK result message
- * @returns {Object|null} Token budget object or null
- */
-function extractTokenBudget(resultMessage) {
-  if (resultMessage.type !== 'result' || !resultMessage.modelUsage) {
-    return null;
-  }
-
-  // Get the first model's usage data
-  const modelKey = Object.keys(resultMessage.modelUsage)[0];
-  const modelData = resultMessage.modelUsage[modelKey];
-
-  if (!modelData) {
-    return null;
-  }
-
-  // Use cumulative tokens if available (tracks total for the session)
-  // Otherwise fall back to per-request tokens
-  const inputTokens = modelData.cumulativeInputTokens || modelData.inputTokens || 0;
-  const outputTokens = modelData.cumulativeOutputTokens || modelData.outputTokens || 0;
-  const cacheReadTokens = modelData.cumulativeCacheReadInputTokens || modelData.cacheReadInputTokens || 0;
-  const cacheCreationTokens = modelData.cumulativeCacheCreationInputTokens || modelData.cacheCreationInputTokens || 0;
-
-  // Total used = input + output + cache tokens
-  const totalUsed = inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
-
-  // Use configured context window budget from environment (default 160000)
-  // This is the user's budget limit, not the model's context window
-  const contextWindow = parseInt(process.env.CONTEXT_WINDOW) || 160000;
-
-  // Token calc logged via token-budget WS event
-
-  return {
-    used: totalUsed,
-    total: contextWindow
-  };
-}
-
-/**
  * Handles image processing for SDK queries
  * Saves base64 images to temporary files and returns modified prompt with file paths
  * @param {string} command - Original user prompt
@@ -656,18 +616,6 @@ async function queryClaudeSDK(command, options = {}, ws) {
           msg.parentToolUseId = transformedMessage.parentToolUseId;
         }
         ws.send(msg);
-      }
-
-      // Extract and send token budget updates from result messages
-      if (message.type === 'result') {
-        const models = Object.keys(message.modelUsage || {});
-        if (models.length > 0) {
-          // Model info available in result message
-        }
-        const tokenBudgetData = extractTokenBudget(message);
-        if (tokenBudgetData) {
-          ws.send(createNormalizedMessage({ kind: 'status', text: 'token_budget', tokenBudget: tokenBudgetData, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
-        }
       }
     }
 

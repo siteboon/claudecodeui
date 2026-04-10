@@ -6,7 +6,6 @@ import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo'
 type ClaudeStatusProps = {
   status: {
     text?: string;
-    tokens?: number;
     can_interrupt?: boolean;
   } | null;
   onAbort?: () => void;

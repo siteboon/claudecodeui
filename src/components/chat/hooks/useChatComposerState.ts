@@ -42,7 +42,6 @@ interface UseChatComposerStateArgs {
   geminiModel: string;
   isLoading: boolean;
   canAbortSession: boolean;
-  tokenBudget: Record<string, unknown> | null;
   sendMessage: (message: unknown) => void;
   sendByCtrlEnter?: boolean;
   onSessionActive?: (sessionId?: string | null) => void;
@@ -57,7 +56,7 @@ interface UseChatComposerStateArgs {
   rewindMessages: (count: number) => void;
   setIsLoading: (loading: boolean) => void;
   setCanAbortSession: (canAbort: boolean) => void;
-  setClaudeStatus: (status: { text: string; tokens: number; can_interrupt: boolean } | null) => void;
+  setClaudeStatus: (status: { text: string; can_interrupt: boolean } | null) => void;
   setIsUserScrolledUp: (isScrolledUp: boolean) => void;
   setPendingPermissionRequests: Dispatch<SetStateAction<PendingPermissionRequest[]>>;
 }
@@ -114,7 +113,6 @@ export function useChatComposerState({
   geminiModel,
   isLoading,
   canAbortSession,
-  tokenBudget,
   sendMessage,
   sendByCtrlEnter,
   onSessionActive,
@@ -175,12 +173,6 @@ export function useChatComposerState({
             timestamp: Date.now(),
           });
           break;
-
-        case 'cost': {
-          const costMessage = `**Token Usage**: ${data.tokenUsage.used.toLocaleString()} / ${data.tokenUsage.total.toLocaleString()} (${data.tokenUsage.percentage}%)\n\n**Estimated Cost**:\n- Input: $${data.cost.input}\n- Output: $${data.cost.output}\n- **Total**: $${data.cost.total}\n\n**Model**: ${data.model}`;
-          addMessage({ type: 'assistant', content: costMessage, timestamp: Date.now() });
-          break;
-        }
 
         case 'status': {
           const statusMessage = `**System Status**\n\n- Version: ${data.version}\n- Uptime: ${data.uptime}\n- Model: ${data.model}\n- Provider: ${data.provider}\n- Node.js: ${data.nodeVersion}\n- Platform: ${data.platform}`;
@@ -282,7 +274,6 @@ export function useChatComposerState({
           sessionId: currentSessionId,
           provider,
           model: provider === 'cursor' ? cursorModel : provider === 'codex' ? codexModel : provider === 'gemini' ? geminiModel : claudeModel,
-          tokenUsage: tokenBudget,
         };
 
         const response = await authenticatedFetch('/api/commands/execute', {
@@ -339,7 +330,6 @@ export function useChatComposerState({
       provider,
       selectedProject,
       addMessage,
-      tokenBudget,
     ],
   );
 
@@ -543,7 +533,6 @@ export function useChatComposerState({
       setCanAbortSession(true);
       setClaudeStatus({
         text: 'Processing',
-        tokens: 0,
         can_interrupt: true,
       });
 

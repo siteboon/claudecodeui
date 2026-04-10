@@ -96,8 +96,6 @@ function ChatInterface({
     setCanAbortSession,
     isUserScrolledUp,
     setIsUserScrolledUp,
-    tokenBudget,
-    setTokenBudget,
     visibleMessageCount,
     visibleMessages,
     loadEarlierMessages,
@@ -183,7 +181,6 @@ function ChatInterface({
     geminiModel,
     isLoading,
     canAbortSession,
-    tokenBudget,
     sendMessage,
     sendByCtrlEnter,
     onSessionActive,
@@ -227,7 +224,6 @@ function ChatInterface({
     setIsLoading,
     setCanAbortSession,
     setClaudeStatus,
-    setTokenBudget,
     setPendingPermissionRequests,
     pendingViewSessionRef,
     streamBufferRef,
@@ -352,7 +348,6 @@ function ChatInterface({
           onModeSwitch={cyclePermissionMode}
           thinkingMode={thinkingMode}
           setThinkingMode={setThinkingMode}
-          tokenBudget={tokenBudget}
           slashCommandsCount={slashCommandsCount}
           onToggleCommandMenu={handleToggleCommandMenu}
           hasInput={Boolean(input.trim())}

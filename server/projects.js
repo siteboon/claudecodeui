@@ -1618,7 +1618,6 @@ async function getCodexSessionMessages(sessionId, limit = null, offset = 0) {
     }
 
     const messages = [];
-    let tokenUsage = null;
     const fileStream = fsSync.createReadStream(sessionFilePath);
     const rl = readline.createInterface({
       input: fileStream,
@@ -1647,17 +1646,6 @@ async function getCodexSessionMessages(sessionId, limit = null, offset = 0) {
         try {
           const entry = JSON.parse(line);
 
-          // Extract token usage from token_count events (keep latest)
-          if (entry.type === 'event_msg' && entry.payload?.type === 'token_count' && entry.payload?.info) {
-            const info = entry.payload.info;
-            if (info.total_token_usage) {
-              tokenUsage = {
-                used: info.total_token_usage.total_tokens || 0,
-                total: info.model_context_window || 200000
-              };
-            }
-          }
-          
           // Use event_msg.user_message for user-visible inputs.
           if (entry.type === 'event_msg' && isVisibleCodexUserMessage(entry.payload)) {
             messages.push({
@@ -1820,11 +1808,10 @@ async function getCodexSessionMessages(sessionId, limit = null, offset = 0) {
         hasMore,
         offset,
         limit,
-        tokenUsage
       };
     }
 
-    return { messages, tokenUsage };
+    return { messages };
 
   } catch (error) {
     console.error(`Error reading Codex session messages for ${sessionId}:`, error);

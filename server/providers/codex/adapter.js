@@ -214,7 +214,6 @@ export const codexAdapter = {
     const rawMessages = Array.isArray(result) ? result : (result.messages || []);
     const total = Array.isArray(result) ? rawMessages.length : (result.total || 0);
     const hasMore = Array.isArray(result) ? false : Boolean(result.hasMore);
-    const tokenUsage = result.tokenUsage || null;
 
     const normalized = [];
     for (const raw of rawMessages) {
@@ -242,7 +241,6 @@ export const codexAdapter = {
       hasMore,
       offset,
       limit,
-      tokenUsage,
     };
   },
 };

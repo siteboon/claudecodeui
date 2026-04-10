@@ -41,7 +41,7 @@
  * - stream_end:           (no extra fields)
  * - error:                content
  * - complete:             (no extra fields)
- * - status:               text, tokens?, canInterrupt?
+ * - status:               text, canInterrupt?
  * - permission_request:   requestId, toolName, input, context?
  * - permission_cancelled: requestId
  * - session_created:      newSessionId
@@ -66,7 +66,6 @@
  * @property {boolean} hasMore - Whether more messages exist before the current page
  * @property {number} offset - Current offset
  * @property {number|null} limit - Page size used
- * @property {object} [tokenUsage] - Token usage data (provider-specific)
  */
 
 // ─── Provider Adapter Interface ──────────────────────────────────────────────

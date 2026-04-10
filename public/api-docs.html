@@ -585,7 +585,7 @@
                             <p>Server-sent events (SSE) format with real-time updates. Content-Type: <code>text/event-stream</code></p>
 
                             <h4>Response (Non-Streaming)</h4>
-                            <p>JSON object containing session details, assistant messages only (filtered), and token usage summary. Content-Type: <code>application/json</code></p>
+                            <p>JSON object containing session details and assistant messages only (filtered). Content-Type: <code>application/json</code></p>
 
                             <h4>Error Response</h4>
                             <p>Returns error details with appropriate HTTP status code.</p>
@@ -674,21 +674,10 @@ data: {"type":"done"}</code></pre>
             "type": "text",
             "text": "I've completed the task..."
           }
-        ],
-        "usage": {
-          "input_tokens": 150,
-          "output_tokens": 50
-        }
+        ]
       }
     }
   ],
-  "tokens": {
-    "inputTokens": 150,
-    "outputTokens": 50,
-    "cacheReadTokens": 0,
-    "cacheCreationTokens": 0,
-    "totalTokens": 200
-  },
   "projectPath": "/path/to/project",
   "branch": {
     "name": "fix-authentication-bug-abc123",

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { MutableRefObject } from 'react';
-import { authenticatedFetch } from '../../../utils/api';
 import type { ChatMessage, Provider } from '../types/types';
 import type { Project, ProjectSession, SessionProvider } from '../../../types/app';
 import { createCachedDiffCalculator, type DiffCalculator } from '../utils/messageTransforms';
@@ -108,9 +107,8 @@ export function useChatSessionState({
   const [totalMessages, setTotalMessages] = useState(0);
   const [canAbortSession, setCanAbortSession] = useState(false);
   const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
-  const [tokenBudget, setTokenBudget] = useState<Record<string, unknown> | null>(null);
   const [visibleMessageCount, setVisibleMessageCount] = useState(INITIAL_VISIBLE_MESSAGES);
-  const [claudeStatus, setClaudeStatus] = useState<{ text: string; tokens: number; can_interrupt: boolean } | null>(null);
+  const [claudeStatus, setClaudeStatus] = useState<{ text: string; can_interrupt: boolean } | null>(null);
   const [allMessagesLoaded, setAllMessagesLoaded] = useState(false);
   const [isLoadingAllMessages, setIsLoadingAllMessages] = useState(false);
   const [loadAllJustFinished, setLoadAllJustFinished] = useState(false);
@@ -319,7 +317,6 @@ export function useChatSessionState({
       messagesOffsetRef.current = 0;
       setHasMoreMessages(false);
       setTotalMessages(0);
-      setTokenBudget(null);
       lastLoadedSessionKeyRef.current = null;
       return;
     }
@@ -355,7 +352,6 @@ export function useChatSessionState({
     if (loadAllFinishedTimerRef.current) clearTimeout(loadAllFinishedTimerRef.current);
 
     if (sessionChanged) {
-      setTokenBudget(null);
       setIsLoading(false);
     }
 
@@ -383,7 +379,6 @@ export function useChatSessionState({
       if (slot) {
         setHasMoreMessages(slot.hasMore);
         setTotalMessages(slot.total);
-        if (slot.tokenUsage) setTokenBudget(slot.tokenUsage as Record<string, unknown>);
       }
       setIsLoadingSessionMessages(false);
     }).catch(() => {
@@ -539,31 +534,6 @@ export function useChatSessionState({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatMessages.length, isLoadingSessionMessages, searchTarget]);
 
-  // Token usage fetch for Claude
-  useEffect(() => {
-    if (!selectedProject || !selectedSession?.id || selectedSession.id.startsWith('new-session-')) {
-      setTokenBudget(null);
-      return;
-    }
-    const sessionProvider = selectedSession.__provider || 'claude';
-    if (sessionProvider !== 'claude') return;
-
-    const fetchInitialTokenUsage = async () => {
-      try {
-        const url = `/api/projects/${selectedProject.name}/sessions/${selectedSession.id}/token-usage`;
-        const response = await authenticatedFetch(url);
-        if (response.ok) {
-          setTokenBudget(await response.json());
-        } else {
-          setTokenBudget(null);
-        }
-      } catch (error) {
-        console.error('Failed to fetch initial token usage:', error);
-      }
-    };
-    fetchInitialTokenUsage();
-  }, [selectedProject, selectedSession?.id, selectedSession?.__provider]);
-
   const visibleMessages = useMemo(() => {
     if (chatMessages.length <= visibleMessageCount) return chatMessages;
     return chatMessages.slice(-visibleMessageCount);
@@ -713,8 +683,6 @@ export function useChatSessionState({
     setCanAbortSession,
     isUserScrolledUp,
     setIsUserScrolledUp,
-    tokenBudget,
-    setTokenBudget,
     visibleMessageCount,
     visibleMessages,
     loadEarlierMessages,

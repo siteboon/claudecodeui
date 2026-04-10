@@ -38,9 +38,7 @@ type LatestChatMessage = {
   provider?: string;
   content?: string;
   text?: string;
-  tokens?: number;
   canInterrupt?: boolean;
-  tokenBudget?: unknown;
   newSessionId?: string;
   aborted?: boolean;
   [key: string]: any;
@@ -55,8 +53,7 @@ interface UseChatRealtimeHandlersArgs {
   setCurrentSessionId: (sessionId: string | null) => void;
   setIsLoading: (loading: boolean) => void;
   setCanAbortSession: (canAbort: boolean) => void;
-  setClaudeStatus: (status: { text: string; tokens: number; can_interrupt: boolean } | null) => void;
-  setTokenBudget: (budget: Record<string, unknown> | null) => void;
+  setClaudeStatus: (status: { text: string; can_interrupt: boolean } | null) => void;
   setPendingPermissionRequests: Dispatch<SetStateAction<PendingPermissionRequest[]>>;
   pendingViewSessionRef: MutableRefObject<PendingViewSession | null>;
   streamBufferRef: MutableRefObject<string>;
@@ -85,7 +82,6 @@ export function useChatRealtimeHandlers({
   setIsLoading,
   setCanAbortSession,
   setClaudeStatus,
-  setTokenBudget,
   setPendingPermissionRequests,
   pendingViewSessionRef,
   streamBufferRef,
@@ -140,7 +136,6 @@ export function useChatRealtimeHandlers({
           if (status) {
             const statusInfo = {
               text: status.text || 'Working...',
-              tokens: status.tokens || 0,
               can_interrupt: status.can_interrupt !== undefined ? status.can_interrupt : true,
             };
             setClaudeStatus(statusInfo);
@@ -311,7 +306,7 @@ export function useChatRealtimeHandlers({
         });
         setIsLoading(true);
         setCanAbortSession(true);
-        setClaudeStatus({ text: 'Waiting for permission', tokens: 0, can_interrupt: true });
+        setClaudeStatus({ text: 'Waiting for permission', can_interrupt: true });
         break;
       }
 
@@ -323,12 +318,9 @@ export function useChatRealtimeHandlers({
       }
 
       case 'status': {
-        if (msg.text === 'token_budget' && msg.tokenBudget) {
-          setTokenBudget(msg.tokenBudget as Record<string, unknown>);
-        } else if (msg.text) {
+        if (msg.text) {
           setClaudeStatus({
             text: msg.text,
-            tokens: msg.tokens || 0,
             can_interrupt: msg.canInterrupt !== undefined ? msg.canInterrupt : true,
           });
           setIsLoading(true);
@@ -352,7 +344,6 @@ export function useChatRealtimeHandlers({
     setIsLoading,
     setCanAbortSession,
     setClaudeStatus,
-    setTokenBudget,
     setPendingPermissionRequests,
     pendingViewSessionRef,
     streamBufferRef,

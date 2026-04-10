@@ -46,9 +46,7 @@ export interface NormalizedMessage {
   toolResult?: { content: string; isError: boolean; toolUseResult?: unknown } | null;
   isError?: boolean;
   text?: string;
-  tokens?: number;
   canInterrupt?: boolean;
-  tokenBudget?: unknown;
   requestId?: string;
   input?: unknown;
   context?: unknown;
@@ -81,7 +79,6 @@ export interface SessionSlot {
   total: number;
   hasMore: boolean;
   offset: number;
-  tokenUsage: unknown;
 }
 
 const EMPTY: NormalizedMessage[] = [];
@@ -98,7 +95,6 @@ function createEmptySlot(): SessionSlot {
     total: 0,
     hasMore: false,
     offset: 0,
-    tokenUsage: null,
   };
 }
 
@@ -208,9 +204,6 @@ export function useSessionStore() {
       slot.fetchedAt = Date.now();
       slot.status = 'idle';
       recomputeMergedIfNeeded(slot);
-      if (data.tokenUsage) {
-        slot.tokenUsage = data.tokenUsage;
-      }
 
       notify(sessionId);
       return slot;

@@ -129,8 +129,7 @@ function transformCodexEvent(event) {
 
     case 'turn.completed':
       return {
-        type: 'turn_complete',
-        usage: event.usage
+        type: 'turn_complete'
       };
 
     case 'turn.failed':
@@ -278,12 +277,6 @@ export async function queryCodex(command, options = {}, ws) {
           sessionName: sessionSummary,
           error: terminalFailure
         });
-      }
-
-      // Extract and send token usage if available (normalized to match Claude format)
-      if (event.type === 'turn.completed' && event.usage) {
-        const totalTokens = (event.usage.input_tokens || 0) + (event.usage.output_tokens || 0);
-        sendMessage(ws, createNormalizedMessage({ kind: 'status', text: 'token_budget', tokenBudget: { used: totalTokens, total: 200000 }, sessionId: currentSessionId, provider: 'codex' }));
       }
     }
 
