@@ -2,21 +2,12 @@ import {
   ArrowDown,
   Brain,
   Eye,
-  FileText,
   Languages,
   Maximize2,
-  Mic,
-  Sparkles,
 } from 'lucide-react';
-import type {
-  PreferenceToggleItem,
-  WhisperMode,
-  WhisperOption,
-} from './types';
+import type { PreferenceToggleItem } from './types';
 
 export const HANDLE_POSITION_STORAGE_KEY = 'quickSettingsHandlePosition';
-export const WHISPER_MODE_STORAGE_KEY = 'whisperMode';
-export const WHISPER_MODE_CHANGED_EVENT = 'whisperModeChanged';
 
 export const DEFAULT_HANDLE_POSITION = 50;
 export const HANDLE_POSITION_MIN = 10;
@@ -63,31 +54,4 @@ export const INPUT_SETTING_TOGGLES: PreferenceToggleItem[] = [
     labelKey: 'quickSettings.sendByCtrlEnter',
     icon: Languages,
   },
-];
-
-export const WHISPER_OPTIONS: WhisperOption[] = [
-  {
-    value: 'default',
-    titleKey: 'quickSettings.whisper.modes.default',
-    descriptionKey: 'quickSettings.whisper.modes.defaultDescription',
-    icon: Mic,
-  },
-  {
-    value: 'prompt',
-    titleKey: 'quickSettings.whisper.modes.prompt',
-    descriptionKey: 'quickSettings.whisper.modes.promptDescription',
-    icon: Sparkles,
-  },
-  {
-    value: 'vibe',
-    titleKey: 'quickSettings.whisper.modes.vibe',
-    descriptionKey: 'quickSettings.whisper.modes.vibeDescription',
-    icon: FileText,
-  },
-];
-
-export const VIBE_MODE_ALIASES: WhisperMode[] = [
-  'vibe',
-  'instructions',
-  'architect',
 ];
