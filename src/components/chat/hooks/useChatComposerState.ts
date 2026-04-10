@@ -38,6 +38,7 @@ interface UseChatComposerStateArgs {
   cyclePermissionMode: () => void;
   cursorModel: string;
   claudeModel: string;
+  setClaudeModel: (model: string) => void;
   codexModel: string;
   geminiModel: string;
   isLoading: boolean;
@@ -110,6 +111,7 @@ export function useChatComposerState({
   cyclePermissionMode,
   cursorModel,
   claudeModel,
+  setClaudeModel,
   codexModel,
   geminiModel,
   isLoading,
@@ -169,6 +171,10 @@ export function useChatComposerState({
           break;
 
         case 'model':
+          if (data.newModel) {
+            setClaudeModel(data.newModel);
+            safeLocalStorage.setItem('claude-model', data.newModel);
+          }
           addMessage({
             type: 'assistant',
             content: `**Current Model**: ${data.current.model}\n\n**Available Models**:\n\nClaude: ${data.available.claude.join(', ')}\n\nCursor: ${data.available.cursor.join(', ')}`,
@@ -232,7 +238,7 @@ export function useChatComposerState({
           console.warn('Unknown built-in command action:', action);
       }
     },
-    [onFileOpen, onShowSettings, addMessage, clearMessages, rewindMessages],
+    [onFileOpen, onShowSettings, addMessage, clearMessages, rewindMessages, setClaudeModel],
   );
 
   const handleCustomCommand = useCallback(async (result: CommandExecutionResult) => {

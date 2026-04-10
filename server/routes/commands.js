@@ -202,6 +202,7 @@ Custom commands can be created in:
           model: currentModel
         },
         available: availableModels,
+        newModel: args.length > 0 ? args[0] : null,
         message: args.length > 0
           ? `Switching to model: ${args[0]}`
           : `Current model: ${currentModel}`
