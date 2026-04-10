@@ -338,7 +338,6 @@ function ChatInterface({
           showRawParameters={showRawParameters}
           showThinking={showThinking}
           selectedProject={selectedProject}
-          isLoading={isLoading}
         />
 
         <ChatComposer

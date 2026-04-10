@@ -6,7 +6,6 @@ import type { Project, ProjectSession, SessionProvider } from '../../../../types
 import { getIntrinsicMessageKey } from '../../utils/messageKeys';
 import MessageComponent from './MessageComponent';
 import ProviderSelectionEmptyState from './ProviderSelectionEmptyState';
-import AssistantThinkingIndicator from './AssistantThinkingIndicator';
 
 interface ChatMessagesPaneProps {
   scrollContainerRef: RefObject<HTMLDivElement>;
@@ -51,7 +50,6 @@ interface ChatMessagesPaneProps {
   showRawParameters?: boolean;
   showThinking?: boolean;
   selectedProject: Project;
-  isLoading: boolean;
 }
 
 export default function ChatMessagesPane({
@@ -97,7 +95,6 @@ export default function ChatMessagesPane({
   showRawParameters,
   showThinking,
   selectedProject,
-  isLoading,
 }: ChatMessagesPaneProps) {
   const { t } = useTranslation('chat');
   const messageKeyMapRef = useRef<WeakMap<ChatMessage, string>>(new WeakMap());
@@ -261,8 +258,6 @@ export default function ChatMessagesPane({
           })}
         </>
       )}
-
-      {isLoading && <AssistantThinkingIndicator selectedProvider={provider} />}
     </div>
   );
 }
