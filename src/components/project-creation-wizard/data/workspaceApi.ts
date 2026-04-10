@@ -1,4 +1,4 @@
-import { api } from '../../../utils/api';
+import { api, withBasePath } from '../../../utils/api';
 import type {
   BrowseFilesystemResponse,
   CloneProgressEvent,
@@ -110,7 +110,7 @@ export const cloneWorkspaceWithProgress = (
 ) =>
   new Promise<Record<string, unknown> | undefined>((resolve, reject) => {
     const query = buildCloneProgressQuery(params);
-    const eventSource = new EventSource(`/api/projects/clone-progress?${query}`);
+    const eventSource = new EventSource(withBasePath(`/api/projects/clone-progress?${query}`));
     let settled = false;
 
     const settle = (callback: () => void) => {

@@ -6,6 +6,16 @@ export default defineConfig(({ mode }) => {
   // Load env file based on `mode` in the current working directory.
   const env = loadEnv(mode, process.cwd(), '')
 
+  const isDev = mode === 'development'
+  // In production, default to relative paths so we can serve under any subpath (e.g., /clawpilot/<uuid>/claudecodeui/)
+  const rawBasePath = env.VITE_BASE_PATH || (isDev ? '/' : './')
+  const normalizedBasePath =
+    rawBasePath === './'
+      ? './'
+      : rawBasePath === '/'
+        ? '/'
+        : `/${rawBasePath.replace(/^\/+|\/+$/g, '')}/`
+
   const configuredHost = env.HOST || '0.0.0.0'
   // if the host is not a loopback address, it should be used directly. 
   // This allows the vite server to EXPOSE all interfaces when the host 
@@ -17,18 +27,28 @@ export default defineConfig(({ mode }) => {
   // TODO: Remove support for legacy PORT variables in all locations in a future major release, leaving only SERVER_PORT.
   const serverPort = env.SERVER_PORT || env.PORT || 3001
 
+  // Create proxy paths relative to the base path for nested deployments
+  const basePathPrefix =
+    normalizedBasePath === '/' || normalizedBasePath === './'
+      ? ''
+      : normalizedBasePath.replace(/\/$/, '')
+  const proxyApiPath = basePathPrefix ? `${basePathPrefix}/api` : '/api'
+  const proxyWsPath = basePathPrefix ? `${basePathPrefix}/ws` : '/ws'
+  const proxyShellPath = basePathPrefix ? `${basePathPrefix}/shell` : '/shell'
+
   return {
+    base: normalizedBasePath,
     plugins: [react()],
     server: {
       host,
       port: parseInt(env.VITE_PORT) || 5173,
       proxy: {
-        '/api': `http://${proxyHost}:${serverPort}`,
-        '/ws': {
+        [proxyApiPath]: `http://${proxyHost}:${serverPort}`,
+        [proxyWsPath]: {
           target: `ws://${proxyHost}:${serverPort}`,
           ws: true
         },
-        '/shell': {
+        [proxyShellPath]: {
           target: `ws://${proxyHost}:${serverPort}`,
           ws: true
         }

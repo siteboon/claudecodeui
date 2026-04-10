@@ -54,8 +54,8 @@ export async function validateWorkspacePath(requestedPath) {
     let absolutePath = path.resolve(requestedPath);
 
     // Check if path is a forbidden system directory
-    const normalizedPath = path.normalize(absolutePath);
-    if (FORBIDDEN_PATHS.includes(normalizedPath) || normalizedPath === '/') {
+    const normalizedPath = path.normalize(absolutePath).replace(new RegExp(`\\${path.sep}$`), '');
+    if (FORBIDDEN_PATHS.some(fp => path.normalize(fp).replace(new RegExp(`\\${path.sep}$`), '') === normalizedPath) || normalizedPath === '') {
       return {
         valid: false,
         error: 'Cannot use system-critical directories as workspace locations'

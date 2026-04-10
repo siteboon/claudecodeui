@@ -94,25 +94,6 @@ Open `http://localhost:3001` — all your existing sessions are discovered autom
 Visit the **[documentation →](https://cloudcli.ai/docs)** for more full configuration options, PM2, remote server setup and more
 
 
-### Deploying under a sub-path (reverse proxy / nginx)
-
-If you host CloudCLI UI behind a proxy path prefix (for example `/clawpilot/<uuid>`), configure:
-
-- **Build-time base**: `VITE_BASE_PATH` (for Vite asset URLs)
-- **Runtime base**: `BASE_PATH` (Express route/WebSocket prefix)
-
-With Docker:
-
-```bash
-docker build --build-arg VITE_BASE_PATH=/clawpilot/my-app/ -t cloudcli-ui .
-docker run -e BASE_PATH=/clawpilot/my-app/ -p 3001:3001 cloudcli-ui
-```
-
-For **dynamic per-request prefixes** (e.g. UUID path decided by proxy), CloudCLI UI now also reads
-`X-Forwarded-Prefix` / `X-Script-Name` headers at runtime and applies prefix-aware routing + HTML URL rewriting.
-For older builds or strict proxy setups, `sub_filter` remains a valid fallback.
-
-
 ---
 
 ## Which option is right for you?

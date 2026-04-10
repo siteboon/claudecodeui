@@ -28,21 +28,6 @@ const router = express.Router();
  *    via API keys created in the UI. Keys are validated against the local database.
  */
 const validateExternalApiKey = (req, res, next) => {
-  // Platform mode: Authentication is handled externally (e.g., by a proxy layer).
-  // Trust the request and use the default user context.
-  if (IS_PLATFORM) {
-    try {
-      const user = userDb.getFirstUser();
-      if (!user) {
-        return res.status(500).json({ error: 'Platform mode: No user found in database' });
-      }
-      req.user = user;
-      return next();
-    } catch (error) {
-      console.error('Platform mode error:', error);
-      return res.status(500).json({ error: 'Platform mode: Failed to fetch user' });
-    }
-  }
 
   // Self-hosted mode: Validate API key from header or query parameter
   const apiKey = req.headers['x-api-key'] || req.query.apiKey;
@@ -442,7 +427,7 @@ async function cleanupProject(projectPath, sessionId = null) {
       }
     }
   } catch (error) {
-    console.error('❌ Failed to clean up project:', error);
+    console.error('Failed to clean up project:', error);
   }
 }
 

@@ -69,12 +69,56 @@ import messagesRoutes from './routes/messages.js';
 import { createNormalizedMessage } from './providers/types.js';
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
 import { initializeDatabase, sessionNamesDb, applyCustomSessionNames } from './database/db.js';
+import { userDb, credentialsDb } from './database/db.js';
 import { configureWebPush } from './services/vapid-keys.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { IS_PLATFORM } from './constants/config.js';
 import { getConnectableHost } from '../shared/networkHosts.js';
+import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 
 const VALID_PROVIDERS = ['claude', 'codex', 'cursor', 'gemini'];
+
+const normalizeBasePath = (value = '') => {
+    if (!value || value === '/') return '';
+    const trimmed = String(value).trim();
+    if (!trimmed || trimmed === '/') return '';
+    return `/${trimmed.replace(/^\/+|\/+$/g, '')}`;
+};
+
+const BASE_PATH = normalizeBasePath(process.env.BASE_PATH || '');
+
+const BASE_PATH_HEADER_NAMES = ['x-forwarded-prefix', 'x-script-name'];
+
+function getBasePathFromHeaders(headers = {}) {
+    for (const headerName of BASE_PATH_HEADER_NAMES) {
+        const rawHeader = headers[headerName];
+        if (!rawHeader) continue;
+        const candidate = String(rawHeader).split(',')[0]?.trim();
+        const normalized = normalizeBasePath(candidate);
+        if (normalized) return normalized;
+    }
+    return '';
+}
+
+function getEffectiveBasePathFromRequest(req) {
+    return getBasePathFromHeaders(req?.headers || {}) || BASE_PATH;
+}
+
+function stripBasePathPrefix(urlPath = '', basePath = BASE_PATH) {
+    if (!basePath) return urlPath;
+
+    const [pathname, query = ''] = String(urlPath).split('?');
+    let strippedPath = pathname;
+
+    if (pathname === basePath) {
+        strippedPath = '/';
+    } else if (pathname.startsWith(`${basePath}/`)) {
+        strippedPath = pathname.slice(basePath.length) || '/';
+    }
+
+    return query ? `${strippedPath}?${query}` : strippedPath;
+}
 
 // File system watchers for provider project/session folders
 const PROVIDER_WATCH_PATHS = [
@@ -222,6 +266,12 @@ async function setupProjectsWatcher() {
 
 const app = express();
 const server = http.createServer(app);
+
+app.use((req, _res, next) => {
+    const effectiveBasePath = getEffectiveBasePathFromRequest(req);
+    req.url = stripBasePathPrefix(req.url, effectiveBasePath);
+    next();
+});
 
 const ptySessionsMap = new Map();
 const PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
@@ -406,6 +456,60 @@ app.use('/api/agent', agentRoutes);
 
 // Serve public files (like api-docs.html)
 app.use(express.static(path.join(__dirname, '../public')));
+
+// Middleware to inject <base href> for prefix support
+// This allows the app to work correctly when deployed at a sub-path
+// Read index.html and inject <base href> tag if BASE_PATH is set
+app.use(async (req, res, next) => {
+    // Only handle root-like paths that should serve index.html (SPA routing)
+    const effectiveBasePath = getEffectiveBasePathFromRequest(req);
+    const pathname = stripBasePathPrefix(req.path, effectiveBasePath);
+    const isRootPath = pathname === '/' || !pathname;
+    const isIndexFile = pathname === '/index.html';
+    
+    if ((isRootPath || isIndexFile) && effectiveBasePath && effectiveBasePath !== '/') {
+        try {
+            const indexPath = path.join(__dirname, '../dist/index.html');
+            let html = await fsPromises.readFile(indexPath, 'utf-8');
+
+            const basePathWithSlash = `${effectiveBasePath}/`;
+
+            // Rewrite absolute root asset/public URLs for dynamic subpath proxies.
+            html = html
+                .replaceAll('"/assets/', `"${basePathWithSlash}assets/`)
+                .replaceAll('"/icons/', `"${basePathWithSlash}icons/`)
+                .replaceAll('"/favicon', `"${basePathWithSlash}favicon`)
+                .replaceAll('"/manifest.json', `"${basePathWithSlash}manifest.json`)
+                .replaceAll('"/logo', `"${basePathWithSlash}logo`);
+            
+            // Inject <base href> into the <head> tag if not already present
+            if (!html.includes('<base href=')) {
+                const baseHrefTag = `<base href="${basePathWithSlash}" />`;
+                html = html.replace('<head>', `<head>\n    ${baseHrefTag}`);
+            }
+
+            // Expose runtime router basename for React Router.
+            const routerBasenameScript = `<script>window.__ROUTER_BASENAME__ = ${JSON.stringify(effectiveBasePath)};</script>`;
+            html = html.includes('window.__ROUTER_BASENAME__')
+                ? html
+                : html.replace('</head>', `    ${routerBasenameScript}\n  </head>`);
+            
+            // Set proper headers for HTML
+            res.setHeader('Content-Type', 'text/html; charset=utf-8');
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
+            
+            return res.send(html);
+        } catch (error) {
+            console.error('Error serving index.html with base href:', error);
+            // Fall through to static file serving
+            next();
+        }
+    } else {
+        next();
+    }
+});
 
 // Static files served after API routes
 // Add cache control: HTML files should not be cached, but assets can be cached
@@ -1426,7 +1530,8 @@ wss.on('connection', (ws, request) => {
 
     // Parse URL to get pathname without query parameters
     const urlObj = new URL(url, 'http://localhost');
-    const pathname = urlObj.pathname;
+    const effectiveBasePath = getEffectiveBasePathFromRequest(request);
+    const pathname = stripBasePathPrefix(urlObj.pathname, effectiveBasePath);
 
     if (pathname === '/shell') {
         handleShellConnection(ws);
@@ -2515,12 +2620,41 @@ const SERVER_PORT = process.env.SERVER_PORT || 3001;
 const HOST = process.env.HOST || '0.0.0.0';
 const DISPLAY_HOST = getConnectableHost(HOST);
 const VITE_PORT = process.env.VITE_PORT || 5173;
+const EXTERNAL_BASE_PATH = BASE_PATH || '';
 
 // Initialize database and start server
 async function startServer() {
     try {
         // Initialize authentication database
         await initializeDatabase();
+
+        // Platform auto-provision: ensure a user exists and optionally inject a GitHub PAT
+        if (IS_PLATFORM) {
+            let user = userDb.getFirstUser();
+
+            if (!user) {
+                const username = process.env.PLATFORM_USERNAME || 'platform';
+                const password = process.env.PLATFORM_PASSWORD || crypto.randomBytes(16).toString('hex');
+                const hash = await bcrypt.hash(password, 12);
+                const created = userDb.createUser(username, hash);
+                user = userDb.getFirstUser();
+                console.log(`[INFO] Created platform user "${username}" for headless mode`);
+            }
+            const githubTokenEnv = process.env.GITHUB_PAT || process.env.GITHUB_TOKEN;
+            if (githubTokenEnv) {
+                const existingToken = credentialsDb.getActiveCredential(user.id, 'github_token');
+                if (!existingToken) {
+                    credentialsDb.createCredential(
+                        user.id,
+                        process.env.GITHUB_PAT_NAME || 'Clawpilot GitHub PAT',
+                        'github_token',
+                        githubTokenEnv,
+                        'Imported from Clawpilot environment',
+                    );
+                    console.log('[INFO] Injected GitHub PAT into Claude Code UI credentials for platform user');
+                }
+            }
+        }
 
         // Configure Web Push (VAPID keys)
         configureWebPush();
@@ -2534,7 +2668,7 @@ async function startServer() {
         console.log('');
 
         if (isProduction) {
-            console.log(`${c.info('[INFO]')} To run in production mode, go to http://${DISPLAY_HOST}:${SERVER_PORT}`);            
+            console.log(`${c.info('[INFO]')} To run in production mode, go to http://${DISPLAY_HOST}:${SERVER_PORT}${EXTERNAL_BASE_PATH}`);
         }
 
         console.log(`${c.info('[INFO]')} To run in development mode with hot-module replacement, go to http://${DISPLAY_HOST}:${VITE_PORT}`);
@@ -2547,7 +2681,7 @@ async function startServer() {
             console.log(`  ${c.bright('Claude Code UI Server - Ready')}`);
             console.log(c.dim('═'.repeat(63)));
             console.log('');
-            console.log(`${c.info('[INFO]')} Server URL:  ${c.bright('http://' + DISPLAY_HOST + ':' + SERVER_PORT)}`);
+            console.log(`${c.info('[INFO]')} Server URL:  ${c.bright('http://' + DISPLAY_HOST + ':' + SERVER_PORT + EXTERNAL_BASE_PATH)}`);
             console.log(`${c.info('[INFO]')} Installed at: ${c.dim(appInstallPath)}`);
             console.log(`${c.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
             console.log('');

@@ -17,10 +17,10 @@
   "homepage": "https://cloudcli.ai",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/siteboon/claudecodeui.git"
+    "url": "git+https://github.com/DivyanshiOC/claudecodeui.git"
   },
   "bugs": {
-    "url": "https://github.com/siteboon/claudecodeui/issues"
+    "url": "https://github.com/DivyanshiOC/claudecodeui/issues"
   },
   "scripts": {
     "dev": "concurrently --kill-others \"npm run server\" \"npm run client\"",

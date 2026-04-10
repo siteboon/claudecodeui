@@ -21,20 +21,6 @@ const validateApiKey = (req, res, next) => {
 
 // JWT authentication middleware
 const authenticateToken = async (req, res, next) => {
-  // Platform mode:  use single database user
-  if (IS_PLATFORM) {
-    try {
-      const user = userDb.getFirstUser();
-      if (!user) {
-        return res.status(500).json({ error: 'Platform mode: No user found in database' });
-      }
-      req.user = user;
-      return next();
-    } catch (error) {
-      console.error('Platform mode error:', error);
-      return res.status(500).json({ error: 'Platform mode: Failed to fetch user' });
-    }
-  }
 
   // Normal OSS JWT validation
   const authHeader = req.headers['authorization'];
@@ -43,6 +29,19 @@ const authenticateToken = async (req, res, next) => {
   // Also check query param for SSE endpoints (EventSource can't set headers)
   if (!token && req.query.token) {
     token = req.query.token;
+  }
+
+  // Platform mode: allow requests without a token by falling back to the first active user
+  if (!token && IS_PLATFORM) {
+    const user = userDb.getFirstUser();
+    if (!user) {
+      return res.status(401).json({ error: 'Access denied. No user provisioned.' });
+    }
+    // Issue a short-lived token so the frontend can store it if desired
+    const platformToken = generateToken(user);
+    res.setHeader('X-Refreshed-Token', platformToken);
+    req.user = user;
+    return next();
   }
 
   if (!token) {
@@ -90,18 +89,14 @@ const generateToken = (user) => {
 
 // WebSocket authentication function
 const authenticateWebSocket = (token) => {
-  // Platform mode: bypass token validation, return first user
-  if (IS_PLATFORM) {
-    try {
-      const user = userDb.getFirstUser();
-      if (user) {
-        return { id: user.id, userId: user.id, username: user.username };
-      }
-      return null;
-    } catch (error) {
-      console.error('Platform mode WebSocket error:', error);
+
+  // Platform mode: allow missing token by using the first active user
+  if (!token && IS_PLATFORM) {
+    const user = userDb.getFirstUser();
+    if (!user) {
       return null;
     }
+    return { userId: user.id, username: user.username };
   }
 
   // Normal OSS JWT validation
