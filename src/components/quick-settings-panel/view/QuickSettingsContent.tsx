@@ -15,7 +15,6 @@ import type {
 } from '../types';
 import QuickSettingsSection from './QuickSettingsSection';
 import QuickSettingsToggleRow from './QuickSettingsToggleRow';
-import QuickSettingsWhisperSection from './QuickSettingsWhisperSection';
 
 type QuickSettingsContentProps = {
   isDarkMode: boolean;
@@ -73,8 +72,6 @@ export default function QuickSettingsContent({
           {t('quickSettings.sendByCtrlEnterDescription')}
         </p>
       </QuickSettingsSection>
-
-      <QuickSettingsWhisperSection />
     </div>
   );
 }
