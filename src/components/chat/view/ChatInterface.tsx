@@ -170,6 +170,19 @@ function ChatInterface({
     handleGrantToolPermission,
     handleInputFocusChange,
     isInputFocused,
+    showPromptLibrary,
+    setShowPromptLibrary,
+    showRoleManagement,
+    setShowRoleManagement,
+    prompts,
+    promptsLoading,
+    promptsError,
+    activeRoles,
+    handleToggleRole,
+    reorderRoles,
+    removeRole,
+    clearAllRoles,
+    handleInsertTemplate,
   } = useChatComposerState({
     selectedProject,
     selectedSession,
@@ -408,6 +421,19 @@ function ChatInterface({
           isTextareaExpanded={isTextareaExpanded}
           sendByCtrlEnter={sendByCtrlEnter}
           onTranscript={handleTranscript}
+          showPromptLibrary={showPromptLibrary}
+          setShowPromptLibrary={setShowPromptLibrary}
+          showRoleManagement={showRoleManagement}
+          setShowRoleManagement={setShowRoleManagement}
+          prompts={prompts}
+          promptsLoading={promptsLoading}
+          promptsError={promptsError}
+          activeRoles={activeRoles}
+          handleToggleRole={handleToggleRole}
+          reorderRoles={reorderRoles}
+          removeRole={removeRole}
+          clearAllRoles={clearAllRoles}
+          handleInsertTemplate={handleInsertTemplate}
         />
       </div>
 

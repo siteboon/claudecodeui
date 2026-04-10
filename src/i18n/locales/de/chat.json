@@ -268,5 +268,42 @@
   },
   "tasks": {
     "nextTaskPrompt": "Nächste Aufgabe starten"
+  },
+  "promptLibrary": {
+    "title": "Prompt-Bibliothek",
+    "subtitle": "Rollen fügen dauerhaften Kontext hinzu. Vorlagen fügen wiederverwendbaren Text ein.",
+    "helpButtonTitle": "So erstellst du einen eigenen Prompt",
+    "helpButton": "Eigene hinzufügen",
+    "helpTitle": "Eigene Rollen oder Vorlagen erstellen",
+    "helpDescription": "Füge Markdown-Prompt-Dateien hinzu, dann erscheinen sie in dieser Bibliothek.",
+    "helpClose": "Hilfe schließen",
+    "helpPaths": "Füge Markdown-Dateien zu <0>~/.claude/prompts/</0> für globale Prompts oder zu <1>{project}/.claude/prompts/</1> für projektspezifische Prompts hinzu.",
+    "helpTypes": "Verwende <0>type: role</0> für dauerhaften Kontext und <1>type: template</1> für wiederverwendbaren Eingabetext.",
+    "tabs": {
+      "roles": "Rollen",
+      "templates": "Vorlagen"
+    },
+    "searchPlaceholder": "Prompts durchsuchen...",
+    "loading": "Prompts werden geladen...",
+    "loadError": "Prompts konnten nicht geladen werden",
+    "empty": "Keine Prompts gefunden",
+    "actions": {
+      "applyRole": "Rolle anwenden",
+      "insertTemplate": "Vorlage einfügen"
+    },
+    "selector": {
+      "clearRole": "Rolle entfernen",
+      "openLibrary": "Prompt-Bibliothek öffnen",
+      "manageRoles": "Aktive Rollen verwalten",
+      "role": "Rolle",
+      "roles": "Rollen"
+    },
+    "roleManagement": {
+      "title": "Aktive Rollen verwalten",
+      "subtitle": "Ziehen Sie zum Neuordnen der Priorität. Höhere Rollen haben Vorrang.",
+      "empty": "Keine aktiven Rollen. Aktivieren Sie Rollen in der Prompt-Bibliothek, um sie hinzuzufügen.",
+      "clearAll": "Alle Rollen löschen",
+      "confirmClearAll": "Möchten Sie wirklich alle aktiven Rollen löschen?"
+    }
   }
 }

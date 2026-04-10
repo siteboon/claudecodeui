@@ -250,5 +250,42 @@
   },
   "tasks": {
     "nextTaskPrompt": "开始下一个任务"
+  },
+  "promptLibrary": {
+    "title": "提示词库",
+    "subtitle": "角色会添加持续上下文。模板会插入可复用文本。",
+    "helpButtonTitle": "如何创建你自己的提示词",
+    "helpButton": "如何添加自己的",
+    "helpTitle": "创建你自己的角色或模板",
+    "helpDescription": "添加 Markdown 提示词文件后，它们会显示在此库中。",
+    "helpClose": "关闭帮助",
+    "helpPaths": "将 Markdown 文件添加到 <0>~/.claude/prompts/</0> 用于全局提示词，或添加到 <1>{project}/.claude/prompts/</1> 用于项目专属提示词。",
+    "helpTypes": "使用 <0>type: role</0> 表示持续上下文，使用 <1>type: template</1> 表示可复用输入文本。",
+    "tabs": {
+      "roles": "角色",
+      "templates": "模板"
+    },
+    "searchPlaceholder": "搜索提示词...",
+    "loading": "正在加载提示词...",
+    "loadError": "加载提示词失败",
+    "empty": "未找到提示词",
+    "actions": {
+      "applyRole": "应用角色",
+      "insertTemplate": "插入模板"
+    },
+    "selector": {
+      "clearRole": "清除角色",
+      "openLibrary": "打开提示词库",
+      "manageRoles": "管理活动角色",
+      "role": "角色",
+      "roles": "角色"
+    },
+    "roleManagement": {
+      "title": "管理活动角色",
+      "subtitle": "拖动以重新排序优先级。较高的角色优先。",
+      "empty": "没有活动角色。在提示词库中切换角色以添加它们。",
+      "clearAll": "清除所有角色",
+      "confirmClearAll": "您确定要清除所有活动角色吗？"
+    }
   }
 }
