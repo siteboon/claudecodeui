@@ -1402,12 +1402,12 @@ function handlePluginWsProxy(clientWs, pathname) {
         console.log(`[Plugins] WS proxy connected to "${pluginName}" on port ${port}`);
     });
 
-    // Relay messages bidirectionally
-    upstream.on('message', (data) => {
-        if (clientWs.readyState === WebSocket.OPEN) clientWs.send(data);
+    // Relay messages bidirectionally, preserving frame type (text vs binary)
+    upstream.on('message', (data, isBinary) => {
+        if (clientWs.readyState === WebSocket.OPEN) clientWs.send(data, { binary: isBinary });
     });
-    clientWs.on('message', (data) => {
-        if (upstream.readyState === WebSocket.OPEN) upstream.send(data);
+    clientWs.on('message', (data, isBinary) => {
+        if (upstream.readyState === WebSocket.OPEN) upstream.send(data, { binary: isBinary });
     });
 
     // Propagate close in both directions
