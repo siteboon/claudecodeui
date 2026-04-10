@@ -70,13 +70,13 @@ export default function ClaudeStatus({
 
   const actionWords = ACTION_KEYS.map((key, i) => t(key, { defaultValue: DEFAULT_ACTION_WORDS[i] }));
   const statusText = (status?.text || actionWords[Math.floor(elapsedTime / 3) % actionWords.length]).replace(/[.]+$/, '');
-  
+
   const providerLabel = t(PROVIDER_LABEL_KEYS[provider] || 'claudeStatus.providers.assistant', { defaultValue: 'Assistant' });
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 mb-3 w-full duration-500">
       <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 overflow-hidden rounded-full border border-border/50 bg-slate-100 px-3 py-1.5 shadow-sm backdrop-blur-md dark:bg-slate-900">
-        
+
         {/* Left Side: Identity & Status */}
         <div className="flex min-w-0 items-center gap-2.5">
           <div className="relative flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/20 ring-1 ring-primary/10">
@@ -101,24 +101,26 @@ export default function ClaudeStatus({
 
         {/* Right Side: Metrics & Actions */}
         <div className="flex items-center gap-2">
-          <div className="hidden items-center rounded-md bg-muted/50 px-2 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground sm:flex">
-            {formatElapsedTime(elapsedTime)}
-          </div>
-
           {isLoading && status?.can_interrupt !== false && onAbort && (
-            <button
-              type="button"
-              onClick={onAbort}
-              className="group flex items-center gap-1.5 rounded-full bg-destructive/10 px-2.5 py-1 text-[10px] font-bold text-destructive transition-all hover:bg-destructive hover:text-destructive-foreground"
-            >
-              <svg className="h-3 w-3 fill-current" viewBox="0 0 24 24">
-                <path d="M6 6h12v12H6z" />
-              </svg>
-              <span className="hidden sm:inline">STOP</span>
-              <kbd className="hidden rounded bg-black/10 px-1 text-[9px] group-hover:bg-white/20 sm:block">
-                ESC
-              </kbd>
-            </button>
+            <>
+              <div className="hidden items-center rounded-md bg-muted/50 px-2 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground sm:flex">
+                {formatElapsedTime(elapsedTime)}
+              </div>
+
+              <button
+                type="button"
+                onClick={onAbort}
+                className="group flex items-center gap-1.5 rounded-full bg-destructive/10 px-2.5 py-1 text-[10px] font-bold text-destructive transition-all hover:bg-destructive hover:text-destructive-foreground"
+              >
+                <svg className="h-3 w-3 fill-current" viewBox="0 0 24 24">
+                  <path d="M6 6h12v12H6z" />
+                </svg>
+                <span className="hidden sm:inline">STOP</span>
+                <kbd className="hidden rounded bg-black/10 px-1 text-[9px] group-hover:bg-white/20 sm:block">
+                  ESC
+                </kbd>
+              </button>
+            </>
           )}
         </div>
       </div>
