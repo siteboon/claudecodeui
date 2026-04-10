@@ -93,7 +93,7 @@ const WATCHER_IGNORED_PATTERNS = [
     '**/*.swp',
     '**/.DS_Store'
 ];
-const WATCHER_DEBOUNCE_MS = 300;
+const WATCHER_DEBOUNCE_MS = 2000;
 let projectsWatchers = [];
 let projectsWatcherDebounceTimer = null;
 const connectedClients = new Set();
@@ -188,11 +188,7 @@ async function setupProjectsWatcher() {
                 persistent: true,
                 ignoreInitial: true, // Don't fire events for existing files on startup
                 followSymlinks: false,
-                depth: 10, // Reasonable depth limit
-                awaitWriteFinish: {
-                    stabilityThreshold: 100, // Wait 100ms for file to stabilize
-                    pollInterval: 50
-                }
+                depth: 3
             });
 
             // Set up event listeners
@@ -225,7 +221,8 @@ const server = http.createServer(app);
 
 const ptySessionsMap = new Map();
 const PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
-const SHELL_URL_PARSE_BUFFER_LIMIT = 32768;
+const SHELL_URL_PARSE_BUFFER_LIMIT = 8192;
+const URL_PARSE_THROTTLE_MS = 2000;
 const ANSI_ESCAPE_SEQUENCE_REGEX = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1B\\))/g;
 const TRAILING_URL_PUNCTUATION_REGEX = /[)\]}>.,;:!?]+$/;
 
@@ -1632,7 +1629,9 @@ function handleShellConnection(ws) {
     let shellProcess = null;
     let ptySessionKey = null;
     let urlDetectionBuffer = '';
-    const announcedAuthUrls = new Set();
+    let urlParseTimer = null;
+    let urlParsePending = false;
+    const announcedAuthUrls = new Map();
 
     ws.on('message', async (message) => {
         try {
@@ -1864,38 +1863,56 @@ function handleShellConnection(ws) {
                                 '[INFO] Opening in browser: $1'
                             );
 
-                            const emitAuthUrl = (detectedUrl, autoOpen = false) => {
-                                const normalizedUrl = normalizeDetectedUrl(detectedUrl);
-                                if (!normalizedUrl) return;
+                            const runUrlDetection = (forceAutoOpen = false) => {
+                                const emitAuthUrl = (detectedUrl, autoOpen = false) => {
+                                    const normalizedUrl = normalizeDetectedUrl(detectedUrl);
+                                    if (!normalizedUrl) return;
+                                    const alreadyAutoOpened = announcedAuthUrls.get(normalizedUrl);
+                                    if (alreadyAutoOpened === undefined || (autoOpen && !alreadyAutoOpened)) {
+                                        announcedAuthUrls.set(normalizedUrl, autoOpen);
+                                        const s = ptySessionsMap.get(ptySessionKey);
+                                        if (s && s.ws && s.ws.readyState === WebSocket.OPEN) {
+                                            s.ws.send(JSON.stringify({ type: 'auth_url', url: normalizedUrl, autoOpen }));
+                                        }
+                                    }
+                                };
 
-                                const isNewUrl = !announcedAuthUrls.has(normalizedUrl);
-                                if (isNewUrl) {
-                                    announcedAuthUrls.add(normalizedUrl);
-                                    session.ws.send(JSON.stringify({
-                                        type: 'auth_url',
-                                        url: normalizedUrl,
-                                        autoOpen
-                                    }));
+                                const normalizedDetectedUrls = extractUrlsFromText(urlDetectionBuffer)
+                                    .map((url) => normalizeDetectedUrl(url))
+                                    .filter(Boolean);
+
+                                const dedupedDetectedUrls = Array.from(new Set(normalizedDetectedUrls)).filter((url, _, urls) =>
+                                    !urls.some((otherUrl) => otherUrl !== url && otherUrl.startsWith(url))
+                                );
+
+                                if (forceAutoOpen && dedupedDetectedUrls.length > 0) {
+                                    const bestUrl = dedupedDetectedUrls.reduce((longest, current) =>
+                                        current.length > longest.length ? current : longest
+                                    );
+                                    emitAuthUrl(bestUrl, true);
                                 }
 
+                                dedupedDetectedUrls.forEach((url) => emitAuthUrl(url, false));
                             };
 
-                            const normalizedDetectedUrls = extractUrlsFromText(urlDetectionBuffer)
-                                .map((url) => normalizeDetectedUrl(url))
-                                .filter(Boolean);
-
-                            // Prefer the most complete URL if shorter prefix variants are also present.
-                            const dedupedDetectedUrls = Array.from(new Set(normalizedDetectedUrls)).filter((url, _, urls) =>
-                                !urls.some((otherUrl) => otherUrl !== url && otherUrl.startsWith(url))
-                            );
-
-                            dedupedDetectedUrls.forEach((url) => emitAuthUrl(url, false));
-
-                            if (shouldAutoOpenUrlFromOutput(cleanChunk) && dedupedDetectedUrls.length > 0) {
-                                const bestUrl = dedupedDetectedUrls.reduce((longest, current) =>
-                                    current.length > longest.length ? current : longest
-                                );
-                                emitAuthUrl(bestUrl, true);
+                            if (shouldAutoOpenUrlFromOutput(cleanChunk)) {
+                                if (urlParseTimer) {
+                                    clearTimeout(urlParseTimer);
+                                    urlParseTimer = null;
+                                }
+                                urlParsePending = false;
+                                runUrlDetection(true);
+                            } else if (!urlParseTimer) {
+                                urlParsePending = true;
+                                urlParseTimer = setTimeout(() => {
+                                    urlParseTimer = null;
+                                    if (urlParsePending) {
+                                        urlParsePending = false;
+                                        runUrlDetection(false);
+                                    }
+                                }, URL_PARSE_THROTTLE_MS);
+                            } else {
+                                urlParsePending = true;
                             }
 
                             // Send regular output
