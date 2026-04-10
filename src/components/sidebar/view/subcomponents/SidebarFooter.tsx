@@ -122,7 +122,7 @@ export default function SidebarFooter({
       </div>
 
       {/* Mobile settings */}
-      <div className="px-3 pb-20 pt-2 md:hidden">
+      <div className="px-3 pb-3 pt-2 md:hidden">
         <button
           className="flex h-12 w-full items-center gap-3.5 rounded-xl bg-muted/40 px-4 transition-all hover:bg-muted/60 active:scale-[0.98]"
           onClick={onShowSettings}

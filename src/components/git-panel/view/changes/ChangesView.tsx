@@ -151,7 +151,7 @@ export default function ChangesView({
 
       {!gitStatus?.error && <FileStatusLegend isMobile={isMobile} />}
 
-      <div className={`flex-1 overflow-y-auto ${isMobile ? 'pb-mobile-nav' : ''}`}>
+      <div className="flex-1 overflow-y-auto">
         {isLoading ? (
           <div className="flex h-32 items-center justify-center">
             <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />

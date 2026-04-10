@@ -23,7 +23,6 @@ const ACTION_KEYS = [
   'claudeStatus.actions.reasoning',
 ];
 const DEFAULT_ACTION_WORDS = ['Thinking', 'Processing', 'Analyzing', 'Working', 'Computing', 'Reasoning'];
-const ANIMATION_STEPS = 40;
 
 const PROVIDER_LABEL_KEYS: Record<string, string> = {
   claude: 'messageTypes.claude',
@@ -32,19 +31,10 @@ const PROVIDER_LABEL_KEYS: Record<string, string> = {
   gemini: 'messageTypes.gemini',
 };
 
-function formatElapsedTime(totalSeconds: number, t: (key: string, options?: Record<string, unknown>) => string) {
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-
-  if (minutes < 1) {
-    return t('claudeStatus.elapsed.seconds', { count: seconds, defaultValue: '{{count}}s' });
-  }
-
-  return t('claudeStatus.elapsed.minutesSeconds', {
-    minutes,
-    seconds,
-    defaultValue: '{{minutes}}m {{seconds}}s',
-  });
+function formatElapsedTime(totalSeconds: number) {
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  return mins < 1 ? `${secs}s` : `${mins}m ${secs}s`;
 }
 
 export default function ClaudeStatus({
@@ -55,141 +45,83 @@ export default function ClaudeStatus({
 }: ClaudeStatusProps) {
   const { t } = useTranslation('chat');
   const [elapsedTime, setElapsedTime] = useState(0);
-  const [animationPhase, setAnimationPhase] = useState(0);
+  const [dots, setDots] = useState('');
 
   useEffect(() => {
     if (!isLoading) {
       setElapsedTime(0);
       return;
     }
-
     const startTime = Date.now();
-
-    const timer = window.setInterval(() => {
-      const elapsed = Math.floor((Date.now() - startTime) / 1000);
-      setElapsedTime(elapsed);
+    const timer = setInterval(() => {
+      setElapsedTime(Math.floor((Date.now() - startTime) / 1000));
     }, 1000);
-
-    return () => window.clearInterval(timer);
-  }, [isLoading]);
-
-  useEffect(() => {
-    if (!isLoading) {
-      return;
-    }
-
-    const timer = window.setInterval(() => {
-      setAnimationPhase((previous) => (previous + 1) % ANIMATION_STEPS);
+    const dotTimer = setInterval(() => {
+      setDots((prev) => (prev.length >= 3 ? '' : prev + '.'));
     }, 500);
 
-    return () => window.clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      clearInterval(dotTimer);
+    };
   }, [isLoading]);
 
-  // Note: showThinking only controls the reasoning accordion in messages, not this processing indicator
-  if (!isLoading && !status) {
-    return null;
-  }
+  if (!isLoading && !status) return null;
 
-  const actionWords = ACTION_KEYS.map((key, index) => t(key, { defaultValue: DEFAULT_ACTION_WORDS[index] }));
-  const actionIndex = Math.floor(elapsedTime / 3) % actionWords.length;
-  const statusText = status?.text || actionWords[actionIndex];
-  const cleanStatusText = statusText.replace(/[.]+$/, '');
-  const canInterrupt = isLoading && status?.can_interrupt !== false;
-  const providerLabelKey = PROVIDER_LABEL_KEYS[provider];
-  const providerLabel = providerLabelKey
-    ? t(providerLabelKey)
-    : t('claudeStatus.providers.assistant', { defaultValue: 'Assistant' });
-  const animatedDots = '.'.repeat((animationPhase % 3) + 1);
-  const elapsedLabel =
-    elapsedTime > 0
-      ? t('claudeStatus.elapsed.label', {
-          time: formatElapsedTime(elapsedTime, t),
-          defaultValue: '{{time}} elapsed',
-        })
-      : t('claudeStatus.elapsed.startingNow', { defaultValue: 'Starting now' });
+  const actionWords = ACTION_KEYS.map((key, i) => t(key, { defaultValue: DEFAULT_ACTION_WORDS[i] }));
+  const statusText = (status?.text || actionWords[Math.floor(elapsedTime / 3) % actionWords.length]).replace(/[.]+$/, '');
+
+  const providerLabel = t(PROVIDER_LABEL_KEYS[provider] || 'claudeStatus.providers.assistant', { defaultValue: 'Assistant' });
 
   return (
-    <div className="animate-in slide-in-from-bottom mb-3 w-full duration-300 sm:mb-6">
-      <div className="relative mx-auto max-w-4xl overflow-hidden rounded-2xl border border-border/70 bg-card/90 shadow-md backdrop-blur-md">
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-primary/10 via-transparent to-sky-500/10 dark:from-primary/20 dark:to-sky-400/20" />
+    <div className="animate-in fade-in slide-in-from-bottom-2 mb-3 w-full duration-500">
+      <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 overflow-hidden rounded-full border border-border/50 bg-slate-100 px-3 py-1.5 shadow-sm backdrop-blur-md dark:bg-slate-900">
 
-        <div className="relative px-3 py-3 sm:px-4 sm:py-3.5">
-          <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-w-0 items-start gap-3" role="status" aria-live="polite">
-              <div className="relative mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-primary/25 bg-primary/10">
-                <SessionProviderLogo provider={provider} className="h-5 w-5" />
-                <span className="absolute -right-0.5 -top-0.5 flex h-2.5 w-2.5">
-                  {isLoading && (
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/70" />
-                  )}
-                  <span
-                    className={cn(
-                      'relative inline-flex h-2.5 w-2.5 rounded-full',
-                      isLoading ? 'bg-emerald-400' : 'bg-amber-400',
-                    )}
-                  />
-                </span>
-              </div>
-
-              <div className="min-w-0">
-                <div className="mb-0.5 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-                  <span>{providerLabel}</span>
-                  <span
-                    className={cn(
-                      'rounded-full px-2 py-0.5 text-[9px] tracking-[0.14em]',
-                      isLoading
-                        ? 'bg-emerald-500/15 text-emerald-500 dark:text-emerald-400'
-                        : 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
-                    )}
-                  >
-                    {isLoading
-                      ? t('claudeStatus.state.live', { defaultValue: 'Live' })
-                      : t('claudeStatus.state.paused', { defaultValue: 'Paused' })}
-                  </span>
-                </div>
-
-                <p className="truncate text-sm font-semibold text-foreground sm:text-[15px]">
-                  {cleanStatusText}
-                  {isLoading && (
-                    <span aria-hidden="true" className="text-primary">
-                      {animatedDots}
-                    </span>
-                  )}
-                </p>
-
-                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground sm:text-xs">
-                  <span
-                    aria-hidden="true"
-                    className="-ml-2 inline-flex items-center rounded-full border border-border/70 bg-background/60 px-2 py-0.5"
-                  >
-                    {elapsedLabel}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {canInterrupt && onAbort && (
-              <div className="w-full sm:w-auto sm:text-right">
-                <button
-                  type="button"
-                  onClick={onAbort}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-destructive px-3.5 py-2 text-sm font-semibold text-destructive-foreground shadow-sm ring-1 ring-destructive/40 transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/70 active:opacity-90 sm:w-auto"
-                >
-                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                  <span>{t('claudeStatus.controls.stopGeneration', { defaultValue: 'Stop Generation' })}</span>
-                  <span className="rounded-md bg-black/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-destructive-foreground/95">
-                    Esc
-                  </span>
-                </button>
-
-                <p className="mt-1 hidden text-[11px] text-muted-foreground sm:block">
-                  {t('claudeStatus.controls.pressEscToStop', { defaultValue: 'Press Esc anytime to stop' })}
-                </p>
-              </div>
+        {/* Left Side: Identity & Status */}
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div className="relative flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/20 ring-1 ring-primary/10">
+            <SessionProviderLogo provider={provider} className="h-3.5 w-3.5" />
+            {isLoading && (
+              <span className="absolute inset-0 animate-pulse rounded-full ring-2 ring-emerald-500/20" />
             )}
           </div>
+
+          <div className="flex min-w-0 flex-col sm:flex-row sm:items-center sm:gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
+              {providerLabel}
+            </span>
+            <div className="flex items-center gap-1.5">
+              <span className={cn("h-1.5 w-1.5 rounded-full", isLoading ? "bg-emerald-500 animate-pulse" : "bg-amber-500")} />
+              <p className="truncate text-xs font-medium text-foreground">
+                {statusText}<span className="inline-block w-4 text-primary">{isLoading ? dots : ''}</span>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Side: Metrics & Actions */}
+        <div className="flex items-center gap-2">
+          {isLoading && status?.can_interrupt !== false && onAbort && (
+            <>
+              <div className="hidden items-center rounded-md bg-muted/50 px-2 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground sm:flex">
+                {formatElapsedTime(elapsedTime)}
+              </div>
+
+              <button
+                type="button"
+                onClick={onAbort}
+                className="group flex items-center gap-1.5 rounded-full bg-destructive/10 px-2.5 py-1 text-[10px] font-bold text-destructive transition-all hover:bg-destructive hover:text-destructive-foreground"
+              >
+                <svg className="h-3 w-3 fill-current" viewBox="0 0 24 24">
+                  <path d="M6 6h12v12H6z" />
+                </svg>
+                <span className="hidden sm:inline">STOP</span>
+                <kbd className="hidden rounded bg-black/10 px-1 text-[9px] group-hover:bg-white/20 sm:block">
+                  ESC
+                </kbd>
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
