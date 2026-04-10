@@ -106,8 +106,8 @@
     "apiTokens": "API & 토큰",
     "tasks": "작업",
     "notifications": "알림",
-    "plugins": "플러그인"
-
+    "plugins": "플러그인",
+    "about": "정보"
   },
   "notifications": {
     "title": "알림",

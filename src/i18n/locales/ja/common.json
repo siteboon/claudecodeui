@@ -84,7 +84,7 @@
     "openInEditor": "エディタで開く"
   },
   "mainContent": {
-    "loading": "Claude Code UI を読み込んでいます",
+    "loading": "CloudCLI を読み込んでいます",
     "settingUpWorkspace": "ワークスペースを準備しています...",
     "chooseProject": "プロジェクトを選択",
     "selectProjectDescription": "サイドバーからプロジェクトを選択して、Claudeとコーディングを始めましょう。各プロジェクトにはチャットセッションとファイル履歴が含まれています。",

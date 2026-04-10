@@ -20,7 +20,7 @@
     "runClaudeCli": "Führ Claude CLI in einem Projektverzeichnis aus, um zu beginnen"
   },
   "app": {
-    "title": "Claude Code UI",
+    "title": "CloudCLI",
     "subtitle": "KI-Programmierassistent-Oberfläche"
   },
   "sessions": {
@@ -65,7 +65,12 @@
     "save": "Speichern",
     "delete": "Löschen",
     "rename": "Umbenennen",
-    "joinCommunity": "Community beitreten"
+    "joinCommunity": "Community beitreten",
+    "reportIssue": "Problem melden",
+    "starOnGithub": "Stern auf GitHub"
+  },
+  "branding": {
+    "openSource": "Open Source"
   },
   "status": {
     "active": "Aktiv",
