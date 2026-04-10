@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Auto-start Claude Code UI server in background if not already running.
+# Auto-start CloudCLI server in background if not already running.
 # This script is sourced from ~/.bashrc on sandbox shell open.
 
 if ! pgrep -f "server/index.js" > /dev/null 2>&1; then
@@ -13,7 +13,7 @@ if ! pgrep -f "server/index.js" > /dev/null 2>&1; then
   disown
 
   echo ""
-  echo "  Claude Code UI is starting on port 3001..."
+  echo "  CloudCLI is starting on port 3001..."
   echo ""
   echo "  To access the web UI, forward the port:"
   echo "    sbx ports \$(hostname) --publish 3001:3001"

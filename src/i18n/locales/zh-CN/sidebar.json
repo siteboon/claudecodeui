@@ -20,7 +20,7 @@
     "runClaudeCli": "在项目目录中运行 Claude CLI 以开始使用"
   },
   "app": {
-    "title": "Claude Code UI",
+    "title": "CloudCLI",
     "subtitle": "AI 编程助手"
   },
   "sessions": {
@@ -65,7 +65,12 @@
     "save": "保存",
     "delete": "删除",
     "rename": "重命名",
-    "joinCommunity": "加入社区"
+    "joinCommunity": "加入社区",
+    "reportIssue": "报告问题",
+    "starOnGithub": "在GitHub上加星"
+  },
+  "branding": {
+    "openSource": "开源"
   },
   "status": {
     "active": "活动",

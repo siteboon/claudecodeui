@@ -20,7 +20,7 @@
     "runClaudeCli": "Run Claude CLI in a project directory to get started"
   },
   "app": {
-    "title": "Claude Code UI",
+    "title": "CloudCLI",
     "subtitle": "AI coding assistant interface"
   },
   "sessions": {
@@ -65,7 +65,12 @@
     "save": "Save",
     "delete": "Delete",
     "rename": "Rename",
-    "joinCommunity": "Join Community"
+    "joinCommunity": "Join Community",
+    "reportIssue": "Report Issue",
+    "starOnGithub": "Star on GitHub"
+  },
+  "branding": {
+    "openSource": "Open Source"
   },
   "status": {
     "active": "Active",
