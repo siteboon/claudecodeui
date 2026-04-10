@@ -47,7 +47,7 @@ export const useVersionCheck = (owner: string, repo: string) => {
   useEffect(() => {
     const checkVersion = async () => {
       try {
-        const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases/latest`);
+        const response = await fetch(`/repos/${owner}/${repo}/releases/latest.json`);
         const data = await response.json();
 
         // Handle the case where there might not be any releases
