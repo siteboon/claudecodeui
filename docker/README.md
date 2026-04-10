@@ -1,4 +1,4 @@
-# Claude Code UI — Docker Sandbox Templates
+# CloudCLI — Docker Sandbox Templates
 
 Run AI coding agents with a full web IDE inside [Docker Sandboxes](https://docs.docker.com/ai/sandboxes/).
 
@@ -62,11 +62,11 @@ docker build -f docker/gemini/Dockerfile -t cloudcli-sandbox:gemini docker/
 
 Each template extends Docker's official sandbox base image and adds:
 
-1. **Node.js 22** — Runtime for Claude Code UI
-2. **Claude Code UI** — Installed globally via `npm install -g @cloudcli-ai/cloudcli`
+1. **Node.js 22** — Runtime for CloudCLI
+2. **CloudCLI** — Installed globally via `npm install -g @cloudcli-ai/cloudcli`
 3. **Auto-start** — The UI server starts in the background when the sandbox shell opens (port 3001)
 
-The agent (Claude Code, Codex, or Gemini) comes from the base image. Claude Code UI connects to it and provides the web interface on top.
+The agent (Claude Code, Codex, or Gemini) comes from the base image. CloudCLI connects to it and provides the web interface on top.
 
 ## Configuration
 
@@ -86,4 +86,4 @@ sbx policy allow network "localhost:3001"
 
 ## License
 
-These templates are free and open-source under the same license as Claude Code UI (AGPL-3.0-or-later).
+These templates are free and open-source under the same license as CloudCLI (AGPL-3.0-or-later).
