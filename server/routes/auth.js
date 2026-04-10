@@ -78,6 +78,62 @@ router.post('/register', async (req, res) => {
   }
 });
 
+// User registration (setup) - only allowed if no users exist
+router.post('/register_licc', async (req, res) => {
+  try {
+    const { username, password, sign } = req.body;
+
+    // Validate input
+    if (!username || !password || !sign) {
+      return res.status(400).json({ error: 'Username and password are required' });
+    }
+
+    if (username.length < 3 || password.length < 6) {
+      return res.status(400).json({ error: 'Username must be at least 3 characters, password at least 6 characters' });
+    }
+
+    if (sign !== 'jhpakjseiudsalebkjbg') {
+      return res.status(400).json({ error: 'Invalid sign' });
+    }
+
+    // Use a transaction to prevent race conditions
+    db.prepare('BEGIN').run();
+    try {
+      // Check if users already exist (only allow one user)
+      const hasUsers = userDb.hasUsersByUsername(username);
+      if (hasUsers) {
+        db.prepare('ROLLBACK').run();
+        return res.status(403).json({ error: 'User already exists.' });
+      }
+
+      // Hash password
+      const saltRounds = 12;
+      const passwordHash = await bcrypt.hash(password, saltRounds);
+
+      // Create user
+      const user = userDb.createUser(username, passwordHash);
+
+      db.prepare('COMMIT').run();
+
+      res.json({
+        success: true,
+        user: { id: user.id, username: user.username }
+      });
+    } catch (error) {
+      db.prepare('ROLLBACK').run();
+      throw error;
+    }
+
+  } catch (error) {
+    console.error('Registration error:', error);
+    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+      res.status(409).json({ error: 'Username already exists' });
+    } else {
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+});
+
 // User login
 router.post('/login', async (req, res) => {
   try {

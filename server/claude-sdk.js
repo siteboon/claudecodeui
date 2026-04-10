@@ -12,6 +12,12 @@
  * - WebSocket message streaming
  */
 
+// IMPORTANT: Unset CLAUDECODE before importing the SDK to prevent the error:
+// "Claude Code cannot be launched inside another Claude Code session"
+// This allows the SDK to spawn child claude processes properly
+const savedClaudecode = process.env.CLAUDECODE;
+delete process.env.CLAUDECODE;
+
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import crypto from 'crypto';
 import { promises as fs } from 'fs';
@@ -615,6 +621,13 @@ async function queryClaudeSDK(command, options = {}, ws) {
     } else {
       delete process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT;
     }
+
+    // Restore CLAUDECODE to its previous value
+    if (savedClaudecode !== undefined) {
+        process.env.CLAUDECODE = savedClaudecode;
+    }
+    console.log('prevClaudecode:', savedClaudecode);
+    console.log('env.prevClaudecode:', process.env);
 
     // Track the query instance for abort capability
     if (capturedSessionId) {
