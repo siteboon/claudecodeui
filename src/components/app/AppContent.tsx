@@ -7,7 +7,6 @@ import { useWebSocket } from '../../contexts/WebSocketContext';
 import { useDeviceSettings } from '../../hooks/useDeviceSettings';
 import { useSessionProtection } from '../../hooks/useSessionProtection';
 import { useProjectsState } from '../../hooks/useProjectsState';
-import MobileNav from './MobileNav';
 
 export default function AppContent() {
   const navigate = useNavigate();
@@ -33,7 +32,6 @@ export default function AppContent() {
     activeTab,
     sidebarOpen,
     isLoadingProjects,
-    isInputFocused,
     externalMessageUpdate,
     setActiveTab,
     setSidebarOpen,
@@ -159,7 +157,7 @@ export default function AppContent() {
         </div>
       )}
 
-      <div className={`flex min-w-0 flex-1 flex-col ${isMobile ? 'pb-mobile-nav' : ''}`}>
+      <div className="flex min-w-0 flex-1 flex-col">
         <MainContent
           selectedProject={selectedProject}
           selectedSession={selectedSession}
@@ -183,14 +181,6 @@ export default function AppContent() {
           externalMessageUpdate={externalMessageUpdate}
         />
       </div>
-
-      {isMobile && (
-        <MobileNav
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          isInputFocused={isInputFocused}
-        />
-      )}
 
     </div>
   );
