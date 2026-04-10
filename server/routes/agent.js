@@ -4,7 +4,7 @@ import path from 'path';
 import os from 'os';
 import { promises as fs } from 'fs';
 import crypto from 'crypto';
-import { userDb, apiKeysDb, githubTokensDb } from '../database/db.js';
+import { userDb, apiKeysDb, githubTokensDb, gitlabTokensDb } from '../database/db.js';
 import { addProjectManually } from '../projects.js';
 import { queryClaudeSDK } from '../claude-sdk.js';
 import { spawnCursor } from '../cursor-cli.js';
@@ -12,6 +12,7 @@ import { queryCodex } from '../openai-codex.js';
 import { spawnGemini } from '../gemini-cli.js';
 import { Octokit } from '@octokit/rest';
 import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '../../shared/modelConstants.js';
+import { GitPlatformFactory } from '../git-platforms/index.js';
 import { IS_PLATFORM } from '../constants/config.js';
 
 const router = express.Router();
@@ -335,7 +336,7 @@ async function cloneGitHubRepo(githubUrl, githubToken = null, projectPath) {
   return new Promise(async (resolve, reject) => {
     try {
       // Validate GitHub URL
-      if (!githubUrl || !githubUrl.includes('github.com')) {
+      if (!githubUrl) {
         throw new Error('Invalid GitHub URL');
       }
 
@@ -778,9 +779,9 @@ class ResponseCollector {
  *   Events:
  *     - { type: "status", message: "...", projectPath: "..." }
  *     - { type: "claude-response", data: {...} }
- *     - { type: "github-branch", branch: { name: "...", url: "..." } }
- *     - { type: "github-pr", pullRequest: { number: 42, url: "..." } }
- *     - { type: "github-error", error: "..." }
+ *     - { type: "git-branch", branch: { name: "...", url: "..." } }
+ *     - { type: "git-pr", pullRequest: { number: 42, url: "..." } }
+ *     - { type: "git-error", error: "..." }
  *     - { type: "done" }
  *
  * Non-Streaming Response (stream=false):
@@ -838,9 +839,17 @@ class ResponseCollector {
  *     "createBranch": true,
  *     "cleanup": false
  *   }
+ *
+ * Example 4: GitLab v3 API support
+ *   POST /api/agent
+ *   {
+ *     "githubUrl": "https://gitlab.com/user/repo",
+ *     "message": "Fix bug",
+ *     "gitlabApiVersion": "v3"
+ *   }
  */
 router.post('/', validateExternalApiKey, async (req, res) => {
-  const { githubUrl, projectPath, message, provider = 'claude', model, githubToken, branchName, sessionId } = req.body;
+  const { githubUrl, projectPath, message, provider = 'claude', model, githubToken, branchName, gitlabApiVersion = 'v4' } = req.body;
 
   // Parse stream and cleanup as booleans (handle string "true"/"false" from curl)
   const stream = req.body.stream === undefined ? true : (req.body.stream === true || req.body.stream === 'true');
@@ -863,6 +872,11 @@ router.post('/', validateExternalApiKey, async (req, res) => {
     return res.status(400).json({ error: 'provider must be "claude", "cursor", "codex", or "gemini"' });
   }
 
+  // Validate gitlabApiVersion if provided
+  if (gitlabApiVersion && !['v3', 'v4'].includes(gitlabApiVersion)) {
+    return res.status(400).json({ error: 'gitlabApiVersion must be "v3" or "v4"' });
+  }
+
   // Validate GitHub branch/PR creation requirements
   // Allow branch/PR creation with projectPath as long as it has a GitHub remote
   if ((createBranch || createPR) && !githubUrl && !projectPath) {
@@ -875,8 +889,22 @@ router.post('/', validateExternalApiKey, async (req, res) => {
   try {
     // Determine the final project path
     if (githubUrl) {
-      // Clone repository (to projectPath if provided, otherwise generate path)
-      const tokenToUse = githubToken || githubTokensDb.getActiveGithubToken(req.user.id);
+      // Detect platform from URL
+      const gitPlatform = GitPlatformFactory.detectPlatform(githubUrl.trim());
+      console.log(`📦 Detected platform: ${gitPlatform}`);
+
+      // Get appropriate token based on platform
+      let tokenToUse;
+      if (gitPlatform === 'github') {
+        tokenToUse = githubToken || githubTokensDb.getActiveGithubToken(req.user.id);
+      } else {
+        tokenToUse = githubToken || gitlabTokensDb.getActiveGitlabToken(req.user.id);
+      }
+
+      console.log("tokenToUse:", tokenToUse)
+
+      // Create platform instance with API version (for GitLab)
+      const platform = GitPlatformFactory.createFromUrl(githubUrl.trim(), tokenToUse, gitlabApiVersion);
 
       let targetPath;
       if (projectPath) {
@@ -887,7 +915,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         targetPath = path.join(os.homedir(), '.claude', 'external-projects', repoHash);
       }
 
-      finalProjectPath = await cloneGitHubRepo(githubUrl.trim(), tokenToUse, targetPath);
+      finalProjectPath = await platform.cloneRepo(githubUrl.trim(), targetPath);
     } else {
       // Use existing project path
       finalProjectPath = path.resolve(projectPath);
@@ -987,42 +1015,51 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       }, writer);
     }
 
-    // Handle GitHub branch and PR creation after successful agent completion
+    // Handle Git branch and PR/MR creation after successful agent completion
     let branchInfo = null;
     let prInfo = null;
 
     if (createBranch || createPR) {
       try {
-        console.log('🔄 Starting GitHub branch/PR creation workflow...');
+        console.log('🔄 Starting Git branch/PR/MR creation workflow...');
 
-        // Get GitHub token
-        const tokenToUse = githubToken || githubTokensDb.getActiveGithubToken(req.user.id);
-
-        if (!tokenToUse) {
-          throw new Error('GitHub token required for branch/PR creation. Please configure a GitHub token in settings.');
-        }
-
-        // Initialize Octokit
-        const octokit = new Octokit({ auth: tokenToUse });
-
-        // Get GitHub URL - either from parameter or from git remote
+        // Get repository URL - either from parameter or from git remote
         let repoUrl = githubUrl;
         if (!repoUrl) {
-          console.log('🔍 Getting GitHub URL from git remote...');
+          console.log('🔍 Getting Git URL from git remote...');
           try {
             repoUrl = await getGitRemoteUrl(finalProjectPath);
-            if (!repoUrl.includes('github.com')) {
-              throw new Error('Project does not have a GitHub remote configured');
-            }
-            console.log(`✅ Found GitHub remote: ${repoUrl}`);
+            console.log(`✅ Found Git remote: ${repoUrl}`);
           } catch (error) {
-            throw new Error(`Failed to get GitHub remote URL: ${error.message}`);
+            throw new Error(`Failed to get Git remote URL: ${error.message}`);
           }
         }
 
-        // Parse GitHub URL to get owner and repo
-        const { owner, repo } = parseGitHubUrl(repoUrl);
-        console.log(`📦 Repository: ${owner}/${repo}`);
+        // Detect platform from URL
+        const gitPlatform = GitPlatformFactory.detectPlatform(repoUrl);
+        console.log(`📦 Detected platform: ${gitPlatform}`);
+
+        // Get appropriate token based on platform
+        let tokenToUse;
+        const platformName = gitPlatform === 'github' ? 'GitHub' : 'GitLab';
+
+        if (gitPlatform === 'github') {
+          tokenToUse = githubToken || githubTokensDb.getActiveGithubToken(req.user.id);
+        } else {
+          tokenToUse = githubToken || gitlabTokensDb.getActiveGitlabToken(req.user.id);
+        }
+
+        // Validate token availability for GitLab platform
+        if (gitPlatform === 'gitlab' && !tokenToUse) {
+          throw new Error(`GitLab token is required for creating Merge Requests (using ${gitlabApiVersion || 'v4'} API). Please add a GitLab token in your account settings.`);
+        }
+
+        // Create platform instance with token and API version
+        const platform = GitPlatformFactory.createFromUrl(repoUrl, tokenToUse, gitlabApiVersion);
+
+        // Parse URL to get owner and repo
+        const { owner, repo } = platform.parseUrl(repoUrl);
+        console.log(`📦 Repository: ${owner}/${repo} (${gitPlatform})`);
 
         // Use provided branch name or auto-generate from message
         const finalBranchName = branchName || autogenerateBranchName(message);
@@ -1106,57 +1143,58 @@ router.post('/', validateExternalApiKey, async (req, res) => {
 
           branchInfo = {
             name: finalBranchName,
-            url: `https://github.com/${owner}/${repo}/tree/${finalBranchName}`
+            url: platform.getBranchUrl(owner, repo, finalBranchName)
           };
         }
 
         if (createPR) {
-          // Get commit messages to generate PR description
-          console.log('🔄 Generating PR title and description...');
+          // Get commit messages to generate PR/MR description
+          console.log('🔄 Generating PR/MR title and description...');
           const commitMessages = await getCommitMessages(finalProjectPath, 5);
 
-          // Use the first commit message as the PR title, or fallback to the agent message
+          // Use the first commit message as the PR/MR title, or fallback to the agent message
           const prTitle = commitMessages.length > 0 ? commitMessages[0] : message;
 
-          // Generate PR body from commit messages
+          // Generate PR/MR body from commit messages
           let prBody = '## Changes\n\n';
           if (commitMessages.length > 0) {
             prBody += commitMessages.map(msg => `- ${msg}`).join('\n');
           } else {
             prBody += `Agent task: ${message}`;
           }
-          prBody += '\n\n---\n*This pull request was automatically created by Claude Code UI Agent.*';
+          prBody += '\n\n---\n*This request was automatically created by Claude Code UI Agent.*';
 
-          console.log(`📝 PR Title: ${prTitle}`);
+          console.log(`📝 PR/MR Title: ${prTitle}`);
 
-          // Create the pull request
-          console.log('🔄 Creating pull request...');
-          prInfo = await createGitHubPR(octokit, owner, repo, finalBranchName, prTitle, prBody, 'main');
+          // Create the PR/MR using platform-specific API
+          const actionType = gitPlatform === 'github' ? 'pull request' : 'merge request';
+          console.log(`🔄 Creating ${actionType}...||owner:${owner}, repo:${repo}, finalBranchName:${finalBranchName}, prBody:${prBody}`);
+          prInfo = await platform.createPR(owner, repo, finalBranchName, prTitle, prBody, 'main');
         }
 
         // Send branch/PR info in response
         if (stream) {
           if (branchInfo) {
             writer.send({
-              type: 'github-branch',
+              type: 'git-branch',
               branch: branchInfo
             });
           }
           if (prInfo) {
             writer.send({
-              type: 'github-pr',
+              type: 'git-pr',
               pullRequest: prInfo
             });
           }
         }
 
       } catch (error) {
-        console.error('❌ GitHub branch/PR creation error:', error);
+        console.error('❌ Git branch/PR/MR creation error:', error);
 
         // Send error but don't fail the entire request
         if (stream) {
           writer.send({
-            type: 'github-error',
+            type: 'git-error',
             error: error.message
           });
         }

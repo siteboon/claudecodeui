@@ -179,7 +179,14 @@ const userDb = {
       throw err;
     }
   },
-
+  hasUsersByUsername: (username) => {
+    try {
+      const row = db.prepare('SELECT COUNT(*) as count FROM users WHERE username = ?').get(username);
+      return row.count > 0;
+    } catch (err) {
+      throw err;
+    }
+  },
   // Create a new user
   createUser: (username, passwordHash) => {
     try {
@@ -615,6 +622,27 @@ const githubTokensDb = {
   }
 };
 
+
+// GitLab token operations - same structure as githubTokensDb for consistency，
+const gitlabTokensDb = {
+  createGitlabToken: (userId, tokenName, gitlabToken, description = null) => {
+    return credentialsDb.createCredential(userId, tokenName, 'gitlab_token', gitlabToken, description);
+  },
+  getGitlabTokens: (userId) => {
+    return credentialsDb.getCredentials(userId, 'gitlab_token');
+  },
+  getActiveGitlabToken: (userId) => {
+    return credentialsDb.getActiveCredential(userId, 'github_token'); // todo 临时使用 github_token
+  },
+  deleteGitlabToken: (userId, tokenId) => {
+    return credentialsDb.deleteCredential(userId, tokenId);
+  },
+  toggleGitlabToken: (userId, tokenId, isActive) => {
+    return credentialsDb.toggleCredential(userId, tokenId, isActive);
+  }
+};
+
+
 export {
   db,
   initializeDatabase,
@@ -626,5 +654,6 @@ export {
   sessionNamesDb,
   applyCustomSessionNames,
   appConfigDb,
-  githubTokensDb // Backward compatibility
+  githubTokensDb, // Backward compatibility
+  gitlabTokensDb,
 };
