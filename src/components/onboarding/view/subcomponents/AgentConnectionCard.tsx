@@ -1,6 +1,6 @@
 import { Check } from 'lucide-react';
 import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
-import type { CliProvider, ProviderAuthStatus } from '../types';
+import type { CliProvider, ProviderAuthStatus } from '../../../provider-auth/types';
 
 type AgentConnectionCardProps = {
   provider: CliProvider;

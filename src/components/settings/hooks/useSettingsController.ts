@@ -1,15 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { authenticatedFetch } from '../../../utils/api';
+import { useProviderAuthStatus } from '../../provider-auth/hooks/useProviderAuthStatus';
 import {
-  AUTH_STATUS_ENDPOINTS,
-  DEFAULT_AUTH_STATUS,
   DEFAULT_CODE_EDITOR_SETTINGS,
   DEFAULT_CURSOR_PERMISSIONS,
 } from '../constants/constants';
 import type {
   AgentProvider,
-  AuthStatus,
   ClaudeMcpFormState,
   ClaudePermissionsState,
   CodeEditorSettingsState,
@@ -33,13 +31,6 @@ type ThemeContextValue = {
 type UseSettingsControllerArgs = {
   isOpen: boolean;
   initialTab: string;
-};
-
-type StatusApiResponse = {
-  authenticated?: boolean;
-  email?: string | null;
-  error?: string | null;
-  method?: string;
 };
 
 type JsonResult = {
@@ -225,63 +216,11 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
 
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginProvider, setLoginProvider] = useState<ActiveLoginProvider>('');
-
-  const [claudeAuthStatus, setClaudeAuthStatus] = useState<AuthStatus>(DEFAULT_AUTH_STATUS);
-  const [cursorAuthStatus, setCursorAuthStatus] = useState<AuthStatus>(DEFAULT_AUTH_STATUS);
-  const [codexAuthStatus, setCodexAuthStatus] = useState<AuthStatus>(DEFAULT_AUTH_STATUS);
-  const [geminiAuthStatus, setGeminiAuthStatus] = useState<AuthStatus>(DEFAULT_AUTH_STATUS);
-
-  const setAuthStatusByProvider = useCallback((provider: AgentProvider, status: AuthStatus) => {
-    if (provider === 'claude') {
-      setClaudeAuthStatus(status);
-      return;
-    }
-
-    if (provider === 'cursor') {
-      setCursorAuthStatus(status);
-      return;
-    }
-
-    if (provider === 'gemini') {
-      setGeminiAuthStatus(status);
-      return;
-    }
-
-    setCodexAuthStatus(status);
-  }, []);
-
-  const checkAuthStatus = useCallback(async (provider: AgentProvider) => {
-    try {
-      const response = await authenticatedFetch(AUTH_STATUS_ENDPOINTS[provider]);
-
-      if (!response.ok) {
-        setAuthStatusByProvider(provider, {
-          authenticated: false,
-          email: null,
-          loading: false,
-          error: 'Failed to check authentication status',
-        });
-        return;
-      }
-
-      const data = await toResponseJson<StatusApiResponse>(response);
-      setAuthStatusByProvider(provider, {
-        authenticated: Boolean(data.authenticated),
-        email: data.email || null,
-        loading: false,
-        error: data.error || null,
-        method: data.method,
-      });
-    } catch (error) {
-      console.error(`Error checking ${provider} auth status:`, error);
-      setAuthStatusByProvider(provider, {
-        authenticated: false,
-        email: null,
-        loading: false,
-        error: getErrorMessage(error),
-      });
-    }
-  }, [setAuthStatusByProvider]);
+  const {
+    providerAuthStatus,
+    checkProviderAuthStatus,
+    refreshProviderAuthStatuses,
+  } = useProviderAuthStatus();
 
   const fetchCursorMcpServers = useCallback(async () => {
     try {
@@ -715,8 +654,8 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     }
 
     setSaveStatus('success');
-    void checkAuthStatus(loginProvider);
-  }, [checkAuthStatus, loginProvider]);
+    void checkProviderAuthStatus(loginProvider);
+  }, [checkProviderAuthStatus, loginProvider]);
 
   const saveSettings = useCallback(async () => {
     setSaveStatus(null);
@@ -808,11 +747,8 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
 
     setActiveTab(normalizeMainTab(initialTab));
     void loadSettings();
-    void checkAuthStatus('claude');
-    void checkAuthStatus('cursor');
-    void checkAuthStatus('codex');
-    void checkAuthStatus('gemini');
-  }, [checkAuthStatus, initialTab, isOpen, loadSettings]);
+    void refreshProviderAuthStatuses();
+  }, [initialTab, isOpen, loadSettings, refreshProviderAuthStatuses]);
 
   useEffect(() => {
     localStorage.setItem('codeEditorTheme', codeEditorSettings.theme);
@@ -916,10 +852,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     closeCodexMcpForm,
     submitCodexMcpForm,
     handleCodexMcpDelete,
-    claudeAuthStatus,
-    cursorAuthStatus,
-    codexAuthStatus,
-    geminiAuthStatus,
+    providerAuthStatus,
     geminiPermissionMode,
     setGeminiPermissionMode,
     openLoginForProvider,

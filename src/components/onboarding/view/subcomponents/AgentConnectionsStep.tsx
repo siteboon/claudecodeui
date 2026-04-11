@@ -1,8 +1,8 @@
-import type { CliProvider, ProviderStatusMap } from '../types';
+import type { CliProvider, ProviderAuthStatusMap } from '../../../provider-auth/types';
 import AgentConnectionCard from './AgentConnectionCard';
 
 type AgentConnectionsStepProps = {
-  providerStatuses: ProviderStatusMap;
+  providerStatuses: ProviderAuthStatusMap;
   onOpenProviderLogin: (provider: CliProvider) => void;
 };
 

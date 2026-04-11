@@ -56,10 +56,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     closeCodexMcpForm,
     submitCodexMcpForm,
     handleCodexMcpDelete,
-    claudeAuthStatus,
-    cursorAuthStatus,
-    codexAuthStatus,
-    geminiAuthStatus,
+    providerAuthStatus,
     geminiPermissionMode,
     setGeminiPermissionMode,
     openLoginForProvider,
@@ -102,13 +99,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     return null;
   }
 
-  const isAuthenticated = loginProvider === 'claude'
-    ? claudeAuthStatus.authenticated
-    : loginProvider === 'cursor'
-      ? cursorAuthStatus.authenticated
-      : loginProvider === 'codex'
-        ? codexAuthStatus.authenticated
-        : false;
+  const isAuthenticated = Boolean(loginProvider && providerAuthStatus[loginProvider].authenticated);
 
   return (
     <div className="modal-backdrop fixed inset-0 z-[9999] flex items-center justify-center bg-background/80 backdrop-blur-sm md:p-4">
@@ -155,14 +146,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
 
               {activeTab === 'agents' && (
                 <AgentsSettingsTab
-                  claudeAuthStatus={claudeAuthStatus}
-                  cursorAuthStatus={cursorAuthStatus}
-                  codexAuthStatus={codexAuthStatus}
-                  geminiAuthStatus={geminiAuthStatus}
-                  onClaudeLogin={() => openLoginForProvider('claude')}
-                  onCursorLogin={() => openLoginForProvider('cursor')}
-                  onCodexLogin={() => openLoginForProvider('codex')}
-                  onGeminiLogin={() => openLoginForProvider('gemini')}
+                  providerAuthStatus={providerAuthStatus}
+                  onProviderLogin={openLoginForProvider}
                   claudePermissions={claudePermissions}
                   onClaudePermissionsChange={setClaudePermissions}
                   cursorPermissions={cursorPermissions}

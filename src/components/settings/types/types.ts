@@ -1,7 +1,8 @@
 import type { Dispatch, SetStateAction } from 'react';
+import type { CliProvider, ProviderAuthStatus } from '../../provider-auth/types';
 
 export type SettingsMainTab = 'agents' | 'appearance' | 'git' | 'api' | 'tasks' | 'notifications' | 'plugins' | 'about';
-export type AgentProvider = 'claude' | 'cursor' | 'codex' | 'gemini';
+export type AgentProvider = CliProvider;
 export type AgentCategory = 'account' | 'permissions' | 'mcp';
 export type ProjectSortOrder = 'name' | 'date';
 export type SaveStatus = 'success' | 'error' | null;
@@ -18,13 +19,7 @@ export type SettingsProject = {
   path?: string;
 };
 
-export type AuthStatus = {
-  authenticated: boolean;
-  email: string | null;
-  loading: boolean;
-  error: string | null;
-  method?: string;
-};
+export type AuthStatus = ProviderAuthStatus;
 
 export type KeyValueMap = Record<string, string>;
 
