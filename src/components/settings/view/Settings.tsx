@@ -69,8 +69,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     handleLoginComplete,
   } = useSettingsController({
     isOpen,
-    initialTab,
-    onClose,
+    initialTab
   });
 
   const {

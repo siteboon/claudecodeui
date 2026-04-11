@@ -33,7 +33,6 @@ type ThemeContextValue = {
 type UseSettingsControllerArgs = {
   isOpen: boolean;
   initialTab: string;
-  onClose: () => void;
 };
 
 type StatusApiResponse = {
