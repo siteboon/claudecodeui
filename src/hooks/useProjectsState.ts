@@ -8,6 +8,8 @@ import type {
   Project,
   ProjectSession,
   ProjectsUpdatedMessage,
+  LLMProvider,
+  SessionNameUpdatedMessage,
 } from '../types/app';
 
 type UseProjectsStateArgs = {
@@ -222,6 +224,57 @@ export function useProjectsState({
           loadingProgressTimeoutRef.current = null;
         }, 500);
       }
+
+      return;
+    }
+
+    if (latestMessage.type === 'session_name_updated') {
+      const { sessionId: updatedId, provider, name } = latestMessage as SessionNameUpdatedMessage;
+
+      const sessionKey = (p: LLMProvider): keyof Project => {
+        switch (p) {
+          case 'cursor': return 'cursorSessions';
+          case 'codex': return 'codexSessions';
+          case 'gemini': return 'geminiSessions';
+          default: return 'sessions';
+        }
+      };
+
+      const key = sessionKey(provider);
+
+      setProjects(prev => {
+        let changed = false;
+        const next = prev.map(project => {
+          const sessions = project[key] as ProjectSession[] | undefined;
+          if (!sessions) return project;
+
+          const idx = sessions.findIndex(s => s.id === updatedId);
+          if (idx === -1 || sessions[idx]?.summary === name) return project;
+
+          changed = true;
+          const updated = [...sessions];
+          updated[idx] = { ...updated[idx], summary: name };
+          return { ...project, [key]: updated };
+        });
+        return changed ? next : prev;
+      });
+
+      setSelectedProject(prev => {
+        if (!prev) return prev;
+        const sessions = prev[key] as ProjectSession[] | undefined;
+        if (!sessions) return prev;
+        const idx = sessions.findIndex(s => s.id === updatedId);
+        if (idx === -1 || sessions[idx]?.summary === name) return prev;
+        const updated = [...sessions];
+        updated[idx] = { ...updated[idx], summary: name };
+        return { ...prev, [key]: updated };
+      });
+
+      setSelectedSession(prev => {
+        if (!prev || prev.id !== updatedId || prev.summary === name) return prev;
+        if (prev.__provider && prev.__provider !== provider) return prev;
+        return { ...prev, summary: name };
+      });
 
       return;
     }

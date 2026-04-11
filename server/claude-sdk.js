@@ -27,6 +27,7 @@ import {
 import { claudeAdapter } from './providers/claude/adapter.js';
 import { createNormalizedMessage } from './providers/types.js';
 import { getStatusChecker } from './providers/registry.js';
+import { generateAndPersistSessionName } from './session-naming.js';
 
 const activeSessions = new Map();
 const pendingToolApprovals = new Map();
@@ -476,6 +477,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
   let sessionCreatedSent = false;
   let tempImagePaths = [];
   let tempDir = null;
+  let firstAssistantResponse = null;
 
   const emitNotification = (event) => {
     notifyUserIfEnabled({
@@ -663,6 +665,14 @@ async function queryClaudeSDK(command, options = {}, ws) {
         ws.send(msg);
       }
 
+      // Capture first assistant response for session naming
+      if (!firstAssistantResponse && message.type === 'assistant' && message.message?.content) {
+        const c = message.message.content;
+        firstAssistantResponse = Array.isArray(c)
+          ? c.find(p => p.type === 'text')?.text
+          : typeof c === 'string' ? c : null;
+      }
+
       // Extract and send token budget updates from result messages
       if (message.type === 'result') {
         const models = Object.keys(message.modelUsage || {});
@@ -694,6 +704,14 @@ async function queryClaudeSDK(command, options = {}, ws) {
       stopReason: 'completed'
     });
     // Complete
+
+    // Fire-and-forget: auto-name new sessions (opt-in only — chat sessions pass this flag)
+    if (options.autoNameSession && !sessionId && !!command && capturedSessionId) {
+      generateAndPersistSessionName(
+        capturedSessionId, command, firstAssistantResponse,
+        options.broadcastSessionNameUpdated || null
+      ).catch(err => console.error('Session naming failed:', err));
+    }
 
   } catch (error) {
     console.error('SDK query error:', error);

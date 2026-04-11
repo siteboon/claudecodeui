@@ -17,6 +17,7 @@ console.log('SERVER_PORT from env:', process.env.SERVER_PORT);
 
 import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
+import { connectedClients, broadcastProgress, broadcastSessionNameUpdated } from './utils/websocket-clients.js';
 import os from 'os';
 import http from 'http';
 import cors from 'cors';
@@ -50,7 +51,7 @@ import pluginsRoutes from './routes/plugins.js';
 import messagesRoutes from './routes/messages.js';
 import { createNormalizedMessage } from './providers/types.js';
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
-import { initializeDatabase, sessionNamesDb, applyCustomSessionNames } from './database/db.js';
+import { initializeDatabase, sessionNamesDb, apiKeysDb, applyCustomSessionNames } from './database/db.js';
 import { configureWebPush } from './services/vapid-keys.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { IS_PLATFORM } from './constants/config.js';
@@ -78,21 +79,7 @@ const WATCHER_IGNORED_PATTERNS = [
 const WATCHER_DEBOUNCE_MS = 300;
 let projectsWatchers = [];
 let projectsWatcherDebounceTimer = null;
-const connectedClients = new Set();
 let isGetProjectsRunning = false; // Flag to prevent reentrant calls
-
-// Broadcast progress to all connected WebSocket clients
-function broadcastProgress(progress) {
-    const message = JSON.stringify({
-        type: 'loading_progress',
-        ...progress
-    });
-    connectedClients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-            client.send(message);
-        }
-    });
-}
 
 // Setup file system watchers for Claude, Cursor, and Codex project/session folders
 async function setupProjectsWatcher() {
@@ -274,6 +261,54 @@ app.get('/health', (req, res) => {
     });
 });
 
+// Rename session endpoint (JWT or DB API-key) — registered before the
+// global validateApiKey middleware so DB-stored API keys are not blocked
+// by the env-level API_KEY gate.
+app.put('/api/sessions/:sessionId/rename', (req, res, next) => {
+    // Platform mode or Bearer token → delegate to authenticateToken (handles
+    // platform default-user and normal JWT validation).
+    const authHeader = req.headers['authorization'];
+    if (IS_PLATFORM || (authHeader && authHeader.startsWith('Bearer '))) {
+        return authenticateToken(req, res, next);
+    }
+
+    const rawKey = req.headers['x-api-key'];
+    if (Array.isArray(rawKey)) {
+        return res.status(400).json({ error: 'Invalid x-api-key header' });
+    }
+    if (typeof rawKey === 'string' && rawKey) {
+        const user = apiKeysDb.validateApiKey(rawKey);
+        if (user) { req.user = user; return next(); }
+        return res.status(401).json({ error: 'Invalid or inactive API key' });
+    }
+
+    return res.status(401).json({ error: 'Authentication required (Authorization or x-api-key header)' });
+}, async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+        const safeSessionId = String(sessionId).replace(/[^a-zA-Z0-9._-]/g, '');
+        if (!safeSessionId || safeSessionId !== String(sessionId)) {
+            return res.status(400).json({ error: 'Invalid sessionId' });
+        }
+        const { summary, provider } = req.body;
+        if (!summary || typeof summary !== 'string' || summary.trim() === '') {
+            return res.status(400).json({ error: 'Summary is required' });
+        }
+        if (summary.trim().length > 500) {
+            return res.status(400).json({ error: 'Summary must not exceed 500 characters' });
+        }
+        if (!provider || !VALID_PROVIDERS.includes(provider)) {
+            return res.status(400).json({ error: `Provider must be one of: ${VALID_PROVIDERS.join(', ')}` });
+        }
+        sessionNamesDb.setName(safeSessionId, provider, summary.trim());
+        broadcastSessionNameUpdated(safeSessionId, provider, summary.trim());
+        res.json({ success: true });
+    } catch (error) {
+        console.error(`[API] Error renaming session ${req.params.sessionId}:`, error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Optional API key validation (if configured)
 app.use('/api', validateApiKey);
 
@@ -324,6 +359,7 @@ app.use('/api/sessions', authenticateToken, messagesRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
+
 
 // Serve public files (like api-docs.html)
 app.use(express.static(path.join(APP_ROOT, 'public')));
@@ -464,32 +500,6 @@ app.delete('/api/projects/:projectName/sessions/:sessionId', authenticateToken, 
         res.json({ success: true });
     } catch (error) {
         console.error(`[API] Error deleting session ${req.params.sessionId}:`, error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Rename session endpoint
-app.put('/api/sessions/:sessionId/rename', authenticateToken, async (req, res) => {
-    try {
-        const { sessionId } = req.params;
-        const safeSessionId = String(sessionId).replace(/[^a-zA-Z0-9._-]/g, '');
-        if (!safeSessionId || safeSessionId !== String(sessionId)) {
-            return res.status(400).json({ error: 'Invalid sessionId' });
-        }
-        const { summary, provider } = req.body;
-        if (!summary || typeof summary !== 'string' || summary.trim() === '') {
-            return res.status(400).json({ error: 'Summary is required' });
-        }
-        if (summary.trim().length > 500) {
-            return res.status(400).json({ error: 'Summary must not exceed 500 characters' });
-        }
-        if (!provider || !VALID_PROVIDERS.includes(provider)) {
-            return res.status(400).json({ error: `Provider must be one of: ${VALID_PROVIDERS.join(', ')}` });
-        }
-        sessionNamesDb.setName(safeSessionId, provider, summary.trim());
-        res.json({ success: true });
-    } catch (error) {
-        console.error(`[API] Error renaming session ${req.params.sessionId}:`, error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -1429,7 +1439,7 @@ function handleChatConnection(ws, request) {
                 console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
 
                 // Use Claude Agents SDK
-                await queryClaudeSDK(data.command, data.options, writer);
+                await queryClaudeSDK(data.command, { ...data.options, autoNameSession: true, broadcastSessionNameUpdated }, writer);
             } else if (data.type === 'cursor-command') {
                 console.log('[DEBUG] Cursor message:', data.command || '[Continue/Resume]');
                 console.log('📁 Project:', data.options?.cwd || 'Unknown');
