@@ -15,18 +15,15 @@ import type {
 } from '../types';
 import QuickSettingsSection from './QuickSettingsSection';
 import QuickSettingsToggleRow from './QuickSettingsToggleRow';
-import QuickSettingsWhisperSection from './QuickSettingsWhisperSection';
 
 type QuickSettingsContentProps = {
   isDarkMode: boolean;
-  isMobile: boolean;
   preferences: QuickSettingsPreferences;
   onPreferenceChange: (key: PreferenceToggleKey, value: boolean) => void;
 };
 
 export default function QuickSettingsContent({
   isDarkMode,
-  isMobile,
   preferences,
   onPreferenceChange,
 }: QuickSettingsContentProps) {
@@ -45,7 +42,7 @@ export default function QuickSettingsContent({
   );
 
   return (
-    <div className={`flex-1 space-y-6 overflow-y-auto overflow-x-hidden bg-background p-4 ${isMobile ? 'pb-mobile-nav' : ''}`}>
+    <div className="flex-1 space-y-6 overflow-y-auto overflow-x-hidden bg-background p-4">
       <QuickSettingsSection title={t('quickSettings.sections.appearance')}>
         <div className={SETTING_ROW_CLASS}>
           <span className="flex items-center gap-2 text-sm text-gray-900 dark:text-white">
@@ -75,8 +72,6 @@ export default function QuickSettingsContent({
           {t('quickSettings.sendByCtrlEnterDescription')}
         </p>
       </QuickSettingsSection>
-
-      <QuickSettingsWhisperSection />
     </div>
   );
 }

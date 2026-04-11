@@ -900,30 +900,6 @@ export function useChatComposerState({
     });
   }, [canAbortSession, currentSessionId, pendingViewSessionRef, provider, selectedSession?.id, sendMessage]);
 
-  const handleTranscript = useCallback((text: string) => {
-    if (!text.trim()) {
-      return;
-    }
-
-    setInput((previousInput) => {
-      const newInput = previousInput.trim() ? `${previousInput} ${text}` : text;
-      inputValueRef.current = newInput;
-
-      setTimeout(() => {
-        if (!textareaRef.current) {
-          return;
-        }
-
-        textareaRef.current.style.height = 'auto';
-        textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-        const lineHeight = parseInt(window.getComputedStyle(textareaRef.current).lineHeight);
-        setIsTextareaExpanded(textareaRef.current.scrollHeight > lineHeight * 2);
-      }, 0);
-
-      return newInput;
-    });
-  }, []);
-
   const handleGrantToolPermission = useCallback(
     (suggestion: { entry: string; toolName: string }) => {
       if (!suggestion || provider !== 'claude') {
@@ -1016,7 +992,6 @@ export function useChatComposerState({
     syncInputOverlayScroll,
     handleClearInput,
     handleAbortSession,
-    handleTranscript,
     handlePermissionDecision,
     handleGrantToolPermission,
     handleInputFocusChange,

@@ -167,7 +167,7 @@ export default function BranchesView({
   }
 
   return (
-    <div className={`flex flex-1 flex-col overflow-hidden ${isMobile ? 'pb-mobile-nav' : ''}`}>
+    <div className="flex flex-1 flex-col overflow-hidden">
       {/* Create branch button */}
       <div className="flex items-center justify-between border-b border-border/40 px-4 py-2.5">
         <span className="text-sm text-muted-foreground">

@@ -1,6 +1,8 @@
-import { Edit3, Globe, Plus, Server, Terminal, Trash2, Zap } from 'lucide-react';
+import { Edit3, Globe, Plus, Server, Terminal, Trash2, Users, Zap } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Badge, Button } from '../../../../../../../shared/view/ui';
+import { IS_PLATFORM } from '../../../../../../../constants/config';
+import PremiumFeatureCard from '../../../../PremiumFeatureCard';
 import type { McpServer, McpToolsResult, McpTestResult } from '../../../../../types/types';
 
 const getTransportIcon = (type: string | undefined) => {
@@ -179,6 +181,14 @@ function ClaudeMcpServers({
           <div className="py-8 text-center text-muted-foreground">{t('mcpServers.empty')}</div>
         )}
       </div>
+
+      {!IS_PLATFORM && (
+        <PremiumFeatureCard
+          icon={<Users className="h-5 w-5" />}
+          title="Team MCP Configs"
+          description="Share MCP server configurations across your team. Everyone stays in sync automatically."
+        />
+      )}
     </div>
   );
 }

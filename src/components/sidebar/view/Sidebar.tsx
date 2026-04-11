@@ -266,6 +266,7 @@ function Sidebar({
             updateAvailable={updateAvailable}
             releaseInfo={releaseInfo}
             latestVersion={latestVersion}
+            currentVersion={currentVersion}
             onShowVersionModal={() => setShowVersionModal(true)}
             onShowSettings={onShowSettings}
             projectListProps={projectListProps}

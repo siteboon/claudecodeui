@@ -84,7 +84,7 @@
     "openInEditor": "Open in Editor"
   },
   "mainContent": {
-    "loading": "Loading Claude Code UI",
+    "loading": "Loading CloudCLI",
     "settingUpWorkspace": "Setting up your workspace...",
     "chooseProject": "Choose Your Project",
     "selectProjectDescription": "Select a project from the sidebar to start coding with Claude. Each project contains your chat sessions and file history.",
