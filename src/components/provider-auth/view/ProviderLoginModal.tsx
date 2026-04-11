@@ -1,21 +1,12 @@
 import { ExternalLink, KeyRound, X } from 'lucide-react';
 import StandaloneShell from '../../standalone-shell/view/StandaloneShell';
-import { IS_PLATFORM } from '../../../constants/config';
+import { DEFAULT_PROJECT_FOR_EMPTY_SHELL, IS_PLATFORM } from '../../../constants/config';
 import type { CliProvider } from '../types';
-
-type LoginModalProject = {
-  name?: string;
-  displayName?: string;
-  fullPath?: string;
-  path?: string;
-  [key: string]: unknown;
-};
 
 type ProviderLoginModalProps = {
   isOpen: boolean;
   onClose: () => void;
   provider?: CliProvider;
-  project?: LoginModalProject | null;
   onComplete?: (exitCode: number) => void;
   customCommand?: string;
   isAuthenticated?: boolean;
@@ -56,23 +47,10 @@ const getProviderTitle = (provider: CliProvider) => {
   return 'Gemini CLI Configuration';
 };
 
-const normalizeProject = (project?: LoginModalProject | null) => {
-  const normalizedName = project?.name || 'default';
-  const normalizedFullPath = project?.fullPath ?? project?.path ?? (IS_PLATFORM ? '/workspace' : '');
-
-  return {
-    name: normalizedName,
-    displayName: project?.displayName || normalizedName,
-    fullPath: normalizedFullPath,
-    path: project?.path ?? normalizedFullPath,
-  };
-};
-
 export default function ProviderLoginModal({
   isOpen,
   onClose,
   provider = 'claude',
-  project = null,
   onComplete,
   customCommand,
   isAuthenticated = false,
@@ -83,7 +61,6 @@ export default function ProviderLoginModal({
 
   const command = getProviderCommand({ provider, customCommand, isAuthenticated });
   const title = getProviderTitle(provider);
-  const shellProject = normalizeProject(project);
 
   const handleComplete = (exitCode: number) => {
     onComplete?.(exitCode);
@@ -158,7 +135,7 @@ export default function ProviderLoginModal({
               </button>
             </div>
           ) : (
-            <StandaloneShell project={shellProject} command={command} onComplete={handleComplete} minimal={true} />
+            <StandaloneShell project={DEFAULT_PROJECT_FOR_EMPTY_SHELL} command={command} onComplete={handleComplete} minimal={true} />
           )}
         </div>
       </div>

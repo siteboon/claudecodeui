@@ -1,16 +1,8 @@
-import { IS_PLATFORM } from '../../../constants/config';
 import type { CliProvider, ProviderStatusMap } from './types';
 
 export const cliProviders: CliProvider[] = ['claude', 'cursor', 'codex', 'gemini'];
 
 export const gitEmailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-export const selectedProject = {
-  name: 'default',
-  displayName: 'default',
-  fullPath: IS_PLATFORM ? '/workspace' : '',
-  path: IS_PLATFORM ? '/workspace' : '',
-};
 
 export const createInitialProviderStatuses = (): ProviderStatusMap => ({
   claude: { authenticated: false, email: null, loading: true, error: null },

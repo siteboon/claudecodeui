@@ -66,12 +66,10 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     showLoginModal,
     setShowLoginModal,
     loginProvider,
-    selectedProject,
     handleLoginComplete,
   } = useSettingsController({
     isOpen,
     initialTab,
-    projects,
     onClose,
   });
 
@@ -219,7 +217,6 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
         isOpen={showLoginModal}
         onClose={() => setShowLoginModal(false)}
         provider={loginProvider || 'claude'}
-        project={selectedProject}
         onComplete={handleLoginComplete}
         isAuthenticated={isAuthenticated}
       />

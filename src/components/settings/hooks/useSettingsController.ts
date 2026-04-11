@@ -23,7 +23,6 @@ import type {
   NotificationPreferencesState,
   ProjectSortOrder,
   SettingsMainTab,
-  SettingsProject,
 } from '../types/types';
 
 type ThemeContextValue = {
@@ -34,7 +33,6 @@ type ThemeContextValue = {
 type UseSettingsControllerArgs = {
   isOpen: boolean;
   initialTab: string;
-  projects: SettingsProject[];
   onClose: () => void;
 };
 
@@ -166,20 +164,6 @@ const mapCliServersToMcpServers = (servers: McpCliServer[] = []): McpServer[] =>
   }))
 );
 
-const getDefaultProject = (projects: SettingsProject[]): SettingsProject => {
-  if (projects.length > 0) {
-    return projects[0];
-  }
-
-  const cwd = typeof process !== 'undefined' && process.cwd ? process.cwd() : '';
-  return {
-    name: 'default',
-    displayName: 'default',
-    fullPath: cwd,
-    path: cwd,
-  };
-};
-
 const toResponseJson = async <T>(response: Response): Promise<T> => response.json() as Promise<T>;
 
 const createEmptyClaudePermissions = (): ClaudePermissionsState => ({
@@ -204,7 +188,7 @@ const createDefaultNotificationPreferences = (): NotificationPreferencesState =>
   },
 });
 
-export function useSettingsController({ isOpen, initialTab, projects, onClose }: UseSettingsControllerArgs) {
+export function useSettingsController({ isOpen, initialTab }: UseSettingsControllerArgs) {
   const { isDarkMode, toggleDarkMode } = useTheme() as ThemeContextValue;
   const closeTimerRef = useRef<number | null>(null);
 
@@ -242,7 +226,6 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
 
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginProvider, setLoginProvider] = useState<ActiveLoginProvider>('');
-  const [selectedProject, setSelectedProject] = useState<SettingsProject | null>(null);
 
   const [claudeAuthStatus, setClaudeAuthStatus] = useState<AuthStatus>(DEFAULT_AUTH_STATUS);
   const [cursorAuthStatus, setCursorAuthStatus] = useState<AuthStatus>(DEFAULT_AUTH_STATUS);
@@ -724,9 +707,8 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
 
   const openLoginForProvider = useCallback((provider: AgentProvider) => {
     setLoginProvider(provider);
-    setSelectedProject(getDefaultProject(projects));
     setShowLoginModal(true);
-  }, [projects]);
+  }, []);
 
   const handleLoginComplete = useCallback((exitCode: number) => {
     if (exitCode !== 0 || !loginProvider) {
@@ -945,7 +927,6 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
     showLoginModal,
     setShowLoginModal,
     loginProvider,
-    selectedProject,
     handleLoginComplete,
   };
 }

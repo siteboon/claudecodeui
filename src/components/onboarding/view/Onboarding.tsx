@@ -11,7 +11,6 @@ import {
   createInitialProviderStatuses,
   gitEmailPattern,
   readErrorMessageFromResponse,
-  selectedProject,
 } from './utils';
 
 type OnboardingProps = {
@@ -279,7 +278,6 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           isOpen={Boolean(activeLoginProvider)}
           onClose={() => setActiveLoginProvider(null)}
           provider={activeLoginProvider}
-          project={selectedProject}
           onComplete={handleLoginComplete}
         />
       )}
