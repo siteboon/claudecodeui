@@ -115,7 +115,7 @@ async function loadClaudeSettingsEnv() {
 /**
  * Checks Claude authentication credentials using two methods with priority order:
  *
- * Priority 1: ANTHROPIC_API_KEY environment variable
+ * Priority 1: ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN environment variables
  * Priority 1b: ~/.claude/settings.json env values
  * Priority 2: ~/.claude/.credentials.json OAuth tokens
  *
@@ -141,6 +141,14 @@ async function checkClaudeCredentials() {
     return {
       authenticated: true,
       email: 'API Key Auth',
+      method: 'api_key'
+    };
+  }
+
+  if (process.env.ANTHROPIC_AUTH_TOKEN && process.env.ANTHROPIC_AUTH_TOKEN.trim()) {
+    return {
+      authenticated: true,
+      email: 'Configured via environment',
       method: 'api_key'
     };
   }
