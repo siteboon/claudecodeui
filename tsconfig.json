@@ -4,6 +4,10 @@
     "useDefineForClassFields": true,
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "module": "ESNext",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    },
     "skipLibCheck": true,
     "moduleResolution": "Bundler",
     "resolveJsonModule": true,
@@ -14,7 +18,8 @@
     "forceConsistentCasingInFileNames": true,
     "allowJs": true,
     // "checkJs": true, 
-    "types": ["vite/client"]
+    "types": ["vite/client"],
+    "ignoreDeprecations": "6.0"
   },
   "include": ["src", "shared", "vite.config.js"]
 }
