@@ -1,0 +1,46 @@
+name: Sync Upstream
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: sync-upstream-main
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: |
+          git remote remove upstream 2>/dev/null || true
+          git remote add upstream https://github.com/siteboon/claudecodeui.git
+
+      - name: Fetch fork and upstream
+        run: |
+          git fetch origin main
+          git fetch upstream main
+
+      - name: Merge upstream/main into main
+        run: |
+          git checkout -B main origin/main
+          git merge --no-edit upstream/main
+
+      - name: Push merged main
+        run: git push origin main

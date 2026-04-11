@@ -93,6 +93,30 @@ Open `http://localhost:3001` — all your existing sessions are discovered autom
 
 Visit the **[documentation →](https://cloudcli.ai/docs)** for more full configuration options, PM2, remote server setup and more
 
+### Deployment Notes
+
+- `VITE_BASE_PATH` controls the frontend base path for subpath deployments. Leave it unset for local/root deployments, or set it to a subpath such as `/cloudcli/` when building and running behind a gateway.
+- `DATABASE_PATH` controls where the auth database is stored. By default CloudCLI uses `~/.cloudcli/auth.db`.
+
+Examples:
+
+```bash
+# Local development or root deployment
+npm run build
+npm run server
+```
+
+```bash
+# Deployment behind a gateway subpath
+VITE_BASE_PATH=/cloudcli/ npm run build
+VITE_BASE_PATH=/cloudcli/ npm run server
+```
+
+### Fork Maintenance
+
+- Forks can automatically merge updates from `siteboon/claudecodeui` by enabling the GitHub Actions workflow in `.github/workflows/sync-upstream.yml`.
+- The workflow fetches `upstream/main`, merges it into your fork's `main`, and pushes only when the merge succeeds. If upstream introduces conflicts, the workflow fails and leaves the branch unchanged.
+
 
 ---
 
