@@ -1,12 +1,12 @@
 import { ExternalLink, KeyRound, X } from 'lucide-react';
 import StandaloneShell from '../../standalone-shell/view/StandaloneShell';
 import { DEFAULT_PROJECT_FOR_EMPTY_SHELL, IS_PLATFORM } from '../../../constants/config';
-import type { CliProvider } from '../types';
+import type { LLMProvider } from '../../../types/app';
 
 type ProviderLoginModalProps = {
   isOpen: boolean;
   onClose: () => void;
-  provider?: CliProvider;
+  provider?: LLMProvider;
   onComplete?: (exitCode: number) => void;
   customCommand?: string;
   isAuthenticated?: boolean;
@@ -17,7 +17,7 @@ const getProviderCommand = ({
   customCommand,
   isAuthenticated: _isAuthenticated,
 }: {
-  provider: CliProvider;
+  provider: LLMProvider;
   customCommand?: string;
   isAuthenticated: boolean;
 }) => {
@@ -40,7 +40,7 @@ const getProviderCommand = ({
   return 'gemini status';
 };
 
-const getProviderTitle = (provider: CliProvider) => {
+const getProviderTitle = (provider: LLMProvider) => {
   if (provider === 'claude') return 'Claude CLI Login';
   if (provider === 'cursor') return 'Cursor CLI Login';
   if (provider === 'codex') return 'Codex CLI Login';

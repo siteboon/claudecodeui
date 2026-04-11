@@ -1,9 +1,10 @@
-import type { CliProvider, ProviderAuthStatusMap } from '../../../provider-auth/types';
+import type { LLMProvider } from '../../../../types/app';
+import type { ProviderAuthStatusMap } from '../../../provider-auth/types';
 import AgentConnectionCard from './AgentConnectionCard';
 
 type AgentConnectionsStepProps = {
   providerStatuses: ProviderAuthStatusMap;
-  onOpenProviderLogin: (provider: CliProvider) => void;
+  onOpenProviderLogin: (provider: LLMProvider) => void;
 };
 
 const providerCards = [

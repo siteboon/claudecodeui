@@ -1,8 +1,9 @@
 import type { Dispatch, SetStateAction } from 'react';
-import type { CliProvider, ProviderAuthStatus } from '../../provider-auth/types';
+import type { LLMProvider } from '../../../types/app';
+import type { ProviderAuthStatus } from '../../provider-auth/types';
 
 export type SettingsMainTab = 'agents' | 'appearance' | 'git' | 'api' | 'tasks' | 'notifications' | 'plugins' | 'about';
-export type AgentProvider = CliProvider;
+export type AgentProvider = LLMProvider;
 export type AgentCategory = 'account' | 'permissions' | 'mcp';
 export type ProjectSortOrder = 'name' | 'date';
 export type SaveStatus = 'success' | 'error' | null;

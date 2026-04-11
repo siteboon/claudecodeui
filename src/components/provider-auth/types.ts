@@ -1,4 +1,4 @@
-export type CliProvider = 'claude' | 'cursor' | 'codex' | 'gemini';
+import type { LLMProvider } from '../../types/app';
 
 export type ProviderAuthStatus = {
   authenticated: boolean;
@@ -8,11 +8,11 @@ export type ProviderAuthStatus = {
   loading: boolean;
 };
 
-export type ProviderAuthStatusMap = Record<CliProvider, ProviderAuthStatus>;
+export type ProviderAuthStatusMap = Record<LLMProvider, ProviderAuthStatus>;
 
-export const CLI_PROVIDERS: CliProvider[] = ['claude', 'cursor', 'codex', 'gemini'];
+export const CLI_PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'gemini'];
 
-export const CLI_AUTH_STATUS_ENDPOINTS: Record<CliProvider, string> = {
+export const CLI_AUTH_STATUS_ENDPOINTS: Record<LLMProvider, string> = {
   claude: '/api/cli/claude/status',
   cursor: '/api/cli/cursor/status',
   codex: '/api/cli/codex/status',
