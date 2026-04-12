@@ -548,13 +548,21 @@ export function useChatSessionState({
     const sessionProvider = selectedSession.__provider || 'claude';
     if (sessionProvider !== 'claude') return;
 
+    // Fetch initial token usage but don't overwrite a higher value from WebSocket
+    let cancelled = false;
     const fetchInitialTokenUsage = async () => {
       try {
         const url = `/api/projects/${selectedProject.name}/sessions/${selectedSession.id}/token-usage`;
         const response = await authenticatedFetch(url);
-        if (response.ok) {
-          setTokenBudget(await response.json());
-        } else {
+        if (response.ok && !cancelled) {
+          const data = await response.json();
+          setTokenBudget((prev: Record<string, unknown> | null) => {
+            if (prev && typeof prev.total === 'number' && prev.total > (data.total || 0)) {
+              return prev;
+            }
+            return data;
+          });
+        } else if (!cancelled) {
           setTokenBudget(null);
         }
       } catch (error) {
@@ -562,6 +570,7 @@ export function useChatSessionState({
       }
     };
     fetchInitialTokenUsage();
+    return () => { cancelled = true; };
   }, [selectedProject, selectedSession?.id, selectedSession?.__provider]);
 
   const visibleMessages = useMemo(() => {
