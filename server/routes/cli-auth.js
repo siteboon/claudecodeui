@@ -169,10 +169,29 @@ async function checkClaudeCredentials() {
   // Priority 2: Check ~/.claude/.credentials.json for OAuth tokens
   // This is the standard authentication method used by Claude CLI after running
   // 'claude /login' or 'claude setup-token' commands.
+  const notAuthenticatedResult = {
+    authenticated: false,
+    email: null,
+    method: null,
+    error: 'Claude CLI is not authenticated. Run claude /login or configure ANTHROPIC_API_KEY.'
+  };
+
+  const credPath = path.join(os.homedir(), '.claude', '.credentials.json');
+
   try {
-    const credPath = path.join(os.homedir(), '.claude', '.credentials.json');
     const content = await fs.readFile(credPath, 'utf8');
-    const creds = JSON.parse(content);
+    let creds;
+
+    try {
+      creds = JSON.parse(content);
+    } catch {
+      return {
+        authenticated: false,
+        email: null,
+        method: null,
+        error: 'Claude credentials are unreadable. Run claude /login again.'
+      };
+    }
 
     const oauth = creds.claudeAiOauth;
     if (oauth && oauth.accessToken) {
@@ -185,18 +204,26 @@ async function checkClaudeCredentials() {
           method: 'credentials_file'
         };
       }
+
+      return {
+        authenticated: false,
+        email: null,
+        method: null,
+        error: 'Claude login has expired. Run claude /login again.'
+      };
+    }
+
+    return notAuthenticatedResult;
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return notAuthenticatedResult;
     }
 
     return {
       authenticated: false,
       email: null,
-      method: null
-    };
-  } catch (error) {
-    return {
-      authenticated: false,
-      email: null,
-      method: null
+      method: null,
+      error: 'Unable to read Claude credentials. Run claude /login again.'
     };
   }
 }

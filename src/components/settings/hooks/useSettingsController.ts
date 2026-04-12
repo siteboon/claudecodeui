@@ -268,36 +268,41 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
     setCodexAuthStatus(status);
   }, []);
 
-  const checkAuthStatus = useCallback(async (provider: AgentProvider) => {
+  const checkAuthStatus = useCallback(async (provider: AgentProvider): Promise<AuthStatus> => {
     try {
       const response = await authenticatedFetch(AUTH_STATUS_ENDPOINTS[provider]);
 
       if (!response.ok) {
-        setAuthStatusByProvider(provider, {
+        const status = {
           authenticated: false,
           email: null,
           loading: false,
           error: 'Failed to check authentication status',
-        });
-        return;
+        };
+        setAuthStatusByProvider(provider, status);
+        return status;
       }
 
       const data = await toResponseJson<StatusApiResponse>(response);
-      setAuthStatusByProvider(provider, {
+      const status = {
         authenticated: Boolean(data.authenticated),
         email: data.email || null,
         loading: false,
         error: data.error || null,
         method: data.method,
-      });
+      };
+      setAuthStatusByProvider(provider, status);
+      return status;
     } catch (error) {
       console.error(`Error checking ${provider} auth status:`, error);
-      setAuthStatusByProvider(provider, {
+      const status = {
         authenticated: false,
         email: null,
         loading: false,
         error: getErrorMessage(error),
-      });
+      };
+      setAuthStatusByProvider(provider, status);
+      return status;
     }
   }, [setAuthStatusByProvider]);
 
@@ -729,12 +734,17 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
   }, [projects]);
 
   const handleLoginComplete = useCallback((exitCode: number) => {
-    if (exitCode !== 0 || !loginProvider) {
+    if (!loginProvider) {
       return;
     }
 
-    setSaveStatus('success');
-    void checkAuthStatus(loginProvider);
+    void (async () => {
+      const authStatus = await checkAuthStatus(loginProvider);
+
+      if (exitCode === 0) {
+        setSaveStatus(authStatus.authenticated ? 'success' : 'error');
+      }
+    })();
   }, [checkAuthStatus, loginProvider]);
 
   const saveSettings = useCallback(async () => {
