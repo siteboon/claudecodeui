@@ -47,6 +47,7 @@ export type SidebarProjectListProps = {
   ) => void;
   onLoadMoreSessions: (project: Project) => void;
   onNewSession: (project: Project) => void;
+  onNewWorktree?: (project: Project) => void;
   onEditingSessionNameChange: (value: string) => void;
   onStartEditingSession: (sessionId: string, initialName: string) => void;
   onCancelEditingSession: () => void;
@@ -86,6 +87,7 @@ export default function SidebarProjectList({
   onDeleteSession,
   onLoadMoreSessions,
   onNewSession,
+  onNewWorktree,
   onEditingSessionNameChange,
   onStartEditingSession,
   onCancelEditingSession,
@@ -167,6 +169,7 @@ export default function SidebarProjectList({
     onDeleteSession,
     onLoadMoreSessions,
     onNewSession,
+    onNewWorktree,
     onEditingSessionNameChange,
     onStartEditingSession,
     onCancelEditingSession,

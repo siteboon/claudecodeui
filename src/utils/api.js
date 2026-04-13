@@ -104,6 +104,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ path }),
     }),
+  createWorktree: (projectName, branchName) =>
+    authenticatedFetch(`/api/projects/${projectName}/worktrees`, {
+      method: 'POST',
+      body: JSON.stringify({ branchName }),
+    }),
   createWorkspace: (workspaceData) =>
     authenticatedFetch('/api/projects/create-workspace', {
       method: 'POST',
