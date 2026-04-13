@@ -30,6 +30,8 @@ interface ChatMessagesPaneProps {
   isTaskMasterInstalled: boolean | null;
   onShowAllTasks?: (() => void) | null;
   setInput: Dispatch<SetStateAction<string>>;
+  linkedWorktrees?: Project[];
+  onWorktreeSelect?: (project: Project) => void;
   isLoadingMoreMessages: boolean;
   hasMoreMessages: boolean;
   totalMessages: number;
@@ -75,6 +77,8 @@ export default function ChatMessagesPane({
   isTaskMasterInstalled,
   onShowAllTasks,
   setInput,
+  linkedWorktrees,
+  onWorktreeSelect,
   isLoadingMoreMessages,
   hasMoreMessages,
   totalMessages,
@@ -158,6 +162,8 @@ export default function ChatMessagesPane({
           isTaskMasterInstalled={isTaskMasterInstalled}
           onShowAllTasks={onShowAllTasks}
           setInput={setInput}
+          linkedWorktrees={linkedWorktrees}
+          onWorktreeSelect={onWorktreeSelect}
         />
       ) : (
         <>

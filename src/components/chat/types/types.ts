@@ -92,8 +92,10 @@ export interface Question {
 }
 
 export interface ChatInterfaceProps {
+  projects?: Project[];
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
+  onProjectSelect?: (project: Project) => void;
   ws: WebSocket | null;
   sendMessage: (message: unknown) => void;
   latestMessage: any;

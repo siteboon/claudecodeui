@@ -33,6 +33,7 @@ export type PrdFile = {
 };
 
 export type MainContentProps = {
+  projects: Project[];
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
   activeTab: AppTab;
@@ -52,6 +53,7 @@ export type MainContentProps = {
   onReplaceTemporarySession: SessionLifecycleHandler;
   onNavigateToSession: (targetSessionId: string) => void;
   onShowSettings: () => void;
+  onProjectSelect: (project: Project) => void;
   externalMessageUpdate: number;
 };
 
