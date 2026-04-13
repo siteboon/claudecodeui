@@ -637,6 +637,7 @@ app.post('/api/projects/:projectName/worktrees', authenticateToken, async (req, 
         try {
             await new Promise((resolve, reject) => {
                 const check = spawn('git', ['rev-parse', '--verify', branch], { cwd: mainRepoPath });
+                check.on('error', reject);
                 check.on('close', code => code === 0 ? resolve() : reject());
             });
             branchExists = true;
@@ -651,6 +652,7 @@ app.post('/api/projects/:projectName/worktrees', authenticateToken, async (req, 
         await new Promise((resolve, reject) => {
             const proc = spawn('git', worktreeArgs, { cwd: mainRepoPath });
             let stderr = '';
+            proc.on('error', reject);
             proc.stderr.on('data', d => { stderr += d.toString(); });
             proc.on('close', code => {
                 if (code === 0) resolve();

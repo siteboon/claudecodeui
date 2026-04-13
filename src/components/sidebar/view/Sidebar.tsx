@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDeviceSettings } from '../../../hooks/useDeviceSettings';
 import { useVersionCheck } from '../../../hooks/useVersionCheck';
@@ -125,13 +125,16 @@ function Sidebar({
   }, [isPWA]);
 
   const [newWorktreeProject, setNewWorktreeProject] = useState<Project | null>(null);
+  // Keep a ref to latest projects so the post-refresh callback isn't a stale closure
+  const projectsRef = useRef(projects);
+  useEffect(() => { projectsRef.current = projects; }, [projects]);
 
   const handleWorktreeCreated = (worktreePath: string) => {
     setNewWorktreeProject(null);
     if (window.refreshProjects) {
       void window.refreshProjects().then(() => {
-        // After refresh, find the new worktree project and open a new session
-        const wt = projects.find(p => p.fullPath === worktreePath);
+        // After refresh, projectsRef.current has the updated list
+        const wt = projectsRef.current.find(p => p.fullPath === worktreePath);
         if (wt) {
           handleProjectSelect(wt);
           onNewSession(wt);
