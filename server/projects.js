@@ -423,7 +423,7 @@ async function resolveWorktreeInfo(projectPath) {
 
     return {
       isWorktree: true,
-      mainRepoPath: mainWorktree.path,
+      mainRepoPath: path.resolve(mainWorktree.path),
       worktreeBranch: linked.branch || 'HEAD (detached)',
     };
   } catch {

@@ -122,7 +122,7 @@ export default function SidebarWorktreeItem({
 
           <div
             className={cn(
-              'flex cursor-pointer items-center justify-between rounded-lg px-2 py-1.5 transition-colors hover:bg-accent/50',
+              'group flex cursor-pointer items-center justify-between rounded-lg px-2 py-1.5 transition-colors hover:bg-accent/50',
               isSelected && 'bg-primary/5',
             )}
             onClick={selectAndToggle}
@@ -176,7 +176,7 @@ export default function SidebarWorktreeItem({
               'flex items-center gap-2 rounded-lg border border-border/50 bg-card px-3 py-2 mx-3 my-1 active:scale-[0.98] transition-all duration-150',
               isSelected && 'border-primary/20 bg-primary/5',
             )}
-            onClick={toggle}
+            onClick={selectAndToggle}
           >
             <GitBranch className="h-4 w-4 shrink-0 text-emerald-500 dark:text-emerald-400" />
             <div className="min-w-0 flex-1">
