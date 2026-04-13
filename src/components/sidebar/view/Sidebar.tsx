@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDeviceSettings } from '../../../hooks/useDeviceSettings';
 import { useVersionCheck } from '../../../hooks/useVersionCheck';
@@ -125,21 +125,24 @@ function Sidebar({
   }, [isPWA]);
 
   const [newWorktreeProject, setNewWorktreeProject] = useState<Project | null>(null);
-  // Keep a ref to latest projects so the post-refresh callback isn't a stale closure
-  const projectsRef = useRef(projects);
-  useEffect(() => { projectsRef.current = projects; }, [projects]);
+  const [pendingWorktreePath, setPendingWorktreePath] = useState<string | null>(null);
+
+  // When projects list updates after worktree creation, navigate to the new project
+  useEffect(() => {
+    if (!pendingWorktreePath) return;
+    const wt = projects.find(p => p.fullPath === pendingWorktreePath);
+    if (wt) {
+      setPendingWorktreePath(null);
+      handleProjectSelect(wt);
+      onNewSession(wt);
+    }
+  }, [projects, pendingWorktreePath, handleProjectSelect, onNewSession]);
 
   const handleWorktreeCreated = (worktreePath: string) => {
     setNewWorktreeProject(null);
     if (window.refreshProjects) {
-      void window.refreshProjects().then(() => {
-        // After refresh, projectsRef.current has the updated list
-        const wt = projectsRef.current.find(p => p.fullPath === worktreePath);
-        if (wt) {
-          handleProjectSelect(wt);
-          onNewSession(wt);
-        }
-      });
+      setPendingWorktreePath(worktreePath);
+      void window.refreshProjects();
     } else {
       window.location.reload();
     }

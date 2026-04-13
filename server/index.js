@@ -624,6 +624,12 @@ app.post('/api/projects/:projectName/worktrees', authenticateToken, async (req, 
         const safeSuffix = branch.replace(/[/\\]/g, '-');
         const worktreePath = path.join(path.dirname(mainRepoPath), `${repoName}-${safeSuffix}`);
 
+        // Validate the resolved path is inside the allowed workspace boundary
+        const workspaceValidation = await validateWorkspacePath(worktreePath);
+        if (!workspaceValidation.isValid) {
+            return res.status(400).json({ error: 'Worktree path is outside the allowed workspace area' });
+        }
+
         // Check if the worktree path already exists
         try {
             await fsPromises.access(worktreePath);
@@ -637,7 +643,6 @@ app.post('/api/projects/:projectName/worktrees', authenticateToken, async (req, 
         try {
             await new Promise((resolve, reject) => {
                 const check = spawn('git', ['rev-parse', '--verify', branch], { cwd: mainRepoPath });
-                check.on('error', reject);
                 check.on('close', code => code === 0 ? resolve() : reject());
             });
             branchExists = true;
@@ -652,7 +657,6 @@ app.post('/api/projects/:projectName/worktrees', authenticateToken, async (req, 
         await new Promise((resolve, reject) => {
             const proc = spawn('git', worktreeArgs, { cwd: mainRepoPath });
             let stderr = '';
-            proc.on('error', reject);
             proc.stderr.on('data', d => { stderr += d.toString(); });
             proc.on('close', code => {
                 if (code === 0) resolve();
@@ -666,7 +670,7 @@ app.post('/api/projects/:projectName/worktrees', authenticateToken, async (req, 
         res.json({ success: true, worktreePath, project });
     } catch (error) {
         console.error('Error creating worktree:', error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: 'Failed to create worktree' });
     }
 });
 
