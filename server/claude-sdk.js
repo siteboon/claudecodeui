@@ -26,6 +26,7 @@ import {
 } from './services/notification-orchestrator.js';
 import { claudeAdapter } from './providers/claude/adapter.js';
 import { createNormalizedMessage } from './providers/types.js';
+import { CLAUDE_SETTINGS_PATH } from './constants/config.js';
 
 const activeSessions = new Map();
 const pendingToolApprovals = new Map();
@@ -139,11 +140,65 @@ function matchesToolPermission(entry, toolName, input) {
 }
 
 /**
- * Maps CLI options to SDK-compatible options format
+ * Loads and validates a custom Claude settings JSON file.
+ * Supports the same structure as ~/.claude/settings.json.
+ * Returns null (with a console warning) on any error so callers can fall back gracefully.
+ *
+ * @param {string} settingsPath - Absolute or relative path to the settings JSON file
+ * @returns {Promise<Object|null>} Parsed settings object, or null on failure
+ */
+async function loadCustomSettings(settingsPath) {
+  if (!settingsPath) return null;
+
+  // Resolve relative paths against cwd
+  const resolvedPath = path.isAbsolute(settingsPath)
+    ? settingsPath
+    : path.resolve(process.cwd(), settingsPath);
+
+  // Check the file exists and is accessible
+  try {
+    await fs.access(resolvedPath);
+  } catch {
+    console.warn(`[WARN] Custom settings file not found: ${resolvedPath}`);
+    return null;
+  }
+
+  // Read the file
+  let raw;
+  try {
+    raw = await fs.readFile(resolvedPath, 'utf8');
+  } catch (err) {
+    console.warn(`[WARN] Could not read custom settings file ${resolvedPath}: ${err.message}`);
+    return null;
+  }
+
+  // Parse as JSON
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    console.warn(`[WARN] Custom settings file is not valid JSON (${resolvedPath}): ${err.message}`);
+    return null;
+  }
+
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    console.warn(`[WARN] Custom settings file must be a JSON object: ${resolvedPath}`);
+    return null;
+  }
+
+  console.log(`[INFO] Loaded custom Claude settings from ${resolvedPath}`);
+  return parsed;
+}
+
+/**
+ * Maps CLI options to SDK-compatible options format.
+ * When customSettings is provided, its values take precedence over the defaults
+ * derived from toolsSettings/permissionMode in options.
  * @param {Object} options - CLI options
+ * @param {Object|null} customSettings - Parsed custom settings JSON (optional)
  * @returns {Object} SDK-compatible options
  */
-function mapCliOptionsToSDK(options = {}) {
+function mapCliOptionsToSDK(options = {}, customSettings = null) {
   const { sessionId, cwd, toolsSettings, permissionMode } = options;
 
   const sdkOptions = {};
@@ -153,20 +208,31 @@ function mapCliOptionsToSDK(options = {}) {
     sdkOptions.cwd = cwd;
   }
 
-  // Map permission mode
-  if (permissionMode && permissionMode !== 'default') {
-    sdkOptions.permissionMode = permissionMode;
+  // Determine effective permission mode:
+  // custom settings file wins if it specifies one, then fall back to per-request option
+  const effectivePermissionMode = customSettings?.permissionMode || permissionMode;
+
+  if (effectivePermissionMode && effectivePermissionMode !== 'default') {
+    sdkOptions.permissionMode = effectivePermissionMode;
   }
 
-  // Map tool settings
-  const settings = toolsSettings || {
+  // Build effective tool settings by merging:
+  //   1. per-request toolsSettings (from UI/caller)
+  //   2. custom settings file (wins on overlap)
+  const baseSettings = toolsSettings || {
     allowedTools: [],
     disallowedTools: [],
     skipPermissions: false
   };
 
+  const settings = {
+    allowedTools: customSettings?.allowedTools ?? baseSettings.allowedTools ?? [],
+    disallowedTools: customSettings?.disallowedTools ?? baseSettings.disallowedTools ?? [],
+    skipPermissions: customSettings?.skipPermissions ?? baseSettings.skipPermissions ?? false,
+  };
+
   // Handle tool permissions
-  if (settings.skipPermissions && permissionMode !== 'plan') {
+  if (settings.skipPermissions && effectivePermissionMode !== 'plan') {
     // When skipping permissions, use bypassPermissions mode
     sdkOptions.permissionMode = 'bypassPermissions';
   }
@@ -174,7 +240,7 @@ function mapCliOptionsToSDK(options = {}) {
   let allowedTools = [...(settings.allowedTools || [])];
 
   // Add plan mode default tools
-  if (permissionMode === 'plan') {
+  if (effectivePermissionMode === 'plan') {
     const planModeTools = ['Read', 'Task', 'exit_plan_mode', 'TodoRead', 'TodoWrite', 'WebFetch', 'WebSearch'];
     for (const tool of planModeTools) {
       if (!allowedTools.includes(tool)) {
@@ -194,7 +260,7 @@ function mapCliOptionsToSDK(options = {}) {
 
   // Map model (default to sonnet)
   // Valid models: sonnet, opus, haiku, opusplan, sonnet[1m]
-  sdkOptions.model = options.model || CLAUDE_MODELS.DEFAULT;
+  sdkOptions.model = options.model || customSettings?.model || CLAUDE_MODELS.DEFAULT;
   // Model logged at query start below
 
   // Map system prompt configuration
@@ -481,8 +547,12 @@ async function queryClaudeSDK(command, options = {}, ws) {
   };
 
   try {
+    // Load custom settings file if configured (CLI flag > env var)
+    const settingsFilePath = options.settingsPath || CLAUDE_SETTINGS_PATH;
+    const customSettings = await loadCustomSettings(settingsFilePath);
+
     // Map CLI options to SDK format
-    const sdkOptions = mapCliOptionsToSDK(options);
+    const sdkOptions = mapCliOptionsToSDK(options, customSettings);
 
     // Load MCP configuration
     const mcpServers = await loadMcpConfig(options.cwd);
