@@ -35,7 +35,8 @@
     "release": "./release.sh",
     "prepublishOnly": "npm run build",
     "postinstall": "node scripts/fix-node-pty.js",
-    "prepare": "husky"
+    "prepare": "husky",
+    "update:platform": "./update-platform.sh"
   },
   "keywords": [
     "claude code",
