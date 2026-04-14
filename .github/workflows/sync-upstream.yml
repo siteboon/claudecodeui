@@ -55,7 +55,7 @@ jobs:
           CLAUDE_CODE_USE_BEDROCK: "1"
           AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
         run: |
-          npm install -g @anthropic-ai/claude-code
+          curl -fsSL https://claude.ai/install.sh | sh
           claude -p "There are git merge conflicts from merging upstream/main into this fork's main branch. Resolve all conflicts by keeping changes from both sides when possible. For package.json, preserve both upstream additions and fork-specific customizations (like build:sdk). After resolving, stage all files with 'git add .' and commit with 'git commit --no-edit'." --allowedTools "Bash(git*)" "Bash(cat*)" "Bash(grep*)" "Edit" "Read"
 
       - name: Create PR with resolved conflicts
@@ -67,6 +67,7 @@ jobs:
           git checkout -b "$BRANCH"
           git push origin "$BRANCH"
           gh pr create \
+            --repo GeorgeZhiXu/claudecodeui \
             --title "Auto-sync upstream (conflicts resolved by Claude Code)" \
             --body "Automated merge from \`upstream/main\` had conflicts that were resolved by Claude Code. Please review the resolutions before merging." \
             --base main \
