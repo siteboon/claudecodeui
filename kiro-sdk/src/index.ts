@@ -18,24 +18,19 @@ function getTransport(): AcpTransport {
   if (!transport) {
     transport = new AcpTransport();
     transport.setNotificationHandler((method, params) => {
-      if (method === 'session/update') {
-        const sessionId = params.sessionId as string;
-        const update = (params.update || params) as Record<string, unknown>;
-        const type = (update.sessionUpdate || update.type || update.kind) as string;
-        if (!sessionId || !router.has(sessionId)) {
-          console.log('[kiro-sdk] notification for unregistered session:', sessionId?.slice(0,8), 'type:', type);
-          return;
-        }
+      if (method !== 'session/update') return;
+
+      const sessionId = params.sessionId as string;
+      const update = (params.update || params) as Record<string, unknown>;
+      const type = (update.sessionUpdate || update.type || update.kind) as string;
+
+      if (!sessionId || !router.has(sessionId)) return;
 
       if (type === 'agent_message_chunk') {
         const content = update.content as Record<string, unknown> | undefined;
         const text = (content?.text || '') as string;
         if (text) {
-          router.push(sessionId, {
-            type: 'assistant',
-            content: text,
-            session_id: sessionId,
-          });
+          router.push(sessionId, { type: 'assistant', content: text, session_id: sessionId });
         }
       } else if (type === 'tool_call') {
         router.push(sessionId, {
