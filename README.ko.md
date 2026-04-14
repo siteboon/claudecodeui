@@ -72,6 +72,8 @@
 
 ### 셀프 호스트 (오픈 소스)
 
+#### npm
+
 **npx**로 즉시 CloudCLI UI를 실행하세요 (Node.js v22+ 필요):
 
 ```bash
@@ -87,7 +89,17 @@ cloudcli
 
 `http://localhost:3001`을 열면 기존 세션이 자동으로 발견됩니다.
 
-자세한 구성 옵션, PM2, 원격 서버 설정 등은 **[문서 →](https://cloudcli.ai/docs)**를 참고하세요
+자세한 구성 옵션, PM2, 원격 서버 설정 등은 **[문서 →](https://cloudcli.ai/docs)**를 참고하세요.
+
+#### Docker Sandboxes (실험적)
+
+하이퍼바이저 수준 격리로 에이전트를 샌드박스에서 실행합니다. 기본 에이전트는 Claude Code입니다. [`sbx` CLI](https://docs.docker.com/ai/sandboxes/get-started/)가 필요합니다.
+
+```
+npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project
+```
+
+Claude Code, Codex, Gemini CLI를 지원합니다. 자세한 내용은 [샌드박스 문서](docker/)를 참고하세요.
 
 ---
 
