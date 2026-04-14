@@ -2,8 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
+import { findAppRoot, getModuleDir } from '../utils/runtime-paths.js';
 import {
   APP_CONFIG_TABLE_SQL,
   USER_NOTIFICATION_PREFERENCES_TABLE_SQL,
@@ -14,8 +13,10 @@ import {
   DATABASE_SCHEMA_SQL
 } from './schema.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const __dirname = getModuleDir(import.meta.url);
+// The compiled backend lives under dist-server/server/database, but the install root we log
+// should still point at the project/app root. Resolving it here avoids build-layout drift.
+const APP_ROOT = findAppRoot(__dirname);
 
 // ANSI color codes for terminal output
 const colors = {
@@ -73,7 +74,7 @@ const db = new Database(DB_PATH);
 db.exec(APP_CONFIG_TABLE_SQL);
 
 // Show app installation path prominently
-const appInstallPath = path.join(__dirname, '../..');
+const appInstallPath = APP_ROOT;
 console.log('');
 console.log(c.dim('═'.repeat(60)));
 console.log(`${c.info('[INFO]')} App Installation: ${c.bright(appInstallPath)}`);
