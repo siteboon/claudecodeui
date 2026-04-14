@@ -9,6 +9,7 @@ Usage:
 
 from __future__ import annotations
 
+import asyncio
 import os
 from typing import Any, AsyncGenerator
 
@@ -101,15 +102,26 @@ class Query:
 
         _router.register(self.session_id)
         try:
-            prompt_result = await t.send_rpc("session/prompt", {
-                "sessionId": self.session_id,
-                "prompt": [{"type": "text", "text": self._prompt}],
-            })
-            if isinstance(prompt_result, dict) and prompt_result.get("stopReason"):
-                _router.finish(self.session_id)
+            # Fire the prompt RPC but DON'T await it before yielding.
+            # kiro-cli streams notifications BEFORE the RPC response arrives.
+            # If we await here, the generator blocks and nothing streams.
+            async def _send_prompt() -> None:
+                try:
+                    prompt_result = await t.send_rpc("session/prompt", {
+                        "sessionId": self.session_id,
+                        "prompt": [{"type": "text", "text": self._prompt}],
+                    })
+                    if isinstance(prompt_result, dict) and prompt_result.get("stopReason"):
+                        _router.finish(self.session_id)
+                except Exception:
+                    _router.finish(self.session_id, is_error=True)
+
+            prompt_task = asyncio.ensure_future(_send_prompt())
 
             async for msg in _router.iterate(self.session_id):
                 yield msg
+
+            await prompt_task
         finally:
             _router.unregister(self.session_id)
 

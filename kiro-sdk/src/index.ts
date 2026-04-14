@@ -92,19 +92,27 @@ export function query(params: { prompt: string; options?: Options }): Query {
       // Note: set_model is intentionally skipped — it crashes kiro-cli with
       // certain model ID formats. Kiro uses 'auto' by default which works well.
 
-      // Send the prompt — response arrives after streaming completes
-      const promptResult = await t.sendRpc('session/prompt', {
+      // Fire the prompt RPC but DON'T await it before yielding.
+      // kiro-cli streams notifications (agent_message_chunk, tool_call, etc.)
+      // BEFORE the RPC response arrives. If we await here, the generator blocks
+      // and the UI shows "Thinking..." until the entire turn completes.
+      const promptDone = t.sendRpc('session/prompt', {
         sessionId: acpSessionId,
         prompt: [{ type: 'text', text: prompt }],
-      }) as Record<string, unknown>;
+      }).then((result) => {
+        const r = result as Record<string, unknown> | null;
+        if (r?.stopReason) {
+          router.finish(acpSessionId!);
+        }
+      }).catch((err) => {
+        router.finish(acpSessionId!, true);
+      });
 
-      // If turn already ended (stopReason in response), finish the session
-      if (promptResult?.stopReason) {
-        router.finish(acpSessionId);
-      }
-
-      // Yield messages until TurnEnd
+      // Yield messages as they stream in via notifications
       yield* router.iterate(acpSessionId);
+
+      // Ensure the RPC has settled before we exit
+      await promptDone;
     } finally {
       router.unregister(acpSessionId);
     }
