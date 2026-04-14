@@ -21,20 +21,16 @@ function getTransport(): AcpTransport {
       if (method !== 'session/update') return;
 
       const sessionId = params.sessionId as string;
-      if (!sessionId || !router.has(sessionId)) return;
-
       const update = (params.update || params) as Record<string, unknown>;
       const type = (update.sessionUpdate || update.type || update.kind) as string;
+
+      if (!sessionId || !router.has(sessionId)) return;
 
       if (type === 'agent_message_chunk') {
         const content = update.content as Record<string, unknown> | undefined;
         const text = (content?.text || '') as string;
         if (text) {
-          router.push(sessionId, {
-            type: 'assistant',
-            content: text,
-            session_id: sessionId,
-          });
+          router.push(sessionId, { type: 'assistant', content: text, session_id: sessionId });
         }
       } else if (type === 'tool_call') {
         router.push(sessionId, {
@@ -75,15 +71,9 @@ export function query(params: { prompt: string; options?: Options }): Query {
     const t = getTransport();
     await t.connect(buildAcpArgs(options));
 
-    // Set model if specified
-    if (options.model && options.model !== 'auto') {
-      try { await t.sendRpc('session/set_model', { model: options.model }); } catch { /* ignore */ }
-    }
-
-    // Create or load session
     if (options.resume) {
-      const result = await t.sendRpc('session/load', { sessionId: options.resume }) as AcpSessionResult;
-      acpSessionId = result?.sessionId || options.resume;
+      // Reuse existing ACP session — just send another prompt
+      acpSessionId = options.resume;
     } else {
       const result = await t.sendRpc('session/new', {
         cwd: options.cwd || process.cwd(),
@@ -97,19 +87,30 @@ export function query(params: { prompt: string; options?: Options }): Query {
     router.register(acpSessionId);
 
     try {
-      // Send the prompt — response arrives after streaming completes
-      const promptResult = await t.sendRpc('session/prompt', {
+      // Note: set_model is intentionally skipped — it crashes kiro-cli with
+      // certain model ID formats. Kiro uses 'auto' by default which works well.
+
+      // Fire the prompt RPC but DON'T await it before yielding.
+      // kiro-cli streams notifications (agent_message_chunk, tool_call, etc.)
+      // BEFORE the RPC response arrives. If we await here, the generator blocks
+      // and the UI shows "Thinking..." until the entire turn completes.
+      const promptDone = t.sendRpc('session/prompt', {
         sessionId: acpSessionId,
         prompt: [{ type: 'text', text: prompt }],
-      }) as Record<string, unknown>;
+      }).then((result) => {
+        const r = result as Record<string, unknown> | null;
+        if (r?.stopReason) {
+          router.finish(acpSessionId!);
+        }
+      }).catch((err) => {
+        router.finish(acpSessionId!, true);
+      });
 
-      // If turn already ended (stopReason in response), finish the session
-      if (promptResult?.stopReason) {
-        router.finish(acpSessionId);
-      }
-
-      // Yield messages until TurnEnd
+      // Yield messages as they stream in via notifications
       yield* router.iterate(acpSessionId);
+
+      // Ensure the RPC has settled before we exit
+      await promptDone;
     } finally {
       router.unregister(acpSessionId);
     }

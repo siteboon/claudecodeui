@@ -1,255 +1,110 @@
 /**
- * Kiro CLI Integration via Agent Client Protocol (ACP)
+ * Kiro CLI Integration via kiro-sdk
  *
- * Spawns `kiro-cli acp` as a long-lived process and communicates via JSON-RPC 2.0 over stdio.
- * ACP methods: initialize, session/new, session/load, session/prompt, session/cancel, session/set_model
- * Notifications arrive via session/notification with types: AgentMessageChunk, ToolCall, ToolCallUpdate, TurnEnd
+ * Uses the kiro-sdk's query()/disconnect() API to communicate with `kiro-cli acp`.
+ * The SDK manages the long-lived ACP process, JSON-RPC transport, and session routing internally.
  */
 
-import { spawn } from 'child_process';
-import crossSpawn from 'cross-spawn';
-import os from 'os';
+import { query, disconnect } from 'kiro-sdk';
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
 import { createNormalizedMessage } from './providers/types.js';
 
-const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
-
-const activeSessions = new Map(); // sessionId -> { process, sessionId, writer, status }
-let acpProcess = null;
-let acpReady = false;
-let rpcId = 0;
-const pendingRequests = new Map(); // rpc id -> { resolve, reject, timeout }
-let lineBuffer = '';
-
-function nextId() { return ++rpcId; }
-
-function sendRpc(method, params = {}) {
-    return new Promise((resolve, reject) => {
-        if (!acpProcess || !acpReady) {
-            return reject(new Error('ACP process not ready'));
-        }
-        const id = nextId();
-        const msg = JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n';
-        const timeout = setTimeout(() => {
-            pendingRequests.delete(id);
-            reject(new Error(`RPC timeout for ${method}`));
-        }, 120000);
-        pendingRequests.set(id, { resolve, reject, timeout });
-        acpProcess.stdin.write(msg);
-    });
-}
-
-function handleRpcLine(line) {
-    if (!line.trim()) return;
-    let msg;
-    try { msg = JSON.parse(line); } catch { return; }
-
-    // Response to a request
-    if (msg.id != null && pendingRequests.has(msg.id)) {
-        const { resolve, reject, timeout } = pendingRequests.get(msg.id);
-        clearTimeout(timeout);
-        pendingRequests.delete(msg.id);
-        if (msg.error) {
-            reject(new Error(msg.error.message || JSON.stringify(msg.error)));
-        } else {
-            resolve(msg.result);
-        }
-        return;
-    }
-
-    // Notification (no id)
-    if (msg.method) {
-        handleNotification(msg.method, msg.params || {});
-    }
-}
-
-function handleNotification(method, params) {
-    const sessionId = params.sessionId;
-    const session = sessionId ? findSessionByAcpId(sessionId) : null;
-    const ws = session?.writer;
-    const wsSessionId = session?.wsSessionId || sessionId;
-
-    if (!ws) return;
-
-    if (method === 'session/update') {
-        const update = params.update || params;
-        const type = update.sessionUpdate || update.type;
-
-        if (type === 'agent_message_chunk') {
-            const content = update.content?.text || '';
-            if (content) {
-                ws.send(createNormalizedMessage({ kind: 'stream_delta', content, sessionId: wsSessionId, provider: 'kiro' }));
-            }
-        } else if (type === 'tool_call') {
-            const toolName = update.name || update.toolName || 'unknown';
-            const status = update.status || 'running';
-            ws.send(createNormalizedMessage({ kind: 'tool_use', toolName, toolInput: update.parameters || update.input || {}, status, sessionId: wsSessionId, provider: 'kiro' }));
-        } else if (type === 'tool_call_update') {
-            const content = update.content?.text || '';
-            if (content) {
-                ws.send(createNormalizedMessage({ kind: 'stream_delta', content, sessionId: wsSessionId, provider: 'kiro' }));
-            }
-        } else if (type === 'turn_end') {
-            ws.send(createNormalizedMessage({ kind: 'complete', exitCode: 0, isNewSession: session?.isNew || false, sessionId: wsSessionId, provider: 'kiro' }));
-            notifyRunStopped({ userId: ws?.userId || null, provider: 'kiro', sessionId: wsSessionId, sessionName: session?.sessionSummary, stopReason: 'completed' });
-            activeSessions.delete(wsSessionId);
-        }
-    }
-}
-
-function findSessionByAcpId(acpSessionId) {
-    for (const [, session] of activeSessions) {
-        if (session.acpSessionId === acpSessionId) return session;
-    }
-    return null;
-}
-
-async function ensureAcpProcess() {
-    if (acpProcess && acpReady) return;
-
-    const kiroPath = process.env.KIRO_PATH || 'kiro-cli';
-    const args = ['acp'];
-    if (process.env.KIRO_TRUST_ALL_TOOLS === 'true') {
-        args.push('--trust-all-tools');
-    }
-
-    let cmd = kiroPath;
-    let spawnArgs = args;
-    if (os.platform() !== 'win32') {
-        cmd = 'sh';
-        spawnArgs = ['-c', 'exec "$0" "$@"', kiroPath, ...args];
-    }
-
-    console.log('Spawning ACP process:', kiroPath, args.join(' '));
-
-    acpProcess = spawnFunction(cmd, spawnArgs, {
-        stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env }
-    });
-
-    lineBuffer = '';
-    acpProcess.stdout.on('data', (data) => {
-        lineBuffer += data.toString();
-        const lines = lineBuffer.split('\n');
-        lineBuffer = lines.pop();
-        for (const line of lines) {
-            handleRpcLine(line);
-        }
-    });
-
-    acpProcess.stderr.on('data', (data) => {
-        const msg = data.toString().trim();
-        if (msg && !msg.includes('DeprecationWarning')) {
-            console.error('[kiro-acp stderr]', msg);
-        }
-    });
-
-    acpProcess.on('close', (code) => {
-        console.log('ACP process exited with code', code);
-        acpProcess = null;
-        acpReady = false;
-        // Reject all pending requests
-        for (const [id, { reject, timeout }] of pendingRequests) {
-            clearTimeout(timeout);
-            reject(new Error('ACP process exited'));
-        }
-        pendingRequests.clear();
-        // Notify all active sessions
-        for (const [wsSessionId, session] of activeSessions) {
-            session.writer?.send(createNormalizedMessage({ kind: 'error', content: 'Kiro ACP process exited unexpectedly', sessionId: wsSessionId, provider: 'kiro' }));
-        }
-        activeSessions.clear();
-    });
-
-    acpProcess.on('error', (err) => {
-        console.error('ACP process error:', err.message);
-        acpProcess = null;
-        acpReady = false;
-    });
-
-    // Initialize the ACP connection
-    acpReady = true; // allow sendRpc to work
-    try {
-        const result = await sendRpc('initialize', {
-            protocolVersion: 1,
-            clientCapabilities: { fs: { readTextFile: true, writeTextFile: true }, terminal: true },
-            clientInfo: { name: 'cloudcli', version: '1.0.0' }
-        });
-        console.log('ACP initialized:', result?.agentInfo?.name, result?.agentInfo?.version);
-    } catch (err) {
-        console.error('ACP initialize failed:', err.message);
-        acpReady = false;
-        if (acpProcess) { acpProcess.kill(); acpProcess = null; }
-        throw err;
-    }
-}
+const activeSessions = new Map(); // wsSessionId -> { query, abortController, ... }
 
 async function spawnKiro(command, options = {}, ws) {
-    const { sessionId, projectPath, cwd, sessionSummary } = options;
-
-    try {
-        await ensureAcpProcess();
-    } catch (err) {
-        ws.send(createNormalizedMessage({ kind: 'error', content: `Failed to start Kiro ACP: ${err.message}`, sessionId: sessionId || null, provider: 'kiro' }));
-        notifyRunFailed({ userId: ws?.userId || null, provider: 'kiro', sessionId, sessionName: sessionSummary, error: err });
-        throw err;
-    }
+    const { sessionId, projectPath, cwd, sessionSummary, model } = options;
 
     const workingDir = (cwd || projectPath || process.cwd()).replace(/[^\x20-\x7E]/g, '').trim();
-    let acpSessionId;
     let wsSessionId = sessionId;
-    let isNew = !sessionId;
+    const isNew = !sessionId;
+    const abortController = new AbortController();
 
     try {
-        // Set model if specified
-        if (options.model && options.model !== 'auto') {
-            try { await sendRpc('session/set_model', { model: options.model }); } catch { /* ignore */ }
-        }
+        const sdkOptions = {
+            cwd: workingDir,
+            model: model || undefined,
+            trustAllTools: process.env.KIRO_TRUST_ALL_TOOLS === 'true' || undefined,
+            abortController,
+        };
 
+        // Resume existing session if we have a sessionId
         if (sessionId) {
-            // Try to load existing session
+            sdkOptions.resume = sessionId;
+        }
+
+        const conversation = query({ prompt: command?.trim() || '', options: sdkOptions });
+
+        const sessionEntry = {
+            query: conversation,
+            abortController,
+            wsSessionId,
+            acpSessionId: null,
+            writer: ws,
+            isNew,
+            sessionSummary,
+            status: 'active',
+        };
+
+        // Register session immediately so abort works
+        activeSessions.set(wsSessionId || `kiro_pending_${Date.now()}`, sessionEntry);
+
+        // Stream messages from the SDK async generator
+        (async () => {
             try {
-                const loadResult = await sendRpc('session/load', { sessionId });
-                acpSessionId = loadResult?.sessionId || sessionId;
-            } catch {
-                // Fall back to new session if load fails
-                const newResult = await sendRpc('session/new', { cwd: workingDir, mcpServers: [] });
-                acpSessionId = newResult?.sessionId;
-                isNew = true;
+                let sessionAnnounced = !isNew; // existing sessions don't need announcement
+
+                for await (const message of conversation) {
+                    // For new sessions: announce BEFORE sending any content.
+                    // This ensures the frontend navigates to the new session
+                    // before stream_delta messages arrive.
+                    if (!sessionAnnounced && conversation.sessionId) {
+                        sessionEntry.acpSessionId = conversation.sessionId;
+                        wsSessionId = conversation.sessionId;
+                        sessionEntry.wsSessionId = wsSessionId;
+                        // Re-register under the real ACP session ID
+                        activeSessions.delete(sessionId);
+                        activeSessions.set(wsSessionId, sessionEntry);
+                        if (typeof ws.setSessionId === 'function') ws.setSessionId(wsSessionId);
+                        ws.send(createNormalizedMessage({ kind: 'session_created', newSessionId: wsSessionId, sessionId: wsSessionId, provider: 'kiro' }));
+                        sessionAnnounced = true;
+                    }
+
+                    switch (message.type) {
+                        case 'assistant':
+                            ws.send(createNormalizedMessage({ kind: 'stream_delta', content: message.content, sessionId: wsSessionId, provider: 'kiro' }));
+                            break;
+                        case 'tool_use':
+                            ws.send(createNormalizedMessage({ kind: 'tool_use', toolName: message.name, toolInput: message.input, status: message.status, sessionId: wsSessionId, provider: 'kiro' }));
+                            break;
+                        case 'tool_progress':
+                            ws.send(createNormalizedMessage({ kind: 'stream_delta', content: message.content, sessionId: wsSessionId, provider: 'kiro' }));
+                            break;
+                        case 'result':
+                            ws.send(createNormalizedMessage({ kind: 'stream_end', sessionId: wsSessionId, provider: 'kiro' }));
+                            ws.send(createNormalizedMessage({ kind: 'complete', exitCode: message.is_error ? 1 : 0, isNewSession: isNew, sessionId: wsSessionId, provider: 'kiro' }));
+                            notifyRunStopped({ userId: ws?.userId || null, provider: 'kiro', sessionId: wsSessionId, sessionName: sessionSummary, stopReason: message.is_error ? 'error' : 'completed' });
+                            activeSessions.delete(wsSessionId);
+                            break;
+                    }
+                }
+
+                // Generator finished without a result message — send complete
+                if (activeSessions.has(wsSessionId)) {
+                    ws.send(createNormalizedMessage({ kind: 'complete', exitCode: 0, isNewSession: isNew, sessionId: wsSessionId, provider: 'kiro' }));
+                    notifyRunStopped({ userId: ws?.userId || null, provider: 'kiro', sessionId: wsSessionId, sessionName: sessionSummary, stopReason: 'completed' });
+                    activeSessions.delete(wsSessionId);
+                }
+            } catch (err) {
+                if (activeSessions.has(wsSessionId)) {
+                    ws.send(createNormalizedMessage({ kind: 'error', content: err.message, sessionId: wsSessionId, provider: 'kiro' }));
+                    notifyRunFailed({ userId: ws?.userId || null, provider: 'kiro', sessionId: wsSessionId, sessionName: sessionSummary, error: err });
+                    activeSessions.delete(wsSessionId);
+                }
             }
-        } else {
-            const newResult = await sendRpc('session/new', { cwd: workingDir, mcpServers: [] });
-            acpSessionId = newResult?.sessionId;
-            wsSessionId = acpSessionId || `kiro_${Date.now()}`;
-        }
-
-        // Register session
-        activeSessions.set(wsSessionId, { acpSessionId, wsSessionId, writer: ws, isNew, sessionSummary, status: 'active' });
-
-        // Notify frontend of session creation
-        if (isNew) {
-            if (typeof ws.setSessionId === 'function') ws.setSessionId(wsSessionId);
-            ws.send(createNormalizedMessage({ kind: 'session_created', newSessionId: wsSessionId, sessionId: wsSessionId, provider: 'kiro' }));
-        }
-
-        // Send the prompt
-        if (command && command.trim()) {
-            const promptResult = await sendRpc('session/prompt', {
-                sessionId: acpSessionId,
-                prompt: [{ type: 'text', text: command }]
-            });
-            // If turn already ended (stopReason in response), send complete
-            if (promptResult?.stopReason && activeSessions.has(wsSessionId)) {
-                const session = activeSessions.get(wsSessionId);
-                ws.send(createNormalizedMessage({ kind: 'complete', exitCode: 0, isNewSession: session?.isNew || false, sessionId: wsSessionId, provider: 'kiro' }));
-                notifyRunStopped({ userId: ws?.userId || null, provider: 'kiro', sessionId: wsSessionId, sessionName: session?.sessionSummary, stopReason: 'completed' });
-                activeSessions.delete(wsSessionId);
-            }
-        }
+        })();
 
     } catch (err) {
-        activeSessions.delete(wsSessionId);
-        ws.send(createNormalizedMessage({ kind: 'error', content: err.message, sessionId: wsSessionId, provider: 'kiro' }));
+        ws.send(createNormalizedMessage({ kind: 'error', content: `Failed to start Kiro: ${err.message}`, sessionId: wsSessionId || null, provider: 'kiro' }));
         notifyRunFailed({ userId: ws?.userId || null, provider: 'kiro', sessionId: wsSessionId, sessionName: sessionSummary, error: err });
         throw err;
     }
@@ -260,7 +115,8 @@ function abortKiroSession(sessionId) {
     if (!session) return false;
 
     try {
-        sendRpc('session/cancel', { sessionId: session.acpSessionId }).catch(() => {});
+        session.query?.interrupt?.();
+        session.abortController?.abort();
         activeSessions.delete(sessionId);
         return true;
     } catch {
@@ -275,6 +131,9 @@ function isKiroSessionActive(sessionId) {
 function getActiveKiroSessions() {
     return Array.from(activeSessions.keys());
 }
+
+// Clean up on process exit
+process.on('exit', () => disconnect());
 
 export {
     spawnKiro,

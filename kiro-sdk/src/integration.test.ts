@@ -171,3 +171,52 @@ describe('integration: kiro-cli acp', () => {
     expect((promptResp!.result as Record<string, unknown>)?.stopReason).toBe('end_turn');
   }, TIMEOUT);
 });
+
+/**
+ * SDK public API tests — exercises query() → AsyncGenerator → KiroMessage.
+ * This is the code path claudecodeui actually uses.
+ */
+describe('integration: kiro-sdk public API', () => {
+  it('query() streams assistant chunks and ends with a result', async () => {
+    const { query, disconnect } = await import('./index.js');
+
+    const conversation = query({
+      prompt: 'Say exactly: SDK_PUBLIC_API_OK',
+      options: { cwd: '/tmp', trustAllTools: true },
+    });
+
+    const messages: Array<{ type: string; content?: string; text?: string; is_error?: boolean }> = [];
+    const timestamps: number[] = [];
+
+    for await (const msg of conversation) {
+      timestamps.push(Date.now());
+      messages.push(msg as any);
+    }
+
+    disconnect();
+
+    // Must have assistant chunks + result
+    const types = new Set(messages.map(m => m.type));
+    expect(types.has('assistant')).toBe(true);
+    expect(types.has('result')).toBe(true);
+
+    // Streamed text is complete
+    const fullText = messages.filter(m => m.type === 'assistant').map(m => m.content).join('');
+    expect(fullText).toContain('SDK_PUBLIC_API_OK');
+
+    // Result message aggregates the full text
+    const result = messages.find(m => m.type === 'result')!;
+    expect(result.is_error).toBe(false);
+    expect(result.text).toContain('SDK_PUBLIC_API_OK');
+
+    // Session ID was set
+    expect(conversation.sessionId).toBeTruthy();
+
+    // CRITICAL: first assistant chunk arrived BEFORE the result.
+    // This verifies streaming works — not buffered until turn end.
+    const firstAssistantIdx = messages.findIndex(m => m.type === 'assistant');
+    const resultIdx = messages.findIndex(m => m.type === 'result');
+    expect(firstAssistantIdx).toBeLessThan(resultIdx);
+    expect(firstAssistantIdx).toBeGreaterThanOrEqual(0);
+  }, 60_000);
+});

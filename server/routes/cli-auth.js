@@ -398,6 +398,20 @@ function mapModelToSDKShortname(model) {
   return model;
 }
 
+router.get('/kiro/status', async (req, res) => {
+  try {
+    const result = await checkKiroCredentials();
+    res.json({
+      authenticated: result.authenticated,
+      email: result.email,
+      error: result.error
+    });
+  } catch (error) {
+    console.error('Error checking Kiro auth status:', error);
+    res.status(500).json({ authenticated: false, email: null, error: error.message });
+  }
+});
+
 async function checkGeminiCredentials() {
   if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim()) {
     return {
@@ -469,6 +483,35 @@ async function checkGeminiCredentials() {
       email: null,
       error: 'Gemini CLI not configured'
     };
+  }
+}
+
+async function checkKiroCredentials() {
+  try {
+    // Kiro uses AWS Builder ID / SSO — no local credentials file.
+    // Check if kiro-cli is installed and has an active session directory.
+    const sessionsDir = path.join(os.homedir(), '.kiro', 'sessions');
+    await fs.access(sessionsDir);
+
+    // Verify kiro-cli is on PATH
+    return await new Promise((resolve) => {
+      const child = spawn('kiro-cli', ['--version']);
+      let stdout = '';
+      child.stdout.on('data', (d) => { stdout += d.toString(); });
+      child.on('close', (code) => {
+        if (code === 0) {
+          resolve({ authenticated: true, email: `Kiro CLI ${stdout.trim()}` });
+        } else {
+          resolve({ authenticated: false, email: null, error: 'Kiro CLI not authenticated' });
+        }
+      });
+      child.on('error', () => {
+        resolve({ authenticated: false, email: null, error: 'Kiro CLI not installed' });
+      });
+      setTimeout(() => { child.kill(); resolve({ authenticated: false, email: null, error: 'Timeout' }); }, 5000);
+    });
+  } catch {
+    return { authenticated: false, email: null, error: 'Kiro CLI not configured' };
   }
 }
 

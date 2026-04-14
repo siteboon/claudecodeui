@@ -31,22 +31,24 @@ export class AcpTransport {
     this.onNotification = handler;
   }
 
+  private initResult: AcpInitializeResult | null = null;
+
   /** Ensure the ACP process is running and initialized. */
   async connect(acpArgs: string[] = []): Promise<AcpInitializeResult> {
-    if (this.ready && this.process) {
-      // Already connected — return cached capabilities
-      return this.sendRpc('initialize', {
-        protocolVersion: 1,
-        clientCapabilities: { fs: { readTextFile: true, writeTextFile: true }, terminal: true },
-        clientInfo: { name: 'kiro-sdk', version: '0.1.0' },
-      }) as Promise<AcpInitializeResult>;
+    // If process died, reset so we respawn
+    if (this.initResult && (!this.ready || !this.process)) {
+      this.initResult = null;
+      this.initPromise = null;
+    }
+
+    if (this.ready && this.process && this.initResult) {
+      return this.initResult;
     }
 
     if (this.initPromise) return this.initPromise;
 
     this.initPromise = this._spawn(acpArgs);
-    const result = await this.initPromise;
-    return result;
+    return this.initPromise;
   }
 
   private async _spawn(acpArgs: string[]): Promise<AcpInitializeResult> {
@@ -77,6 +79,7 @@ export class AcpTransport {
       this.ready = false;
       this.process = null;
       this.initPromise = null;
+      this.initResult = null;
       for (const [id, { reject, timeout }] of this.pending) {
         clearTimeout(timeout);
         reject(new Error('ACP process exited'));
@@ -89,6 +92,7 @@ export class AcpTransport {
       this.ready = false;
       this.process = null;
       this.initPromise = null;
+      this.initResult = null;
     });
 
     this.ready = true;
@@ -99,6 +103,7 @@ export class AcpTransport {
       clientInfo: { name: 'kiro-sdk', version: '0.1.0' },
     }) as AcpInitializeResult;
 
+    this.initResult = result;
     return result;
   }
 

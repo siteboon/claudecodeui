@@ -2320,12 +2320,23 @@ app.get('*', (req, res) => {
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
         res.setHeader('Pragma', 'no-cache');
         res.setHeader('Expires', '0');
-        res.sendFile(indexPath);
+        // Substitute %VITE_BASE_PATH% at serve-time (Vite doesn't replace %VAR% in HTML)
+        let html = fs.readFileSync(indexPath, 'utf8');
+        html = html.replace(/%VITE_BASE_PATH%/g, BASE_PATH);
+        res.type('html').send(html);
     } else {
         // In development, redirect to Vite dev server only if dist doesn't exist
         const redirectHost = getConnectableHost(req.hostname);
         res.redirect(`${req.protocol}://${redirectHost}:${VITE_PORT}`);
     }
+});
+
+// Handle malformed URLs (e.g. unsubstituted %VITE_BASE_PATH% from cached pages)
+app.use((err, req, res, next) => {
+    if (err instanceof URIError) {
+        return res.status(400).send('Bad Request');
+    }
+    next(err);
 });
 
 // Helper function to convert permissions to rwx format
