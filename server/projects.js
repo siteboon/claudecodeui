@@ -65,8 +65,12 @@ import crypto from 'crypto';
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 import os from 'os';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import sessionManager from './sessionManager.js';
 import { applyCustomSessionNames } from './database/db.js';
+
+const execFileAsync = promisify(execFile);
 
 // Import TaskMaster detection functions
 async function detectTaskMasterFolder(projectPath) {
@@ -381,6 +385,52 @@ async function extractProjectDirectory(projectName) {
   }
 }
 
+/**
+ * Detect if a given path is a git linked worktree and return metadata.
+ * Uses `git worktree list --porcelain` which lists all worktrees from any
+ * worktree path (the first entry is always the main worktree).
+ *
+ * Returns null if not in a git repo or if the git command fails.
+ * Returns { isWorktree: false } for the main worktree.
+ * Returns { isWorktree: true, mainRepoPath, worktreeBranch } for linked worktrees.
+ */
+async function resolveWorktreeInfo(projectPath) {
+  try {
+    const { stdout } = await execFileAsync('git', ['-C', projectPath, 'worktree', 'list', '--porcelain']);
+    // Each worktree block is separated by a blank line
+    const blocks = stdout.trim().split(/\n\n+/);
+    const worktrees = blocks.map(block => {
+      const result = {};
+      for (const line of block.trim().split('\n')) {
+        if (line.startsWith('worktree ')) result.path = line.slice(9).trim();
+        else if (line.startsWith('branch ')) result.branch = line.slice(7).trim().replace('refs/heads/', '');
+        else if (line === 'detached') result.branch = 'HEAD (detached)';
+      }
+      return result;
+    }).filter(w => w.path);
+
+    if (worktrees.length === 0) return null;
+
+    const mainWorktree = worktrees[0];
+    const resolvedPath = path.resolve(projectPath);
+
+    if (path.resolve(mainWorktree.path) === resolvedPath) {
+      return { isWorktree: false };
+    }
+
+    const linked = worktrees.find(w => path.resolve(w.path) === resolvedPath);
+    if (!linked) return null;
+
+    return {
+      isWorktree: true,
+      mainRepoPath: path.resolve(mainWorktree.path),
+      worktreeBranch: linked.branch || 'HEAD (detached)',
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function getProjects(progressCallback = null) {
   const claudeDir = path.join(os.homedir(), '.claude', 'projects');
   const config = await loadProjectConfig();
@@ -513,6 +563,18 @@ async function getProjects(progressCallback = null) {
         };
       }
 
+      // Detect git worktree membership
+      try {
+        const worktreeInfo = await resolveWorktreeInfo(actualProjectDir);
+        if (worktreeInfo) {
+          project.isWorktree = worktreeInfo.isWorktree;
+          project.mainRepoPath = worktreeInfo.mainRepoPath || null;
+          project.worktreeBranch = worktreeInfo.worktreeBranch || null;
+        }
+      } catch (e) {
+        // Non-fatal: worktree detection failure should not break project listing
+      }
+
       projects.push(project);
     }
   } catch (error) {
@@ -623,6 +685,18 @@ async function getProjects(progressCallback = null) {
           hasEssentialFiles: false,
           error: error.message
         };
+      }
+
+      // Detect git worktree membership for manual projects
+      try {
+        const worktreeInfo = await resolveWorktreeInfo(actualProjectDir);
+        if (worktreeInfo) {
+          project.isWorktree = worktreeInfo.isWorktree;
+          project.mainRepoPath = worktreeInfo.mainRepoPath || null;
+          project.worktreeBranch = worktreeInfo.worktreeBranch || null;
+        }
+      } catch (e) {
+        // Non-fatal
       }
 
       projects.push(project);

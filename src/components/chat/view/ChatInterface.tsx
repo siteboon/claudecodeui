@@ -19,8 +19,10 @@ type PendingViewSession = {
 };
 
 function ChatInterface({
+  projects = [],
   selectedProject,
   selectedSession,
+  onProjectSelect,
   ws,
   sendMessage,
   latestMessage,
@@ -317,6 +319,8 @@ function ChatInterface({
           isTaskMasterInstalled={isTaskMasterInstalled}
           onShowAllTasks={onShowAllTasks}
           setInput={setInput}
+          linkedWorktrees={projects.filter(p => p.isWorktree && p.mainRepoPath === selectedProject.fullPath)}
+          onWorktreeSelect={onProjectSelect}
           isLoadingMoreMessages={isLoadingMoreMessages}
           hasMoreMessages={hasMoreMessages}
           totalMessages={totalMessages}

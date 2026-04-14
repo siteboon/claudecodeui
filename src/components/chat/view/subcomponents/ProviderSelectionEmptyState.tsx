@@ -1,5 +1,5 @@
 import React from "react";
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, GitBranch } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import SessionProviderLogo from "../../../llm-logo-provider/SessionProviderLogo";
 import {
@@ -8,7 +8,7 @@ import {
   CODEX_MODELS,
   GEMINI_MODELS,
 } from "../../../../../shared/modelConstants";
-import type { ProjectSession, SessionProvider } from "../../../../types/app";
+import type { Project, ProjectSession, SessionProvider } from "../../../../types/app";
 import { NextTaskBanner } from "../../../task-master";
 
 type ProviderSelectionEmptyStateProps = {
@@ -29,6 +29,8 @@ type ProviderSelectionEmptyStateProps = {
   isTaskMasterInstalled: boolean | null;
   onShowAllTasks?: (() => void) | null;
   setInput: React.Dispatch<React.SetStateAction<string>>;
+  linkedWorktrees?: Project[];
+  onWorktreeSelect?: (project: Project) => void;
 };
 
 type ProviderDef = {
@@ -113,6 +115,8 @@ export default function ProviderSelectionEmptyState({
   isTaskMasterInstalled,
   onShowAllTasks,
   setInput,
+  linkedWorktrees = [],
+  onWorktreeSelect,
 }: ProviderSelectionEmptyStateProps) {
   const { t } = useTranslation("chat");
   const nextTaskPrompt = t("tasks.nextTaskPrompt", {
@@ -155,6 +159,26 @@ export default function ProviderSelectionEmptyState({
     return (
       <div className="flex h-full items-center justify-center px-4">
         <div className="w-full max-w-md">
+          {/* Linked-worktree workspace switcher */}
+          {linkedWorktrees.length > 0 && onWorktreeSelect && (
+            <div className="mb-6 flex flex-wrap items-center justify-center gap-2">
+              <span className="flex items-center gap-1 text-[12px] text-muted-foreground">
+                <GitBranch className="h-3 w-3" />
+                Switch workspace:
+              </span>
+              {linkedWorktrees.map((wt) => (
+                <button
+                  key={wt.name}
+                  onClick={() => onWorktreeSelect(wt)}
+                  className="flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700 transition-colors hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-400 dark:hover:bg-emerald-900/40"
+                >
+                  <GitBranch className="h-2.5 w-2.5" />
+                  {wt.worktreeBranch ?? wt.displayName}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* Heading */}
           <div className="mb-8 text-center">
             <h2 className="text-lg font-semibold tracking-tight text-foreground sm:text-xl">

@@ -602,6 +602,85 @@ app.post('/api/projects/create', authenticateToken, async (req, res) => {
     }
 });
 
+// Create a new git worktree for a project and register it
+app.post('/api/projects/:projectName/worktrees', authenticateToken, async (req, res) => {
+    try {
+        const { projectName } = req.params;
+        const { branchName } = req.body;
+
+        if (!branchName || !branchName.trim()) {
+            return res.status(400).json({ error: 'branchName is required' });
+        }
+
+        // Validate branch name — only allow safe git branch characters
+        const safeBranchPattern = /^[a-zA-Z0-9._/\-]+$/;
+        if (!safeBranchPattern.test(branchName.trim())) {
+            return res.status(400).json({ error: 'Invalid branch name' });
+        }
+
+        const branch = branchName.trim();
+        const mainRepoPath = await extractProjectDirectory(projectName);
+
+        if (!mainRepoPath) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+
+        // Determine worktree path: sibling directory named <repo>-<branch>
+        // e.g. /home/user/myrepo + feature/foo → /home/user/myrepo-feature-foo
+        const repoName = path.basename(mainRepoPath);
+        const safeSuffix = branch.replace(/[/\\]/g, '-');
+        const worktreePath = path.join(path.dirname(mainRepoPath), `${repoName}-${safeSuffix}`);
+
+        // Validate the resolved path is inside the allowed workspace boundary
+        const workspaceValidation = await validateWorkspacePath(worktreePath);
+        if (!workspaceValidation.isValid) {
+            return res.status(400).json({ error: 'Worktree path is outside the allowed workspace area' });
+        }
+
+        // Check if the worktree path already exists
+        try {
+            await fsPromises.access(worktreePath);
+            return res.status(409).json({ error: `Path already exists: ${worktreePath}` });
+        } catch {
+            // Good — path does not exist
+        }
+
+        // Determine whether the branch already exists in the repo
+        let branchExists = false;
+        try {
+            await new Promise((resolve, reject) => {
+                const check = spawn('git', ['rev-parse', '--verify', branch], { cwd: mainRepoPath });
+                check.on('close', code => code === 0 ? resolve() : reject());
+            });
+            branchExists = true;
+        } catch {
+            branchExists = false;
+        }
+
+        const worktreeArgs = branchExists
+            ? ['worktree', 'add', worktreePath, branch]
+            : ['worktree', 'add', '-b', branch, worktreePath];
+
+        await new Promise((resolve, reject) => {
+            const proc = spawn('git', worktreeArgs, { cwd: mainRepoPath });
+            let stderr = '';
+            proc.stderr.on('data', d => { stderr += d.toString(); });
+            proc.on('close', code => {
+                if (code === 0) resolve();
+                else reject(new Error(stderr.trim() || `git worktree add exited with code ${code}`));
+            });
+        });
+
+        // Register the new worktree as a project so it appears in the sidebar
+        const project = await addProjectManually(worktreePath);
+
+        res.json({ success: true, worktreePath, project });
+    } catch (error) {
+        console.error('Error creating worktree:', error);
+        res.status(500).json({ error: 'Failed to create worktree' });
+    }
+});
+
 // Search conversations content (SSE streaming)
 app.get('/api/search/conversations', authenticateToken, async (req, res) => {
     const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';

@@ -27,6 +27,7 @@ export default function AppContent() {
   } = useSessionProtection();
 
   const {
+    projects,
     selectedProject,
     selectedSession,
     activeTab,
@@ -39,6 +40,7 @@ export default function AppContent() {
     setShowSettings,
     openSettings,
     refreshProjectsSilently,
+    handleProjectSelect,
     sidebarSharedProps,
   } = useProjectsState({
     sessionId,
@@ -159,8 +161,10 @@ export default function AppContent() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <MainContent
+          projects={projects}
           selectedProject={selectedProject}
           selectedSession={selectedSession}
+          onProjectSelect={handleProjectSelect}
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           ws={ws}

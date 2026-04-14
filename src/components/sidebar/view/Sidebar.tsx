@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDeviceSettings } from '../../../hooks/useDeviceSettings';
 import { useVersionCheck } from '../../../hooks/useVersionCheck';
@@ -11,6 +11,7 @@ import type { MCPServerStatus, SidebarProps } from '../types/types';
 import SidebarCollapsed from './subcomponents/SidebarCollapsed';
 import SidebarContent from './subcomponents/SidebarContent';
 import SidebarModals from './subcomponents/SidebarModals';
+import NewWorktreeDialog from './subcomponents/NewWorktreeDialog';
 import type { SidebarProjectListProps } from './subcomponents/SidebarProjectList';
 
 type TaskMasterSidebarContext = {
@@ -123,6 +124,30 @@ function Sidebar({
     document.body.classList.toggle('pwa-mode', isPWA);
   }, [isPWA]);
 
+  const [newWorktreeProject, setNewWorktreeProject] = useState<Project | null>(null);
+  const [pendingWorktreePath, setPendingWorktreePath] = useState<string | null>(null);
+
+  // When projects list updates after worktree creation, navigate to the new project
+  useEffect(() => {
+    if (!pendingWorktreePath) return;
+    const wt = projects.find(p => p.fullPath === pendingWorktreePath);
+    if (wt) {
+      setPendingWorktreePath(null);
+      handleProjectSelect(wt);
+      onNewSession(wt);
+    }
+  }, [projects, pendingWorktreePath, handleProjectSelect, onNewSession]);
+
+  const handleWorktreeCreated = (worktreePath: string) => {
+    setNewWorktreeProject(null);
+    if (window.refreshProjects) {
+      setPendingWorktreePath(worktreePath);
+      void window.refreshProjects();
+    } else {
+      window.location.reload();
+    }
+  };
+
   const handleProjectCreated = () => {
     if (window.refreshProjects) {
       void window.refreshProjects();
@@ -168,6 +193,7 @@ function Sidebar({
       void loadMoreSessions(project);
     },
     onNewSession,
+    onNewWorktree: (project: Project) => setNewWorktreeProject(project),
     onEditingSessionNameChange: setEditingSessionName,
     onStartEditingSession: (sessionId, initialName) => {
       setEditingSession(sessionId);
@@ -185,6 +211,14 @@ function Sidebar({
 
   return (
     <>
+      {newWorktreeProject && (
+        <NewWorktreeDialog
+          project={newWorktreeProject}
+          onClose={() => setNewWorktreeProject(null)}
+          onCreated={handleWorktreeCreated}
+          t={t}
+        />
+      )}
       <SidebarModals
         projects={projects}
         showSettings={showSettings}

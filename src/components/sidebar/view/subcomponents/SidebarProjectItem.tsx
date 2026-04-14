@@ -1,4 +1,4 @@
-import { Check, ChevronDown, ChevronRight, Edit3, Folder, FolderOpen, Star, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, Edit3, Folder, FolderOpen, GitBranch, Star, Trash2, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
 import { Button } from '../../../../shared/view/ui';
 import { cn } from '../../../../lib/utils';
@@ -42,6 +42,7 @@ type SidebarProjectItemProps = {
   ) => void;
   onLoadMoreSessions: (project: Project) => void;
   onNewSession: (project: Project) => void;
+  onNewWorktree?: (project: Project) => void;
   onEditingSessionNameChange: (value: string) => void;
   onStartEditingSession: (sessionId: string, initialName: string) => void;
   onCancelEditingSession: () => void;
@@ -87,6 +88,7 @@ export default function SidebarProjectItem({
   onDeleteSession,
   onLoadMoreSessions,
   onNewSession,
+  onNewWorktree,
   onEditingSessionNameChange,
   onStartEditingSession,
   onCancelEditingSession,
@@ -235,6 +237,18 @@ export default function SidebarProjectItem({
                       />
                     </button>
 
+                    {!project.isWorktree && onNewWorktree && (
+                      <button
+                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-500/10 active:scale-90 dark:border-emerald-800 dark:bg-emerald-900/30"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onNewWorktree(project);
+                        }}
+                        title="New worktree"
+                      >
+                        <GitBranch className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                      </button>
+                    )}
                     <button
                       className="flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-500/10 active:scale-90 dark:border-red-800 dark:bg-red-900/30"
                       onClick={(event) => {
@@ -382,6 +396,18 @@ export default function SidebarProjectItem({
                 >
                   <Edit3 className="h-3 w-3" />
                 </div>
+                {!project.isWorktree && onNewWorktree && (
+                  <div
+                    className="touch:opacity-100 flex h-6 w-6 cursor-pointer items-center justify-center rounded opacity-0 transition-all duration-200 hover:bg-emerald-50 group-hover:opacity-100 dark:hover:bg-emerald-900/20"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onNewWorktree(project);
+                    }}
+                    title="New worktree"
+                  >
+                    <GitBranch className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                )}
                 <div
                   className="touch:opacity-100 flex h-6 w-6 cursor-pointer items-center justify-center rounded opacity-0 transition-all duration-200 hover:bg-red-50 group-hover:opacity-100 dark:hover:bg-red-900/20"
                   onClick={(event) => {

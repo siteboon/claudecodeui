@@ -28,6 +28,7 @@ type TasksSettingsContextValue = {
 };
 
 function MainContent({
+  projects,
   selectedProject,
   selectedSession,
   activeTab,
@@ -47,6 +48,7 @@ function MainContent({
   onReplaceTemporarySession,
   onNavigateToSession,
   onShowSettings,
+  onProjectSelect,
   externalMessageUpdate,
 }: MainContentProps) {
   const { preferences } = useUiPreferences();
@@ -112,6 +114,7 @@ function MainContent({
           <div className={`h-full ${activeTab === 'chat' ? 'block' : 'hidden'}`}>
             <ErrorBoundary showDetails>
               <ChatInterface
+                projects={projects}
                 selectedProject={selectedProject}
                 selectedSession={selectedSession}
                 ws={ws}
@@ -127,6 +130,7 @@ function MainContent({
                 onReplaceTemporarySession={onReplaceTemporarySession}
                 onNavigateToSession={onNavigateToSession}
                 onShowSettings={onShowSettings}
+                onProjectSelect={onProjectSelect}
                 autoExpandTools={autoExpandTools}
                 showRawParameters={showRawParameters}
                 showThinking={showThinking}

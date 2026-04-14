@@ -41,6 +41,12 @@ export interface Project {
   geminiSessions?: ProjectSession[];
   sessionMeta?: ProjectSessionMeta;
   taskmaster?: ProjectTaskmasterInfo;
+  /** True if this project lives in a linked git worktree (not the main worktree). */
+  isWorktree?: boolean;
+  /** Absolute path to the main worktree root. Populated only when isWorktree is true. */
+  mainRepoPath?: string;
+  /** Branch checked out in this worktree. Populated only when isWorktree is true. */
+  worktreeBranch?: string;
   [key: string]: unknown;
 }
 
