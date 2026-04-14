@@ -27,7 +27,7 @@ export function VersionUpgradeModal({
     const upgradeCommand = installMode === 'npm'
         ? t('versionUpdate.npmUpgradeCommand')
         : IS_PLATFORM
-            ? 'git checkout main && git pull && npm install && npm run update:platform'
+            ? 'npm run update:platform'
             : 'git checkout main && git pull && npm install';
     const [isUpdating, setIsUpdating] = useState(false);
     const [updateOutput, setUpdateOutput] = useState('');
@@ -49,7 +49,7 @@ export function VersionUpgradeModal({
             if (response.ok) {
                 setUpdateOutput(prev => prev + data.output + '\n');
                 setUpdateOutput(prev => prev + '\n✅ Update completed successfully!\n');
-                const text = IS_PLATFORM ? 'Please refresh the page after 5 seconds to load the new version.' : 'Please restart the server to apply changes.';
+                const text = IS_PLATFORM ? 'Please refresh the page after 5 seconds to load the new version. If that doesn\'t work, RESTART the environment.' : 'Please restart the server to apply changes.';
                 setUpdateOutput(prev => prev + text + '\n');
             } else {
                 setUpdateError(data.error || 'Update failed');
