@@ -367,7 +367,7 @@ Advanced usage:
 }
 
 async function sandboxCommand(args) {
-    const { execFileSync } = await import('child_process');
+    const { execFileSync, spawn: spawnProcess } = await import('child_process');
 
     // Safe execution — uses execFileSync (no shell) to prevent injection
     const sbx = (subcmd, opts = {}) => {
@@ -443,12 +443,15 @@ async function sandboxCommand(args) {
                 process.exit(1);
             }
             console.log(`\n${c.info('▶')} Starting sandbox ${c.bright(opts.name)}...`);
-            try {
-                sbx(['start', opts.name], { inherit: true });
-            } catch { /* might already be running */ }
+            const restartRun = spawnProcess('sbx', ['run', opts.name], {
+                detached: true,
+                stdio: ['ignore', 'ignore', 'ignore'],
+            });
+            restartRun.unref();
+            await new Promise(resolve => setTimeout(resolve, 5000));
 
             console.log(`${c.info('▶')} Launching CloudCLI web server...`);
-            sbx(['exec', '-d', opts.name, 'cloudcli', 'start', '--port', '3001']);
+            sbx(['exec', opts.name, 'bash', '-c', 'cloudcli start --port 3001 &']);
 
             console.log(`${c.info('▶')} Forwarding port ${opts.port} → 3001...`);
             try {
@@ -515,22 +518,19 @@ async function sandboxCommand(args) {
             }
             console.log(c.dim('─'.repeat(50)));
 
-            // Step 1: Create sandbox
+            // Step 1: Launch sandbox with sbx run in background.
+            // sbx run creates the sandbox (or reconnects) AND holds an active session,
+            // which prevents the sandbox from auto-stopping.
             console.log(`\n${c.info('▶')} Creating sandbox ${c.bright(opts.name)}...`);
-            try {
-                sbx(
-                    ['create', '--template', opts.template, '--name', opts.name, opts.agent, workspace],
-                    { inherit: true }
-                );
-            } catch (e) {
-                const msg = e.stdout || e.stderr || e.message || '';
-                if (msg.includes('already exists')) {
-                    console.log(`${c.warn('⚠')}  Sandbox ${c.bright(opts.name)} already exists. Starting it instead...\n`);
-                    try { sbx(['start', opts.name]); } catch { /* may already be running */ }
-                } else {
-                    throw e;
-                }
-            }
+            const bgRun = spawnProcess('sbx', [
+                'run', '--template', opts.template, '--name', opts.name, opts.agent, workspace,
+            ], {
+                detached: true,
+                stdio: ['ignore', 'ignore', 'ignore'],
+            });
+            bgRun.unref();
+            // Wait for sandbox to be ready
+            await new Promise(resolve => setTimeout(resolve, 5000));
 
             // Step 2: Inject environment variables
             if (opts.env.length > 0) {
@@ -548,11 +548,9 @@ async function sandboxCommand(args) {
                 }
             }
 
-            // Step 3: Start CloudCLI as a long-running detached exec session.
-            // Using -d with a long-running command (cloudcli start never exits)
-            // keeps the exec session alive, which keeps the sandbox running.
+            // Step 3: Start CloudCLI inside the sandbox
             console.log(`${c.info('▶')} Launching CloudCLI web server...`);
-            sbx(['exec', '-d', opts.name, 'cloudcli', 'start', '--port', '3001']);
+            sbx(['exec', opts.name, 'bash', '-c', 'cloudcli start --port 3001 &']);
 
             // Step 4: Forward port
             console.log(`${c.info('▶')} Forwarding port ${opts.port} → 3001...`);
