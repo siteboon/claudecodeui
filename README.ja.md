@@ -96,7 +96,7 @@ cloudcli
 ハイパーバイザーレベルの分離でエージェントをサンドボックスで実行します。デフォルトでは Claude Code が起動します。[`sbx` CLI](https://docs.docker.com/ai/sandboxes/get-started/) が必要です。
 
 ```
-npx @cloudcli-ai/cloudcli sandbox ~/my-project
+npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project
 ```
 
 Claude Code、Codex、Gemini CLI に対応。詳細は[サンドボックスのドキュメント](docker/)をご覧ください。

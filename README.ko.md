@@ -96,7 +96,7 @@ cloudcli
 하이퍼바이저 수준 격리로 에이전트를 샌드박스에서 실행합니다. 기본 에이전트는 Claude Code입니다. [`sbx` CLI](https://docs.docker.com/ai/sandboxes/get-started/)가 필요합니다.
 
 ```
-npx @cloudcli-ai/cloudcli sandbox ~/my-project
+npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project
 ```
 
 Claude Code, Codex, Gemini CLI를 지원합니다. 자세한 내용은 [샌드박스 문서](docker/)를 참고하세요.

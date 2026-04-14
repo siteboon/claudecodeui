@@ -448,7 +448,7 @@ async function sandboxCommand(args) {
             } catch { /* might already be running */ }
 
             console.log(`${c.info('▶')} Launching CloudCLI web server...`);
-            sbx(['exec', '-d', opts.name, 'bash', '-c', '. ~/.cloudcli-start.sh']);
+            sbx(['exec', '-d', opts.name, 'cloudcli', 'start', '--port', '3001']);
 
             console.log(`${c.info('▶')} Forwarding port ${opts.port} → 3001...`);
             try {
@@ -548,14 +548,11 @@ async function sandboxCommand(args) {
                 }
             }
 
-            // Step 3: Start CloudCLI
+            // Step 3: Start CloudCLI as a long-running detached exec session.
+            // Using -d with a long-running command (cloudcli start never exits)
+            // keeps the exec session alive, which keeps the sandbox running.
             console.log(`${c.info('▶')} Launching CloudCLI web server...`);
-            try {
-                sbx(['exec', '-d', opts.name, 'bash', '-c', '. ~/.cloudcli-start.sh']);
-            } catch (e) {
-                console.error(`${c.error('❌')} Failed to start CloudCLI: ${e.message}`);
-                process.exit(1);
-            }
+            sbx(['exec', '-d', opts.name, 'cloudcli', 'start', '--port', '3001']);
 
             // Step 4: Forward port
             console.log(`${c.info('▶')} Forwarding port ${opts.port} → 3001...`);
@@ -582,10 +579,11 @@ async function sandboxCommand(args) {
             console.log(`\n${c.ok('✔')} ${c.bright('CloudCLI is ready!')}`);
             console.log(`  ${c.info('→')} Open ${c.bright(`http://localhost:${opts.port}`)}`);
             console.log(`\n${c.dim('  Manage with:')}`);
-            console.log(`  ${c.dim('$')} cloudcli sandbox ls`);
-            console.log(`  ${c.dim('$')} cloudcli sandbox stop ${opts.name}`);
-            console.log(`  ${c.dim('$')} cloudcli sandbox start ${opts.name}`);
-            console.log(`  ${c.dim('$')} cloudcli sandbox rm ${opts.name}\n`);
+            console.log(`  ${c.dim('$')} sbx ls`);
+            console.log(`  ${c.dim('$')} sbx stop ${opts.name}`);
+            console.log(`  ${c.dim('$')} sbx start ${opts.name}`);
+            console.log(`  ${c.dim('$')} sbx rm ${opts.name}`);
+            console.log(`\n${c.dim('  Or install globally:')} npm install -g @cloudcli-ai/cloudcli\n`);
             break;
         }
 

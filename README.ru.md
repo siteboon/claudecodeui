@@ -100,7 +100,7 @@ cloudcli
 Запускайте агентов в изолированных песочницах с гипервизорной изоляцией. По умолчанию запускается Claude Code. Требуется [`sbx` CLI](https://docs.docker.com/ai/sandboxes/get-started/).
 
 ```
-npx @cloudcli-ai/cloudcli sandbox ~/my-project
+npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project
 ```
 
 Поддерживаются Claude Code, Codex и Gemini CLI. Подробнее в [документации sandbox](docker/).

@@ -29,7 +29,7 @@ sbx secret set -g anthropic
 ### 3. Launch Claude Code
 
 ```bash
-npx @cloudcli-ai/cloudcli sandbox ~/my-project
+npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project
 ```
 
 Open **http://localhost:3001**. Set a password on first visit. Start building.
@@ -41,11 +41,11 @@ Store the matching API key and pass `--agent`:
 ```bash
 # OpenAI Codex
 sbx secret set -g openai
-npx @cloudcli-ai/cloudcli sandbox ~/my-project --agent codex
+npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project --agent codex
 
 # Gemini CLI
 sbx secret set -g google
-npx @cloudcli-ai/cloudcli sandbox ~/my-project --agent gemini
+npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project --agent gemini
 ```
 
 ### Available templates
@@ -61,11 +61,19 @@ These are used with `--template` when running `sbx` directly (see [Advanced usag
 ## Managing sandboxes
 
 ```bash
-cloudcli sandbox ls                  # List all sandboxes
-cloudcli sandbox stop my-project     # Stop (preserves state)
+sbx ls                               # List all sandboxes
+sbx stop my-project                  # Stop (preserves state)
+sbx start my-project                 # Restart a stopped sandbox
+sbx rm my-project                    # Remove everything
+sbx exec my-project bash             # Open a shell inside the sandbox
+```
+
+If you install CloudCLI globally (`npm install -g @cloudcli-ai/cloudcli`), you can also use:
+
+```bash
+cloudcli sandbox ls
 cloudcli sandbox start my-project    # Restart and re-launch web UI
 cloudcli sandbox logs my-project     # View server logs
-cloudcli sandbox rm my-project       # Remove everything
 ```
 
 ## What you get
@@ -84,14 +92,20 @@ Your project directory is mounted bidirectionally — edits propagate in real ti
 Set variables at creation time with `--env`:
 
 ```bash
-npx @cloudcli-ai/cloudcli sandbox ~/my-project --env SERVER_PORT=8080
+npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project --env SERVER_PORT=8080
 ```
 
 Or inside a running sandbox:
 
 ```bash
 sbx exec my-project bash -c 'echo "export SERVER_PORT=8080" >> /etc/sandbox-persistent.sh'
-sbx exec my-project bash -c 'pkill -f "server/index.js"; . ~/.cloudcli-start.sh'
+```
+
+Restart CloudCLI for changes to take effect:
+
+```bash
+sbx exec my-project bash -c 'pkill -f "server/index.js"'
+sbx exec -d my-project cloudcli start --port 3001
 ```
 
 | Variable | Default | Description |
