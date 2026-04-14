@@ -71,13 +71,16 @@ export function query(params: { prompt: string; options?: Options }): Query {
     const t = getTransport();
     await t.connect(buildAcpArgs(options));
 
-    // Always create a new session — session/load + session/prompt crashes kiro-cli (v1.29.x bug).
-    // The resume option is accepted but not used until the kiro-cli bug is fixed.
-    const result = await t.sendRpc('session/new', {
-      cwd: options.cwd || process.cwd(),
-      mcpServers: options.mcpServers || [],
-    }) as AcpSessionResult;
-    acpSessionId = result?.sessionId;
+    if (options.resume) {
+      // Reuse existing ACP session — just send another prompt
+      acpSessionId = options.resume;
+    } else {
+      const result = await t.sendRpc('session/new', {
+        cwd: options.cwd || process.cwd(),
+        mcpServers: options.mcpServers || [],
+      }) as AcpSessionResult;
+      acpSessionId = result?.sessionId;
+    }
 
     if (!acpSessionId) throw new Error('Failed to create ACP session');
 

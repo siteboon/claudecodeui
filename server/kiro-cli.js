@@ -9,7 +9,7 @@ import { query, disconnect } from 'kiro-sdk';
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
 import { createNormalizedMessage } from './providers/types.js';
 
-const activeSessions = new Map(); // wsSessionId -> { query, abortController, wsSessionId, acpSessionId, ... }
+const activeSessions = new Map(); // wsSessionId -> { query, abortController, ... }
 
 async function spawnKiro(command, options = {}, ws) {
     const { sessionId, projectPath, cwd, sessionSummary, model } = options;
@@ -27,14 +27,13 @@ async function spawnKiro(command, options = {}, ws) {
             abortController,
         };
 
+        // Resume existing session if we have a sessionId
         if (sessionId) {
             sdkOptions.resume = sessionId;
         }
 
         const conversation = query({ prompt: command?.trim() || '', options: sdkOptions });
 
-        // We need the sessionId from the SDK — it's available after first yield
-        // Register a placeholder first
         const sessionEntry = {
             query: conversation,
             abortController,
@@ -46,22 +45,28 @@ async function spawnKiro(command, options = {}, ws) {
             status: 'active',
         };
 
+        // Register session immediately so abort works
+        activeSessions.set(wsSessionId || `kiro_pending_${Date.now()}`, sessionEntry);
+
         // Stream messages from the SDK async generator
         (async () => {
             try {
+                let sessionAnnounced = !isNew; // existing sessions don't need announcement
+
                 for await (const message of conversation) {
-                    // Capture acpSessionId on first message
-                    if (!sessionEntry.acpSessionId && conversation.sessionId) {
+                    // For new sessions: announce BEFORE sending any content.
+                    // This ensures the frontend navigates to the new session
+                    // before stream_delta messages arrive.
+                    if (!sessionAnnounced && conversation.sessionId) {
                         sessionEntry.acpSessionId = conversation.sessionId;
-                        if (isNew) {
-                            wsSessionId = conversation.sessionId || `kiro_${Date.now()}`;
-                            sessionEntry.wsSessionId = wsSessionId;
-                            // Re-register under the real ID
-                            activeSessions.delete(sessionId);
-                            activeSessions.set(wsSessionId, sessionEntry);
-                            if (typeof ws.setSessionId === 'function') ws.setSessionId(wsSessionId);
-                            ws.send(createNormalizedMessage({ kind: 'session_created', newSessionId: wsSessionId, sessionId: wsSessionId, provider: 'kiro' }));
-                        }
+                        wsSessionId = conversation.sessionId;
+                        sessionEntry.wsSessionId = wsSessionId;
+                        // Re-register under the real ACP session ID
+                        activeSessions.delete(sessionId);
+                        activeSessions.set(wsSessionId, sessionEntry);
+                        if (typeof ws.setSessionId === 'function') ws.setSessionId(wsSessionId);
+                        ws.send(createNormalizedMessage({ kind: 'session_created', newSessionId: wsSessionId, sessionId: wsSessionId, provider: 'kiro' }));
+                        sessionAnnounced = true;
                     }
 
                     switch (message.type) {
@@ -97,9 +102,6 @@ async function spawnKiro(command, options = {}, ws) {
                 }
             }
         })();
-
-        // Register session immediately so abort works
-        activeSessions.set(wsSessionId || `kiro_pending_${Date.now()}`, sessionEntry);
 
     } catch (err) {
         ws.send(createNormalizedMessage({ kind: 'error', content: `Failed to start Kiro: ${err.message}`, sessionId: wsSessionId || null, provider: 'kiro' }));

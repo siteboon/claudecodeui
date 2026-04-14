@@ -92,11 +92,15 @@ class Query:
         t = _get_transport()
         await t.connect(_build_acp_args(self._options))
 
-        result = await t.send_rpc("session/new", {
-            "cwd": self._options.cwd or os.getcwd(),
-            "mcpServers": self._options.mcp_servers,
-        })
-        self.session_id = (result or {}).get("sessionId")
+        if self._options.resume:
+            # Reuse existing ACP session — just send another prompt
+            self.session_id = self._options.resume
+        else:
+            result = await t.send_rpc("session/new", {
+                "cwd": self._options.cwd or os.getcwd(),
+                "mcpServers": self._options.mcp_servers,
+            })
+            self.session_id = (result or {}).get("sessionId")
         if not self.session_id:
             raise RuntimeError("Failed to create ACP session")
 
