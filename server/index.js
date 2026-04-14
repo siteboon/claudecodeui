@@ -2465,7 +2465,10 @@ app.get('*', (req, res) => {
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
         res.setHeader('Pragma', 'no-cache');
         res.setHeader('Expires', '0');
-        res.sendFile(indexPath);
+        // Substitute %VITE_BASE_PATH% at serve-time (Vite doesn't replace %VAR% in HTML)
+        let html = fs.readFileSync(indexPath, 'utf8');
+        html = html.replace(/%VITE_BASE_PATH%/g, BASE_PATH);
+        res.type('html').send(html);
     } else {
         // In development, redirect to Vite dev server only if dist doesn't exist
         const redirectHost = getConnectableHost(req.hostname);
