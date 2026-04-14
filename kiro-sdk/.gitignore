@@ -1,0 +1,3 @@
+# Override root .gitignore — dist/ must be tracked because
+# the parent project imports kiro-sdk via file: reference
+!dist/
