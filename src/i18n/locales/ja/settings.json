@@ -55,8 +55,7 @@
       "appearance": "外観",
       "toolDisplay": "ツール表示",
       "viewOptions": "表示オプション",
-      "inputSettings": "入力設定",
-      "whisperDictation": "Whisper音声入力"
+      "inputSettings": "入力設定"
     },
     "darkMode": "ダークモード",
     "autoExpandTools": "ツールを自動展開",
@@ -71,16 +70,6 @@
       "openPanel": "設定パネルを開く",
       "draggingStatus": "ドラッグ中...",
       "toggleAndMove": "クリックで切替、ドラッグで移動"
-    },
-    "whisper": {
-      "modes": {
-        "default": "標準モード",
-        "defaultDescription": "音声をそのまま文字起こしします",
-        "prompt": "プロンプト強化",
-        "promptDescription": "ラフなアイデアを明確で詳細なAIプロンプトに変換します",
-        "vibe": "バイブモード",
-        "vibeDescription": "アイデアを明確なエージェント指示に整形します"
-      }
     }
   },
   "terminalShortcuts": {
@@ -106,8 +95,8 @@
     "apiTokens": "API & トークン",
     "tasks": "タスク",
     "notifications": "通知",
-    "plugins": "プラグイン"
-
+    "plugins": "プラグイン",
+    "about": "概要"
   },
   "notifications": {
     "title": "通知",

@@ -55,8 +55,7 @@
       "appearance": "Darstellung",
       "toolDisplay": "Werkzeuganzeige",
       "viewOptions": "Anzeigeoptionen",
-      "inputSettings": "Eingabeeinstellungen",
-      "whisperDictation": "Whisper-Diktat"
+      "inputSettings": "Eingabeeinstellungen"
     },
     "darkMode": "Darkmode",
     "autoExpandTools": "Werkzeuge automatisch erweitern",
@@ -71,16 +70,6 @@
       "openPanel": "Einstellungspanel öffnen",
       "draggingStatus": "Wird gezogen...",
       "toggleAndMove": "Klicken zum Umschalten, ziehen zum Verschieben"
-    },
-    "whisper": {
-      "modes": {
-        "default": "Standardmodus",
-        "defaultDescription": "Direkte Transkription deiner Sprache",
-        "prompt": "Prompt-Verbesserung",
-        "promptDescription": "Rohe Ideen in klare, detaillierte KI-Prompts umwandeln",
-        "vibe": "Vibe-Modus",
-        "vibeDescription": "Ideen als klare Agentenanweisungen mit Details formatieren"
-      }
     }
   },
   "terminalShortcuts": {
@@ -105,7 +94,8 @@
     "git": "Git",
     "apiTokens": "API & Token",
     "tasks": "Aufgaben",
-    "plugins": "Plugins"
+    "plugins": "Plugins",
+    "about": "Info"
   },
   "appearanceSettings": {
     "darkMode": {

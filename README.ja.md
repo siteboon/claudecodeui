@@ -72,6 +72,8 @@
 
 ### セルフホスト（オープンソース）
 
+#### npm
+
 **npx** で今すぐ CloudCLI UI を試せます（**Node.js** v22+ が必要）：
 
 ```bash
@@ -89,6 +91,15 @@ cloudcli
 
 より詳細な設定オプション、PM2、リモートサーバー設定などについては **[ドキュメントはこちら →](https://cloudcli.ai/docs)** を参照してください。
 
+#### Docker Sandboxes（実験的）
+
+ハイパーバイザーレベルの分離でエージェントをサンドボックスで実行します。デフォルトでは Claude Code が起動します。[`sbx` CLI](https://docs.docker.com/ai/sandboxes/get-started/) が必要です。
+
+```
+npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project
+```
+
+Claude Code、Codex、Gemini CLI に対応。詳細は[サンドボックスのドキュメント](docker/)をご覧ください。
 
 ---
 

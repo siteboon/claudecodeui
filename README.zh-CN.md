@@ -72,6 +72,8 @@
 
 ### 自托管（开源）
 
+#### npm
+
 启动 CloudCLI UI，只需一行 `npx`（需要 Node.js v22+）：
 
 ```bash
@@ -87,7 +89,17 @@ cloudcli
 
 打开 `http://localhost:3001`，系统会自动发现所有现有会话。
 
-更多配置选项、PM2、远程服务器设置等，请参阅 **[文档 →](https://cloudcli.ai/docs)**
+更多配置选项、PM2、远程服务器设置等，请参阅 **[文档 →](https://cloudcli.ai/docs)**。
+
+#### Docker Sandboxes（实验性）
+
+在隔离的沙箱中运行代理，具有虚拟机管理程序级别的隔离。默认启动 Claude Code。需要 [`sbx` CLI](https://docs.docker.com/ai/sandboxes/get-started/)。
+
+```
+npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project
+```
+
+支持 Claude Code、Codex 和 Gemini CLI。详情请参阅 [沙箱文档](docker/)。
 
 ---
 

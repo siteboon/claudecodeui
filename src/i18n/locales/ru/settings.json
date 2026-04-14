@@ -55,8 +55,7 @@
       "appearance": "Внешний вид",
       "toolDisplay": "Отображение инструментов",
       "viewOptions": "Параметры просмотра",
-      "inputSettings": "Настройки ввода",
-      "whisperDictation": "Диктовка Whisper"
+      "inputSettings": "Настройки ввода"
     },
     "darkMode": "Темная тема",
     "autoExpandTools": "Автоматически разворачивать инструменты",
@@ -71,16 +70,6 @@
       "openPanel": "Открыть панель настроек",
       "draggingStatus": "Перетаскивание...",
       "toggleAndMove": "Нажмите для переключения, перетащите для перемещения"
-    },
-    "whisper": {
-      "modes": {
-        "default": "Режим по умолчанию",
-        "defaultDescription": "Прямая транскрипция вашей речи",
-        "prompt": "Улучшение запроса",
-        "promptDescription": "Преобразование грубых идей в четкие, детальные AI-запросы",
-        "vibe": "Режим Vibe",
-        "vibeDescription": "Форматирование идей как четких инструкций агента с деталями"
-      }
     }
   },
   "terminalShortcuts": {
@@ -105,7 +94,8 @@
     "git": "Git",
     "apiTokens": "API и токены",
     "tasks": "Задачи",
-    "plugins": "Плагины"
+    "plugins": "Плагины",
+    "about": "О программе"
   },
   "appearanceSettings": {
     "darkMode": {

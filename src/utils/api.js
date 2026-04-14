@@ -147,13 +147,6 @@ export const api = {
       headers: {}, // Let browser set Content-Type for FormData
     }),
 
-  transcribe: (formData) =>
-    authenticatedFetch('/api/transcribe', {
-      method: 'POST',
-      body: formData,
-      headers: {}, // Let browser set Content-Type for FormData
-    }),
-
   // TaskMaster endpoints
   taskmaster: {
     // Initialize TaskMaster in a project

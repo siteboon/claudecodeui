@@ -20,7 +20,7 @@
     "runClaudeCli": "Запустите Claude CLI в каталоге проекта для начала работы"
   },
   "app": {
-    "title": "Claude Code UI",
+    "title": "CloudCLI",
     "subtitle": "Интерфейс AI помощника для программирования"
   },
   "sessions": {
@@ -65,7 +65,12 @@
     "save": "Сохранить",
     "delete": "Удалить",
     "rename": "Переименовать",
-    "joinCommunity": "Присоединиться к сообществу"
+    "joinCommunity": "Присоединиться к сообществу",
+    "reportIssue": "Сообщить о проблеме",
+    "starOnGithub": "Звезда на GitHub"
+  },
+  "branding": {
+    "openSource": "Открытый исходный код"
   },
   "status": {
     "active": "Активен",
