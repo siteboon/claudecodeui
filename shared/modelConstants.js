@@ -13,15 +13,15 @@
 export const CLAUDE_MODELS = {
   // Models in SDK format (what the actual SDK accepts)
   OPTIONS: [
-    { value: 'sonnet', label: 'Sonnet' },
-    { value: 'opus', label: 'Opus' },
-    { value: 'haiku', label: 'Haiku' },
-    { value: 'opus[1m]', label: 'Opus [1M]' },
-    { value: 'opusplan', label: 'Opus Plan' },
-    { value: 'sonnet[1m]', label: 'Sonnet [1M]' }
+    { value: "sonnet", label: "Sonnet" },
+    { value: "opus", label: "Opus" },
+    { value: "haiku", label: "Haiku" },
+    { value: "opusplan", label: "Opus Plan" },
+    { value: "sonnet[1m]", label: "Sonnet [1M]" },
+    { value: "opus[1m]", label: "Opus [1M]" },
   ],
 
-  DEFAULT: "sonnet",
+  DEFAULT: "opus",
 };
 
 /**
@@ -59,6 +59,7 @@ export const CURSOR_MODELS = {
 export const CODEX_MODELS = {
   OPTIONS: [
     { value: "gpt-5.4", label: "GPT-5.4" },
+    { value: "gpt-5.4-mini", label: "GPT-5.4 mini" },
     { value: "gpt-5.3-codex", label: "GPT-5.3 Codex" },
     { value: "gpt-5.2-codex", label: "GPT-5.2 Codex" },
     { value: "gpt-5.2", label: "GPT-5.2" },
@@ -117,5 +118,5 @@ export const GEMINI_MODELS = {
     },
   ],
 
-  DEFAULT: "gemini-2.5-flash",
+  DEFAULT: "gemini-3.1-pro-preview",
 };
