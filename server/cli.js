@@ -7,6 +7,7 @@
  * Commands:
  *   (no args)     - Start the server (default)
  *   start         - Start the server
+ *   sandbox       - Manage Docker sandbox environments
  *   status        - Show configuration and data locations
  *   help          - Show help information
  *   version       - Show version information
@@ -150,6 +151,7 @@ Usage:
 
 Commands:
   start          Start the CloudCLI server (default)
+  sandbox        Manage Docker sandbox environments
   status         Show configuration and data locations
   update         Update to the latest version
   help           Show this help information
@@ -164,8 +166,7 @@ Options:
 Examples:
   $ cloudcli                        # Start with defaults
   $ cloudcli --port 8080            # Start on port 8080
-  $ cloudcli -p 3000                # Short form for port
-  $ cloudcli start --port 4000      # Explicit start command
+  $ cloudcli sandbox ~/my-project   # Run in a Docker sandbox
   $ cloudcli status                 # Show configuration
 
 Environment Variables:
@@ -244,6 +245,357 @@ async function updatePackage() {
     }
 }
 
+// ── Sandbox command ─────────────────────────────────────────
+
+const SANDBOX_TEMPLATES = {
+    claude: 'docker.io/cloudcliai/sandbox:claude-code',
+    codex: 'docker.io/cloudcliai/sandbox:codex',
+    gemini: 'docker.io/cloudcliai/sandbox:gemini',
+};
+
+const SANDBOX_SECRETS = {
+    claude: 'anthropic',
+    codex: 'openai',
+    gemini: 'google',
+};
+
+function parseSandboxArgs(args) {
+    const result = {
+        subcommand: null,
+        workspace: null,
+        agent: 'claude',
+        name: null,
+        port: 3001,
+        template: null,
+        env: [],
+    };
+
+    const subcommands = ['ls', 'stop', 'start', 'rm', 'logs', 'help'];
+
+    for (let i = 0; i < args.length; i++) {
+        const arg = args[i];
+
+        if (i === 0 && subcommands.includes(arg)) {
+            result.subcommand = arg;
+        } else if (arg === '--agent' || arg === '-a') {
+            result.agent = args[++i];
+        } else if (arg === '--name' || arg === '-n') {
+            result.name = args[++i];
+        } else if (arg === '--port') {
+            result.port = parseInt(args[++i], 10);
+        } else if (arg === '--template' || arg === '-t') {
+            result.template = args[++i];
+        } else if (arg === '--env' || arg === '-e') {
+            result.env.push(args[++i]);
+        } else if (!arg.startsWith('-')) {
+            if (!result.subcommand) {
+                result.workspace = arg;
+            } else {
+                result.name = arg; // for stop/start/rm/logs <name>
+            }
+        }
+    }
+
+    // Default subcommand based on what we got
+    if (!result.subcommand) {
+        result.subcommand = 'create';
+    }
+
+    // Derive name from workspace path if not set
+    if (!result.name && result.workspace) {
+        result.name = path.basename(path.resolve(result.workspace.replace(/^~/, os.homedir())));
+    }
+
+    // Default template from agent
+    if (!result.template) {
+        result.template = SANDBOX_TEMPLATES[result.agent] || SANDBOX_TEMPLATES.claude;
+    }
+
+    return result;
+}
+
+function showSandboxHelp() {
+    console.log(`
+${c.bright('CloudCLI Sandbox')} — Run CloudCLI inside Docker Sandboxes
+
+Usage:
+  cloudcli sandbox <workspace>            Create and start a sandbox
+  cloudcli sandbox <subcommand> [name]    Manage sandboxes
+
+Subcommands:
+  ${c.bright('(default)')}    Create a sandbox and start the web UI
+  ${c.bright('ls')}           List all sandboxes
+  ${c.bright('start')}        Restart a stopped sandbox and re-launch the web UI
+  ${c.bright('stop')}         Stop a sandbox (preserves state)
+  ${c.bright('rm')}           Remove a sandbox
+  ${c.bright('logs')}         Show CloudCLI server logs
+  ${c.bright('help')}         Show this help
+
+Options:
+  -a, --agent <agent>       Agent to use: claude, codex, gemini (default: claude)
+  -n, --name <name>         Sandbox name (default: derived from workspace folder)
+  -t, --template <image>    Custom template image
+  -e, --env <KEY=VALUE>     Set environment variable (repeatable)
+      --port <port>         Host port for the web UI (default: 3001)
+
+Examples:
+  $ cloudcli sandbox ~/my-project
+  $ cloudcli sandbox ~/my-project --agent codex --port 8080
+  $ cloudcli sandbox ~/my-project --env SERVER_PORT=8080 --env HOST=0.0.0.0
+  $ cloudcli sandbox ls
+  $ cloudcli sandbox stop my-project
+  $ cloudcli sandbox start my-project
+  $ cloudcli sandbox rm my-project
+
+Prerequisites:
+  1. Install sbx CLI: https://docs.docker.com/ai/sandboxes/get-started/
+  2. Authenticate and store your API key:
+       sbx login
+       sbx secret set -g anthropic   # for Claude
+       sbx secret set -g openai      # for Codex
+       sbx secret set -g google      # for Gemini
+
+Advanced usage:
+  For branch mode, multiple workspaces, memory limits, network policies,
+  or passing prompts to the agent, use sbx directly with the template:
+
+    sbx run --template docker.io/cloudcliai/sandbox:claude-code claude ~/my-project --branch my-feature
+    sbx run --template docker.io/cloudcliai/sandbox:claude-code claude ~/project ~/libs:ro --memory 8g
+
+  Full Docker Sandboxes docs: https://docs.docker.com/ai/sandboxes/usage/
+`);
+}
+
+async function sandboxCommand(args) {
+    const { execFileSync } = await import('child_process');
+
+    // Safe execution — uses execFileSync (no shell) to prevent injection
+    const sbx = (subcmd, opts = {}) => {
+        const result = execFileSync('sbx', subcmd, {
+            encoding: 'utf8',
+            stdio: opts.inherit ? 'inherit' : 'pipe',
+        });
+        return result || '';
+    };
+
+    const opts = parseSandboxArgs(args);
+
+    if (opts.subcommand === 'help') {
+        showSandboxHelp();
+        return;
+    }
+
+    // Validate name (alphanumeric, hyphens, underscores only)
+    if (opts.name && !/^[\w-]+$/.test(opts.name)) {
+        console.error(`\n${c.error('❌')} Invalid sandbox name: ${opts.name}`);
+        console.log(`   Names may only contain letters, numbers, hyphens, and underscores.\n`);
+        process.exit(1);
+    }
+
+    // Check sbx is installed
+    try {
+        sbx(['version']);
+    } catch {
+        console.error(`\n${c.error('❌')} ${c.bright('sbx')} CLI not found.\n`);
+        console.log(`   Install it from: ${c.info('https://docs.docker.com/ai/sandboxes/get-started/')}`);
+        console.log(`   Then run: ${c.bright('sbx login')}`);
+        console.log(`   And store your API key: ${c.bright('sbx secret set -g anthropic')}\n`);
+        process.exit(1);
+    }
+
+    switch (opts.subcommand) {
+
+        case 'ls':
+            sbx(['ls'], { inherit: true });
+            break;
+
+        case 'stop':
+            if (!opts.name) {
+                console.error(`\n${c.error('❌')} Sandbox name required: cloudcli sandbox stop <name>\n`);
+                process.exit(1);
+            }
+            sbx(['stop', opts.name], { inherit: true });
+            break;
+
+        case 'rm':
+            if (!opts.name) {
+                console.error(`\n${c.error('❌')} Sandbox name required: cloudcli sandbox rm <name>\n`);
+                process.exit(1);
+            }
+            sbx(['rm', opts.name], { inherit: true });
+            break;
+
+        case 'logs':
+            if (!opts.name) {
+                console.error(`\n${c.error('❌')} Sandbox name required: cloudcli sandbox logs <name>\n`);
+                process.exit(1);
+            }
+            try {
+                sbx(['exec', opts.name, 'bash', '-c', 'cat /tmp/cloudcli-ui.log'], { inherit: true });
+            } catch (e) {
+                console.error(`\n${c.error('❌')} Could not read logs: ${e.message || 'Is the sandbox running?'}\n`);
+            }
+            break;
+
+        case 'start': {
+            if (!opts.name) {
+                console.error(`\n${c.error('❌')} Sandbox name required: cloudcli sandbox start <name>\n`);
+                process.exit(1);
+            }
+            console.log(`\n${c.info('▶')} Starting sandbox ${c.bright(opts.name)}...`);
+            try {
+                sbx(['start', opts.name], { inherit: true });
+            } catch { /* might already be running */ }
+
+            console.log(`${c.info('▶')} Launching CloudCLI web server...`);
+            sbx(['exec', '-d', opts.name, 'bash', '-c', '. ~/.cloudcli-start.sh']);
+
+            console.log(`${c.info('▶')} Forwarding port ${opts.port} → 3001...`);
+            try {
+                sbx(['ports', opts.name, '--publish', `${opts.port}:3001`]);
+            } catch (e) {
+                const msg = e.stdout || e.stderr || e.message || '';
+                if (msg.includes('address already in use')) {
+                    const altPort = opts.port + 1;
+                    console.log(`${c.warn('⚠')}  Port ${opts.port} in use, trying ${altPort}...`);
+                    try {
+                        sbx(['ports', opts.name, '--publish', `${altPort}:3001`]);
+                        opts.port = altPort;
+                    } catch {
+                        console.error(`${c.error('❌')} Ports ${opts.port} and ${altPort} both in use. Use --port to specify a free port.`);
+                        process.exit(1);
+                    }
+                } else {
+                    throw e;
+                }
+            }
+
+            console.log(`\n${c.ok('✔')} ${c.bright('CloudCLI is ready!')}`);
+            console.log(`  ${c.info('→')} ${c.bright(`http://localhost:${opts.port}`)}\n`);
+            break;
+        }
+
+        case 'create': {
+            if (!opts.workspace) {
+                console.error(`\n${c.error('❌')} Workspace path required: cloudcli sandbox <path>\n`);
+                console.log(`   Example: ${c.bright('cloudcli sandbox ~/my-project')}\n`);
+                process.exit(1);
+            }
+
+            const workspace = opts.workspace.startsWith('~')
+                ? opts.workspace.replace(/^~/, os.homedir())
+                : path.resolve(opts.workspace);
+
+            if (!fs.existsSync(workspace)) {
+                console.error(`\n${c.error('❌')} Workspace path not found: ${c.dim(workspace)}\n`);
+                process.exit(1);
+            }
+
+            const secret = SANDBOX_SECRETS[opts.agent] || 'anthropic';
+
+            // Check if the required secret is stored
+            try {
+                const secretList = sbx(['secret', 'ls']);
+                if (!secretList.includes(secret)) {
+                    console.error(`\n${c.error('❌')} No ${c.bright(secret)} API key found.\n`);
+                    console.log(`   Run: ${c.bright(`sbx secret set -g ${secret}`)}\n`);
+                    process.exit(1);
+                }
+            } catch { /* sbx secret ls not available, skip check */ }
+
+            console.log(`\n${c.bright('CloudCLI Sandbox')}`);
+            console.log(c.dim('─'.repeat(50)));
+            console.log(`  Agent:     ${c.info(opts.agent)} ${c.dim(`(${secret} credentials)`)}`);
+            console.log(`  Workspace: ${c.dim(workspace)}`);
+            console.log(`  Name:      ${c.dim(opts.name)}`);
+            console.log(`  Template:  ${c.dim(opts.template)}`);
+            console.log(`  Port:      ${c.dim(String(opts.port))}`);
+            if (opts.env.length > 0) {
+                console.log(`  Env:       ${c.dim(opts.env.join(', '))}`);
+            }
+            console.log(c.dim('─'.repeat(50)));
+
+            // Step 1: Create sandbox
+            console.log(`\n${c.info('▶')} Creating sandbox ${c.bright(opts.name)}...`);
+            try {
+                sbx(
+                    ['create', '--template', opts.template, '--name', opts.name, opts.agent, workspace],
+                    { inherit: true }
+                );
+            } catch (e) {
+                const msg = e.stdout || e.stderr || e.message || '';
+                if (msg.includes('already exists')) {
+                    console.log(`${c.warn('⚠')}  Sandbox ${c.bright(opts.name)} already exists. Starting it instead...\n`);
+                    try { sbx(['start', opts.name]); } catch { /* may already be running */ }
+                } else {
+                    throw e;
+                }
+            }
+
+            // Step 2: Inject environment variables
+            if (opts.env.length > 0) {
+                console.log(`${c.info('▶')} Setting environment variables...`);
+                const exports = opts.env
+                    .filter(e => /^\w+=.+$/.test(e))
+                    .map(e => `export ${e}`)
+                    .join('\n');
+                if (exports) {
+                    sbx(['exec', opts.name, 'bash', '-c', `echo '${exports}' >> /etc/sandbox-persistent.sh`]);
+                }
+                const invalid = opts.env.filter(e => !/^\w+=.+$/.test(e));
+                if (invalid.length > 0) {
+                    console.log(`${c.warn('⚠')}  Skipped invalid env vars: ${invalid.join(', ')} (expected KEY=VALUE)`);
+                }
+            }
+
+            // Step 3: Start CloudCLI
+            console.log(`${c.info('▶')} Launching CloudCLI web server...`);
+            try {
+                sbx(['exec', '-d', opts.name, 'bash', '-c', '. ~/.cloudcli-start.sh']);
+            } catch (e) {
+                console.error(`${c.error('❌')} Failed to start CloudCLI: ${e.message}`);
+                process.exit(1);
+            }
+
+            // Step 4: Forward port
+            console.log(`${c.info('▶')} Forwarding port ${opts.port} → 3001...`);
+            try {
+                sbx(['ports', opts.name, '--publish', `${opts.port}:3001`]);
+            } catch (e) {
+                const msg = e.stdout || e.stderr || e.message || '';
+                if (msg.includes('address already in use')) {
+                    const altPort = opts.port + 1;
+                    console.log(`${c.warn('⚠')}  Port ${opts.port} in use, trying ${altPort}...`);
+                    try {
+                        sbx(['ports', opts.name, '--publish', `${altPort}:3001`]);
+                        opts.port = altPort;
+                    } catch {
+                        console.error(`${c.error('❌')} Ports ${opts.port} and ${altPort} both in use. Use --port to specify a free port.`);
+                        process.exit(1);
+                    }
+                } else {
+                    throw e;
+                }
+            }
+
+            // Done
+            console.log(`\n${c.ok('✔')} ${c.bright('CloudCLI is ready!')}`);
+            console.log(`  ${c.info('→')} Open ${c.bright(`http://localhost:${opts.port}`)}`);
+            console.log(`\n${c.dim('  Manage with:')}`);
+            console.log(`  ${c.dim('$')} cloudcli sandbox ls`);
+            console.log(`  ${c.dim('$')} cloudcli sandbox stop ${opts.name}`);
+            console.log(`  ${c.dim('$')} cloudcli sandbox start ${opts.name}`);
+            console.log(`  ${c.dim('$')} cloudcli sandbox rm ${opts.name}\n`);
+            break;
+        }
+
+        default:
+            showSandboxHelp();
+    }
+}
+
+// ── Server ──────────────────────────────────────────────────
+
 // Start the server
 async function startServer() {
     // Check for updates silently on startup
@@ -274,6 +626,10 @@ function parseArgs(args) {
             parsed.command = 'version';
         } else if (!arg.startsWith('-')) {
             parsed.command = arg;
+            if (arg === 'sandbox') {
+                parsed.remainingArgs = args.slice(i + 1);
+                break;
+            }
         }
     }
 
@@ -283,7 +639,7 @@ function parseArgs(args) {
 // Main CLI handler
 async function main() {
     const args = process.argv.slice(2);
-    const { command, options } = parseArgs(args);
+    const { command, options, remainingArgs } = parseArgs(args);
 
     // Apply CLI options to environment variables
     if (options.serverPort) {
@@ -298,6 +654,9 @@ async function main() {
     switch (command) {
         case 'start':
             await startServer();
+            break;
+        case 'sandbox':
+            await sandboxCommand(remainingArgs || []);
             break;
         case 'status':
         case 'info':
