@@ -1,11 +1,7 @@
-import { spawn } from 'child_process';
-import crossSpawn from 'cross-spawn';
+import { spawn } from 'cross-spawn';
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
 import { cursorAdapter } from './providers/cursor/adapter.js';
 import { createNormalizedMessage } from './providers/types.js';
-
-// Use cross-spawn on Windows for better command execution
-const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
 
 let activeCursorProcesses = new Map(); // Track active processes by session ID
 
@@ -122,7 +118,7 @@ async function spawnCursor(command, options = {}, ws) {
       console.log('Working directory:', workingDir);
       console.log('Session info - Input sessionId:', sessionId, 'Resume:', resume);
 
-      const cursorProcess = spawnFunction('cursor-agent', args, {
+      const cursorProcess = spawn('cursor-agent', args, {
         cwd: workingDir,
         stdio: ['pipe', 'pipe', 'pipe'],
         env: { ...process.env } // Inherit all environment variables

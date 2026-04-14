@@ -4,7 +4,7 @@ import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-import { spawn } from 'child_process';
+import { spawn } from 'cross-spawn';
 
 const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);

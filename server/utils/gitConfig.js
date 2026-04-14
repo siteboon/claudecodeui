@@ -1,4 +1,4 @@
-import { spawn } from 'child_process';
+import { spawn } from 'cross-spawn';
 
 function spawnAsync(command, args) {
   return new Promise((resolve, reject) => {
