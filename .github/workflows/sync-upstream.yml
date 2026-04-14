@@ -55,7 +55,8 @@ jobs:
           CLAUDE_CODE_USE_BEDROCK: "1"
           AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
         run: |
-          curl -fsSL https://claude.ai/install.sh | sh
+          curl -fsSL https://claude.ai/install.sh | bash
+          export PATH="$HOME/.claude/local/bin:$PATH"
           claude -p "There are git merge conflicts from merging upstream/main into this fork's main branch. Resolve all conflicts by keeping changes from both sides when possible. For package.json, preserve both upstream additions and fork-specific customizations (like build:sdk). After resolving, stage all files with 'git add .' and commit with 'git commit --no-edit'." --allowedTools "Bash(git*)" "Bash(cat*)" "Bash(grep*)" "Edit" "Read"
 
       - name: Create PR with resolved conflicts
