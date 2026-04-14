@@ -121,12 +121,11 @@ npm run test:integration
 ### Test Coverage
 
 - **19 unit tests** — SessionRouter, AcpTransport, public API (all mocked)
-- **3 integration tests** — real `kiro-cli acp` process: initialize, session/new, MCP notifications
-- **1 skipped** — `session/prompt` causes kiro-cli v1.29.3 to exit (tracked)
+- **4 integration tests** — real `kiro-cli acp` process: initialize, session/new, MCP notifications, session/prompt streaming
 
 ## Known Limitations
 
-- **`session/prompt` not working** — As of `kiro-cli` v1.29.3, sending `session/prompt` via ACP causes the process to exit cleanly (code 0). Initialize and session creation work correctly. This appears to be a kiro-cli bug.
+- **`session/resume` not working** — As of `kiro-cli` v1.29.x, `session/load` followed by `session/prompt` crashes the ACP process. The SDK always creates a new session as a workaround. The `resume` option is accepted but ignored until the kiro-cli bug is fixed.
 - **No per-message timestamps** — Kiro session JSONL files don't include timestamps on individual messages. The SDK uses synthetic incrementing timestamps to preserve ordering.
 
 ## File Structure

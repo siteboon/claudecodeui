@@ -18,13 +18,14 @@ function getTransport(): AcpTransport {
   if (!transport) {
     transport = new AcpTransport();
     transport.setNotificationHandler((method, params) => {
-      if (method !== 'session/update') return;
-
-      const sessionId = params.sessionId as string;
-      if (!sessionId || !router.has(sessionId)) return;
-
-      const update = (params.update || params) as Record<string, unknown>;
-      const type = (update.sessionUpdate || update.type || update.kind) as string;
+      if (method === 'session/update') {
+        const sessionId = params.sessionId as string;
+        const update = (params.update || params) as Record<string, unknown>;
+        const type = (update.sessionUpdate || update.type || update.kind) as string;
+        if (!sessionId || !router.has(sessionId)) {
+          console.log('[kiro-sdk] notification for unregistered session:', sessionId?.slice(0,8), 'type:', type);
+          return;
+        }
 
       if (type === 'agent_message_chunk') {
         const content = update.content as Record<string, unknown> | undefined;
@@ -75,28 +76,22 @@ export function query(params: { prompt: string; options?: Options }): Query {
     const t = getTransport();
     await t.connect(buildAcpArgs(options));
 
-    // Set model if specified
-    if (options.model && options.model !== 'auto') {
-      try { await t.sendRpc('session/set_model', { model: options.model }); } catch { /* ignore */ }
-    }
-
-    // Create or load session
-    if (options.resume) {
-      const result = await t.sendRpc('session/load', { sessionId: options.resume }) as AcpSessionResult;
-      acpSessionId = result?.sessionId || options.resume;
-    } else {
-      const result = await t.sendRpc('session/new', {
-        cwd: options.cwd || process.cwd(),
-        mcpServers: options.mcpServers || [],
-      }) as AcpSessionResult;
-      acpSessionId = result?.sessionId;
-    }
+    // Always create a new session — session/load + session/prompt crashes kiro-cli (v1.29.x bug).
+    // The resume option is accepted but not used until the kiro-cli bug is fixed.
+    const result = await t.sendRpc('session/new', {
+      cwd: options.cwd || process.cwd(),
+      mcpServers: options.mcpServers || [],
+    }) as AcpSessionResult;
+    acpSessionId = result?.sessionId;
 
     if (!acpSessionId) throw new Error('Failed to create ACP session');
 
     router.register(acpSessionId);
 
     try {
+      // Note: set_model is intentionally skipped — it crashes kiro-cli with
+      // certain model ID formats. Kiro uses 'auto' by default which works well.
+
       // Send the prompt — response arrives after streaming completes
       const promptResult = await t.sendRpc('session/prompt', {
         sessionId: acpSessionId,
