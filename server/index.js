@@ -2476,6 +2476,14 @@ app.get('*', (req, res) => {
     }
 });
 
+// Handle malformed URLs (e.g. unsubstituted %VITE_BASE_PATH% from cached pages)
+app.use((err, req, res, next) => {
+    if (err instanceof URIError) {
+        return res.status(400).send('Bad Request');
+    }
+    next(err);
+});
+
 // Helper function to convert permissions to rwx format
 function permToRwx(perm) {
     const r = perm & 4 ? 'r' : '-';
