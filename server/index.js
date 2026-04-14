@@ -437,7 +437,8 @@ app.post('/api/system/update', authenticateToken, async (req, res) => {
 
         // Platform deployments use their own update workflow from the project root.
         const updateCommand = IS_PLATFORM
-            ? 'git checkout main && git pull && npm install && npm run update:platform'
+        // In platform, husky and dev dependencies are not needed
+            ? 'git checkout main && git pull && npm pkg delete scripts.prepare && npm install --omit=dev && npm run update:platform'
             : installMode === 'git'
                 ? 'git checkout main && git pull && npm install'
                 : 'npm install -g @cloudcli-ai/cloudcli@latest';
