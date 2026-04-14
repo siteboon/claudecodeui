@@ -23,10 +23,11 @@
     "url": "https://github.com/siteboon/claudecodeui/issues"
   },
   "scripts": {
-    "dev": "concurrently --kill-others \"npm run server\" \"npm run client\"",
+    "dev": "npm run build:sdk && concurrently --kill-others \"npm run server\" \"npm run client\"",
     "server": "node server/index.js",
     "client": "vite",
-    "build": "vite build",
+    "build": "npm run build:sdk && vite build",
+    "build:sdk": "npm run build --prefix kiro-sdk",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint src/",
@@ -34,7 +35,7 @@
     "start": "npm run build && npm run server",
     "release": "./release.sh",
     "prepublishOnly": "npm run build",
-    "postinstall": "node scripts/fix-node-pty.js",
+    "postinstall": "npm run build:sdk && node scripts/fix-node-pty.js",
     "prepare": "husky"
   },
   "keywords": [
@@ -114,7 +115,8 @@
     "sqlite3": "^5.1.7",
     "tailwind-merge": "^3.3.1",
     "web-push": "^3.6.7",
-    "ws": "^8.14.2"
+    "ws": "^8.14.2",
+    "kiro-sdk": "file:./kiro-sdk"
   },
   "devDependencies": {
     "@commitlint/cli": "^20.4.3",
