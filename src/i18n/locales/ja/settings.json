@@ -62,6 +62,7 @@
     "showRawParameters": "生パラメータを表示",
     "showThinking": "思考を表示",
     "autoScrollToBottom": "自動スクロール",
+    "showAllSessionsSortedByTime": "すべてのセッションを時間順に表示",
     "sendByCtrlEnter": "Ctrl+Enterで送信",
     "sendByCtrlEnterDescription": "有効にすると、Enterではなく Ctrl+Enter でメッセージを送信します。IMEユーザーの誤送信防止に便利です。",
     "dragHandle": {

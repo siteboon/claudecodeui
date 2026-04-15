@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
+import { useUiPreferences } from './useUiPreferences';
 import { api } from '../utils/api';
 import type {
   AppSocketMessage,
@@ -133,6 +134,8 @@ export function useProjectsState({
   isMobile,
   activeSessions,
 }: UseProjectsStateArgs) {
+  const { preferences } = useUiPreferences();
+  const { showAllSessionsSortedByTime } = preferences;
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [selectedSession, setSelectedSession] = useState<ProjectSession | null>(null);
@@ -161,7 +164,7 @@ export function useProjectsState({
       if (showLoadingState) {
         setIsLoadingProjects(true);
       }
-      const response = await api.projects();
+      const response = await api.projects({ includeAllSessions: showAllSessionsSortedByTime });
       const projectData = (await response.json()) as Project[];
 
       setProjects((prevProjects) => {
@@ -180,7 +183,7 @@ export function useProjectsState({
         setIsLoadingProjects(false);
       }
     }
-  }, []);
+  }, [showAllSessionsSortedByTime]);
 
   const refreshProjectsSilently = useCallback(async () => {
     // Keep chat view stable while still syncing sidebar/session metadata in background.
@@ -230,69 +233,83 @@ export function useProjectsState({
       return;
     }
 
-    const projectsMessage = latestMessage as ProjectsUpdatedMessage;
+    void (async () => {
+      const projectsMessage = latestMessage as ProjectsUpdatedMessage;
 
-    if (projectsMessage.changedFile && selectedSession && selectedProject) {
-      const normalized = projectsMessage.changedFile.replace(/\\/g, '/');
-      const changedFileParts = normalized.split('/');
+      if (projectsMessage.changedFile && selectedSession && selectedProject) {
+        const normalized = projectsMessage.changedFile.replace(/\\/g, '/');
+        const changedFileParts = normalized.split('/');
 
-      if (changedFileParts.length >= 2) {
-        const filename = changedFileParts[changedFileParts.length - 1];
-        const changedSessionId = filename.replace('.jsonl', '');
+        if (changedFileParts.length >= 2) {
+          const filename = changedFileParts[changedFileParts.length - 1];
+          const changedSessionId = filename.replace('.jsonl', '');
 
-        if (changedSessionId === selectedSession.id) {
-          const isSessionActive = activeSessions.has(selectedSession.id);
+          if (changedSessionId === selectedSession.id) {
+            const isSessionActive = activeSessions.has(selectedSession.id);
 
-          if (!isSessionActive) {
-            setExternalMessageUpdate((prev) => prev + 1);
+            if (!isSessionActive) {
+              setExternalMessageUpdate((prev) => prev + 1);
+            }
           }
         }
       }
-    }
 
-    const hasActiveSession =
-      (selectedSession && activeSessions.has(selectedSession.id)) ||
-      (activeSessions.size > 0 && Array.from(activeSessions).some((id) => id.startsWith('new-session-')));
+      const hasActiveSession =
+        (selectedSession && activeSessions.has(selectedSession.id)) ||
+        (activeSessions.size > 0 && Array.from(activeSessions).some((id) => id.startsWith('new-session-')));
 
-    const updatedProjects = projectsMessage.projects;
+      try {
+        const response = await api.projects({ includeAllSessions: showAllSessionsSortedByTime });
+        const updatedProjects = (await response.json()) as Project[];
 
-    if (
-      hasActiveSession &&
-      !isUpdateAdditive(projects, updatedProjects, selectedProject, selectedSession)
-    ) {
-      return;
-    }
+        if (
+          hasActiveSession &&
+          !isUpdateAdditive(projects, updatedProjects, selectedProject, selectedSession)
+        ) {
+          return;
+        }
 
-    setProjects(updatedProjects);
+        setProjects(updatedProjects);
 
-    if (!selectedProject) {
-      return;
-    }
+        if (!selectedProject) {
+          return;
+        }
 
-    const updatedSelectedProject = updatedProjects.find(
-      (project) => project.name === selectedProject.name,
-    );
+        const updatedSelectedProject = updatedProjects.find(
+          (project) => project.name === selectedProject.name,
+        );
 
-    if (!updatedSelectedProject) {
-      return;
-    }
+        if (!updatedSelectedProject) {
+          return;
+        }
 
-    if (serialize(updatedSelectedProject) !== serialize(selectedProject)) {
-      setSelectedProject(updatedSelectedProject);
-    }
+        if (serialize(updatedSelectedProject) !== serialize(selectedProject)) {
+          setSelectedProject(updatedSelectedProject);
+        }
 
-    if (!selectedSession) {
-      return;
-    }
+        if (!selectedSession) {
+          return;
+        }
 
-    const updatedSelectedSession = getProjectSessions(updatedSelectedProject).find(
-      (session) => session.id === selectedSession.id,
-    );
+        const updatedSelectedSession = getProjectSessions(updatedSelectedProject).find(
+          (session) => session.id === selectedSession.id,
+        );
 
-    if (!updatedSelectedSession) {
-      setSelectedSession(null);
-    }
-  }, [latestMessage, selectedProject, selectedSession, activeSessions, projects]);
+        if (!updatedSelectedSession) {
+          setSelectedSession(null);
+        }
+      } catch (error) {
+        console.error('Error syncing updated projects:', error);
+      }
+    })();
+  }, [
+    latestMessage,
+    selectedProject,
+    selectedSession,
+    activeSessions,
+    projects,
+    showAllSessionsSortedByTime,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -448,7 +465,7 @@ export function useProjectsState({
 
   const handleSidebarRefresh = useCallback(async () => {
     try {
-      const response = await api.projects();
+      const response = await api.projects({ includeAllSessions: showAllSessionsSortedByTime });
       const freshProjects = (await response.json()) as Project[];
 
       setProjects((prevProjects) =>
@@ -490,7 +507,7 @@ export function useProjectsState({
     } catch (error) {
       console.error('Error refreshing sidebar:', error);
     }
-  }, [selectedProject, selectedSession]);
+  }, [selectedProject, selectedSession, showAllSessionsSortedByTime]);
 
   const handleProjectDelete = useCallback(
     (projectName: string) => {

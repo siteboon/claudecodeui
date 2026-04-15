@@ -62,6 +62,7 @@
     "showRawParameters": "Show raw parameters",
     "showThinking": "Show thinking",
     "autoScrollToBottom": "Auto-scroll to bottom",
+    "showAllSessionsSortedByTime": "Sort all sessions by time",
     "sendByCtrlEnter": "Send by Ctrl+Enter",
     "sendByCtrlEnterDescription": "When enabled, pressing Ctrl+Enter will send the message instead of just Enter. This is useful for IME users to avoid accidental sends.",
     "dragHandle": {

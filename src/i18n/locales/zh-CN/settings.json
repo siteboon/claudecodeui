@@ -62,6 +62,7 @@
     "showRawParameters": "显示原始参数",
     "showThinking": "显示思考过程",
     "autoScrollToBottom": "自动滚动到底部",
+    "showAllSessionsSortedByTime": "按时间排序显示全部会话",
     "sendByCtrlEnter": "使用 Ctrl+Enter 发送",
     "sendByCtrlEnterDescription": "启用后，按 Ctrl+Enter 发送消息，而不是仅按 Enter。这对于使用输入法的用户可以避免意外发送。",
     "dragHandle": {

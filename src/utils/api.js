@@ -51,7 +51,14 @@ export const api = {
 
   // Protected endpoints
   // config endpoint removed - no longer needed (frontend uses window.location)
-  projects: () => authenticatedFetch('/api/projects'),
+  projects: ({ includeAllSessions = false } = {}) => {
+    const params = new URLSearchParams();
+    if (includeAllSessions) {
+      params.set('includeAllSessions', 'true');
+    }
+    const queryString = params.toString();
+    return authenticatedFetch(`/api/projects${queryString ? `?${queryString}` : ''}`);
+  },
   sessions: (projectName, limit = 5, offset = 0) =>
     authenticatedFetch(`/api/projects/${projectName}/sessions?limit=${limit}&offset=${offset}`),
   // Unified endpoint — all providers through one URL

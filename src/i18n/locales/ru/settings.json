@@ -62,6 +62,7 @@
     "showRawParameters": "Показывать сырые параметры",
     "showThinking": "Показывать размышления",
     "autoScrollToBottom": "Автопрокрутка вниз",
+    "showAllSessionsSortedByTime": "Сортировать все сессии по времени",
     "sendByCtrlEnter": "Отправка по Ctrl+Enter",
     "sendByCtrlEnterDescription": "Когда включено, нажатие Ctrl+Enter будет отправлять сообщение вместо просто Enter. Это полезно для пользователей IME, чтобы избежать случайной отправки.",
     "dragHandle": {

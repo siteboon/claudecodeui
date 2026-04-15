@@ -46,6 +46,11 @@ export const VIEW_OPTION_TOGGLES: PreferenceToggleItem[] = [
     labelKey: 'quickSettings.autoScrollToBottom',
     icon: ArrowDown,
   },
+  {
+    key: 'showAllSessionsSortedByTime',
+    labelKey: 'quickSettings.showAllSessionsSortedByTime',
+    icon: ArrowDown,
+  },
 ];
 
 export const INPUT_SETTING_TOGGLES: PreferenceToggleItem[] = [

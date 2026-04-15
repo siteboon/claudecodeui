@@ -6,6 +6,7 @@ export type PreferenceToggleKey =
   | 'showRawParameters'
   | 'showThinking'
   | 'autoScrollToBottom'
+  | 'showAllSessionsSortedByTime'
   | 'sendByCtrlEnter';
 
 export type QuickSettingsPreferences = Record<PreferenceToggleKey, boolean>;

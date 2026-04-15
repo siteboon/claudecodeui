@@ -503,7 +503,8 @@ app.post('/api/system/update', authenticateToken, async (req, res) => {
 
 app.get('/api/projects', authenticateToken, async (req, res) => {
     try {
-        const projects = await getProjects(broadcastProgress);
+        const includeAllSessions = req.query.includeAllSessions === 'true';
+        const projects = await getProjects(broadcastProgress, { includeAllSessions });
         res.json(projects);
     } catch (error) {
         res.status(500).json({ error: error.message });
