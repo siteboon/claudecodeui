@@ -11,6 +11,7 @@
     "server/",
     "shared/",
     "dist/",
+    "dist-server/",
     "scripts/",
     "README.md"
   ],
