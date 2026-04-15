@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type React from 'react';
 import type { TFunction } from 'i18next';
 import { api } from '../../../utils/api';
-import type { Project, ProjectSession, SessionProvider } from '../../../types/app';
+import type { Project, ProjectSession, LLMProvider } from '../../../types/app';
 import type {
   AdditionalSessionsByProject,
   DeleteProjectConfirmation,
@@ -545,7 +545,7 @@ export function useSidebarController({
   }, [onRefresh]);
 
   const updateSessionSummary = useCallback(
-    async (_projectName: string, sessionId: string, summary: string, provider: SessionProvider) => {
+    async (_projectName: string, sessionId: string, summary: string, provider: LLMProvider) => {
       const trimmed = summary.trim();
       if (!trimmed) {
         setEditingSession(null);
