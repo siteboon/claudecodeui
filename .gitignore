@@ -140,3 +140,7 @@ tasks/
 
 # Git worktrees
 .worktrees/
+
+# Local SDK clones (separate repos)
+kiro-sdk/
+kiro-sdk-python/

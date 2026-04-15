@@ -47,7 +47,18 @@ jobs:
             fi
             cd "$PROD_DIR"
 
-            # Install dependencies
+            # Install kiro-sdk locally (not published to npm)
+            if [ ! -d "$PROD_DIR/kiro-sdk/.git" ]; then
+              git clone https://github.com/GeorgeZhiXu/kiro-sdk.git "$PROD_DIR/kiro-sdk"
+            else
+              cd "$PROD_DIR/kiro-sdk"
+              git fetch origin && git reset --hard origin/master
+            fi
+            cd "$PROD_DIR/kiro-sdk"
+            npm install && npm run build
+            cd "$PROD_DIR"
+
+            # Install dependencies (kiro-sdk resolved via file: link)
             npm install --production=false
 
             # Build frontend (VITE_BASE_PATH must be set at build time for correct asset paths)

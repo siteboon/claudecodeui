@@ -127,7 +127,24 @@ VITE_BASE_PATH=/cloudcli/ npm run server
 ### Fork Maintenance
 
 - Forks can automatically merge updates from `siteboon/claudecodeui` by enabling the GitHub Actions workflow in `.github/workflows/sync-upstream.yml`.
-- The workflow fetches `upstream/main`, merges it into your fork's `main`, and pushes only when the merge succeeds. If upstream introduces conflicts, the workflow fails and leaves the branch unchanged.
+- The workflow fetches `upstream/main`, merges it into your fork's `main`, and pushes only when the merge succeeds. If upstream introduces conflicts, Claude Code automatically resolves them and opens a PR for review.
+
+### Fork Development Setup
+
+This fork uses `kiro-sdk` and `kiro-sdk-python` as separate repos. To set up for local development:
+
+```bash
+git clone https://github.com/GeorgeZhiXu/claudecodeui.git
+cd claudecodeui
+
+# Clone the SDK (required — not published to npm)
+git clone https://github.com/GeorgeZhiXu/kiro-sdk.git
+cd kiro-sdk && npm install && npm run build && cd ..
+
+# Install dependencies and start
+npm install
+npm run start
+```
 
 
 ---
