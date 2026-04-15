@@ -435,13 +435,20 @@ app.post('/api/system/update', authenticateToken, async (req, res) => {
 
         console.log('Starting system update from directory:', projectRoot);
 
-        // Run the update command based on install mode
-        const updateCommand = installMode === 'git'
-            ? 'git checkout main && git pull && npm install'
-            : 'npm install -g @cloudcli-ai/cloudcli@latest';
+        // Platform deployments use their own update workflow from the project root.
+        const updateCommand = IS_PLATFORM
+        // In platform, husky and dev dependencies are not needed
+            ? 'npm run update:platform'
+            : installMode === 'git'
+                ? 'git checkout main && git pull && npm install'
+                : 'npm install -g @cloudcli-ai/cloudcli@latest';
+
+        const updateCwd = IS_PLATFORM || installMode === 'git'
+            ? projectRoot
+            : os.homedir();
 
         const child = spawn('sh', ['-c', updateCommand], {
-            cwd: installMode === 'git' ? projectRoot : os.homedir(),
+            cwd: updateCwd,
             env: process.env
         });
 
