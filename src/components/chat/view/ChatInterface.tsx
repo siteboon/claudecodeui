@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import { QuickSettingsPanel } from '../../quick-settings-panel';
 import type { ChatInterfaceProps, Provider  } from '../types/types';
-import type { SessionProvider } from '../../../types/app';
+import type { LLMProvider } from '../../../types/app';
 import { useChatProviderState } from '../hooks/useChatProviderState';
 import { useChatSessionState } from '../hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '../hooks/useChatRealtimeHandlers';
@@ -209,9 +209,9 @@ function ChatInterface({
   // so missed streaming events are shown. Also reset isLoading.
   const handleWebSocketReconnect = useCallback(async () => {
     if (!selectedProject || !selectedSession) return;
-    const providerVal = (localStorage.getItem('selected-provider') as SessionProvider) || 'claude';
+    const providerVal = (localStorage.getItem('selected-provider') as LLMProvider) || 'claude';
     await sessionStore.refreshFromServer(selectedSession.id, {
-      provider: (selectedSession.__provider || providerVal) as SessionProvider,
+      provider: (selectedSession.__provider || providerVal) as LLMProvider,
       projectName: selectedProject.name,
       projectPath: selectedProject.fullPath || selectedProject.path || '',
     });

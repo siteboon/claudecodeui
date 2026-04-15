@@ -1,16 +1,17 @@
 {
   "name": "@cloudcli-ai/cloudcli",
-  "version": "1.29.2",
+  "version": "1.29.3",
   "description": "A web-based UI for Claude Code CLI",
   "type": "module",
-  "main": "server/index.js",
+  "main": "dist-server/server/index.js",
   "bin": {
-    "cloudcli": "server/cli.js"
+    "cloudcli": "dist-server/server/cli.js"
   },
   "files": [
     "server/",
     "shared/",
     "dist/",
+    "dist-server/",
     "scripts/",
     "README.md"
   ],
@@ -23,15 +24,20 @@
     "url": "https://github.com/siteboon/claudecodeui/issues"
   },
   "scripts": {
-    "dev": "npm run build:sdk && concurrently --kill-others \"npm run server\" \"npm run client\"",
-    "server": "node server/index.js",
+    "dev": "npm run build:sdk && concurrently --kill-others \"npm run server:dev\" \"npm run client\"",
+    "server": "node dist-server/server/index.js",
+    "server:dev": "tsx --tsconfig server/tsconfig.json server/index.js",
+    "server:dev-watch": "tsx watch --tsconfig server/tsconfig.json server/index.js",
     "client": "vite",
-    "build": "npm run build:sdk && vite build",
+    "build": "npm run build:sdk && npm run build:client && npm run build:server",
     "build:sdk": "npm run build --prefix kiro-sdk",
+    "build:client": "vite build",
+    "prebuild:server": "node -e \"require('node:fs').rmSync('dist-server', { recursive: true, force: true })\"",
+    "build:server": "tsc -p server/tsconfig.json && tsc-alias -p server/tsconfig.json",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
-    "lint": "eslint src/",
-    "lint:fix": "eslint src/ --fix",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p server/tsconfig.json",
+    "lint": "eslint src/ server/",
+    "lint:fix": "eslint src/ server/ --fix",
     "start": "npm run build && npm run server",
     "release": "./release.sh",
     "prepublishOnly": "npm run build",
@@ -132,6 +138,8 @@
     "autoprefixer": "^10.4.16",
     "concurrently": "^8.2.2",
     "eslint": "^9.39.3",
+    "eslint-import-resolver-typescript": "^4.4.4",
+    "eslint-plugin-boundaries": "^6.0.2",
     "eslint-plugin-import-x": "^4.16.1",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.0.1",
@@ -146,11 +154,14 @@
     "release-it": "^19.0.5",
     "sharp": "^0.34.2",
     "tailwindcss": "^3.4.0",
+    "tsc-alias": "^1.8.16",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.56.1",
     "vite": "^7.0.4"
   },
   "lint-staged": {
-    "src/**/*.{ts,tsx,js,jsx}": "eslint"
+    "src/**/*.{ts,tsx,js,jsx}": "eslint",
+    "server/**/*.{js,ts}": "eslint"
   }
 }

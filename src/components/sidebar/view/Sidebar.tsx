@@ -6,7 +6,7 @@ import { useUiPreferences } from '../../../hooks/useUiPreferences';
 import { useSidebarController } from '../hooks/useSidebarController';
 import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
-import type { Project, SessionProvider } from '../../../types/app';
+import type { Project, LLMProvider } from '../../../types/app';
 import type { MCPServerStatus, SidebarProps } from '../types/types';
 import SidebarCollapsed from './subcomponents/SidebarCollapsed';
 import SidebarContent from './subcomponents/SidebarContent';
@@ -177,7 +177,7 @@ function Sidebar({
       setEditingSession(null);
       setEditingSessionName('');
     },
-    onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: SessionProvider) => {
+    onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: LLMProvider) => {
       void updateSessionSummary(projectName, sessionId, summary, provider);
     },
     t,
@@ -235,7 +235,7 @@ function Sidebar({
             isSearching={isSearching}
             searchProgress={searchProgress}
             onConversationResultClick={(projectName: string, sessionId: string, provider: string, messageTimestamp?: string | null, messageSnippet?: string | null) => {
-              const resolvedProvider = (provider || 'claude') as SessionProvider;
+              const resolvedProvider = (provider || 'claude') as LLMProvider;
               const project = projects.find(p => p.name === projectName);
               const searchTarget = { __searchTargetTimestamp: messageTimestamp || null, __searchTargetSnippet: messageSnippet || null };
               const sessionObj = {

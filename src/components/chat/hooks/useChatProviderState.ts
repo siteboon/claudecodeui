@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { authenticatedFetch } from '../../../utils/api';
 import { CLAUDE_MODELS, CODEX_MODELS, CURSOR_MODELS, GEMINI_MODELS, KIRO_MODELS } from '../../../../shared/modelConstants';
 import type { PendingPermissionRequest, PermissionMode } from '../types/types';
-import type { ProjectSession, SessionProvider } from '../../../types/app';
+import type { ProjectSession, LLMProvider } from '../../../types/app';
 
 interface UseChatProviderStateArgs {
   selectedSession: ProjectSession | null;
@@ -11,8 +11,8 @@ interface UseChatProviderStateArgs {
 export function useChatProviderState({ selectedSession }: UseChatProviderStateArgs) {
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('default');
   const [pendingPermissionRequests, setPendingPermissionRequests] = useState<PendingPermissionRequest[]>([]);
-  const [provider, setProvider] = useState<SessionProvider>(() => {
-    return (localStorage.getItem('selected-provider') as SessionProvider) || 'claude';
+  const [provider, setProvider] = useState<LLMProvider>(() => {
+    return (localStorage.getItem('selected-provider') as LLMProvider) || 'claude';
   });
   const [cursorModel, setCursorModel] = useState<string>(() => {
     return localStorage.getItem('cursor-model') || CURSOR_MODELS.DEFAULT;
