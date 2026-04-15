@@ -24,13 +24,12 @@
     "url": "https://github.com/siteboon/claudecodeui/issues"
   },
   "scripts": {
-    "dev": "npm run build:sdk && concurrently --kill-others \"npm run server:dev\" \"npm run client\"",
+    "dev": "concurrently --kill-others \"npm run server:dev\" \"npm run client\"",
     "server": "node dist-server/server/index.js",
     "server:dev": "tsx --tsconfig server/tsconfig.json server/index.js",
     "server:dev-watch": "tsx watch --tsconfig server/tsconfig.json server/index.js",
     "client": "vite",
-    "build": "npm run build:sdk && npm run build:client && npm run build:server",
-    "build:sdk": "npm run build --prefix kiro-sdk",
+    "build": "npm run build:client && npm run build:server",
     "build:client": "vite build",
     "prebuild:server": "node -e \"require('node:fs').rmSync('dist-server', { recursive: true, force: true })\"",
     "build:server": "tsc -p server/tsconfig.json && tsc-alias -p server/tsconfig.json",
@@ -41,7 +40,7 @@
     "start": "npm run build && npm run server",
     "release": "./release.sh",
     "prepublishOnly": "npm run build",
-    "postinstall": "npm run build:sdk && node scripts/fix-node-pty.js",
+    "postinstall": "node scripts/fix-node-pty.js",
     "prepare": "husky",
     "update:platform": "./update-platform.sh"
   },
@@ -123,7 +122,7 @@
     "tailwind-merge": "^3.3.1",
     "web-push": "^3.6.7",
     "ws": "^8.14.2",
-    "kiro-sdk": "file:./kiro-sdk"
+    "kiro-sdk": "github:GeorgeZhiXu/kiro-sdk"
   },
   "devDependencies": {
     "@commitlint/cli": "^20.4.3",
