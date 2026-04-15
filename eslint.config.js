@@ -148,6 +148,11 @@ export default tseslint.config(
       ],
       "boundaries/elements": [
         {
+          type: "backend-shared-types", // shared backend type contract that modules may consume without creating runtime coupling
+          pattern: ["server/shared/types.{js,ts}", "server/types.{js,ts}"], // support the current shared types path and the older top-level server/types file
+          mode: "file", // treat the types file itself as the boundary element instead of the whole folder
+        },
+        {
           type: "backend-module", // logical element name used by boundaries rules below
           pattern: "server/modules/*", // each direct folder in server/modules is treated as one module boundary
           mode: "folder", // classify dependencies at folder-module level (not per individual file)
@@ -190,6 +195,15 @@ export default tseslint.config(
           default: "allow", // allow normal imports unless a rule below explicitly disallows them
           checkInternals: false, // do not apply these cross-module rules to imports inside the same module
           rules: [
+            {
+              from: { type: "backend-module" }, // modules may depend on the shared types contract only as erased type-only imports
+              to: { type: "backend-shared-types" },
+              disallow: {
+                dependency: { kind: ["value", "typeof"] },
+              }, // block runtime imports so shared types stay a compile-time contract instead of a hidden shared module
+              message:
+                "Backend modules may only use `import type` when importing from server/shared/types.ts (or server/types.ts).",
+            },
             {
               to: { type: "backend-module" }, // when importing anything that belongs to another backend module
               disallow: { to: { internalPath: "**" } }, // block all direct/deep imports into module internals by default
