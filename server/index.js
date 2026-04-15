@@ -5,6 +5,9 @@ import fs from 'fs';
 import path from 'path';
 import { findAppRoot, getModuleDir } from './utils/runtime-paths.js';
 
+import { AppError } from '@/shared/utils.js';
+
+
 const __dirname = getModuleDir(import.meta.url);
 // The server source runs from /server, while the compiled output runs from /dist-server/server.
 // Resolving the app root once keeps every repo-level lookup below aligned across both layouts.
@@ -2287,6 +2290,30 @@ app.get('*', (req, res) => {
         const redirectHost = getConnectableHost(req.hostname);
         res.redirect(`${req.protocol}://${redirectHost}:${VITE_PORT}`);
     }
+});
+
+// global error middleware must be last
+app.use((err, req, res, next) => {
+  if (err instanceof AppError) {
+    return res.status(err.statusCode).json({
+      success: false,
+      error: {
+        code: err.code,
+        message: err.message,
+        details: err.details,
+      },
+    });
+  }
+
+  console.error(err);
+
+  return res.status(500).json({
+    success: false,
+    error: {
+      code: 'INTERNAL_ERROR',
+      message: 'Internal server error',
+    },
+  });
 });
 
 // Helper function to convert permissions to rwx format
