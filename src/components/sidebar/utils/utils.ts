@@ -1,5 +1,5 @@
 import type { TFunction } from 'i18next';
-import type { Project } from '../../../types/app';
+import type { Project, SessionProvider } from '../../../types/app';
 import type {
   AdditionalSessionsByProject,
   ProjectSortOrder,
@@ -101,10 +101,23 @@ export const createSessionViewModel = (
 export const getAllSessions = (
   project: Project,
   additionalSessions: AdditionalSessionsByProject,
+  useTimeline = false,
 ): SessionWithProvider[] => {
+  const additionalProjectSessions = additionalSessions[project.name] || [];
+
+  if (useTimeline) {
+    const timelineSessions = (project.timelineSessions || []).map((session) => ({
+      ...session,
+      __provider: (session.__provider || 'claude') as SessionProvider,
+    }));
+
+    return [...timelineSessions, ...additionalProjectSessions].sort(
+      (a, b) => getSessionDate(b).getTime() - getSessionDate(a).getTime(),
+    );
+  }
+
   const claudeSessions = [
     ...(project.sessions || []),
-    ...(additionalSessions[project.name] || []),
   ].map((session) => ({ ...session, __provider: 'claude' as const }));
 
   const cursorSessions = (project.cursorSessions || []).map((session) => ({
@@ -122,16 +135,21 @@ export const getAllSessions = (
     __provider: 'gemini' as const,
   }));
 
-  return [...claudeSessions, ...cursorSessions, ...codexSessions, ...geminiSessions].sort(
-    (a, b) => getSessionDate(b).getTime() - getSessionDate(a).getTime(),
-  );
+  return [
+    ...claudeSessions,
+    ...additionalProjectSessions,
+    ...cursorSessions,
+    ...codexSessions,
+    ...geminiSessions,
+  ].sort((a, b) => getSessionDate(b).getTime() - getSessionDate(a).getTime());
 };
 
 export const getProjectLastActivity = (
   project: Project,
   additionalSessions: AdditionalSessionsByProject,
+  useTimeline = false,
 ): Date => {
-  const sessions = getAllSessions(project, additionalSessions);
+  const sessions = getAllSessions(project, additionalSessions, useTimeline);
   if (sessions.length === 0) {
     return new Date(0);
   }
@@ -147,6 +165,7 @@ export const sortProjects = (
   projectSortOrder: ProjectSortOrder,
   starredProjects: Set<string>,
   additionalSessions: AdditionalSessionsByProject,
+  useTimeline = false,
 ): Project[] => {
   const byName = [...projects];
 
@@ -164,8 +183,8 @@ export const sortProjects = (
 
     if (projectSortOrder === 'date') {
       return (
-        getProjectLastActivity(projectB, additionalSessions).getTime() -
-        getProjectLastActivity(projectA, additionalSessions).getTime()
+        getProjectLastActivity(projectB, additionalSessions, useTimeline).getTime() -
+        getProjectLastActivity(projectA, additionalSessions, useTimeline).getTime()
       );
     }
 

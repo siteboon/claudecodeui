@@ -1,6 +1,7 @@
 import {
   ArrowDown,
   Brain,
+  Clock3,
   Eye,
   Languages,
   Maximize2,
@@ -49,7 +50,7 @@ export const VIEW_OPTION_TOGGLES: PreferenceToggleItem[] = [
   {
     key: 'showAllSessionsSortedByTime',
     labelKey: 'quickSettings.showAllSessionsSortedByTime',
-    icon: ArrowDown,
+    icon: Clock3,
   },
 ];
 

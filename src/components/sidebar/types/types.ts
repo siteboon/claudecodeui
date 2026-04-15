@@ -6,7 +6,7 @@ export type SessionWithProvider = ProjectSession & {
   __provider: SessionProvider;
 };
 
-export type AdditionalSessionsByProject = Record<string, ProjectSession[]>;
+export type AdditionalSessionsByProject = Record<string, SessionWithProvider[]>;
 export type LoadingSessionsByProject = Record<string, boolean>;
 
 export type DeleteProjectConfirmation = {

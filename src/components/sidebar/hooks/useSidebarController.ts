@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type React from 'react';
 import type { TFunction } from 'i18next';
 import { api } from '../../../utils/api';
+import { useUiPreferences } from '../../../hooks/useUiPreferences';
 import type { Project, ProjectSession, SessionProvider } from '../../../types/app';
 import type {
   AdditionalSessionsByProject,
@@ -91,6 +92,8 @@ export function useSidebarController({
   setSidebarVisible,
   sidebarVisible,
 }: UseSidebarControllerArgs) {
+  const { preferences } = useUiPreferences();
+  const { showAllSessionsSortedByTime } = preferences;
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const [editingProject, setEditingProject] = useState<string | null>(null);
   const [showNewProject, setShowNewProject] = useState(false);
@@ -333,8 +336,8 @@ export function useSidebarController({
   );
 
   const getProjectSessions = useCallback(
-    (project: Project) => getAllSessions(project, additionalSessions),
-    [additionalSessions],
+    (project: Project) => getAllSessions(project, additionalSessions, showAllSessionsSortedByTime),
+    [additionalSessions, showAllSessionsSortedByTime],
   );
 
   const projectsWithSessionMeta = useMemo(
@@ -354,8 +357,14 @@ export function useSidebarController({
   );
 
   const sortedProjects = useMemo(
-    () => sortProjects(projectsWithSessionMeta, projectSortOrder, starredProjects, additionalSessions),
-    [additionalSessions, projectSortOrder, projectsWithSessionMeta, starredProjects],
+    () => sortProjects(
+      projectsWithSessionMeta,
+      projectSortOrder,
+      starredProjects,
+      additionalSessions,
+      showAllSessionsSortedByTime,
+    ),
+    [additionalSessions, projectSortOrder, projectsWithSessionMeta, showAllSessionsSortedByTime, starredProjects],
   );
 
   const filteredProjects = useMemo(
@@ -496,9 +505,10 @@ export function useSidebarController({
       setLoadingSessions((prev) => ({ ...prev, [project.name]: true }));
 
       try {
-        const currentSessionCount =
-          (project.sessions?.length || 0) + (additionalSessions[project.name]?.length || 0);
-        const response = await api.sessions(project.name, 5, currentSessionCount);
+        const currentSessionCount = getProjectSessions(project).length;
+        const response = await api.sessions(project.name, 5, currentSessionCount, {
+          sortAllSessionsByTime: showAllSessionsSortedByTime,
+        });
 
         if (!response.ok) {
           return;
@@ -509,9 +519,16 @@ export function useSidebarController({
           hasMore?: boolean;
         };
 
+        const normalizedSessions = (result.sessions || []).map((session) => ({
+          ...session,
+          __provider: showAllSessionsSortedByTime
+            ? ((session.__provider || 'claude') as SessionProvider)
+            : 'claude',
+        }));
+
         setAdditionalSessions((prev) => ({
           ...prev,
-          [project.name]: [...(prev[project.name] || []), ...(result.sessions || [])],
+          [project.name]: [...(prev[project.name] || []), ...normalizedSessions],
         }));
 
         if (result.hasMore === false) {
@@ -524,7 +541,7 @@ export function useSidebarController({
         setLoadingSessions((prev) => ({ ...prev, [project.name]: false }));
       }
     },
-    [additionalSessions, loadingSessions, projectHasMoreOverrides],
+    [getProjectSessions, loadingSessions, projectHasMoreOverrides, showAllSessionsSortedByTime],
   );
 
   const handleProjectSelect = useCallback(

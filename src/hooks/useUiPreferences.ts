@@ -39,7 +39,7 @@ const DEFAULTS: UiPreferences = {
   showThinking: true,
   autoScrollToBottom: true,
   sendByCtrlEnter: false,
-  showAllSessionsSortedByTime: false,
+  showAllSessionsSortedByTime: true,
   sidebarVisible: true,
 };
 

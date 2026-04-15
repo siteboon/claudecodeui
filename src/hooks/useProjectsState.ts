@@ -46,6 +46,7 @@ const projectsHaveChanges = (
       nextProject.fullPath !== prevProject.fullPath ||
       serialize(nextProject.sessionMeta) !== serialize(prevProject.sessionMeta) ||
       serialize(nextProject.sessions) !== serialize(prevProject.sessions) ||
+      serialize(nextProject.timelineSessions) !== serialize(prevProject.timelineSessions) ||
       serialize(nextProject.taskmaster) !== serialize(prevProject.taskmaster);
 
     if (baseChanged) {
@@ -65,12 +66,30 @@ const projectsHaveChanges = (
 };
 
 const getProjectSessions = (project: Project): ProjectSession[] => {
-  return [
-    ...(project.sessions ?? []),
-    ...(project.codexSessions ?? []),
-    ...(project.cursorSessions ?? []),
-    ...(project.geminiSessions ?? []),
-  ];
+  const sessionMap = new Map<string, ProjectSession>();
+  const addSessions = (sessions: ProjectSession[] = [], provider?: ProjectSession['__provider']) => {
+    sessions.forEach((session) => {
+      const normalizedSession = provider && !session.__provider
+        ? { ...session, __provider: provider }
+        : session;
+      const key = `${normalizedSession.__provider || 'claude'}:${normalizedSession.id}`;
+      if (!sessionMap.has(key)) {
+        sessionMap.set(key, normalizedSession);
+      }
+    });
+  };
+
+  addSessions(project.timelineSessions ?? []);
+  addSessions(project.sessions ?? [], 'claude');
+  addSessions(project.codexSessions ?? [], 'codex');
+  addSessions(project.cursorSessions ?? [], 'cursor');
+  addSessions(project.geminiSessions ?? [], 'gemini');
+
+  return [...sessionMap.values()];
+};
+
+const findSessionInProject = (project: Project, sessionId: string): ProjectSession | null => {
+  return getProjectSessions(project).find((session) => session.id === sessionId) ?? null;
 };
 
 const isUpdateAdditive = (
@@ -164,7 +183,7 @@ export function useProjectsState({
       if (showLoadingState) {
         setIsLoadingProjects(true);
       }
-      const response = await api.projects({ includeAllSessions: showAllSessionsSortedByTime });
+      const response = await api.projects({ sortAllSessionsByTime: showAllSessionsSortedByTime });
       const projectData = (await response.json()) as Project[];
 
       setProjects((prevProjects) => {
@@ -259,7 +278,7 @@ export function useProjectsState({
         (activeSessions.size > 0 && Array.from(activeSessions).some((id) => id.startsWith('new-session-')));
 
       try {
-        const response = await api.projects({ includeAllSessions: showAllSessionsSortedByTime });
+        const response = await api.projects({ sortAllSessionsByTime: showAllSessionsSortedByTime });
         const updatedProjects = (await response.json()) as Project[];
 
         if (
@@ -326,62 +345,17 @@ export function useProjectsState({
     }
 
     for (const project of projects) {
-      const claudeSession = project.sessions?.find((session) => session.id === sessionId);
-      if (claudeSession) {
+      const matchedSession = findSessionInProject(project, sessionId);
+      if (matchedSession) {
         const shouldUpdateProject = selectedProject?.name !== project.name;
         const shouldUpdateSession =
-          selectedSession?.id !== sessionId || selectedSession.__provider !== 'claude';
+          selectedSession?.id !== sessionId || selectedSession.__provider !== matchedSession.__provider;
 
         if (shouldUpdateProject) {
           setSelectedProject(project);
         }
         if (shouldUpdateSession) {
-          setSelectedSession({ ...claudeSession, __provider: 'claude' });
-        }
-        return;
-      }
-
-      const cursorSession = project.cursorSessions?.find((session) => session.id === sessionId);
-      if (cursorSession) {
-        const shouldUpdateProject = selectedProject?.name !== project.name;
-        const shouldUpdateSession =
-          selectedSession?.id !== sessionId || selectedSession.__provider !== 'cursor';
-
-        if (shouldUpdateProject) {
-          setSelectedProject(project);
-        }
-        if (shouldUpdateSession) {
-          setSelectedSession({ ...cursorSession, __provider: 'cursor' });
-        }
-        return;
-      }
-
-      const codexSession = project.codexSessions?.find((session) => session.id === sessionId);
-      if (codexSession) {
-        const shouldUpdateProject = selectedProject?.name !== project.name;
-        const shouldUpdateSession =
-          selectedSession?.id !== sessionId || selectedSession.__provider !== 'codex';
-
-        if (shouldUpdateProject) {
-          setSelectedProject(project);
-        }
-        if (shouldUpdateSession) {
-          setSelectedSession({ ...codexSession, __provider: 'codex' });
-        }
-        return;
-      }
-
-      const geminiSession = project.geminiSessions?.find((session) => session.id === sessionId);
-      if (geminiSession) {
-        const shouldUpdateProject = selectedProject?.name !== project.name;
-        const shouldUpdateSession =
-          selectedSession?.id !== sessionId || selectedSession.__provider !== 'gemini';
-
-        if (shouldUpdateProject) {
-          setSelectedProject(project);
-        }
-        if (shouldUpdateSession) {
-          setSelectedSession({ ...geminiSession, __provider: 'gemini' });
+          setSelectedSession(matchedSession);
         }
         return;
       }
@@ -453,6 +427,10 @@ export function useProjectsState({
         prevProjects.map((project) => ({
           ...project,
           sessions: project.sessions?.filter((session) => session.id !== sessionIdToDelete) ?? [],
+          timelineSessions: project.timelineSessions?.filter((session) => session.id !== sessionIdToDelete) ?? [],
+          cursorSessions: project.cursorSessions?.filter((session) => session.id !== sessionIdToDelete) ?? [],
+          codexSessions: project.codexSessions?.filter((session) => session.id !== sessionIdToDelete) ?? [],
+          geminiSessions: project.geminiSessions?.filter((session) => session.id !== sessionIdToDelete) ?? [],
           sessionMeta: {
             ...project.sessionMeta,
             total: Math.max(0, (project.sessionMeta?.total as number | undefined ?? 0) - 1),
@@ -465,7 +443,7 @@ export function useProjectsState({
 
   const handleSidebarRefresh = useCallback(async () => {
     try {
-      const response = await api.projects({ includeAllSessions: showAllSessionsSortedByTime });
+      const response = await api.projects({ sortAllSessionsByTime: showAllSessionsSortedByTime });
       const freshProjects = (await response.json()) as Project[];
 
       setProjects((prevProjects) =>

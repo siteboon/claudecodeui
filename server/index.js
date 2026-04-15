@@ -44,7 +44,7 @@ import pty from 'node-pty';
 import fetch from 'node-fetch';
 import mime from 'mime-types';
 
-import { getProjects, getSessions, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache, searchConversations } from './projects.js';
+import { getProjects, getSessions, getProjectSessionTimeline, warmCodexSessionsIndex, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache, markCodexSessionsIndexDirty, searchConversations } from './projects.js';
 import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions, resolveToolApproval, getPendingApprovalsForSession, reconnectSessionWriter } from './claude-sdk.js';
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
 import { queryCodex, abortCodexSession, isCodexSessionActive, getActiveCodexSessions } from './openai-codex.js';
@@ -148,6 +148,9 @@ async function setupProjectsWatcher() {
 
                 // Clear project directory cache when files change
                 clearProjectDirectoryCache();
+                if (provider === 'codex') {
+                    markCodexSessionsIndexDirty();
+                }
 
                 // Get updated projects list
                 const updatedProjects = await getProjects(broadcastProgress);
@@ -503,8 +506,10 @@ app.post('/api/system/update', authenticateToken, async (req, res) => {
 
 app.get('/api/projects', authenticateToken, async (req, res) => {
     try {
-        const includeAllSessions = req.query.includeAllSessions === 'true';
-        const projects = await getProjects(broadcastProgress, { includeAllSessions });
+        const sortAllSessionsByTime =
+            req.query.sortAllSessionsByTime === 'true' ||
+            req.query.includeAllSessions === 'true';
+        const projects = await getProjects(broadcastProgress, { sortAllSessionsByTime });
         res.json(projects);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -514,8 +519,22 @@ app.get('/api/projects', authenticateToken, async (req, res) => {
 app.get('/api/projects/:projectName/sessions', authenticateToken, async (req, res) => {
     try {
         const { limit = 5, offset = 0 } = req.query;
-        const result = await getSessions(req.params.projectName, parseInt(limit), parseInt(offset));
-        applyCustomSessionNames(result.sessions, 'claude');
+        const sortAllSessionsByTime =
+            req.query.sortAllSessionsByTime === 'true' ||
+            req.query.includeAllSessions === 'true';
+
+        let result;
+        if (sortAllSessionsByTime) {
+            const projectPath = await extractProjectDirectory(req.params.projectName);
+            result = await getProjectSessionTimeline(req.params.projectName, projectPath, {
+                limit: parseInt(limit, 10),
+                offset: parseInt(offset, 10),
+            });
+        } else {
+            result = await getSessions(req.params.projectName, parseInt(limit, 10), parseInt(offset, 10));
+            applyCustomSessionNames(result.sessions, 'claude');
+        }
+
         res.json(result);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -2417,6 +2436,14 @@ async function startServer() {
 
             // Start watching the projects folder for changes
             await setupProjectsWatcher();
+
+            // Warm the expensive Codex index once in the background so the first sidebar open
+            // does not pay the full ~/.codex/sessions scan cost.
+            setTimeout(() => {
+                warmCodexSessionsIndex().catch((error) => {
+                    console.warn('[Codex] Index warmup failed:', error.message);
+                });
+            }, 0);
 
             // Start server-side plugin processes for enabled plugins
             startEnabledPluginServers().catch(err => {
