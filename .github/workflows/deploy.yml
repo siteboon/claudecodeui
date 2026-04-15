@@ -49,6 +49,7 @@ jobs:
 
             # Install kiro-sdk locally (not published to npm)
             if [ ! -d "$PROD_DIR/kiro-sdk/.git" ]; then
+              rm -rf "$PROD_DIR/kiro-sdk"
               git clone https://github.com/GeorgeZhiXu/kiro-sdk.git "$PROD_DIR/kiro-sdk"
             else
               cd "$PROD_DIR/kiro-sdk"
