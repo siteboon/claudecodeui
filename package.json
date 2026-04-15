@@ -3,9 +3,9 @@
   "version": "1.29.2",
   "description": "A web-based UI for Claude Code CLI",
   "type": "module",
-  "main": "server/index.js",
+  "main": "dist-server/server/index.js",
   "bin": {
-    "cloudcli": "server/cli.js"
+    "cloudcli": "dist-server/server/cli.js"
   },
   "files": [
     "server/",
@@ -159,6 +159,7 @@
     "vite": "^7.0.4"
   },
   "lint-staged": {
-    "src/**/*.{ts,tsx,js,jsx}": "eslint"
+    "src/**/*.{ts,tsx,js,jsx}": "eslint",
+    "server/**/*.{js,ts}": "eslint"
   }
 }
