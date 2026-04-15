@@ -62,6 +62,7 @@
     "showRawParameters": "Rohe Parameter anzeigen",
     "showThinking": "Denken anzeigen",
     "autoScrollToBottom": "Automatisch nach unten scrollen",
+    "showAllSessionsSortedByTime": "Alle Sitzungen nach Zeit sortieren",
     "sendByCtrlEnter": "Mit Strg+Enter senden",
     "sendByCtrlEnterDescription": "Wenn aktiviert, sendet Strg+Enter die Nachricht anstelle von Enter. Dies ist nützlich für IME-Benutzer:innen, um versehentliches Senden zu vermeiden.",
     "dragHandle": {

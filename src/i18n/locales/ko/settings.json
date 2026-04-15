@@ -62,6 +62,7 @@
     "showRawParameters": "Raw 파라미터 표시",
     "showThinking": "생각 과정 표시",
     "autoScrollToBottom": "자동 스크롤",
+    "showAllSessionsSortedByTime": "모든 세션을 시간순으로 정렬",
     "sendByCtrlEnter": "Ctrl+Enter로 전송",
     "sendByCtrlEnterDescription": "활성화하면 Enter 대신 Ctrl+Enter로 메시지를 전송합니다. IME 사용자가 실수로 전송하는 것을 방지하는 데 유용합니다.",
     "dragHandle": {

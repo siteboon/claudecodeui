@@ -6,6 +6,7 @@ type UiPreferences = {
   showThinking: boolean;
   autoScrollToBottom: boolean;
   sendByCtrlEnter: boolean;
+  showAllSessionsSortedByTime: boolean;
   sidebarVisible: boolean;
 };
 
@@ -38,6 +39,7 @@ const DEFAULTS: UiPreferences = {
   showThinking: true,
   autoScrollToBottom: true,
   sendByCtrlEnter: false,
+  showAllSessionsSortedByTime: false,
   sidebarVisible: true,
 };
 

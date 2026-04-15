@@ -381,7 +381,9 @@ async function extractProjectDirectory(projectName) {
   }
 }
 
-async function getProjects(progressCallback = null) {
+async function getProjects(progressCallback = null, options = {}) {
+  const { includeAllSessions = false } = options;
+  const sessionLimit = includeAllSessions ? 0 : 5;
   const claudeDir = path.join(os.homedir(), '.claude', 'projects');
   const config = await loadProjectConfig();
   const projects = [];
@@ -444,9 +446,9 @@ async function getProjects(progressCallback = null) {
         }
       };
 
-      // Try to get sessions for this project (just first 5 for performance)
+      // Load a capped subset by default; optionally return the full session list for global time sorting.
       try {
-        const sessionResult = await getSessions(entry.name, 5, 0);
+        const sessionResult = await getSessions(entry.name, sessionLimit, 0);
         project.sessions = sessionResult.sessions || [];
         project.sessionMeta = {
           hasMore: sessionResult.hasMore,
@@ -463,7 +465,7 @@ async function getProjects(progressCallback = null) {
 
       // Also fetch Cursor sessions for this project
       try {
-        project.cursorSessions = await getCursorSessions(actualProjectDir);
+        project.cursorSessions = await getCursorSessions(actualProjectDir, { limit: sessionLimit });
       } catch (e) {
         console.warn(`Could not load Cursor sessions for project ${entry.name}:`, e.message);
         project.cursorSessions = [];
@@ -473,6 +475,7 @@ async function getProjects(progressCallback = null) {
       // Also fetch Codex sessions for this project
       try {
         project.codexSessions = await getCodexSessions(actualProjectDir, {
+          limit: sessionLimit,
           indexRef: codexSessionsIndexRef,
         });
       } catch (e) {
@@ -487,7 +490,7 @@ async function getProjects(progressCallback = null) {
         const cliSessions = await getGeminiCliSessions(actualProjectDir);
         const uiIds = new Set(uiSessions.map(s => s.id));
         const mergedGemini = [...uiSessions, ...cliSessions.filter(s => !uiIds.has(s.id))];
-        project.geminiSessions = mergedGemini;
+        project.geminiSessions = sessionLimit > 0 ? mergedGemini.slice(0, sessionLimit) : mergedGemini;
       } catch (e) {
         console.warn(`Could not load Gemini sessions for project ${entry.name}:`, e.message);
         project.geminiSessions = [];
@@ -570,9 +573,21 @@ async function getProjects(progressCallback = null) {
         codexSessions: []
       };
 
+      try {
+        const sessionResult = await getSessions(projectName, sessionLimit, 0);
+        project.sessions = sessionResult.sessions || [];
+        project.sessionMeta = {
+          hasMore: sessionResult.hasMore,
+          total: sessionResult.total
+        };
+      } catch (e) {
+        console.warn(`Could not load sessions for manual project ${projectName}:`, e.message);
+      }
+      applyCustomSessionNames(project.sessions, 'claude');
+
       // Try to fetch Cursor sessions for manual projects too
       try {
-        project.cursorSessions = await getCursorSessions(actualProjectDir);
+        project.cursorSessions = await getCursorSessions(actualProjectDir, { limit: sessionLimit });
       } catch (e) {
         console.warn(`Could not load Cursor sessions for manual project ${projectName}:`, e.message);
       }
@@ -581,6 +596,7 @@ async function getProjects(progressCallback = null) {
       // Try to fetch Codex sessions for manual projects too
       try {
         project.codexSessions = await getCodexSessions(actualProjectDir, {
+          limit: sessionLimit,
           indexRef: codexSessionsIndexRef,
         });
       } catch (e) {
@@ -593,7 +609,8 @@ async function getProjects(progressCallback = null) {
         const uiSessions = sessionManager.getProjectSessions(actualProjectDir) || [];
         const cliSessions = await getGeminiCliSessions(actualProjectDir);
         const uiIds = new Set(uiSessions.map(s => s.id));
-        project.geminiSessions = [...uiSessions, ...cliSessions.filter(s => !uiIds.has(s.id))];
+        const mergedGemini = [...uiSessions, ...cliSessions.filter(s => !uiIds.has(s.id))];
+        project.geminiSessions = sessionLimit > 0 ? mergedGemini.slice(0, sessionLimit) : mergedGemini;
       } catch (e) {
         console.warn(`Could not load Gemini sessions for manual project ${projectName}:`, e.message);
       }
@@ -682,7 +699,11 @@ async function getSessions(projectName, limit = 5, offset = 0) {
       allEntries.push(...result.entries);
 
       // Early exit optimization for large projects
-      if (allSessions.size >= (limit + offset) * 2 && allEntries.length >= Math.min(3, filesWithStats.length)) {
+      if (
+        limit > 0 &&
+        allSessions.size >= (limit + offset) * 2 &&
+        allEntries.length >= Math.min(3, filesWithStats.length)
+      ) {
         break;
       }
     }
@@ -753,8 +774,8 @@ async function getSessions(projectName, limit = 5, offset = 0) {
       .sort((a, b) => new Date(b.lastActivity) - new Date(a.lastActivity));
 
     const total = visibleSessions.length;
-    const paginatedSessions = visibleSessions.slice(offset, offset + limit);
-    const hasMore = offset + limit < total;
+    const paginatedSessions = limit > 0 ? visibleSessions.slice(offset, offset + limit) : visibleSessions.slice(offset);
+    const hasMore = limit > 0 ? offset + limit < total : false;
 
     return {
       sessions: paginatedSessions,
@@ -1271,7 +1292,8 @@ async function addProjectManually(projectPath, displayName = null) {
 }
 
 // Fetch Cursor sessions for a given project path
-async function getCursorSessions(projectPath) {
+async function getCursorSessions(projectPath, options = {}) {
+  const { limit = 5 } = options;
   try {
     // Calculate cwdID hash for the project path (Cursor uses MD5 hash)
     const cwdId = crypto.createHash('md5').update(projectPath).digest('hex');
@@ -1372,8 +1394,7 @@ async function getCursorSessions(projectPath) {
     // Sort sessions by creation time (newest first)
     sessions.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-    // Return only the first 5 sessions for performance
-    return sessions.slice(0, 5);
+    return limit > 0 ? sessions.slice(0, limit) : sessions;
 
   } catch (error) {
     console.error('Error fetching Cursor sessions:', error);
