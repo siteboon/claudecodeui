@@ -17,18 +17,11 @@ export type AgentContext = {
 };
 
 export type AgentContextByProvider = Record<AgentProvider, AgentContext>;
+export type ProviderAuthStatusByProvider = Record<AgentProvider, AuthStatus>;
 
 export type AgentsSettingsTabProps = {
-  claudeAuthStatus: AuthStatus;
-  cursorAuthStatus: AuthStatus;
-  codexAuthStatus: AuthStatus;
-  geminiAuthStatus: AuthStatus;
-  kiroAuthStatus: AuthStatus;
-  onClaudeLogin: () => void;
-  onCursorLogin: () => void;
-  onCodexLogin: () => void;
-  onGeminiLogin: () => void;
-  onKiroLogin: () => void;
+  providerAuthStatus: ProviderAuthStatusByProvider;
+  onProviderLogin: (provider: AgentProvider) => void;
   claudePermissions: ClaudePermissionsState;
   onClaudePermissionsChange: (value: ClaudePermissionsState) => void;
   cursorPermissions: CursorPermissionsState;

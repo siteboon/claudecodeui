@@ -1,7 +1,9 @@
 import type { Dispatch, SetStateAction } from 'react';
+import type { LLMProvider } from '../../../types/app';
+import type { ProviderAuthStatus } from '../../provider-auth/types';
 
 export type SettingsMainTab = 'agents' | 'appearance' | 'git' | 'api' | 'tasks' | 'notifications' | 'plugins' | 'about';
-export type AgentProvider = 'claude' | 'cursor' | 'codex' | 'gemini' | 'kiro';
+export type AgentProvider = LLMProvider;
 export type AgentCategory = 'account' | 'permissions' | 'mcp';
 export type ProjectSortOrder = 'name' | 'date';
 export type SaveStatus = 'success' | 'error' | null;
@@ -18,13 +20,7 @@ export type SettingsProject = {
   path?: string;
 };
 
-export type AuthStatus = {
-  authenticated: boolean;
-  email: string | null;
-  loading: boolean;
-  error: string | null;
-  method?: string;
-};
+export type AuthStatus = ProviderAuthStatus;
 
 export type KeyValueMap = Record<string, string>;
 

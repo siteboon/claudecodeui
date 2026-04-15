@@ -1,7 +1,7 @@
 import { ChevronDown, Plus } from 'lucide-react';
 import type { TFunction } from 'i18next';
 import { Button } from '../../../../shared/view/ui';
-import type { Project, ProjectSession, SessionProvider } from '../../../../types/app';
+import type { Project, ProjectSession, LLMProvider } from '../../../../types/app';
 import type { SessionWithProvider } from '../../types/types';
 import SidebarSessionItem from './SidebarSessionItem';
 
@@ -18,14 +18,14 @@ type SidebarProjectSessionsProps = {
   onEditingSessionNameChange: (value: string) => void;
   onStartEditingSession: (sessionId: string, initialName: string) => void;
   onCancelEditingSession: () => void;
-  onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: SessionProvider) => void;
+  onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: LLMProvider) => void;
   onProjectSelect: (project: Project) => void;
   onSessionSelect: (session: SessionWithProvider, projectName: string) => void;
   onDeleteSession: (
     projectName: string,
     sessionId: string,
     sessionTitle: string,
-    provider: SessionProvider,
+    provider: LLMProvider,
   ) => void;
   onLoadMoreSessions: (project: Project) => void;
   onNewSession: (project: Project) => void;

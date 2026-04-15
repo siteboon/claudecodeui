@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 export type SessionProvider = 'claude' | 'cursor' | 'codex' | 'gemini' | 'kiro';
+=======
+export type LLMProvider = 'claude' | 'cursor' | 'codex' | 'gemini';
+>>>>>>> upstream/main
 
 export type AppTab = 'chat' | 'files' | 'shell' | 'git' | 'tasks' | 'preview' | `plugin:${string}`;
 
@@ -12,7 +16,7 @@ export interface ProjectSession {
   updated_at?: string;
   lastActivity?: string;
   messageCount?: number;
-  __provider?: SessionProvider;
+  __provider?: LLMProvider;
   __projectName?: string;
   [key: string]: unknown;
 }

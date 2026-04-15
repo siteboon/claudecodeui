@@ -1,4 +1,4 @@
-import type { SessionProvider } from '../../types/app';
+import type { LLMProvider } from '../../types/app';
 import ClaudeLogo from './ClaudeLogo';
 import CodexLogo from './CodexLogo';
 import CursorLogo from './CursorLogo';
@@ -6,7 +6,7 @@ import GeminiLogo from './GeminiLogo';
 import KiroLogo from './KiroLogo';
 
 type SessionProviderLogoProps = {
-  provider?: SessionProvider | string | null;
+  provider?: LLMProvider | string | null;
   className?: string;
 };
 

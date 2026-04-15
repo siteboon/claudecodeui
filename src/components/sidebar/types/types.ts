@@ -1,9 +1,9 @@
-import type { LoadingProgress, Project, ProjectSession, SessionProvider } from '../../../types/app';
+import type { LoadingProgress, Project, ProjectSession, LLMProvider } from '../../../types/app';
 
 export type ProjectSortOrder = 'name' | 'date';
 
 export type SessionWithProvider = ProjectSession & {
-  __provider: SessionProvider;
+  __provider: LLMProvider;
 };
 
 export type AdditionalSessionsByProject = Record<string, ProjectSession[]>;
@@ -18,7 +18,7 @@ export type SessionDeleteConfirmation = {
   projectName: string;
   sessionId: string;
   sessionTitle: string;
-  provider: SessionProvider;
+  provider: LLMProvider;
 };
 
 export type SidebarProps = {

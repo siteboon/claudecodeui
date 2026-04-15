@@ -9,14 +9,14 @@ import {
   GEMINI_MODELS,
   KIRO_MODELS,
 } from "../../../../../shared/modelConstants";
-import type { ProjectSession, SessionProvider } from "../../../../types/app";
+import type { ProjectSession, LLMProvider } from "../../../../types/app";
 import { NextTaskBanner } from "../../../task-master";
 
 type ProviderSelectionEmptyStateProps = {
   selectedSession: ProjectSession | null;
   currentSessionId: string | null;
-  provider: SessionProvider;
-  setProvider: (next: SessionProvider) => void;
+  provider: LLMProvider;
+  setProvider: (next: LLMProvider) => void;
   textareaRef: React.RefObject<HTMLTextAreaElement>;
   claudeModel: string;
   setClaudeModel: (model: string) => void;
@@ -35,7 +35,7 @@ type ProviderSelectionEmptyStateProps = {
 };
 
 type ProviderDef = {
-  id: SessionProvider;
+  id: LLMProvider;
   name: string;
   infoKey: string;
   accent: string;
@@ -86,7 +86,7 @@ const PROVIDERS: ProviderDef[] = [
   },
 ];
 
-function getModelConfig(p: SessionProvider) {
+function getModelConfig(p: LLMProvider) {
   if (p === "claude") return CLAUDE_MODELS;
   if (p === "codex") return CODEX_MODELS;
   if (p === "gemini") return GEMINI_MODELS;
@@ -95,7 +95,7 @@ function getModelConfig(p: SessionProvider) {
 }
 
 function getModelValue(
-  p: SessionProvider,
+  p: LLMProvider,
   c: string,
   cu: string,
   co: string,
@@ -135,7 +135,7 @@ export default function ProviderSelectionEmptyState({
     defaultValue: "Start the next task",
   });
 
-  const selectProvider = (next: SessionProvider) => {
+  const selectProvider = (next: LLMProvider) => {
     setProvider(next);
     localStorage.setItem("selected-provider", next);
     setTimeout(() => textareaRef.current?.focus(), 100);

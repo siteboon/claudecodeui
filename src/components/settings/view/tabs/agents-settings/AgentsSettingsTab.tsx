@@ -6,16 +6,8 @@ import AgentSelectorSection from './sections/AgentSelectorSection';
 import type { AgentContext, AgentsSettingsTabProps } from './types';
 
 export default function AgentsSettingsTab({
-  claudeAuthStatus,
-  cursorAuthStatus,
-  codexAuthStatus,
-  geminiAuthStatus,
-  kiroAuthStatus,
-  onClaudeLogin,
-  onCursorLogin,
-  onCodexLogin,
-  onGeminiLogin,
-  onKiroLogin,
+  providerAuthStatus,
+  onProviderLogin,
   claudePermissions,
   onClaudePermissionsChange,
   cursorPermissions,
@@ -43,36 +35,27 @@ export default function AgentsSettingsTab({
 
   const agentContextById = useMemo<Record<AgentProvider, AgentContext>>(() => ({
     claude: {
-      authStatus: claudeAuthStatus,
-      onLogin: onClaudeLogin,
+      authStatus: providerAuthStatus.claude,
+      onLogin: () => onProviderLogin('claude'),
     },
     cursor: {
-      authStatus: cursorAuthStatus,
-      onLogin: onCursorLogin,
+      authStatus: providerAuthStatus.cursor,
+      onLogin: () => onProviderLogin('cursor'),
     },
     codex: {
-      authStatus: codexAuthStatus,
-      onLogin: onCodexLogin,
+      authStatus: providerAuthStatus.codex,
+      onLogin: () => onProviderLogin('codex'),
     },
     gemini: {
-      authStatus: geminiAuthStatus,
-      onLogin: onGeminiLogin,
-    },
-    kiro: {
-      authStatus: kiroAuthStatus,
-      onLogin: onKiroLogin,
+      authStatus: providerAuthStatus.gemini,
+      onLogin: () => onProviderLogin('gemini'),
     },
   }), [
-    claudeAuthStatus,
-    codexAuthStatus,
-    cursorAuthStatus,
-    geminiAuthStatus,
-    kiroAuthStatus,
-    onClaudeLogin,
-    onCodexLogin,
-    onCursorLogin,
-    onGeminiLogin,
-    onKiroLogin,
+    onProviderLogin,
+    providerAuthStatus.claude,
+    providerAuthStatus.codex,
+    providerAuthStatus.cursor,
+    providerAuthStatus.gemini,
   ]);
 
   return (
