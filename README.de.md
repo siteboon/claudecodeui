@@ -76,6 +76,8 @@ Der schnellste Einstieg – keine lokale Einrichtung erforderlich. Erhalte eine 
 
 ### Self-Hosted (Open Source)
 
+#### npm
+
 CloudCLI UI sofort mit **npx** ausprobieren (erfordert **Node.js** v22+):
 
 ```bash
@@ -93,6 +95,15 @@ cloudcli
 
 Die **[Dokumentation →](https://cloudcli.ai/docs)** enthält weitere Konfigurationsoptionen, PM2, Remote-Server-Einrichtung und mehr.
 
+#### Docker Sandboxes (Experimentell)
+
+Agents in isolierten Sandboxes mit Hypervisor-Isolation ausführen. Standardmäßig wird Claude Code gestartet. Erfordert die [`sbx` CLI](https://docs.docker.com/ai/sandboxes/get-started/).
+
+```
+npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project
+```
+
+Unterstützt Claude Code, Codex und Gemini CLI. Weitere Details in der [Sandbox-Dokumentation](docker/).
 
 ---
 
