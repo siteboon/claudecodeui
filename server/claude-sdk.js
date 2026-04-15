@@ -719,11 +719,15 @@ async function queryClaudeSDK(command, options = {}, ws) {
       : error.message;
 
     // Send error to WebSocket
-    ws.send(createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+    const errorSessionId = capturedSessionId || sessionId || null;
+    ws.send(createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: errorSessionId, provider: 'claude' }));
+
+    ws.send(createNormalizedMessage({ kind: 'complete', exitCode: 1, sessionId: errorSessionId, provider: 'claude' }));
+
     notifyRunFailed({
       userId: ws?.userId || null,
       provider: 'claude',
-      sessionId: capturedSessionId || sessionId || null,
+      sessionId: errorSessionId,
       sessionName: sessionSummary,
       error
     });
