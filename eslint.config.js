@@ -149,7 +149,7 @@ export default tseslint.config(
       "boundaries/elements": [
         {
           type: "backend-shared-types", // shared backend type contract that modules may consume without creating runtime coupling
-          pattern: ["server/shared/types.{js,ts}", "server/types.{js,ts}"], // support the current shared types path and the older top-level server/types file
+          pattern: ["server/shared/types.{js,ts}"], // support the current shared types path
           mode: "file", // treat the types file itself as the boundary element instead of the whole folder
         },
         {
