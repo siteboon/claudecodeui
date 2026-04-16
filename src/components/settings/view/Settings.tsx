@@ -39,17 +39,12 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     mcpServers,
     cursorMcpServers,
     codexMcpServers,
-    mcpTestResults,
-    mcpServerTools,
-    mcpToolsLoading,
     showMcpForm,
     editingMcpServer,
     openMcpForm,
     closeMcpForm,
     submitMcpForm,
     handleMcpDelete,
-    handleMcpTest,
-    handleMcpToolsDiscovery,
     showCodexMcpForm,
     editingCodexMcpServer,
     openCodexMcpForm,
@@ -159,13 +154,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
                   mcpServers={mcpServers}
                   cursorMcpServers={cursorMcpServers}
                   codexMcpServers={codexMcpServers}
-                  mcpTestResults={mcpTestResults}
-                  mcpServerTools={mcpServerTools}
-                  mcpToolsLoading={mcpToolsLoading}
                   onOpenMcpForm={openMcpForm}
                   onDeleteMcpServer={handleMcpDelete}
-                  onTestMcpServer={handleMcpTest}
-                  onDiscoverMcpTools={handleMcpToolsDiscovery}
                   onOpenCodexMcpForm={openCodexMcpForm}
                   onDeleteCodexMcpServer={handleCodexMcpDelete}
                   deleteError={deleteError}

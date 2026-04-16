@@ -5,8 +5,6 @@ import type {
   CodexMcpFormState,
   CodeEditorSettingsState,
   CursorPermissionsState,
-  McpToolsResult,
-  McpTestResult,
   ProjectSortOrder,
   SettingsMainTab,
 } from '../types/types';
@@ -31,20 +29,6 @@ export const DEFAULT_CODE_EDITOR_SETTINGS: CodeEditorSettingsState = {
   showMinimap: true,
   lineNumbers: true,
   fontSize: '14',
-};
-
-export const DEFAULT_MCP_TEST_RESULT: McpTestResult = {
-  success: false,
-  message: '',
-  details: [],
-  loading: false,
-};
-
-export const DEFAULT_MCP_TOOLS_RESULT: McpToolsResult = {
-  success: false,
-  tools: [],
-  resources: [],
-  prompts: [],
 };
 
 export const DEFAULT_CLAUDE_MCP_FORM: ClaudeMcpFormState = {

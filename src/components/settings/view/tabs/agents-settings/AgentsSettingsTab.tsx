@@ -19,14 +19,9 @@ export default function AgentsSettingsTab({
   mcpServers,
   cursorMcpServers,
   codexMcpServers,
-  mcpTestResults,
-  mcpServerTools,
-  mcpToolsLoading,
   deleteError,
   onOpenMcpForm,
   onDeleteMcpServer,
-  onTestMcpServer,
-  onDiscoverMcpTools,
   onOpenCodexMcpForm,
   onDeleteCodexMcpServer,
 }: AgentsSettingsTabProps) {
@@ -87,14 +82,9 @@ export default function AgentsSettingsTab({
           mcpServers={mcpServers}
           cursorMcpServers={cursorMcpServers}
           codexMcpServers={codexMcpServers}
-          mcpTestResults={mcpTestResults}
-          mcpServerTools={mcpServerTools}
-          mcpToolsLoading={mcpToolsLoading}
           deleteError={deleteError}
           onOpenMcpForm={onOpenMcpForm}
           onDeleteMcpServer={onDeleteMcpServer}
-          onTestMcpServer={onTestMcpServer}
-          onDiscoverMcpTools={onDiscoverMcpTools}
           onOpenCodexMcpForm={onOpenCodexMcpForm}
           onDeleteCodexMcpServer={onDeleteCodexMcpServer}
         />

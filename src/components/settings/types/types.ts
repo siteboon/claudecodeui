@@ -77,25 +77,6 @@ export type CodexMcpFormState = {
   config: CodexMcpFormConfig;
 };
 
-export type McpTestResult = {
-  success: boolean;
-  message: string;
-  details?: string[];
-  loading?: boolean;
-};
-
-export type McpTool = {
-  name: string;
-  [key: string]: unknown;
-};
-
-export type McpToolsResult = {
-  success?: boolean;
-  tools?: McpTool[];
-  resources?: unknown[];
-  prompts?: unknown[];
-};
-
 export type ClaudePermissionsState = {
   allowedTools: string[];
   disallowedTools: string[];

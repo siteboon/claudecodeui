@@ -16,14 +16,9 @@ export default function AgentCategoryContentSection({
   mcpServers,
   cursorMcpServers,
   codexMcpServers,
-  mcpTestResults,
-  mcpServerTools,
-  mcpToolsLoading,
   deleteError,
   onOpenMcpForm,
   onDeleteMcpServer,
-  onTestMcpServer,
-  onDiscoverMcpTools,
   onOpenCodexMcpForm,
   onDeleteCodexMcpServer,
 }: AgentCategoryContentSectionProps) {
@@ -91,11 +86,6 @@ export default function AgentCategoryContentSection({
           onAdd={() => onOpenMcpForm()}
           onEdit={(server) => onOpenMcpForm(server)}
           onDelete={onDeleteMcpServer}
-          onTest={onTestMcpServer}
-          onDiscoverTools={onDiscoverMcpTools}
-          testResults={mcpTestResults}
-          serverTools={mcpServerTools}
-          toolsLoading={mcpToolsLoading}
           deleteError={deleteError}
         />
       )}

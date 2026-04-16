@@ -16,8 +16,6 @@ import type {
   CursorPermissionsState,
   GeminiPermissionMode,
   McpServer,
-  McpToolsResult,
-  McpTestResult,
   NotificationPreferencesState,
   ProjectSortOrder,
   SettingsMainTab,
@@ -56,16 +54,6 @@ type McpCliServer = {
 type McpCliReadResponse = {
   success?: boolean;
   servers?: McpCliServer[];
-};
-
-type McpTestResponse = {
-  testResult?: McpTestResult;
-  error?: string;
-};
-
-type McpToolsResponse = {
-  toolsResult?: McpToolsResult;
-  error?: string;
 };
 
 type ClaudeSettingsStorage = {
@@ -205,9 +193,6 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
   const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
   const [cursorMcpServers, setCursorMcpServers] = useState<McpServer[]>([]);
   const [codexMcpServers, setCodexMcpServers] = useState<McpServer[]>([]);
-  const [mcpTestResults, setMcpTestResults] = useState<Record<string, McpTestResult>>({});
-  const [mcpServerTools, setMcpServerTools] = useState<Record<string, McpToolsResult>>({});
-  const [mcpToolsLoading, setMcpToolsLoading] = useState<Record<string, boolean>>({});
 
   const [showMcpForm, setShowMcpForm] = useState(false);
   const [editingMcpServer, setEditingMcpServer] = useState<McpServer | null>(null);
@@ -285,14 +270,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
         }
       }
 
-      const fallbackResponse = await authenticatedFetch('/api/mcp/servers?scope=user');
-      if (!fallbackResponse.ok) {
-        console.error('Failed to fetch MCP servers');
-        return;
-      }
-
-      const fallbackData = await toResponseJson<{ servers?: McpServer[] }>(fallbackResponse);
-      setMcpServers(fallbackData.servers || []);
+      console.error('Failed to fetch MCP servers');
     } catch (error) {
       console.error('Error fetching MCP servers:', error);
     }
@@ -420,76 +398,6 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
       }
     },
     [deleteMcpServer, fetchMcpServers],
-  );
-
-  const testMcpServer = useCallback(async (serverId: string, scope = 'user') => {
-    const response = await authenticatedFetch(`/api/mcp/servers/${serverId}/test?scope=${scope}`, {
-      method: 'POST',
-    });
-
-    if (!response.ok) {
-      const error = await toResponseJson<McpTestResponse>(response);
-      throw new Error(error.error || 'Failed to test server');
-    }
-
-    const data = await toResponseJson<McpTestResponse>(response);
-    return data.testResult || { success: false, message: 'No test result returned' };
-  }, []);
-
-  const discoverMcpTools = useCallback(async (serverId: string, scope = 'user') => {
-    const response = await authenticatedFetch(`/api/mcp/servers/${serverId}/tools?scope=${scope}`, {
-      method: 'POST',
-    });
-
-    if (!response.ok) {
-      const error = await toResponseJson<McpToolsResponse>(response);
-      throw new Error(error.error || 'Failed to discover tools');
-    }
-
-    const data = await toResponseJson<McpToolsResponse>(response);
-    return data.toolsResult || { success: false, tools: [], resources: [], prompts: [] };
-  }, []);
-
-  const handleMcpTest = useCallback(
-    async (serverId: string, scope = 'user') => {
-      try {
-        setMcpTestResults((prev) => ({
-          ...prev,
-          [serverId]: { success: false, message: 'Testing server...', details: [], loading: true },
-        }));
-
-        const result = await testMcpServer(serverId, scope);
-        setMcpTestResults((prev) => ({ ...prev, [serverId]: result }));
-      } catch (error) {
-        setMcpTestResults((prev) => ({
-          ...prev,
-          [serverId]: {
-            success: false,
-            message: getErrorMessage(error),
-            details: [],
-          },
-        }));
-      }
-    },
-    [testMcpServer],
-  );
-
-  const handleMcpToolsDiscovery = useCallback(
-    async (serverId: string, scope = 'user') => {
-      try {
-        setMcpToolsLoading((prev) => ({ ...prev, [serverId]: true }));
-        const result = await discoverMcpTools(serverId, scope);
-        setMcpServerTools((prev) => ({ ...prev, [serverId]: result }));
-      } catch {
-        setMcpServerTools((prev) => ({
-          ...prev,
-          [serverId]: { success: false, tools: [], resources: [], prompts: [] },
-        }));
-      } finally {
-        setMcpToolsLoading((prev) => ({ ...prev, [serverId]: false }));
-      }
-    },
-    [discoverMcpTools],
   );
 
   const deleteCodexMcpServer = useCallback(async (serverId: string) => {
@@ -835,17 +743,12 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     mcpServers,
     cursorMcpServers,
     codexMcpServers,
-    mcpTestResults,
-    mcpServerTools,
-    mcpToolsLoading,
     showMcpForm,
     editingMcpServer,
     openMcpForm,
     closeMcpForm,
     submitMcpForm,
     handleMcpDelete,
-    handleMcpTest,
-    handleMcpToolsDiscovery,
     showCodexMcpForm,
     editingCodexMcpServer,
     openCodexMcpForm,

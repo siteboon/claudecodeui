@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Badge, Button } from '../../../../../../../shared/view/ui';
 import { IS_PLATFORM } from '../../../../../../../constants/config';
 import PremiumFeatureCard from '../../../../PremiumFeatureCard';
-import type { McpServer, McpToolsResult, McpTestResult } from '../../../../../types/types';
+import type { McpServer } from '../../../../../types/types';
 
 const getTransportIcon = (type: string | undefined) => {
   if (type === 'stdio') {
@@ -36,11 +36,6 @@ type ClaudeMcpServersProps = {
   onAdd: () => void;
   onEdit: (server: McpServer) => void;
   onDelete: (serverId: string, scope?: string) => void;
-  onTest: (serverId: string, scope?: string) => void;
-  onDiscoverTools: (serverId: string, scope?: string) => void;
-  testResults: Record<string, McpTestResult>;
-  serverTools: Record<string, McpToolsResult>;
-  toolsLoading: Record<string, boolean>;
   deleteError?: string | null;
 };
 
@@ -49,10 +44,8 @@ function ClaudeMcpServers({
   onAdd,
   onEdit,
   onDelete,
-  testResults,
-  serverTools,
   deleteError,
-}: Omit<ClaudeMcpServersProps, 'agent' | 'onTest' | 'onDiscoverTools' | 'toolsLoading'>) {
+}: Omit<ClaudeMcpServersProps, 'agent'>) {
   const { t } = useTranslation('settings');
 
   return (
@@ -78,8 +71,6 @@ function ClaudeMcpServers({
       <div className="space-y-2">
         {servers.map((server) => {
           const serverId = server.id || server.name;
-          const testResult = testResults[serverId];
-          const toolsResult = serverTools[serverId];
 
           return (
             <div key={serverId} className="rounded-lg border border-border bg-card/50 p-4">
@@ -121,36 +112,6 @@ function ClaudeMcpServers({
                     )}
                   </div>
 
-                  {testResult && (
-                    <div className={`mt-2 rounded p-2 text-xs ${
-                      testResult.success
-                        ? 'bg-green-50 text-green-800 dark:bg-green-900/20 dark:text-green-200'
-                        : 'bg-red-50 text-red-800 dark:bg-red-900/20 dark:text-red-200'
-                    }`}
-                    >
-                      <div className="font-medium">{testResult.message}</div>
-                    </div>
-                  )}
-
-                  {toolsResult && toolsResult.tools && toolsResult.tools.length > 0 && (
-                    <div className="mt-2 rounded bg-blue-50 p-2 text-xs text-blue-800 dark:bg-blue-900/20 dark:text-blue-200">
-                      <div className="font-medium">
-                        {t('mcpServers.tools.title')} {t('mcpServers.tools.count', { count: toolsResult.tools.length })}
-                      </div>
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {toolsResult.tools.slice(0, 5).map((tool, index) => (
-                          <code key={`${tool.name}-${index}`} className="rounded bg-blue-100 px-1 dark:bg-blue-800">
-                            {tool.name}
-                          </code>
-                        ))}
-                        {toolsResult.tools.length > 5 && (
-                          <span className="text-xs opacity-75">
-                            {t('mcpServers.tools.more', { count: toolsResult.tools.length - 5 })}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  )}
                 </div>
 
                 <div className="ml-4 flex items-center gap-2">
