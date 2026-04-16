@@ -1,5 +1,5 @@
 // Gemini Response Handler - JSON Stream processing
-import { geminiAdapter } from './providers/gemini/adapter.js';
+import { geminiAdapter } from './providers/gemini/index.js';
 
 class GeminiResponseHandler {
   constructor(ws, options = {}) {

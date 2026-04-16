@@ -7,10 +7,10 @@
  * @module providers/registry
  */
 
-import { claudeAdapter } from './claude/adapter.js';
-import { cursorAdapter } from './cursor/adapter.js';
-import { codexAdapter } from './codex/adapter.js';
-import { geminiAdapter } from './gemini/adapter.js';
+import { claudeAdapter } from './claude/index.js';
+import { cursorAdapter } from './cursor/index.js';
+import { codexAdapter } from './codex/index.js';
+import { geminiAdapter } from './gemini/index.js';
 
 /**
  * @typedef {import('./types.js').ProviderAdapter} ProviderAdapter

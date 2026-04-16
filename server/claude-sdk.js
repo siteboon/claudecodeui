@@ -24,7 +24,7 @@ import {
   notifyRunStopped,
   notifyUserIfEnabled
 } from './services/notification-orchestrator.js';
-import { claudeAdapter } from './providers/claude/adapter.js';
+import { claudeAdapter } from './providers/claude/index.js';
 import { createNormalizedMessage } from './providers/types.js';
 
 const activeSessions = new Map();

@@ -15,7 +15,7 @@
 
 import { Codex } from '@openai/codex-sdk';
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
-import { codexAdapter } from './providers/codex/adapter.js';
+import { codexAdapter } from './providers/codex/index.js';
 import { createNormalizedMessage } from './providers/types.js';
 
 // Track active sessions

@@ -5,7 +5,6 @@
  * @module adapters/codex
  */
 
-import { getCodexSessionMessages } from '../../projects.js';
 import { createNormalizedMessage, generateMessageId } from '../types.js';
 
 const PROVIDER = 'codex';
@@ -16,7 +15,7 @@ const PROVIDER = 'codex';
  * @param {string} sessionId
  * @returns {import('../types.js').NormalizedMessage[]}
  */
-function normalizeCodexHistoryEntry(raw, sessionId) {
+export function normalizeCodexHistoryEntry(raw, sessionId) {
   const ts = raw.timestamp || new Date().toISOString();
   const baseId = raw.uuid || generateMessageId('codex');
 
@@ -191,58 +190,3 @@ export function normalizeMessage(raw, sessionId) {
 
   return [];
 }
-
-/**
- * @type {import('../types.js').ProviderAdapter}
- */
-export const codexAdapter = {
-  normalizeMessage,
-  /**
-   * Fetch session history from Codex JSONL files.
-   */
-  async fetchHistory(sessionId, opts = {}) {
-    const { limit = null, offset = 0 } = opts;
-
-    let result;
-    try {
-      result = await getCodexSessionMessages(sessionId, limit, offset);
-    } catch (error) {
-      console.warn(`[CodexAdapter] Failed to load session ${sessionId}:`, error.message);
-      return { messages: [], total: 0, hasMore: false, offset: 0, limit: null };
-    }
-
-    const rawMessages = Array.isArray(result) ? result : (result.messages || []);
-    const total = Array.isArray(result) ? rawMessages.length : (result.total || 0);
-    const hasMore = Array.isArray(result) ? false : Boolean(result.hasMore);
-    const tokenUsage = result.tokenUsage || null;
-
-    const normalized = [];
-    for (const raw of rawMessages) {
-      const entries = normalizeCodexHistoryEntry(raw, sessionId);
-      normalized.push(...entries);
-    }
-
-    // Attach tool results to tool_use messages
-    const toolResultMap = new Map();
-    for (const msg of normalized) {
-      if (msg.kind === 'tool_result' && msg.toolId) {
-        toolResultMap.set(msg.toolId, msg);
-      }
-    }
-    for (const msg of normalized) {
-      if (msg.kind === 'tool_use' && msg.toolId && toolResultMap.has(msg.toolId)) {
-        const tr = toolResultMap.get(msg.toolId);
-        msg.toolResult = { content: tr.content, isError: tr.isError };
-      }
-    }
-
-    return {
-      messages: normalized,
-      total,
-      hasMore,
-      offset,
-      limit,
-      tokenUsage,
-    };
-  },
-};
