@@ -143,7 +143,7 @@ const parseProvider = (value: unknown): LLMProvider => {
 };
 
 router.get(
-  '/providers/:provider/mcp/servers',
+  '/:provider/mcp/servers',
   asyncHandler(async (req: Request, res: Response) => {
     const provider = parseProvider(req.params.provider);
     const workspacePath = readOptionalQueryString(req.query.workspacePath);
@@ -161,7 +161,7 @@ router.get(
 );
 
 router.post(
-  '/providers/:provider/mcp/servers',
+  '/:provider/mcp/servers',
   asyncHandler(async (req: Request, res: Response) => {
     const provider = parseProvider(req.params.provider);
     const payload = parseMcpUpsertPayload(req.body);
@@ -171,7 +171,7 @@ router.post(
 );
 
 router.put(
-  '/providers/:provider/mcp/servers/:name',
+  '/:provider/mcp/servers/:name',
   asyncHandler(async (req: Request, res: Response) => {
     const provider = parseProvider(req.params.provider);
     const payload = parseMcpUpsertPayload({
@@ -184,7 +184,7 @@ router.put(
 );
 
 router.delete(
-  '/providers/:provider/mcp/servers/:name',
+  '/:provider/mcp/servers/:name',
   asyncHandler(async (req: Request, res: Response) => {
     const provider = parseProvider(req.params.provider);
     const scope = parseMcpScope(req.query.scope);
@@ -199,7 +199,7 @@ router.delete(
 );
 
 router.post(
-  '/providers/:provider/mcp/servers/:name/run',
+  '/:provider/mcp/servers/:name/run',
   asyncHandler(async (req: Request, res: Response) => {
     const provider = parseProvider(req.params.provider);
     const body = (req.body as Record<string, unknown> | undefined) ?? {};
