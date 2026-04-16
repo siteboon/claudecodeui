@@ -8,7 +8,7 @@
  */
 
 import { useCallback, useMemo, useRef, useState } from 'react';
-import type { SessionProvider } from '../types/app';
+import type { LLMProvider } from '../types/app';
 import { authenticatedFetch } from '../utils/api';
 
 // ─── NormalizedMessage (mirrors server/adapters/types.js) ────────────────────
@@ -33,7 +33,7 @@ export interface NormalizedMessage {
   id: string;
   sessionId: string;
   timestamp: string;
-  provider: SessionProvider;
+  provider: LLMProvider;
   kind: MessageKind;
 
   // kind-specific fields (flat for simplicity)
@@ -169,7 +169,7 @@ export function useSessionStore() {
   const fetchFromServer = useCallback(async (
     sessionId: string,
     opts: {
-      provider?: SessionProvider;
+      provider?: LLMProvider;
       projectName?: string;
       projectPath?: string;
       limit?: number | null;
@@ -228,7 +228,7 @@ export function useSessionStore() {
   const fetchMore = useCallback(async (
     sessionId: string,
     opts: {
-      provider?: SessionProvider;
+      provider?: LLMProvider;
       projectName?: string;
       projectPath?: string;
       limit?: number;
@@ -303,7 +303,7 @@ export function useSessionStore() {
   const refreshFromServer = useCallback(async (
     sessionId: string,
     opts: {
-      provider?: SessionProvider;
+      provider?: LLMProvider;
       projectName?: string;
       projectPath?: string;
     } = {},
@@ -357,7 +357,7 @@ export function useSessionStore() {
    * Update or create a streaming message (accumulated text so far).
    * Uses a well-known ID so subsequent calls replace the same message.
    */
-  const updateStreaming = useCallback((sessionId: string, accumulatedText: string, msgProvider: SessionProvider) => {
+  const updateStreaming = useCallback((sessionId: string, accumulatedText: string, msgProvider: LLMProvider) => {
     const slot = getSlot(sessionId);
     const streamId = `__streaming_${sessionId}`;
     const msg: NormalizedMessage = {

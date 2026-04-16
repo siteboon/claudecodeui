@@ -2,11 +2,21 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
+import { findAppRoot, getModuleDir } from '../utils/runtime-paths.js';
+import {
+  APP_CONFIG_TABLE_SQL,
+  USER_NOTIFICATION_PREFERENCES_TABLE_SQL,
+  VAPID_KEYS_TABLE_SQL,
+  PUSH_SUBSCRIPTIONS_TABLE_SQL,
+  SESSION_NAMES_TABLE_SQL,
+  SESSION_NAMES_LOOKUP_INDEX_SQL,
+  DATABASE_SCHEMA_SQL
+} from './schema.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const __dirname = getModuleDir(import.meta.url);
+// The compiled backend lives under dist-server/server/database, but the install root we log
+// should still point at the project/app root. Resolving it here avoids build-layout drift.
+const APP_ROOT = findAppRoot(__dirname);
 
 // ANSI color codes for terminal output
 const colors = {
@@ -24,7 +34,6 @@ const c = {
 
 // Use DATABASE_PATH environment variable if set, otherwise use default location
 const DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, 'auth.db');
-const INIT_SQL_PATH = path.join(__dirname, 'init.sql');
 
 // Ensure database directory exists if custom path is provided
 if (process.env.DATABASE_PATH) {
@@ -62,14 +71,10 @@ const db = new Database(DB_PATH);
 // app_config must exist before any other module imports (auth.js reads the JWT secret at load time).
 // runMigrations() also creates this table, but it runs too late for existing installations
 // where auth.js is imported before initializeDatabase() is called.
-db.exec(`CREATE TABLE IF NOT EXISTS app_config (
-  key TEXT PRIMARY KEY,
-  value TEXT NOT NULL,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-)`);
+db.exec(APP_CONFIG_TABLE_SQL);
 
 // Show app installation path prominently
-const appInstallPath = path.join(__dirname, '../..');
+const appInstallPath = APP_ROOT;
 console.log('');
 console.log(c.dim('═'.repeat(60)));
 console.log(`${c.info('[INFO]')} App Installation: ${c.bright(appInstallPath)}`);
@@ -100,53 +105,12 @@ const runMigrations = () => {
       db.exec('ALTER TABLE users ADD COLUMN has_completed_onboarding BOOLEAN DEFAULT 0');
     }
 
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS user_notification_preferences (
-        user_id INTEGER PRIMARY KEY,
-        preferences_json TEXT NOT NULL,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-      )
-    `);
-
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS vapid_keys (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        public_key TEXT NOT NULL,
-        private_key TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS push_subscriptions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        endpoint TEXT NOT NULL UNIQUE,
-        keys_p256dh TEXT NOT NULL,
-        keys_auth TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-      )
-    `);
-    // Create app_config table if it doesn't exist (for existing installations)
-    db.exec(`CREATE TABLE IF NOT EXISTS app_config (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`);
-
-    // Create session_names table if it doesn't exist (for existing installations)
-    db.exec(`CREATE TABLE IF NOT EXISTS session_names (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      session_id TEXT NOT NULL,
-      provider TEXT NOT NULL DEFAULT 'claude',
-      custom_name TEXT NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(session_id, provider)
-    )`);
-    db.exec('CREATE INDEX IF NOT EXISTS idx_session_names_lookup ON session_names(session_id, provider)');
+    db.exec(USER_NOTIFICATION_PREFERENCES_TABLE_SQL);
+    db.exec(VAPID_KEYS_TABLE_SQL);
+    db.exec(PUSH_SUBSCRIPTIONS_TABLE_SQL);
+    db.exec(APP_CONFIG_TABLE_SQL);
+    db.exec(SESSION_NAMES_TABLE_SQL);
+    db.exec(SESSION_NAMES_LOOKUP_INDEX_SQL);
 
     console.log('Database migrations completed successfully');
   } catch (error) {
@@ -158,8 +122,7 @@ const runMigrations = () => {
 // Initialize database with schema
 const initializeDatabase = async () => {
   try {
-    const initSQL = fs.readFileSync(INIT_SQL_PATH, 'utf8');
-    db.exec(initSQL);
+    db.exec(DATABASE_SCHEMA_SQL);
     console.log('Database initialized successfully');
     runMigrations();
   } catch (error) {

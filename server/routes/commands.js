@@ -1,13 +1,15 @@
 import express from 'express';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import os from 'os';
 import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '../../shared/modelConstants.js';
 import { parseFrontmatter } from '../utils/frontmatter.js';
+import { findAppRoot, getModuleDir } from '../utils/runtime-paths.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname = getModuleDir(import.meta.url);
+// This route reads the top-level package.json for the status command, so it needs the real
+// app root even after compilation moves the route file under dist-server/server/routes.
+const APP_ROOT = findAppRoot(__dirname);
 
 const router = express.Router();
 
@@ -291,7 +293,7 @@ Custom commands can be created in:
 
   '/status': async (args, context) => {
     // Read version from package.json
-    const packageJsonPath = path.join(path.dirname(__dirname), '..', 'package.json');
+    const packageJsonPath = path.join(APP_ROOT, 'package.json');
     let version = 'unknown';
     let packageName = 'claude-code-ui';
 
