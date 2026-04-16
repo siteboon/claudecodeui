@@ -206,7 +206,13 @@ const app = express();
 const server = http.createServer(app);
 
 const ptySessionsMap = new Map();
-const PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
+function getPtySessionTimeoutMs() {
+    const parsedMinutes = Number.parseInt(process.env.SHELL_SESSION_TIMEOUT_MINUTES || '', 10);
+    const timeoutMinutes = Number.isFinite(parsedMinutes) && parsedMinutes > 0 ? parsedMinutes : 30;
+    return timeoutMinutes * 60 * 1000;
+}
+
+const PTY_SESSION_TIMEOUT = getPtySessionTimeoutMs();
 const SHELL_URL_PARSE_BUFFER_LIMIT = 32768;
 import { stripAnsiSequences, normalizeDetectedUrl, extractUrlsFromText, shouldAutoOpenUrlFromOutput } from './utils/url-detection.js';
 

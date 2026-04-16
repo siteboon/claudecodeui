@@ -95,6 +95,28 @@ Open `http://localhost:3001` — all your existing sessions are discovered autom
 
 Visit the **[documentation →](https://cloudcli.ai/docs)** for full configuration options, PM2, remote server setup and more.
 
+#### Keep CloudCLI running after terminal closes
+
+Use daemon mode to keep CloudCLI alive in background and reconnect later:
+
+```
+cloudcli daemon start
+cloudcli daemon status
+```
+
+Enable startup on login (platform-native):
+
+```
+cloudcli daemon enable
+```
+
+Useful commands:
+
+```
+cloudcli daemon stop
+cloudcli daemon logs
+```
+
 #### Docker Sandboxes (Experimental)
 
 Run agents in isolated sandboxes with hypervisor-level isolation. Starts Claude Code by default. Requires the [`sbx` CLI](https://docs.docker.com/ai/sandboxes/get-started/).

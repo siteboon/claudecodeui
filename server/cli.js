@@ -7,6 +7,7 @@
  * Commands:
  *   (no args)     - Start the server (default)
  *   start         - Start the server
+ *   daemon        - Run and manage background daemon mode
  *   sandbox       - Manage Docker sandbox environments
  *   status        - Show configuration and data locations
  *   help          - Show help information
@@ -16,7 +17,16 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+
 import { findAppRoot, getModuleDir } from './utils/runtime-paths.js';
+import {
+    disableAutostart,
+    enableAutostart,
+    getDaemonStatus,
+    readDaemonLogs,
+    startDaemon,
+    stopDaemon
+} from './daemon/manager.js';
 
 const __dirname = getModuleDir(import.meta.url);
 // The CLI is compiled into dist-server/server, but it still needs to read the top-level
@@ -138,6 +148,7 @@ function showStatus() {
     console.log(`\n${c.tip('[TIP]')} Hints:`);
     console.log(`      ${c.dim('>')} Use ${c.bright('cloudcli --port 8080')} to run on a custom port`);
     console.log(`      ${c.dim('>')} Use ${c.bright('cloudcli --database-path /path/to/db')} for custom database`);
+    console.log(`      ${c.dim('>')} Use ${c.bright('cloudcli daemon start')} to keep CloudCLI running in background`);
     console.log(`      ${c.dim('>')} Run ${c.bright('cloudcli help')} for all options`);
     console.log(`      ${c.dim('>')} Access the UI at http://localhost:${process.env.SERVER_PORT || process.env.PORT || '3001'}\n`);
 }
@@ -155,6 +166,7 @@ Usage:
 
 Commands:
   start          Start the CloudCLI server (default)
+  daemon         Manage background daemon mode
   sandbox        Manage Docker sandbox environments
   status         Show configuration and data locations
   update         Update to the latest version
@@ -170,6 +182,8 @@ Options:
 Examples:
   $ cloudcli                        # Start with defaults
   $ cloudcli --port 8080            # Start on port 8080
+  $ cloudcli daemon start           # Start in background daemon mode
+  $ cloudcli daemon enable          # Enable auto-start on login
   $ cloudcli sandbox ~/my-project   # Run in a Docker sandbox
   $ cloudcli status                 # Show configuration
 
@@ -179,6 +193,7 @@ Environment Variables:
   DATABASE_PATH       Set custom database location
   CLAUDE_CLI_PATH     Set custom Claude CLI path
   CONTEXT_WINDOW      Set context window size (default: 160000)
+  SHELL_SESSION_TIMEOUT_MINUTES  PTY reconnect timeout (default: 30)
 
 Documentation:
   ${packageJson.homepage || 'https://github.com/siteboon/claudecodeui'}
@@ -594,12 +609,204 @@ async function sandboxCommand(args) {
     }
 }
 
+// ── Daemon command ──────────────────────────────────────────
+
+function parseDaemonArgs(args) {
+    const parsed = {
+        subcommand: 'status',
+        options: {}
+    };
+
+    const subcommands = new Set(['start', 'stop', 'status', 'enable', 'disable', 'logs', 'help']);
+    let subcommandSet = false;
+
+    for (let i = 0; i < args.length; i++) {
+        const arg = args[i];
+
+        if (arg === '--port' || arg === '-p') {
+            parsed.options.serverPort = args[++i];
+        } else if (arg.startsWith('--port=')) {
+            parsed.options.serverPort = arg.split('=')[1];
+        } else if (arg === '--database-path') {
+            parsed.options.databasePath = args[++i];
+        } else if (arg.startsWith('--database-path=')) {
+            parsed.options.databasePath = arg.split('=')[1];
+        } else if (arg === '--help' || arg === '-h') {
+            parsed.subcommand = 'help';
+            subcommandSet = true;
+        } else if (!arg.startsWith('-') && !subcommandSet) {
+            parsed.subcommand = arg;
+            subcommandSet = true;
+        }
+    }
+
+    if (!subcommands.has(parsed.subcommand)) {
+        parsed.subcommand = `unknown:${parsed.subcommand}`;
+    }
+
+    return parsed;
+}
+
+function showDaemonHelp() {
+    console.log(`
+${c.bright('CloudCLI Daemon')} — Keep CloudCLI running after terminal closes
+
+Usage:
+  cloudcli daemon <subcommand> [options]
+
+Subcommands:
+  ${c.bright('start')}        Start CloudCLI in detached background mode
+  ${c.bright('stop')}         Stop the running daemon
+  ${c.bright('status')}       Show daemon, health, and autostart status
+  ${c.bright('logs')}         Show recent daemon logs
+  ${c.bright('enable')}       Enable autostart on user login (platform native)
+  ${c.bright('disable')}      Disable autostart on user login
+  ${c.bright('help')}         Show this help
+
+Options:
+  -p, --port <port>           Server port for start/enable (default: 3001)
+  --database-path <path>      Database path for start/enable
+
+Examples:
+  $ cloudcli daemon start
+  $ cloudcli daemon start --port 3001
+  $ cloudcli daemon status
+  $ cloudcli daemon enable --port 3001
+  $ cloudcli daemon logs
+`);
+}
+
+async function daemonCommand(args, globalOptions = {}) {
+    const { subcommand, options } = parseDaemonArgs(args);
+
+    if (subcommand.startsWith('unknown:')) {
+        const invalidSubcommand = subcommand.split(':')[1];
+        console.error(`\n${c.error('❌')} Unknown daemon subcommand: ${invalidSubcommand}`);
+        console.log(`   Run ${c.bright('cloudcli daemon help')} for usage.\n`);
+        process.exit(1);
+    }
+
+    const effectiveOptions = {
+        serverPort: options.serverPort || globalOptions.serverPort || process.env.SERVER_PORT || process.env.PORT || '3001',
+        databasePath: options.databasePath || globalOptions.databasePath || process.env.DATABASE_PATH || ''
+    };
+
+    const daemonRuntimeOptions = {
+        nodePath: process.execPath,
+        cliEntryPath: path.resolve(process.argv[1]),
+        serverPort: effectiveOptions.serverPort,
+        databasePath: effectiveOptions.databasePath || null
+    };
+
+    try {
+        switch (subcommand) {
+            case 'help':
+                showDaemonHelp();
+                return;
+            case 'start': {
+                const result = startDaemon(daemonRuntimeOptions);
+                if (result.alreadyRunning) {
+                    console.log(`${c.ok('[OK]')} CloudCLI daemon is already running (PID ${result.pid}) on port ${result.port}.`);
+                } else {
+                    console.log(`${c.ok('[OK]')} CloudCLI daemon started (PID ${result.pid}) on port ${result.port}.`);
+                }
+                console.log(`${c.tip('[TIP]')} Use ${c.bright('cloudcli daemon status')} to verify health.`);
+                return;
+            }
+            case 'stop': {
+                const result = await stopDaemon();
+                if (result.stopped && result.reason === 'stale_pid') {
+                    console.log(`${c.warn('[WARN]')} Stale PID cleaned up. No running daemon process was found.`);
+                    return;
+                }
+
+                if (result.stopped) {
+                    console.log(`${c.ok('[OK]')} CloudCLI daemon stopped.`);
+                    return;
+                }
+
+                if (result.reason === 'not_running') {
+                    console.log(`${c.warn('[WARN]')} CloudCLI daemon is not running.`);
+                    return;
+                }
+
+                console.error(`${c.error('[ERROR]')} Failed to stop daemon${result.error ? `: ${result.error}` : '.'}`);
+                process.exit(1);
+                return;
+            }
+            case 'status': {
+                const status = await getDaemonStatus({ serverPort: effectiveOptions.serverPort });
+                console.log(`\n${c.bright('CloudCLI Daemon Status')}\n`);
+                console.log(`  Running:   ${status.running ? c.ok('yes') : c.warn('no')}`);
+                console.log(`  Health:    ${status.health ? c.ok('healthy') : c.warn(status.running ? 'unreachable' : 'stopped')}`);
+                console.log(`  PID:       ${status.pid ? c.dim(String(status.pid)) : c.dim('-')}`);
+                console.log(`  Port:      ${c.dim(String(status.port))}`);
+                console.log(`  Autostart: ${status.autostart.enabled ? c.ok(`enabled (${status.autostart.mode})`) : c.warn(`disabled (${status.autostart.mode})`)}`);
+                if (status.autostart.path) {
+                    console.log(`  Auto Path: ${c.dim(status.autostart.path)}`);
+                }
+                console.log(`  PID File:  ${c.dim(status.paths.pidFile)}`);
+                console.log(`  Log File:  ${c.dim(status.paths.logFile)}`);
+                if (status.stalePid) {
+                    console.log(`  Note:      ${c.warn('stale PID file was cleaned up')}`);
+                }
+                console.log('');
+                return;
+            }
+            case 'enable': {
+                const result = enableAutostart(daemonRuntimeOptions);
+                console.log(`${c.ok('[OK]')} Autostart enabled via ${result.mode}.`);
+                if (result.path) {
+                    console.log(`       ${c.dim(result.path)}`);
+                }
+                console.log(`${c.tip('[TIP]')} Use ${c.bright('cloudcli daemon status')} to confirm.`);
+                return;
+            }
+            case 'disable': {
+                const result = disableAutostart();
+                console.log(`${c.ok('[OK]')} Autostart disabled (${result.mode}).`);
+                if (result.path) {
+                    console.log(`       ${c.dim(result.path)}`);
+                }
+                return;
+            }
+            case 'logs': {
+                const logs = readDaemonLogs({ lines: 200 });
+                if (!logs.exists) {
+                    console.log(`${c.warn('[WARN]')} No daemon log file found yet.`);
+                    console.log(`       ${c.dim(logs.logFile)}`);
+                    return;
+                }
+
+                console.log(`\n${c.bright('CloudCLI Daemon Logs')} (${c.dim(logs.logFile)})\n`);
+                if (logs.content) {
+                    console.log(logs.content);
+                } else {
+                    console.log(c.dim('(log file is empty)'));
+                }
+                console.log('');
+                return;
+            }
+            default:
+                showDaemonHelp();
+        }
+    } catch (error) {
+        console.error(`${c.error('[ERROR]')} Daemon command failed: ${error.message}`);
+        if (process.platform === 'linux' && subcommand === 'enable') {
+            console.log(`${c.tip('[TIP]')} Ensure user-level systemd is available, then retry ${c.bright('cloudcli daemon enable')}.`);
+        }
+        process.exit(1);
+    }
+}
+
 // ── Server ──────────────────────────────────────────────────
 
 // Start the server
 async function startServer() {
-    // Check for updates silently on startup
-    checkForUpdates(true);
+    // Check for updates silently on startup (can be disabled for daemon bootstrap)
+    if (process.env.CLOUDCLI_SKIP_UPDATE_CHECK !== '1') {
+        checkForUpdates(true);
+    }
 
     // Import and run the server
     await import('./index.js');
@@ -626,7 +833,7 @@ function parseArgs(args) {
             parsed.command = 'version';
         } else if (!arg.startsWith('-')) {
             parsed.command = arg;
-            if (arg === 'sandbox') {
+            if (arg === 'sandbox' || arg === 'daemon') {
                 parsed.remainingArgs = args.slice(i + 1);
                 break;
             }
@@ -654,6 +861,9 @@ async function main() {
     switch (command) {
         case 'start':
             await startServer();
+            break;
+        case 'daemon':
+            await daemonCommand(remainingArgs || [], options);
             break;
         case 'sandbox':
             await sandboxCommand(remainingArgs || []);
