@@ -100,6 +100,10 @@ export const api = {
     authenticatedFetch(`/api/gemini/sessions/${sessionId}`, {
       method: 'DELETE',
     }),
+  deleteKiroSession: (sessionId) =>
+    authenticatedFetch(`/api/kiro/sessions/${sessionId}`, {
+      method: 'DELETE',
+    }),
   deleteProject: (projectName, force = false) =>
     authenticatedFetch(`/api/projects/${projectName}${force ? '?force=true' : ''}`, {
       method: 'DELETE',
