@@ -6,7 +6,7 @@ import type {
   CursorPermissionsState,
   CodexPermissionMode,
   GeminiPermissionMode,
-  McpServer,
+  SettingsProject,
 } from '../../../types/types';
 
 export type AgentContext = {
@@ -28,14 +28,7 @@ export type AgentsSettingsTabProps = {
   onCodexPermissionModeChange: (value: CodexPermissionMode) => void;
   geminiPermissionMode: GeminiPermissionMode;
   onGeminiPermissionModeChange: (value: GeminiPermissionMode) => void;
-  mcpServers: McpServer[];
-  cursorMcpServers: McpServer[];
-  codexMcpServers: McpServer[];
-  deleteError: string | null;
-  onOpenMcpForm: (server?: McpServer) => void;
-  onDeleteMcpServer: (serverId: string, scope?: string) => void;
-  onOpenCodexMcpForm: (server?: McpServer) => void;
-  onDeleteCodexMcpServer: (serverId: string) => void;
+  projects: SettingsProject[];
 };
 
 export type AgentCategoryTabsSectionProps = {
@@ -61,12 +54,5 @@ export type AgentCategoryContentSectionProps = {
   onCodexPermissionModeChange: (value: CodexPermissionMode) => void;
   geminiPermissionMode: GeminiPermissionMode;
   onGeminiPermissionModeChange: (value: GeminiPermissionMode) => void;
-  mcpServers: McpServer[];
-  cursorMcpServers: McpServer[];
-  codexMcpServers: McpServer[];
-  deleteError: string | null;
-  onOpenMcpForm: (server?: McpServer) => void;
-  onDeleteMcpServer: (serverId: string, scope?: string) => void;
-  onOpenCodexMcpForm: (server?: McpServer) => void;
-  onDeleteCodexMcpServer: (serverId: string) => void;
+  projects: SettingsProject[];
 };

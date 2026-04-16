@@ -2,8 +2,6 @@ import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import ProviderLoginModal from '../../provider-auth/view/ProviderLoginModal';
 import { Button } from '../../../shared/view/ui';
-import ClaudeMcpFormModal from '../view/modals/ClaudeMcpFormModal';
-import CodexMcpFormModal from '../view/modals/CodexMcpFormModal';
 import SettingsSidebar from '../view/SettingsSidebar';
 import AgentsSettingsTab from '../view/tabs/agents-settings/AgentsSettingsTab';
 import AppearanceSettingsTab from '../view/tabs/AppearanceSettingsTab';
@@ -23,7 +21,6 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     activeTab,
     setActiveTab,
     saveStatus,
-    deleteError,
     projectSortOrder,
     setProjectSortOrder,
     codeEditorSettings,
@@ -36,21 +33,6 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     setCursorPermissions,
     codexPermissionMode,
     setCodexPermissionMode,
-    mcpServers,
-    cursorMcpServers,
-    codexMcpServers,
-    showMcpForm,
-    editingMcpServer,
-    openMcpForm,
-    closeMcpForm,
-    submitMcpForm,
-    handleMcpDelete,
-    showCodexMcpForm,
-    editingCodexMcpServer,
-    openCodexMcpForm,
-    closeCodexMcpForm,
-    submitCodexMcpForm,
-    handleCodexMcpDelete,
     providerAuthStatus,
     geminiPermissionMode,
     setGeminiPermissionMode,
@@ -151,14 +133,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
                   onCodexPermissionModeChange={setCodexPermissionMode}
                   geminiPermissionMode={geminiPermissionMode}
                   onGeminiPermissionModeChange={setGeminiPermissionMode}
-                  mcpServers={mcpServers}
-                  cursorMcpServers={cursorMcpServers}
-                  codexMcpServers={codexMcpServers}
-                  onOpenMcpForm={openMcpForm}
-                  onDeleteMcpServer={handleMcpDelete}
-                  onOpenCodexMcpForm={openCodexMcpForm}
-                  onDeleteCodexMcpServer={handleCodexMcpDelete}
-                  deleteError={deleteError}
+                  projects={projects}
                 />
               )}
 
@@ -195,20 +170,6 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
         isAuthenticated={isAuthenticated}
       />
 
-      <ClaudeMcpFormModal
-        isOpen={showMcpForm}
-        editingServer={editingMcpServer}
-        projects={projects}
-        onClose={closeMcpForm}
-        onSubmit={submitMcpForm}
-      />
-
-      <CodexMcpFormModal
-        isOpen={showCodexMcpForm}
-        editingServer={editingCodexMcpServer}
-        onClose={closeCodexMcpForm}
-        onSubmit={submitCodexMcpForm}
-      />
     </div>
   );
 }

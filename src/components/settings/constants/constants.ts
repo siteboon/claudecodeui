@@ -1,8 +1,6 @@
 import type {
   AgentCategory,
   AgentProvider,
-  ClaudeMcpFormState,
-  CodexMcpFormState,
   CodeEditorSettingsState,
   CursorPermissionsState,
   ProjectSortOrder,
@@ -18,7 +16,7 @@ export const SETTINGS_MAIN_TABS: SettingsMainTab[] = [
   'notifications',
 ];
 
-export const AGENT_PROVIDERS: AgentProvider[] = ['claude', 'cursor', 'codex'];
+export const AGENT_PROVIDERS: AgentProvider[] = ['claude', 'cursor', 'codex', 'gemini'];
 export const AGENT_CATEGORIES: AgentCategory[] = ['account', 'permissions', 'mcp'];
 
 export const DEFAULT_PROJECT_SORT_ORDER: ProjectSortOrder = 'name';
@@ -29,33 +27,6 @@ export const DEFAULT_CODE_EDITOR_SETTINGS: CodeEditorSettingsState = {
   showMinimap: true,
   lineNumbers: true,
   fontSize: '14',
-};
-
-export const DEFAULT_CLAUDE_MCP_FORM: ClaudeMcpFormState = {
-  name: '',
-  type: 'stdio',
-  scope: 'user',
-  projectPath: '',
-  config: {
-    command: '',
-    args: [],
-    env: {},
-    url: '',
-    headers: {},
-    timeout: 30000,
-  },
-  importMode: 'form',
-  jsonInput: '',
-};
-
-export const DEFAULT_CODEX_MCP_FORM: CodexMcpFormState = {
-  name: '',
-  type: 'stdio',
-  config: {
-    command: '',
-    args: [],
-    env: {},
-  },
 };
 
 export const DEFAULT_CURSOR_PERMISSIONS: CursorPermissionsState = {

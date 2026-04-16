@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react';
+
 import type { AgentCategory, AgentProvider } from '../../../types/types';
+
+import type { AgentContext, AgentsSettingsTabProps } from './types';
 import AgentCategoryContentSection from './sections/AgentCategoryContentSection';
 import AgentCategoryTabsSection from './sections/AgentCategoryTabsSection';
 import AgentSelectorSection from './sections/AgentSelectorSection';
-import type { AgentContext, AgentsSettingsTabProps } from './types';
 
 export default function AgentsSettingsTab({
   providerAuthStatus,
@@ -16,14 +18,7 @@ export default function AgentsSettingsTab({
   onCodexPermissionModeChange,
   geminiPermissionMode,
   onGeminiPermissionModeChange,
-  mcpServers,
-  cursorMcpServers,
-  codexMcpServers,
-  deleteError,
-  onOpenMcpForm,
-  onDeleteMcpServer,
-  onOpenCodexMcpForm,
-  onDeleteCodexMcpServer,
+  projects,
 }: AgentsSettingsTabProps) {
   const [selectedAgent, setSelectedAgent] = useState<AgentProvider>('claude');
   const [selectedCategory, setSelectedCategory] = useState<AgentCategory>('account');
@@ -79,14 +74,7 @@ export default function AgentsSettingsTab({
           onCodexPermissionModeChange={onCodexPermissionModeChange}
           geminiPermissionMode={geminiPermissionMode}
           onGeminiPermissionModeChange={onGeminiPermissionModeChange}
-          mcpServers={mcpServers}
-          cursorMcpServers={cursorMcpServers}
-          codexMcpServers={codexMcpServers}
-          deleteError={deleteError}
-          onOpenMcpForm={onOpenMcpForm}
-          onDeleteMcpServer={onDeleteMcpServer}
-          onOpenCodexMcpForm={onOpenCodexMcpForm}
-          onDeleteCodexMcpServer={onDeleteCodexMcpServer}
+          projects={projects}
         />
       </div>
     </div>
