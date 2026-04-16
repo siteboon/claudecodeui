@@ -1163,8 +1163,9 @@ async function isProjectEmpty(projectName) {
   }
 }
 
-// Delete a project (force=true to delete even with sessions)
-async function deleteProject(projectName, force = false) {
+// Remove a project from the UI.
+// When deleteData=true, also delete session/memory files on disk (destructive).
+async function deleteProject(projectName, force = false, deleteData = false) {
   const projectDir = path.join(os.homedir(), '.claude', 'projects', projectName);
 
   try {
@@ -1174,48 +1175,50 @@ async function deleteProject(projectName, force = false) {
     }
 
     const config = await loadProjectConfig();
-    let projectPath = config[projectName]?.path || config[projectName]?.originalPath;
 
-    // Fallback to extractProjectDirectory if projectPath is not in config
-    if (!projectPath) {
-      projectPath = await extractProjectDirectory(projectName);
-    }
+    // Destructive path: delete underlying data when explicitly requested
+    if (deleteData) {
+      let projectPath = config[projectName]?.path || config[projectName]?.originalPath;
+      if (!projectPath) {
+        projectPath = await extractProjectDirectory(projectName);
+      }
 
-    // Remove the project directory (includes all Claude sessions)
-    await fs.rm(projectDir, { recursive: true, force: true });
+      // Remove the Claude project directory (session logs, memory, subagent data)
+      await fs.rm(projectDir, { recursive: true, force: true });
 
-    // Delete all Codex sessions associated with this project
-    if (projectPath) {
-      try {
-        const codexSessions = await getCodexSessions(projectPath, { limit: 0 });
-        for (const session of codexSessions) {
-          try {
-            await deleteCodexSession(session.id);
-          } catch (err) {
-            console.warn(`Failed to delete Codex session ${session.id}:`, err.message);
+      // Delete Codex sessions associated with this project
+      if (projectPath) {
+        try {
+          const codexSessions = await getCodexSessions(projectPath, { limit: 0 });
+          for (const session of codexSessions) {
+            try {
+              await deleteCodexSession(session.id);
+            } catch (err) {
+              console.warn(`Failed to delete Codex session ${session.id}:`, err.message);
+            }
           }
+        } catch (err) {
+          console.warn('Failed to delete Codex sessions:', err.message);
         }
-      } catch (err) {
-        console.warn('Failed to delete Codex sessions:', err.message);
-      }
 
-      // Delete Cursor sessions directory if it exists
-      try {
-        const hash = crypto.createHash('md5').update(projectPath).digest('hex');
-        const cursorProjectDir = path.join(os.homedir(), '.cursor', 'chats', hash);
-        await fs.rm(cursorProjectDir, { recursive: true, force: true });
-      } catch (err) {
-        // Cursor dir may not exist, ignore
+        // Delete Cursor sessions directory if it exists
+        try {
+          const hash = crypto.createHash('md5').update(projectPath).digest('hex');
+          const cursorProjectDir = path.join(os.homedir(), '.cursor', 'chats', hash);
+          await fs.rm(cursorProjectDir, { recursive: true, force: true });
+        } catch (err) {
+          // Cursor dir may not exist, ignore
+        }
       }
     }
 
-    // Remove from project config
+    // Always remove from project config
     delete config[projectName];
     await saveProjectConfig(config);
 
     return true;
   } catch (error) {
-    console.error(`Error deleting project ${projectName}:`, error);
+    console.error(`Error removing project ${projectName}:`, error);
     throw error;
   }
 }
