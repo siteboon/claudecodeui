@@ -9,7 +9,6 @@ import {
   MCP_SUPPORTS_WORKING_DIRECTORY,
 } from '../../constants';
 import { useMcpServerForm } from '../../hooks/useMcpServerForm';
-import { formatKeyValueLines, parseKeyValueLines, parseListLines } from '../../utils/mcpFormatting';
 import type { McpFormState, McpProject, McpProvider, McpScope, ProviderMcpServer } from '../../types';
 
 type McpServerFormModalProps = {
@@ -56,6 +55,7 @@ export default function McpServerFormModal({
   const { t } = useTranslation('settings');
   const {
     formData,
+    multilineText,
     projectOptions,
     isEditing,
     isSubmitting,
@@ -65,6 +65,7 @@ export default function McpServerFormModal({
     updateScope,
     updateTransport,
     updateJsonInput,
+    updateMultilineText,
     handleSubmit,
   } = useMcpServerForm({
     provider,
@@ -275,8 +276,8 @@ export default function McpServerFormModal({
                   {t('mcpForm.fields.arguments')}
                 </label>
                 <textarea
-                  value={formData.args.join('\n')}
-                  onChange={(event) => updateForm('args', parseListLines(event.target.value))}
+                  value={multilineText.args}
+                  onChange={(event) => updateMultilineText('args', event.target.value)}
                   className="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                   rows={3}
                   placeholder="--port&#10;3000"
@@ -285,14 +286,14 @@ export default function McpServerFormModal({
 
               {supportsWorkingDirectory && (
                 <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">
-                  Working Directory
-                </label>
-                <Input
-                  value={formData.cwd}
-                  onChange={(event) => updateForm('cwd', event.target.value)}
-                  placeholder="."
-                />
+                  <label className="mb-2 block text-sm font-medium text-foreground">
+                    Working Directory
+                  </label>
+                  <Input
+                    value={formData.cwd}
+                    onChange={(event) => updateForm('cwd', event.target.value)}
+                    placeholder="."
+                  />
                 </div>
               )}
             </div>
@@ -319,8 +320,8 @@ export default function McpServerFormModal({
                 {t('mcpForm.fields.envVars')}
               </label>
               <textarea
-                value={formatKeyValueLines(formData.env)}
-                onChange={(event) => updateForm('env', parseKeyValueLines(event.target.value))}
+                value={multilineText.env}
+                onChange={(event) => updateMultilineText('env', event.target.value)}
                 className="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                 rows={3}
                 placeholder="API_KEY=your-key&#10;DEBUG=true"
@@ -334,8 +335,8 @@ export default function McpServerFormModal({
                 {t('mcpForm.fields.headers')}
               </label>
               <textarea
-                value={formatKeyValueLines(formData.headers)}
-                onChange={(event) => updateForm('headers', parseKeyValueLines(event.target.value))}
+                value={multilineText.headers}
+                onChange={(event) => updateMultilineText('headers', event.target.value)}
                 className="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                 rows={3}
                 placeholder="Authorization=Bearer token&#10;X-API-Key=your-key"
@@ -349,8 +350,8 @@ export default function McpServerFormModal({
                 Environment Variable Names
               </label>
               <textarea
-                value={formData.envVars.join('\n')}
-                onChange={(event) => updateForm('envVars', parseListLines(event.target.value))}
+                value={multilineText.envVars}
+                onChange={(event) => updateMultilineText('envVars', event.target.value)}
                 className="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                 rows={3}
                 placeholder="GITHUB_TOKEN&#10;API_KEY"

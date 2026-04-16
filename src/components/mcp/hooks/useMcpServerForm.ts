@@ -3,7 +3,14 @@ import { useTranslation } from 'react-i18next';
 
 import { DEFAULT_MCP_FORM, MCP_SUPPORTED_SCOPES, MCP_SUPPORTED_TRANSPORTS } from '../constants';
 import type { McpFormState, McpProject, McpProvider, McpScope, McpTransport, ProviderMcpServer } from '../types';
-import { getErrorMessage, getProjectPath, isMcpTransport } from '../utils/mcpFormatting';
+import {
+  formatKeyValueLines,
+  getErrorMessage,
+  getProjectPath,
+  isMcpTransport,
+  parseKeyValueLines,
+  parseListLines,
+} from '../utils/mcpFormatting';
 
 type UseMcpServerFormArgs = {
   provider: McpProvider;
@@ -11,6 +18,14 @@ type UseMcpServerFormArgs = {
   editingServer: ProviderMcpServer | null;
   currentProjects: McpProject[];
   onSubmit: (formData: McpFormState, editingServer: ProviderMcpServer | null) => Promise<void>;
+};
+
+type MultilineFieldText = {
+  args: string;
+  env: string;
+  headers: string;
+  envVars: string;
+  envHttpHeaders: string;
 };
 
 const cloneDefaultForm = (provider: McpProvider): McpFormState => ({
@@ -44,6 +59,14 @@ const createFormStateFromServer = (
   envHttpHeaders: server.envHttpHeaders || {},
 });
 
+const createMultilineTextFromForm = (formData: McpFormState): MultilineFieldText => ({
+  args: formData.args.join('\n'),
+  env: formatKeyValueLines(formData.env),
+  headers: formatKeyValueLines(formData.headers),
+  envVars: formData.envVars.join('\n'),
+  envHttpHeaders: formatKeyValueLines(formData.envHttpHeaders),
+});
+
 const normalizeScope = (provider: McpProvider, value: McpScope): McpScope => (
   MCP_SUPPORTED_SCOPES[provider].includes(value) ? value : MCP_SUPPORTED_SCOPES[provider][0]
 );
@@ -61,6 +84,9 @@ export function useMcpServerForm({
 }: UseMcpServerFormArgs) {
   const { t } = useTranslation('settings');
   const [formData, setFormData] = useState<McpFormState>(() => cloneDefaultForm(provider));
+  const [multilineText, setMultilineText] = useState<MultilineFieldText>(() => (
+    createMultilineTextFromForm(cloneDefaultForm(provider))
+  ));
   const [jsonValidationError, setJsonValidationError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -73,11 +99,15 @@ export function useMcpServerForm({
 
     setJsonValidationError('');
     if (editingServer) {
-      setFormData(createFormStateFromServer(provider, editingServer));
+      const nextFormData = createFormStateFromServer(provider, editingServer);
+      setFormData(nextFormData);
+      setMultilineText(createMultilineTextFromForm(nextFormData));
       return;
     }
 
-    setFormData(cloneDefaultForm(provider));
+    const nextFormData = cloneDefaultForm(provider);
+    setFormData(nextFormData);
+    setMultilineText(createMultilineTextFromForm(nextFormData));
   }, [editingServer, isOpen, provider]);
 
   const projectOptions = useMemo(() => (
@@ -135,6 +165,19 @@ export function useMcpServerForm({
     validateJsonInput(value);
   };
 
+  const updateMultilineText = <K extends keyof MultilineFieldText>(key: K, value: MultilineFieldText[K]) => {
+    setMultilineText((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const createSubmitFormData = (): McpFormState => ({
+    ...formData,
+    args: parseListLines(multilineText.args),
+    env: parseKeyValueLines(multilineText.env),
+    headers: parseKeyValueLines(multilineText.headers),
+    envVars: parseListLines(multilineText.envVars),
+    envHttpHeaders: parseKeyValueLines(multilineText.envHttpHeaders),
+  });
+
   const canSubmit = useMemo(() => {
     if (!formData.name.trim()) {
       return false;
@@ -160,7 +203,9 @@ export function useMcpServerForm({
     setIsSubmitting(true);
 
     try {
-      await onSubmit(formData, editingServer);
+      // Textareas keep raw strings while editing so users can create blank
+      // lines or partial KEY=value entries without the form rewriting them.
+      await onSubmit(createSubmitFormData(), editingServer);
     } catch (error) {
       alert(`Error: ${getErrorMessage(error)}`);
     } finally {
@@ -171,6 +216,7 @@ export function useMcpServerForm({
   return {
     formData,
     setFormData,
+    multilineText,
     projectOptions,
     isEditing,
     isSubmitting,
@@ -180,6 +226,7 @@ export function useMcpServerForm({
     updateScope,
     updateTransport,
     updateJsonInput,
+    updateMultilineText,
     handleSubmit,
   };
 }
