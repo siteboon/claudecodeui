@@ -37,6 +37,7 @@ export type AgentCategoryTabsSectionProps = {
 };
 
 export type AgentSelectorSectionProps = {
+  agents: AgentProvider[];
   selectedAgent: AgentProvider;
   onSelectAgent: (agent: AgentProvider) => void;
   agentContextById: AgentContextByProvider;

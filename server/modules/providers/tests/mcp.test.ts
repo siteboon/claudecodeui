@@ -255,7 +255,8 @@ test('providerMcpService global adder writes to all providers and rejects unsupp
       workspacePath,
     });
 
-    assert.equal(globalResult.length, 4);
+    const expectCursorGlobal = process.platform !== 'win32';
+    assert.equal(globalResult.length, expectCursorGlobal ? 4 : 3);
     assert.ok(globalResult.every((entry) => entry.created === true));
 
     const claudeProject = await readJson(path.join(workspacePath, '.mcp.json'));
@@ -267,8 +268,10 @@ test('providerMcpService global adder writes to all providers and rejects unsupp
     const geminiProject = await readJson(path.join(workspacePath, '.gemini', 'settings.json'));
     assert.ok((geminiProject.mcpServers as Record<string, unknown>)['global-http']);
 
-    const cursorProject = await readJson(path.join(workspacePath, '.cursor', 'mcp.json'));
-    assert.ok((cursorProject.mcpServers as Record<string, unknown>)['global-http']);
+    if (expectCursorGlobal) {
+      const cursorProject = await readJson(path.join(workspacePath, '.cursor', 'mcp.json'));
+      assert.ok((cursorProject.mcpServers as Record<string, unknown>)['global-http']);
+    }
 
     await assert.rejects(
       providerMcpService.addMcpServerToAllProviders({

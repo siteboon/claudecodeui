@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useEffect, useMemo } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useServerPlatform } from "../../../../hooks/useServerPlatform";
 import SessionProviderLogo from "../../../llm-logo-provider/SessionProviderLogo";
 import {
   CLAUDE_MODELS,
@@ -115,6 +116,23 @@ export default function ProviderSelectionEmptyState({
   setInput,
 }: ProviderSelectionEmptyStateProps) {
   const { t } = useTranslation("chat");
+  const { isWindowsServer } = useServerPlatform();
+
+  const visibleProviders = useMemo(
+    () =>
+      isWindowsServer
+        ? PROVIDERS.filter((p) => p.id !== "cursor")
+        : PROVIDERS,
+    [isWindowsServer],
+  );
+
+  useEffect(() => {
+    if (isWindowsServer && provider === "cursor") {
+      setProvider("claude");
+      localStorage.setItem("selected-provider", "claude");
+    }
+  }, [isWindowsServer, provider, setProvider]);
+
   const nextTaskPrompt = t("tasks.nextTaskPrompt", {
     defaultValue: "Start the next task",
   });
@@ -166,8 +184,10 @@ export default function ProviderSelectionEmptyState({
           </div>
 
           {/* Provider cards — horizontal row, equal width */}
-          <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-2.5">
-            {PROVIDERS.map((p) => {
+          <div
+            className={`mb-6 grid grid-cols-2 gap-2 sm:gap-2.5 ${visibleProviders.length >= 4 ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}
+          >
+            {visibleProviders.map((p) => {
               const active = provider === p.id;
               return (
                 <button
