@@ -2,8 +2,7 @@ import express from 'express';
 import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
-import sqlite3 from 'sqlite3';
-import { open } from 'sqlite';
+import Database from 'better-sqlite3';
 import crypto from 'crypto';
 import { CURSOR_MODELS } from '../../shared/modelConstants.js';
 import { applyCustomSessionNames } from '../database/db.js';
@@ -386,16 +385,10 @@ router.get('/sessions', async (req, res) => {
         } catch (_) {}
 
         // Open SQLite database
-        const db = await open({
-          filename: storeDbPath,
-          driver: sqlite3.Database,
-          mode: sqlite3.OPEN_READONLY
-        });
+        const db = new Database(storeDbPath, { readonly: true, fileMustExist: true });
         
         // Get metadata from meta table
-        const metaRows = await db.all(`
-          SELECT key, value FROM meta
-        `);
+        const metaRows = db.prepare('SELECT key, value FROM meta').all();
         
         let sessionData = {
           id: sessionId,
@@ -457,20 +450,11 @@ router.get('/sessions', async (req, res) => {
         
         // Get message count from JSON blobs only (actual messages, not DAG structure)
         try {
-          const blobCount = await db.get(`
-            SELECT COUNT(*) as count 
-            FROM blobs 
-            WHERE substr(data, 1, 1) = X'7B'
-          `);
+          const blobCount = db.prepare(`SELECT COUNT(*) as count FROM blobs WHERE substr(data, 1, 1) = X'7B'`).get();
           sessionData.messageCount = blobCount.count;
           
           // Get the most recent JSON blob for preview (actual message, not DAG structure)
-          const lastBlob = await db.get(`
-            SELECT data FROM blobs 
-            WHERE substr(data, 1, 1) = X'7B'
-            ORDER BY rowid DESC 
-            LIMIT 1
-          `);
+          const lastBlob = db.prepare(`SELECT data FROM blobs WHERE substr(data, 1, 1) = X'7B' ORDER BY rowid DESC LIMIT 1`).get();
           
           if (lastBlob && lastBlob.data) {
             try {
@@ -525,7 +509,7 @@ router.get('/sessions', async (req, res) => {
           console.log('Could not read blobs:', e.message);
         }
         
-        await db.close();
+        db.close();
 
         // Finalize createdAt: use parsed meta value when valid, else fall back to store.db mtime
         if (!sessionData.createdAt) {

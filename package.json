@@ -117,9 +117,7 @@
     "rehype-raw": "^7.0.0",
     "remark-gfm": "^4.0.0",
     "remark-math": "^6.0.0",
-    "sqlite": "^5.1.1",
-    "sqlite3": "^5.1.7",
-    "tailwind-merge": "^3.3.1",
+"tailwind-merge": "^3.3.1",
     "web-push": "^3.6.7",
     "ws": "^8.14.2"
   },

@@ -62,8 +62,7 @@ import fsSync from 'fs';
 import path from 'path';
 import readline from 'readline';
 import crypto from 'crypto';
-import sqlite3 from 'sqlite3';
-import { open } from 'sqlite';
+import Database from 'better-sqlite3';
 import os from 'os';
 import sessionManager from './sessionManager.js';
 import { applyCustomSessionNames } from './database/db.js';
@@ -1305,16 +1304,10 @@ async function getCursorSessions(projectPath) {
         } catch (_) { }
 
         // Open SQLite database
-        const db = await open({
-          filename: storeDbPath,
-          driver: sqlite3.Database,
-          mode: sqlite3.OPEN_READONLY
-        });
+        const db = new Database(storeDbPath, { readonly: true, fileMustExist: true });
 
         // Get metadata from meta table
-        const metaRows = await db.all(`
-          SELECT key, value FROM meta
-        `);
+        const metaRows = db.prepare('SELECT key, value FROM meta').all();
 
         // Parse metadata
         let metadata = {};
@@ -1336,11 +1329,9 @@ async function getCursorSessions(projectPath) {
         }
 
         // Get message count
-        const messageCountResult = await db.get(`
-          SELECT COUNT(*) as count FROM blobs
-        `);
+        const messageCountResult = db.prepare('SELECT COUNT(*) as count FROM blobs').get();
 
-        await db.close();
+        db.close();
 
         // Extract session info
         const sessionName = metadata.title || metadata.sessionTitle || 'Untitled Session';
