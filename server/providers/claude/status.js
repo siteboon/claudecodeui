@@ -59,8 +59,8 @@ export async function checkStatus() {
   return {
     installed,
     authenticated: false,
-    email: null,
-    method: null,
+    email: credentialsResult.email || null,
+    method: credentialsResult.method || null,
     error: credentialsResult.error || 'Not authenticated'
   };
 }
@@ -120,6 +120,13 @@ async function checkCredentials() {
           method: 'credentials_file'
         };
       }
+
+      return {
+        authenticated: false,
+        email: creds.email || creds.user || null,
+        method: 'credentials_file',
+        error: 'OAuth token has expired. Please re-authenticate with claude login'
+      };
     }
 
     return { authenticated: false, email: null, method: null };
