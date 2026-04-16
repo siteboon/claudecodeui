@@ -148,6 +148,10 @@ function mapCliOptionsToSDK(options = {}) {
 
   const sdkOptions = {};
 
+  if (process.env.CLAUDE_CLI_PATH) {
+    sdkOptions.pathToClaudeCodeExecutable = process.env.CLAUDE_CLI_PATH;
+  }
+
   // Map working directory
   if (cwd) {
     sdkOptions.cwd = cwd;
