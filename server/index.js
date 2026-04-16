@@ -11,25 +11,7 @@ const __dirname = getModuleDir(import.meta.url);
 const APP_ROOT = findAppRoot(__dirname);
 const installMode = fs.existsSync(path.join(APP_ROOT, '.git')) ? 'git' : 'npm';
 
-// ANSI color codes for terminal output
-const colors = {
-    reset: '\x1b[0m',
-    bright: '\x1b[1m',
-    cyan: '\x1b[36m',
-    green: '\x1b[32m',
-    yellow: '\x1b[33m',
-    blue: '\x1b[34m',
-    dim: '\x1b[2m',
-};
-
-const c = {
-    info: (text) => `${colors.cyan}${text}${colors.reset}`,
-    ok: (text) => `${colors.green}${text}${colors.reset}`,
-    warn: (text) => `${colors.yellow}${text}${colors.reset}`,
-    tip: (text) => `${colors.blue}${text}${colors.reset}`,
-    bright: (text) => `${colors.bright}${text}${colors.reset}`,
-    dim: (text) => `${colors.dim}${text}${colors.reset}`,
-};
+import { c } from './utils/colors.js';
 
 console.log('SERVER_PORT from env:', process.env.SERVER_PORT);
 
@@ -226,68 +208,7 @@ const server = http.createServer(app);
 const ptySessionsMap = new Map();
 const PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
 const SHELL_URL_PARSE_BUFFER_LIMIT = 32768;
-const ANSI_ESCAPE_SEQUENCE_REGEX = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1B\\))/g;
-const TRAILING_URL_PUNCTUATION_REGEX = /[)\]}>.,;:!?]+$/;
-
-function stripAnsiSequences(value = '') {
-    return value.replace(ANSI_ESCAPE_SEQUENCE_REGEX, '');
-}
-
-function normalizeDetectedUrl(url) {
-    if (!url || typeof url !== 'string') return null;
-
-    const cleaned = url.trim().replace(TRAILING_URL_PUNCTUATION_REGEX, '');
-    if (!cleaned) return null;
-
-    try {
-        const parsed = new URL(cleaned);
-        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-            return null;
-        }
-        return parsed.toString();
-    } catch {
-        return null;
-    }
-}
-
-function extractUrlsFromText(value = '') {
-    const directMatches = value.match(/https?:\/\/[^\s<>"'`\\\x1b\x07]+/gi) || [];
-
-    // Handle wrapped terminal URLs split across lines by terminal width.
-    const wrappedMatches = [];
-    const continuationRegex = /^[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]+$/;
-    const lines = value.split(/\r?\n/);
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        const startMatch = line.match(/https?:\/\/[^\s<>"'`\\\x1b\x07]+/i);
-        if (!startMatch) continue;
-
-        let combined = startMatch[0];
-        let j = i + 1;
-        while (j < lines.length) {
-            const continuation = lines[j].trim();
-            if (!continuation) break;
-            if (!continuationRegex.test(continuation)) break;
-            combined += continuation;
-            j++;
-        }
-
-        wrappedMatches.push(combined.replace(/\r?\n\s*/g, ''));
-    }
-
-    return Array.from(new Set([...directMatches, ...wrappedMatches]));
-}
-
-function shouldAutoOpenUrlFromOutput(value = '') {
-    const normalized = value.toLowerCase();
-    return (
-        normalized.includes('browser didn\'t open') ||
-        normalized.includes('open this url') ||
-        normalized.includes('continue in your browser') ||
-        normalized.includes('press enter to open') ||
-        normalized.includes('open_url:')
-    );
-}
+import { stripAnsiSequences, normalizeDetectedUrl, extractUrlsFromText, shouldAutoOpenUrlFromOutput } from './utils/url-detection.js';
 
 // Single WebSocket server that handles both paths
 const wss = new WebSocketServer({
@@ -573,12 +494,15 @@ app.put('/api/sessions/:sessionId/rename', authenticateToken, async (req, res) =
     }
 });
 
-// Delete project endpoint (force=true to delete with sessions)
+// Delete project endpoint
+// force=true to allow removal even when sessions exist
+// deleteData=true to also delete session/memory files on disk (destructive)
 app.delete('/api/projects/:projectName', authenticateToken, async (req, res) => {
     try {
         const { projectName } = req.params;
         const force = req.query.force === 'true';
-        await deleteProject(projectName, force);
+        const deleteData = req.query.deleteData === 'true';
+        await deleteProject(projectName, force, deleteData);
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: error.message });

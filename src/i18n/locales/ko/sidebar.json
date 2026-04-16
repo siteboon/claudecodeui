@@ -2,7 +2,7 @@
   "projects": {
     "title": "프로젝트",
     "newProject": "새 프로젝트",
-    "deleteProject": "프로젝트 삭제",
+    "deleteProject": "프로젝트 제거",
     "renameProject": "프로젝트 이름 변경",
     "noProjects": "프로젝트가 없습니다",
     "loadingProjects": "프로젝트 로딩 중...",
@@ -40,7 +40,7 @@
     "createProject": "새 프로젝트 생성",
     "refresh": "프로젝트 및 세션 새로고침 (Ctrl+R)",
     "renameProject": "프로젝트 이름 변경 (F2)",
-    "deleteProject": "빈 프로젝트 삭제 (Delete)",
+    "deleteProject": "사이드바에서 프로젝트 제거 (Delete)",
     "addToFavorites": "즐겨찾기에 추가",
     "removeFromFavorites": "즐겨찾기에서 제거",
     "editSessionName": "세션 이름 직접 편집",
@@ -94,14 +94,14 @@
     "deleteSuccess": "삭제되었습니다",
     "errorOccurred": "오류가 발생했습니다",
     "deleteSessionConfirm": "이 세션을 삭제하시겠습니까? 이 작업은 취소할 수 없습니다.",
-    "deleteProjectConfirm": "이 빈 프로젝트를 삭제하시겠습니까? 이 작업은 취소할 수 없습니다.",
+    "deleteProjectConfirm": "사이드바에서 이 프로젝트를 제거하시겠습니까? 프로젝트 파일, 메모리 및 세션 데이터는 삭제되지 않습니다.",
     "enterProjectPath": "프로젝트 경로를 입력해주세요",
     "deleteSessionFailed": "세션 삭제 실패. 다시 시도해주세요.",
     "deleteSessionError": "세션 삭제 오류. 다시 시도해주세요.",
     "renameSessionFailed": "세션 이름 변경 실패. 다시 시도해주세요.",
     "renameSessionError": "세션 이름 변경 오류. 다시 시도해주세요.",
-    "deleteProjectFailed": "프로젝트 삭제 실패. 다시 시도해주세요.",
-    "deleteProjectError": "프로젝트 삭제 오류. 다시 시도해주세요.",
+    "deleteProjectFailed": "프로젝트 제거 실패. 다시 시도해주세요.",
+    "deleteProjectError": "프로젝트 제거 오류. 다시 시도해주세요.",
     "createProjectFailed": "프로젝트 생성 실패. 다시 시도해주세요.",
     "createProjectError": "프로젝트 생성 오류. 다시 시도해주세요."
   },
@@ -109,12 +109,14 @@
     "updateAvailable": "업데이트 가능"
   },
   "deleteConfirmation": {
-    "deleteProject": "프로젝트 삭제",
+    "deleteProject": "프로젝트 제거",
     "deleteSession": "세션 삭제",
-    "confirmDelete": "정말 삭제하시겠습니까",
+    "confirmDelete": "이 프로젝트를 어떻게 하시겠습니까:",
     "sessionCount_one": "이 프로젝트에는 {{count}}개의 대화가 있습니다.",
     "sessionCount_other": "이 프로젝트에는 {{count}}개의 대화가 있습니다.",
-    "allConversationsDeleted": "모든 대화가 영구적으로 삭제됩니다.",
-    "cannotUndo": "이 작업은 취소할 수 없습니다."
+    "removeFromSidebar": "사이드바에서만 제거",
+    "deleteAllData": "모든 데이터 영구 삭제",
+    "allConversationsDeleted": "프로젝트가 사이드바에서 제거됩니다. 파일, 메모리 및 세션 데이터는 보존됩니다.",
+    "cannotUndo": "나중에 프로젝트를 다시 추가할 수 있습니다."
   }
 }

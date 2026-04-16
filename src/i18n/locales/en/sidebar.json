@@ -2,7 +2,7 @@
   "projects": {
     "title": "Projects",
     "newProject": "New Project",
-    "deleteProject": "Delete Project",
+    "deleteProject": "Remove Project",
     "renameProject": "Rename Project",
     "noProjects": "No projects found",
     "loadingProjects": "Loading projects...",
@@ -40,7 +40,7 @@
     "createProject": "Create new project",
     "refresh": "Refresh projects and sessions (Ctrl+R)",
     "renameProject": "Rename project (F2)",
-    "deleteProject": "Delete empty project (Delete)",
+    "deleteProject": "Remove project from sidebar (Delete)",
     "addToFavorites": "Add to favorites",
     "removeFromFavorites": "Remove from favorites",
     "editSessionName": "Manually edit session name",
@@ -95,14 +95,14 @@
     "deleteSuccess": "Deleted successfully",
     "errorOccurred": "An error occurred",
     "deleteSessionConfirm": "Are you sure you want to delete this session? This action cannot be undone.",
-    "deleteProjectConfirm": "Are you sure you want to delete this empty project? This action cannot be undone.",
+    "deleteProjectConfirm": "Remove this project from the sidebar? Your project files, memories, and session data will not be deleted.",
     "enterProjectPath": "Please enter a project path",
     "deleteSessionFailed": "Failed to delete session. Please try again.",
     "deleteSessionError": "Error deleting session. Please try again.",
     "renameSessionFailed": "Failed to rename session. Please try again.",
     "renameSessionError": "Error renaming session. Please try again.",
-    "deleteProjectFailed": "Failed to delete project. Please try again.",
-    "deleteProjectError": "Error deleting project. Please try again.",
+    "deleteProjectFailed": "Failed to remove project. Please try again.",
+    "deleteProjectError": "Error removing project. Please try again.",
     "createProjectFailed": "Failed to create project. Please try again.",
     "createProjectError": "Error creating project. Please try again."
   },
@@ -122,12 +122,14 @@
     "projectsScanned_other": "{{count}} projects scanned"
   },
   "deleteConfirmation": {
-    "deleteProject": "Delete Project",
+    "deleteProject": "Remove Project",
     "deleteSession": "Delete Session",
-    "confirmDelete": "Are you sure you want to delete",
+    "confirmDelete": "What would you like to do with",
     "sessionCount_one": "This project contains {{count}} conversation.",
     "sessionCount_other": "This project contains {{count}} conversations.",
-    "allConversationsDeleted": "All conversations will be permanently deleted.",
-    "cannotUndo": "This action cannot be undone."
+    "removeFromSidebar": "Remove from sidebar only",
+    "deleteAllData": "Delete all data permanently",
+    "allConversationsDeleted": "The project will be removed from the sidebar. Your files, memories, and session data will be preserved.",
+    "cannotUndo": "You can re-add the project later."
   }
 }
