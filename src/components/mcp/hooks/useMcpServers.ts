@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { authenticatedFetch } from '../../../utils/api';
-import { MCP_SUPPORTED_SCOPES } from '../constants';
+import { MCP_GLOBAL_SUPPORTED_TRANSPORTS, MCP_PROVIDER_NAMES, MCP_SUPPORTED_SCOPES } from '../constants';
 import type {
   ApiResponse,
+  GlobalMcpServerResult,
   McpFormState,
   McpProject,
   McpProvider,
@@ -24,6 +25,10 @@ type ProviderMcpServerResponse = {
   provider: McpProvider;
   scope: McpScope;
   servers: Array<Partial<ProviderMcpServer>>;
+};
+
+type GlobalMcpServerResponse = {
+  results: GlobalMcpServerResult[];
 };
 
 type ProjectTarget = {
@@ -184,6 +189,22 @@ const saveProviderServer = async (
   }
 };
 
+const saveGlobalServer = async (
+  payload: UpsertProviderMcpServerPayload,
+): Promise<GlobalMcpServerResult[]> => {
+  const response = await authenticatedFetch('/api/providers/mcp/servers/global', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  const data = await toResponseJson<ApiResponse<GlobalMcpServerResponse>>(response);
+
+  if (!response.ok || !data.success) {
+    throw new Error(getApiErrorMessage(data, 'Failed to save MCP server to all providers'));
+  }
+
+  return data.data.results || [];
+};
+
 const didServerIdentityChange = (
   editingServer: ProviderMcpServer,
   payload: UpsertProviderMcpServerPayload,
@@ -201,6 +222,12 @@ const getCacheKey = (provider: McpProvider, projects: ProjectTarget[]): string =
   const projectKey = projects.map((project) => project.path).sort().join('|');
   return `${provider}:${projectKey}`;
 };
+
+const formatGlobalAddFailures = (failures: GlobalMcpServerResult[]): string => (
+  failures
+    .map((failure) => `${MCP_PROVIDER_NAMES[failure.provider]}: ${failure.error || 'Unknown error'}`)
+    .join('; ')
+);
 
 const sortServers = (servers: ProviderMcpServer[]): ProviderMcpServer[] => {
   const scopeOrder: Record<McpScope, number> = {
@@ -265,6 +292,7 @@ export function useMcpServers({ selectedProvider, currentProjects }: UseMcpServe
   const [saveStatus, setSaveStatus] = useState<'success' | 'error' | null>(null);
   const [isLoadingProjectScopes, setIsLoadingProjectScopes] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isGlobalFormOpen, setIsGlobalFormOpen] = useState(false);
   const [editingServer, setEditingServer] = useState<ProviderMcpServer | null>(null);
   const activeLoadIdRef = useRef(0);
 
@@ -379,6 +407,14 @@ export function useMcpServers({ selectedProvider, currentProjects }: UseMcpServe
     setEditingServer(null);
   }, []);
 
+  const openGlobalForm = useCallback(() => {
+    setIsGlobalFormOpen(true);
+  }, []);
+
+  const closeGlobalForm = useCallback(() => {
+    setIsGlobalFormOpen(false);
+  }, []);
+
   const submitForm = useCallback(
     async (formData: McpFormState, serverBeingEdited: ProviderMcpServer | null) => {
       const payload = createMcpPayloadFromForm(selectedProvider, formData);
@@ -398,6 +434,42 @@ export function useMcpServers({ selectedProvider, currentProjects }: UseMcpServe
       closeForm();
     },
     [cacheKey, closeForm, refreshServers, selectedProvider],
+  );
+
+  const submitGlobalForm = useCallback(
+    async (formData: McpFormState) => {
+      const payload = createMcpPayloadFromForm(selectedProvider, formData, {
+        supportedTransports: MCP_GLOBAL_SUPPORTED_TRANSPORTS,
+        supportsWorkingDirectory: false,
+        includeProviderSpecificFields: false,
+        unsupportedTransportMessage: (transport) =>
+          `Add MCP Server supports only stdio and http across all providers, not ${transport}.`,
+      });
+
+      if (payload.scope === 'local') {
+        throw new Error('Add MCP Server supports only user or project scope across all providers.');
+      }
+
+      if (payload.scope !== 'user' && !payload.workspacePath) {
+        throw new Error('Select a project for project-scoped MCP servers');
+      }
+
+      // The global endpoint updates every provider, so clear every provider
+      // cache entry instead of only the currently visible provider tab.
+      const results = await saveGlobalServer(payload);
+      mcpServersCache.clear();
+      await refreshServers({ force: true });
+
+      const failures = results.filter((result) => !result.created);
+      if (failures.length > 0) {
+        setSaveStatus('error');
+        throw new Error(`Failed to add MCP server to all providers. ${formatGlobalAddFailures(failures)}`);
+      }
+
+      setSaveStatus('success');
+      closeGlobalForm();
+    },
+    [closeGlobalForm, refreshServers, selectedProvider],
   );
 
   const deleteServer = useCallback(
@@ -426,6 +498,7 @@ export function useMcpServers({ selectedProvider, currentProjects }: UseMcpServe
 
   useEffect(() => {
     setIsFormOpen(false);
+    setIsGlobalFormOpen(false);
     setEditingServer(null);
     setDeleteError(null);
     setSaveStatus(null);
@@ -448,10 +521,14 @@ export function useMcpServers({ selectedProvider, currentProjects }: UseMcpServe
     deleteError,
     saveStatus,
     isFormOpen,
+    isGlobalFormOpen,
     editingServer,
     openForm,
+    openGlobalForm,
     closeForm,
+    closeGlobalForm,
     submitForm,
+    submitGlobalForm,
     deleteServer,
     refreshServers,
   };

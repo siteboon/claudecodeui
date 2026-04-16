@@ -4,6 +4,7 @@ export type McpProvider = LLMProvider;
 export type McpScope = 'user' | 'local' | 'project';
 export type McpTransport = 'stdio' | 'http' | 'sse';
 export type McpImportMode = 'form' | 'json';
+export type McpFormMode = 'provider' | 'global';
 export type KeyValueMap = Record<string, string>;
 
 export type McpProject = {
@@ -64,6 +65,12 @@ export type UpsertProviderMcpServerPayload = {
   envVars?: string[];
   bearerTokenEnvVar?: string;
   envHttpHeaders?: KeyValueMap;
+};
+
+export type GlobalMcpServerResult = {
+  provider: McpProvider;
+  created: boolean;
+  error?: string;
 };
 
 export type ApiSuccessResponse<T> = {

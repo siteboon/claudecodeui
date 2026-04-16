@@ -8,6 +8,13 @@ import type {
   UpsertProviderMcpServerPayload,
 } from '../types';
 
+type CreateMcpPayloadOptions = {
+  supportedTransports?: McpTransport[];
+  supportsWorkingDirectory?: boolean;
+  includeProviderSpecificFields?: boolean;
+  unsupportedTransportMessage?: (transport: McpTransport) => string;
+};
+
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 );
@@ -79,9 +86,25 @@ export const getErrorMessage = (error: unknown): string => (
   error instanceof Error ? error.message : 'Unknown error'
 );
 
+const assertSupportedTransport = (
+  provider: McpProvider,
+  transport: McpTransport,
+  options?: CreateMcpPayloadOptions,
+) => {
+  const supportedTransports = options?.supportedTransports ?? MCP_SUPPORTED_TRANSPORTS[provider];
+  if (supportedTransports.includes(transport)) {
+    return;
+  }
+
+  throw new Error(
+    options?.unsupportedTransportMessage?.(transport) ?? `${provider} does not support ${transport} MCP servers`,
+  );
+};
+
 export const parseJsonMcpPayload = (
   provider: McpProvider,
   formData: McpFormState,
+  options?: CreateMcpPayloadOptions,
 ): UpsertProviderMcpServerPayload => {
   const parsed = JSON.parse(formData.jsonInput) as unknown;
   if (!isRecord(parsed)) {
@@ -94,9 +117,7 @@ export const parseJsonMcpPayload = (
     throw new Error('Missing required field: type');
   }
 
-  if (!MCP_SUPPORTED_TRANSPORTS[provider].includes(transport)) {
-    throw new Error(`${provider} does not support ${transport} MCP servers`);
-  }
+  assertSupportedTransport(provider, transport, options);
 
   if (transport === 'stdio' && !readString(parsed.command)) {
     throw new Error('stdio type requires a command field');
@@ -114,22 +135,36 @@ export const parseJsonMcpPayload = (
     command: readString(parsed.command),
     args: readStringArray(parsed.args) ?? [],
     env: readStringRecord(parsed.env) ?? {},
-    cwd: MCP_SUPPORTS_WORKING_DIRECTORY[provider] ? readString(parsed.cwd) : undefined,
+    cwd: (options?.supportsWorkingDirectory ?? MCP_SUPPORTS_WORKING_DIRECTORY[provider])
+      ? readString(parsed.cwd)
+      : undefined,
     url: readString(parsed.url),
     headers: readStringRecord(parsed.headers ?? parsed.http_headers) ?? {},
-    envVars: readStringArray(parsed.envVars ?? parsed.env_vars) ?? [],
-    bearerTokenEnvVar: readString(parsed.bearerTokenEnvVar ?? parsed.bearer_token_env_var),
-    envHttpHeaders: readStringRecord(parsed.envHttpHeaders ?? parsed.env_http_headers) ?? {},
+    envVars: (options?.includeProviderSpecificFields ?? provider === 'codex')
+      ? readStringArray(parsed.envVars ?? parsed.env_vars) ?? []
+      : undefined,
+    bearerTokenEnvVar: (options?.includeProviderSpecificFields ?? provider === 'codex')
+      ? readString(parsed.bearerTokenEnvVar ?? parsed.bearer_token_env_var)
+      : undefined,
+    envHttpHeaders: (options?.includeProviderSpecificFields ?? provider === 'codex')
+      ? readStringRecord(parsed.envHttpHeaders ?? parsed.env_http_headers) ?? {}
+      : undefined,
   };
 };
 
 export const createMcpPayloadFromForm = (
   provider: McpProvider,
   formData: McpFormState,
+  options?: CreateMcpPayloadOptions,
 ): UpsertProviderMcpServerPayload => {
   if (formData.importMode === 'json') {
-    return parseJsonMcpPayload(provider, formData);
+    return parseJsonMcpPayload(provider, formData, options);
   }
+
+  assertSupportedTransport(provider, formData.transport, options);
+
+  const supportsWorkingDirectory = options?.supportsWorkingDirectory ?? MCP_SUPPORTS_WORKING_DIRECTORY[provider];
+  const includeProviderSpecificFields = options?.includeProviderSpecificFields ?? provider === 'codex';
 
   return {
     name: formData.name.trim(),
@@ -139,11 +174,11 @@ export const createMcpPayloadFromForm = (
     command: formData.transport === 'stdio' ? formData.command.trim() : undefined,
     args: formData.transport === 'stdio' ? formData.args : undefined,
     env: formData.env,
-    cwd: MCP_SUPPORTS_WORKING_DIRECTORY[provider] ? formData.cwd.trim() || undefined : undefined,
+    cwd: supportsWorkingDirectory ? formData.cwd.trim() || undefined : undefined,
     url: formData.transport !== 'stdio' ? formData.url.trim() : undefined,
     headers: formData.transport !== 'stdio' ? formData.headers : undefined,
-    envVars: provider === 'codex' ? formData.envVars : undefined,
-    bearerTokenEnvVar: provider === 'codex' ? formData.bearerTokenEnvVar.trim() || undefined : undefined,
-    envHttpHeaders: provider === 'codex' ? formData.envHttpHeaders : undefined,
+    envVars: includeProviderSpecificFields ? formData.envVars : undefined,
+    bearerTokenEnvVar: includeProviderSpecificFields ? formData.bearerTokenEnvVar.trim() || undefined : undefined,
+    envHttpHeaders: includeProviderSpecificFields ? formData.envHttpHeaders : undefined,
   };
 };

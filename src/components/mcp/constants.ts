@@ -21,6 +21,10 @@ export const MCP_SUPPORTED_TRANSPORTS: Record<McpProvider, McpTransport[]> = {
   gemini: ['stdio', 'http', 'sse'],
 };
 
+export const MCP_GLOBAL_SUPPORTED_SCOPES: McpScope[] = ['user', 'project'];
+
+export const MCP_GLOBAL_SUPPORTED_TRANSPORTS: McpTransport[] = ['stdio', 'http'];
+
 export const MCP_PROVIDER_BUTTON_CLASSES: Record<McpProvider, string> = {
   claude: 'bg-purple-600 text-white hover:bg-purple-700',
   cursor: 'bg-purple-600 text-white hover:bg-purple-700',

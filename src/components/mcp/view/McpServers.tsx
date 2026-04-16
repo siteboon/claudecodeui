@@ -4,7 +4,12 @@ import { useTranslation } from 'react-i18next';
 import type { McpProject, McpProvider, McpScope, ProviderMcpServer } from '../types';
 import { IS_PLATFORM } from '../../../constants/config';
 import { Badge, Button } from '../../../shared/view/ui';
-import { MCP_PROVIDER_BUTTON_CLASSES, MCP_PROVIDER_NAMES } from '../constants';
+import {
+  MCP_GLOBAL_SUPPORTED_SCOPES,
+  MCP_GLOBAL_SUPPORTED_TRANSPORTS,
+  MCP_PROVIDER_BUTTON_CLASSES,
+  MCP_PROVIDER_NAMES,
+} from '../constants';
 import { useMcpServers } from '../hooks/useMcpServers';
 import { maskSecret } from '../utils/mcpFormatting';
 
@@ -100,10 +105,14 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
     deleteError,
     saveStatus,
     isFormOpen,
+    isGlobalFormOpen,
     editingServer,
     openForm,
+    openGlobalForm,
     closeForm,
+    closeGlobalForm,
     submitForm,
+    submitGlobalForm,
     deleteServer,
   } = useMcpServers({ selectedProvider, currentProjects });
 
@@ -111,6 +120,12 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
   const description = t(`mcpServers.description.${selectedProvider}`, {
     defaultValue: `Model Context Protocol servers provide additional tools and data sources to ${providerName}`,
   });
+  const globalButtonLabel = 'Add Global MCP Server';
+  const providerButtonLabel = `Add ${providerName} MCP Server`;
+  const globalAddDescription = 'Add Global MCP Server writes one common stdio or HTTP server to Claude, Cursor, Codex, and Gemini.';
+  const providerAddDescription = `${providerButtonLabel} only changes ${providerName}.`;
+  const globalModalDescription = 'Adds this MCP server to every provider: Claude, Cursor, Codex, and Gemini. '
+    + 'Only stdio and HTTP transports are supported because the same config must work across all providers.';
 
   return (
     <div className="space-y-4">
@@ -120,17 +135,35 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
       </div>
       <p className="text-sm text-muted-foreground">{description}</p>
 
-      <div className="flex items-center justify-between gap-3">
-        <Button onClick={() => openForm()} className={MCP_PROVIDER_BUTTON_CLASSES[selectedProvider]} size="sm">
-          <Plus className="mr-2 h-4 w-4" />
-          {t('mcpServers.addButton')}
-        </Button>
-        {saveStatus === 'success' && (
-          <span className="animate-in fade-in text-xs text-muted-foreground">{t('saveStatus.success')}</span>
-        )}
-        {isLoadingProjectScopes && (
-          <span className="animate-in fade-in text-xs text-muted-foreground">Refreshing project scopes...</span>
-        )}
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            onClick={openGlobalForm}
+            className={MCP_PROVIDER_BUTTON_CLASSES[selectedProvider]}
+            size="sm"
+            title={globalAddDescription}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            {globalButtonLabel}
+          </Button>
+          <Button
+            onClick={() => openForm()}
+            variant="outline"
+            size="sm"
+            title={providerAddDescription}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            {providerButtonLabel}
+          </Button>
+        </div>
+        <div className="min-h-4">
+          {saveStatus === 'success' && (
+            <span className="animate-in fade-in text-xs text-muted-foreground">{t('saveStatus.success')}</span>
+          )}
+          {isLoadingProjectScopes && (
+            <span className="animate-in fade-in text-xs text-muted-foreground">Refreshing project scopes...</span>
+          )}
+        </div>
       </div>
 
       {(loadError || deleteError) && (
@@ -223,8 +256,25 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
         isOpen={isFormOpen}
         editingServer={editingServer}
         currentProjects={currentProjects}
+        title={editingServer ? undefined : providerButtonLabel}
+        submitLabel={providerButtonLabel}
         onClose={closeForm}
         onSubmit={submitForm}
+      />
+
+      <McpServerFormModal
+        provider={selectedProvider}
+        mode="global"
+        isOpen={isGlobalFormOpen}
+        editingServer={null}
+        currentProjects={currentProjects}
+        title={globalButtonLabel}
+        description={globalModalDescription}
+        submitLabel={globalButtonLabel}
+        supportedScopes={MCP_GLOBAL_SUPPORTED_SCOPES}
+        supportedTransports={MCP_GLOBAL_SUPPORTED_TRANSPORTS}
+        onClose={closeGlobalForm}
+        onSubmit={(formData) => submitGlobalForm(formData)}
       />
     </div>
   );

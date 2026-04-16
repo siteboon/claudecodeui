@@ -17,6 +17,9 @@ type UseMcpServerFormArgs = {
   isOpen: boolean;
   editingServer: ProviderMcpServer | null;
   currentProjects: McpProject[];
+  supportedScopes?: McpScope[];
+  supportedTransports?: McpTransport[];
+  unsupportedTransportMessage?: (transport: McpTransport) => string;
   onSubmit: (formData: McpFormState, editingServer: ProviderMcpServer | null) => Promise<void>;
 };
 
@@ -28,10 +31,14 @@ type MultilineFieldText = {
   envHttpHeaders: string;
 };
 
-const cloneDefaultForm = (provider: McpProvider): McpFormState => ({
+const cloneDefaultForm = (
+  provider: McpProvider,
+  supportedScopes = MCP_SUPPORTED_SCOPES[provider],
+  supportedTransports = MCP_SUPPORTED_TRANSPORTS[provider],
+): McpFormState => ({
   ...DEFAULT_MCP_FORM,
-  scope: MCP_SUPPORTED_SCOPES[provider][0],
-  transport: MCP_SUPPORTED_TRANSPORTS[provider][0],
+  scope: supportedScopes[0],
+  transport: supportedTransports[0],
   args: [],
   env: {},
   headers: {},
@@ -42,8 +49,10 @@ const cloneDefaultForm = (provider: McpProvider): McpFormState => ({
 const createFormStateFromServer = (
   provider: McpProvider,
   server: ProviderMcpServer,
+  supportedScopes?: McpScope[],
+  supportedTransports?: McpTransport[],
 ): McpFormState => ({
-  ...cloneDefaultForm(provider),
+  ...cloneDefaultForm(provider, supportedScopes, supportedTransports),
   name: server.name,
   scope: server.scope,
   workspacePath: server.workspacePath || '',
@@ -67,12 +76,12 @@ const createMultilineTextFromForm = (formData: McpFormState): MultilineFieldText
   envHttpHeaders: formatKeyValueLines(formData.envHttpHeaders),
 });
 
-const normalizeScope = (provider: McpProvider, value: McpScope): McpScope => (
-  MCP_SUPPORTED_SCOPES[provider].includes(value) ? value : MCP_SUPPORTED_SCOPES[provider][0]
+const normalizeScope = (supportedScopes: McpScope[], value: McpScope): McpScope => (
+  supportedScopes.includes(value) ? value : supportedScopes[0]
 );
 
-const normalizeTransport = (provider: McpProvider, value: McpTransport): McpTransport => (
-  MCP_SUPPORTED_TRANSPORTS[provider].includes(value) ? value : MCP_SUPPORTED_TRANSPORTS[provider][0]
+const normalizeTransport = (supportedTransports: McpTransport[], value: McpTransport): McpTransport => (
+  supportedTransports.includes(value) ? value : supportedTransports[0]
 );
 
 export function useMcpServerForm({
@@ -80,12 +89,17 @@ export function useMcpServerForm({
   isOpen,
   editingServer,
   currentProjects,
+  supportedScopes = MCP_SUPPORTED_SCOPES[provider],
+  supportedTransports = MCP_SUPPORTED_TRANSPORTS[provider],
+  unsupportedTransportMessage,
   onSubmit,
 }: UseMcpServerFormArgs) {
   const { t } = useTranslation('settings');
-  const [formData, setFormData] = useState<McpFormState>(() => cloneDefaultForm(provider));
+  const [formData, setFormData] = useState<McpFormState>(() => (
+    cloneDefaultForm(provider, supportedScopes, supportedTransports)
+  ));
   const [multilineText, setMultilineText] = useState<MultilineFieldText>(() => (
-    createMultilineTextFromForm(cloneDefaultForm(provider))
+    createMultilineTextFromForm(cloneDefaultForm(provider, supportedScopes, supportedTransports))
   ));
   const [jsonValidationError, setJsonValidationError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -99,16 +113,16 @@ export function useMcpServerForm({
 
     setJsonValidationError('');
     if (editingServer) {
-      const nextFormData = createFormStateFromServer(provider, editingServer);
+      const nextFormData = createFormStateFromServer(provider, editingServer, supportedScopes, supportedTransports);
       setFormData(nextFormData);
       setMultilineText(createMultilineTextFromForm(nextFormData));
       return;
     }
 
-    const nextFormData = cloneDefaultForm(provider);
+    const nextFormData = cloneDefaultForm(provider, supportedScopes, supportedTransports);
     setFormData(nextFormData);
     setMultilineText(createMultilineTextFromForm(nextFormData));
-  }, [editingServer, isOpen, provider]);
+  }, [editingServer, isOpen, provider, supportedScopes, supportedTransports]);
 
   const projectOptions = useMemo(() => (
     currentProjects
@@ -126,13 +140,13 @@ export function useMcpServerForm({
   const updateScope = (scope: McpScope) => {
     setFormData((prev) => ({
       ...prev,
-      scope: normalizeScope(provider, scope),
+      scope: normalizeScope(supportedScopes, scope),
       workspacePath: scope === 'user' ? '' : prev.workspacePath,
     }));
   };
 
   const updateTransport = (transport: McpTransport) => {
-    setFormData((prev) => ({ ...prev, transport: normalizeTransport(provider, transport) }));
+    setFormData((prev) => ({ ...prev, transport: normalizeTransport(supportedTransports, transport) }));
   };
 
   const validateJsonInput = (value: string) => {
@@ -146,8 +160,10 @@ export function useMcpServerForm({
       const transportInput = parsed.transport || parsed.type;
       if (!isMcpTransport(transportInput)) {
         setJsonValidationError(t('mcpForm.validation.missingType'));
-      } else if (!MCP_SUPPORTED_TRANSPORTS[provider].includes(transportInput)) {
-        setJsonValidationError(`${provider} does not support ${transportInput} MCP servers`);
+      } else if (!supportedTransports.includes(transportInput)) {
+        setJsonValidationError(
+          unsupportedTransportMessage?.(transportInput) ?? `${provider} does not support ${transportInput} MCP servers`,
+        );
       } else if (transportInput === 'stdio' && !parsed.command) {
         setJsonValidationError(t('mcpForm.validation.stdioRequiresCommand'));
       } else if ((transportInput === 'http' || transportInput === 'sse') && !parsed.url) {
