@@ -95,27 +95,40 @@ Open `http://localhost:3001` — all your existing sessions are discovered autom
 
 Visit the **[documentation →](https://cloudcli.ai/docs)** for full configuration options, PM2, remote server setup and more.
 
-#### Keep CloudCLI running after terminal closes
+#### Keep It Running On Linux (VDS / SSH-safe)
 
-Use daemon mode to keep CloudCLI alive in background and reconnect later:
+If you run CloudCLI over SSH and your terminal disconnects, foreground processes like `npm run dev` will stop.  
+Use the built-in daemon manager to run CloudCLI as a persistent service:
 
-```
-cloudcli daemon start
-cloudcli daemon status
-```
+```bash
+# Default behavior on Linux (auto-daemon):
+cloudcli
 
-Enable startup on login (platform-native):
-
-```
-cloudcli daemon enable
+# Explicit install (recommended on first setup):
+cloudcli daemon install --mode auto --port 3001
+cloudcli daemon status --mode auto
+cloudcli daemon doctor --mode auto
 ```
 
 Useful commands:
 
+```bash
+cloudcli daemon logs --mode auto
+cloudcli daemon restart --mode auto
+cloudcli daemon stop --mode auto      # temporary stop, auto-start remains enabled
+cloudcli daemon disable --mode auto   # disable auto-start at boot
+cloudcli daemon uninstall --mode auto
+cloudcli update --restart-daemon
 ```
-cloudcli daemon stop
-cloudcli daemon logs
-```
+
+Notes:
+- On Linux, `cloudcli` now attempts auto-daemon startup by default.
+- `npm run dev`, `npm run start`, and direct server entrypoints now pass through the same auto-daemon behavior.
+- Recommended for always-on server deployments: use `cloudcli daemon install`, not `npm run dev`.
+- `--mode user` uses `systemctl --user`, `--mode system` uses system service management, and `--mode auto` chooses the best available mode.
+- Use `cloudcli --no-daemon` (or `CLOUDCLI_NO_DAEMON=1`) to force foreground mode.
+- On some servers you may need to enable linger for boot-time startup without an active login session:
+  `sudo loginctl enable-linger <your-username>`
 
 #### Docker Sandboxes (Experimental)
 
