@@ -1,6 +1,6 @@
-import type { Project, ProjectSession, SessionProvider } from '../../../types/app';
+import type { Project, ProjectSession, LLMProvider } from '../../../types/app';
 
-export type Provider = SessionProvider;
+export type Provider = LLMProvider;
 
 export type PermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan';
 
