@@ -516,12 +516,15 @@ app.put('/api/sessions/:sessionId/rename', authenticateToken, async (req, res) =
     }
 });
 
-// Delete project endpoint (force=true to delete with sessions)
+// Delete project endpoint
+// force=true to allow removal even when sessions exist
+// deleteData=true to also delete session/memory files on disk (destructive)
 app.delete('/api/projects/:projectName', authenticateToken, async (req, res) => {
     try {
         const { projectName } = req.params;
         const force = req.query.force === 'true';
-        await deleteProject(projectName, force);
+        const deleteData = req.query.deleteData === 'true';
+        await deleteProject(projectName, force, deleteData);
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: error.message });

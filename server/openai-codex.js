@@ -17,6 +17,7 @@ import { Codex } from '@openai/codex-sdk';
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
 import { codexAdapter } from './providers/codex/adapter.js';
 import { createNormalizedMessage } from './providers/types.js';
+import { getStatusChecker } from './providers/registry.js';
 
 // Track active sessions
 const activeCodexSessions = new Map();
@@ -308,7 +309,14 @@ export async function queryCodex(command, options = {}, ws) {
 
     if (!wasAborted) {
       console.error('[Codex] Error:', error);
-      sendMessage(ws, createNormalizedMessage({ kind: 'error', content: error.message, sessionId: currentSessionId, provider: 'codex' }));
+
+      // Check if Codex SDK is available for a clearer error message
+      const installed = getStatusChecker('codex')?.checkInstalled() ?? true;
+      const errorContent = !installed
+        ? 'Codex CLI is not configured. Please set up authentication first.'
+        : error.message;
+
+      sendMessage(ws, createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: currentSessionId, provider: 'codex' }));
       if (!terminalFailure) {
         notifyRunFailed({
           userId: ws?.userId || null,
