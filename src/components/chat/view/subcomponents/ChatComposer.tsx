@@ -160,6 +160,9 @@ export default function ChatComposer({
     (r) => r.toolName === 'AskUserQuestion'
   );
 
+  // Hide the thinking/status bar while any permission request is pending
+  const hasPendingPermissions = pendingPermissionRequests.length > 0;
+
   // On mobile, when input is focused, float the input box at the bottom
   const mobileFloatingClass = isInputFocused
     ? 'max-sm:fixed max-sm:bottom-0 max-sm:left-0 max-sm:right-0 max-sm:z-50 max-sm:bg-background max-sm:shadow-[0_-4px_20px_rgba(0,0,0,0.15)]'
@@ -167,7 +170,7 @@ export default function ChatComposer({
 
   return (
     <div className={`flex-shrink-0 p-2 pb-2 sm:p-4 sm:pb-4 md:p-4 md:pb-6 ${mobileFloatingClass}`}>
-      {!hasQuestionPanel && (
+      {!hasPendingPermissions && (
         <div className="flex-1">
           <ClaudeStatus
             status={claudeStatus}
