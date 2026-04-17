@@ -10,6 +10,7 @@ import sessionManager from './sessionManager.js';
 import GeminiResponseHandler from './gemini-response-handler.js';
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
 import { createNormalizedMessage } from './providers/types.js';
+import { getStatusChecker } from './providers/registry.js';
 
 let activeGeminiProcesses = new Map(); // Track active processes by session ID
 
@@ -380,6 +381,15 @@ async function spawnGemini(command, options = {}, ws) {
                 notifyTerminalState({ code });
                 resolve();
             } else {
+                // code 127 = shell "command not found" — check installation
+                if (code === 127) {
+                    const installed = getStatusChecker('gemini')?.checkInstalled() ?? true;
+                    if (!installed) {
+                        const socketSessionId = typeof ws.getSessionId === 'function' ? ws.getSessionId() : finalSessionId;
+                        ws.send(createNormalizedMessage({ kind: 'error', content: 'Gemini CLI is not installed. Please install it first: https://github.com/google-gemini/gemini-cli', sessionId: socketSessionId, provider: 'gemini' }));
+                    }
+                }
+
                 notifyTerminalState({
                     code,
                     error: code === null ? 'Gemini CLI process was terminated or timed out' : null
@@ -394,8 +404,14 @@ async function spawnGemini(command, options = {}, ws) {
             const finalSessionId = capturedSessionId || sessionId || processKey;
             activeGeminiProcesses.delete(finalSessionId);
 
+            // Check if Gemini CLI is installed for a clearer error message
+            const installed = getStatusChecker('gemini')?.checkInstalled() ?? true;
+            const errorContent = !installed
+                ? 'Gemini CLI is not installed. Please install it first: https://github.com/google-gemini/gemini-cli'
+                : error.message;
+
             const errorSessionId = typeof ws.getSessionId === 'function' ? ws.getSessionId() : finalSessionId;
-            ws.send(createNormalizedMessage({ kind: 'error', content: error.message, sessionId: errorSessionId, provider: 'gemini' }));
+            ws.send(createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: errorSessionId, provider: 'gemini' }));
             notifyTerminalState({ error });
 
             reject(error);

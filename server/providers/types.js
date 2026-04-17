@@ -69,6 +69,19 @@
  * @property {object} [tokenUsage] - Token usage data (provider-specific)
  */
 
+// ─── Provider Status ────────────────────────────────────────────────────────
+
+/**
+ * Result of a provider status check (installation + authentication).
+ *
+ * @typedef {Object} ProviderStatus
+ * @property {boolean} installed - Whether the provider's CLI/SDK is available
+ * @property {boolean} authenticated - Whether valid credentials exist
+ * @property {string|null} email - User email or auth method identifier
+ * @property {string|null} [method] - Auth method (e.g. 'api_key', 'credentials_file')
+ * @property {string|null} [error] - Error message if not installed or not authenticated
+ */
+
 // ─── Provider Adapter Interface ──────────────────────────────────────────────
 
 /**

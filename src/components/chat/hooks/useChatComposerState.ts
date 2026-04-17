@@ -19,7 +19,7 @@ import type {
   PendingPermissionRequest,
   PermissionMode,
 } from '../types/types';
-import type { Project, ProjectSession, SessionProvider } from '../../../types/app';
+import type { Project, ProjectSession, LLMProvider } from '../../../types/app';
 import { escapeRegExp } from '../utils/chatFormatting';
 import { useFileMentions } from './useFileMentions';
 import { type SlashCommand, useSlashCommands } from './useSlashCommands';
@@ -33,7 +33,7 @@ interface UseChatComposerStateArgs {
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
   currentSessionId: string | null;
-  provider: SessionProvider;
+  provider: LLMProvider;
   permissionMode: PermissionMode | string;
   cyclePermissionMode: () => void;
   cursorModel: string;

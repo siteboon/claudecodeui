@@ -16,11 +16,12 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
+import { findAppRoot, getModuleDir } from './utils/runtime-paths.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const __dirname = getModuleDir(import.meta.url);
+// The CLI is compiled into dist-server/server, but it still needs to read the top-level
+// package.json and .env file. Resolving the app root once keeps those lookups stable.
+const APP_ROOT = findAppRoot(__dirname);
 
 // ANSI color codes for terminal output
 const colors = {
@@ -50,13 +51,16 @@ const c = {
 };
 
 // Load package.json for version info
-const packageJsonPath = path.join(__dirname, '../package.json');
+const packageJsonPath = path.join(APP_ROOT, 'package.json');
 const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+// Match the runtime fallback in load-env.js so "cloudcli status" reports the same default
+// database location that the backend will actually use when no DATABASE_PATH is configured.
+const DEFAULT_DATABASE_PATH = path.join(os.homedir(), '.cloudcli', 'auth.db');
 
 // Load environment variables from .env file if it exists
 function loadEnvFile() {
     try {
-        const envPath = path.join(__dirname, '../.env');
+        const envPath = path.join(APP_ROOT, '.env');
         const envFile = fs.readFileSync(envPath, 'utf8');
         envFile.split('\n').forEach(line => {
             const trimmedLine = line.trim();
@@ -75,12 +79,12 @@ function loadEnvFile() {
 // Get the database path (same logic as db.js)
 function getDatabasePath() {
     loadEnvFile();
-    return process.env.DATABASE_PATH || path.join(__dirname, 'database', 'auth.db');
+    return process.env.DATABASE_PATH || DEFAULT_DATABASE_PATH;
 }
 
 // Get the installation directory
 function getInstallDir() {
-    return path.join(__dirname, '..');
+    return APP_ROOT;
 }
 
 // Show status command
@@ -124,7 +128,7 @@ function showStatus() {
     console.log(`       Status: ${projectsExists ? c.ok('[OK] Exists') : c.warn('[WARN] Not found')}`);
 
     // Config file location
-    const envFilePath = path.join(__dirname, '../.env');
+    const envFilePath = path.join(APP_ROOT, '.env');
     const envExists = fs.existsSync(envFilePath);
     console.log(`\n${c.info('[INFO]')} Configuration File:`);
     console.log(`       ${c.dim(envFilePath)}`);

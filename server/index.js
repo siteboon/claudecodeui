@@ -3,13 +3,13 @@
 import './load-env.js';
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
+import { findAppRoot, getModuleDir } from './utils/runtime-paths.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const installMode = fs.existsSync(path.join(__dirname, '..', '.git')) ? 'git' : 'npm';
+const __dirname = getModuleDir(import.meta.url);
+// The server source runs from /server, while the compiled output runs from /dist-server/server.
+// Resolving the app root once keeps every repo-level lookup below aligned across both layouts.
+const APP_ROOT = findAppRoot(__dirname);
+const installMode = fs.existsSync(path.join(APP_ROOT, '.git')) ? 'git' : 'npm';
 
 import { c } from './utils/colors.js';
 
@@ -326,11 +326,11 @@ app.use('/api/sessions', authenticateToken, messagesRoutes);
 app.use('/api/agent', agentRoutes);
 
 // Serve public files (like api-docs.html)
-app.use(express.static(path.join(__dirname, '../public')));
+app.use(express.static(path.join(APP_ROOT, 'public')));
 
 // Static files served after API routes
 // Add cache control: HTML files should not be cached, but assets can be cached
-app.use(express.static(path.join(__dirname, '../dist'), {
+app.use(express.static(path.join(APP_ROOT, 'dist'), {
     setHeaders: (res, filePath) => {
         if (filePath.endsWith('.html')) {
             // Prevent HTML caching to avoid service worker issues after builds
@@ -352,7 +352,7 @@ app.use(express.static(path.join(__dirname, '../dist'), {
 app.post('/api/system/update', authenticateToken, async (req, res) => {
     try {
         // Get the project root directory (parent of server directory)
-        const projectRoot = path.join(__dirname, '..');
+        const projectRoot = APP_ROOT;
 
         console.log('Starting system update from directory:', projectRoot);
 
@@ -494,12 +494,15 @@ app.put('/api/sessions/:sessionId/rename', authenticateToken, async (req, res) =
     }
 });
 
-// Delete project endpoint (force=true to delete with sessions)
+// Delete project endpoint
+// force=true to allow removal even when sessions exist
+// deleteData=true to also delete session/memory files on disk (destructive)
 app.delete('/api/projects/:projectName', authenticateToken, async (req, res) => {
     try {
         const { projectName } = req.params;
         const force = req.query.force === 'true';
-        await deleteProject(projectName, force);
+        const deleteData = req.query.deleteData === 'true';
+        await deleteProject(projectName, force, deleteData);
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -2194,7 +2197,7 @@ app.get('*', (req, res) => {
 
     // Only serve index.html for HTML routes, not for static assets
     // Static assets should already be handled by express.static middleware above
-    const indexPath = path.join(__dirname, '../dist/index.html');
+    const indexPath = path.join(APP_ROOT, 'dist', 'index.html');
 
     // Check if dist/index.html exists (production build available)
     if (fs.existsSync(indexPath)) {
@@ -2309,7 +2312,7 @@ async function startServer() {
         configureWebPush();
 
         // Check if running in production mode (dist folder exists)
-        const distIndexPath = path.join(__dirname, '../dist/index.html');
+        const distIndexPath = path.join(APP_ROOT, 'dist', 'index.html');
         const isProduction = fs.existsSync(distIndexPath);
 
         // Log Claude implementation mode
@@ -2323,7 +2326,7 @@ async function startServer() {
         console.log(`${c.info('[INFO]')} To run in development mode with hot-module replacement, go to http://${DISPLAY_HOST}:${VITE_PORT}`);
    
         server.listen(SERVER_PORT, HOST, async () => {
-            const appInstallPath = path.join(__dirname, '..');
+            const appInstallPath = APP_ROOT;
 
             console.log('');
             console.log(c.dim('═'.repeat(63)));
