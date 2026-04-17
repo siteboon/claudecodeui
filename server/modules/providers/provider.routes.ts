@@ -1,5 +1,6 @@
 import express, { type Request, type Response } from 'express';
 
+import { providerAuthService } from '@/modules/providers/services/provider-auth.service.js';
 import { providerMcpService } from '@/modules/providers/services/mcp.service.js';
 import type { LLMProvider, McpScope, McpTransport, UpsertProviderMcpServerInput } from '@/shared/types.js';
 import { AppError, asyncHandler, createApiSuccessResponse } from '@/shared/utils.js';
@@ -141,6 +142,15 @@ const parseProvider = (value: unknown): LLMProvider => {
     statusCode: 400,
   });
 };
+
+router.get(
+  '/:provider/auth/status',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const status = await providerAuthService.getProviderAuthStatus(provider);
+    res.json(status);
+  }),
+);
 
 router.get(
   '/:provider/mcp/servers',
