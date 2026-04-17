@@ -15,7 +15,7 @@
 
 import { Codex } from '@openai/codex-sdk';
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
-import { providersService } from './modules/providers/services/providers.service.js';
+import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { createNormalizedMessage } from './shared/utils.js';
 
 // Track active sessions
@@ -264,7 +264,7 @@ export async function queryCodex(command, options = {}, ws) {
       const transformed = transformCodexEvent(event);
 
       // Normalize the transformed event into NormalizedMessage(s) via adapter
-      const normalizedMsgs = providersService.normalizeMessage('codex', transformed, currentSessionId);
+      const normalizedMsgs = sessionsService.normalizeMessage('codex', transformed, currentSessionId);
       for (const msg of normalizedMsgs) {
         sendMessage(ws, msg);
       }

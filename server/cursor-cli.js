@@ -1,7 +1,7 @@
 import { spawn } from 'child_process';
 import crossSpawn from 'cross-spawn';
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
-import { providersService } from './modules/providers/services/providers.service.js';
+import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { createNormalizedMessage } from './shared/utils.js';
 
 // Use cross-spawn on Windows for better command execution
@@ -189,7 +189,7 @@ async function spawnCursor(command, options = {}, ws) {
             case 'assistant':
               // Accumulate assistant message chunks
               if (response.message && response.message.content && response.message.content.length > 0) {
-                const normalized = providersService.normalizeMessage('cursor', response, capturedSessionId || sessionId || null);
+                const normalized = sessionsService.normalizeMessage('cursor', response, capturedSessionId || sessionId || null);
                 for (const msg of normalized) ws.send(msg);
               }
               break;
@@ -219,7 +219,7 @@ async function spawnCursor(command, options = {}, ws) {
           }
 
           // If not JSON, send as stream delta via adapter
-          const normalized = providersService.normalizeMessage('cursor', line, capturedSessionId || sessionId || null);
+          const normalized = sessionsService.normalizeMessage('cursor', line, capturedSessionId || sessionId || null);
           for (const msg of normalized) ws.send(msg);
         }
       };
