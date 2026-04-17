@@ -33,7 +33,6 @@ export class ClaudeProviderAuth implements IProviderAuth {
    * Returns Claude installation and credential status using Claude Code's auth priority.
    */
   async getStatus(): Promise<ProviderAuthStatus> {
-    console.log("Checking Claude authentication status...")
     const installed = this.checkInstalled();
 
     if (!installed) {
@@ -49,7 +48,6 @@ export class ClaudeProviderAuth implements IProviderAuth {
 
     const credentials = await this.checkCredentials();
 
-    console.log("Credientials status for Claude:", credentials)
     return {
       installed,
       provider: 'claude',
@@ -68,7 +66,6 @@ export class ClaudeProviderAuth implements IProviderAuth {
       const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
       const content = await readFile(settingsPath, 'utf8');
       const settings = readObjectRecord(JSON.parse(content));
-      console.log("Settings env for Claude:", settings)
       return readObjectRecord(settings?.env) ?? {};
     } catch {
       return {};
