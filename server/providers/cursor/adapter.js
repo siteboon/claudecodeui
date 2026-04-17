@@ -20,21 +20,16 @@ const PROVIDER = 'cursor';
  * @returns {Promise<Array<{id: string, sequence: number, rowid: number, content: object}>>}
  */
 async function loadCursorBlobs(sessionId, projectPath) {
-  // Lazy-import sqlite so the module doesn't fail if sqlite3 is unavailable
-  const { default: sqlite3 } = await import('sqlite3');
-  const { open } = await import('sqlite');
+  // Lazy-import better-sqlite3 so the module doesn't fail if it's unavailable
+  const { default: Database } = await import('better-sqlite3');
 
   const cwdId = crypto.createHash('md5').update(projectPath || process.cwd()).digest('hex');
   const storeDbPath = path.join(os.homedir(), '.cursor', 'chats', cwdId, sessionId, 'store.db');
 
-  const db = await open({
-    filename: storeDbPath,
-    driver: sqlite3.Database,
-    mode: sqlite3.OPEN_READONLY,
-  });
+  const db = new Database(storeDbPath, { readonly: true, fileMustExist: true });
 
   try {
-    const allBlobs = await db.all('SELECT rowid, id, data FROM blobs');
+    const allBlobs = db.prepare('SELECT rowid, id, data FROM blobs').all();
 
     const blobMap = new Map();
     const parentRefs = new Map();
@@ -129,7 +124,7 @@ async function loadCursorBlobs(sessionId, projectPath) {
 
     return messages;
   } finally {
-    await db.close();
+    db.close();
   }
 }
 

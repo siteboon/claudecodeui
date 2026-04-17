@@ -3,6 +3,7 @@ import crossSpawn from 'cross-spawn';
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
 import { cursorAdapter } from './providers/cursor/adapter.js';
 import { createNormalizedMessage } from './providers/types.js';
+import { getStatusChecker } from './providers/registry.js';
 
 // Use cross-spawn on Windows for better command execution
 const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
@@ -294,7 +295,13 @@ async function spawnCursor(command, options = {}, ws) {
         const finalSessionId = capturedSessionId || sessionId || processKey;
         activeCursorProcesses.delete(finalSessionId);
 
-        ws.send(createNormalizedMessage({ kind: 'error', content: error.message, sessionId: capturedSessionId || sessionId || null, provider: 'cursor' }));
+        // Check if Cursor CLI is installed for a clearer error message
+        const installed = getStatusChecker('cursor')?.checkInstalled() ?? true;
+        const errorContent = !installed
+          ? 'Cursor CLI is not installed. Please install it from https://cursor.com'
+          : error.message;
+
+        ws.send(createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: capturedSessionId || sessionId || null, provider: 'cursor' }));
         notifyTerminalState({ error });
 
         settleOnce(() => reject(error));

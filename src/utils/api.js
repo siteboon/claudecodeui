@@ -104,10 +104,15 @@ export const api = {
     authenticatedFetch(`/api/kiro/sessions/${sessionId}`, {
       method: 'DELETE',
     }),
-  deleteProject: (projectName, force = false) =>
-    authenticatedFetch(`/api/projects/${projectName}${force ? '?force=true' : ''}`, {
+  deleteProject: (projectName, force = false, deleteData = false) => {
+    const params = new URLSearchParams();
+    if (force) params.set('force', 'true');
+    if (deleteData) params.set('deleteData', 'true');
+    const qs = params.toString();
+    return authenticatedFetch(`/api/projects/${projectName}${qs ? `?${qs}` : ''}`, {
       method: 'DELETE',
-    }),
+    });
+  },
   searchConversationsUrl: (query, limit = 50) => {
     const token = localStorage.getItem('auth-token');
     const params = new URLSearchParams({ q: query, limit: String(limit) });
