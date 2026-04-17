@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import spawn from 'cross-spawn';
 
-import type { IProviderMcpRuntime } from '@/shared/interfaces.js';
+import type { IProviderMcp } from '@/shared/interfaces.js';
 import type { LLMProvider, McpScope, McpTransport, ProviderMcpServer, UpsertProviderMcpServerInput } from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
 
@@ -93,7 +93,7 @@ const runHttpServerProbe = async (
 /**
  * Shared MCP provider for provider-specific config readers/writers.
  */
-export abstract class McpProvider implements IProviderMcpRuntime {
+export abstract class McpProvider implements IProviderMcp {
   protected readonly provider: LLMProvider;
   protected readonly supportedScopes: McpScope[];
   protected readonly supportedTransports: McpTransport[];

@@ -13,13 +13,13 @@ import type {
 /**
  * Main provider contract for CLI and SDK integrations.
  *
- * Each concrete provider owns its MCP/auth runtimes plus the provider-specific
+ * Each concrete provider owns its MCP/auth handlers plus the provider-specific
  * logic for converting native events/history into the app's normalized shape.
  */
 export interface IProvider {
   readonly id: LLMProvider;
-  readonly mcp: IProviderMcpRuntime;
-  readonly auth: IProviderAuthRuntime;
+  readonly mcp: IProviderMcp;
+  readonly auth: IProviderAuth;
 
   normalizeMessage(raw: unknown, sessionId: string | null): NormalizedMessage[];
   fetchHistory(sessionId: string, options?: FetchHistoryOptions): Promise<FetchHistoryResult>;
@@ -27,19 +27,19 @@ export interface IProvider {
 
 
 /**
- * Auth runtime contract for one provider.
+ * Auth contract for one provider.
  */
-export interface IProviderAuthRuntime {
+export interface IProviderAuth {
   /**
-   * Checks whether the provider runtime is installed and has usable credentials.
+   * Checks whether the provider is installed and has usable credentials.
    */
   getStatus(): Promise<ProviderAuthStatus>;
 }
 
 /**
- * MCP runtime contract for one provider.
+ * MCP contract for one provider.
  */
-export interface IProviderMcpRuntime {
+export interface IProviderMcp {
   listServers(options?: { workspacePath?: string }): Promise<Record<McpScope, ProviderMcpServer[]>>;
   listServersForScope(scope: McpScope, options?: { workspacePath?: string }): Promise<ProviderMcpServer[]>;
   upsertServer(input: UpsertProviderMcpServerInput): Promise<ProviderMcpServer>;

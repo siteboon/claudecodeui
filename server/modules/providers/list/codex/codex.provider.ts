@@ -1,8 +1,8 @@
 import { getCodexSessionMessages } from '@/projects.js';
 import { AbstractProvider } from '@/modules/providers/shared/base/abstract.provider.js';
-import { CodexAuthProvider } from '@/modules/providers/list/codex/codex-auth.provider.js';
+import { CodexProviderAuth } from '@/modules/providers/list/codex/codex-auth.provider.js';
 import { CodexMcpProvider } from '@/modules/providers/list/codex/codex-mcp.provider.js';
-import type { IProviderAuthRuntime } from '@/shared/interfaces.js';
+import type { IProviderAuth } from '@/shared/interfaces.js';
 import type { FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
 import { createNormalizedMessage, generateMessageId, readObjectRecord } from '@/shared/utils.js';
 
@@ -31,7 +31,7 @@ function readRawProviderMessage(raw: unknown): RawProviderMessage | null {
 
 export class CodexProvider extends AbstractProvider {
   readonly mcp = new CodexMcpProvider();
-  readonly auth: IProviderAuthRuntime = new CodexAuthProvider();
+  readonly auth: IProviderAuth = new CodexProviderAuth();
 
   constructor() {
     super('codex');

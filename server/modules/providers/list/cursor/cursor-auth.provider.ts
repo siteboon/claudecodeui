@@ -1,6 +1,6 @@
 import spawn from 'cross-spawn';
 
-import type { IProviderAuthRuntime } from '@/shared/interfaces.js';
+import type { IProviderAuth } from '@/shared/interfaces.js';
 import type { ProviderAuthStatus } from '@/shared/types.js';
 
 type CursorLoginStatus = {
@@ -10,7 +10,7 @@ type CursorLoginStatus = {
   error?: string;
 };
 
-export class CursorAuthProvider implements IProviderAuthRuntime {
+export class CursorProviderAuth implements IProviderAuth {
   /**
    * Checks whether the cursor-agent CLI is available on this host.
    */

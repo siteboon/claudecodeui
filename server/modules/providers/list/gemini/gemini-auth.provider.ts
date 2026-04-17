@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import spawn from 'cross-spawn';
 
-import type { IProviderAuthRuntime } from '@/shared/interfaces.js';
+import type { IProviderAuth } from '@/shared/interfaces.js';
 import type { ProviderAuthStatus } from '@/shared/types.js';
 import { readObjectRecord, readOptionalString } from '@/shared/utils.js';
 
@@ -15,7 +15,7 @@ type GeminiCredentialsStatus = {
   error?: string;
 };
 
-export class GeminiAuthProvider implements IProviderAuthRuntime {
+export class GeminiProviderAuth implements IProviderAuth {
   /**
    * Checks whether the Gemini CLI is available on this host.
    */

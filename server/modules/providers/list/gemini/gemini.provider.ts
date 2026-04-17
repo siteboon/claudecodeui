@@ -1,9 +1,9 @@
 import sessionManager from '@/sessionManager.js';
 import { getGeminiCliSessionMessages } from '@/projects.js';
 import { AbstractProvider } from '@/modules/providers/shared/base/abstract.provider.js';
-import { GeminiAuthProvider } from '@/modules/providers/list/gemini/gemini-auth.provider.js';
+import { GeminiProviderAuth } from '@/modules/providers/list/gemini/gemini-auth.provider.js';
 import { GeminiMcpProvider } from '@/modules/providers/list/gemini/gemini-mcp.provider.js';
-import type { IProviderAuthRuntime } from '@/shared/interfaces.js';
+import type { IProviderAuth } from '@/shared/interfaces.js';
 import type { FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
 import { createNormalizedMessage, generateMessageId, readObjectRecord } from '@/shared/utils.js';
 
@@ -17,7 +17,7 @@ function readRawProviderMessage(raw: unknown): RawProviderMessage | null {
 
 export class GeminiProvider extends AbstractProvider {
   readonly mcp = new GeminiMcpProvider();
-  readonly auth: IProviderAuthRuntime = new GeminiAuthProvider();
+  readonly auth: IProviderAuth = new GeminiProviderAuth();
 
   constructor() {
     super('gemini');
