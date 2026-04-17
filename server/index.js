@@ -2342,6 +2342,23 @@ function printSystemDaemonActiveNotice(port) {
     console.log(`${c.info('[INFO]')} Logs: ${c.bright('sudo cloudcli daemon logs --mode system')}`);
 }
 
+function printUserDaemonActiveNotice(port, frontendPort) {
+    const effectivePort = Number(port) || 3001;
+    const effectiveFrontendPort = Number(frontendPort) || 5173;
+    console.log(`${c.ok('[OK]')} User daemon is active for this account.`);
+    console.log(`${c.info('[INFO]')} Backend: ${c.bright(`http://localhost:${effectivePort}`)}`);
+    console.log(`${c.info('[INFO]')} Frontend: ${c.bright(`http://localhost:${effectiveFrontendPort}`)}`);
+    console.log(`${c.info('[INFO]')} Status: ${c.bright('cloudcli daemon status --mode user')}`);
+    console.log(`${c.info('[INFO]')} Stop: ${c.bright('cloudcli daemon stop --mode user')}`);
+    console.log(`${c.info('[INFO]')} Logs: ${c.bright('cloudcli daemon logs --mode user')}`);
+    console.log(`${c.tip('[TIP]')} For login/reboot persistence, enable linger once: ${c.bright(`sudo loginctl enable-linger ${os.userInfo().username}`)}`);
+}
+
+function isSystemPermissionError(error) {
+    const message = String(error?.message || error || '');
+    return /(access denied|permission denied|must be root|interactive authentication required|not permitted|failed to connect to bus|operation not permitted|authentication is required|polkit)/i.test(message);
+}
+
 async function maybeAutoDaemonBootstrapFromIndex() {
     if (process.platform !== 'linux') return false;
     if (process.env.CLOUDCLI_DAEMON_MANAGED === '1') return false;
@@ -2350,16 +2367,19 @@ async function maybeAutoDaemonBootstrapFromIndex() {
 
     process.env.CLOUDCLI_DAEMON_ATTEMPTED = '1';
 
+    const systemArgs = ['install', '--mode=system', '--port', String(SERVER_PORT), '--frontend-port', String(VITE_PORT)];
+    const userArgs = ['install', '--mode=user', '--port', String(SERVER_PORT), '--frontend-port', String(VITE_PORT)];
+
     try {
         console.log(`${c.info('[INFO]')} Linux detected. Enforcing system daemon mode for CloudCLI...`);
-        await handleDaemonCommand(['install', '--mode=system', '--port', String(SERVER_PORT)], {
+        await handleDaemonCommand(systemArgs, {
             appRoot: APP_ROOT,
             defaultPort: String(SERVER_PORT),
             color: c,
             cliEntry: path.join(APP_ROOT, 'server', 'cli.js'),
         });
         return true;
-    } catch (error) {
+    } catch (systemError) {
         const healthySoon = await waitForPortOpen(SERVER_PORT);
         if (healthySoon) {
             console.log(`${c.warn('[WARN]')} System daemon health check was delayed, but port ${SERVER_PORT} is now reachable.`);
@@ -2367,11 +2387,43 @@ async function maybeAutoDaemonBootstrapFromIndex() {
             return true;
         }
 
-        throw new Error(
-            `System daemon bootstrap failed.\n` +
-            `${error.message}\n` +
-            `Run with privileges: sudo cloudcli daemon install --mode system --port ${SERVER_PORT}`
-        );
+        if (!isSystemPermissionError(systemError)) {
+            throw new Error(
+                `System daemon bootstrap failed.\n` +
+                `${systemError.message}\n` +
+                `Run with privileges: sudo cloudcli daemon install --mode system --port ${SERVER_PORT} --frontend-port ${VITE_PORT}`
+            );
+        }
+
+        console.log(`${c.warn('[WARN]')} System daemon setup requires elevated privileges for this user.`);
+        console.log(`${c.info('[INFO]')} Falling back to user daemon mode for account "${os.userInfo().username}"...`);
+
+        try {
+            await handleDaemonCommand(userArgs, {
+                appRoot: APP_ROOT,
+                defaultPort: String(SERVER_PORT),
+                color: c,
+                cliEntry: path.join(APP_ROOT, 'server', 'cli.js'),
+            });
+            printUserDaemonActiveNotice(SERVER_PORT, VITE_PORT);
+            return true;
+        } catch (userError) {
+            const userHealthySoon = await waitForPortOpen(SERVER_PORT);
+            if (userHealthySoon) {
+                console.log(`${c.warn('[WARN]')} User daemon health check was delayed, but port ${SERVER_PORT} is now reachable.`);
+                printUserDaemonActiveNotice(SERVER_PORT, VITE_PORT);
+                return true;
+            }
+            throw new Error(
+                `System daemon bootstrap failed.\n` +
+                `${systemError.message}\n\n` +
+                `User daemon fallback also failed.\n` +
+                `${userError.message}\n` +
+                `Try one of:\n` +
+                `1) sudo cloudcli daemon install --mode system --port ${SERVER_PORT} --frontend-port ${VITE_PORT}\n` +
+                `2) cloudcli daemon install --mode user --port ${SERVER_PORT} --frontend-port ${VITE_PORT}`
+            );
+        }
     }
 }
 

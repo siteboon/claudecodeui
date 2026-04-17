@@ -683,6 +683,19 @@ export async function handleDaemonCommand(args, context = {}) {
                 console.log(`${c.info('[INFO]')} Status: ${c.bright('cloudcli daemon status --mode system')}`);
                 console.log(`${c.info('[INFO]')} Stop: ${c.bright('sudo cloudcli daemon stop --mode system')}`);
                 console.log(`${c.info('[INFO]')} Logs: ${c.bright('sudo cloudcli daemon logs --mode system')}\n`);
+            } else {
+                const linger = probeLinger();
+                console.log(`${c.ok('[OK]')} User daemon is active for backend and frontend.`);
+                console.log(`${c.info('[INFO]')} Backend health: ${c.bright(`http://localhost:${installedPort}/health`)}`);
+                console.log(`${c.info('[INFO]')} Frontend: ${c.bright(`http://localhost:${installedFrontendPort}/`)}`);
+                console.log(`${c.info('[INFO]')} Status: ${c.bright('cloudcli daemon status --mode user')}`);
+                console.log(`${c.info('[INFO]')} Stop: ${c.bright('cloudcli daemon stop --mode user')}`);
+                console.log(`${c.info('[INFO]')} Logs: ${c.bright('cloudcli daemon logs --mode user')}`);
+                if (linger.value !== 'yes') {
+                    console.log(`${c.tip('[TIP]')} Enable linger for reboot/login persistence: ${c.bright(`sudo loginctl enable-linger ${os.userInfo().username}`)}\n`);
+                } else {
+                    console.log('');
+                }
             }
             break;
         }
