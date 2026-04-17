@@ -6,7 +6,7 @@ import { CURSOR_MODELS } from '../../shared/modelConstants.js';
 
 const router = express.Router();
 
-// GET /api/cursor/config - Read Cursor CLI configuration
+// GET /api/cursor/config - Read Cursor CLI configuration.
 router.get('/config', async (req, res) => {
   try {
     const configPath = path.join(os.homedir(), '.cursor', 'cli-config.json');
@@ -21,10 +21,9 @@ router.get('/config', async (req, res) => {
         path: configPath,
       });
     } catch (error) {
-      // Config doesn't exist or is invalid
+      // Config doesn't exist or is invalid, so return the UI default shape.
       console.log('Cursor config not found or invalid:', error.message);
 
-      // Return default config
       res.json({
         success: true,
         config: {

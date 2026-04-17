@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -10,8 +11,21 @@ import type { FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from 
 import { createNormalizedMessage, generateMessageId, readObjectRecord } from '@/shared/utils.js';
 
 const PROVIDER = 'cursor';
+const nodeRequire = createRequire(import.meta.url);
 
 type RawProviderMessage = Record<string, any>;
+
+type BetterSqliteDatabase = {
+  prepare(sql: string): {
+    all(): CursorDbBlob[];
+  };
+  close(): void;
+};
+
+type BetterSqliteConstructor = new (
+  filename: string,
+  options: { readonly: boolean; fileMustExist: boolean },
+) => BetterSqliteDatabase;
 
 type CursorDbBlob = {
   rowid: number;
@@ -47,21 +61,15 @@ export class CursorProvider extends AbstractProvider {
    * order. Cursor history is stored as content-addressed blobs rather than JSONL.
    */
   private async loadCursorBlobs(sessionId: string, projectPath: string): Promise<CursorMessageBlob[]> {
-    const sqlite3Module = await import('sqlite3');
-    const sqlite3 = sqlite3Module.default;
-    const { open } = await import('sqlite');
+    const Database = nodeRequire('better-sqlite3') as BetterSqliteConstructor;
 
     const cwdId = crypto.createHash('md5').update(projectPath || process.cwd()).digest('hex');
     const storeDbPath = path.join(os.homedir(), '.cursor', 'chats', cwdId, sessionId, 'store.db');
 
-    const db = await open({
-      filename: storeDbPath,
-      driver: sqlite3.Database,
-      mode: sqlite3.OPEN_READONLY,
-    });
+    const db = new Database(storeDbPath, { readonly: true, fileMustExist: true });
 
     try {
-      const allBlobs = await db.all('SELECT rowid, id, data FROM blobs') as CursorDbBlob[];
+      const allBlobs = db.prepare('SELECT rowid, id, data FROM blobs').all();
 
       const blobMap = new Map<string, CursorDbBlob>();
       const parentRefs = new Map<string, string[]>();
@@ -170,7 +178,7 @@ export class CursorProvider extends AbstractProvider {
 
       return messages;
     } finally {
-      await db.close();
+      db.close();
     }
   }
 

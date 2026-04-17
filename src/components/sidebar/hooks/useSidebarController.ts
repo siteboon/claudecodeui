@@ -452,7 +452,7 @@ export function useSidebarController({
     [getProjectSessions],
   );
 
-  const confirmDeleteProject = useCallback(async () => {
+  const confirmDeleteProject = useCallback(async (deleteData = false) => {
     if (!deleteConfirmation) {
       return;
     }
@@ -464,7 +464,7 @@ export function useSidebarController({
     setDeletingProjects((prev) => new Set([...prev, project.name]));
 
     try {
-      const response = await api.deleteProject(project.name, !isEmpty);
+      const response = await api.deleteProject(project.name, !isEmpty, deleteData);
 
       if (response.ok) {
         onProjectDelete?.(project.name);
