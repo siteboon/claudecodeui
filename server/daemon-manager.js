@@ -6,8 +6,12 @@ import { request } from 'node:http';
 import net from 'node:net';
 
 const DAEMON_SERVICE_NAME = 'cloudcli.service';
+const FRONTEND_DAEMON_SERVICE_NAME = 'cloudcli-frontend.service';
 const DAEMON_USER_SERVICE_PATH = path.join(os.homedir(), '.config', 'systemd', 'user', DAEMON_SERVICE_NAME);
 const DAEMON_SYSTEM_SERVICE_PATH = path.join('/etc', 'systemd', 'system', DAEMON_SERVICE_NAME);
+const FRONTEND_DAEMON_USER_SERVICE_PATH = path.join(os.homedir(), '.config', 'systemd', 'user', FRONTEND_DAEMON_SERVICE_NAME);
+const FRONTEND_DAEMON_SYSTEM_SERVICE_PATH = path.join('/etc', 'systemd', 'system', FRONTEND_DAEMON_SERVICE_NAME);
+const DEFAULT_FRONTEND_PORT = 5173;
 const DAEMON_HEALTH_TIMEOUT_MS = 60000;
 const DAEMON_HEALTH_REQUEST_TIMEOUT_MS = 4000;
 const DAEMON_HEALTH_RETRY_INTERVAL_MS = 1000;
@@ -72,6 +76,10 @@ function getDaemonServicePath(mode) {
     return mode === 'system' ? DAEMON_SYSTEM_SERVICE_PATH : DAEMON_USER_SERVICE_PATH;
 }
 
+function getFrontendServicePath(mode) {
+    return mode === 'system' ? FRONTEND_DAEMON_SYSTEM_SERVICE_PATH : FRONTEND_DAEMON_USER_SERVICE_PATH;
+}
+
 function getSystemctlArgs(mode, commandArgs) {
     return mode === 'user' ? ['--user', ...commandArgs] : commandArgs;
 }
@@ -84,7 +92,7 @@ function parseDaemonArgs(args) {
     const parsed = {
         subcommand: 'status',
         options: {
-            mode: 'user',
+            mode: 'system',
         },
     };
 
@@ -100,6 +108,10 @@ function parseDaemonArgs(args) {
             parsed.options.serverPort = args[++i];
         } else if (arg.startsWith('--port=')) {
             parsed.options.serverPort = arg.split('=')[1];
+        } else if (arg === '--frontend-port') {
+            parsed.options.frontendPort = args[++i];
+        } else if (arg.startsWith('--frontend-port=')) {
+            parsed.options.frontendPort = arg.split('=')[1];
         } else if (arg === '--mode' || arg === '-m') {
             parsed.options.mode = (args[++i] || '').toLowerCase();
         } else if (arg.startsWith('--mode=')) {
@@ -153,6 +165,69 @@ Type=simple
 WorkingDirectory=${appRoot}
 ExecStart=${execStart}
 Environment=HOST=0.0.0.0
+Environment=CI=true
+Environment=CLOUDCLI_DAEMON_MANAGED=1
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target
+`;
+}
+
+function resolveFrontendDaemonEntry(appRoot, cliEntry) {
+    const cliCandidate = cliEntry
+        ? path.resolve(cliEntry)
+        : (process.argv[1] ? path.resolve(process.argv[1]) : '');
+    const candidates = [];
+    if (cliCandidate) {
+        candidates.push(path.join(path.dirname(cliCandidate), 'vite-daemon.js'));
+    }
+    candidates.push(path.join(appRoot, 'dist-server', 'server', 'vite-daemon.js'));
+    candidates.push(path.join(appRoot, 'server', 'vite-daemon.js'));
+
+    const resolved = candidates.find(candidate => fs.existsSync(candidate));
+    if (!resolved) {
+        throw new Error(
+            `Frontend daemon entry was not found. Checked: ${candidates.join(', ')}. ` +
+            `Run "npm run build:server" or ensure server/vite-daemon.js exists.`
+        );
+    }
+    return resolved;
+}
+
+function buildFrontendDaemonExecStart({ appRoot, frontendPort, nodeExecPath, cliEntry }) {
+    const nodeExec = nodeExecPath || process.execPath || 'node';
+    const frontendEntry = resolveFrontendDaemonEntry(appRoot, cliEntry);
+    const args = [
+        nodeExec,
+        frontendEntry,
+        '--host',
+        '0.0.0.0',
+        '--port',
+        String(frontendPort),
+        '--strictPort',
+    ];
+    return args.map(quoteSystemdArg).join(' ');
+}
+
+function buildFrontendDaemonServiceUnit({ appRoot, frontendPort, nodeExecPath, cliEntry }) {
+    const execStart = buildFrontendDaemonExecStart({
+        appRoot,
+        frontendPort,
+        nodeExecPath,
+        cliEntry,
+    });
+    return `[Unit]
+Description=CloudCLI Frontend (Vite Dev Server)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=${appRoot}
+ExecStart=${execStart}
+Environment=HOST=0.0.0.0
+Environment=CI=true
 Environment=CLOUDCLI_DAEMON_MANAGED=1
 Restart=always
 RestartSec=2
@@ -169,9 +244,9 @@ function normalizeState(value) {
     return text;
 }
 
-function getState(mode) {
-    const activeRes = runCommand('systemctl', getSystemctlArgs(mode, ['is-active', DAEMON_SERVICE_NAME]));
-    const enabledRes = runCommand('systemctl', getSystemctlArgs(mode, ['is-enabled', DAEMON_SERVICE_NAME]));
+function getServiceState(mode, serviceName) {
+    const activeRes = runCommand('systemctl', getSystemctlArgs(mode, ['is-active', serviceName]));
+    const enabledRes = runCommand('systemctl', getSystemctlArgs(mode, ['is-enabled', serviceName]));
 
     return {
         active: normalizeState(activeRes.stdout || activeRes.stderr),
@@ -179,8 +254,9 @@ function getState(mode) {
     };
 }
 
-function readLogs(mode, lines = 100, inherit = false) {
-    const args = [...getJournalctlArgs(mode, ['-u', DAEMON_SERVICE_NAME]), '-n', String(lines), '--no-pager'];
+function readLogs(mode, lines = 100, inherit = false, serviceNames = [DAEMON_SERVICE_NAME]) {
+    const unitArgs = serviceNames.flatMap((serviceName) => ['-u', serviceName]);
+    const args = [...getJournalctlArgs(mode, unitArgs), '-n', String(lines), '--no-pager'];
     return runCommand('journalctl', args, { inherit });
 }
 
@@ -234,16 +310,15 @@ function resolveDaemonMode({ requestedMode, subcommand, userBusAvailable }) {
         return requestedMode;
     }
 
-    const userUnitInstalled = fs.existsSync(getDaemonServicePath('user'));
+    // Auto mode is intentionally system-first to guarantee boot-time startup
+    // even without an interactive user session.
     const systemUnitInstalled = fs.existsSync(getDaemonServicePath('system'));
+    const userUnitInstalled = fs.existsSync(getDaemonServicePath('user'));
 
-    if (subcommand === 'install') {
-        return userBusAvailable ? 'user' : 'system';
-    }
-
-    if (userUnitInstalled) return 'user';
     if (systemUnitInstalled) return 'system';
-    return userBusAvailable ? 'user' : 'system';
+    if (subcommand === 'install') return 'system';
+    if (userUnitInstalled && userBusAvailable) return 'user';
+    return 'system';
 }
 
 function runSystemctl(mode, commandArgs, opts = {}) {
@@ -315,10 +390,10 @@ async function waitForHealth(port, timeoutMs = DAEMON_HEALTH_TIMEOUT_MS) {
     throw new Error(lastError?.message || `Service did not become healthy on port ${port}`);
 }
 
-async function healthCheckOrThrow(mode, port, c) {
-    const state = getState(mode);
+async function healthCheckOrThrow(mode, serviceName, port, c) {
+    const state = getServiceState(mode, serviceName);
     if (state.active !== 'active' && state.active !== 'activating') {
-        throw new Error(`Service is not active (state: ${state.active})`);
+        throw new Error(`Service ${serviceName} is not active (state: ${state.active})`);
     }
 
     try {
@@ -327,19 +402,19 @@ async function healthCheckOrThrow(mode, port, c) {
             console.log(`${c.warn('[WARN]')} HTTP /health probe delayed; TCP port ${port} is already accepting connections.`);
         }
     } catch (healthError) {
-        const logsResult = readLogs(mode, 50);
+        const logsResult = readLogs(mode, 50, false, [serviceName]);
         const logText = (logsResult.stdout || logsResult.stderr || '').trim();
         const lastErrorLine = findLatestErrorLine(logText);
 
         if (logText) {
-            console.log(`\n${c.warn('[WARN]')} Last 50 daemon log lines:`);
+            console.log(`\n${c.warn('[WARN]')} Last 50 log lines for ${serviceName}:`);
             console.log(logText);
         }
 
         if (lastErrorLine) {
-            throw new Error(`Health check failed: ${healthError.message}\nLikely cause: ${lastErrorLine}`);
+            throw new Error(`Health check failed for ${serviceName}: ${healthError.message}\nLikely cause: ${lastErrorLine}`);
         }
-        throw new Error(`Health check failed: ${healthError.message}`);
+        throw new Error(`Health check failed for ${serviceName}: ${healthError.message}`);
     }
 }
 
@@ -378,19 +453,25 @@ Subcommands:
 
 Options:
   -p, --port <port>           Set service server port (default: 3001)
-  -m, --mode <mode>           Service mode: user | system | auto (default: user)
+  --frontend-port <port>      Set frontend Vite port (default: 5173)
+  -m, --mode <mode>           Service mode: user | system | auto (default: system)
   --database-path <path>      Set service database path
 
 Examples:
-  $ cloudcli daemon install --mode auto --port 3001
-  $ cloudcli daemon status --mode auto
+  $ cloudcli daemon install --mode system --port 3001 --frontend-port 5173
+  $ cloudcli daemon status --mode system
   $ cloudcli daemon doctor --mode auto
   $ cloudcli daemon logs --mode system
 `);
 }
 
 export function hasInstalledDaemonUnit() {
-    return fs.existsSync(DAEMON_USER_SERVICE_PATH) || fs.existsSync(DAEMON_SYSTEM_SERVICE_PATH);
+    return (
+        fs.existsSync(DAEMON_USER_SERVICE_PATH) ||
+        fs.existsSync(DAEMON_SYSTEM_SERVICE_PATH) ||
+        fs.existsSync(FRONTEND_DAEMON_USER_SERVICE_PATH) ||
+        fs.existsSync(FRONTEND_DAEMON_SYSTEM_SERVICE_PATH)
+    );
 }
 
 export async function handleDaemonCommand(args, context = {}) {
@@ -416,12 +497,18 @@ export async function handleDaemonCommand(args, context = {}) {
 
     const appRoot = context.appRoot || process.cwd();
     const defaultPort = context.defaultPort || process.env.SERVER_PORT || process.env.PORT || '3001';
+    const defaultFrontendPort = context.defaultFrontendPort || process.env.VITE_PORT || String(DEFAULT_FRONTEND_PORT);
     const configuredPort = parsed.options.serverPort || defaultPort;
+    const configuredFrontendPort = parsed.options.frontendPort || defaultFrontendPort;
     const databasePath = parsed.options.databasePath || process.env.DATABASE_PATH || '';
 
     const portNum = Number(configuredPort);
     if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
         throw new Error(`Invalid port "${configuredPort}". Expected an integer between 1 and 65535.`);
+    }
+    const frontendPortNum = Number(configuredFrontendPort);
+    if (!Number.isInteger(frontendPortNum) || frontendPortNum < 1 || frontendPortNum > 65535) {
+        throw new Error(`Invalid frontend port "${configuredFrontendPort}". Expected an integer between 1 and 65535.`);
     }
 
     const userBus = probeUserBus();
@@ -431,7 +518,9 @@ export async function handleDaemonCommand(args, context = {}) {
         userBusAvailable: userBus.ok,
     });
     const servicePath = getDaemonServicePath(mode);
+    const frontendServicePath = getFrontendServicePath(mode);
     const effectivePort = getPortFromServiceUnit(servicePath) || portNum;
+    const effectiveFrontendPort = getPortFromServiceUnit(frontendServicePath) || frontendPortNum;
 
     if (mode === 'user' && !userBus.ok) {
         throw new Error(
@@ -443,12 +532,27 @@ export async function handleDaemonCommand(args, context = {}) {
     if (parsed.subcommand === 'doctor') {
         const linger = probeLinger();
         const userUnitInstalled = fs.existsSync(getDaemonServicePath('user'));
+        const userFrontendUnitInstalled = fs.existsSync(getFrontendServicePath('user'));
         const systemUnitInstalled = fs.existsSync(getDaemonServicePath('system'));
+        const systemFrontendUnitInstalled = fs.existsSync(getFrontendServicePath('system'));
         const selectedModePort = getPortFromServiceUnit(servicePath) || portNum;
+        const selectedModeFrontendPort = getPortFromServiceUnit(frontendServicePath) || frontendPortNum;
         const portReachable = await isPortReachable(selectedModePort);
-        const userState = userBus.ok ? getState('user') : { active: 'unavailable', enabled: 'unavailable' };
-        const systemState = getState('system');
-        const logsResult = readLogs(mode, 50);
+        const frontendPortReachable = await isPortReachable(selectedModeFrontendPort);
+        const userState = userBus.ok
+            ? {
+                backend: getServiceState('user', DAEMON_SERVICE_NAME),
+                frontend: getServiceState('user', FRONTEND_DAEMON_SERVICE_NAME),
+            }
+            : {
+                backend: { active: 'unavailable', enabled: 'unavailable' },
+                frontend: { active: 'unavailable', enabled: 'unavailable' },
+            };
+        const systemState = {
+            backend: getServiceState('system', DAEMON_SERVICE_NAME),
+            frontend: getServiceState('system', FRONTEND_DAEMON_SERVICE_NAME),
+        };
+        const logsResult = readLogs(mode, 50, false, [DAEMON_SERVICE_NAME, FRONTEND_DAEMON_SERVICE_NAME]);
         const logsText = (logsResult.stdout || logsResult.stderr || '').trim();
         const lastErrorLine = findLatestErrorLine(logsText);
 
@@ -460,11 +564,14 @@ export async function handleDaemonCommand(args, context = {}) {
             console.log(`       ${c.dim(userBus.detail)}`);
         }
         console.log(`${c.info('[INFO]')} linger:         ${c.bright(linger.value)}${linger.detail ? ` ${c.dim(`(${linger.detail})`)}` : ''}`);
-        console.log(`${c.info('[INFO]')} user unit:      ${userUnitInstalled ? c.ok('installed') : c.warn('missing')} (${c.dim(getDaemonServicePath('user'))})`);
-        console.log(`${c.info('[INFO]')} system unit:    ${systemUnitInstalled ? c.ok('installed') : c.warn('missing')} (${c.dim(getDaemonServicePath('system'))})`);
-        console.log(`${c.info('[INFO]')} user state:     active=${c.bright(userState.active)} enabled=${c.bright(userState.enabled)}`);
-        console.log(`${c.info('[INFO]')} system state:   active=${c.bright(systemState.active)} enabled=${c.bright(systemState.enabled)}`);
-        console.log(`${c.info('[INFO]')} health port:    ${c.bright(String(selectedModePort))} (${portReachable ? c.ok('reachable') : c.warn('not reachable')})`);
+        console.log(`${c.info('[INFO]')} user backend:   ${userUnitInstalled ? c.ok('installed') : c.warn('missing')} (${c.dim(getDaemonServicePath('user'))})`);
+        console.log(`${c.info('[INFO]')} user frontend:  ${userFrontendUnitInstalled ? c.ok('installed') : c.warn('missing')} (${c.dim(getFrontendServicePath('user'))})`);
+        console.log(`${c.info('[INFO]')} system backend: ${systemUnitInstalled ? c.ok('installed') : c.warn('missing')} (${c.dim(getDaemonServicePath('system'))})`);
+        console.log(`${c.info('[INFO]')} system frontend:${systemFrontendUnitInstalled ? c.ok('installed') : c.warn('missing')} (${c.dim(getFrontendServicePath('system'))})`);
+        console.log(`${c.info('[INFO]')} user state:     backend active=${c.bright(userState.backend.active)} enabled=${c.bright(userState.backend.enabled)} | frontend active=${c.bright(userState.frontend.active)} enabled=${c.bright(userState.frontend.enabled)}`);
+        console.log(`${c.info('[INFO]')} system state:   backend active=${c.bright(systemState.backend.active)} enabled=${c.bright(systemState.backend.enabled)} | frontend active=${c.bright(systemState.frontend.active)} enabled=${c.bright(systemState.frontend.enabled)}`);
+        console.log(`${c.info('[INFO]')} backend port:   ${c.bright(String(selectedModePort))} (${portReachable ? c.ok('reachable') : c.warn('not reachable')})`);
+        console.log(`${c.info('[INFO]')} frontend port:  ${c.bright(String(selectedModeFrontendPort))} (${frontendPortReachable ? c.ok('reachable') : c.warn('not reachable')})`);
         if (lastErrorLine) {
             console.log(`${c.warn('[WARN]')} Latest error:   ${lastErrorLine}`);
         }
@@ -474,17 +581,34 @@ export async function handleDaemonCommand(args, context = {}) {
         console.log(`MODE_RESOLVED=${mode}`);
         console.log(`USER_BUS_OK=${userBus.ok}`);
         console.log(`LINGER=${linger.value}`);
-        console.log(`USER_UNIT_INSTALLED=${userUnitInstalled}`);
-        console.log(`SYSTEM_UNIT_INSTALLED=${systemUnitInstalled}`);
-        console.log(`USER_ACTIVE=${userState.active}`);
-        console.log(`USER_ENABLED=${userState.enabled}`);
-        console.log(`SYSTEM_ACTIVE=${systemState.active}`);
-        console.log(`SYSTEM_ENABLED=${systemState.enabled}`);
-        console.log(`HEALTH_PORT=${selectedModePort}`);
-        console.log(`PORT_REACHABLE=${portReachable}`);
+        console.log(`USER_BACKEND_UNIT_INSTALLED=${userUnitInstalled}`);
+        console.log(`USER_FRONTEND_UNIT_INSTALLED=${userFrontendUnitInstalled}`);
+        console.log(`SYSTEM_BACKEND_UNIT_INSTALLED=${systemUnitInstalled}`);
+        console.log(`SYSTEM_FRONTEND_UNIT_INSTALLED=${systemFrontendUnitInstalled}`);
+        console.log(`USER_BACKEND_ACTIVE=${userState.backend.active}`);
+        console.log(`USER_BACKEND_ENABLED=${userState.backend.enabled}`);
+        console.log(`USER_FRONTEND_ACTIVE=${userState.frontend.active}`);
+        console.log(`USER_FRONTEND_ENABLED=${userState.frontend.enabled}`);
+        console.log(`SYSTEM_BACKEND_ACTIVE=${systemState.backend.active}`);
+        console.log(`SYSTEM_BACKEND_ENABLED=${systemState.backend.enabled}`);
+        console.log(`SYSTEM_FRONTEND_ACTIVE=${systemState.frontend.active}`);
+        console.log(`SYSTEM_FRONTEND_ENABLED=${systemState.frontend.enabled}`);
+        console.log(`BACKEND_PORT=${selectedModePort}`);
+        console.log(`BACKEND_PORT_REACHABLE=${portReachable}`);
+        console.log(`FRONTEND_PORT=${selectedModeFrontendPort}`);
+        console.log(`FRONTEND_PORT_REACHABLE=${frontendPortReachable}`);
         console.log(`LAST_ERROR_LINE=${JSON.stringify(lastErrorLine || '')}\n`);
         return;
     }
+
+    const serviceDefs = [
+        {
+            servicePath,
+        },
+        {
+            servicePath: frontendServicePath,
+        },
+    ];
 
     switch (parsed.subcommand) {
         case 'install': {
@@ -494,23 +618,37 @@ export async function handleDaemonCommand(args, context = {}) {
 
             try {
                 fs.mkdirSync(path.dirname(servicePath), { recursive: true });
-                const unitContent = buildDaemonServiceUnit({
+                fs.mkdirSync(path.dirname(frontendServicePath), { recursive: true });
+
+                const backendUnitContent = buildDaemonServiceUnit({
                     appRoot,
                     serverPort: portNum,
                     databasePath,
                     nodeExecPath: context.nodeExecPath,
                     cliEntry: context.cliEntry,
                 });
-                fs.writeFileSync(servicePath, unitContent, 'utf8');
+                fs.writeFileSync(servicePath, backendUnitContent, 'utf8');
+
+                const frontendUnitContent = buildFrontendDaemonServiceUnit({
+                    appRoot,
+                    frontendPort: frontendPortNum,
+                    nodeExecPath: context.nodeExecPath,
+                    cliEntry: context.cliEntry,
+                });
+                fs.writeFileSync(frontendServicePath, frontendUnitContent, 'utf8');
             } catch (fileError) {
                 if (mode === 'system' && (fileError.code === 'EACCES' || fileError.code === 'EPERM')) {
-                    throw new Error(`Permission denied writing ${servicePath}. Try: sudo cloudcli daemon install --mode system --port ${portNum}`);
+                    throw new Error(
+                        `Permission denied writing daemon unit files (${servicePath}, ${frontendServicePath}). ` +
+                        `Try: sudo cloudcli daemon install --mode system --port ${portNum} --frontend-port ${frontendPortNum}`
+                    );
                 }
                 throw fileError;
             }
 
             runSystemctl(mode, ['daemon-reload']);
             runSystemctl(mode, ['enable', '--now', DAEMON_SERVICE_NAME]);
+            runSystemctl(mode, ['enable', '--now', FRONTEND_DAEMON_SERVICE_NAME]);
 
             if (mode === 'user') {
                 const lingerResult = runCommand('loginctl', ['enable-linger', os.userInfo().username]);
@@ -522,46 +660,69 @@ export async function handleDaemonCommand(args, context = {}) {
             }
 
             const installedPort = getPortFromServiceUnit(servicePath) || portNum;
-            await healthCheckOrThrow(mode, installedPort, c);
+            const installedFrontendPort = getPortFromServiceUnit(frontendServicePath) || frontendPortNum;
+            await healthCheckOrThrow(mode, DAEMON_SERVICE_NAME, installedPort, c);
+            await healthCheckOrThrow(mode, FRONTEND_DAEMON_SERVICE_NAME, installedFrontendPort, c);
 
-            const state = getState(mode);
+            const backendState = getServiceState(mode, DAEMON_SERVICE_NAME);
+            const frontendState = getServiceState(mode, FRONTEND_DAEMON_SERVICE_NAME);
             console.log(`\n${c.ok('✔')} Daemon installed and started.`);
             console.log(`   Mode:    ${c.bright(mode)}`);
-            console.log(`   Unit:    ${c.dim(servicePath)}`);
-            console.log(`   Active:  ${c.bright(state.active)}`);
-            console.log(`   Enabled: ${c.bright(state.enabled)}\n`);
+            console.log(`   Backend Unit:   ${c.dim(servicePath)}`);
+            console.log(`   Frontend Unit:  ${c.dim(frontendServicePath)}`);
+            console.log(`   Backend Active: ${c.bright(backendState.active)}`);
+            console.log(`   Backend Enabled:${c.bright(backendState.enabled)}`);
+            console.log(`   Frontend Active:${c.bright(frontendState.active)}`);
+            console.log(`   Frontend Enabled:${c.bright(frontendState.enabled)}`);
+            console.log(`   Backend URL:    ${c.bright(`http://localhost:${installedPort}`)}`);
+            console.log(`   Frontend URL:   ${c.bright(`http://localhost:${installedFrontendPort}`)}\n`);
+            if (mode === 'system') {
+                console.log(`${c.ok('[OK]')} System daemon is active for backend and frontend.`);
+                console.log(`${c.info('[INFO]')} Backend health: ${c.bright(`http://localhost:${installedPort}/health`)}`);
+                console.log(`${c.info('[INFO]')} Frontend: ${c.bright(`http://localhost:${installedFrontendPort}/`)}`);
+                console.log(`${c.info('[INFO]')} Status: ${c.bright('cloudcli daemon status --mode system')}`);
+                console.log(`${c.info('[INFO]')} Stop: ${c.bright('sudo cloudcli daemon stop --mode system')}`);
+                console.log(`${c.info('[INFO]')} Logs: ${c.bright('sudo cloudcli daemon logs --mode system')}\n`);
+            }
             break;
         }
 
         case 'start':
             runSystemctl(mode, ['start', DAEMON_SERVICE_NAME]);
-            await healthCheckOrThrow(mode, effectivePort, c);
-            console.log(`${c.ok('[OK]')} Service started.`);
+            runSystemctl(mode, ['start', FRONTEND_DAEMON_SERVICE_NAME]);
+            await healthCheckOrThrow(mode, DAEMON_SERVICE_NAME, effectivePort, c);
+            await healthCheckOrThrow(mode, FRONTEND_DAEMON_SERVICE_NAME, effectiveFrontendPort, c);
+            console.log(`${c.ok('[OK]')} Backend and frontend services started.`);
             break;
 
         case 'stop':
+            runSystemctl(mode, ['stop', FRONTEND_DAEMON_SERVICE_NAME], { allowFailure: true });
             runSystemctl(mode, ['stop', DAEMON_SERVICE_NAME]);
-            console.log(`${c.ok('[OK]')} Service stopped (auto-start remains enabled).`);
+            console.log(`${c.ok('[OK]')} Backend and frontend services stopped (auto-start remains enabled).`);
             break;
 
         case 'restart':
             runSystemctl(mode, ['restart', DAEMON_SERVICE_NAME]);
-            await healthCheckOrThrow(mode, effectivePort, c);
-            console.log(`${c.ok('[OK]')} Service restarted.`);
+            runSystemctl(mode, ['restart', FRONTEND_DAEMON_SERVICE_NAME]);
+            await healthCheckOrThrow(mode, DAEMON_SERVICE_NAME, effectivePort, c);
+            await healthCheckOrThrow(mode, FRONTEND_DAEMON_SERVICE_NAME, effectiveFrontendPort, c);
+            console.log(`${c.ok('[OK]')} Backend and frontend services restarted.`);
             break;
 
         case 'enable':
             runSystemctl(mode, ['enable', DAEMON_SERVICE_NAME]);
-            console.log(`${c.ok('[OK]')} Service enabled for auto-start.`);
+            runSystemctl(mode, ['enable', FRONTEND_DAEMON_SERVICE_NAME]);
+            console.log(`${c.ok('[OK]')} Backend and frontend services enabled for auto-start.`);
             break;
 
         case 'disable':
             runSystemctl(mode, ['disable', DAEMON_SERVICE_NAME]);
-            console.log(`${c.ok('[OK]')} Service disabled for auto-start.`);
+            runSystemctl(mode, ['disable', FRONTEND_DAEMON_SERVICE_NAME]);
+            console.log(`${c.ok('[OK]')} Backend and frontend services disabled for auto-start.`);
             break;
 
         case 'logs': {
-            const logsResult = readLogs(mode, 100, true);
+            const logsResult = readLogs(mode, 100, true, [DAEMON_SERVICE_NAME, FRONTEND_DAEMON_SERVICE_NAME]);
             if (logsResult.status !== 0) {
                 throw new Error(extractCommandError(logsResult, 'Unable to read daemon logs'));
             }
@@ -569,34 +730,45 @@ export async function handleDaemonCommand(args, context = {}) {
         }
 
         case 'uninstall': {
+            runSystemctl(mode, ['stop', FRONTEND_DAEMON_SERVICE_NAME], { allowFailure: true });
+            runSystemctl(mode, ['disable', FRONTEND_DAEMON_SERVICE_NAME], { allowFailure: true });
             runSystemctl(mode, ['stop', DAEMON_SERVICE_NAME], { allowFailure: true });
             runSystemctl(mode, ['disable', DAEMON_SERVICE_NAME], { allowFailure: true });
-            if (fs.existsSync(servicePath)) {
+
+            for (const def of serviceDefs) {
+                if (!fs.existsSync(def.servicePath)) continue;
                 try {
-                    fs.unlinkSync(servicePath);
+                    fs.unlinkSync(def.servicePath);
                 } catch (unlinkError) {
                     if (mode === 'system' && (unlinkError.code === 'EACCES' || unlinkError.code === 'EPERM')) {
-                        throw new Error(`Permission denied removing ${servicePath}. Try: sudo cloudcli daemon uninstall --mode system`);
+                        throw new Error(`Permission denied removing ${def.servicePath}. Try: sudo cloudcli daemon uninstall --mode system`);
                     }
                     throw unlinkError;
                 }
             }
             runSystemctl(mode, ['daemon-reload'], { allowFailure: true });
-            console.log(`${c.ok('[OK]')} Daemon uninstalled.`);
+            console.log(`${c.ok('[OK]')} Backend and frontend daemons uninstalled.`);
             break;
         }
 
         case 'status':
         default: {
-            const state = getState(mode);
-            const unitExists = fs.existsSync(servicePath);
+            const backendState = getServiceState(mode, DAEMON_SERVICE_NAME);
+            const frontendState = getServiceState(mode, FRONTEND_DAEMON_SERVICE_NAME);
+            const backendUnitExists = fs.existsSync(servicePath);
+            const frontendUnitExists = fs.existsSync(frontendServicePath);
             const selectedPort = getPortFromServiceUnit(servicePath) || portNum;
+            const selectedFrontendPort = getPortFromServiceUnit(frontendServicePath) || frontendPortNum;
             console.log(`\n${c.bright('CloudCLI Daemon Status')}\n`);
             console.log(`${c.info('[INFO]')} Mode:      ${c.bright(mode)} ${parsed.options.mode === 'auto' ? c.dim('(resolved from auto)') : ''}`);
-            console.log(`${c.info('[INFO]')} Unit file: ${c.dim(servicePath)} ${unitExists ? c.ok('[OK]') : c.warn('[MISSING]')}`);
-            console.log(`${c.info('[INFO]')} Active:    ${c.bright(state.active)}`);
-            console.log(`${c.info('[INFO]')} Enabled:   ${c.bright(state.enabled)}`);
-            console.log(`${c.info('[INFO]')} Port:      ${c.bright(String(selectedPort))}`);
+            console.log(`${c.info('[INFO]')} Backend Unit:   ${c.dim(servicePath)} ${backendUnitExists ? c.ok('[OK]') : c.warn('[MISSING]')}`);
+            console.log(`${c.info('[INFO]')} Backend Active: ${c.bright(backendState.active)}`);
+            console.log(`${c.info('[INFO]')} Backend Enabled:${c.bright(backendState.enabled)}`);
+            console.log(`${c.info('[INFO]')} Backend Port:   ${c.bright(String(selectedPort))}`);
+            console.log(`${c.info('[INFO]')} Frontend Unit:  ${c.dim(frontendServicePath)} ${frontendUnitExists ? c.ok('[OK]') : c.warn('[MISSING]')}`);
+            console.log(`${c.info('[INFO]')} Frontend Active:${c.bright(frontendState.active)}`);
+            console.log(`${c.info('[INFO]')} Frontend Enabled:${c.bright(frontendState.enabled)}`);
+            console.log(`${c.info('[INFO]')} Frontend Port:  ${c.bright(String(selectedFrontendPort))}`);
             console.log('');
         }
     }

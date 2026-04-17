@@ -2333,6 +2333,15 @@ async function waitForPortOpen(port, timeoutMs = 25000) {
     return false;
 }
 
+function printSystemDaemonActiveNotice(port) {
+    const effectivePort = Number(port) || 3001;
+    console.log(`${c.ok('[OK]')} System daemon is active and managing CloudCLI.`);
+    console.log(`${c.info('[INFO]')} Health URL: ${c.bright(`http://localhost:${effectivePort}/health`)}`);
+    console.log(`${c.info('[INFO]')} Status: ${c.bright('cloudcli daemon status --mode system')}`);
+    console.log(`${c.info('[INFO]')} Stop: ${c.bright('sudo cloudcli daemon stop --mode system')}`);
+    console.log(`${c.info('[INFO]')} Logs: ${c.bright('sudo cloudcli daemon logs --mode system')}`);
+}
+
 async function maybeAutoDaemonBootstrapFromIndex() {
     if (process.platform !== 'linux') return false;
     if (process.env.CLOUDCLI_DAEMON_MANAGED === '1') return false;
@@ -2342,28 +2351,27 @@ async function maybeAutoDaemonBootstrapFromIndex() {
     process.env.CLOUDCLI_DAEMON_ATTEMPTED = '1';
 
     try {
-        console.log(`${c.info('[INFO]')} Linux detected. Bootstrapping CloudCLI daemon mode...`);
-        await handleDaemonCommand(['install', '--mode=auto', '--port', String(SERVER_PORT)], {
+        console.log(`${c.info('[INFO]')} Linux detected. Enforcing system daemon mode for CloudCLI...`);
+        await handleDaemonCommand(['install', '--mode=system', '--port', String(SERVER_PORT)], {
             appRoot: APP_ROOT,
             defaultPort: String(SERVER_PORT),
             color: c,
             cliEntry: path.join(APP_ROOT, 'server', 'cli.js'),
         });
-        console.log(`${c.ok('[OK]')} CloudCLI daemon is now managing the service.`);
-        console.log(`${c.tip('[TIP]')} Run "cloudcli daemon status --mode auto" for details.`);
         return true;
     } catch (error) {
         const healthySoon = await waitForPortOpen(SERVER_PORT);
         if (healthySoon) {
-            console.log(`${c.warn('[WARN]')} Daemon health check was delayed, but port ${SERVER_PORT} is now reachable.`);
-            console.log(`${c.tip('[TIP]')} Continuing with daemon-managed runtime.`);
+            console.log(`${c.warn('[WARN]')} System daemon health check was delayed, but port ${SERVER_PORT} is now reachable.`);
+            printSystemDaemonActiveNotice(SERVER_PORT);
             return true;
         }
 
-        console.log(`${c.warn('[WARN]')} Daemon bootstrap failed; continuing in foreground mode.`);
-        console.log(`       ${c.dim(error.message)}`);
-        console.log(`${c.tip('[TIP]')} Retry manually with: ${c.bright('cloudcli daemon install --mode auto')}`);
-        return false;
+        throw new Error(
+            `System daemon bootstrap failed.\n` +
+            `${error.message}\n` +
+            `Run with privileges: sudo cloudcli daemon install --mode system --port ${SERVER_PORT}`
+        );
     }
 }
 

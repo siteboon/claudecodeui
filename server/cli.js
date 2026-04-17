@@ -158,7 +158,7 @@ Usage:
 
 Commands:
   start          Start the CloudCLI server (default)
-  daemon         Manage persistent Linux service (user/system/auto)
+  daemon         Manage persistent Linux service (system-first)
   sandbox        Manage Docker sandbox environments
   status         Show configuration and data locations
   update         Update to the latest version
@@ -177,8 +177,8 @@ Examples:
   $ cloudcli                        # Start with defaults
   $ cloudcli --port 8080            # Start on port 8080
   $ cloudcli --no-daemon            # Force foreground mode
-  $ cloudcli daemon install --mode auto --port 3001
-  $ cloudcli daemon doctor --mode auto
+  $ sudo cloudcli daemon install --mode system --port 3001
+  $ cloudcli daemon doctor --mode system
   $ cloudcli update --restart-daemon
   $ cloudcli sandbox ~/my-project   # Run in a Docker sandbox
   $ cloudcli status                 # Show configuration
@@ -260,14 +260,14 @@ async function updatePackage(options = {}) {
                 return;
             }
             console.log(`${c.info('[INFO]')} Restarting daemon service...`);
-            await handleDaemonCommand(['restart', '--mode=auto'], {
+            await handleDaemonCommand(['restart', '--mode=system'], {
                 appRoot: APP_ROOT,
                 defaultPort: process.env.SERVER_PORT || process.env.PORT || '3001',
                 color: c,
             });
             console.log(`${c.ok('[OK]')} Daemon restart completed.`);
         } else if (hasInstalledDaemonUnit()) {
-            console.log(`${c.tip('[TIP]')} Daemon unit detected. Restart to apply update: ${c.bright('cloudcli daemon restart --mode auto')}`);
+            console.log(`${c.tip('[TIP]')} Daemon unit detected. Restart to apply update: ${c.bright('cloudcli daemon restart --mode system')}`);
             console.log(`${c.tip('[TIP]')} Or update + restart in one step: ${c.bright('cloudcli update --restart-daemon')}`);
         } else {
             console.log(`${c.tip('[TIP]')} Restart cloudcli to use the new version.`);
@@ -663,6 +663,15 @@ async function waitForPortOpen(port, timeoutMs = 25000) {
     return false;
 }
 
+function printSystemDaemonActiveNotice(port) {
+    const effectivePort = Number(port) || 3001;
+    console.log(`${c.ok('[OK]')} System daemon is active and managing CloudCLI.`);
+    console.log(`${c.info('[INFO]')} Health URL: ${c.bright(`http://localhost:${effectivePort}/health`)}`);
+    console.log(`${c.info('[INFO]')} Status: ${c.bright('cloudcli daemon status --mode system')}`);
+    console.log(`${c.info('[INFO]')} Stop: ${c.bright('sudo cloudcli daemon stop --mode system')}`);
+    console.log(`${c.info('[INFO]')} Logs: ${c.bright('sudo cloudcli daemon logs --mode system')}`);
+}
+
 async function maybeAutoDaemonStart(options = {}) {
     if (process.platform !== 'linux') return false;
     if (process.env.CLOUDCLI_DAEMON_MANAGED === '1') return false;
@@ -673,7 +682,7 @@ async function maybeAutoDaemonStart(options = {}) {
     process.env.CLOUDCLI_DAEMON_ATTEMPTED = '1';
     const daemonPort = Number(options.serverPort || process.env.SERVER_PORT || process.env.PORT || '3001');
 
-    const daemonArgs = ['install', '--mode=auto'];
+    const daemonArgs = ['install', '--mode=system'];
     if (options.serverPort) {
         daemonArgs.push('--port', String(options.serverPort));
     }
@@ -682,27 +691,26 @@ async function maybeAutoDaemonStart(options = {}) {
     }
 
     try {
-        console.log(`${c.info('[INFO]')} Linux detected. Starting CloudCLI via daemon mode for persistent uptime...`);
+        console.log(`${c.info('[INFO]')} Linux detected. Enforcing system daemon mode for CloudCLI...`);
         await handleDaemonCommand(daemonArgs, {
             appRoot: APP_ROOT,
             defaultPort: process.env.SERVER_PORT || process.env.PORT || '3001',
             color: c,
         });
-        console.log(`${c.ok('[OK]')} CloudCLI daemon is managing the service.`);
-        console.log(`${c.tip('[TIP]')} Use ${c.bright('cloudcli daemon status --mode auto')} to inspect state.`);
         return true;
     } catch (error) {
         const healthySoon = await waitForPortOpen(daemonPort);
         if (healthySoon) {
-            console.log(`${c.warn('[WARN]')} Daemon health check was delayed, but port ${daemonPort} is now reachable.`);
-            console.log(`${c.tip('[TIP]')} Continuing with daemon-managed runtime.`);
+            console.log(`${c.warn('[WARN]')} System daemon health check was delayed, but port ${daemonPort} is now reachable.`);
+            printSystemDaemonActiveNotice(daemonPort);
             return true;
         }
 
-        console.log(`${c.warn('[WARN]')} Auto-daemon setup failed, falling back to foreground mode.`);
-        console.log(`       ${c.dim(error.message)}`);
-        console.log(`${c.tip('[TIP]')} Retry manually: ${c.bright('cloudcli daemon install --mode auto')}`);
-        return false;
+        throw new Error(
+            `System daemon bootstrap failed.\n` +
+            `${error.message}\n` +
+            `Run with privileges: sudo cloudcli daemon install --mode system --port ${daemonPort}`
+        );
     }
 }
 
@@ -757,6 +765,9 @@ async function main() {
         process.env.SERVER_PORT = options.serverPort;
     } else if (!process.env.SERVER_PORT && process.env.PORT) {
         process.env.SERVER_PORT = process.env.PORT;
+    }
+    if (options.noDaemon) {
+        process.env.CLOUDCLI_NO_DAEMON = '1';
     }
     if (options.databasePath) {
         process.env.DATABASE_PATH = options.databasePath;
