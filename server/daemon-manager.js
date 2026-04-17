@@ -31,6 +31,17 @@ const DAEMON_SUBCOMMANDS = new Set([
 ]);
 
 const DAEMON_MODES = new Set(['auto', 'user', 'system']);
+const SYSTEM_MUTATING_DAEMON_SUBCOMMANDS = new Set([
+    'install',
+    'start',
+    'stop',
+    'restart',
+    'enable',
+    'disable',
+    'uninstall',
+    'logs',
+]);
+let cloudcliBinaryAvailableCache = null;
 
 function passthroughColor(text) {
     return text;
@@ -68,8 +79,72 @@ function extractCommandError(result, fallbackMessage) {
     return fallbackMessage;
 }
 
+function isRootUser() {
+    return typeof process.getuid === 'function' && process.getuid() === 0;
+}
+
+function quoteShellArg(arg) {
+    const value = String(arg);
+    if (/^[A-Za-z0-9_./:=+-]+$/.test(value)) {
+        return value;
+    }
+    return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
 function quoteSystemdArg(arg) {
     return `"${String(arg).replace(/(["\\$`])/g, '\\$1')}"`;
+}
+
+function resolveDaemonCliEntryPath(context = {}) {
+    const appRoot = context.appRoot || process.cwd();
+    const explicitCliEntry = context.cliEntry ? path.resolve(context.cliEntry) : null;
+    const argvCliEntry = process.argv[1] ? path.resolve(process.argv[1]) : null;
+    const candidatePaths = [
+        explicitCliEntry,
+        argvCliEntry,
+        path.join(appRoot, 'dist-server', 'server', 'cli.js'),
+        path.join(appRoot, 'server', 'cli.js'),
+    ].filter(Boolean);
+
+    const existingPath = candidatePaths.find(candidate => fs.existsSync(candidate));
+    if (existingPath) {
+        return existingPath;
+    }
+
+    return explicitCliEntry || argvCliEntry || path.join(appRoot, 'server', 'cli.js');
+}
+
+function hasCloudcliBinary() {
+    if (cloudcliBinaryAvailableCache !== null) {
+        return cloudcliBinaryAvailableCache;
+    }
+
+    const probe = runCommand('cloudcli', ['--version']);
+    cloudcliBinaryAvailableCache = probe.status === 0;
+    return cloudcliBinaryAvailableCache;
+}
+
+function getDaemonCommandPrefix(context = {}, { forceLocal = false } = {}) {
+    if (!forceLocal && hasCloudcliBinary()) {
+        return 'cloudcli';
+    }
+
+    const nodeExec = context.nodeExecPath || process.execPath || 'node';
+    const cliEntry = resolveDaemonCliEntryPath(context);
+    return `${quoteShellArg(nodeExec)} ${quoteShellArg(cliEntry)}`;
+}
+
+export function buildDaemonCliCommand({ subcommand, mode = 'system', extraArgs = [] }, context = {}) {
+    const normalizedSubcommand = String(subcommand || 'status').trim() || 'status';
+    const normalizedMode = String(mode || 'system').trim() || 'system';
+    const args = ['daemon', normalizedSubcommand, '--mode', normalizedMode, ...extraArgs.map(value => String(value))];
+    const needsSudo =
+        normalizedMode === 'system' &&
+        SYSTEM_MUTATING_DAEMON_SUBCOMMANDS.has(normalizedSubcommand) &&
+        !isRootUser();
+    const prefix = getDaemonCommandPrefix(context, { forceLocal: needsSudo });
+    const command = `${prefix} ${args.map(quoteShellArg).join(' ')}`;
+    return needsSudo ? `sudo ${command}` : command;
 }
 
 function getDaemonServicePath(mode) {
@@ -326,7 +401,7 @@ function runSystemctl(mode, commandArgs, opts = {}) {
     if (result.status !== 0 && !opts.allowFailure) {
         let errorText = extractCommandError(result, `systemctl ${commandArgs.join(' ')} failed`);
         if (mode === 'system' && /(access denied|permission denied|must be root|interactive authentication required|not permitted)/i.test(errorText)) {
-            errorText += `\nTry running with elevated privileges (e.g. sudo cloudcli daemon ${commandArgs.join(' ')} --mode system).`;
+            errorText += '\nTry rerunning this daemon operation with elevated privileges (sudo).';
         }
         throw new Error(errorText);
     }
@@ -431,12 +506,24 @@ function ensureSystemctl() {
     }
 }
 
-function showDaemonHelp(c) {
+function showDaemonHelp(c, context = {}) {
+    const usagePrefix = getDaemonCommandPrefix(context);
+    const installExample = buildDaemonCliCommand(
+        {
+            subcommand: 'install',
+            mode: 'system',
+            extraArgs: ['--port', '3001', '--frontend-port', '5173'],
+        },
+        context
+    );
+    const statusExample = buildDaemonCliCommand({ subcommand: 'status', mode: 'system' }, context);
+    const doctorExample = buildDaemonCliCommand({ subcommand: 'doctor', mode: 'auto' }, context);
+    const logsExample = buildDaemonCliCommand({ subcommand: 'logs', mode: 'system' }, context);
     console.log(`
 ${c.bright('CloudCLI Daemon')} - Persistent Linux service manager
 
 Usage:
-  cloudcli daemon [subcommand] [options]
+  ${usagePrefix} daemon [subcommand] [options]
 
 Subcommands:
   ${c.bright('install')}      Install/update unit, reload daemon, enable and start now
@@ -458,10 +545,10 @@ Options:
   --database-path <path>      Set service database path
 
 Examples:
-  $ cloudcli daemon install --mode system --port 3001 --frontend-port 5173
-  $ cloudcli daemon status --mode system
-  $ cloudcli daemon doctor --mode auto
-  $ cloudcli daemon logs --mode system
+  $ ${installExample}
+  $ ${statusExample}
+  $ ${doctorExample}
+  $ ${logsExample}
 `);
 }
 
@@ -477,14 +564,20 @@ export function hasInstalledDaemonUnit() {
 export async function handleDaemonCommand(args, context = {}) {
     const c = getColorHelpers(context.color);
     const parsed = parseDaemonArgs(args);
+    const appRoot = context.appRoot || process.cwd();
+    const daemonCommandContext = {
+        appRoot,
+        cliEntry: context.cliEntry,
+        nodeExecPath: context.nodeExecPath,
+    };
 
     if (parsed.options.extraArgs?.length) {
-        showDaemonHelp(c);
+        showDaemonHelp(c, daemonCommandContext);
         throw new Error(`Unknown daemon arguments: ${parsed.options.extraArgs.join(' ')}`);
     }
 
     if (parsed.subcommand === 'help') {
-        showDaemonHelp(c);
+        showDaemonHelp(c, daemonCommandContext);
         return;
     }
 
@@ -495,7 +588,6 @@ export async function handleDaemonCommand(args, context = {}) {
     ensureLinux();
     ensureSystemctl();
 
-    const appRoot = context.appRoot || process.cwd();
     const defaultPort = context.defaultPort || process.env.SERVER_PORT || process.env.PORT || '3001';
     const defaultFrontendPort = context.defaultFrontendPort || process.env.VITE_PORT || String(DEFAULT_FRONTEND_PORT);
     const configuredPort = parsed.options.serverPort || defaultPort;
@@ -523,9 +615,13 @@ export async function handleDaemonCommand(args, context = {}) {
     const effectiveFrontendPort = getPortFromServiceUnit(frontendServicePath) || frontendPortNum;
 
     if (mode === 'user' && !userBus.ok) {
+        const installSystemCommand = buildDaemonCliCommand(
+            { subcommand: 'install', mode: 'system' },
+            daemonCommandContext
+        );
         throw new Error(
             `Could not connect to your systemd user session.\n${userBus.detail}\n` +
-            `Try ${c.bright('cloudcli daemon install --mode system')} or enable user linger: ${c.bright(`sudo loginctl enable-linger ${os.userInfo().username}`)}`
+            `Try ${c.bright(installSystemCommand)} or enable user linger: ${c.bright(`sudo loginctl enable-linger ${os.userInfo().username}`)}`
         );
     }
 
@@ -638,9 +734,17 @@ export async function handleDaemonCommand(args, context = {}) {
                 fs.writeFileSync(frontendServicePath, frontendUnitContent, 'utf8');
             } catch (fileError) {
                 if (mode === 'system' && (fileError.code === 'EACCES' || fileError.code === 'EPERM')) {
+                    const installHint = buildDaemonCliCommand(
+                        {
+                            subcommand: 'install',
+                            mode: 'system',
+                            extraArgs: ['--port', String(portNum), '--frontend-port', String(frontendPortNum)],
+                        },
+                        daemonCommandContext
+                    );
                     throw new Error(
                         `Permission denied writing daemon unit files (${servicePath}, ${frontendServicePath}). ` +
-                        `Try: sudo cloudcli daemon install --mode system --port ${portNum} --frontend-port ${frontendPortNum}`
+                        `Try: ${installHint}`
                     );
                 }
                 throw fileError;
@@ -677,20 +781,44 @@ export async function handleDaemonCommand(args, context = {}) {
             console.log(`   Backend URL:    ${c.bright(`http://localhost:${installedPort}`)}`);
             console.log(`   Frontend URL:   ${c.bright(`http://localhost:${installedFrontendPort}`)}\n`);
             if (mode === 'system') {
+                const statusCommand = buildDaemonCliCommand(
+                    { subcommand: 'status', mode: 'system' },
+                    daemonCommandContext
+                );
+                const stopCommand = buildDaemonCliCommand(
+                    { subcommand: 'stop', mode: 'system' },
+                    daemonCommandContext
+                );
+                const logsCommand = buildDaemonCliCommand(
+                    { subcommand: 'logs', mode: 'system' },
+                    daemonCommandContext
+                );
                 console.log(`${c.ok('[OK]')} System daemon is active for backend and frontend.`);
                 console.log(`${c.info('[INFO]')} Backend health: ${c.bright(`http://localhost:${installedPort}/health`)}`);
                 console.log(`${c.info('[INFO]')} Frontend: ${c.bright(`http://localhost:${installedFrontendPort}/`)}`);
-                console.log(`${c.info('[INFO]')} Status: ${c.bright('cloudcli daemon status --mode system')}`);
-                console.log(`${c.info('[INFO]')} Stop: ${c.bright('sudo cloudcli daemon stop --mode system')}`);
-                console.log(`${c.info('[INFO]')} Logs: ${c.bright('sudo cloudcli daemon logs --mode system')}\n`);
+                console.log(`${c.info('[INFO]')} Status: ${c.bright(statusCommand)}`);
+                console.log(`${c.info('[INFO]')} Stop: ${c.bright(stopCommand)}`);
+                console.log(`${c.info('[INFO]')} Logs: ${c.bright(logsCommand)}\n`);
             } else {
                 const linger = probeLinger();
+                const statusCommand = buildDaemonCliCommand(
+                    { subcommand: 'status', mode: 'user' },
+                    daemonCommandContext
+                );
+                const stopCommand = buildDaemonCliCommand(
+                    { subcommand: 'stop', mode: 'user' },
+                    daemonCommandContext
+                );
+                const logsCommand = buildDaemonCliCommand(
+                    { subcommand: 'logs', mode: 'user' },
+                    daemonCommandContext
+                );
                 console.log(`${c.ok('[OK]')} User daemon is active for backend and frontend.`);
                 console.log(`${c.info('[INFO]')} Backend health: ${c.bright(`http://localhost:${installedPort}/health`)}`);
                 console.log(`${c.info('[INFO]')} Frontend: ${c.bright(`http://localhost:${installedFrontendPort}/`)}`);
-                console.log(`${c.info('[INFO]')} Status: ${c.bright('cloudcli daemon status --mode user')}`);
-                console.log(`${c.info('[INFO]')} Stop: ${c.bright('cloudcli daemon stop --mode user')}`);
-                console.log(`${c.info('[INFO]')} Logs: ${c.bright('cloudcli daemon logs --mode user')}`);
+                console.log(`${c.info('[INFO]')} Status: ${c.bright(statusCommand)}`);
+                console.log(`${c.info('[INFO]')} Stop: ${c.bright(stopCommand)}`);
+                console.log(`${c.info('[INFO]')} Logs: ${c.bright(logsCommand)}`);
                 if (linger.value !== 'yes') {
                     console.log(`${c.tip('[TIP]')} Enable linger for reboot/login persistence: ${c.bright(`sudo loginctl enable-linger ${os.userInfo().username}`)}\n`);
                 } else {
@@ -754,7 +882,11 @@ export async function handleDaemonCommand(args, context = {}) {
                     fs.unlinkSync(def.servicePath);
                 } catch (unlinkError) {
                     if (mode === 'system' && (unlinkError.code === 'EACCES' || unlinkError.code === 'EPERM')) {
-                        throw new Error(`Permission denied removing ${def.servicePath}. Try: sudo cloudcli daemon uninstall --mode system`);
+                        const uninstallHint = buildDaemonCliCommand(
+                            { subcommand: 'uninstall', mode: 'system' },
+                            daemonCommandContext
+                        );
+                        throw new Error(`Permission denied removing ${def.servicePath}. Try: ${uninstallHint}`);
                     }
                     throw unlinkError;
                 }

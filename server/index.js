@@ -10,6 +10,11 @@ const __dirname = getModuleDir(import.meta.url);
 // Resolving the app root once keeps every repo-level lookup below aligned across both layouts.
 const APP_ROOT = findAppRoot(__dirname);
 const installMode = fs.existsSync(path.join(APP_ROOT, '.git')) ? 'git' : 'npm';
+const DAEMON_COMMAND_CONTEXT = {
+    appRoot: APP_ROOT,
+    cliEntry: path.join(APP_ROOT, 'server', 'cli.js'),
+    nodeExecPath: process.execPath,
+};
 
 import { c } from './utils/colors.js';
 
@@ -61,7 +66,7 @@ import { configureWebPush } from './services/vapid-keys.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { IS_PLATFORM } from './constants/config.js';
 import { getConnectableHost } from '../shared/networkHosts.js';
-import { handleDaemonCommand } from './daemon-manager.js';
+import { buildDaemonCliCommand, handleDaemonCommand } from './daemon-manager.js';
 
 const VALID_PROVIDERS = ['claude', 'codex', 'cursor', 'gemini'];
 
@@ -2342,22 +2347,46 @@ async function waitForPortOpen(port, timeoutMs = 25000) {
 
 function printSystemDaemonActiveNotice(port) {
     const effectivePort = Number(port) || 3001;
+    const statusCommand = buildDaemonCliCommand(
+        { subcommand: 'status', mode: 'system' },
+        DAEMON_COMMAND_CONTEXT
+    );
+    const stopCommand = buildDaemonCliCommand(
+        { subcommand: 'stop', mode: 'system' },
+        DAEMON_COMMAND_CONTEXT
+    );
+    const logsCommand = buildDaemonCliCommand(
+        { subcommand: 'logs', mode: 'system' },
+        DAEMON_COMMAND_CONTEXT
+    );
     console.log(`${c.ok('[OK]')} System daemon is active and managing CloudCLI.`);
     console.log(`${c.info('[INFO]')} Health URL: ${c.bright(`http://localhost:${effectivePort}/health`)}`);
-    console.log(`${c.info('[INFO]')} Status: ${c.bright('cloudcli daemon status --mode system')}`);
-    console.log(`${c.info('[INFO]')} Stop: ${c.bright('sudo cloudcli daemon stop --mode system')}`);
-    console.log(`${c.info('[INFO]')} Logs: ${c.bright('sudo cloudcli daemon logs --mode system')}`);
+    console.log(`${c.info('[INFO]')} Status: ${c.bright(statusCommand)}`);
+    console.log(`${c.info('[INFO]')} Stop: ${c.bright(stopCommand)}`);
+    console.log(`${c.info('[INFO]')} Logs: ${c.bright(logsCommand)}`);
 }
 
 function printUserDaemonActiveNotice(port, frontendPort) {
     const effectivePort = Number(port) || 3001;
     const effectiveFrontendPort = Number(frontendPort) || 5173;
+    const statusCommand = buildDaemonCliCommand(
+        { subcommand: 'status', mode: 'user' },
+        DAEMON_COMMAND_CONTEXT
+    );
+    const stopCommand = buildDaemonCliCommand(
+        { subcommand: 'stop', mode: 'user' },
+        DAEMON_COMMAND_CONTEXT
+    );
+    const logsCommand = buildDaemonCliCommand(
+        { subcommand: 'logs', mode: 'user' },
+        DAEMON_COMMAND_CONTEXT
+    );
     console.log(`${c.ok('[OK]')} User daemon is active for this account.`);
     console.log(`${c.info('[INFO]')} Backend: ${c.bright(`http://localhost:${effectivePort}`)}`);
     console.log(`${c.info('[INFO]')} Frontend: ${c.bright(`http://localhost:${effectiveFrontendPort}`)}`);
-    console.log(`${c.info('[INFO]')} Status: ${c.bright('cloudcli daemon status --mode user')}`);
-    console.log(`${c.info('[INFO]')} Stop: ${c.bright('cloudcli daemon stop --mode user')}`);
-    console.log(`${c.info('[INFO]')} Logs: ${c.bright('cloudcli daemon logs --mode user')}`);
+    console.log(`${c.info('[INFO]')} Status: ${c.bright(statusCommand)}`);
+    console.log(`${c.info('[INFO]')} Stop: ${c.bright(stopCommand)}`);
+    console.log(`${c.info('[INFO]')} Logs: ${c.bright(logsCommand)}`);
     console.log(`${c.tip('[TIP]')} For login/reboot persistence, enable linger once: ${c.bright(`sudo loginctl enable-linger ${os.userInfo().username}`)}`);
 }
 
@@ -2395,10 +2424,18 @@ async function maybeAutoDaemonBootstrapFromIndex() {
         }
 
         if (!isSystemPermissionError(systemError)) {
+            const installSystemCommand = buildDaemonCliCommand(
+                {
+                    subcommand: 'install',
+                    mode: 'system',
+                    extraArgs: ['--port', String(SERVER_PORT), '--frontend-port', String(VITE_PORT)],
+                },
+                DAEMON_COMMAND_CONTEXT
+            );
             throw new Error(
                 `System daemon bootstrap failed.\n` +
                 `${systemError.message}\n` +
-                `Run with privileges: sudo cloudcli daemon install --mode system --port ${SERVER_PORT} --frontend-port ${VITE_PORT}`
+                `Run with privileges: ${installSystemCommand}`
             );
         }
 
@@ -2421,14 +2458,30 @@ async function maybeAutoDaemonBootstrapFromIndex() {
                 printUserDaemonActiveNotice(SERVER_PORT, VITE_PORT);
                 return true;
             }
+            const installSystemCommand = buildDaemonCliCommand(
+                {
+                    subcommand: 'install',
+                    mode: 'system',
+                    extraArgs: ['--port', String(SERVER_PORT), '--frontend-port', String(VITE_PORT)],
+                },
+                DAEMON_COMMAND_CONTEXT
+            );
+            const installUserCommand = buildDaemonCliCommand(
+                {
+                    subcommand: 'install',
+                    mode: 'user',
+                    extraArgs: ['--port', String(SERVER_PORT), '--frontend-port', String(VITE_PORT)],
+                },
+                DAEMON_COMMAND_CONTEXT
+            );
             throw new Error(
                 `System daemon bootstrap failed.\n` +
                 `${systemError.message}\n\n` +
                 `User daemon fallback also failed.\n` +
                 `${userError.message}\n` +
                 `Try one of:\n` +
-                `1) sudo cloudcli daemon install --mode system --port ${SERVER_PORT} --frontend-port ${VITE_PORT}\n` +
-                `2) cloudcli daemon install --mode user --port ${SERVER_PORT} --frontend-port ${VITE_PORT}`
+                `1) ${installSystemCommand}\n` +
+                `2) ${installUserCommand}`
             );
         }
     }
