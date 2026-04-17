@@ -3,7 +3,9 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { AbstractProvider } from '@/modules/providers/shared/base/abstract.provider.js';
+import { CursorAuthProvider } from '@/modules/providers/list/cursor/cursor-auth.provider.js';
 import { CursorMcpProvider } from '@/modules/providers/list/cursor/cursor-mcp.provider.js';
+import type { IProviderAuthRuntime } from '@/shared/interfaces.js';
 import type { FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
 import { createNormalizedMessage, generateMessageId, readObjectRecord } from '@/shared/utils.js';
 
@@ -34,6 +36,7 @@ function readRawProviderMessage(raw: unknown): RawProviderMessage | null {
 
 export class CursorProvider extends AbstractProvider {
   readonly mcp = new CursorMcpProvider();
+  readonly auth: IProviderAuthRuntime = new CursorAuthProvider();
 
   constructor() {
     super('cursor');

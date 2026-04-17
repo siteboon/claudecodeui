@@ -155,3 +155,25 @@ export type UpsertProviderMcpServerInput = {
   bearerTokenEnvVar?: string;
   envHttpHeaders?: Record<string, string>;
 };
+
+// ---------------------------------------------------------------------------------------------
+
+// -------------------- Provider auth status types --------------------
+/**
+ * Result of a provider status check (installation + authentication).
+ *
+ * installed - Whether the provider's CLI/SDK is available
+ * provider - Provider id the status belongs to
+ * authenticated - Whether valid credentials exist
+ * email - User email or auth method identifier
+ * method - Auth method (e.g. 'api_key', 'credentials_file')
+ * [error] - Error message if not installed or not authenticated
+ */
+export type ProviderAuthStatus = {
+  installed: boolean;
+  provider: LLMProvider;
+  authenticated: boolean;
+  email: string | null;
+  method: string | null;
+  error?: string;
+};

@@ -1,6 +1,8 @@
 import { getSessionMessages } from '@/projects.js';
 import { AbstractProvider } from '@/modules/providers/shared/base/abstract.provider.js';
+import { ClaudeAuthProvider } from '@/modules/providers/list/claude/claude-auth.provider.js';
 import { ClaudeMcpProvider } from '@/modules/providers/list/claude/claude-mcp.provider.js';
+import type { IProviderAuthRuntime } from '@/shared/interfaces.js';
 import type { FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
 import { createNormalizedMessage, generateMessageId, readObjectRecord } from '@/shared/utils.js';
 
@@ -55,6 +57,7 @@ function readRawProviderMessage(raw: unknown): RawProviderMessage | null {
 
 export class ClaudeProvider extends AbstractProvider {
   readonly mcp = new ClaudeMcpProvider();
+  readonly auth: IProviderAuthRuntime = new ClaudeAuthProvider();
 
   constructor() {
     super('claude');

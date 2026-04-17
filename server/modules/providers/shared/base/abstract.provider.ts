@@ -1,4 +1,4 @@
-import type { IProvider, IProviderMcpRuntime } from '@/shared/interfaces.js';
+import type { IProvider, IProviderAuthRuntime, IProviderMcpRuntime } from '@/shared/interfaces.js';
 import type {
   FetchHistoryOptions,
   FetchHistoryResult,
@@ -9,12 +9,14 @@ import type {
 /**
  * Shared provider base.
  *
- * Concrete providers must implement message normalization and history loading
- * because both behaviors depend on each provider's native SDK/CLI event format.
+ * Concrete providers must expose auth/MCP runtimes and implement message
+ * normalization/history loading because those behaviors depend on native
+ * SDK/CLI formats.
  */
 export abstract class AbstractProvider implements IProvider {
   readonly id: LLMProvider;
   abstract readonly mcp: IProviderMcpRuntime;
+  abstract readonly auth: IProviderAuthRuntime;
 
   protected constructor(id: LLMProvider) {
     this.id = id;
