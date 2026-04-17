@@ -23,6 +23,7 @@ export type CredentialsResponse = {
 
 export type BrowseFilesystemResponse = {
   path?: string;
+  rootPath?: string;
   suggestions?: FolderSuggestion[];
   error?: string;
 };

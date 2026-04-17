@@ -197,6 +197,7 @@ async function detectTaskMasterFolder(projectPath) {
 
 // Cache for extracted project directories
 const projectDirectoryCache = new Map();
+let hasWarnedDiscoveredPersistenceFailure = false;
 
 // Clear cache when needed (called when project files change)
 function clearProjectDirectoryCache() {
@@ -230,6 +231,199 @@ async function saveProjectConfig(config) {
   }
 
   await fs.writeFile(configPath, JSON.stringify(config, null, 2), 'utf8');
+}
+
+function encodeProjectName(projectPath) {
+  return path.resolve(projectPath).replace(/[\\/:\s~_]/g, '-');
+}
+
+function isTrackedConfigProject(projectConfig) {
+  return Boolean(projectConfig?.manuallyAdded || projectConfig?.autoDiscovered);
+}
+
+function mergeUniqueProviders(existingProviders = [], incomingProviders = []) {
+  return Array.from(new Set([
+    ...(Array.isArray(existingProviders) ? existingProviders : []),
+    ...(Array.isArray(incomingProviders) ? incomingProviders : []),
+  ])).sort();
+}
+
+function areStringArraysEqual(first, second) {
+  if (!Array.isArray(first) || !Array.isArray(second)) {
+    return false;
+  }
+
+  if (first.length !== second.length) {
+    return false;
+  }
+
+  return first.every((value, index) => value === second[index]);
+}
+
+async function listGeminiCliProjectEntries() {
+  const geminiTmpDir = path.join(os.homedir(), '.gemini', 'tmp');
+  try {
+    await fs.access(geminiTmpDir);
+  } catch {
+    return [];
+  }
+
+  let projectDirs;
+  try {
+    projectDirs = await fs.readdir(geminiTmpDir);
+  } catch {
+    return [];
+  }
+
+  const entries = [];
+
+  for (const projectDir of projectDirs) {
+    const projectRootFile = path.join(geminiTmpDir, projectDir, '.project_root');
+    let projectRoot;
+    try {
+      projectRoot = (await fs.readFile(projectRootFile, 'utf8')).trim();
+    } catch {
+      continue;
+    }
+
+    const normalizedProjectRoot = normalizeComparablePath(projectRoot);
+    if (!normalizedProjectRoot) {
+      continue;
+    }
+
+    entries.push({
+      projectDir,
+      projectRoot: path.resolve(projectRoot),
+      normalizedProjectRoot,
+    });
+  }
+
+  return entries;
+}
+
+function addDiscoveredProject(discoveredProjectsByPath, projectPath, provider) {
+  if (typeof projectPath !== 'string' || projectPath.trim().length === 0) {
+    return;
+  }
+
+  const normalizedProjectPath = normalizeComparablePath(projectPath);
+  if (!normalizedProjectPath) {
+    return;
+  }
+
+  const absoluteProjectPath = path.resolve(projectPath);
+  if (!discoveredProjectsByPath.has(normalizedProjectPath)) {
+    discoveredProjectsByPath.set(normalizedProjectPath, {
+      path: absoluteProjectPath,
+      providers: new Set(),
+    });
+  }
+
+  discoveredProjectsByPath.get(normalizedProjectPath).providers.add(provider);
+}
+
+async function discoverProjectsFromHistory(codexSessionsIndexRef = null, geminiCliProjectsRef = null) {
+  const discoveredProjectsByPath = new Map();
+
+  if (codexSessionsIndexRef && !codexSessionsIndexRef.sessionsByProject) {
+    codexSessionsIndexRef.sessionsByProject = await buildCodexSessionsIndex();
+  }
+  const codexSessionsByProject = codexSessionsIndexRef?.sessionsByProject || await buildCodexSessionsIndex();
+
+  for (const sessions of codexSessionsByProject.values()) {
+    const sampleSession = sessions.find(session => typeof session.cwd === 'string' && session.cwd.trim().length > 0);
+    if (!sampleSession?.cwd) {
+      continue;
+    }
+    addDiscoveredProject(discoveredProjectsByPath, sampleSession.cwd, 'codex');
+  }
+
+  if (geminiCliProjectsRef && !geminiCliProjectsRef.entries) {
+    geminiCliProjectsRef.entries = await listGeminiCliProjectEntries();
+  }
+  const geminiCliEntries = geminiCliProjectsRef?.entries || await listGeminiCliProjectEntries();
+  for (const entry of geminiCliEntries) {
+    addDiscoveredProject(discoveredProjectsByPath, entry.projectRoot, 'gemini');
+  }
+
+  for (const session of sessionManager.sessions.values()) {
+    if (session?.projectPath) {
+      addDiscoveredProject(discoveredProjectsByPath, session.projectPath, 'gemini');
+    }
+  }
+
+  return Array.from(discoveredProjectsByPath.values()).map((entry) => ({
+    path: entry.path,
+    providers: Array.from(entry.providers).sort(),
+  }));
+}
+
+function mergeDiscoveredProjectsIntoConfig(config, discoveredProjects) {
+  let changed = false;
+  const nextConfig = { ...config };
+  const nowIso = new Date().toISOString();
+
+  for (const discovered of discoveredProjects) {
+    const projectName = encodeProjectName(discovered.path);
+    const currentConfig = nextConfig[projectName] || {};
+
+    const mergedProviders = mergeUniqueProviders(
+      currentConfig.detectedProviders,
+      discovered.providers
+    );
+
+    const nextProjectConfig = {
+      ...currentConfig,
+      originalPath: currentConfig.originalPath || discovered.path,
+      detectedProviders: mergedProviders,
+      detectedAt: currentConfig.detectedAt || nowIso,
+    };
+
+    if (currentConfig.manuallyAdded) {
+      delete nextProjectConfig.autoDiscovered;
+    } else {
+      nextProjectConfig.autoDiscovered = true;
+    }
+
+    const providersChanged = !areStringArraysEqual(
+      Array.isArray(currentConfig.detectedProviders) ? currentConfig.detectedProviders : [],
+      mergedProviders
+    );
+    const autoDiscoveredChanged = Boolean(currentConfig.autoDiscovered) !== Boolean(nextProjectConfig.autoDiscovered);
+    const originalPathChanged = currentConfig.originalPath !== nextProjectConfig.originalPath;
+    const detectedAtChanged = !currentConfig.detectedAt && Boolean(nextProjectConfig.detectedAt);
+
+    if (providersChanged || autoDiscoveredChanged || originalPathChanged || detectedAtChanged || !nextConfig[projectName]) {
+      changed = true;
+      nextConfig[projectName] = nextProjectConfig;
+    }
+  }
+
+  return { config: nextConfig, changed };
+}
+
+async function syncAutoDiscoveredProjects(config, codexSessionsIndexRef = null, geminiCliProjectsRef = null) {
+  const discoveredProjects = await discoverProjectsFromHistory(codexSessionsIndexRef, geminiCliProjectsRef);
+  if (discoveredProjects.length === 0) {
+    return config;
+  }
+
+  const mergedConfigResult = mergeDiscoveredProjectsIntoConfig(config, discoveredProjects);
+  if (!mergedConfigResult.changed) {
+    return config;
+  }
+
+  try {
+    await saveProjectConfig(mergedConfigResult.config);
+    clearProjectDirectoryCache();
+  } catch (error) {
+    // Keep discovered projects available in-memory even if persistence fails.
+    if (!hasWarnedDiscoveredPersistenceFailure) {
+      console.warn('Failed to persist discovered projects to config:', error.message);
+      hasWarnedDiscoveredPersistenceFailure = true;
+    }
+  }
+  return mergedConfigResult.config;
 }
 
 // Generate better display name from path
@@ -382,13 +576,20 @@ async function extractProjectDirectory(projectName) {
 
 async function getProjects(progressCallback = null) {
   const claudeDir = path.join(os.homedir(), '.claude', 'projects');
-  const config = await loadProjectConfig();
+  let config = await loadProjectConfig();
   const projects = [];
   const existingProjects = new Set();
   const codexSessionsIndexRef = { sessionsByProject: null };
+  const geminiCliProjectsRef = { entries: null };
   let totalProjects = 0;
   let processedProjects = 0;
   let directories = [];
+
+  try {
+    config = await syncAutoDiscoveredProjects(config, codexSessionsIndexRef, geminiCliProjectsRef);
+  } catch (error) {
+    console.warn('Failed to sync auto-discovered projects:', error.message);
+  }
 
   try {
     // Check if the .claude/projects directory exists
@@ -400,137 +601,131 @@ async function getProjects(progressCallback = null) {
 
     // Build set of existing project names for later
     directories.forEach(e => existingProjects.add(e.name));
-
-    // Count manual projects not already in directories
-    const manualProjectsCount = Object.entries(config)
-      .filter(([name, cfg]) => cfg.manuallyAdded && !existingProjects.has(name))
-      .length;
-
-    totalProjects = directories.length + manualProjectsCount;
-
-    for (const entry of directories) {
-      processedProjects++;
-
-      // Emit progress
-      if (progressCallback) {
-        progressCallback({
-          phase: 'loading',
-          current: processedProjects,
-          total: totalProjects,
-          currentProject: entry.name
-        });
-      }
-
-      // Extract actual project directory from JSONL sessions
-      const actualProjectDir = await extractProjectDirectory(entry.name);
-
-      // Get display name from config or generate one
-      const customName = config[entry.name]?.displayName;
-      const autoDisplayName = await generateDisplayName(entry.name, actualProjectDir);
-      const fullPath = actualProjectDir;
-
-      const project = {
-        name: entry.name,
-        path: actualProjectDir,
-        displayName: customName || autoDisplayName,
-        fullPath: fullPath,
-        isCustomName: !!customName,
-        sessions: [],
-        geminiSessions: [],
-        sessionMeta: {
-          hasMore: false,
-          total: 0
-        }
-      };
-
-      // Try to get sessions for this project (just first 5 for performance)
-      try {
-        const sessionResult = await getSessions(entry.name, 5, 0);
-        project.sessions = sessionResult.sessions || [];
-        project.sessionMeta = {
-          hasMore: sessionResult.hasMore,
-          total: sessionResult.total
-        };
-      } catch (e) {
-        console.warn(`Could not load sessions for project ${entry.name}:`, e.message);
-        project.sessionMeta = {
-          hasMore: false,
-          total: 0
-        };
-      }
-      applyCustomSessionNames(project.sessions, 'claude');
-
-      // Also fetch Cursor sessions for this project
-      try {
-        project.cursorSessions = await getCursorSessions(actualProjectDir);
-      } catch (e) {
-        console.warn(`Could not load Cursor sessions for project ${entry.name}:`, e.message);
-        project.cursorSessions = [];
-      }
-      applyCustomSessionNames(project.cursorSessions, 'cursor');
-
-      // Also fetch Codex sessions for this project
-      try {
-        project.codexSessions = await getCodexSessions(actualProjectDir, {
-          indexRef: codexSessionsIndexRef,
-        });
-      } catch (e) {
-        console.warn(`Could not load Codex sessions for project ${entry.name}:`, e.message);
-        project.codexSessions = [];
-      }
-      applyCustomSessionNames(project.codexSessions, 'codex');
-
-      // Also fetch Gemini sessions for this project (UI + CLI)
-      try {
-        const uiSessions = sessionManager.getProjectSessions(actualProjectDir) || [];
-        const cliSessions = await getGeminiCliSessions(actualProjectDir);
-        const uiIds = new Set(uiSessions.map(s => s.id));
-        const mergedGemini = [...uiSessions, ...cliSessions.filter(s => !uiIds.has(s.id))];
-        project.geminiSessions = mergedGemini;
-      } catch (e) {
-        console.warn(`Could not load Gemini sessions for project ${entry.name}:`, e.message);
-        project.geminiSessions = [];
-      }
-      applyCustomSessionNames(project.geminiSessions, 'gemini');
-
-      // Add TaskMaster detection
-      try {
-        const taskMasterResult = await detectTaskMasterFolder(actualProjectDir);
-        project.taskmaster = {
-          hasTaskmaster: taskMasterResult.hasTaskmaster,
-          hasEssentialFiles: taskMasterResult.hasEssentialFiles,
-          metadata: taskMasterResult.metadata,
-          status: taskMasterResult.hasTaskmaster && taskMasterResult.hasEssentialFiles ? 'configured' : 'not-configured'
-        };
-      } catch (e) {
-        console.warn(`Could not detect TaskMaster for project ${entry.name}:`, e.message);
-        project.taskmaster = {
-          hasTaskmaster: false,
-          hasEssentialFiles: false,
-          metadata: null,
-          status: 'error'
-        };
-      }
-
-      projects.push(project);
-    }
   } catch (error) {
     // If the directory doesn't exist (ENOENT), that's okay - just continue with empty projects
     if (error.code !== 'ENOENT') {
       console.error('Error reading projects directory:', error);
     }
-    // Calculate total for manual projects only (no directories exist)
-    totalProjects = Object.entries(config)
-      .filter(([name, cfg]) => cfg.manuallyAdded)
-      .length;
   }
 
-  // Add manually configured projects that don't exist as folders yet
+  // Count tracked config projects (manual + auto discovered) not already represented by Claude folders
+  const trackedProjectsCount = Object.entries(config)
+    .filter(([name, cfg]) => isTrackedConfigProject(cfg) && !existingProjects.has(name))
+    .length;
+  totalProjects = directories.length + trackedProjectsCount;
+
+  for (const entry of directories) {
+    processedProjects++;
+
+    if (progressCallback) {
+      progressCallback({
+        phase: 'loading',
+        current: processedProjects,
+        total: totalProjects,
+        currentProject: entry.name
+      });
+    }
+
+    const actualProjectDir = await extractProjectDirectory(entry.name);
+    const projectConfig = config[entry.name] || {};
+    const isManuallyAdded = Boolean(projectConfig.manuallyAdded);
+    const isAutoDiscovered = Boolean(projectConfig.autoDiscovered) && !isManuallyAdded;
+    const customName = projectConfig.displayName;
+    const autoDisplayName = await generateDisplayName(entry.name, actualProjectDir);
+
+    const project = {
+      name: entry.name,
+      path: actualProjectDir,
+      displayName: customName || autoDisplayName,
+      fullPath: actualProjectDir,
+      isCustomName: !!customName,
+      isManuallyAdded,
+      autoDiscovered: isAutoDiscovered,
+      source: isManuallyAdded ? 'manual' : 'claude',
+      detectedProviders: projectConfig.detectedProviders || [],
+      detectedAt: projectConfig.detectedAt || null,
+      sessions: [],
+      geminiSessions: [],
+      sessionMeta: {
+        hasMore: false,
+        total: 0
+      }
+    };
+
+    // Try to get sessions for this project (just first 5 for performance)
+    try {
+      const sessionResult = await getSessions(entry.name, 5, 0);
+      project.sessions = sessionResult.sessions || [];
+      project.sessionMeta = {
+        hasMore: sessionResult.hasMore,
+        total: sessionResult.total
+      };
+    } catch (e) {
+      console.warn(`Could not load sessions for project ${entry.name}:`, e.message);
+      project.sessionMeta = {
+        hasMore: false,
+        total: 0
+      };
+    }
+    applyCustomSessionNames(project.sessions, 'claude');
+
+    try {
+      project.cursorSessions = await getCursorSessions(actualProjectDir);
+    } catch (e) {
+      console.warn(`Could not load Cursor sessions for project ${entry.name}:`, e.message);
+      project.cursorSessions = [];
+    }
+    applyCustomSessionNames(project.cursorSessions, 'cursor');
+
+    try {
+      project.codexSessions = await getCodexSessions(actualProjectDir, {
+        indexRef: codexSessionsIndexRef,
+      });
+    } catch (e) {
+      console.warn(`Could not load Codex sessions for project ${entry.name}:`, e.message);
+      project.codexSessions = [];
+    }
+    applyCustomSessionNames(project.codexSessions, 'codex');
+
+    try {
+      const uiSessions = sessionManager.getProjectSessions(actualProjectDir) || [];
+      const cliSessions = await getGeminiCliSessions(actualProjectDir, {
+        geminiCliProjectsRef,
+      });
+      const uiIds = new Set(uiSessions.map(s => s.id));
+      project.geminiSessions = [...uiSessions, ...cliSessions.filter(s => !uiIds.has(s.id))];
+    } catch (e) {
+      console.warn(`Could not load Gemini sessions for project ${entry.name}:`, e.message);
+      project.geminiSessions = [];
+    }
+    applyCustomSessionNames(project.geminiSessions, 'gemini');
+
+    try {
+      const taskMasterResult = await detectTaskMasterFolder(actualProjectDir);
+      project.taskmaster = {
+        hasTaskmaster: taskMasterResult.hasTaskmaster,
+        hasEssentialFiles: taskMasterResult.hasEssentialFiles,
+        metadata: taskMasterResult.metadata,
+        status: taskMasterResult.hasTaskmaster && taskMasterResult.hasEssentialFiles ? 'configured' : 'not-configured'
+      };
+    } catch (e) {
+      console.warn(`Could not detect TaskMaster for project ${entry.name}:`, e.message);
+      project.taskmaster = {
+        hasTaskmaster: false,
+        hasEssentialFiles: false,
+        metadata: null,
+        status: 'error'
+      };
+    }
+
+    projects.push(project);
+  }
+
+  // Add tracked projects from config that do not currently have Claude folders.
   for (const [projectName, projectConfig] of Object.entries(config)) {
-    if (!existingProjects.has(projectName) && projectConfig.manuallyAdded) {
+    if (!existingProjects.has(projectName) && isTrackedConfigProject(projectConfig)) {
       processedProjects++;
 
-      // Emit progress for manual projects
       if (progressCallback) {
         progressCallback({
           phase: 'loading',
@@ -540,9 +735,7 @@ async function getProjects(progressCallback = null) {
         });
       }
 
-      // Use the original path if available, otherwise extract from potential sessions
       let actualProjectDir = projectConfig.originalPath;
-
       if (!actualProjectDir) {
         try {
           actualProjectDir = await extractProjectDirectory(projectName);
@@ -552,13 +745,21 @@ async function getProjects(progressCallback = null) {
         }
       }
 
+      const isManuallyAdded = Boolean(projectConfig.manuallyAdded);
+      const isAutoDiscovered = Boolean(projectConfig.autoDiscovered) && !isManuallyAdded;
+      const source = isManuallyAdded ? 'manual' : 'history';
+
       const project = {
         name: projectName,
         path: actualProjectDir,
         displayName: projectConfig.displayName || await generateDisplayName(projectName, actualProjectDir),
         fullPath: actualProjectDir,
         isCustomName: !!projectConfig.displayName,
-        isManuallyAdded: true,
+        isManuallyAdded,
+        autoDiscovered: isAutoDiscovered,
+        source,
+        detectedProviders: projectConfig.detectedProviders || [],
+        detectedAt: projectConfig.detectedAt || null,
         sessions: [],
         geminiSessions: [],
         sessionMeta: {
@@ -569,43 +770,40 @@ async function getProjects(progressCallback = null) {
         codexSessions: []
       };
 
-      // Try to fetch Cursor sessions for manual projects too
       try {
         project.cursorSessions = await getCursorSessions(actualProjectDir);
       } catch (e) {
-        console.warn(`Could not load Cursor sessions for manual project ${projectName}:`, e.message);
+        console.warn(`Could not load Cursor sessions for tracked project ${projectName}:`, e.message);
       }
       applyCustomSessionNames(project.cursorSessions, 'cursor');
 
-      // Try to fetch Codex sessions for manual projects too
       try {
         project.codexSessions = await getCodexSessions(actualProjectDir, {
           indexRef: codexSessionsIndexRef,
         });
       } catch (e) {
-        console.warn(`Could not load Codex sessions for manual project ${projectName}:`, e.message);
+        console.warn(`Could not load Codex sessions for tracked project ${projectName}:`, e.message);
       }
       applyCustomSessionNames(project.codexSessions, 'codex');
 
-      // Try to fetch Gemini sessions for manual projects too (UI + CLI)
       try {
         const uiSessions = sessionManager.getProjectSessions(actualProjectDir) || [];
-        const cliSessions = await getGeminiCliSessions(actualProjectDir);
+        const cliSessions = await getGeminiCliSessions(actualProjectDir, {
+          geminiCliProjectsRef,
+        });
         const uiIds = new Set(uiSessions.map(s => s.id));
         project.geminiSessions = [...uiSessions, ...cliSessions.filter(s => !uiIds.has(s.id))];
       } catch (e) {
-        console.warn(`Could not load Gemini sessions for manual project ${projectName}:`, e.message);
+        console.warn(`Could not load Gemini sessions for tracked project ${projectName}:`, e.message);
       }
       applyCustomSessionNames(project.geminiSessions, 'gemini');
 
-      // Add TaskMaster detection for manual projects
       try {
         const taskMasterResult = await detectTaskMasterFolder(actualProjectDir);
 
-        // Determine TaskMaster status
         let taskMasterStatus = 'not-configured';
         if (taskMasterResult.hasTaskmaster && taskMasterResult.hasEssentialFiles) {
-          taskMasterStatus = 'taskmaster-only'; // We don't check MCP for manual projects in bulk
+          taskMasterStatus = 'taskmaster-only';
         }
 
         project.taskmaster = {
@@ -615,7 +813,7 @@ async function getProjects(progressCallback = null) {
           metadata: taskMasterResult.metadata
         };
       } catch (error) {
-        console.warn(`TaskMaster detection failed for manual project ${projectName}:`, error.message);
+        console.warn(`TaskMaster detection failed for tracked project ${projectName}:`, error.message);
         project.taskmaster = {
           status: 'error',
           hasTaskmaster: false,
@@ -628,7 +826,6 @@ async function getProjects(progressCallback = null) {
     }
   }
 
-  // Emit completion after all projects (including manual) are processed
   if (progressCallback) {
     progressCallback({
       phase: 'complete',
@@ -1235,14 +1432,39 @@ async function addProjectManually(projectPath, displayName = null) {
   }
 
   // Generate project name (encode path for use as directory name)
-  const projectName = absolutePath.replace(/[\\/:\s~_]/g, '-');
+  const projectName = encodeProjectName(absolutePath);
 
   // Check if project already exists in config
   const config = await loadProjectConfig();
-  const projectDir = path.join(os.homedir(), '.claude', 'projects', projectName);
 
   if (config[projectName]) {
-    throw new Error(`Project already configured for path: ${absolutePath}`);
+    if (config[projectName].manuallyAdded) {
+      throw new Error(`Project already configured for path: ${absolutePath}`);
+    }
+
+    // Upgrade discovered project to manual tracking.
+    config[projectName] = {
+      ...config[projectName],
+      manuallyAdded: true,
+      originalPath: absolutePath
+    };
+    delete config[projectName].autoDiscovered;
+    if (displayName) {
+      config[projectName].displayName = displayName;
+    }
+
+    await saveProjectConfig(config);
+    clearProjectDirectoryCache();
+
+    return {
+      name: projectName,
+      path: absolutePath,
+      fullPath: absolutePath,
+      displayName: displayName || await generateDisplayName(projectName, absolutePath),
+      isManuallyAdded: true,
+      sessions: [],
+      cursorSessions: []
+    };
   }
 
   // Allow adding projects even if the directory exists - this enables tracking
@@ -1867,7 +2089,9 @@ async function searchConversations(query, limit = 50, onProjectResult = null, si
   const safeQuery = typeof query === 'string' ? query.trim() : '';
   const safeLimit = Math.max(1, Math.min(Number.isFinite(limit) ? limit : 50, 200));
   const claudeDir = path.join(os.homedir(), '.claude', 'projects');
-  const config = await loadProjectConfig();
+  let config = await loadProjectConfig();
+  const codexSessionsIndexRef = { sessionsByProject: null };
+  const geminiCliProjectsRef = { entries: null };
   const results = [];
   let totalMatches = 0;
   const words = safeQuery.toLowerCase().split(/\s+/).filter(w => w.length > 0);
@@ -1950,41 +2174,92 @@ async function searchConversations(query, limit = 50, onProjectResult = null, si
   };
 
   try {
+    config = await syncAutoDiscoveredProjects(config, codexSessionsIndexRef, geminiCliProjectsRef);
+  } catch (error) {
+    console.warn('Failed to sync auto-discovered projects for search:', error.message);
+  }
+
+  const projectTargetsByName = new Map();
+
+  try {
     await fs.access(claudeDir);
     const entries = await fs.readdir(claudeDir, { withFileTypes: true });
     const projectDirs = entries.filter(e => e.isDirectory());
-    let scannedProjects = 0;
-    const totalProjects = projectDirs.length;
+    for (const projectDir of projectDirs) {
+      projectTargetsByName.set(projectDir.name, {
+        projectName: projectDir.name,
+        claudeProjectDir: path.join(claudeDir, projectDir.name),
+        projectConfig: config[projectDir.name] || {},
+      });
+    }
+  } catch {
+    // No Claude sessions directory; continue with tracked projects from config.
+  }
 
-    for (const projectEntry of projectDirs) {
-      if (totalMatches >= safeLimit || isAborted()) break;
+  for (const [projectName, projectConfig] of Object.entries(config)) {
+    if (!isTrackedConfigProject(projectConfig)) {
+      continue;
+    }
 
-      const projectName = projectEntry.name;
-      const projectDir = path.join(claudeDir, projectName);
-      const displayName = config[projectName]?.displayName
-        || await generateDisplayName(projectName);
+    const existingTarget = projectTargetsByName.get(projectName);
+    if (existingTarget) {
+      existingTarget.projectConfig = {
+        ...existingTarget.projectConfig,
+        ...projectConfig,
+      };
+      continue;
+    }
 
+    projectTargetsByName.set(projectName, {
+      projectName,
+      claudeProjectDir: null,
+      projectConfig,
+    });
+  }
+
+  const projectTargets = Array.from(projectTargetsByName.values());
+  const totalProjects = projectTargets.length;
+  let scannedProjects = 0;
+
+  for (const projectTarget of projectTargets) {
+    if (totalMatches >= safeLimit || isAborted()) break;
+
+    const projectName = projectTarget.projectName;
+    const projectConfig = projectTarget.projectConfig || {};
+    let actualProjectDir = projectConfig.originalPath;
+    if (!actualProjectDir) {
+      try {
+        actualProjectDir = await extractProjectDirectory(projectName);
+      } catch {
+        actualProjectDir = projectName.replace(/-/g, '/');
+      }
+    }
+
+    const displayName = projectConfig.displayName
+      || await generateDisplayName(projectName, actualProjectDir);
+
+    const projectResult = {
+      projectName,
+      projectDisplayName: displayName,
+      sessions: []
+    };
+
+    if (projectTarget.claudeProjectDir) {
       let files;
       try {
-        files = await fs.readdir(projectDir);
+        files = await fs.readdir(projectTarget.claudeProjectDir);
       } catch {
-        continue;
+        files = [];
       }
 
       const jsonlFiles = files.filter(
         file => file.endsWith('.jsonl') && !file.startsWith('agent-')
       );
 
-      const projectResult = {
-        projectName,
-        projectDisplayName: displayName,
-        sessions: []
-      };
-
       for (const file of jsonlFiles) {
         if (totalMatches >= safeLimit || isAborted()) break;
 
-        const filePath = path.join(projectDir, file);
+        const filePath = path.join(projectTarget.claudeProjectDir, file);
         const sessionMatches = new Map();
         const sessionSummaries = new Map();
         const pendingSummaries = new Map();
@@ -2021,13 +2296,11 @@ async function searchConversations(query, limit = 50, onProjectResult = null, si
               }
             }
 
-            // Apply pending summary via parentUuid
             if (entry.parentUuid && currentSessionId && !sessionSummaries.has(currentSessionId)) {
               const pending = pendingSummaries.get(entry.parentUuid);
               if (pending) sessionSummaries.set(currentSessionId, pending);
             }
 
-            // Track last user/assistant message for fallback title
             if (entry.message?.content && currentSessionId && !entry.isApiErrorMessage) {
               const role = entry.message.role;
               if (role === 'user' || role === 'assistant') {
@@ -2036,9 +2309,9 @@ async function searchConversations(query, limit = 50, onProjectResult = null, si
                   if (!sessionLastMessages.has(currentSessionId)) {
                     sessionLastMessages.set(currentSessionId, {});
                   }
-                  const msgs = sessionLastMessages.get(currentSessionId);
-                  if (role === 'user') msgs.user = text;
-                  else msgs.assistant = text;
+                  const messages = sessionLastMessages.get(currentSessionId);
+                  if (role === 'user') messages.user = text;
+                  else messages.assistant = text;
                 }
               }
             }
@@ -2081,105 +2354,98 @@ async function searchConversations(query, limit = 50, onProjectResult = null, si
             sessionId,
             provider: 'claude',
             sessionSummary: sessionSummaries.get(sessionId) || (() => {
-              const msgs = sessionLastMessages.get(sessionId);
-              const lastMsg = msgs?.user || msgs?.assistant;
-              return lastMsg ? (lastMsg.length > 50 ? lastMsg.substring(0, 50) + '...' : lastMsg) : 'New Session';
+              const messages = sessionLastMessages.get(sessionId);
+              const lastMessage = messages?.user || messages?.assistant;
+              return lastMessage
+                ? (lastMessage.length > 50 ? lastMessage.substring(0, 50) + '...' : lastMessage)
+                : 'New Session';
             })(),
             matches
           });
         }
       }
-
-      // Search Codex sessions for this project
-      try {
-        const actualProjectDir = await extractProjectDirectory(projectName);
-        if (actualProjectDir && !isAborted() && totalMatches < safeLimit) {
-          await searchCodexSessionsForProject(
-            actualProjectDir, projectResult, words, allWordsMatch, extractText, isSystemMessage,
-            buildSnippet, safeLimit, () => totalMatches, (n) => { totalMatches += n; }, isAborted
-          );
-        }
-      } catch {
-        // Skip codex search errors
-      }
-
-      // Search Gemini sessions for this project
-      try {
-        const actualProjectDir = await extractProjectDirectory(projectName);
-        if (actualProjectDir && !isAborted() && totalMatches < safeLimit) {
-          await searchGeminiSessionsForProject(
-            actualProjectDir, projectResult, words, allWordsMatch,
-            buildSnippet, safeLimit, () => totalMatches, (n) => { totalMatches += n; }
-          );
-        }
-      } catch {
-        // Skip gemini search errors
-      }
-
-      scannedProjects++;
-      if (projectResult.sessions.length > 0) {
-        results.push(projectResult);
-        if (onProjectResult) {
-          onProjectResult({ projectResult, totalMatches, scannedProjects, totalProjects });
-        }
-      } else if (onProjectResult && scannedProjects % 10 === 0) {
-        onProjectResult({ projectResult: null, totalMatches, scannedProjects, totalProjects });
-      }
     }
-  } catch {
-    // claudeDir doesn't exist
+
+    if (actualProjectDir && !isAborted() && totalMatches < safeLimit) {
+      await searchCodexSessionsForProject(
+        actualProjectDir,
+        projectResult,
+        allWordsMatch,
+        buildSnippet,
+        safeLimit,
+        () => totalMatches,
+        (n) => { totalMatches += n; },
+        isAborted,
+        codexSessionsIndexRef
+      );
+    }
+
+    if (actualProjectDir && !isAborted() && totalMatches < safeLimit) {
+      await searchGeminiSessionsForProject(
+        actualProjectDir,
+        projectResult,
+        allWordsMatch,
+        buildSnippet,
+        safeLimit,
+        () => totalMatches,
+        (n) => { totalMatches += n; },
+        isAborted,
+        geminiCliProjectsRef
+      );
+    }
+
+    scannedProjects++;
+    if (projectResult.sessions.length > 0) {
+      results.push(projectResult);
+      if (onProjectResult) {
+        onProjectResult({ projectResult, totalMatches, scannedProjects, totalProjects });
+      }
+    } else if (onProjectResult && scannedProjects % 10 === 0) {
+      onProjectResult({ projectResult: null, totalMatches, scannedProjects, totalProjects });
+    }
   }
 
   return { results, totalMatches, query: safeQuery };
 }
 
 async function searchCodexSessionsForProject(
-  projectPath, projectResult, words, allWordsMatch, extractText, isSystemMessage,
-  buildSnippet, limit, getTotalMatches, addMatches, isAborted
+  projectPath,
+  projectResult,
+  allWordsMatch,
+  buildSnippet,
+  limit,
+  getTotalMatches,
+  addMatches,
+  isAborted,
+  codexSessionsIndexRef = null
 ) {
   const normalizedProjectPath = normalizeComparablePath(projectPath);
   if (!normalizedProjectPath) return;
-  const codexSessionsDir = path.join(os.homedir(), '.codex', 'sessions');
-  try {
-    await fs.access(codexSessionsDir);
-  } catch {
-    return;
+
+  if (codexSessionsIndexRef && !codexSessionsIndexRef.sessionsByProject) {
+    codexSessionsIndexRef.sessionsByProject = await buildCodexSessionsIndex();
+  }
+  const sessionsByProject = codexSessionsIndexRef?.sessionsByProject || await buildCodexSessionsIndex();
+  const indexedSessions = sessionsByProject.get(normalizedProjectPath) || [];
+  if (indexedSessions.length === 0) return;
+
+  const sessionsByFile = new Map();
+  for (const session of indexedSessions) {
+    if (session?.filePath && !sessionsByFile.has(session.filePath)) {
+      sessionsByFile.set(session.filePath, session);
+    }
   }
 
-  const jsonlFiles = await findCodexJsonlFiles(codexSessionsDir);
-
-  for (const filePath of jsonlFiles) {
+  for (const [filePath, indexedSession] of sessionsByFile.entries()) {
     if (getTotalMatches() >= limit || isAborted()) break;
 
     try {
       const fileStream = fsSync.createReadStream(filePath);
       const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
-
-      // First pass: read session_meta to check project path match
-      let sessionMeta = null;
-      for await (const line of rl) {
-        if (!line.trim()) continue;
-        try {
-          const entry = JSON.parse(line);
-          if (entry.type === 'session_meta' && entry.payload) {
-            sessionMeta = entry.payload;
-            break;
-          }
-        } catch { continue; }
-      }
-
-      // Skip sessions that don't belong to this project
-      if (!sessionMeta) continue;
-      const sessionProjectPath = normalizeComparablePath(sessionMeta.cwd);
-      if (sessionProjectPath !== normalizedProjectPath) continue;
-
-      // Second pass: re-read file to find matching messages
-      const fileStream2 = fsSync.createReadStream(filePath);
-      const rl2 = readline.createInterface({ input: fileStream2, crlfDelay: Infinity });
       let lastUserMessage = null;
       const matches = [];
 
-      for await (const line of rl2) {
+      for await (const line of rl) {
         if (getTotalMatches() >= limit || isAborted()) break;
         if (!line.trim()) continue;
 
@@ -2189,7 +2455,7 @@ async function searchCodexSessionsForProject(
         let text = null;
         let role = null;
 
-        if (entry.type === 'event_msg' && entry.payload?.type === 'user_message' && entry.payload.message) {
+        if (entry.type === 'event_msg' && isVisibleCodexUserMessage(entry.payload) && entry.payload.message) {
           text = entry.payload.message;
           role = 'user';
           lastUserMessage = text;
@@ -2224,11 +2490,11 @@ async function searchCodexSessionsForProject(
 
       if (matches.length > 0) {
         projectResult.sessions.push({
-          sessionId: sessionMeta.id,
+          sessionId: indexedSession.id || path.basename(filePath, '.jsonl'),
           provider: 'codex',
           sessionSummary: lastUserMessage
             ? (lastUserMessage.length > 50 ? lastUserMessage.substring(0, 50) + '...' : lastUserMessage)
-            : 'Codex Session',
+            : (indexedSession.summary || 'Codex Session'),
           matches
         });
       }
@@ -2239,17 +2505,17 @@ async function searchCodexSessionsForProject(
 }
 
 async function searchGeminiSessionsForProject(
-  projectPath, projectResult, words, allWordsMatch,
-  buildSnippet, limit, getTotalMatches, addMatches
+  projectPath, projectResult, allWordsMatch,
+  buildSnippet, limit, getTotalMatches, addMatches, isAborted = () => false, geminiCliProjectsRef = null
 ) {
   // 1) Search in-memory sessions (created via UI)
   for (const [sessionId, session] of sessionManager.sessions) {
-    if (getTotalMatches() >= limit) break;
+    if (getTotalMatches() >= limit || isAborted()) break;
     if (session.projectPath !== projectPath) continue;
 
     const matches = [];
     for (const msg of session.messages) {
-      if (getTotalMatches() >= limit) break;
+      if (getTotalMatches() >= limit || isAborted()) break;
       if (msg.role !== 'user' && msg.role !== 'assistant') continue;
 
       const text = typeof msg.content === 'string' ? msg.content
@@ -2293,37 +2559,22 @@ async function searchGeminiSessionsForProject(
   if (!normalizedProjectPath) return;
 
   const geminiTmpDir = path.join(os.homedir(), '.gemini', 'tmp');
-  try {
-    await fs.access(geminiTmpDir);
-  } catch {
-    return;
-  }
 
   const trackedSessionIds = new Set();
   for (const [sid] of sessionManager.sessions) {
     trackedSessionIds.add(sid);
   }
 
-  let projectDirs;
-  try {
-    projectDirs = await fs.readdir(geminiTmpDir);
-  } catch {
-    return;
+  if (geminiCliProjectsRef && !geminiCliProjectsRef.entries) {
+    geminiCliProjectsRef.entries = await listGeminiCliProjectEntries();
   }
+  const geminiCliEntries = geminiCliProjectsRef?.entries || await listGeminiCliProjectEntries();
 
-  for (const projectDir of projectDirs) {
-    if (getTotalMatches() >= limit) break;
+  for (const entry of geminiCliEntries) {
+    if (getTotalMatches() >= limit || isAborted()) break;
+    if (entry.normalizedProjectRoot !== normalizedProjectPath) continue;
 
-    const projectRootFile = path.join(geminiTmpDir, projectDir, '.project_root');
-    let projectRoot;
-    try {
-      projectRoot = (await fs.readFile(projectRootFile, 'utf8')).trim();
-    } catch {
-      continue;
-    }
-
-    if (normalizeComparablePath(projectRoot) !== normalizedProjectPath) continue;
-
+    const projectDir = entry.projectDir;
     const chatsDir = path.join(geminiTmpDir, projectDir, 'chats');
     let chatFiles;
     try {
@@ -2333,7 +2584,7 @@ async function searchGeminiSessionsForProject(
     }
 
     for (const chatFile of chatFiles) {
-      if (getTotalMatches() >= limit) break;
+      if (getTotalMatches() >= limit || isAborted()) break;
       if (!chatFile.endsWith('.json')) continue;
 
       try {
@@ -2349,7 +2600,7 @@ async function searchGeminiSessionsForProject(
         let firstUserText = null;
 
         for (const msg of session.messages) {
-          if (getTotalMatches() >= limit) break;
+          if (getTotalMatches() >= limit || isAborted()) break;
 
           const role = msg.type === 'user' ? 'user'
             : (msg.type === 'gemini' || msg.type === 'assistant') ? 'assistant'
@@ -2402,36 +2653,22 @@ async function searchGeminiSessionsForProject(
   }
 }
 
-async function getGeminiCliSessions(projectPath) {
+async function getGeminiCliSessions(projectPath, options = {}) {
+  const { geminiCliProjectsRef = null } = options;
   const normalizedProjectPath = normalizeComparablePath(projectPath);
   if (!normalizedProjectPath) return [];
 
-  const geminiTmpDir = path.join(os.homedir(), '.gemini', 'tmp');
-  try {
-    await fs.access(geminiTmpDir);
-  } catch {
-    return [];
-  }
-
   const sessions = [];
-  let projectDirs;
-  try {
-    projectDirs = await fs.readdir(geminiTmpDir);
-  } catch {
-    return [];
+  const geminiTmpDir = path.join(os.homedir(), '.gemini', 'tmp');
+
+  if (geminiCliProjectsRef && !geminiCliProjectsRef.entries) {
+    geminiCliProjectsRef.entries = await listGeminiCliProjectEntries();
   }
+  const geminiCliEntries = geminiCliProjectsRef?.entries || await listGeminiCliProjectEntries();
 
-  for (const projectDir of projectDirs) {
-    const projectRootFile = path.join(geminiTmpDir, projectDir, '.project_root');
-    let projectRoot;
-    try {
-      projectRoot = (await fs.readFile(projectRootFile, 'utf8')).trim();
-    } catch {
-      continue;
-    }
-
-    if (normalizeComparablePath(projectRoot) !== normalizedProjectPath) continue;
-
+  for (const entry of geminiCliEntries) {
+    if (entry.normalizedProjectRoot !== normalizedProjectPath) continue;
+    const projectDir = entry.projectDir;
     const chatsDir = path.join(geminiTmpDir, projectDir, 'chats');
     let chatFiles;
     try {

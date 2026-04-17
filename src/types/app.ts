@@ -35,6 +35,11 @@ export interface Project {
   displayName: string;
   fullPath: string;
   path?: string;
+  source?: 'claude' | 'manual' | 'history';
+  isManuallyAdded?: boolean;
+  autoDiscovered?: boolean;
+  detectedProviders?: string[];
+  detectedAt?: string | null;
   sessions?: ProjectSession[];
   cursorSessions?: ProjectSession[];
   codexSessions?: ProjectSession[];

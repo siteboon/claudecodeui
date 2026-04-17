@@ -42,7 +42,12 @@ import mcpUtilsRoutes from './routes/mcp-utils.js';
 import commandsRoutes from './routes/commands.js';
 import settingsRoutes from './routes/settings.js';
 import agentRoutes from './routes/agent.js';
-import projectsRoutes, { WORKSPACES_ROOT, validateWorkspacePath } from './routes/projects.js';
+import projectsRoutes, {
+    WORKSPACES_ROOT,
+    WORKSPACES_BASE,
+    validateWorkspacePath,
+    normalizeWorkspacePath,
+} from './routes/projects.js';
 import cliAuthRoutes from './routes/cli-auth.js';
 import userRoutes from './routes/user.js';
 import codexRoutes from './routes/codex.js';
@@ -66,7 +71,8 @@ const PROVIDER_WATCH_PATHS = [
     { provider: 'cursor', rootPath: path.join(os.homedir(), '.cursor', 'chats') },
     { provider: 'codex', rootPath: path.join(os.homedir(), '.codex', 'sessions') },
     { provider: 'gemini', rootPath: path.join(os.homedir(), '.gemini', 'projects') },
-    { provider: 'gemini_sessions', rootPath: path.join(os.homedir(), '.gemini', 'sessions') }
+    { provider: 'gemini_sessions', rootPath: path.join(os.homedir(), '.gemini', 'sessions') },
+    { provider: 'gemini_cli', rootPath: path.join(os.homedir(), '.gemini', 'tmp') },
 ];
 const WATCHER_IGNORED_PATTERNS = [
     '**/node_modules/**',
@@ -574,14 +580,8 @@ app.get('/api/search/conversations', authenticateToken, async (req, res) => {
 });
 
 const expandWorkspacePath = (inputPath) => {
-    if (!inputPath) return inputPath;
-    if (inputPath === '~') {
-        return WORKSPACES_ROOT;
-    }
-    if (inputPath.startsWith('~/') || inputPath.startsWith('~\\')) {
-        return path.join(WORKSPACES_ROOT, inputPath.slice(2));
-    }
-    return inputPath;
+    if (!inputPath) return WORKSPACES_BASE;
+    return normalizeWorkspacePath(inputPath);
 };
 
 // Browse filesystem endpoint for project suggestions - uses existing getFileTree
@@ -591,22 +591,28 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
 
         console.log('[API] Browse filesystem request for path:', dirPath);
         console.log('[API] WORKSPACES_ROOT is:', WORKSPACES_ROOT);
+        console.log('[API] WORKSPACES_BASE is:', WORKSPACES_BASE);
         // Default to home directory if no path provided
-        const defaultRoot = WORKSPACES_ROOT;
+        const defaultRoot = WORKSPACES_BASE;
         let targetPath = dirPath ? expandWorkspacePath(dirPath) : defaultRoot;
 
-        // Resolve and normalize the path
-        targetPath = path.resolve(targetPath);
-
         // Security check - ensure path is within allowed workspace root
-        const validation = await validateWorkspacePath(targetPath);
+        let validation = await validateWorkspacePath(targetPath);
         if (!validation.valid) {
-            return res.status(403).json({ error: validation.error });
+            // Keep the browser functional by returning to the safe base on invalid navigation.
+            const fallbackValidation = await validateWorkspacePath(defaultRoot);
+            if (!fallbackValidation.valid) {
+                return res.status(403).json({ error: validation.error });
+            }
+            validation = fallbackValidation;
         }
         const resolvedPath = validation.resolvedPath || targetPath;
 
         // Security check - ensure path is accessible
         try {
+            if (resolvedPath === defaultRoot) {
+                await fs.promises.mkdir(resolvedPath, { recursive: true });
+            }
             await fs.promises.access(resolvedPath);
             const stats = await fs.promises.stat(resolvedPath);
 
@@ -638,13 +644,13 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
 
         // Add common directories if browsing home directory
         const suggestions = [];
-        let resolvedWorkspaceRoot = defaultRoot;
+        let resolvedWorkspaceBase = defaultRoot;
         try {
-            resolvedWorkspaceRoot = await fsPromises.realpath(defaultRoot);
+            resolvedWorkspaceBase = await fsPromises.realpath(defaultRoot);
         } catch (error) {
             // Use default root as-is if realpath fails
         }
-        if (resolvedPath === resolvedWorkspaceRoot) {
+        if (resolvedPath === resolvedWorkspaceBase) {
             const commonDirs = ['Desktop', 'Documents', 'Projects', 'Development', 'Dev', 'Code', 'workspace'];
             const existingCommon = directories.filter(dir => commonDirs.includes(dir.name));
             const otherDirs = directories.filter(dir => !commonDirs.includes(dir.name));
@@ -656,6 +662,7 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
 
         res.json({
             path: resolvedPath,
+            rootPath: resolvedWorkspaceBase,
             suggestions: suggestions
         });
 
