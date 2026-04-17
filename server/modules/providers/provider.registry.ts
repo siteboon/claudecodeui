@@ -14,7 +14,7 @@ const providers: Record<LLMProvider, IProvider> = {
 };
 
 /**
- * Central registry for resolving provider MCP implementations by id.
+ * Central registry for resolving concrete provider implementations by id.
  */
 export const providerRegistry = {
   listProviders(): IProvider[] {

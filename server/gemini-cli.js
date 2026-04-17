@@ -9,7 +9,7 @@ import os from 'os';
 import sessionManager from './sessionManager.js';
 import GeminiResponseHandler from './gemini-response-handler.js';
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
-import { createNormalizedMessage } from './providers/types.js';
+import { createNormalizedMessage } from './shared/utils.js';
 
 let activeGeminiProcesses = new Map(); // Track active processes by session ID
 

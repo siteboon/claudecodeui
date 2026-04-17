@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { findAppRoot, getModuleDir } from './utils/runtime-paths.js';
 
-import { AppError } from '@/shared/utils.js';
+import { AppError, createNormalizedMessage } from '@/shared/utils.js';
 
 
 const __dirname = getModuleDir(import.meta.url);
@@ -70,7 +70,6 @@ import geminiRoutes from './routes/gemini.js';
 import pluginsRoutes from './routes/plugins.js';
 import messagesRoutes from './routes/messages.js';
 import providerRoutes from './modules/providers/provider.routes.js';
-import { createNormalizedMessage } from './providers/types.js';
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
 import { initializeDatabase, sessionNamesDb, applyCustomSessionNames } from './database/db.js';
 import { configureWebPush } from './services/vapid-keys.js';
@@ -1461,7 +1460,7 @@ wss.on('connection', (ws, request) => {
 /**
  * WebSocket Writer - Wrapper for WebSocket to match SSEStreamWriter interface
  *
- * Provider files use `createNormalizedMessage()` from `providers/types.js` and
+ * Provider files use `createNormalizedMessage()` from `shared/utils.js` and
  * adapter `normalizeMessage()` to produce unified NormalizedMessage events.
  * The writer simply serialises and sends.
  */

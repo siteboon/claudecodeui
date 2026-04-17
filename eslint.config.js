@@ -161,6 +161,16 @@ export default tseslint.config(
           mode: "file",
         },
         {
+          type: "backend-legacy-runtime", // legacy runtime persistence modules used while providers migrate into server/modules
+          pattern: [
+            "server/projects.js",
+            "server/sessionManager.js",
+            "server/database/*.{js,ts}",
+            "server/utils/runtime-paths.js",
+          ], // provider history loading still resolves session data through these legacy runtime/database files
+          mode: "file",
+        },
+        {
           type: "backend-module", // logical element name used by boundaries rules below
           pattern: "server/modules/*", // each direct folder in server/modules is treated as one module boundary
           mode: "folder", // classify dependencies at folder-module level (not per individual file)

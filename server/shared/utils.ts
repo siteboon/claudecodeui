@@ -1,10 +1,25 @@
 
+import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 
-import type { ApiErrorShape, ApiSuccessShape, AppErrorOptions } from '@/shared/types.js';
+import type {
+  ApiErrorShape,
+  ApiSuccessShape,
+  AppErrorOptions,
+  NormalizedMessage,
+} from '@/shared/types.js';
+
+type NormalizedMessageInput =
+  {
+    kind: NormalizedMessage['kind'];
+    provider: NormalizedMessage['provider'];
+    id?: string | null;
+    sessionId?: string | null;
+    timestamp?: string | null;
+  } & Record<string, unknown>;
 
 export function createApiSuccessResponse<TData>(
   data: TData,
@@ -51,6 +66,33 @@ export class AppError extends Error {
     this.statusCode = options.statusCode ?? 500;
     this.details = options.details;
   }
+}
+
+// -------------------------------------------------------------------------------------------
+
+// ------------------------ Normalized provider message helpers ------------------------
+/**
+ * Generates a stable unique id for normalized provider messages.
+ */
+export function generateMessageId(prefix = 'msg'): string {
+  return `${prefix}_${randomUUID()}`;
+}
+
+/**
+ * Creates a normalized provider message and fills the shared envelope fields.
+ *
+ * Provider adapters and live SDK handlers pass through provider-specific fields,
+ * while this helper guarantees every emitted event has an id, session id,
+ * timestamp, and provider marker.
+ */
+export function createNormalizedMessage(fields: NormalizedMessageInput): NormalizedMessage {
+  return {
+    ...fields,
+    id: fields.id || generateMessageId(fields.kind),
+    sessionId: fields.sessionId || '',
+    timestamp: fields.timestamp || new Date().toISOString(),
+    provider: fields.provider,
+  };
 }
 
 // -------------------------------------------------------------------------------------------
