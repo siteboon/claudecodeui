@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
-import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -287,65 +286,6 @@ test('providerMcpService global adder writes to all providers and rejects unsupp
         error.statusCode === 400,
     );
   } finally {
-    restoreHomeDir();
-    await fs.rm(tempRoot, { recursive: true, force: true });
-  }
-});
-
-/**
- * This test covers "run" behavior for both stdio and http MCP servers.
- */
-test('providerMcpService runProviderServer probes stdio and http MCP servers', { concurrency: false }, async () => {
-  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-mcp-run-'));
-  const workspacePath = path.join(tempRoot, 'workspace');
-  await fs.mkdir(workspacePath, { recursive: true });
-
-  const restoreHomeDir = patchHomeDir(tempRoot);
-  const server = http.createServer((_req, res) => {
-    res.statusCode = 200;
-    res.end('ok');
-  });
-
-  try {
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
-    const address = server.address();
-    assert.ok(address && typeof address === 'object');
-    const url = `http://127.0.0.1:${address.port}/mcp`;
-
-    await providerMcpService.upsertProviderMcpServer('gemini', {
-      name: 'probe-http',
-      scope: 'project',
-      transport: 'http',
-      url,
-      workspacePath,
-    });
-
-    await providerMcpService.upsertProviderMcpServer('cursor', {
-      name: 'probe-stdio',
-      scope: 'project',
-      transport: 'stdio',
-      command: process.execPath,
-      args: ['-e', 'process.exit(0)'],
-      workspacePath,
-    });
-
-    const httpProbe = await providerMcpService.runProviderMcpServer('gemini', {
-      name: 'probe-http',
-      scope: 'project',
-      workspacePath,
-    });
-    assert.equal(httpProbe.reachable, true);
-    assert.equal(httpProbe.transport, 'http');
-
-    const stdioProbe = await providerMcpService.runProviderMcpServer('cursor', {
-      name: 'probe-stdio',
-      scope: 'project',
-      workspacePath,
-    });
-    assert.equal(stdioProbe.reachable, true);
-    assert.equal(stdioProbe.transport, 'stdio');
-  } finally {
-    server.close();
     restoreHomeDir();
     await fs.rm(tempRoot, { recursive: true, force: true });
   }

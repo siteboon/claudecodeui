@@ -3,7 +3,6 @@ import type {
   FetchHistoryResult,
   LLMProvider,
   McpScope,
-  McpTransport,
   NormalizedMessage,
   ProviderAuthStatus,
   ProviderMcpServer,
@@ -46,15 +45,4 @@ export interface IProviderMcp {
   removeServer(
     input: { name: string; scope?: McpScope; workspacePath?: string },
   ): Promise<{ removed: boolean; provider: LLMProvider; name: string; scope: McpScope }>;
-  runServer(
-    input: { name: string; scope?: McpScope; workspacePath?: string },
-  ): Promise<{
-    provider: LLMProvider;
-    name: string;
-    scope: McpScope;
-    transport: McpTransport;
-    reachable: boolean;
-    statusCode?: number;
-    error?: string;
-  }>;
 }

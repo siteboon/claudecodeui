@@ -180,19 +180,6 @@ router.post(
   }),
 );
 
-router.put(
-  '/:provider/mcp/servers/:name',
-  asyncHandler(async (req: Request, res: Response) => {
-    const provider = parseProvider(req.params.provider);
-    const payload = parseMcpUpsertPayload({
-      ...((req.body && typeof req.body === 'object') ? req.body as Record<string, unknown> : {}),
-      name: readPathParam(req.params.name, 'name'),
-    });
-    const server = await providerMcpService.upsertProviderMcpServer(provider, payload);
-    res.json(createApiSuccessResponse({ server }));
-  }),
-);
-
 router.delete(
   '/:provider/mcp/servers/:name',
   asyncHandler(async (req: Request, res: Response) => {
@@ -200,22 +187,6 @@ router.delete(
     const scope = parseMcpScope(req.query.scope);
     const workspacePath = readOptionalQueryString(req.query.workspacePath);
     const result = await providerMcpService.removeProviderMcpServer(provider, {
-      name: readPathParam(req.params.name, 'name'),
-      scope,
-      workspacePath,
-    });
-    res.json(createApiSuccessResponse(result));
-  }),
-);
-
-router.post(
-  '/:provider/mcp/servers/:name/run',
-  asyncHandler(async (req: Request, res: Response) => {
-    const provider = parseProvider(req.params.provider);
-    const body = (req.body as Record<string, unknown> | undefined) ?? {};
-    const scope = parseMcpScope(body.scope ?? req.query.scope);
-    const workspacePath = readOptionalQueryString(body.workspacePath ?? req.query.workspacePath);
-    const result = await providerMcpService.runProviderMcpServer(provider, {
       name: readPathParam(req.params.name, 'name'),
       scope,
       workspacePath,

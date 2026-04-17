@@ -61,25 +61,6 @@ export const providerMcpService = {
   },
 
   /**
-   * Runs one provider MCP server probe.
-   */
-  async runProviderMcpServer(
-    providerName: string,
-    input: { name: string; scope?: McpScope; workspacePath?: string },
-  ): Promise<{
-    provider: LLMProvider;
-    name: string;
-    scope: McpScope;
-    transport: 'stdio' | 'http' | 'sse';
-    reachable: boolean;
-    statusCode?: number;
-    error?: string;
-  }> {
-    const provider = providerRegistry.resolveProvider(providerName);
-    return provider.mcp.runServer(input);
-  },
-
-  /**
    * Adds one HTTP/stdio MCP server to every provider.
    */
   async addMcpServerToAllProviders(
