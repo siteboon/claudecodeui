@@ -15,7 +15,7 @@ import {
 
 export class CursorMcpProvider extends McpProvider {
   constructor() {
-    super('cursor', ['user', 'project'], ['stdio', 'http', 'sse']);
+    super('cursor', ['user', 'project'], ['stdio', 'http']);
   }
 
   protected async readScopedServers(scope: McpScope, workspacePath: string): Promise<Record<string, unknown>> {
@@ -57,7 +57,7 @@ export class CursorMcpProvider extends McpProvider {
     }
 
     if (!input.url?.trim()) {
-      throw new AppError('url is required for http/sse MCP servers.', {
+      throw new AppError('url is required for http MCP servers.', {
         code: 'MCP_URL_REQUIRED',
         statusCode: 400,
       });
