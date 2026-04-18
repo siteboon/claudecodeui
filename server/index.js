@@ -2221,73 +2221,79 @@ function permToRwx(perm) {
     return r + w + x;
 }
 
+// Directories that are almost never interesting for a project tree but can
+// contain tens of thousands of files. Skipping them before recursion keeps
+// traversal time bounded on large monorepos and high-latency filesystems
+// (NFS / SMB).
+const IGNORED_DIRS = new Set([
+    // JS / TS toolchains
+    'node_modules', 'dist', 'build', '.next', '.nuxt', '.cache', '.parcel-cache',
+    // VCS
+    '.git', '.svn', '.hg',
+    // Python
+    '__pycache__', '.pytest_cache', '.mypy_cache', '.tox', 'venv', '.venv',
+    // Rust / Go / Java / Ruby
+    'target', 'vendor',
+    // Build output / IDE
+    '.gradle', '.idea', 'coverage', '.nyc_output'
+]);
+
 async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden = true) {
     // Using fsPromises from import
-    const items = [];
-
+    let entries;
     try {
-        const entries = await fsPromises.readdir(dirPath, { withFileTypes: true });
-
-        for (const entry of entries) {
-            // Debug: log all entries including hidden files
-
-
-            // Skip heavy build directories and VCS directories
-            if (entry.name === 'node_modules' ||
-                entry.name === 'dist' ||
-                entry.name === 'build' ||
-                entry.name === '.git' ||
-                entry.name === '.svn' ||
-                entry.name === '.hg') continue;
-
-            const itemPath = path.join(dirPath, entry.name);
-            const item = {
-                name: entry.name,
-                path: itemPath,
-                type: entry.isDirectory() ? 'directory' : 'file'
-            };
-
-            // Get file stats for additional metadata
-            try {
-                const stats = await fsPromises.stat(itemPath);
-                item.size = stats.size;
-                item.modified = stats.mtime.toISOString();
-
-                // Convert permissions to rwx format
-                const mode = stats.mode;
-                const ownerPerm = (mode >> 6) & 7;
-                const groupPerm = (mode >> 3) & 7;
-                const otherPerm = mode & 7;
-                item.permissions = ((mode >> 6) & 7).toString() + ((mode >> 3) & 7).toString() + (mode & 7).toString();
-                item.permissionsRwx = permToRwx(ownerPerm) + permToRwx(groupPerm) + permToRwx(otherPerm);
-            } catch (statError) {
-                // If stat fails, provide default values
-                item.size = 0;
-                item.modified = null;
-                item.permissions = '000';
-                item.permissionsRwx = '---------';
-            }
-
-            if (entry.isDirectory() && currentDepth < maxDepth) {
-                // Recursively get subdirectories but limit depth
-                try {
-                    // Check if we can access the directory before trying to read it
-                    await fsPromises.access(item.path, fs.constants.R_OK);
-                    item.children = await getFileTree(item.path, maxDepth, currentDepth + 1, showHidden);
-                } catch (e) {
-                    // Silently skip directories we can't access (permission denied, etc.)
-                    item.children = [];
-                }
-            }
-
-            items.push(item);
-        }
+        entries = await fsPromises.readdir(dirPath, { withFileTypes: true });
     } catch (error) {
         // Only log non-permission errors to avoid spam
         if (error.code !== 'EACCES' && error.code !== 'EPERM') {
             console.error('Error reading directory:', error);
         }
+        return [];
     }
+
+    const filteredEntries = entries.filter((entry) => !IGNORED_DIRS.has(entry.name));
+
+    // Process every entry in parallel. On high-latency filesystems (NFS/SMB)
+    // serial stat() was the real bottleneck — issuing them concurrently lets
+    // the kernel pipeline the round-trips and the recursive calls overlap too.
+    const items = await Promise.all(filteredEntries.map(async (entry) => {
+        const itemPath = path.join(dirPath, entry.name);
+        const item = {
+            name: entry.name,
+            path: itemPath,
+            type: entry.isDirectory() ? 'directory' : 'file'
+        };
+
+        // Get file stats for additional metadata
+        try {
+            const stats = await fsPromises.stat(itemPath);
+            item.size = stats.size;
+            item.modified = stats.mtime.toISOString();
+
+            // Convert permissions to rwx format
+            const mode = stats.mode;
+            const ownerPerm = (mode >> 6) & 7;
+            const groupPerm = (mode >> 3) & 7;
+            const otherPerm = mode & 7;
+            item.permissions = ((mode >> 6) & 7).toString() + ((mode >> 3) & 7).toString() + (mode & 7).toString();
+            item.permissionsRwx = permToRwx(ownerPerm) + permToRwx(groupPerm) + permToRwx(otherPerm);
+        } catch (statError) {
+            // If stat fails, provide default values
+            item.size = 0;
+            item.modified = null;
+            item.permissions = '000';
+            item.permissionsRwx = '---------';
+        }
+
+        if (entry.isDirectory() && currentDepth < maxDepth) {
+            // Recurse. Let readdir's own EACCES bubble up through the catch in
+            // the recursive call rather than doing a separate access() probe
+            // (which doubled the round-trip count on SMB without adding info).
+            item.children = await getFileTree(itemPath, maxDepth, currentDepth + 1, showHidden);
+        }
+
+        return item;
+    }));
 
     return items.sort((a, b) => {
         if (a.type !== b.type) {
