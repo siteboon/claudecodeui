@@ -17,6 +17,7 @@ export const CLI_AUTH_STATUS_ENDPOINTS: Record<LLMProvider, string> = {
   cursor: '/api/cli/cursor/status',
   codex: '/api/cli/codex/status',
   gemini: '/api/cli/gemini/status',
+  kiro: '/api/cli/kiro/status',
 };
 
 export const createInitialProviderAuthStatusMap = (loading = true): ProviderAuthStatusMap => ({
@@ -24,5 +25,6 @@ export const createInitialProviderAuthStatusMap = (loading = true): ProviderAuth
   cursor: { authenticated: false, email: null, method: null, error: null, loading },
   codex: { authenticated: false, email: null, method: null, error: null, loading },
   gemini: { authenticated: false, email: null, method: null, error: null, loading },
+  kiro: { authenticated: false, email: null, method: null, error: null, loading },
 });
 

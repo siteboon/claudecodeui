@@ -50,12 +50,17 @@ export default function AgentsSettingsTab({
       authStatus: providerAuthStatus.gemini,
       onLogin: () => onProviderLogin('gemini'),
     },
+    kiro: {
+      authStatus: providerAuthStatus.kiro,
+      onLogin: () => onProviderLogin('kiro'),
+    },
   }), [
     onProviderLogin,
     providerAuthStatus.claude,
     providerAuthStatus.codex,
     providerAuthStatus.cursor,
     providerAuthStatus.gemini,
+    providerAuthStatus.kiro,
   ]);
 
   return (
