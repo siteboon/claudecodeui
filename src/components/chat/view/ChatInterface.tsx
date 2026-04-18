@@ -178,6 +178,7 @@ function ChatInterface({
     cyclePermissionMode,
     cursorModel,
     claudeModel,
+    setClaudeModel,
     codexModel,
     geminiModel,
     isLoading,
