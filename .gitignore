@@ -142,5 +142,6 @@ tasks/
 .worktrees/
 
 # Local SDK clones (separate repos)
-kiro-sdk/
+kiro-sdk/*
+!kiro-sdk/package.json
 kiro-sdk-python/
