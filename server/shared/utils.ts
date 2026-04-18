@@ -6,7 +6,6 @@ import path from 'node:path';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 
 import type {
-  ApiErrorShape,
   ApiSuccessShape,
   AppErrorOptions,
   NormalizedMessage,
@@ -27,21 +26,6 @@ export function createApiSuccessResponse<TData>(
   return {
     success: true,
     data,
-  };
-}
-
-export function createApiErrorResponse(
-  code: string,
-  message: string,
-  details?: unknown
-): ApiErrorShape {
-  return {
-    success: false,
-    error: {
-      code,
-      message,
-      details,
-    }
   };
 }
 

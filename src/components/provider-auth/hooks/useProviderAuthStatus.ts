@@ -18,6 +18,11 @@ type ProviderAuthStatusPayload = {
   error?: string | null;
 };
 
+type ProviderAuthStatusApiResponse = {
+  success: boolean;
+  data: ProviderAuthStatusPayload;
+};
+
 const FALLBACK_STATUS_ERROR = 'Failed to check authentication status';
 const FALLBACK_UNKNOWN_ERROR = 'Unknown error';
 
@@ -82,8 +87,8 @@ export function useProviderAuthStatus(
         return;
       }
 
-      const payload = (await response.json()) as ProviderAuthStatusPayload;
-      setProviderStatus(provider, toProviderAuthStatus(payload));
+      const payload = (await response.json()) as ProviderAuthStatusApiResponse;
+      setProviderStatus(provider, toProviderAuthStatus(payload.data));
     } catch (caughtError) {
       console.error(`Error checking ${provider} auth status:`, caughtError);
       setProviderStatus(provider, {

@@ -5,15 +5,6 @@ export type ApiSuccessShape<TData = unknown> = {
   data: TData;
 };
 
-export type ApiErrorShape = {
-  success: false;
-  error: {
-    code: string;
-    message: string;
-    details?: unknown;
-  };
-};
-
 // ---------------------------------------------------------------------------------------------
 
 export type LLMProvider = 'claude' | 'codex' | 'gemini' | 'cursor';

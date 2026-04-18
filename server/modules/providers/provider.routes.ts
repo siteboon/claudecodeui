@@ -148,7 +148,7 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const provider = parseProvider(req.params.provider);
     const status = await providerAuthService.getProviderAuthStatus(provider);
-    res.json(status);
+    res.json(createApiSuccessResponse(status));
   }),
 );
 
