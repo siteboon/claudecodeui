@@ -1,8 +1,11 @@
 import React, { memo, useMemo, useCallback } from 'react';
+
 import type { Project } from '../../../types/app';
 import type { SubagentChildTool } from '../types/types';
+
 import { getToolConfig } from './configs/toolConfigs';
 import { OneLineDisplay, CollapsibleDisplay, ToolDiffViewer, MarkdownContent, FileListContent, TodoListContent, TaskListContent, TextContent, QuestionAnswerContent, SubagentContainer } from './components';
+import { PlanDisplay } from './components/PlanDisplay';
 
 type DiffLine = {
   type: string;
@@ -115,6 +118,33 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
         wrapText={displayConfig.wrapText}
         colorScheme={displayConfig.colorScheme}
         resultId={mode === 'input' ? `tool-result-${toolId}` : undefined}
+      />
+    );
+  }
+
+  if (displayConfig.type === 'plan') {
+    const title = typeof displayConfig.title === 'function'
+      ? displayConfig.title(parsedData)
+      : displayConfig.title || 'Plan';
+
+    const contentProps = displayConfig.getContentProps?.(parsedData, {
+      selectedProject,
+      createDiff,
+      onFileOpen
+    }) || {};
+
+    const isStreaming = mode === 'input' && !toolResult;
+
+    return (
+      <PlanDisplay
+        title={title}
+        content={contentProps.content || ''}
+        defaultOpen={displayConfig.defaultOpen ?? autoExpandTools}
+        isStreaming={isStreaming}
+        showRawParameters={mode === 'input' && showRawParameters}
+        rawContent={rawToolInput}
+        toolName={toolName}
+        toolId={toolId}
       />
     );
   }
