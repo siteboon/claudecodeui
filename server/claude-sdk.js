@@ -17,7 +17,7 @@ import crypto from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
-import { CLAUDE_MODELS } from '../shared/modelConstants.js';
+import { CLAUDE_MODELS, CLAUDE_DEFAULT_CONTEXT_WINDOW, getClaudeContextWindow } from '../shared/modelConstants.js';
 import {
   createNotificationEvent,
   notifyRunFailed,
@@ -307,9 +307,11 @@ function extractTokenBudget(resultMessage) {
   // Total used = input + output + cache tokens
   const totalUsed = inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
 
-  // Use configured context window budget from environment (default 160000)
-  // This is the user's budget limit, not the model's context window
-  const contextWindow = parseInt(process.env.CONTEXT_WINDOW) || 160000;
+  // Determine the context window from the model that produced this usage.
+  // Falls back to CONTEXT_WINDOW env var only when the model is unknown.
+  const contextWindow = modelKey
+    ? getClaudeContextWindow(modelKey)
+    : parseInt(process.env.CONTEXT_WINDOW) || CLAUDE_DEFAULT_CONTEXT_WINDOW;
 
   // Token calc logged via token-budget WS event
 

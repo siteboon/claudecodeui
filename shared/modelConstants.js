@@ -13,15 +13,48 @@
 export const CLAUDE_MODELS = {
   // Models in SDK format (what the actual SDK accepts)
   OPTIONS: [
-    { value: "sonnet", label: "Sonnet" },
-    { value: "opus", label: "Opus" },
-    { value: "haiku", label: "Haiku" },
-    { value: "opusplan", label: "Opus Plan" },
-    { value: "sonnet[1m]", label: "Sonnet [1M]" },
-    { value: "opus[1m]", label: "Opus [1M]" },
+    { value: "claude-opus-4-7", label: "Opus 4.7" },
+    { value: "claude-opus-4-6", label: "Opus 4.6" },
+    { value: "opus[1m]", label: "Opus 4.6 (1M context)" },
+    { value: "claude-sonnet-4-6", label: "Sonnet 4.6" },
+    { value: "sonnet[1m]", label: "Sonnet 4.6 (1M context)" },
+    { value: "claude-opus-4-5-20251101", label: "Opus 4.5" },
+    { value: "claude-sonnet-4-5-20250929", label: "Sonnet 4.5" },
+    { value: "claude-haiku-4-5-20251001", label: "Haiku 4.5" },
+    { value: "opusplan", label: "Opus Plan (Opus + Sonnet)" },
   ],
 
-  DEFAULT: "opus",
+  DEFAULT: "claude-sonnet-4-6",
+};
+
+/**
+ * Claude Model Context Windows (in tokens)
+ *
+ * Standard Claude 4.x models have a 200k context window.
+ * The [1m] variants enable the 1M-token context window.
+ */
+export const CLAUDE_DEFAULT_CONTEXT_WINDOW = 200000;
+export const CLAUDE_1M_CONTEXT_WINDOW = 1000000;
+
+/**
+ * Returns the context window (in tokens) for a given Claude model identifier.
+ *
+ * Accepts both the SDK short aliases (e.g. "sonnet", "opus[1m]", "opusplan")
+ * and the full API model IDs (e.g. "claude-opus-4-7", "claude-sonnet-4-6").
+ * Unknown models fall back to the standard 200k context window.
+ *
+ * @param {string} model - Model identifier
+ * @returns {number} Context window size in tokens
+ */
+export const getClaudeContextWindow = (model) => {
+  if (!model || typeof model !== 'string') {
+    return CLAUDE_DEFAULT_CONTEXT_WINDOW;
+  }
+  const normalized = model.toLowerCase();
+  if (normalized.includes('[1m]') || normalized.includes('-1m')) {
+    return CLAUDE_1M_CONTEXT_WINDOW;
+  }
+  return CLAUDE_DEFAULT_CONTEXT_WINDOW;
 };
 
 /**

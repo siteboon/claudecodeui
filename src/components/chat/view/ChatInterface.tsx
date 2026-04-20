@@ -360,6 +360,7 @@ function ChatInterface({
           thinkingMode={thinkingMode}
           setThinkingMode={setThinkingMode}
           tokenBudget={tokenBudget}
+          selectedModel={provider === 'claude' ? claudeModel : undefined}
           slashCommandsCount={slashCommandsCount}
           onToggleCommandMenu={handleToggleCommandMenu}
           hasInput={Boolean(input.trim())}
