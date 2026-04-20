@@ -47,11 +47,19 @@ function getToolCategory(toolName: string): string {
   return 'default';
 }
 
+// Exact denial messages from server/claude-sdk.js — other providers can't reliably signal denial
+const CLAUDE_DENIAL_MESSAGES = [
+  'user denied tool use',
+  'tool disallowed by settings',
+  'permission request timed out',
+  'permission request cancelled',
+];
+
 function deriveToolStatus(toolResult: any): ToolStatus {
   if (!toolResult) return 'running';
   if (toolResult.isError) {
-    const content = String(toolResult.content || '').toLowerCase();
-    if (content.includes('permission') || content.includes('denied') || content.includes('not allowed')) {
+    const content = String(toolResult.content || '').toLowerCase().trim();
+    if (CLAUDE_DENIAL_MESSAGES.some((msg) => content.includes(msg))) {
       return 'denied';
     }
     return 'error';
