@@ -343,7 +343,7 @@ export default function ChatComposer({
                           : 'bg-primary'
                   }`}
                 />
-                <span className="hidden sm:inline">
+                <span className="hidden whitespace-nowrap sm:inline">
                   {permissionMode === 'default' && t('codex.modes.default')}
                   {permissionMode === 'acceptEdits' && t('codex.modes.acceptEdits')}
                   {permissionMode === 'bypassPermissions' && t('codex.modes.bypassPermissions')}
