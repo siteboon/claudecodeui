@@ -60,6 +60,14 @@ export interface ProjectsUpdatedMessage {
   [key: string]: unknown;
 }
 
+export interface SessionNameUpdatedMessage {
+  type: 'session_name_updated';
+  sessionId: string;
+  provider: LLMProvider;
+  name: string;
+  timestamp?: string;
+}
+
 export interface LoadingProgressMessage extends LoadingProgress {
   type: 'loading_progress';
 }
@@ -67,4 +75,5 @@ export interface LoadingProgressMessage extends LoadingProgress {
 export type AppSocketMessage =
   | LoadingProgressMessage
   | ProjectsUpdatedMessage
+  | SessionNameUpdatedMessage
   | { type?: string;[key: string]: unknown };

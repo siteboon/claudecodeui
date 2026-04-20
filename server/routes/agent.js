@@ -7,6 +7,7 @@ import crypto from 'crypto';
 import { userDb, apiKeysDb, githubTokensDb } from '../database/db.js';
 import { addProjectManually } from '../projects.js';
 import { queryClaudeSDK } from '../claude-sdk.js';
+import { broadcastSessionNameUpdated } from '../utils/websocket-clients.js';
 import { spawnCursor } from '../cursor-cli.js';
 import { queryCodex } from '../openai-codex.js';
 import { spawnGemini } from '../gemini-cli.js';
@@ -952,7 +953,9 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         cwd: finalProjectPath,
         sessionId: sessionId || null,
         model: model,
-        permissionMode: 'bypassPermissions' // Bypass all permissions for API calls
+        permissionMode: 'bypassPermissions', // Bypass all permissions for API calls
+        autoNameSession: true,
+        broadcastSessionNameUpdated
       }, writer);
 
     } else if (provider === 'cursor') {

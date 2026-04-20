@@ -490,6 +490,15 @@ const sessionNamesDb = {
     `).run(sessionId, provider, customName);
   },
 
+  setNameIfAbsent: (sessionId, provider, customName) => {
+    const result = db.prepare(`
+      INSERT INTO session_names (session_id, provider, custom_name)
+      VALUES (?, ?, ?)
+      ON CONFLICT(session_id, provider) DO NOTHING
+    `).run(sessionId, provider, customName);
+    return result.changes > 0;
+  },
+
   // Get a single custom session name
   getName: (sessionId, provider) => {
     const row = db.prepare(
