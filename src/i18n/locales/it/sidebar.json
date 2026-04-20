@@ -1,0 +1,135 @@
+{
+  "projects": {
+    "title": "Progetti",
+    "newProject": "Nuovo progetto",
+    "deleteProject": "Rimuovi progetto",
+    "renameProject": "Rinomina progetto",
+    "noProjects": "Nessun progetto trovato",
+    "loadingProjects": "Caricamento progetti...",
+    "searchPlaceholder": "Cerca progetti...",
+    "projectNamePlaceholder": "Nome progetto",
+    "starred": "Preferiti",
+    "all": "Tutti",
+    "untitledSession": "Sessione senza titolo",
+    "newSession": "Nuova sessione",
+    "codexSession": "Sessione Codex",
+    "fetchingProjects": "Recupero dei tuoi progetti e sessioni Claude",
+    "projects": "progetti",
+    "noMatchingProjects": "Nessun progetto corrispondente",
+    "tryDifferentSearch": "Prova a modificare il termine di ricerca",
+    "runClaudeCli": "Esegui Claude CLI in una directory di progetto per iniziare"
+  },
+  "app": {
+    "title": "CloudCLI",
+    "subtitle": "Interfaccia assistente di programmazione AI"
+  },
+  "sessions": {
+    "title": "Sessioni",
+    "newSession": "Nuova sessione",
+    "deleteSession": "Elimina sessione",
+    "renameSession": "Rinomina sessione",
+    "noSessions": "Nessuna sessione",
+    "loadingSessions": "Caricamento sessioni...",
+    "unnamed": "Senza nome",
+    "loading": "Caricamento...",
+    "showMore": "Mostra più sessioni"
+  },
+  "tooltips": {
+    "viewEnvironments": "Visualizza ambienti",
+    "hideSidebar": "Nascondi barra laterale",
+    "createProject": "Crea nuovo progetto",
+    "refresh": "Aggiorna progetti e sessioni (Ctrl+R)",
+    "renameProject": "Rinomina progetto (F2)",
+    "deleteProject": "Rimuovi progetto dalla barra laterale (Canc)",
+    "addToFavorites": "Aggiungi ai preferiti",
+    "removeFromFavorites": "Rimuovi dai preferiti",
+    "editSessionName": "Modifica manualmente il nome della sessione",
+    "deleteSession": "Elimina questa sessione permanentemente",
+    "save": "Salva",
+    "cancel": "Annulla",
+    "clearSearch": "Cancella ricerca"
+  },
+  "navigation": {
+    "chat": "Chat",
+    "files": "File",
+    "git": "Git",
+    "terminal": "Terminale",
+    "tasks": "Attività"
+  },
+  "actions": {
+    "refresh": "Aggiorna",
+    "settings": "Impostazioni",
+    "collapseAll": "Comprimi tutto",
+    "expandAll": "Espandi tutto",
+    "cancel": "Annulla",
+    "save": "Salva",
+    "delete": "Elimina",
+    "rename": "Rinomina",
+    "joinCommunity": "Unisciti alla community",
+    "reportIssue": "Segnala problema",
+    "starOnGithub": "Metti stella su GitHub"
+  },
+  "branding": {
+    "openSource": "Open Source"
+  },
+  "status": {
+    "active": "Attivo",
+    "inactive": "Inattivo",
+    "thinking": "Sto pensando...",
+    "error": "Errore",
+    "aborted": "Interrotto",
+    "unknown": "Sconosciuto"
+  },
+  "time": {
+    "justNow": "Adesso",
+    "oneMinuteAgo": "1 min fa",
+    "minutesAgo": "{{count}} min fa",
+    "oneHourAgo": "1 ora fa",
+    "hoursAgo": "{{count}} ore fa",
+    "oneDayAgo": "1 giorno fa",
+    "daysAgo": "{{count}} giorni fa"
+  },
+  "messages": {
+    "deleteConfirm": "Sei sicuro di voler eliminare questo elemento?",
+    "renameSuccess": "Rinominato con successo",
+    "deleteSuccess": "Eliminato con successo",
+    "errorOccurred": "Si è verificato un errore",
+    "deleteSessionConfirm": "Sei sicuro di voler eliminare questa sessione? Questa azione non può essere annullata.",
+    "deleteProjectConfirm": "Rimuovere questo progetto dalla barra laterale? I file del progetto, le memorie e i dati delle sessioni non verranno eliminati.",
+    "enterProjectPath": "Inserisci un percorso di progetto",
+    "deleteSessionFailed": "Impossibile eliminare la sessione. Riprova.",
+    "deleteSessionError": "Errore durante l'eliminazione della sessione. Riprova.",
+    "renameSessionFailed": "Impossibile rinominare la sessione. Riprova.",
+    "renameSessionError": "Errore durante la rinomina della sessione. Riprova.",
+    "deleteProjectFailed": "Impossibile rimuovere il progetto. Riprova.",
+    "deleteProjectError": "Errore durante la rimozione del progetto. Riprova.",
+    "createProjectFailed": "Impossibile creare il progetto. Riprova.",
+    "createProjectError": "Errore durante la creazione del progetto. Riprova."
+  },
+  "version": {
+    "updateAvailable": "Aggiornamento disponibile"
+  },
+  "search": {
+    "modeProjects": "Progetti",
+    "modeConversations": "Conversazioni",
+    "conversationsPlaceholder": "Cerca nelle conversazioni...",
+    "searching": "Ricerca in corso...",
+    "noResults": "Nessun risultato trovato",
+    "tryDifferentQuery": "Prova con una ricerca diversa",
+    "matches_one": "{{count}} corrispondenza",
+    "matches_other": "{{count}} corrispondenze",
+    "projectsScanned_one": "{{count}} progetto analizzato",
+    "projectsScanned_other": "{{count}} progetti analizzati"
+  },
+  "deleteConfirmation": {
+    "deleteProject": "Rimuovi progetto",
+    "deleteSession": "Elimina sessione",
+    "confirmDelete": "Cosa vuoi fare con",
+    "sessionCount_one": "Questo progetto contiene {{count}} conversazione.",
+    "sessionCount_other": "Questo progetto contiene {{count}} conversazioni.",
+    "removeFromSidebar": "Rimuovi solo dalla barra laterale",
+    "deleteAllData": "Elimina tutti i dati permanentemente",
+    "allConversationsDeleted": "Il progetto verrà rimosso dalla barra laterale. I tuoi file, memorie e dati delle sessioni verranno preservati.",
+    "cannotUndo": "Puoi riaggiungerlo in seguito."
+  }
+}
