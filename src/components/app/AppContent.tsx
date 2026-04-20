@@ -131,15 +131,15 @@ export default function AppContent() {
     const vv = window.visualViewport;
     if (!vv) return;
     const update = () => {
-      const kb = Math.max(0, window.innerHeight - (vv.offsetTop + vv.height));
+      // Only resize matters — keyboard open/close changes vv.height.
+      // Do NOT listen to scroll: on iOS Safari, scrolling content changes
+      // vv.offsetTop which would make --keyboard-height fluctuate during
+      // normal scrolling, causing the container to bounce up and down.
+      const kb = Math.max(0, window.innerHeight - vv.height);
       document.documentElement.style.setProperty('--keyboard-height', `${kb}px`);
     };
     vv.addEventListener('resize', update);
-    vv.addEventListener('scroll', update);
-    return () => {
-      vv.removeEventListener('resize', update);
-      vv.removeEventListener('scroll', update);
-    };
+    return () => vv.removeEventListener('resize', update);
   }, []);
 
   return (
