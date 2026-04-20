@@ -401,7 +401,6 @@ function ChatInterface({
           onTextareaScrollSync={syncInputOverlayScroll}
           onTextareaInput={handleTextareaInput}
           onInputFocusChange={handleInputFocusChange}
-          isInputFocused={isInputFocused}
           placeholder={t('input.placeholder', {
             provider:
               provider === 'cursor'

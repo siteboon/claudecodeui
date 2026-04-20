@@ -136,7 +136,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
         wrapText={displayConfig.wrapText}
         colorScheme={displayConfig.colorScheme}
         resultId={mode === 'input' ? `tool-result-${toolId}` : undefined}
-        status={toolStatus}
+        status={toolStatus !== 'completed' ? toolStatus : undefined}
       />
     );
   }
@@ -266,7 +266,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
         })
       : undefined;
 
-    const badgeElement = toolStatus ? <ToolStatusBadge status={toolStatus} /> : undefined;
+    const badgeElement = toolStatus && toolStatus !== 'completed' ? <ToolStatusBadge status={toolStatus} /> : undefined;
 
     return (
       <CollapsibleDisplay
