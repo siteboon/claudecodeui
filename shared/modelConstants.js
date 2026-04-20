@@ -13,18 +13,16 @@
 export const CLAUDE_MODELS = {
   // Models in SDK format (what the actual SDK accepts)
   OPTIONS: [
+    { value: "sonnet", label: "Sonnet" },
+    { value: "opus", label: "Opus" },
     { value: "claude-opus-4-7", label: "Opus 4.7" },
-    { value: "claude-opus-4-6", label: "Opus 4.6" },
-    { value: "opus[1m]", label: "Opus 4.6 (1M context)" },
-    { value: "claude-sonnet-4-6", label: "Sonnet 4.6" },
-    { value: "sonnet[1m]", label: "Sonnet 4.6 (1M context)" },
-    { value: "claude-opus-4-5-20251101", label: "Opus 4.5" },
-    { value: "claude-sonnet-4-5-20250929", label: "Sonnet 4.5" },
-    { value: "claude-haiku-4-5-20251001", label: "Haiku 4.5" },
-    { value: "opusplan", label: "Opus Plan (Opus + Sonnet)" },
+    { value: "haiku", label: "Haiku" },
+    { value: "opusplan", label: "Opus Plan" },
+    { value: "sonnet[1m]", label: "Sonnet [1M]" },
+    { value: "opus[1m]", label: "Opus [1M]" },
   ],
 
-  DEFAULT: "claude-sonnet-4-6",
+  DEFAULT: "sonnet",
 };
 
 /**

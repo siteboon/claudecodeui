@@ -282,9 +282,10 @@ function transformMessage(sdkMessage) {
 /**
  * Extracts token usage from SDK result messages
  * @param {Object} resultMessage - SDK result message
+ * @param {string} [selectedModel] - The user-selected model identifier (preserves [1m] suffix)
  * @returns {Object|null} Token budget object or null
  */
-function extractTokenBudget(resultMessage) {
+function extractTokenBudget(resultMessage, selectedModel) {
   if (resultMessage.type !== 'result' || !resultMessage.modelUsage) {
     return null;
   }
@@ -308,10 +309,15 @@ function extractTokenBudget(resultMessage) {
   const totalUsed = inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
 
   // Determine the context window from the model that produced this usage.
+  // Prefer `selectedModel` (user input) since `modelKey` from the SDK returns
+  // the resolved API id (e.g. `claude-opus-4-6`) and loses the `[1m]` suffix.
   // Falls back to CONTEXT_WINDOW env var only when the model is unknown.
-  const contextWindow = modelKey
-    ? getClaudeContextWindow(modelKey)
-    : parseInt(process.env.CONTEXT_WINDOW) || CLAUDE_DEFAULT_CONTEXT_WINDOW;
+  const modelForContext = selectedModel || modelKey;
+  const fallbackContextWindow =
+    Number.parseInt(process.env.CONTEXT_WINDOW || '', 10) || CLAUDE_DEFAULT_CONTEXT_WINDOW;
+  const contextWindow = modelForContext
+    ? getClaudeContextWindow(modelForContext)
+    : fallbackContextWindow;
 
   // Token calc logged via token-budget WS event
 
@@ -671,7 +677,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
         if (models.length > 0) {
           // Model info available in result message
         }
-        const tokenBudgetData = extractTokenBudget(message);
+        const tokenBudgetData = extractTokenBudget(message, sdkOptions.model);
         if (tokenBudgetData) {
           ws.send(createNormalizedMessage({ kind: 'status', text: 'token_budget', tokenBudget: tokenBudgetData, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
         }
