@@ -90,8 +90,8 @@ export default function WorkspacePathField({
             onChange={(event) => onChange(event.target.value)}
             placeholder={
               workspaceType === 'existing'
-                ? '/path/to/existing/workspace'
-                : '/path/to/new/workspace'
+                ? 'my-existing-project or /absolute/path'
+                : 'my-new-project or /absolute/path'
             }
             className="w-full"
             disabled={disabled}

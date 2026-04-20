@@ -8,6 +8,7 @@
  *   (no args)     - Start the server (default)
  *   start         - Start the server
  *   sandbox       - Manage Docker sandbox environments
+ *   daemon        - Manage persistent Linux service modes
  *   status        - Show configuration and data locations
  *   help          - Show help information
  *   version       - Show version information
@@ -16,12 +17,19 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import net from 'node:net';
 import { findAppRoot, getModuleDir } from './utils/runtime-paths.js';
+import { buildDaemonCliCommand, handleDaemonCommand, hasInstalledDaemonUnit } from './daemon-manager.js';
 
 const __dirname = getModuleDir(import.meta.url);
 // The CLI is compiled into dist-server/server, but it still needs to read the top-level
 // package.json and .env file. Resolving the app root once keeps those lookups stable.
 const APP_ROOT = findAppRoot(__dirname);
+const DAEMON_COMMAND_CONTEXT = {
+    appRoot: APP_ROOT,
+    cliEntry: process.argv[1],
+    nodeExecPath: process.execPath,
+};
 
 // ANSI color codes for terminal output
 const colors = {
@@ -155,6 +163,7 @@ Usage:
 
 Commands:
   start          Start the CloudCLI server (default)
+  daemon         Manage persistent Linux service (system-first)
   sandbox        Manage Docker sandbox environments
   status         Show configuration and data locations
   update         Update to the latest version
@@ -164,12 +173,19 @@ Commands:
 Options:
   -p, --port <port>           Set server port (default: 3001)
   --database-path <path>      Set custom database location
+  --no-daemon                 Disable automatic daemon startup on Linux
+  --restart-daemon            Restart daemon automatically after update
   -h, --help                  Show this help information
   -v, --version               Show version information
 
 Examples:
   $ cloudcli                        # Start with defaults
   $ cloudcli --port 8080            # Start on port 8080
+  $ cloudcli --no-daemon            # Force foreground mode
+  $ sudo cloudcli daemon install --mode system --port 3001
+  $ cloudcli daemon install --mode user --port 3001 --frontend-port 5173
+  $ cloudcli daemon doctor --mode system
+  $ cloudcli update --restart-daemon
   $ cloudcli sandbox ~/my-project   # Run in a Docker sandbox
   $ cloudcli status                 # Show configuration
 
@@ -228,7 +244,7 @@ async function checkForUpdates(silent = false) {
 }
 
 // Update the package
-async function updatePackage() {
+async function updatePackage(options = {}) {
     try {
         const { execSync } = await import('child_process');
         console.log(`${c.info('[INFO]')} Checking for updates...`);
@@ -242,7 +258,30 @@ async function updatePackage() {
 
         console.log(`${c.info('[INFO]')} Updating from ${currentVersion} to ${latestVersion}...`);
         execSync('npm update -g @cloudcli-ai/cloudcli', { stdio: 'inherit' });
-        console.log(`${c.ok('[OK]')} Update complete! Restart cloudcli to use the new version.`);
+        console.log(`${c.ok('[OK]')} Update complete!`);
+
+        if (options.restartDaemon) {
+            if (!hasInstalledDaemonUnit()) {
+                console.log(`${c.warn('[WARN]')} No daemon unit detected; skipping restart.`);
+                return;
+            }
+            console.log(`${c.info('[INFO]')} Restarting daemon service...`);
+            await handleDaemonCommand(['restart', '--mode=system'], {
+                appRoot: APP_ROOT,
+                defaultPort: process.env.SERVER_PORT || process.env.PORT || '3001',
+                color: c,
+            });
+            console.log(`${c.ok('[OK]')} Daemon restart completed.`);
+        } else if (hasInstalledDaemonUnit()) {
+            const restartCommand = buildDaemonCliCommand(
+                { subcommand: 'restart', mode: 'system' },
+                DAEMON_COMMAND_CONTEXT
+            );
+            console.log(`${c.tip('[TIP]')} Daemon unit detected. Restart to apply update: ${c.bright(restartCommand)}`);
+            console.log(`${c.tip('[TIP]')} Or update + restart in one step: ${c.bright('cloudcli update --restart-daemon')}`);
+        } else {
+            console.log(`${c.tip('[TIP]')} Restart cloudcli to use the new version.`);
+        }
     } catch (e) {
         console.error(`${c.error('[ERROR]')} Update failed: ${e.message}`);
         console.log(`${c.tip('[TIP]')} Try running manually: npm update -g @cloudcli-ai/cloudcli`);
@@ -605,9 +644,195 @@ async function startServer() {
     await import('./index.js');
 }
 
+async function isPortOpen(port, timeoutMs = 800) {
+    return await new Promise((resolve) => {
+        const socket = net.createConnection({ host: '127.0.0.1', port: Number(port) });
+        let settled = false;
+        const done = (value) => {
+            if (settled) return;
+            settled = true;
+            socket.destroy();
+            resolve(value);
+        };
+
+        socket.setTimeout(timeoutMs);
+        socket.once('connect', () => done(true));
+        socket.once('timeout', () => done(false));
+        socket.once('error', () => done(false));
+    });
+}
+
+async function waitForPortOpen(port, timeoutMs = 25000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        if (await isPortOpen(port)) {
+            return true;
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    return false;
+}
+
+function printSystemDaemonActiveNotice(port) {
+    const effectivePort = Number(port) || 3001;
+    const statusCommand = buildDaemonCliCommand(
+        { subcommand: 'status', mode: 'system' },
+        DAEMON_COMMAND_CONTEXT
+    );
+    const stopCommand = buildDaemonCliCommand(
+        { subcommand: 'stop', mode: 'system' },
+        DAEMON_COMMAND_CONTEXT
+    );
+    const logsCommand = buildDaemonCliCommand(
+        { subcommand: 'logs', mode: 'system' },
+        DAEMON_COMMAND_CONTEXT
+    );
+    console.log(`${c.ok('[OK]')} System daemon is active and managing CloudCLI.`);
+    console.log(`${c.info('[INFO]')} Health URL: ${c.bright(`http://localhost:${effectivePort}/health`)}`);
+    console.log(`${c.info('[INFO]')} Status: ${c.bright(statusCommand)}`);
+    console.log(`${c.info('[INFO]')} Stop: ${c.bright(stopCommand)}`);
+    console.log(`${c.info('[INFO]')} Logs: ${c.bright(logsCommand)}`);
+}
+
+function printUserDaemonActiveNotice(port, frontendPort) {
+    const effectivePort = Number(port) || 3001;
+    const effectiveFrontendPort = Number(frontendPort) || 5173;
+    const statusCommand = buildDaemonCliCommand(
+        { subcommand: 'status', mode: 'user' },
+        DAEMON_COMMAND_CONTEXT
+    );
+    const stopCommand = buildDaemonCliCommand(
+        { subcommand: 'stop', mode: 'user' },
+        DAEMON_COMMAND_CONTEXT
+    );
+    const logsCommand = buildDaemonCliCommand(
+        { subcommand: 'logs', mode: 'user' },
+        DAEMON_COMMAND_CONTEXT
+    );
+    console.log(`${c.ok('[OK]')} User daemon is active for this account.`);
+    console.log(`${c.info('[INFO]')} Backend: ${c.bright(`http://localhost:${effectivePort}`)}`);
+    console.log(`${c.info('[INFO]')} Frontend: ${c.bright(`http://localhost:${effectiveFrontendPort}`)}`);
+    console.log(`${c.info('[INFO]')} Status: ${c.bright(statusCommand)}`);
+    console.log(`${c.info('[INFO]')} Stop: ${c.bright(stopCommand)}`);
+    console.log(`${c.info('[INFO]')} Logs: ${c.bright(logsCommand)}`);
+    console.log(`${c.tip('[TIP]')} For login/reboot persistence, enable linger once: ${c.bright(`sudo loginctl enable-linger ${os.userInfo().username}`)}`);
+}
+
+function isSystemPermissionError(error) {
+    const message = String(error?.message || error || '');
+    return /(access denied|permission denied|must be root|interactive authentication required|not permitted|failed to connect to bus|operation not permitted|authentication is required|polkit)/i.test(message);
+}
+
+function buildAutoInstallArgs(mode, options, frontendPort) {
+    const args = ['install', `--mode=${mode}`];
+    if (options.serverPort) {
+        args.push('--port', String(options.serverPort));
+    }
+    if (options.databasePath) {
+        args.push('--database-path', String(options.databasePath));
+    }
+    if (frontendPort) {
+        args.push('--frontend-port', String(frontendPort));
+    }
+    return args;
+}
+
+async function maybeAutoDaemonStart(options = {}) {
+    if (process.platform !== 'linux') return false;
+    if (process.env.CLOUDCLI_DAEMON_MANAGED === '1') return false;
+    if (process.env.CLOUDCLI_NO_DAEMON === '1') return false;
+    if (process.env.CLOUDCLI_DAEMON_ATTEMPTED === '1') return false;
+    if (options.noDaemon) return false;
+
+    process.env.CLOUDCLI_DAEMON_ATTEMPTED = '1';
+    const daemonPort = Number(options.serverPort || process.env.SERVER_PORT || process.env.PORT || '3001');
+    const frontendPort = Number(process.env.VITE_PORT || '5173');
+    const systemArgs = buildAutoInstallArgs('system', options, frontendPort);
+    const userArgs = buildAutoInstallArgs('user', options, frontendPort);
+
+    try {
+        console.log(`${c.info('[INFO]')} Linux detected. Enforcing system daemon mode for CloudCLI...`);
+        await handleDaemonCommand(systemArgs, {
+            appRoot: APP_ROOT,
+            defaultPort: process.env.SERVER_PORT || process.env.PORT || '3001',
+            color: c,
+        });
+        return true;
+    } catch (systemError) {
+        const healthySoon = await waitForPortOpen(daemonPort);
+        if (healthySoon) {
+            console.log(`${c.warn('[WARN]')} System daemon health check was delayed, but port ${daemonPort} is now reachable.`);
+            printSystemDaemonActiveNotice(daemonPort);
+            return true;
+        }
+
+        if (!isSystemPermissionError(systemError)) {
+            const installSystemCommand = buildDaemonCliCommand(
+                {
+                    subcommand: 'install',
+                    mode: 'system',
+                    extraArgs: ['--port', String(daemonPort), '--frontend-port', String(frontendPort)],
+                },
+                DAEMON_COMMAND_CONTEXT
+            );
+            throw new Error(
+                `System daemon bootstrap failed.\n` +
+                `${systemError.message}\n` +
+                `Run with privileges: ${installSystemCommand}`
+            );
+        }
+
+        console.log(`${c.warn('[WARN]')} System daemon setup requires elevated privileges for this user.`);
+        console.log(`${c.info('[INFO]')} Falling back to user daemon mode for account "${os.userInfo().username}"...`);
+
+        try {
+            await handleDaemonCommand(userArgs, {
+                appRoot: APP_ROOT,
+                defaultPort: process.env.SERVER_PORT || process.env.PORT || '3001',
+                color: c,
+            });
+            printUserDaemonActiveNotice(daemonPort, frontendPort);
+            return true;
+        } catch (userError) {
+            const userHealthySoon = await waitForPortOpen(daemonPort);
+            if (userHealthySoon) {
+                console.log(`${c.warn('[WARN]')} User daemon health check was delayed, but port ${daemonPort} is now reachable.`);
+                printUserDaemonActiveNotice(daemonPort, frontendPort);
+                return true;
+            }
+            const installSystemCommand = buildDaemonCliCommand(
+                {
+                    subcommand: 'install',
+                    mode: 'system',
+                    extraArgs: ['--port', String(daemonPort), '--frontend-port', String(frontendPort)],
+                },
+                DAEMON_COMMAND_CONTEXT
+            );
+            const installUserCommand = buildDaemonCliCommand(
+                {
+                    subcommand: 'install',
+                    mode: 'user',
+                    extraArgs: ['--port', String(daemonPort), '--frontend-port', String(frontendPort)],
+                },
+                DAEMON_COMMAND_CONTEXT
+            );
+            throw new Error(
+                `System daemon bootstrap failed.\n` +
+                `${systemError.message}\n\n` +
+                `User daemon fallback also failed.\n` +
+                `${userError.message}\n` +
+                `Try one of:\n` +
+                `1) ${installSystemCommand}\n` +
+                `2) ${installUserCommand}`
+            );
+        }
+    }
+}
+
 // Parse CLI arguments
 function parseArgs(args) {
     const parsed = { command: 'start', options: {} };
+    let commandSet = false;
 
     for (let i = 0; i < args.length; i++) {
         const arg = args[i];
@@ -620,13 +845,22 @@ function parseArgs(args) {
             parsed.options.databasePath = args[++i];
         } else if (arg.startsWith('--database-path=')) {
             parsed.options.databasePath = arg.split('=')[1];
+        } else if (arg === '--no-daemon') {
+            parsed.options.noDaemon = true;
+        } else if (arg === '--restart-daemon') {
+            parsed.options.restartDaemon = true;
         } else if (arg === '--help' || arg === '-h') {
             parsed.command = 'help';
+            commandSet = true;
         } else if (arg === '--version' || arg === '-v') {
             parsed.command = 'version';
+            commandSet = true;
         } else if (!arg.startsWith('-')) {
-            parsed.command = arg;
-            if (arg === 'sandbox') {
+            if (!commandSet) {
+                parsed.command = arg;
+                commandSet = true;
+            }
+            if (arg === 'sandbox' || arg === 'daemon') {
                 parsed.remainingArgs = args.slice(i + 1);
                 break;
             }
@@ -647,16 +881,31 @@ async function main() {
     } else if (!process.env.SERVER_PORT && process.env.PORT) {
         process.env.SERVER_PORT = process.env.PORT;
     }
+    if (options.noDaemon) {
+        process.env.CLOUDCLI_NO_DAEMON = '1';
+    }
     if (options.databasePath) {
         process.env.DATABASE_PATH = options.databasePath;
     }
 
     switch (command) {
         case 'start':
+            if (await maybeAutoDaemonStart(options)) {
+                break;
+            }
             await startServer();
             break;
         case 'sandbox':
             await sandboxCommand(remainingArgs || []);
+            break;
+        case 'daemon':
+            await handleDaemonCommand(remainingArgs || [], {
+                appRoot: APP_ROOT,
+                defaultPort: process.env.SERVER_PORT || process.env.PORT || '3001',
+                color: c,
+                cliEntry: process.argv[1],
+                nodeExecPath: process.execPath,
+            });
             break;
         case 'status':
         case 'info':
@@ -673,7 +922,7 @@ async function main() {
             showVersion();
             break;
         case 'update':
-            await updatePackage();
+            await updatePackage(options);
             break;
         default:
             console.error(`\n❌ Unknown command: ${command}`);

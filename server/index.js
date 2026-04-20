@@ -10,6 +10,11 @@ const __dirname = getModuleDir(import.meta.url);
 // Resolving the app root once keeps every repo-level lookup below aligned across both layouts.
 const APP_ROOT = findAppRoot(__dirname);
 const installMode = fs.existsSync(path.join(APP_ROOT, '.git')) ? 'git' : 'npm';
+const DAEMON_COMMAND_CONTEXT = {
+    appRoot: APP_ROOT,
+    cliEntry: path.join(APP_ROOT, 'server', 'cli.js'),
+    nodeExecPath: process.execPath,
+};
 
 import { c } from './utils/colors.js';
 
@@ -19,6 +24,7 @@ import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
 import os from 'os';
 import http from 'http';
+import net from 'node:net';
 import cors from 'cors';
 import { promises as fsPromises } from 'fs';
 import { spawn } from 'child_process';
@@ -41,7 +47,12 @@ import mcpUtilsRoutes from './routes/mcp-utils.js';
 import commandsRoutes from './routes/commands.js';
 import settingsRoutes from './routes/settings.js';
 import agentRoutes from './routes/agent.js';
-import projectsRoutes, { WORKSPACES_ROOT, validateWorkspacePath } from './routes/projects.js';
+import projectsRoutes, {
+    WORKSPACES_ROOT,
+    WORKSPACES_BASE,
+    validateWorkspacePath,
+    normalizeWorkspacePath,
+} from './routes/projects.js';
 import cliAuthRoutes from './routes/cli-auth.js';
 import userRoutes from './routes/user.js';
 import codexRoutes from './routes/codex.js';
@@ -55,6 +66,7 @@ import { configureWebPush } from './services/vapid-keys.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { IS_PLATFORM } from './constants/config.js';
 import { getConnectableHost } from '../shared/networkHosts.js';
+import { buildDaemonCliCommand, handleDaemonCommand } from './daemon-manager.js';
 
 const VALID_PROVIDERS = ['claude', 'codex', 'cursor', 'gemini'];
 
@@ -64,7 +76,8 @@ const PROVIDER_WATCH_PATHS = [
     { provider: 'cursor', rootPath: path.join(os.homedir(), '.cursor', 'chats') },
     { provider: 'codex', rootPath: path.join(os.homedir(), '.codex', 'sessions') },
     { provider: 'gemini', rootPath: path.join(os.homedir(), '.gemini', 'projects') },
-    { provider: 'gemini_sessions', rootPath: path.join(os.homedir(), '.gemini', 'sessions') }
+    { provider: 'gemini_sessions', rootPath: path.join(os.homedir(), '.gemini', 'sessions') },
+    { provider: 'gemini_cli', rootPath: path.join(os.homedir(), '.gemini', 'tmp') },
 ];
 const WATCHER_IGNORED_PATTERNS = [
     '**/node_modules/**',
@@ -572,14 +585,8 @@ app.get('/api/search/conversations', authenticateToken, async (req, res) => {
 });
 
 const expandWorkspacePath = (inputPath) => {
-    if (!inputPath) return inputPath;
-    if (inputPath === '~') {
-        return WORKSPACES_ROOT;
-    }
-    if (inputPath.startsWith('~/') || inputPath.startsWith('~\\')) {
-        return path.join(WORKSPACES_ROOT, inputPath.slice(2));
-    }
-    return inputPath;
+    if (!inputPath) return WORKSPACES_BASE;
+    return normalizeWorkspacePath(inputPath);
 };
 
 // Browse filesystem endpoint for project suggestions - uses existing getFileTree
@@ -589,22 +596,28 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
 
         console.log('[API] Browse filesystem request for path:', dirPath);
         console.log('[API] WORKSPACES_ROOT is:', WORKSPACES_ROOT);
+        console.log('[API] WORKSPACES_BASE is:', WORKSPACES_BASE);
         // Default to home directory if no path provided
-        const defaultRoot = WORKSPACES_ROOT;
+        const defaultRoot = WORKSPACES_BASE;
         let targetPath = dirPath ? expandWorkspacePath(dirPath) : defaultRoot;
 
-        // Resolve and normalize the path
-        targetPath = path.resolve(targetPath);
-
         // Security check - ensure path is within allowed workspace root
-        const validation = await validateWorkspacePath(targetPath);
+        let validation = await validateWorkspacePath(targetPath);
         if (!validation.valid) {
-            return res.status(403).json({ error: validation.error });
+            // Keep the browser functional by returning to the safe base on invalid navigation.
+            const fallbackValidation = await validateWorkspacePath(defaultRoot);
+            if (!fallbackValidation.valid) {
+                return res.status(403).json({ error: validation.error });
+            }
+            validation = fallbackValidation;
         }
         const resolvedPath = validation.resolvedPath || targetPath;
 
         // Security check - ensure path is accessible
         try {
+            if (resolvedPath === defaultRoot) {
+                await fs.promises.mkdir(resolvedPath, { recursive: true });
+            }
             await fs.promises.access(resolvedPath);
             const stats = await fs.promises.stat(resolvedPath);
 
@@ -636,13 +649,13 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
 
         // Add common directories if browsing home directory
         const suggestions = [];
-        let resolvedWorkspaceRoot = defaultRoot;
+        let resolvedWorkspaceBase = defaultRoot;
         try {
-            resolvedWorkspaceRoot = await fsPromises.realpath(defaultRoot);
+            resolvedWorkspaceBase = await fsPromises.realpath(defaultRoot);
         } catch (error) {
             // Use default root as-is if realpath fails
         }
-        if (resolvedPath === resolvedWorkspaceRoot) {
+        if (resolvedPath === resolvedWorkspaceBase) {
             const commonDirs = ['Desktop', 'Documents', 'Projects', 'Development', 'Dev', 'Code', 'workspace'];
             const existingCommon = directories.filter(dir => commonDirs.includes(dir.name));
             const otherDirs = directories.filter(dir => !commonDirs.includes(dir.name));
@@ -654,6 +667,7 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
 
         res.json({
             path: resolvedPath,
+            rootPath: resolvedWorkspaceBase,
             suggestions: suggestions
         });
 
@@ -2302,9 +2316,184 @@ const HOST = process.env.HOST || '0.0.0.0';
 const DISPLAY_HOST = getConnectableHost(HOST);
 const VITE_PORT = process.env.VITE_PORT || 5173;
 
+async function isPortOpen(port, timeoutMs = 800) {
+    return await new Promise((resolve) => {
+        const socket = net.createConnection({ host: '127.0.0.1', port: Number(port) });
+        let settled = false;
+        const done = (value) => {
+            if (settled) return;
+            settled = true;
+            socket.destroy();
+            resolve(value);
+        };
+
+        socket.setTimeout(timeoutMs);
+        socket.once('connect', () => done(true));
+        socket.once('timeout', () => done(false));
+        socket.once('error', () => done(false));
+    });
+}
+
+async function waitForPortOpen(port, timeoutMs = 25000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        if (await isPortOpen(port)) {
+            return true;
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    return false;
+}
+
+function printSystemDaemonActiveNotice(port) {
+    const effectivePort = Number(port) || 3001;
+    const statusCommand = buildDaemonCliCommand(
+        { subcommand: 'status', mode: 'system' },
+        DAEMON_COMMAND_CONTEXT
+    );
+    const stopCommand = buildDaemonCliCommand(
+        { subcommand: 'stop', mode: 'system' },
+        DAEMON_COMMAND_CONTEXT
+    );
+    const logsCommand = buildDaemonCliCommand(
+        { subcommand: 'logs', mode: 'system' },
+        DAEMON_COMMAND_CONTEXT
+    );
+    console.log(`${c.ok('[OK]')} System daemon is active and managing CloudCLI.`);
+    console.log(`${c.info('[INFO]')} Health URL: ${c.bright(`http://localhost:${effectivePort}/health`)}`);
+    console.log(`${c.info('[INFO]')} Status: ${c.bright(statusCommand)}`);
+    console.log(`${c.info('[INFO]')} Stop: ${c.bright(stopCommand)}`);
+    console.log(`${c.info('[INFO]')} Logs: ${c.bright(logsCommand)}`);
+}
+
+function printUserDaemonActiveNotice(port, frontendPort) {
+    const effectivePort = Number(port) || 3001;
+    const effectiveFrontendPort = Number(frontendPort) || 5173;
+    const statusCommand = buildDaemonCliCommand(
+        { subcommand: 'status', mode: 'user' },
+        DAEMON_COMMAND_CONTEXT
+    );
+    const stopCommand = buildDaemonCliCommand(
+        { subcommand: 'stop', mode: 'user' },
+        DAEMON_COMMAND_CONTEXT
+    );
+    const logsCommand = buildDaemonCliCommand(
+        { subcommand: 'logs', mode: 'user' },
+        DAEMON_COMMAND_CONTEXT
+    );
+    console.log(`${c.ok('[OK]')} User daemon is active for this account.`);
+    console.log(`${c.info('[INFO]')} Backend: ${c.bright(`http://localhost:${effectivePort}`)}`);
+    console.log(`${c.info('[INFO]')} Frontend: ${c.bright(`http://localhost:${effectiveFrontendPort}`)}`);
+    console.log(`${c.info('[INFO]')} Status: ${c.bright(statusCommand)}`);
+    console.log(`${c.info('[INFO]')} Stop: ${c.bright(stopCommand)}`);
+    console.log(`${c.info('[INFO]')} Logs: ${c.bright(logsCommand)}`);
+    console.log(`${c.tip('[TIP]')} For login/reboot persistence, enable linger once: ${c.bright(`sudo loginctl enable-linger ${os.userInfo().username}`)}`);
+}
+
+function isSystemPermissionError(error) {
+    const message = String(error?.message || error || '');
+    return /(access denied|permission denied|must be root|interactive authentication required|not permitted|failed to connect to bus|operation not permitted|authentication is required|polkit)/i.test(message);
+}
+
+async function maybeAutoDaemonBootstrapFromIndex() {
+    if (process.platform !== 'linux') return false;
+    if (process.env.CLOUDCLI_DAEMON_MANAGED === '1') return false;
+    if (process.env.CLOUDCLI_NO_DAEMON === '1') return false;
+    if (process.env.CLOUDCLI_DAEMON_ATTEMPTED === '1') return false;
+
+    process.env.CLOUDCLI_DAEMON_ATTEMPTED = '1';
+
+    const systemArgs = ['install', '--mode=system', '--port', String(SERVER_PORT), '--frontend-port', String(VITE_PORT)];
+    const userArgs = ['install', '--mode=user', '--port', String(SERVER_PORT), '--frontend-port', String(VITE_PORT)];
+
+    try {
+        console.log(`${c.info('[INFO]')} Linux detected. Enforcing system daemon mode for CloudCLI...`);
+        await handleDaemonCommand(systemArgs, {
+            appRoot: APP_ROOT,
+            defaultPort: String(SERVER_PORT),
+            color: c,
+            cliEntry: path.join(APP_ROOT, 'server', 'cli.js'),
+        });
+        return true;
+    } catch (systemError) {
+        const healthySoon = await waitForPortOpen(SERVER_PORT);
+        if (healthySoon) {
+            console.log(`${c.warn('[WARN]')} System daemon health check was delayed, but port ${SERVER_PORT} is now reachable.`);
+            printSystemDaemonActiveNotice(SERVER_PORT);
+            return true;
+        }
+
+        if (!isSystemPermissionError(systemError)) {
+            const installSystemCommand = buildDaemonCliCommand(
+                {
+                    subcommand: 'install',
+                    mode: 'system',
+                    extraArgs: ['--port', String(SERVER_PORT), '--frontend-port', String(VITE_PORT)],
+                },
+                DAEMON_COMMAND_CONTEXT
+            );
+            throw new Error(
+                `System daemon bootstrap failed.\n` +
+                `${systemError.message}\n` +
+                `Run with privileges: ${installSystemCommand}`
+            );
+        }
+
+        console.log(`${c.warn('[WARN]')} System daemon setup requires elevated privileges for this user.`);
+        console.log(`${c.info('[INFO]')} Falling back to user daemon mode for account "${os.userInfo().username}"...`);
+
+        try {
+            await handleDaemonCommand(userArgs, {
+                appRoot: APP_ROOT,
+                defaultPort: String(SERVER_PORT),
+                color: c,
+                cliEntry: path.join(APP_ROOT, 'server', 'cli.js'),
+            });
+            printUserDaemonActiveNotice(SERVER_PORT, VITE_PORT);
+            return true;
+        } catch (userError) {
+            const userHealthySoon = await waitForPortOpen(SERVER_PORT);
+            if (userHealthySoon) {
+                console.log(`${c.warn('[WARN]')} User daemon health check was delayed, but port ${SERVER_PORT} is now reachable.`);
+                printUserDaemonActiveNotice(SERVER_PORT, VITE_PORT);
+                return true;
+            }
+            const installSystemCommand = buildDaemonCliCommand(
+                {
+                    subcommand: 'install',
+                    mode: 'system',
+                    extraArgs: ['--port', String(SERVER_PORT), '--frontend-port', String(VITE_PORT)],
+                },
+                DAEMON_COMMAND_CONTEXT
+            );
+            const installUserCommand = buildDaemonCliCommand(
+                {
+                    subcommand: 'install',
+                    mode: 'user',
+                    extraArgs: ['--port', String(SERVER_PORT), '--frontend-port', String(VITE_PORT)],
+                },
+                DAEMON_COMMAND_CONTEXT
+            );
+            throw new Error(
+                `System daemon bootstrap failed.\n` +
+                `${systemError.message}\n\n` +
+                `User daemon fallback also failed.\n` +
+                `${userError.message}\n` +
+                `Try one of:\n` +
+                `1) ${installSystemCommand}\n` +
+                `2) ${installUserCommand}`
+            );
+        }
+    }
+}
+
 // Initialize database and start server
 async function startServer() {
     try {
+        if (await maybeAutoDaemonBootstrapFromIndex()) {
+            return;
+        }
+
         // Initialize authentication database
         await initializeDatabase();
 

@@ -111,49 +111,68 @@ export default function SidebarProjectList({
   }, [selectedProject]);
 
   const showProjects = !isLoading && projects.length > 0 && filteredProjects.length > 0;
+  const isDetectedProject = (project: Project) =>
+    project.source === 'history' || (project.autoDiscovered === true && project.isManuallyAdded !== true);
+
+  const regularProjects = filteredProjects.filter((project) => !isDetectedProject(project));
+  const detectedProjects = filteredProjects.filter((project) => isDetectedProject(project));
+
+  const renderProjectItem = (project: Project) => (
+    <SidebarProjectItem
+      key={project.name}
+      project={project}
+      selectedProject={selectedProject}
+      selectedSession={selectedSession}
+      isExpanded={expandedProjects.has(project.name)}
+      isDeleting={deletingProjects.has(project.name)}
+      isStarred={isProjectStarred(project.name)}
+      editingProject={editingProject}
+      editingName={editingName}
+      sessions={getProjectSessions(project)}
+      initialSessionsLoaded={initialSessionsLoaded.has(project.name)}
+      isLoadingSessions={Boolean(loadingSessions[project.name])}
+      currentTime={currentTime}
+      editingSession={editingSession}
+      editingSessionName={editingSessionName}
+      tasksEnabled={tasksEnabled}
+      mcpServerStatus={mcpServerStatus}
+      onEditingNameChange={onEditingNameChange}
+      onToggleProject={onToggleProject}
+      onProjectSelect={onProjectSelect}
+      onToggleStarProject={onToggleStarProject}
+      onStartEditingProject={onStartEditingProject}
+      onCancelEditingProject={onCancelEditingProject}
+      onSaveProjectName={onSaveProjectName}
+      onDeleteProject={onDeleteProject}
+      onSessionSelect={onSessionSelect}
+      onDeleteSession={onDeleteSession}
+      onLoadMoreSessions={onLoadMoreSessions}
+      onNewSession={onNewSession}
+      onEditingSessionNameChange={onEditingSessionNameChange}
+      onStartEditingSession={onStartEditingSession}
+      onCancelEditingSession={onCancelEditingSession}
+      onSaveEditingSession={onSaveEditingSession}
+      t={t}
+    />
+  );
 
   return (
     <div className="pb-safe-area-inset-bottom md:space-y-1">
       {!showProjects
         ? state
-        : filteredProjects.map((project) => (
-            <SidebarProjectItem
-              key={project.name}
-              project={project}
-              selectedProject={selectedProject}
-              selectedSession={selectedSession}
-              isExpanded={expandedProjects.has(project.name)}
-              isDeleting={deletingProjects.has(project.name)}
-              isStarred={isProjectStarred(project.name)}
-              editingProject={editingProject}
-              editingName={editingName}
-              sessions={getProjectSessions(project)}
-              initialSessionsLoaded={initialSessionsLoaded.has(project.name)}
-              isLoadingSessions={Boolean(loadingSessions[project.name])}
-              currentTime={currentTime}
-              editingSession={editingSession}
-              editingSessionName={editingSessionName}
-              tasksEnabled={tasksEnabled}
-              mcpServerStatus={mcpServerStatus}
-              onEditingNameChange={onEditingNameChange}
-              onToggleProject={onToggleProject}
-              onProjectSelect={onProjectSelect}
-              onToggleStarProject={onToggleStarProject}
-              onStartEditingProject={onStartEditingProject}
-              onCancelEditingProject={onCancelEditingProject}
-              onSaveProjectName={onSaveProjectName}
-              onDeleteProject={onDeleteProject}
-              onSessionSelect={onSessionSelect}
-              onDeleteSession={onDeleteSession}
-              onLoadMoreSessions={onLoadMoreSessions}
-              onNewSession={onNewSession}
-              onEditingSessionNameChange={onEditingSessionNameChange}
-              onStartEditingSession={onStartEditingSession}
-              onCancelEditingSession={onCancelEditingSession}
-              onSaveEditingSession={onSaveEditingSession}
-              t={t}
-            />
-          ))}
+        : (
+            <>
+              {regularProjects.map((project) => renderProjectItem(project))}
+              {detectedProjects.length > 0 && (
+                <>
+                  <div className="px-3 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    {t('projects.detectedFromHistory')}
+                  </div>
+                  {detectedProjects.map((project) => renderProjectItem(project))}
+                </>
+              )}
+            </>
+          )}
     </div>
   );
 }

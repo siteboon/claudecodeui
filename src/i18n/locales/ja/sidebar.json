@@ -15,6 +15,7 @@
     "codexSession": "Codexセッション",
     "fetchingProjects": "Claudeのプロジェクトとセッションを取得しています",
     "projects": "プロジェクト",
+    "detectedFromHistory": "履歴から検出",
     "noMatchingProjects": "一致するプロジェクトがありません",
     "tryDifferentSearch": "検索語を変えてお試しください",
     "runClaudeCli": "プロジェクトディレクトリでClaude CLIを実行して始めましょう"

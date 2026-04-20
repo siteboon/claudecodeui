@@ -24,10 +24,10 @@
     "url": "https://github.com/siteboon/claudecodeui/issues"
   },
   "scripts": {
-    "dev": "concurrently --kill-others \"npm run server:dev\" \"npm run client\"",
-    "server": "node dist-server/server/index.js",
-    "server:dev": "tsx --tsconfig server/tsconfig.json server/index.js",
-    "server:dev-watch": "tsx watch --tsconfig server/tsconfig.json server/index.js",
+    "dev": "npm run server:dev",
+    "server": "node dist-server/server/cli.js start",
+    "server:dev": "node server/cli.js daemon install --mode system --port 3001 --frontend-port 5173",
+    "server:dev-watch": "node server/cli.js daemon restart --mode system --port 3001 --frontend-port 5173",
     "client": "vite",
     "build": "npm run build:client && npm run build:server",
     "build:client": "vite build",

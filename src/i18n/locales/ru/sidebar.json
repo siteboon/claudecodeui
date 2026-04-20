@@ -15,6 +15,7 @@
     "codexSession": "Сеанс Codex",
     "fetchingProjects": "Получение ваших проектов и сеансов Claude",
     "projects": "проекты",
+    "detectedFromHistory": "Обнаружено в истории",
     "noMatchingProjects": "Нет подходящих проектов",
     "tryDifferentSearch": "Попробуйте изменить поисковый запрос",
     "runClaudeCli": "Запустите Claude CLI в каталоге проекта для начала работы"

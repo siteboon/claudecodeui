@@ -19,6 +19,7 @@ export default function FolderBrowserModal({
   onFolderSelected,
 }: FolderBrowserModalProps) {
   const [currentPath, setCurrentPath] = useState('~');
+  const [rootPath, setRootPath] = useState<string>('~');
   const [folders, setFolders] = useState<FolderSuggestion[]>([]);
   const [loadingFolders, setLoadingFolders] = useState(false);
   const [showHiddenFolders, setShowHiddenFolders] = useState(false);
@@ -34,6 +35,7 @@ export default function FolderBrowserModal({
     try {
       const result = await browseFilesystemFolders(pathToLoad);
       setCurrentPath(result.path);
+      setRootPath(result.rootPath);
       setFolders(result.suggestions);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Failed to load folders');
@@ -90,7 +92,7 @@ export default function FolderBrowserModal({
     }
   }, [currentPath, loadFolders, newFolderName]);
 
-  const parentPath = getParentPath(currentPath);
+  const parentPath = currentPath === rootPath ? null : getParentPath(currentPath);
 
   if (!isOpen) {
     return null;
