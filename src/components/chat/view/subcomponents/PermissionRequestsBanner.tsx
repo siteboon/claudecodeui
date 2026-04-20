@@ -83,18 +83,19 @@ export default function PermissionRequestsBanner({
                     Allow rule: <code className="rounded bg-muted px-1 py-0.5 text-xs">{permissionEntry}</code>
                   </div>
                 )}
-                {rawInput && (
-                  <details className="mt-2">
-                    <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
-                      View tool input
-                    </summary>
-                    <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-md border bg-muted/50 p-2 text-xs text-muted-foreground">
-                      {rawInput}
-                    </pre>
-                  </details>
-                )}
               </ConfirmationRequest>
             </ConfirmationTitle>
+
+            {rawInput && (
+              <details className="mt-2">
+                <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+                  View tool input
+                </summary>
+                <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-md border bg-muted/50 p-2 text-xs text-muted-foreground">
+                  {rawInput}
+                </pre>
+              </details>
+            )}
 
             <ConfirmationActions>
               <ConfirmationAction
