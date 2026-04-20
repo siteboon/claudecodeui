@@ -122,8 +122,28 @@ export default function AppContent() {
     }
   }, [isConnected, selectedSession?.id, sendMessage]);
 
+  // Adjust the app container to stay above the virtual keyboard on iOS Safari.
+  // On Chrome for Android the layout viewport already shrinks when the keyboard opens,
+  // so inset-0 adjusts automatically. On iOS the layout viewport stays full-height and
+  // the keyboard overlays it — we use the Visual Viewport API to track keyboard height
+  // and apply it as a CSS variable that shifts the container's bottom edge up.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      const kb = Math.max(0, window.innerHeight - (vv.offsetTop + vv.height));
+      document.documentElement.style.setProperty('--keyboard-height', `${kb}px`);
+    };
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    return () => {
+      vv.removeEventListener('resize', update);
+      vv.removeEventListener('scroll', update);
+    };
+  }, []);
+
   return (
-    <div className="fixed inset-0 flex bg-background">
+    <div className="fixed inset-0 flex bg-background" style={{ bottom: 'var(--keyboard-height, 0px)' }}>
       {!isMobile ? (
         <div className="h-full flex-shrink-0 border-r border-border/50">
           <Sidebar {...sidebarSharedProps} />

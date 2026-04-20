@@ -6,6 +6,8 @@ import type { SubagentChildTool } from '../types/types';
 import { getToolConfig } from './configs/toolConfigs';
 import { OneLineDisplay, CollapsibleDisplay, ToolDiffViewer, MarkdownContent, FileListContent, TodoListContent, TaskListContent, TextContent, QuestionAnswerContent, SubagentContainer } from './components';
 import { PlanDisplay } from './components/PlanDisplay';
+import { ToolStatusBadge } from './components/ToolStatusBadge';
+import type { ToolStatus } from './components/ToolStatusBadge';
 
 type DiffLine = {
   type: string;
@@ -39,10 +41,22 @@ function getToolCategory(toolName: string): string {
   if (toolName === 'Bash') return 'bash';
   if (['TodoWrite', 'TodoRead'].includes(toolName)) return 'todo';
   if (['TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet'].includes(toolName)) return 'task';
-  if (toolName === 'Task') return 'agent';  // Subagent task
+  if (toolName === 'Task') return 'agent';
   if (toolName === 'exit_plan_mode' || toolName === 'ExitPlanMode') return 'plan';
   if (toolName === 'AskUserQuestion') return 'question';
   return 'default';
+}
+
+function deriveToolStatus(toolResult: any): ToolStatus {
+  if (!toolResult) return 'running';
+  if (toolResult.isError) {
+    const content = String(toolResult.content || '').toLowerCase();
+    if (content.includes('permission') || content.includes('denied') || content.includes('not allowed')) {
+      return 'denied';
+    }
+    return 'error';
+  }
+  return 'completed';
 }
 
 /**
@@ -76,6 +90,12 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
     }
   }, [mode, toolInput, toolResult]);
 
+  // Only derive and show status badge on input renders
+  const toolStatus = useMemo(
+    () => mode === 'input' ? deriveToolStatus(toolResult) : undefined,
+    [mode, toolResult],
+  );
+
   const handleAction = useCallback(() => {
     if (displayConfig?.action === 'open-file' && onFileOpen) {
       const value = displayConfig.getValue?.(parsedData) || '';
@@ -85,9 +105,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
 
   // Route subagent containers to dedicated component (after hooks to satisfy Rules of Hooks)
   if (isSubagentContainer && subagentState) {
-    if (mode === 'result') {
-      return null;
-    }
+    if (mode === 'result') return null;
     return (
       <SubagentContainer
         toolInput={toolInput}
@@ -118,6 +136,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
         wrapText={displayConfig.wrapText}
         colorScheme={displayConfig.colorScheme}
         resultId={mode === 'input' ? `tool-result-${toolId}` : undefined}
+        status={toolStatus}
       />
     );
   }
@@ -164,7 +183,6 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
       onFileOpen
     }) || {};
 
-    // Build the content component based on contentType
     let contentComponent: React.ReactNode = null;
 
     switch (displayConfig.contentType) {
@@ -241,13 +259,14 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
       }
     }
 
-    // For edit tools, make the title (filename) clickable to open the file
     const handleTitleClick = (toolName === 'Edit' || toolName === 'Write' || toolName === 'ApplyPatch') && contentProps.filePath && onFileOpen
       ? () => onFileOpen(contentProps.filePath, {
           old_string: contentProps.oldContent,
           new_string: contentProps.newContent
         })
       : undefined;
+
+    const badgeElement = toolStatus ? <ToolStatusBadge status={toolStatus} /> : undefined;
 
     return (
       <CollapsibleDisplay
@@ -256,6 +275,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
         title={title}
         defaultOpen={defaultOpen}
         onTitleClick={handleTitleClick}
+        badge={badgeElement}
         showRawParameters={mode === 'input' && showRawParameters}
         rawContent={rawToolInput}
         toolCategory={getToolCategory(toolName)}
