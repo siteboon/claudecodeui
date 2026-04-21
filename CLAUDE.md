@@ -1,10 +1,10 @@
 # CLAUDE.md
 
-This is the Startino fork of CloudCLI UI, running on `<host>` from `<app_checkout>`.
-Instances run as `claudecodeui@<user>` systemd services, one Unix user per UI login/workspace.
-Each instance has its own `$HOME`, Claude sessions, CloudCLI auth DB, frontend dist dir, and port.
+This is the Startino fork of CloudCLI UI, running on `<host>` from the shared checkout `<app_checkout>`.
+Production runs one `claudecodeui@<user>` systemd service per UI instance.
+Each instance has its own Unix user, `$HOME`, Claude sessions, CloudCLI auth DB, dist dir, and port.
 The reverse proxy exposes each instance at `/<user>/` on the private tailnet URL.
-Project folders may be systemd `BindPaths`; check the service unit before assuming a GUI path is a normal clone.
-The shared UI checkout may also be bind-mounted into selected user workspaces for live customization.
-Run the host setup script from the servers repo, currently `<servers_repo>/hosts/<host>/claudecodeui/setup.sh`.
-For NixOS changes use `<servers_repo>/update.sh`; commit and push UI changes in this repo.
+The checkout visible in a GUI workspace may be a systemd `BindPaths` mount of the live shared checkout.
+Build outputs are per instance, for example `<dist_dir_for_user>`, while server code is shared.
+Deployment scripts and NixOS units live outside this repo in the infrastructure repo.
+Commit and push UI changes in this repo; deploy through the host setup flow after changes.
