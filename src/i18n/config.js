@@ -168,6 +168,7 @@ i18n
         chat: trChat,
         codeEditor: trCodeEditor,
         tasks: trTasks,
+      },
       it: {
         common: itCommon,
         settings: itSettings,
