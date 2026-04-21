@@ -23,6 +23,16 @@ export default defineConfig(({ mode }) => {
   // TODO: Remove support for legacy PORT variables in all locations in a future major release, leaving only SERVER_PORT.
   const serverPort = env.SERVER_PORT || env.PORT || 3001
 
+  // ALLOWED_HOSTS: comma-separated list of Host-header values vite will accept
+  // (for deployments behind a reverse proxy on a non-localhost hostname).
+  // Use "*" to disable the check entirely.
+  const rawAllowedHosts = (env.ALLOWED_HOSTS || '').trim()
+  const allowedHosts = rawAllowedHosts === '*'
+    ? true
+    : rawAllowedHosts
+      ? rawAllowedHosts.split(',').map((h) => h.trim()).filter(Boolean)
+      : undefined
+
   return {
     base: normalizedBasePath,
     plugins: [react()],
@@ -34,6 +44,7 @@ export default defineConfig(({ mode }) => {
     server: {
       host,
       port: parseInt(env.VITE_PORT) || 5173,
+      ...(allowedHosts !== undefined ? { allowedHosts } : {}),
       proxy: {
         '/api': `http://${proxyHost}:${serverPort}`,
         '/ws': {
