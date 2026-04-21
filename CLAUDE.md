@@ -1,10 +1,10 @@
 # CLAUDE.md
 
-This repo is the Startino fork of CloudCLI UI, deployed on Pluto from `/srv/claudecodeui`.
-Project folders are systemd `BindPaths`: `/home/config/servers` appears as `~/servers`, and the UI checkout is mounted into `/jorge/`.
-Services are `claudecodeui@config`, `claudecodeui@jorge`, and `claudecodeui@jonas`.
-They serve `/config/`, `/jorge/`, and `/jonas/` through Tailscale Serve on Pluto.
-Frontend builds are per user: `dist-config`, `dist-jorge`, and `dist-jonas`.
-Run setup from the servers repo: `/home/config/servers/hosts/pluto/claudecodeui/setup.sh`.
-Use `/home/config/servers/update.sh` for NixOS changes, not direct rebuild commands.
-Commit and push UI changes to `startino/claudecodeui`.
+This is the Startino fork of CloudCLI UI, running on Pluto from `/srv/claudecodeui`.
+The NixOS services are `claudecodeui@config`, `claudecodeui@jorge`, and `claudecodeui@jonas`.
+Each service has its own Unix user, home dir, Claude sessions, CloudCLI auth DB, and port.
+Tailscale Serve exposes them as `/config/`, `/jorge/`, and `/jonas/`.
+Shared project access uses systemd `BindPaths`, so `/home/config/servers` appears as `~/servers` in user GUIs.
+The live UI checkout is also bind-mounted into Jorge's GUI at `/home/jorge/startino/claudecodeui`.
+Build and setup script: `/home/config/servers/hosts/pluto/claudecodeui/setup.sh`.
+For NixOS changes use `/home/config/servers/update.sh`; commit and push UI changes here.
