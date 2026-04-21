@@ -70,7 +70,8 @@ export class ClaudeSessionsProvider implements IProviderSessions {
 
     if (raw.message?.role === 'user' && raw.message?.content) {
       if (Array.isArray(raw.message.content)) {
-        for (const part of raw.message.content) {
+        for (let partIndex = 0; partIndex < raw.message.content.length; partIndex++) {
+          const part = raw.message.content[partIndex];
           if (part.type === 'tool_result') {
             messages.push(createNormalizedMessage({
               id: `${baseId}_tr_${part.tool_use_id}`,
@@ -88,7 +89,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
             const text = part.text || '';
             if (text && !isInternalContent(text)) {
               messages.push(createNormalizedMessage({
-                id: `${baseId}_text`,
+                id: `${baseId}_text_${partIndex}`,
                 sessionId,
                 timestamp: ts,
                 provider: PROVIDER,

@@ -25,6 +25,24 @@ type CursorMessageBlob = {
   content: AnyRecord;
 };
 
+function sanitizeCursorSessionId(sessionId: string): string {
+  const normalized = sessionId.trim();
+  if (!normalized) {
+    throw new Error('Cursor session id is required.');
+  }
+
+  if (
+    normalized.includes('..')
+    || normalized.includes(path.posix.sep)
+    || normalized.includes(path.win32.sep)
+    || normalized !== path.basename(normalized)
+  ) {
+    throw new Error(`Invalid cursor session id "${sessionId}".`);
+  }
+
+  return normalized;
+}
+
 export class CursorSessionsProvider implements IProviderSessions {
   /**
    * Loads Cursor's SQLite blob DAG and returns message blobs in conversation
@@ -35,9 +53,17 @@ export class CursorSessionsProvider implements IProviderSessions {
     const { default: Database } = await import('better-sqlite3');
 
     const cwdId = crypto.createHash('md5').update(projectPath || process.cwd()).digest('hex');
-    const storeDbPath = path.join(os.homedir(), '.cursor', 'chats', cwdId, sessionId, 'store.db');
+    const safeSessionId = sanitizeCursorSessionId(sessionId);
+    const baseChatsPath = path.join(os.homedir(), '.cursor', 'chats', cwdId);
+    const storeDbPath = path.join(baseChatsPath, safeSessionId, 'store.db');
+    const resolvedBaseChatsPath = path.resolve(baseChatsPath);
+    const resolvedStoreDbPath = path.resolve(storeDbPath);
+    const relativeStorePath = path.relative(resolvedBaseChatsPath, resolvedStoreDbPath);
+    if (relativeStorePath.startsWith('..') || path.isAbsolute(relativeStorePath)) {
+      throw new Error(`Invalid cursor session path for "${sessionId}".`);
+    }
 
-    const db = new Database(storeDbPath, { readonly: true, fileMustExist: true });
+    const db = new Database(resolvedStoreDbPath, { readonly: true, fileMustExist: true });
 
     try {
       const allBlobs = db.prepare<[], CursorDbBlob>('SELECT rowid, id, data FROM blobs').all();
@@ -57,28 +83,35 @@ export class CursorSessionsProvider implements IProviderSessions {
           } catch {
             // Cursor can include binary or partial blobs; only JSON blobs become messages.
           }
-        } else if (blob.data) {
-          const parents: string[] = [];
-          let i = 0;
-          while (i < blob.data.length - 33) {
-            if (blob.data[i] === 0x0A && blob.data[i + 1] === 0x20) {
-              const parentHash = blob.data.slice(i + 2, i + 34).toString('hex');
-              if (blobMap.has(parentHash)) {
-                parents.push(parentHash);
-              }
-              i += 34;
-            } else {
-              i++;
+        }
+      }
+
+      for (const blob of allBlobs) {
+        if (!blob.data || blob.data[0] === 0x7B) {
+          continue;
+        }
+
+        const parents: string[] = [];
+        let i = 0;
+        while (i < blob.data.length - 33) {
+          if (blob.data[i] === 0x0A && blob.data[i + 1] === 0x20) {
+            const parentHash = blob.data.slice(i + 2, i + 34).toString('hex');
+            if (blobMap.has(parentHash)) {
+              parents.push(parentHash);
             }
+            i += 34;
+          } else {
+            i++;
           }
-          if (parents.length > 0) {
-            parentRefs.set(blob.id, parents);
-            for (const parentId of parents) {
-              if (!childRefs.has(parentId)) {
-                childRefs.set(parentId, []);
-              }
-              childRefs.get(parentId)?.push(blob.id);
+        }
+
+        if (parents.length > 0) {
+          parentRefs.set(blob.id, parents);
+          for (const parentId of parents) {
+            if (!childRefs.has(parentId)) {
+              childRefs.set(parentId, []);
             }
+            childRefs.get(parentId)?.push(blob.id);
           }
         }
       }
@@ -192,14 +225,20 @@ export class CursorSessionsProvider implements IProviderSessions {
     try {
       const blobs = await this.loadCursorBlobs(sessionId, projectPath);
       const allNormalized = this.normalizeCursorBlobs(blobs, sessionId);
+      const total = allNormalized.length;
 
-      if (limit !== null && limit > 0) {
+      if (limit !== null) {
         const start = offset;
-        const page = allNormalized.slice(start, start + limit);
+        const page = limit === 0
+          ? []
+          : allNormalized.slice(start, start + limit);
+        const hasMore = limit === 0
+          ? start < total
+          : start + limit < total;
         return {
           messages: page,
-          total: allNormalized.length,
-          hasMore: start + limit < allNormalized.length,
+          total,
+          hasMore,
           offset,
           limit,
         };
@@ -207,7 +246,7 @@ export class CursorSessionsProvider implements IProviderSessions {
 
       return {
         messages: allNormalized,
-        total: allNormalized.length,
+        total,
         hasMore: false,
         offset: 0,
         limit: null,

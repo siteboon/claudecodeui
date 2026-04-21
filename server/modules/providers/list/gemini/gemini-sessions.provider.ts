@@ -113,8 +113,10 @@ export class GeminiSessionsProvider implements IProviderSessions {
    */
   async fetchHistory(
     sessionId: string,
-    _options: FetchHistoryOptions = {},
+    options: FetchHistoryOptions = {},
   ): Promise<FetchHistoryResult> {
+    const { limit = null, offset = 0 } = options;
+
     let rawMessages: AnyRecord[];
     try {
       rawMessages = sessionManager.getSessionMessages(sessionId) as AnyRecord[];
@@ -208,12 +210,18 @@ export class GeminiSessionsProvider implements IProviderSessions {
       }
     }
 
+    const start = Math.max(0, offset);
+    const pageLimit = limit === null ? null : Math.max(0, limit);
+    const messages = pageLimit === null
+      ? normalized.slice(start)
+      : normalized.slice(start, start + pageLimit);
+
     return {
-      messages: normalized,
+      messages,
       total: normalized.length,
-      hasMore: false,
-      offset: 0,
-      limit: null,
+      hasMore: pageLimit === null ? false : start + pageLimit < normalized.length,
+      offset: start,
+      limit: pageLimit,
     };
   }
 }
