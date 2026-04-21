@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react';
-import type { AppTab, Project, ProjectSession } from '../../../types/app';
+import type { AppTab, Project, ProjectSession, SessionStatus } from '../../../types/app';
 
 export type SessionLifecycleHandler = (sessionId?: string | null) => void;
 
@@ -53,6 +53,9 @@ export type MainContentProps = {
   onNavigateToSession: (targetSessionId: string) => void;
   onShowSettings: () => void;
   externalMessageUpdate: number;
+  sessionStatus?: SessionStatus;
+  waitingCount?: number;
+  onJumpToNextWaiting?: () => void;
 };
 
 export type MainContentHeaderProps = {
@@ -63,6 +66,9 @@ export type MainContentHeaderProps = {
   shouldShowTasksTab: boolean;
   isMobile: boolean;
   onMenuClick: () => void;
+  sessionStatus?: SessionStatus;
+  waitingCount?: number;
+  onJumpToNextWaiting?: () => void;
 };
 
 export type MainContentStateViewProps = {

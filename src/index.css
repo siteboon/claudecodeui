@@ -44,6 +44,22 @@
     --ring: 0 0% 0%;
     --radius: 0.5rem;
 
+    /* Brand accent — eucalyptus green */
+    --eucalyptus: 157 65% 57%;
+    --eucalyptus-foreground: 157 100% 10%;
+    /* Brand accent — attention pink */
+    --attention: 330 100% 84%;
+    --attention-foreground: 330 100% 10%;
+    /* Session status colors */
+    --status-running: 157 65% 57%;
+    --status-waiting: 330 100% 84%;
+    --status-error: 358 75% 60%;
+    --status-idle: 0 0% 64.5%;
+    --status-done: 0 0% 45.6%;
+    /* Project rail tokens */
+    --rail-bg: 0 0% 96.1%;
+    --rail-active-marker: 157 65% 57%;
+
     /* Sidebar tokens */
     --sidebar: 0 0% 98.7%;
     --sidebar-foreground: 0 0% 0%;
@@ -137,6 +153,19 @@
     --border: 0 0% 14.1%;
     --input: 0 0% 19.9%;
     --ring: 0 0% 64.5%;
+
+    /* Brand accent — dark */
+    --eucalyptus: 157 55% 50%;
+    --eucalyptus-foreground: 0 0% 100%;
+    --attention: 330 80% 75%;
+    --attention-foreground: 0 0% 0%;
+    --status-running: 157 55% 50%;
+    --status-waiting: 330 80% 75%;
+    --status-error: 0 100% 68%;
+    --status-idle: 0 0% 45.6%;
+    --status-done: 0 0% 32.3%;
+    --rail-bg: 0 0% 6.9%;
+    --rail-active-marker: 157 55% 50%;
 
     /* Sidebar tokens — dark */
     --sidebar: 0 0% 6.9%;

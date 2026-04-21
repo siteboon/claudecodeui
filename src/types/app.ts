@@ -1,5 +1,7 @@
 export type LLMProvider = 'claude' | 'cursor' | 'codex' | 'gemini';
 
+export type SessionStatus = 'running' | 'waiting' | 'error' | 'idle' | 'done';
+
 export type AppTab = 'chat' | 'files' | 'shell' | 'git' | 'tasks' | 'preview' | `plugin:${string}`;
 
 export interface ProjectSession {

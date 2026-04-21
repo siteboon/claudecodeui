@@ -48,6 +48,9 @@ function MainContent({
   onNavigateToSession,
   onShowSettings,
   externalMessageUpdate,
+  sessionStatus,
+  waitingCount,
+  onJumpToNextWaiting,
 }: MainContentProps) {
   const { preferences } = useUiPreferences();
   const { autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter } = preferences;
@@ -105,6 +108,9 @@ function MainContent({
         shouldShowTasksTab={shouldShowTasksTab}
         isMobile={isMobile}
         onMenuClick={onMenuClick}
+        sessionStatus={sessionStatus}
+        waitingCount={waitingCount}
+        onJumpToNextWaiting={onJumpToNextWaiting}
       />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">

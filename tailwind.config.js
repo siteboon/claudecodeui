@@ -65,6 +65,25 @@ export default {
           4: "hsl(var(--chart-4))",
           5: "hsl(var(--chart-5))",
         },
+        eucalyptus: {
+          DEFAULT: "hsl(var(--eucalyptus))",
+          foreground: "hsl(var(--eucalyptus-foreground))",
+        },
+        attention: {
+          DEFAULT: "hsl(var(--attention))",
+          foreground: "hsl(var(--attention-foreground))",
+        },
+        status: {
+          running: "hsl(var(--status-running))",
+          waiting: "hsl(var(--status-waiting))",
+          error: "hsl(var(--status-error))",
+          idle: "hsl(var(--status-idle))",
+          done: "hsl(var(--status-done))",
+        },
+        rail: {
+          DEFAULT: "hsl(var(--rail-bg))",
+          marker: "hsl(var(--rail-active-marker))",
+        },
       },
       fontFamily: {
         sans: ["var(--font-sans)"],
@@ -90,8 +109,13 @@ export default {
       spacing: {
         'safe-area-inset-bottom': 'env(safe-area-inset-bottom)',
         'mobile-nav': 'var(--mobile-nav-total)',
+        rail: '52px',
       },
       keyframes: {
+        'status-pulse': {
+          '0%, 100%': { opacity: '1', transform: 'scale(1)' },
+          '50%': { opacity: '0.4', transform: 'scale(2.2)' },
+        },
         shimmer: {
           '0%': { backgroundPosition: '200% 0' },
           '100%': { backgroundPosition: '-200% 0' },
@@ -106,6 +130,7 @@ export default {
         },
       },
       animation: {
+        'status-pulse': 'status-pulse 2s ease-in-out infinite',
         shimmer: 'shimmer 2s linear infinite',
         'dialog-overlay-show': 'dialog-overlay-show 150ms ease-out',
         'dialog-content-show': 'dialog-content-show 150ms ease-out',

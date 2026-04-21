@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
-import type { AppTab, Project, ProjectSession } from '../../../../types/app';
+import type { AppTab, Project, ProjectSession, SessionStatus } from '../../../../types/app';
 import { usePlugins } from '../../../../contexts/PluginsContext';
 
 type MainContentTitleProps = {
@@ -8,6 +8,7 @@ type MainContentTitleProps = {
   selectedProject: Project;
   selectedSession: ProjectSession | null;
   shouldShowTasksTab: boolean;
+  sessionStatus?: SessionStatus;
 };
 
 function getTabTitle(activeTab: AppTab, shouldShowTasksTab: boolean, t: (key: string) => string, pluginDisplayName?: string) {
@@ -38,11 +39,33 @@ function getSessionTitle(session: ProjectSession): string {
   return (session.summary as string) || 'New Session';
 }
 
+function StatusDot({ status }: { status: SessionStatus }) {
+  const colorClass = {
+    running: 'bg-status-running',
+    waiting: 'bg-status-waiting',
+    error: 'bg-status-error',
+    idle: 'bg-status-idle',
+    done: 'bg-status-done',
+  }[status];
+
+  const shouldPulse = status === 'running' || status === 'waiting';
+
+  return (
+    <span className="relative inline-flex h-2 w-2 flex-shrink-0">
+      <span className={`h-2 w-2 rounded-full ${colorClass}`} />
+      {shouldPulse && (
+        <span className={`absolute inset-0 animate-status-pulse rounded-full ${colorClass}`} />
+      )}
+    </span>
+  );
+}
+
 export default function MainContentTitle({
   activeTab,
   selectedProject,
   selectedSession,
   shouldShowTasksTab,
+  sessionStatus,
 }: MainContentTitleProps) {
   const { t } = useTranslation();
   const { plugins } = usePlugins();
@@ -51,16 +74,18 @@ export default function MainContentTitle({
     ? plugins.find((p) => p.name === activeTab.replace('plugin:', ''))?.displayName
     : undefined;
 
-  const showSessionIcon = activeTab === 'chat' && Boolean(selectedSession);
+  const showSessionView = activeTab === 'chat' && Boolean(selectedSession);
   const showChatNewSession = activeTab === 'chat' && !selectedSession;
 
   return (
     <div className="scrollbar-hide flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
-      {showSessionIcon && (
+      {showSessionView && sessionStatus ? (
+        <StatusDot status={sessionStatus} />
+      ) : showSessionView ? (
         <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center">
           <SessionProviderLogo provider={selectedSession?.__provider} className="h-4 w-4" />
         </div>
-      )}
+      ) : null}
 
       <div className="min-w-0 flex-1">
         {activeTab === 'chat' && selectedSession ? (
@@ -68,19 +93,21 @@ export default function MainContentTitle({
             <h2 className="scrollbar-hide overflow-x-auto whitespace-nowrap text-sm font-semibold leading-tight text-foreground">
               {getSessionTitle(selectedSession)}
             </h2>
-            <div className="truncate text-[11px] leading-tight text-muted-foreground">{selectedProject.displayName}</div>
+            <div className="truncate text-[11px] leading-tight text-muted-foreground">
+              @{selectedProject.displayName}
+            </div>
           </div>
         ) : showChatNewSession ? (
           <div className="min-w-0">
             <h2 className="text-base font-semibold leading-tight text-foreground">{t('mainContent.newSession')}</h2>
-            <div className="truncate text-xs leading-tight text-muted-foreground">{selectedProject.displayName}</div>
+            <div className="truncate text-xs leading-tight text-muted-foreground">@{selectedProject.displayName}</div>
           </div>
         ) : (
           <div className="min-w-0">
             <h2 className="text-sm font-semibold leading-tight text-foreground">
               {getTabTitle(activeTab, shouldShowTasksTab, t, pluginDisplayName)}
             </h2>
-            <div className="truncate text-[11px] leading-tight text-muted-foreground">{selectedProject.displayName}</div>
+            <div className="truncate text-[11px] leading-tight text-muted-foreground">@{selectedProject.displayName}</div>
           </div>
         )}
       </div>

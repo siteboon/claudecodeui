@@ -6,5 +6,5 @@ Each instance has its own Unix user, `$HOME`, Claude sessions, CloudCLI auth DB,
 The reverse proxy exposes each instance at `/<user>/` on the private tailnet URL.
 The checkout visible in a GUI workspace may be a systemd `BindPaths` mount of the live shared checkout.
 Build outputs are per instance, for example `<dist_dir_for_user>`, while server code is shared.
-Deployment scripts and NixOS units live outside this repo in the infrastructure repo.
-Commit and push UI changes in this repo; deploy through the host setup flow after changes.
+Use `scripts/deploy-pluto.sh` from this repo to run the host setup flow and restart UI services.
+Commit and push UI changes in this repo before deploying unless explicitly doing a dirty test deploy.

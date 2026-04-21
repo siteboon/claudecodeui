@@ -3,6 +3,7 @@ import type { MainContentHeaderProps } from '../../types/types';
 import MobileMenuButton from './MobileMenuButton';
 import MainContentTabSwitcher from './MainContentTabSwitcher';
 import MainContentTitle from './MainContentTitle';
+import AttentionTicker from './AttentionTicker';
 
 export default function MainContentHeader({
   activeTab,
@@ -12,6 +13,9 @@ export default function MainContentHeader({
   shouldShowTasksTab,
   isMobile,
   onMenuClick,
+  sessionStatus,
+  waitingCount = 0,
+  onJumpToNextWaiting,
 }: MainContentHeaderProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -43,7 +47,17 @@ export default function MainContentHeader({
             selectedProject={selectedProject}
             selectedSession={selectedSession}
             shouldShowTasksTab={shouldShowTasksTab}
+            sessionStatus={sessionStatus}
           />
+        </div>
+
+        <div className="flex flex-shrink-0 items-center gap-2">
+          {waitingCount > 0 && onJumpToNextWaiting && (
+            <AttentionTicker
+              waitingCount={waitingCount}
+              onJumpToNextWaiting={onJumpToNextWaiting}
+            />
+          )}
         </div>
 
         <div className="relative min-w-0 flex-shrink overflow-hidden sm:flex-shrink-0">
