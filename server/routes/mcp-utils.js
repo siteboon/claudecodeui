@@ -7,7 +7,7 @@
  */
 
 import express from 'express';
-import { detectTaskMasterMCPServer, getAllMCPServers } from '../utils/mcp-detector.js';
+import { detectTaskMasterMCPServer } from '../utils/mcp-detector.js';
 
 const router = express.Router();
 
@@ -23,23 +23,6 @@ router.get('/taskmaster-server', async (req, res) => {
         console.error('TaskMaster MCP detection error:', error);
         res.status(500).json({
             error: 'Failed to detect TaskMaster MCP server',
-            message: error.message
-        });
-    }
-});
-
-/**
- * GET /api/mcp-utils/all-servers
- * Get all configured MCP servers
- */
-router.get('/all-servers', async (req, res) => {
-    try {
-        const result = await getAllMCPServers();
-        res.json(result);
-    } catch (error) {
-        console.error('MCP servers detection error:', error);
-        res.status(500).json({
-            error: 'Failed to get MCP servers',
             message: error.message
         });
     }

@@ -2,8 +2,8 @@ import { useCallback, useState } from 'react';
 import { authenticatedFetch } from '../../../utils/api';
 import type { LLMProvider } from '../../../types/app';
 import {
-  CLI_AUTH_STATUS_ENDPOINTS,
   CLI_PROVIDERS,
+  PROVIDER_AUTH_STATUS_ENDPOINTS,
   createInitialProviderAuthStatusMap,
 } from '../types';
 import type {
@@ -16,6 +16,11 @@ type ProviderAuthStatusPayload = {
   email?: string | null;
   method?: string | null;
   error?: string | null;
+};
+
+type ProviderAuthStatusApiResponse = {
+  success: boolean;
+  data: ProviderAuthStatusPayload;
 };
 
 const FALLBACK_STATUS_ERROR = 'Failed to check authentication status';
@@ -69,7 +74,7 @@ export function useProviderAuthStatus(
     setProviderLoading(provider);
 
     try {
-      const response = await authenticatedFetch(CLI_AUTH_STATUS_ENDPOINTS[provider]);
+      const response = await authenticatedFetch(PROVIDER_AUTH_STATUS_ENDPOINTS[provider]);
 
       if (!response.ok) {
         setProviderStatus(provider, {
@@ -82,8 +87,8 @@ export function useProviderAuthStatus(
         return;
       }
 
-      const payload = (await response.json()) as ProviderAuthStatusPayload;
-      setProviderStatus(provider, toProviderAuthStatus(payload));
+      const payload = (await response.json()) as ProviderAuthStatusApiResponse;
+      setProviderStatus(provider, toProviderAuthStatus(payload.data));
     } catch (caughtError) {
       console.error(`Error checking ${provider} auth status:`, caughtError);
       setProviderStatus(provider, {
