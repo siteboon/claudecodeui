@@ -22,6 +22,7 @@ import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
 import os from 'os';
 import http from 'http';
+import net from 'node:net';
 import cors from 'cors';
 import { promises as fsPromises } from 'fs';
 import { spawn } from 'child_process';
@@ -55,6 +56,7 @@ import { configureWebPush } from './services/vapid-keys.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { IS_PLATFORM } from './constants/config.js';
 import { getConnectableHost } from '../shared/networkHosts.js';
+import { handleDaemonCommand } from './daemon-manager.js';
 
 const VALID_PROVIDERS = ['claude', 'codex', 'cursor', 'gemini'];
 
@@ -2306,9 +2308,76 @@ const HOST = process.env.HOST || '0.0.0.0';
 const DISPLAY_HOST = getConnectableHost(HOST);
 const VITE_PORT = process.env.VITE_PORT || 5173;
 
+async function isPortOpen(port, timeoutMs = 800) {
+    return await new Promise((resolve) => {
+        const socket = net.createConnection({ host: '127.0.0.1', port: Number(port) });
+        let settled = false;
+        const done = (value) => {
+            if (settled) return;
+            settled = true;
+            socket.destroy();
+            resolve(value);
+        };
+
+        socket.setTimeout(timeoutMs);
+        socket.once('connect', () => done(true));
+        socket.once('timeout', () => done(false));
+        socket.once('error', () => done(false));
+    });
+}
+
+async function waitForPortOpen(port, timeoutMs = 25000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        if (await isPortOpen(port)) {
+            return true;
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    return false;
+}
+
+async function maybeAutoDaemonBootstrapFromIndex() {
+    if (process.platform !== 'linux') return false;
+    if (process.env.CLOUDCLI_DAEMON_MANAGED === '1') return false;
+    if (process.env.CLOUDCLI_NO_DAEMON === '1') return false;
+    if (process.env.CLOUDCLI_DAEMON_ATTEMPTED === '1') return false;
+
+    process.env.CLOUDCLI_DAEMON_ATTEMPTED = '1';
+
+    try {
+        console.log(`${c.info('[INFO]')} Linux detected. Bootstrapping CloudCLI daemon mode...`);
+        await handleDaemonCommand(['install', '--mode=auto', '--port', String(SERVER_PORT)], {
+            appRoot: APP_ROOT,
+            defaultPort: String(SERVER_PORT),
+            color: c,
+            cliEntry: path.join(APP_ROOT, 'server', 'cli.js'),
+        });
+        console.log(`${c.ok('[OK]')} CloudCLI daemon is now managing the service.`);
+        console.log(`${c.tip('[TIP]')} Run "cloudcli daemon status --mode auto" for details.`);
+        return true;
+    } catch (error) {
+        const healthySoon = await waitForPortOpen(SERVER_PORT);
+        if (healthySoon) {
+            console.log(`${c.warn('[WARN]')} Daemon health check was delayed, but port ${SERVER_PORT} is now reachable.`);
+            console.log(`${c.tip('[TIP]')} Continuing with daemon-managed runtime.`);
+            return true;
+        }
+
+        console.log(`${c.warn('[WARN]')} Daemon bootstrap failed; continuing in foreground mode.`);
+        console.log(`       ${c.dim(error.message)}`);
+        console.log(`${c.tip('[TIP]')} Retry manually with: ${c.bright('cloudcli daemon install --mode auto')}`);
+        return false;
+    }
+}
+
 // Initialize database and start server
 async function startServer() {
     try {
+        if (await maybeAutoDaemonBootstrapFromIndex()) {
+            return;
+        }
+
         // Initialize authentication database
         await initializeDatabase();
 

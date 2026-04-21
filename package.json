@@ -24,10 +24,10 @@
     "url": "https://github.com/siteboon/claudecodeui/issues"
   },
   "scripts": {
-    "dev": "concurrently --kill-others \"npm run server:dev\" \"npm run client\"",
-    "server": "node dist-server/server/index.js",
-    "server:dev": "tsx --tsconfig server/tsconfig.json server/index.js",
-    "server:dev-watch": "tsx watch --tsconfig server/tsconfig.json server/index.js",
+    "dev": "concurrently \"npm run server:dev\" \"npm run client\"",
+    "server": "node dist-server/server/cli.js start",
+    "server:dev": "tsx --tsconfig server/tsconfig.json server/cli.js start",
+    "server:dev-watch": "tsx watch --tsconfig server/tsconfig.json server/cli.js start",
     "client": "vite",
     "build": "npm run build:client && npm run build:server",
     "build:client": "vite build",
