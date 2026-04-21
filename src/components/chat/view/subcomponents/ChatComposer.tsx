@@ -320,7 +320,7 @@ export default function ChatComposer({
             <button
               type="button"
               onClick={onModeSwitch}
-              className={`rounded-lg border px-1.5 py-1 text-xs font-medium transition-all duration-200 sm:px-2.5 ${
+              className={`rounded-lg border p-2 text-xs font-medium transition-all duration-200 sm:px-2.5 sm:py-1 ${
                 permissionMode === 'default'
                   ? 'border-border/60 bg-muted/50 text-muted-foreground hover:bg-muted'
                   : permissionMode === 'acceptEdits'
@@ -333,7 +333,7 @@ export default function ChatComposer({
             >
               <div className="flex items-center gap-1.5">
                 <div
-                  className={`h-2 w-2 rounded-full sm:h-1.5 sm:w-1.5 ${
+                  className={`h-2.5 w-2.5 rounded-full sm:h-1.5 sm:w-1.5 ${
                     permissionMode === 'default'
                       ? 'bg-muted-foreground'
                       : permissionMode === 'acceptEdits'
@@ -343,7 +343,7 @@ export default function ChatComposer({
                           : 'bg-primary'
                   }`}
                 />
-                <span className="hidden sm:inline">
+                <span className="hidden whitespace-nowrap sm:inline">
                   {permissionMode === 'default' && t('codex.modes.default')}
                   {permissionMode === 'acceptEdits' && t('codex.modes.acceptEdits')}
                   {permissionMode === 'bypassPermissions' && t('codex.modes.bypassPermissions')}
@@ -377,7 +377,7 @@ export default function ChatComposer({
               <PromptInputButton
                 tooltip={{ content: t('input.clearInput', { defaultValue: 'Clear input' }) }}
                 onClick={onClearInput}
-                className="hidden sm:inline-flex"
+                className="hidden sm:No-flex"
               >
                 <XIcon />
               </PromptInputButton>

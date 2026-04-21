@@ -172,32 +172,32 @@ export default function ProviderSelectionEmptyState({
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Card
-                className="group mx-auto max-w-sm cursor-pointer border-border/60 transition-all duration-150 hover:border-border hover:shadow-md active:scale-[0.99]"
+                className="group mx-auto max-w-xs cursor-pointer border-border/60 transition-all duration-150 hover:border-border hover:shadow-md active:scale-[0.99]"
                 role="button"
                 tabIndex={0}
               >
-                <div className="flex items-center gap-3 p-4">
+                <div className="flex items-center gap-2 p-3">
                   <SessionProviderLogo
                     provider={provider}
-                    className="h-8 w-8 shrink-0"
+                    className="h-5 w-5 shrink-0"
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm font-semibold text-foreground">
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs font-semibold text-foreground">
                         {getProviderDisplayName(provider)}
                       </span>
                       <span className="text-xs text-muted-foreground">·</span>
-                      <span className="truncate text-sm text-foreground">
+                      <span className="truncate text-xs text-foreground">
                         {currentModelLabel}
                       </span>
                     </div>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
                       {t("providerSelection.clickToChange", {
                         defaultValue: "Click to change model",
                       })}
                     </p>
                   </div>
-                  <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-y-0.5" />
+                  <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-y-0.5" />
                 </div>
               </Card>
             </DialogTrigger>
