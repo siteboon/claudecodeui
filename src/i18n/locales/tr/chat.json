@@ -1,0 +1,272 @@
+{
+  "codeBlock": {
+    "copy": "Kopyala",
+    "copied": "Kopyalandı",
+    "copyCode": "Kodu kopyala"
+  },
+  "copyMessage": {
+    "copy": "Mesajı kopyala",
+    "copied": "Mesaj kopyalandı",
+    "selectFormat": "Kopyalama biçimini seç",
+    "copyAsMarkdown": "Markdown olarak kopyala",
+    "copyAsText": "Metin olarak kopyala"
+  },
+  "messageTypes": {
+    "user": "S",
+    "error": "Hata",
+    "tool": "Araç",
+    "claude": "Claude",
+    "cursor": "Cursor",
+    "codex": "Codex",
+    "gemini": "Gemini"
+  },
+  "tools": {
+    "settings": "Araç Ayarları",
+    "error": "Araç Hatası",
+    "result": "Araç Sonucu",
+    "viewParams": "Girdi parametrelerini göster",
+    "viewRawParams": "Ham parametreleri göster",
+    "viewDiff": "Düzenleme diff'ini göster:",
+    "creatingFile": "Yeni dosya oluşturuluyor:",
+    "updatingTodo": "Yapılacaklar Listesi güncelleniyor",
+    "read": "Okundu",
+    "readFile": "Dosyayı oku",
+    "updateTodo": "Yapılacaklar listesini güncelle",
+    "readTodo": "Yapılacaklar listesini oku",
+    "searchResults": "sonuç"
+  },
+  "search": {
+    "found": "{{count}} {{type}} bulundu",
+    "file": "dosya",
+    "files": "dosya",
+    "pattern": "desen:",
+    "in": "şurada:"
+  },
+  "fileOperations": {
+    "updated": "Dosya başarıyla güncellendi",
+    "created": "Dosya başarıyla oluşturuldu",
+    "written": "Dosya başarıyla yazıldı",
+    "diff": "Diff",
+    "newFile": "Yeni Dosya",
+    "viewContent": "Dosya içeriğini göster",
+    "viewFullOutput": "Tam çıktıyı göster ({{count}} karakter)",
+    "contentDisplayed": "Dosya içeriği yukarıdaki diff görünümünde gösteriliyor"
+  },
+  "interactive": {
+    "title": "Etkileşimli Prompt",
+    "waiting": "CLI'da yanıtın bekleniyor",
+    "instruction": "Lütfen Claude'un çalıştığı terminalde bir seçenek seç.",
+    "selectedOption": "✓ Claude {{number}} numaralı seçeneği seçti",
+    "instructionDetail": "CLI'da bu seçeneği ok tuşları veya numara girerek interaktif olarak seçebilirsin."
+  },
+  "thinking": {
+    "title": "Düşünüyor...",
+    "emoji": "💭 Düşünüyor..."
+  },
+  "json": {
+    "response": "JSON Yanıtı"
+  },
+  "permissions": {
+    "grant": "{{tool}} için izin ver",
+    "added": "İzin eklendi",
+    "addTo": "{{entry}} İzin Verilen Araçlar listesine ekleniyor.",
+    "retry": "İzin kaydedildi. Aracı kullanmak için isteği tekrar dene.",
+    "error": "İzinler güncellenemedi. Lütfen tekrar dene.",
+    "openSettings": "Ayarları aç"
+  },
+  "todo": {
+    "updated": "Yapılacaklar listesi başarıyla güncellendi",
+    "current": "Mevcut Yapılacaklar Listesi"
+  },
+  "plan": {
+    "viewPlan": "📋 Uygulama planını göster",
+    "title": "Uygulama Planı"
+  },
+  "usageLimit": {
+    "resetAt": "Claude kullanım limitin doldu. Limitin **{{time}} {{timezone}}** — {{date}} tarihinde sıfırlanacak"
+  },
+  "codex": {
+    "permissionMode": "İzin Modu",
+    "modes": {
+      "default": "Varsayılan Mod",
+      "acceptEdits": "Düzenlemeleri Kabul Et",
+      "bypassPermissions": "İzinleri Atla",
+      "plan": "Plan Modu"
+    },
+    "descriptions": {
+      "default": "Sadece güvenilir komutlar (ls, cat, grep, git status, vb.) otomatik çalışır. Diğer komutlar atlanır. Çalışma alanına yazabilir.",
+      "acceptEdits": "Tüm komutlar çalışma alanı içinde otomatik çalışır. Sandbox'lu çalıştırma ile tam otomatik mod.",
+      "bypassPermissions": "Kısıtlama olmadan tam sistem erişimi. Tüm komutlar tam disk ve ağ erişimiyle otomatik çalışır. Dikkatli kullan.",
+      "plan": "Planlama modu — hiçbir komut çalıştırılmaz"
+    },
+    "technicalDetails": "Teknik ayrıntılar"
+  },
+  "gemini": {
+    "permissionMode": "Gemini İzin Modu",
+    "description": "Gemini CLI'ın işlem onaylarını nasıl yönettiğini kontrol et.",
+    "modes": {
+      "default": {
+        "title": "Standart (Onay İste)",
+        "description": "Gemini, komut çalıştırmadan, dosya yazmadan ve web kaynağı getirmeden önce onay ister."
+      },
+      "autoEdit": {
+        "title": "Otomatik Düzenleme (Dosya Onaylarını Atla)",
+        "description": "Gemini dosya düzenlemelerini ve web getirmelerini otomatik onaylar, ama shell komutları için yine de onay ister."
+      },
+      "yolo": {
+        "title": "YOLO (Tüm İzinleri Atla)",
+        "description": "Gemini tüm işlemleri onay almadan çalıştırır. Dikkatli kullan."
+      }
+    }
+  },
+  "input": {
+    "placeholder": "Komutlar için /, dosyalar için @ yaz ya da {{provider}}'a her şeyi sor...",
+    "placeholderDefault": "Mesajını yaz...",
+    "disabled": "Girdi devre dışı",
+    "attachFiles": "Dosya ekle",
+    "attachImages": "Resim ekle",
+    "send": "Gönder",
+    "stop": "Durdur",
+    "hintText": {
+      "ctrlEnter": "Göndermek için Ctrl+Enter • Yeni satır için Shift+Enter • Mod değiştirmek için Tab • Slash komutları için /",
+      "enter": "Göndermek için Enter • Yeni satır için Shift+Enter • Mod değiştirmek için Tab • Slash komutları için /"
+    },
+    "clickToChangeMode": "İzin modunu değiştirmek için tıkla (veya girdide Tab tuşuna bas)",
+    "showAllCommands": "Tüm komutları göster",
+    "clearInput": "Girdiyi temizle",
+    "scrollToBottom": "En alta git"
+  },
+  "thinkingMode": {
+    "selector": {
+      "title": "Düşünme Modu",
+      "description": "Uzatılmış düşünme, Claude'a alternatifleri değerlendirmek için daha fazla zaman verir",
+      "active": "Aktif",
+      "tip": "Daha yüksek düşünme modları daha fazla zaman alır ama daha kapsamlı analiz sağlar"
+    },
+    "modes": {
+      "none": {
+        "name": "Standart",
+        "description": "Normal Claude yanıtı",
+        "prefix": ""
+      },
+      "think": {
+        "name": "Düşün",
+        "description": "Temel uzatılmış düşünme",
+        "prefix": "think"
+      },
+      "thinkHard": {
+        "name": "Daha Fazla Düşün",
+        "description": "Daha kapsamlı değerlendirme",
+        "prefix": "think hard"
+      },
+      "thinkHarder": {
+        "name": "Derin Düşün",
+        "description": "Alternatiflerle derin analiz",
+        "prefix": "think harder"
+      },
+      "ultrathink": {
+        "name": "Ultra Düşün",
+        "description": "Maksimum düşünme bütçesi",
+        "prefix": "ultrathink"
+      }
+    },
+    "buttonTitle": "Düşünme modu: {{mode}}"
+  },
+  "providerSelection": {
+    "title": "AI Asistanını Seç",
+    "description": "Yeni bir konuşma başlatmak için bir sağlayıcı seç",
+    "selectModel": "Model Seç",
+    "providerInfo": {
+      "anthropic": "Anthropic tarafından",
+      "openai": "OpenAI tarafından",
+      "cursorEditor": "AI Kod Editörü",
+      "google": "Google tarafından"
+    },
+    "readyPrompt": {
+      "claude": "Claude'u {{model}} ile kullanmaya hazır. Mesajını aşağıya yazmaya başla.",
+      "cursor": "Cursor'ı {{model}} ile kullanmaya hazır. Mesajını aşağıya yazmaya başla.",
+      "codex": "Codex'i {{model}} ile kullanmaya hazır. Mesajını aşağıya yazmaya başla.",
+      "gemini": "Gemini'yi {{model}} ile kullanmaya hazır. Mesajını aşağıya yazmaya başla.",
+      "default": "Başlamak için yukarıdan bir sağlayıcı seç"
+    }
+  },
+  "session": {
+    "continue": {
+      "title": "Konuşmana devam et",
+      "description": "Kodun hakkında soru sor, değişiklik iste veya geliştirme görevlerinde yardım al"
+    },
+    "loading": {
+      "olderMessages": "Eski mesajlar yükleniyor...",
+      "sessionMessages": "Oturum mesajları yükleniyor..."
+    },
+    "messages": {
+      "showingOf": "{{total}} mesajdan {{shown}} tanesi gösteriliyor",
+      "scrollToLoad": "Daha fazlasını yüklemek için yukarı kaydır",
+      "showingLast": "Son {{count}} mesaj gösteriliyor ({{total}} toplam)",
+      "loadEarlier": "Önceki mesajları yükle",
+      "loadAll": "Tüm mesajları yükle",
+      "loadingAll": "Tüm mesajlar yükleniyor...",
+      "allLoaded": "Tüm mesajlar yüklendi",
+      "perfWarning": "Tüm mesajlar yüklendi — kaydırma yavaşlayabilir. Performansı geri getirmek için \"En alta git\"e tıkla."
+    }
+  },
+  "shell": {
+    "selectProject": {
+      "title": "Proje Seç",
+      "description": "O dizinde etkileşimli shell açmak için bir proje seç"
+    },
+    "status": {
+      "newSession": "Yeni Oturum",
+      "initializing": "Başlatılıyor...",
+      "restarting": "Yeniden başlatılıyor..."
+    },
+    "actions": {
+      "disconnect": "Bağlantıyı Kes",
+      "disconnectTitle": "Shell bağlantısını kes",
+      "restart": "Yeniden Başlat",
+      "restartTitle": "Shell'i yeniden başlat (önce bağlantıyı kes)",
+      "connect": "Shell'de Devam Et",
+      "connectTitle": "Shell'e bağlan"
+    },
+    "loading": "Terminal yükleniyor...",
+    "connecting": "Shell'e bağlanılıyor...",
+    "startSession": "Yeni bir Claude oturumu başlat",
+    "resumeSession": "Oturuma devam et: {{displayName}}...",
+    "runCommand": "{{projectName}} içinde {{command}} çalıştır",
+    "startCli": "{{projectName}} içinde Claude CLI başlatılıyor",
+    "defaultCommand": "komut"
+  },
+  "claudeStatus": {
+    "actions": {
+      "thinking": "Düşünüyor",
+      "processing": "İşliyor",
+      "analyzing": "Analiz ediyor",
+      "working": "Çalışıyor",
+      "computing": "Hesaplıyor",
+      "reasoning": "Mantık yürütüyor"
+    },
+    "state": {
+      "live": "Canlı",
+      "paused": "Duraklatıldı"
+    },
+    "elapsed": {
+      "seconds": "{{count}}s",
+      "minutesSeconds": "{{minutes}}d {{seconds}}s",
+      "label": "{{time}} geçti",
+      "startingNow": "Şimdi başlıyor"
+    },
+    "controls": {
+      "stopGeneration": "Üretmeyi Durdur",
+      "pressEscToStop": "Durdurmak için istediğin zaman Esc'ye bas"
+    },
+    "providers": {
+      "assistant": "Asistan"
+    }
+  },
+  "projectSelection": {
+    "startChatWithProvider": "{{provider}} ile sohbet etmeye başlamak için bir proje seç"
+  },
+  "tasks": {
+    "nextTaskPrompt": "Sonraki görevi başlat"
+  }
+}

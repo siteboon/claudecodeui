@@ -1,0 +1,135 @@
+{
+  "projects": {
+    "title": "Projeler",
+    "newProject": "Yeni Proje",
+    "deleteProject": "Projeyi Kaldır",
+    "renameProject": "Projeyi Yeniden Adlandır",
+    "noProjects": "Proje bulunamadı",
+    "loadingProjects": "Projeler yükleniyor...",
+    "searchPlaceholder": "Projelerde ara...",
+    "projectNamePlaceholder": "Proje adı",
+    "starred": "Yıldızlı",
+    "all": "Tümü",
+    "untitledSession": "Adsız Oturum",
+    "newSession": "Yeni Oturum",
+    "codexSession": "Codex Oturumu",
+    "fetchingProjects": "Claude projelerin ve oturumların getiriliyor",
+    "projects": "proje",
+    "noMatchingProjects": "Eşleşen proje yok",
+    "tryDifferentSearch": "Arama terimini değiştirmeyi dene",
+    "runClaudeCli": "Başlamak için bir proje dizininde Claude CLI çalıştır"
+  },
+  "app": {
+    "title": "CloudCLI",
+    "subtitle": "AI kodlama asistanı arayüzü"
+  },
+  "sessions": {
+    "title": "Oturumlar",
+    "newSession": "Yeni Oturum",
+    "deleteSession": "Oturumu Sil",
+    "renameSession": "Oturumu Yeniden Adlandır",
+    "noSessions": "Henüz oturum yok",
+    "loadingSessions": "Oturumlar yükleniyor...",
+    "unnamed": "Adsız",
+    "loading": "Yükleniyor...",
+    "showMore": "Daha fazla oturum göster"
+  },
+  "tooltips": {
+    "viewEnvironments": "Ortamları Görüntüle",
+    "hideSidebar": "Kenar çubuğunu gizle",
+    "createProject": "Yeni proje oluştur",
+    "refresh": "Projeleri ve oturumları yenile (Ctrl+R)",
+    "renameProject": "Projeyi yeniden adlandır (F2)",
+    "deleteProject": "Projeyi kenar çubuğundan kaldır (Delete)",
+    "addToFavorites": "Favorilere ekle",
+    "removeFromFavorites": "Favorilerden çıkar",
+    "editSessionName": "Oturum adını elle düzenle",
+    "deleteSession": "Bu oturumu kalıcı olarak sil",
+    "save": "Kaydet",
+    "cancel": "İptal",
+    "clearSearch": "Aramayı temizle"
+  },
+  "navigation": {
+    "chat": "Sohbet",
+    "files": "Dosyalar",
+    "git": "Git",
+    "terminal": "Terminal",
+    "tasks": "Görevler"
+  },
+  "actions": {
+    "refresh": "Yenile",
+    "settings": "Ayarlar",
+    "collapseAll": "Tümünü Daralt",
+    "expandAll": "Tümünü Genişlet",
+    "cancel": "İptal",
+    "save": "Kaydet",
+    "delete": "Sil",
+    "rename": "Yeniden Adlandır",
+    "joinCommunity": "Topluluğa Katıl",
+    "reportIssue": "Sorun Bildir",
+    "starOnGithub": "GitHub'da Yıldızla"
+  },
+  "branding": {
+    "openSource": "Açık Kaynak"
+  },
+  "status": {
+    "active": "Aktif",
+    "inactive": "Pasif",
+    "thinking": "Düşünüyor...",
+    "error": "Hata",
+    "aborted": "Durduruldu",
+    "unknown": "Bilinmiyor"
+  },
+  "time": {
+    "justNow": "Az önce",
+    "oneMinuteAgo": "1 dakika önce",
+    "minutesAgo": "{{count}} dakika önce",
+    "oneHourAgo": "1 saat önce",
+    "hoursAgo": "{{count}} saat önce",
+    "oneDayAgo": "1 gün önce",
+    "daysAgo": "{{count}} gün önce"
+  },
+  "messages": {
+    "deleteConfirm": "Bunu silmek istediğinden emin misin?",
+    "renameSuccess": "Yeniden adlandırma başarılı",
+    "deleteSuccess": "Silme başarılı",
+    "errorOccurred": "Bir hata oluştu",
+    "deleteSessionConfirm": "Bu oturumu silmek istediğinden emin misin? Bu işlem geri alınamaz.",
+    "deleteProjectConfirm": "Bu proje kenar çubuğundan kaldırılsın mı? Proje dosyaların, bellek verilerin ve oturum verilerin silinmeyecek.",
+    "enterProjectPath": "Lütfen bir proje yolu gir",
+    "deleteSessionFailed": "Oturum silinemedi. Lütfen tekrar dene.",
+    "deleteSessionError": "Oturum silinirken hata oluştu. Lütfen tekrar dene.",
+    "renameSessionFailed": "Oturum yeniden adlandırılamadı. Lütfen tekrar dene.",
+    "renameSessionError": "Oturum yeniden adlandırılırken hata oluştu. Lütfen tekrar dene.",
+    "deleteProjectFailed": "Proje kaldırılamadı. Lütfen tekrar dene.",
+    "deleteProjectError": "Proje kaldırılırken hata oluştu. Lütfen tekrar dene.",
+    "createProjectFailed": "Proje oluşturulamadı. Lütfen tekrar dene.",
+    "createProjectError": "Proje oluşturulurken hata oluştu. Lütfen tekrar dene."
+  },
+  "version": {
+    "updateAvailable": "Güncelleme mevcut"
+  },
+  "search": {
+    "modeProjects": "Projeler",
+    "modeConversations": "Konuşmalar",
+    "conversationsPlaceholder": "Konuşmalarda ara...",
+    "searching": "Aranıyor...",
+    "noResults": "Sonuç bulunamadı",
+    "tryDifferentQuery": "Farklı bir arama sorgusu dene",
+    "matches_one": "{{count}} eşleşme",
+    "matches_other": "{{count}} eşleşme",
+    "projectsScanned_one": "{{count}} proje tarandı",
+    "projectsScanned_other": "{{count}} proje tarandı"
+  },
+  "deleteConfirmation": {
+    "deleteProject": "Projeyi Kaldır",
+    "deleteSession": "Oturumu Sil",
+    "confirmDelete": "Ne yapmak istersin:",
+    "sessionCount_one": "Bu proje {{count}} konuşma içeriyor.",
+    "sessionCount_other": "Bu proje {{count}} konuşma içeriyor.",
+    "removeFromSidebar": "Yalnızca kenar çubuğundan kaldır",
+    "deleteAllData": "Tüm veriyi kalıcı olarak sil",
+    "allConversationsDeleted": "Proje kenar çubuğundan kaldırılacak. Dosyaların, bellek verilerin ve oturum verilerin korunacak.",
+    "cannotUndo": "Projeyi sonra tekrar ekleyebilirsin."
+  }
+}

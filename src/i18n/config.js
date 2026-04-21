@@ -67,6 +67,14 @@ import deCodeEditor from './locales/de/codeEditor.json';
 // eslint-disable-next-line import-x/order
 import deTasks from './locales/de/tasks.json';
 
+import trCommon from './locales/tr/common.json';
+import trSettings from './locales/tr/settings.json';
+import trAuth from './locales/tr/auth.json';
+import trSidebar from './locales/tr/sidebar.json';
+import trChat from './locales/tr/chat.json';
+import trCodeEditor from './locales/tr/codeEditor.json';
+// eslint-disable-next-line import-x/order
+import trTasks from './locales/tr/tasks.json';
 import itCommon from './locales/it/common.json';
 import itSettings from './locales/it/settings.json';
 import itAuth from './locales/it/auth.json';
@@ -152,6 +160,14 @@ i18n
         codeEditor: deCodeEditor,
         tasks: deTasks,
       },
+      tr: {
+        common: trCommon,
+        settings: trSettings,
+        auth: trAuth,
+        sidebar: trSidebar,
+        chat: trChat,
+        codeEditor: trCodeEditor,
+        tasks: trTasks,
       it: {
         common: itCommon,
         settings: itSettings,

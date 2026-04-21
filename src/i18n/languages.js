@@ -40,6 +40,9 @@ export const languages = [
     nativeName: 'Deutsch',
   },
   {
+    value: 'tr',
+    label: 'Turkish',
+    nativeName: 'Türkçe',
     value: 'it',
     label: 'Italian',
     nativeName: 'Italiano',
