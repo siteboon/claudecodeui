@@ -39,6 +39,11 @@ export const languages = [
     label: 'German',
     nativeName: 'Deutsch',
   },
+  {
+    value: 'it',
+    label: 'Italian',
+    nativeName: 'Italiano',
+  },
 ];
 
 /**

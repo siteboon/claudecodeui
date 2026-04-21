@@ -1,0 +1,272 @@
+{
+  "codeBlock": {
+    "copy": "Copia",
+    "copied": "Copiato",
+    "copyCode": "Copia codice"
+  },
+  "copyMessage": {
+    "copy": "Copia messaggio",
+    "copied": "Messaggio copiato",
+    "selectFormat": "Seleziona formato copia",
+    "copyAsMarkdown": "Copia come markdown",
+    "copyAsText": "Copia come testo"
+  },
+  "messageTypes": {
+    "user": "U",
+    "error": "Errore",
+    "tool": "Strumento",
+    "claude": "Claude",
+    "cursor": "Cursor",
+    "codex": "Codex",
+    "gemini": "Gemini"
+  },
+  "tools": {
+    "settings": "Impostazioni strumento",
+    "error": "Errore strumento",
+    "result": "Risultato strumento",
+    "viewParams": "Vedi parametri input",
+    "viewRawParams": "Vedi parametri grezzi",
+    "viewDiff": "Vedi differenze per",
+    "creatingFile": "Creazione nuovo file:",
+    "updatingTodo": "Aggiornamento lista attività",
+    "read": "Leggi",
+    "readFile": "Leggi file",
+    "updateTodo": "Aggiorna lista attività",
+    "readTodo": "Leggi lista attività",
+    "searchResults": "risultati"
+  },
+  "search": {
+    "found": "Trovati {{count}} {{type}}",
+    "file": "file",
+    "files": "file",
+    "pattern": "pattern:",
+    "in": "in:"
+  },
+  "fileOperations": {
+    "updated": "File aggiornato con successo",
+    "created": "File creato con successo",
+    "written": "File scritto con successo",
+    "diff": "Differenze",
+    "newFile": "Nuovo file",
+    "viewContent": "Vedi contenuto file",
+    "viewFullOutput": "Vedi output completo ({{count}} caratteri)",
+    "contentDisplayed": "Il contenuto del file è visualizzato nella vista differenze sopra"
+  },
+  "interactive": {
+    "title": "Prompt interattivo",
+    "waiting": "In attesa della tua risposta nella CLI",
+    "instruction": "Seleziona un'opzione nel terminale dove Claude è in esecuzione.",
+    "selectedOption": "✓ Claude ha selezionato l'opzione {{number}}",
+    "instructionDetail": "Nella CLI, selezioneresti questa opzione interattivamente usando i tasti freccia o digitando il numero."
+  },
+  "thinking": {
+    "title": "Sto pensando...",
+    "emoji": "💭 Sto pensando..."
+  },
+  "json": {
+    "response": "Risposta JSON"
+  },
+  "permissions": {
+    "grant": "Concedi permesso per {{tool}}",
+    "added": "Permesso aggiunto",
+    "addTo": "Aggiunge {{entry}} agli strumenti consentiti.",
+    "retry": "Permesso salvato. Riprova la richiesta per usare lo strumento.",
+    "error": "Impossibile aggiornare i permessi. Riprova.",
+    "openSettings": "Apri impostazioni"
+  },
+  "todo": {
+    "updated": "Lista attività aggiornata con successo",
+    "current": "Lista attività corrente"
+  },
+  "plan": {
+    "viewPlan": "📋 Vedi piano di implementazione",
+    "title": "Piano di implementazione"
+  },
+  "usageLimit": {
+    "resetAt": "Limite di utilizzo Claude raggiunto. Il tuo limite verrà ripristinato alle **{{time}} {{timezone}}** - {{date}}"
+  },
+  "codex": {
+    "permissionMode": "Modalità permessi",
+    "modes": {
+      "default": "Modalità predefinita",
+      "acceptEdits": "Accetta modifiche",
+      "bypassPermissions": "Ignora permessi",
+      "plan": "Modalità piano"
+    },
+    "descriptions": {
+      "default": "Solo i comandi attendibili (ls, cat, grep, git status, ecc.) vengono eseguiti automaticamente. Gli altri comandi vengono saltati. Può scrivere nell'area di lavoro.",
+      "acceptEdits": "Tutti i comandi vengono eseguiti automaticamente nell'area di lavoro. Modalità completamente automatica con esecuzione sandboxed.",
+      "bypassPermissions": "Accesso completo al sistema senza restrizioni. Tutti i comandi vengono eseguiti automaticamente con accesso completo a disco e rete. Usa con cautela.",
+      "plan": "Modalità pianificazione - nessun comando viene eseguito"
+    },
+    "technicalDetails": "Dettagli tecnici"
+  },
+  "gemini": {
+    "permissionMode": "Modalità permessi Gemini",
+    "description": "Controlla come Gemini CLI gestisce le approvazioni delle operazioni.",
+    "modes": {
+      "default": {
+        "title": "Standard (chiedi approvazione)",
+        "description": "Gemini chiederà l'approvazione prima di eseguire comandi, scrivere file e recuperare risorse web."
+      },
+      "autoEdit": {
+        "title": "Modifica automatica (salta approvazioni file)",
+        "description": "Gemini approverà automaticamente modifiche ai file e recupero web, ma chiederà conferma per i comandi shell."
+      },
+      "yolo": {
+        "title": "YOLO (ignora tutti i permessi)",
+        "description": "Gemini eseguirà tutte le operazioni senza chiedere approvazione. Usa con cautela."
+      }
+    }
+  },
+  "input": {
+    "placeholder": "Digita / per i comandi, @ per i file, o chiedi qualcosa a {{provider}}...",
+    "placeholderDefault": "Scrivi il tuo messaggio...",
+    "disabled": "Input disabilitato",
+    "attachFiles": "Allega file",
+    "attachImages": "Allega immagini",
+    "send": "Invia",
+    "stop": "Ferma",
+    "hintText": {
+      "ctrlEnter": "Ctrl+Invio per inviare • Shift+Invio per nuova riga • Tab per cambiare modalità • / per comandi",
+      "enter": "Invio per inviare • Shift+Invio per nuova riga • Tab per cambiare modalità • / per comandi"
+    },
+    "clickToChangeMode": "Clicca per cambiare modalità permessi (o premi Tab nell'input)",
+    "showAllCommands": "Mostra tutti i comandi",
+    "clearInput": "Cancella input",
+    "scrollToBottom": "Scorri in basso"
+  },
+  "thinkingMode": {
+    "selector": {
+      "title": "Modalità ragionamento",
+      "description": "Il ragionamento esteso dà a Claude più tempo per valutare le alternative",
+      "active": "Attivo",
+      "tip": "Modalità di ragionamento più elevate richiedono più tempo ma forniscono un'analisi più approfondita"
+    },
+    "modes": {
+      "none": {
+        "name": "Standard",
+        "description": "Risposta Claude normale",
+        "prefix": ""
+      },
+      "think": {
+        "name": "Pensa",
+        "description": "Ragionamento esteso base",
+        "prefix": "think"
+      },
+      "thinkHard": {
+        "name": "Pensa di più",
+        "description": "Valutazione più approfondita",
+        "prefix": "think hard"
+      },
+      "thinkHarder": {
+        "name": "Pensa ancora",
+        "description": "Analisi profonda con alternative",
+        "prefix": "think harder"
+      },
+      "ultrathink": {
+        "name": "Ultrapensiero",
+        "description": "Budget massimo di ragionamento",
+        "prefix": "ultrathink"
+      }
+    },
+    "buttonTitle": "Modalità ragionamento: {{mode}}"
+  },
+  "providerSelection": {
+    "title": "Scegli il tuo assistente AI",
+    "description": "Seleziona un provider per iniziare una nuova conversazione",
+    "selectModel": "Seleziona modello",
+    "providerInfo": {
+      "anthropic": "di Anthropic",
+      "openai": "di OpenAI",
+      "cursorEditor": "Editor codice AI",
+      "google": "di Google"
+    },
+    "readyPrompt": {
+      "claude": "Pronto a usare Claude con {{model}}. Inizia a digitare il tuo messaggio qui sotto.",
+      "cursor": "Pronto a usare Cursor con {{model}}. Inizia a digitare il tuo messaggio qui sotto.",
+      "codex": "Pronto a usare Codex con {{model}}. Inizia a digitare il tuo messaggio qui sotto.",
+      "gemini": "Pronto a usare Gemini con {{model}}. Inizia a digitare il tuo messaggio qui sotto.",
+      "default": "Seleziona un provider sopra per iniziare"
+    }
+  },
+  "session": {
+    "continue": {
+      "title": "Continua la tua conversazione",
+      "description": "Fai domande sul tuo codice, richiedi modifiche o chiedi aiuto con le attività di sviluppo"
+    },
+    "loading": {
+      "olderMessages": "Caricamento messaggi precedenti...",
+      "sessionMessages": "Caricamento messaggi della sessione..."
+    },
+    "messages": {
+      "showingOf": "Visualizzati {{shown}} di {{total}} messaggi",
+      "scrollToLoad": "Scorri in alto per caricare altri",
+      "showingLast": "Visualizzati ultimi {{count}} messaggi ({{total}} totali)",
+      "loadEarlier": "Carica messaggi precedenti",
+      "loadAll": "Carica tutti i messaggi",
+      "loadingAll": "Caricamento di tutti i messaggi...",
+      "allLoaded": "Tutti i messaggi caricati",
+      "perfWarning": "Tutti i messaggi caricati — lo scorrimento potrebbe essere più lento. Clicca \"Scorri in basso\" per ripristinare le prestazioni."
+    }
+  },
+  "shell": {
+    "selectProject": {
+      "title": "Seleziona un progetto",
+      "description": "Scegli un progetto per aprire una shell interattiva in quella directory"
+    },
+    "status": {
+      "newSession": "Nuova sessione",
+      "initializing": "Inizializzazione...",
+      "restarting": "Riavvio..."
+    },
+    "actions": {
+      "disconnect": "Disconnetti",
+      "disconnectTitle": "Disconnetti dalla shell",
+      "restart": "Riavvia",
+      "restartTitle": "Riavvia shell (disconnetti prima)",
+      "connect": "Continua nella shell",
+      "connectTitle": "Connetti alla shell"
+    },
+    "loading": "Caricamento terminale...",
+    "connecting": "Connessione alla shell...",
+    "startSession": "Avvia una nuova sessione Claude",
+    "resumeSession": "Riprendi sessione: {{displayName}}...",
+    "runCommand": "Esegui {{command}} in {{projectName}}",
+    "startCli": "Avvio Claude CLI in {{projectName}}",
+    "defaultCommand": "comando"
+  },
+  "claudeStatus": {
+    "actions": {
+      "thinking": "Ragionamento",
+      "processing": "Elaborazione",
+      "analyzing": "Analisi",
+      "working": "In lavorazione",
+      "computing": "Calcolo",
+      "reasoning": "Ragionamento"
+    },
+    "state": {
+      "live": "Attivo",
+      "paused": "In pausa"
+    },
+    "elapsed": {
+      "seconds": "{{count}}s",
+      "minutesSeconds": "{{minutes}}m {{seconds}}s",
+      "label": "{{time}} trascorsi",
+      "startingNow": "Avvio in corso"
+    },
+    "controls": {
+      "stopGeneration": "Interrompi generazione",
+      "pressEscToStop": "Premi Esc in qualsiasi momento per interrompere"
+    },
+    "providers": {
+      "assistant": "Assistente"
+    }
+  },
+  "projectSelection": {
+    "startChatWithProvider": "Seleziona un progetto per iniziare a chattare con {{provider}}"
+  },
+  "tasks": {
+    "nextTaskPrompt": "Inizia l'attività successiva"
+  }
+}

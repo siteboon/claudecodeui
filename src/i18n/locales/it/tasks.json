@@ -1,0 +1,142 @@
+{
+  "notConfigured": {
+    "title": "TaskMaster AI non è configurato",
+    "description": "TaskMaster aiuta a suddividere progetti complessi in attività gestibili con assistenza AI",
+    "whatIsTitle": "🎯 Cos'è TaskMaster?",
+    "features": {
+      "aiPowered": "Gestione attività AI: suddividi progetti complessi in sotto-attività gestibili",
+      "prdTemplates": "Template PRD: genera attività da documenti di requisiti del prodotto",
+      "dependencyTracking": "Tracciamento dipendenze: comprendi le relazioni tra attività e l'ordine di esecuzione",
+      "progressVisualization": "Visualizzazione progresso: board Kanban e analisi dettagliata delle attività",
+      "cliIntegration": "Integrazione CLI: usa i comandi taskmaster per flussi di lavoro avanzati"
+    },
+    "initializeButton": "Inizializza TaskMaster AI"
+  },
+  "gettingStarted": {
+    "title": "Inizia con TaskMaster",
+    "subtitle": "TaskMaster è inizializzato! Ecco cosa fare dopo:",
+    "steps": {
+      "createPRD": {
+        "title": "Crea un documento di requisiti del prodotto (PRD)",
+        "description": "Discuti la tua idea di progetto e crea un PRD che descriva cosa vuoi costruire.",
+        "addButton": "Aggiungi PRD",
+        "existingPRDs": "PRD esistenti:"
+      },
+      "generateTasks": {
+        "title": "Genera attività dal PRD",
+        "description": "Una volta che hai un PRD, chiedi al tuo assistente AI di analizzarlo e TaskMaster lo suddividerà automaticamente in attività gestibili con dettagli di implementazione."
+      },
+      "analyzeTasks": {
+        "title": "Analizza ed espandi le attività",
+        "description": "Chiedi al tuo assistente AI di analizzare la complessità delle attività ed espanderle in sotto-attività dettagliate per un'implementazione più semplice."
+      },
+      "startBuilding": {
+        "title": "Inizia a costruire",
+        "description": "Chiedi al tuo assistente AI di iniziare a lavorare sulle attività, aggiornare il loro stato e aggiungere nuove attività man mano che il tuo progetto evolve."
+      }
+    },
+    "tip": "💡 Suggerimento: inizia con un PRD per ottenere il massimo dalla generazione di attività AI di TaskMaster"
+  },
+  "setupModal": {
+    "title": "Configurazione TaskMaster",
+    "subtitle": "CLI interattiva per {{projectName}}",
+    "willStart": "L'inizializzazione di TaskMaster partirà automaticamente",
+    "completed": "Configurazione TaskMaster completata! Ora puoi chiudere questa finestra.",
+    "closeButton": "Chiudi",
+    "closeContinueButton": "Chiudi e continua"
+  },
+  "helpGuide": {
+    "title": "Inizia con TaskMaster",
+    "subtitle": "La tua guida per una gestione produttiva delle attività",
+    "examples": {
+      "parsePRD": "💬 Esempio:\n\"Ho appena inizializzato un nuovo progetto con Claude Task Master. Ho un PRD in .taskmaster/docs/prd.txt. Puoi aiutarmi ad analizzarlo e configurare le attività iniziali?\"",
+      "expandTask": "💬 Esempio:\n\"L'attività 5 sembra complessa. Puoi suddividerla in sotto-attività?\"",
+      "addTask": "💬 Esempio:\n\"Per favore aggiungi una nuova attività per implementare il caricamento delle immagini profilo utente usando Cloudinary, ricerca l'approccio migliore.\""
+    },
+    "moreExamples": "Vedi altri esempi e pattern di utilizzo →",
+    "proTips": {
+      "title": "💡 Suggerimenti pro",
+      "search": "Usa la barra di ricerca per trovare rapidamente attività specifiche",
+      "views": "Passa tra le viste Kanban, Lista e Griglia usando i selettori di vista",
+      "filters": "Usa i filtri per concentrarti su stati o priorità specifiche delle attività",
+      "details": "Clicca su qualsiasi attività per vedere informazioni dettagliate e gestire le sotto-attività"
+    },
+    "learnMore": {
+      "title": "📚 Per saperne di più",
+      "description": "TaskMaster AI è un sistema avanzato di gestione attività pensato per sviluppatori. Trova documentazione, esempi e contribuisci al progetto.",
+      "githubButton": "Vedi su GitHub"
+    }
+  },
+  "search": {
+    "placeholder": "Cerca attività..."
+  },
+  "filters": {
+    "button": "Filtri",
+    "status": "Stato",
+    "priority": "Priorità",
+    "sortBy": "Ordina per",
+    "allStatuses": "Tutti gli stati",
+    "allPriorities": "Tutte le priorità",
+    "showing": "Visualizzate {{filtered}} di {{total}} attività",
+    "clearFilters": "Cancella filtri"
+  },
+  "sort": {
+    "id": "ID",
+    "status": "Stato",
+    "priority": "Priorità",
+    "idAsc": "ID (crescente)",
+    "idDesc": "ID (decrescente)",
+    "titleAsc": "Titolo (A-Z)",
+    "titleDesc": "Titolo (Z-A)",
+    "statusAsc": "Stato (in attesa prima)",
+    "statusDesc": "Stato (completati prima)",
+    "priorityAsc": "Priorità (alta prima)",
+    "priorityDesc": "Priorità (bassa prima)"
+  },
+  "views": {
+    "kanban": "Vista Kanban",
+    "list": "Vista lista",
+    "grid": "Vista griglia"
+  },
+  "kanban": {
+    "pending": "📋 Da fare",
+    "inProgress": "🚀 In corso",
+    "done": "✅ Completate",
+    "blocked": "🚫 Bloccate",
+    "deferred": "⏳ Rimandate",
+    "cancelled": "❌ Annullate",
+    "noTasksYet": "Nessuna attività",
+    "tasksWillAppear": "Le attività appariranno qui",
+    "moveTasksHere": "Sposta le attività qui quando iniziate",
+    "completedTasksHere": "Le attività completate appariranno qui",
+    "statusTasksHere": "Le attività con questo stato appariranno qui"
+  },
+  "buttons": {
+    "help": "Guida introduttiva TaskMaster",
+    "prds": "PRD",
+    "addPRD": "Aggiungi PRD",
+    "addTask": "Aggiungi attività",
+    "createNewPRD": "Crea nuovo PRD",
+    "prdsAvailable": "{{count}} PRD disponibili"
+  },
+  "prd": {
+    "modified": "Modificato: {{date}}"
+  },
+  "statuses": {
+    "pending": "In attesa",
+    "in-progress": "In corso",
+    "done": "Completata",
+    "blocked": "Bloccata",
+    "deferred": "Rimandata",
+    "cancelled": "Annullata"
+  },
+  "priorities": {
+    "high": "Alta",
+    "medium": "Media",
+    "low": "Bassa"
+  },
+  "noMatchingTasks": {
+    "title": "Nessuna attività corrisponde ai filtri",
+    "description": "Prova a modificare la ricerca o i criteri di filtro."
+  }
+}
