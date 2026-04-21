@@ -5,6 +5,9 @@ import fs from 'fs';
 import path from 'path';
 import { findAppRoot, getModuleDir } from './utils/runtime-paths.js';
 
+import { AppError, createNormalizedMessage } from '@/shared/utils.js';
+
+
 const __dirname = getModuleDir(import.meta.url);
 // The server source runs from /server, while the compiled output runs from /dist-server/server.
 // Resolving the app root once keeps every repo-level lookup below aligned across both layouts.
@@ -23,10 +26,9 @@ import cors from 'cors';
 import { promises as fsPromises } from 'fs';
 import { spawn } from 'child_process';
 import pty from 'node-pty';
-import fetch from 'node-fetch';
 import mime from 'mime-types';
 
-import { getProjects, getSessions, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache, searchConversations } from './projects.js';
+import { getProjects, getSessions, renameProject, deleteSession, deleteProject, extractProjectDirectory, clearProjectDirectoryCache, searchConversations } from './projects.js';
 import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions, resolveToolApproval, getPendingApprovalsForSession, reconnectSessionWriter } from './claude-sdk.js';
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
 import { queryCodex, abortCodexSession, isCodexSessionActive, getActiveCodexSessions } from './openai-codex.js';
@@ -34,7 +36,6 @@ import { spawnGemini, abortGeminiSession, isGeminiSessionActive, getActiveGemini
 import sessionManager from './sessionManager.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
-import mcpRoutes from './routes/mcp.js';
 import cursorRoutes from './routes/cursor.js';
 import taskmasterRoutes from './routes/taskmaster.js';
 import mcpUtilsRoutes from './routes/mcp-utils.js';
@@ -42,13 +43,12 @@ import commandsRoutes from './routes/commands.js';
 import settingsRoutes from './routes/settings.js';
 import agentRoutes from './routes/agent.js';
 import projectsRoutes, { WORKSPACES_ROOT, validateWorkspacePath } from './routes/projects.js';
-import cliAuthRoutes from './routes/cli-auth.js';
 import userRoutes from './routes/user.js';
 import codexRoutes from './routes/codex.js';
 import geminiRoutes from './routes/gemini.js';
 import pluginsRoutes from './routes/plugins.js';
 import messagesRoutes from './routes/messages.js';
-import { createNormalizedMessage } from './providers/types.js';
+import providerRoutes from './modules/providers/provider.routes.js';
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
 import { initializeDatabase, sessionNamesDb, applyCustomSessionNames } from './database/db.js';
 import { configureWebPush } from './services/vapid-keys.js';
@@ -286,9 +286,6 @@ app.use('/api/projects', authenticateToken, projectsRoutes);
 // Git API Routes (protected)
 app.use('/api/git', authenticateToken, gitRoutes);
 
-// MCP API Routes (protected)
-app.use('/api/mcp', authenticateToken, mcpRoutes);
-
 // Cursor API Routes (protected)
 app.use('/api/cursor', authenticateToken, cursorRoutes);
 
@@ -304,9 +301,6 @@ app.use('/api/commands', authenticateToken, commandsRoutes);
 // Settings API Routes (protected)
 app.use('/api/settings', authenticateToken, settingsRoutes);
 
-// CLI Authentication API Routes (protected)
-app.use('/api/cli', authenticateToken, cliAuthRoutes);
-
 // User API Routes (protected)
 app.use('/api/user', authenticateToken, userRoutes);
 
@@ -321,6 +315,9 @@ app.use('/api/plugins', authenticateToken, pluginsRoutes);
 
 // Unified session messages route (protected)
 app.use('/api/sessions', authenticateToken, messagesRoutes);
+
+// Unified provider MCP routes (protected)
+app.use('/api/providers', authenticateToken, providerRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
@@ -505,23 +502,6 @@ app.delete('/api/projects/:projectName', authenticateToken, async (req, res) => 
         await deleteProject(projectName, force, deleteData);
         res.json({ success: true });
     } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Create project endpoint
-app.post('/api/projects/create', authenticateToken, async (req, res) => {
-    try {
-        const { path: projectPath } = req.body;
-
-        if (!projectPath || !projectPath.trim()) {
-            return res.status(400).json({ error: 'Project path is required' });
-        }
-
-        const project = await addProjectManually(projectPath.trim());
-        res.json({ success: true, project });
-    } catch (error) {
-        console.error('Error creating project:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -1378,7 +1358,7 @@ wss.on('connection', (ws, request) => {
 /**
  * WebSocket Writer - Wrapper for WebSocket to match SSEStreamWriter interface
  *
- * Provider files use `createNormalizedMessage()` from `providers/types.js` and
+ * Provider files use `createNormalizedMessage()` from `shared/utils.js` and
  * adapter `normalizeMessage()` to produce unified NormalizedMessage events.
  * The writer simply serialises and sends.
  */
@@ -2211,6 +2191,30 @@ app.get('*', (req, res) => {
         const redirectHost = getConnectableHost(req.hostname);
         res.redirect(`${req.protocol}://${redirectHost}:${VITE_PORT}`);
     }
+});
+
+// global error middleware must be last
+app.use((err, req, res, next) => {
+  if (err instanceof AppError) {
+    return res.status(err.statusCode).json({
+      success: false,
+      error: {
+        code: err.code,
+        message: err.message,
+        details: err.details,
+      },
+    });
+  }
+
+  console.error(err);
+
+  return res.status(500).json({
+    success: false,
+    error: {
+      code: 'INTERNAL_ERROR',
+      message: 'Internal server error',
+    },
+  });
 });
 
 // Helper function to convert permissions to rwx format

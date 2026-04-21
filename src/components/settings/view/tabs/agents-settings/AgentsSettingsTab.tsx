@@ -1,9 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+
+import { useServerPlatform } from '../../../../../hooks/useServerPlatform';
 import type { AgentCategory, AgentProvider } from '../../../types/types';
+
+import type { AgentContext, AgentsSettingsTabProps } from './types';
 import AgentCategoryContentSection from './sections/AgentCategoryContentSection';
 import AgentCategoryTabsSection from './sections/AgentCategoryTabsSection';
 import AgentSelectorSection from './sections/AgentSelectorSection';
-import type { AgentContext, AgentsSettingsTabProps } from './types';
 
 export default function AgentsSettingsTab({
   providerAuthStatus,
@@ -16,22 +19,26 @@ export default function AgentsSettingsTab({
   onCodexPermissionModeChange,
   geminiPermissionMode,
   onGeminiPermissionModeChange,
-  mcpServers,
-  cursorMcpServers,
-  codexMcpServers,
-  mcpTestResults,
-  mcpServerTools,
-  mcpToolsLoading,
-  deleteError,
-  onOpenMcpForm,
-  onDeleteMcpServer,
-  onTestMcpServer,
-  onDiscoverMcpTools,
-  onOpenCodexMcpForm,
-  onDeleteCodexMcpServer,
+  projects,
 }: AgentsSettingsTabProps) {
   const [selectedAgent, setSelectedAgent] = useState<AgentProvider>('claude');
   const [selectedCategory, setSelectedCategory] = useState<AgentCategory>('account');
+  const { isWindowsServer } = useServerPlatform();
+
+  const visibleAgents = useMemo<AgentProvider[]>(() => {
+    const all: AgentProvider[] = ['claude', 'cursor', 'codex', 'gemini'];
+    if (isWindowsServer) {
+      return all.filter((id) => id !== 'cursor');
+    }
+
+    return all;
+  }, [isWindowsServer]);
+
+  useEffect(() => {
+    if (isWindowsServer && selectedAgent === 'cursor') {
+      setSelectedAgent('claude');
+    }
+  }, [isWindowsServer, selectedAgent]);
 
   const agentContextById = useMemo<Record<AgentProvider, AgentContext>>(() => ({
     claude: {
@@ -61,6 +68,7 @@ export default function AgentsSettingsTab({
   return (
     <div className="-mx-4 -mb-4 -mt-2 flex min-h-[300px] flex-col overflow-hidden md:-mx-6 md:-mb-6 md:-mt-2 md:min-h-[500px]">
       <AgentSelectorSection
+        agents={visibleAgents}
         selectedAgent={selectedAgent}
         onSelectAgent={setSelectedAgent}
         agentContextById={agentContextById}
@@ -84,19 +92,7 @@ export default function AgentsSettingsTab({
           onCodexPermissionModeChange={onCodexPermissionModeChange}
           geminiPermissionMode={geminiPermissionMode}
           onGeminiPermissionModeChange={onGeminiPermissionModeChange}
-          mcpServers={mcpServers}
-          cursorMcpServers={cursorMcpServers}
-          codexMcpServers={codexMcpServers}
-          mcpTestResults={mcpTestResults}
-          mcpServerTools={mcpServerTools}
-          mcpToolsLoading={mcpToolsLoading}
-          deleteError={deleteError}
-          onOpenMcpForm={onOpenMcpForm}
-          onDeleteMcpServer={onDeleteMcpServer}
-          onTestMcpServer={onTestMcpServer}
-          onDiscoverMcpTools={onDiscoverMcpTools}
-          onOpenCodexMcpForm={onOpenCodexMcpForm}
-          onDeleteCodexMcpServer={onDeleteCodexMcpServer}
+          projects={projects}
         />
       </div>
     </div>

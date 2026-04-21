@@ -12,7 +12,7 @@ import { decodeHtmlEntities, unescapeWithMathProtection, formatUsageLimitText } 
  * that the existing UI components expect.
  *
  * Internal/system content (e.g. <system-reminder>, <command-name>) is already
- * filtered server-side by the Claude adapter (server/providers/utils.js).
+ * filtered server-side by the Claude provider module.
  */
 export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMessage[] {
   const converted: ChatMessage[] = [];
