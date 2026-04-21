@@ -87,7 +87,7 @@ export default function LoginForm() {
         <button
           type="submit"
           disabled={isSubmitting}
-          className="w-full rounded-md bg-blue-600 px-4 py-2 font-medium text-white transition-colors duration-200 hover:bg-blue-700 disabled:bg-blue-400"
+          className="w-full rounded-md bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors duration-200 hover:bg-primary/90 disabled:opacity-50"
         >
           {isSubmitting ? t('login.loading') : t('login.submit')}
         </button>
