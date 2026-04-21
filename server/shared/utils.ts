@@ -6,6 +6,7 @@ import path from 'node:path';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 
 import type {
+  AnyRecord,
   ApiSuccessShape,
   AppErrorOptions,
   NormalizedMessage,
@@ -89,12 +90,12 @@ export function createNormalizedMessage(fields: NormalizedMessageInput): Normali
  * treat the returned value as a JSON-style object map without repeating the same
  * defensive shape checks at every config read site.
  */
-export const readObjectRecord = (value: unknown): Record<string, unknown> | null => {
+export const readObjectRecord = (value: any): AnyRecord | null => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null;
   }
 
-  return value as Record<string, unknown>;
+  return value as AnyRecord;
 };
 
 /**

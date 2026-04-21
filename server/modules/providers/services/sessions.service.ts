@@ -29,7 +29,7 @@ export const sessionsService = {
     raw: unknown,
     sessionId: string | null,
   ): NormalizedMessage[] {
-    return providerRegistry.resolveProvider(providerName).normalizeMessage(raw, sessionId);
+    return providerRegistry.resolveProvider(providerName).sessions.normalizeMessage(raw, sessionId);
   },
 
   /**
@@ -40,6 +40,6 @@ export const sessionsService = {
     sessionId: string,
     options?: FetchHistoryOptions,
   ): Promise<FetchHistoryResult> {
-    return providerRegistry.resolveProvider(providerName).fetchHistory(sessionId, options);
+    return providerRegistry.resolveProvider(providerName).sessions.fetchHistory(sessionId, options);
   },
 };

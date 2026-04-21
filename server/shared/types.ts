@@ -5,6 +5,8 @@ export type ApiSuccessShape<TData = unknown> = {
   data: TData;
 };
 
+export type AnyRecord = Record<string, any>;
+
 // ---------------------------------------------------------------------------------------------
 
 export type LLMProvider = 'claude' | 'codex' | 'gemini' | 'cursor';

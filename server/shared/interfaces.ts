@@ -19,9 +19,7 @@ export interface IProvider {
   readonly id: LLMProvider;
   readonly mcp: IProviderMcp;
   readonly auth: IProviderAuth;
-
-  normalizeMessage(raw: unknown, sessionId: string | null): NormalizedMessage[];
-  fetchHistory(sessionId: string, options?: FetchHistoryOptions): Promise<FetchHistoryResult>;
+  readonly sessions: IProviderSessions;
 }
 
 
@@ -45,4 +43,12 @@ export interface IProviderMcp {
   removeServer(
     input: { name: string; scope?: McpScope; workspacePath?: string },
   ): Promise<{ removed: boolean; provider: LLMProvider; name: string; scope: McpScope }>;
+}
+
+/**
+ * Session/history contract for one provider.
+ */
+export interface IProviderSessions {
+  normalizeMessage(raw: unknown, sessionId: string | null): NormalizedMessage[];
+  fetchHistory(sessionId: string, options?: FetchHistoryOptions): Promise<FetchHistoryResult>;
 }
