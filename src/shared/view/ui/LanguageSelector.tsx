@@ -2,6 +2,7 @@
 
 import { useTranslation } from 'react-i18next';
 import { Languages } from 'lucide-react';
+
 import { languages } from '../../../i18n/languages';
 
 type LanguageSelectorProps = {
