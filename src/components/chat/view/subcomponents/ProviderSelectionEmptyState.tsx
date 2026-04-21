@@ -1,7 +1,8 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import { useServerPlatform } from "../../../../hooks/useServerPlatform";
 import SessionProviderLogo from "../../../llm-logo-provider/SessionProviderLogo";
 import {
   CLAUDE_MODELS,
@@ -45,11 +46,11 @@ type ProviderSelectionEmptyStateProps = {
   setInput: React.Dispatch<React.SetStateAction<string>>;
 };
 
-interface ProviderGroup {
+type ProviderGroup = {
   id: LLMProvider;
   name: string;
   models: { value: string; label: string }[];
-}
+};
 
 const PROVIDER_GROUPS: ProviderGroup[] = [
   { id: "claude", name: "Anthropic", models: CLAUDE_MODELS.OPTIONS },
@@ -105,7 +106,21 @@ export default function ProviderSelectionEmptyState({
   setInput,
 }: ProviderSelectionEmptyStateProps) {
   const { t } = useTranslation("chat");
+  const { isWindowsServer } = useServerPlatform();
   const [dialogOpen, setDialogOpen] = useState(false);
+
+  const visibleProviderGroups = useMemo(
+    () => (isWindowsServer ? PROVIDER_GROUPS.filter((p) => p.id !== "cursor") : PROVIDER_GROUPS),
+    [isWindowsServer],
+  );
+
+  useEffect(() => {
+    if (isWindowsServer && provider === "cursor") {
+      setProvider("claude");
+      localStorage.setItem("selected-provider", "claude");
+    }
+  }, [isWindowsServer, provider, setProvider]);
+
   const nextTaskPrompt = t("tasks.nextTaskPrompt", {
     defaultValue: "Start the next task",
   });
@@ -126,13 +141,8 @@ export default function ProviderSelectionEmptyState({
     return found?.label || currentModel;
   }, [provider, currentModel]);
 
-  const handleModelSelect = useCallback(
+  const setModelForProvider = useCallback(
     (providerId: LLMProvider, modelValue: string) => {
-      // Set provider
-      setProvider(providerId);
-      localStorage.setItem("selected-provider", providerId);
-
-      // Set model for the correct provider
       if (providerId === "claude") {
         setClaudeModel(modelValue);
         localStorage.setItem("claude-model", modelValue);
@@ -146,19 +156,25 @@ export default function ProviderSelectionEmptyState({
         setCursorModel(modelValue);
         localStorage.setItem("cursor-model", modelValue);
       }
+    },
+    [setClaudeModel, setCursorModel, setCodexModel, setGeminiModel],
+  );
 
+  const handleModelSelect = useCallback(
+    (providerId: LLMProvider, modelValue: string) => {
+      setProvider(providerId);
+      localStorage.setItem("selected-provider", providerId);
+      setModelForProvider(providerId, modelValue);
       setDialogOpen(false);
       setTimeout(() => textareaRef.current?.focus(), 100);
     },
-    [setProvider, setClaudeModel, setCursorModel, setCodexModel, setGeminiModel, textareaRef],
+    [setProvider, setModelForProvider, textareaRef],
   );
 
-  /* ── New session — provider + model picker ── */
   if (!selectedSession && !currentSessionId) {
     return (
       <div className="flex h-full items-center justify-center px-4">
         <div className="w-full max-w-md">
-          {/* Heading */}
           <div className="mb-8 text-center">
             <h2 className="text-lg font-semibold tracking-tight text-foreground sm:text-xl">
               {t("providerSelection.title")}
@@ -168,36 +184,35 @@ export default function ProviderSelectionEmptyState({
             </p>
           </div>
 
-          {/* Model selector trigger — hero card style */}
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Card
-                className="group mx-auto max-w-sm cursor-pointer border-border/60 transition-all duration-150 hover:border-border hover:shadow-md active:scale-[0.99]"
+                className="group mx-auto max-w-xs cursor-pointer border-border/60 transition-all duration-150 hover:border-border hover:shadow-md active:scale-[0.99]"
                 role="button"
                 tabIndex={0}
               >
-                <div className="flex items-center gap-3 p-4">
+                <div className="flex items-center gap-2 p-3">
                   <SessionProviderLogo
                     provider={provider}
-                    className="h-8 w-8 shrink-0"
+                    className="h-5 w-5 shrink-0"
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm font-semibold text-foreground">
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs font-semibold text-foreground">
                         {getProviderDisplayName(provider)}
                       </span>
                       <span className="text-xs text-muted-foreground">·</span>
-                      <span className="truncate text-sm text-foreground">
+                      <span className="truncate text-xs text-foreground">
                         {currentModelLabel}
                       </span>
                     </div>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
                       {t("providerSelection.clickToChange", {
                         defaultValue: "Click to change model",
                       })}
                     </p>
                   </div>
-                  <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-y-0.5" />
+                  <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-y-0.5" />
                 </div>
               </Card>
             </DialogTrigger>
@@ -205,12 +220,18 @@ export default function ProviderSelectionEmptyState({
             <DialogContent className="max-w-md overflow-hidden p-0">
               <DialogTitle>Model Selector</DialogTitle>
               <Command>
-                <CommandInput placeholder={t("providerSelection.searchModels", { defaultValue: "Search models..." })} />
+                <CommandInput
+                  placeholder={t("providerSelection.searchModels", {
+                    defaultValue: "Search models...",
+                  })}
+                />
                 <CommandList className="max-h-[350px]">
                   <CommandEmpty>
-                    {t("providerSelection.noModelsFound", { defaultValue: "No models found." })}
+                    {t("providerSelection.noModelsFound", {
+                      defaultValue: "No models found.",
+                    })}
                   </CommandEmpty>
-                  {PROVIDER_GROUPS.map((group) => (
+                  {visibleProviderGroups.map((group) => (
                     <CommandGroup
                       key={group.id}
                       heading={
@@ -221,8 +242,7 @@ export default function ProviderSelectionEmptyState({
                       }
                     >
                       {group.models.map((model) => {
-                        const isSelected =
-                          provider === group.id && currentModel === model.value;
+                        const isSelected = provider === group.id && currentModel === model.value;
                         return (
                           <CommandItem
                             key={`${group.id}-${model.value}`}
@@ -243,7 +263,6 @@ export default function ProviderSelectionEmptyState({
             </DialogContent>
           </Dialog>
 
-          {/* Ready prompt */}
           <p className="mt-4 text-center text-sm text-muted-foreground/70">
             {
               {
@@ -263,7 +282,6 @@ export default function ProviderSelectionEmptyState({
             }
           </p>
 
-          {/* Task banner */}
           {provider && tasksEnabled && isTaskMasterInstalled && (
             <div className="mt-5">
               <NextTaskBanner
@@ -277,7 +295,6 @@ export default function ProviderSelectionEmptyState({
     );
   }
 
-  /* ── Existing session — continue prompt ── */
   if (selectedSession) {
     return (
       <div className="flex h-full items-center justify-center">

@@ -43,6 +43,9 @@ export const languages = [
     value: 'tr',
     label: 'Turkish',
     nativeName: 'Türkçe',
+    value: 'it',
+    label: 'Italian',
+    nativeName: 'Italiano',
   },
 ];
 

@@ -10,7 +10,7 @@
  */
 
 import express from 'express';
-import { getProvider, getAllProviders } from '../providers/registry.js';
+import { sessionsService } from '../modules/providers/services/sessions.service.js';
 
 const router = express.Router();
 
@@ -29,7 +29,7 @@ const router = express.Router();
 router.get('/:sessionId/messages', async (req, res) => {
   try {
     const { sessionId } = req.params;
-    const provider = req.query.provider || 'claude';
+    const provider = String(req.query.provider || 'claude').trim().toLowerCase();
     const projectName = req.query.projectName || '';
     const projectPath = req.query.projectPath || '';
     const limitParam = req.query.limit;
@@ -38,13 +38,13 @@ router.get('/:sessionId/messages', async (req, res) => {
       : null;
     const offset = parseInt(req.query.offset || '0', 10);
 
-    const adapter = getProvider(provider);
-    if (!adapter) {
-      const available = getAllProviders().join(', ');
+    const availableProviders = sessionsService.listProviderIds();
+    if (!availableProviders.includes(provider)) {
+      const available = availableProviders.join(', ');
       return res.status(400).json({ error: `Unknown provider: ${provider}. Available: ${available}` });
     }
 
-    const result = await adapter.fetchHistory(sessionId, {
+    const result = await sessionsService.fetchHistory(provider, sessionId, {
       projectName,
       projectPath,
       limit,
