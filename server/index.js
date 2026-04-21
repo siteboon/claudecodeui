@@ -10,6 +10,7 @@ const __dirname = getModuleDir(import.meta.url);
 // Resolving the app root once keeps every repo-level lookup below aligned across both layouts.
 const APP_ROOT = findAppRoot(__dirname);
 const installMode = fs.existsSync(path.join(APP_ROOT, '.git')) ? 'git' : 'npm';
+const DIST_DIR = process.env.DIST_DIR ? path.resolve(process.env.DIST_DIR) : path.join(APP_ROOT, 'dist');
 
 import { c } from './utils/colors.js';
 
@@ -330,7 +331,7 @@ app.use(express.static(path.join(APP_ROOT, 'public')));
 
 // Static files served after API routes
 // Add cache control: HTML files should not be cached, but assets can be cached
-app.use(express.static(path.join(APP_ROOT, 'dist'), {
+app.use(express.static(DIST_DIR, {
     setHeaders: (res, filePath) => {
         if (filePath.endsWith('.html')) {
             // Prevent HTML caching to avoid service worker issues after builds
@@ -2197,7 +2198,7 @@ app.get('*', (req, res) => {
 
     // Only serve index.html for HTML routes, not for static assets
     // Static assets should already be handled by express.static middleware above
-    const indexPath = path.join(APP_ROOT, 'dist', 'index.html');
+    const indexPath = path.join(DIST_DIR, 'index.html');
 
     // Check if dist/index.html exists (production build available)
     if (fs.existsSync(indexPath)) {
@@ -2312,7 +2313,7 @@ async function startServer() {
         configureWebPush();
 
         // Check if running in production mode (dist folder exists)
-        const distIndexPath = path.join(APP_ROOT, 'dist', 'index.html');
+        const distIndexPath = path.join(DIST_DIR, 'index.html');
         const isProduction = fs.existsSync(distIndexPath);
 
         // Log Claude implementation mode

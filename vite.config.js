@@ -6,6 +6,11 @@ import { getConnectableHost, normalizeLoopbackHost } from './shared/networkHosts
 export default defineConfig(({ mode }) => {
   // Load env file based on `mode` in the current working directory.
   const env = loadEnv(mode, process.cwd(), '')
+  const basePath = env.BASE_PATH || '/'
+  const normalizedBasePath = basePath === '/'
+    ? '/'
+    : `/${basePath.replace(/^\/+|\/+$/g, '')}/`
+  const outDir = env.DIST_OUT_DIR || 'dist'
 
   const configuredHost = env.HOST || '0.0.0.0'
   // if the host is not a loopback address, it should be used directly. 
@@ -19,6 +24,7 @@ export default defineConfig(({ mode }) => {
   const serverPort = env.SERVER_PORT || env.PORT || 3001
 
   return {
+    base: normalizedBasePath,
     plugins: [react()],
     resolve: {
       alias: {
@@ -41,7 +47,7 @@ export default defineConfig(({ mode }) => {
       }
     },
     build: {
-      outDir: 'dist',
+      outDir,
       chunkSizeWarningLimit: 1000,
       rollupOptions: {
         output: {

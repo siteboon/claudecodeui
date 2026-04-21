@@ -1,5 +1,6 @@
 import React from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
+import { withBasePath } from '../../utils/basePath.js';
 
 type CodexLogoProps = {
   className?: string;
@@ -10,7 +11,7 @@ const CodexLogo = ({ className = 'w-5 h-5' }: CodexLogoProps) => {
 
   return (
     <img
-      src={isDarkMode ? "/icons/codex-white.svg" : "/icons/codex.svg"}
+      src={isDarkMode ? withBasePath('/icons/codex-white.svg') : withBasePath('/icons/codex.svg')}
       alt="Codex"
       className={className}
     />
