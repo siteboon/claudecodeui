@@ -2001,6 +2001,78 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
     }
 });
 
+// File/folder upload endpoint — saves files to a temp batch directory, returns metadata + batchId
+app.post('/api/projects/:projectName/upload-files', authenticateToken, async (req, res) => {
+    try {
+        const multer = (await import('multer')).default;
+        const path = (await import('path')).default;
+        const fs = (await import('fs')).promises;
+        const os = (await import('os')).default;
+        const crypto = (await import('crypto')).default;
+
+        const batchId = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+        const batchDir = path.join(os.tmpdir(), 'claude-ui-uploads', String(req.user.id), batchId);
+
+        const storage = multer.diskStorage({
+            destination: async (req, file, cb) => {
+                await fs.mkdir(batchDir, { recursive: true });
+                cb(null, batchDir);
+            },
+            filename: (req, file, cb) => {
+                // Preserve original name (sanitised) to make it easier to identify
+                const sanitizedName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+                const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+                cb(null, uniqueSuffix + '-' + sanitizedName);
+            }
+        });
+
+        const upload = multer({
+            storage,
+            limits: {
+                fileSize: 25 * 1024 * 1024, // 25MB per file
+                files: 50
+            }
+        });
+
+        upload.array('files', 50)(req, res, async (err) => {
+            if (err) {
+                return res.status(400).json({ error: err.message });
+            }
+
+            if (!req.files || req.files.length === 0) {
+                return res.status(400).json({ error: 'No files provided' });
+            }
+
+            try {
+                // Parse optional relative-path metadata sent alongside the files
+                let relativePaths = [];
+                try {
+                    if (req.body && req.body.relativePaths) {
+                        relativePaths = JSON.parse(req.body.relativePaths);
+                    }
+                } catch { /* ignore parse errors */ }
+
+                const processedFiles = req.files.map((file, idx) => ({
+                    name: file.originalname,
+                    size: file.size,
+                    mimeType: file.mimetype,
+                    relativePath: relativePaths[idx] || undefined,
+                    storedName: file.filename, // needed by SDK to find the file in batchDir
+                }));
+
+                res.json({ uploadBatchId: batchId, files: processedFiles });
+            } catch (error) {
+                console.error('Error processing file uploads:', error);
+                await Promise.all(req.files.map(f => fs.unlink(f.path).catch(() => { })));
+                res.status(500).json({ error: 'Failed to process files' });
+            }
+        });
+    } catch (error) {
+        console.error('Error in file upload endpoint:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // Get token usage for a specific session
 app.get('/api/projects/:projectName/sessions/:sessionId/token-usage', authenticateToken, async (req, res) => {
     try {

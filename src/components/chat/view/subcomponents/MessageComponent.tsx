@@ -136,6 +136,22 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                 ))}
               </div>
             )}
+            {message.files && message.files.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {message.files.map((file, idx) => (
+                  <span
+                    key={`${file.name}-${idx}`}
+                    className="inline-flex items-center gap-1 rounded-md bg-primary-foreground/20 px-2 py-0.5 text-xs"
+                    title={file.relativePath || file.name}
+                  >
+                    <svg className="h-3 w-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                    {file.relativePath || file.name}
+                  </span>
+                ))}
+              </div>
+            )}
             <div className="mt-1 flex items-center justify-end gap-1 text-xs text-primary-foreground/70">
               {shouldShowUserCopyControl && (
                 <MessageCopyControl content={userCopyContent} messageType="user" />

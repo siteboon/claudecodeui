@@ -376,6 +376,66 @@ async function handleImages(command, images, cwd) {
 }
 
 /**
+ * Handles uploaded files for SDK queries.
+ * Moves files from the upload temp batch directory into the project's .tmp/uploads/
+ * and appends file paths to the command prompt.
+ * @param {string} command - Original user prompt
+ * @param {Object} fileData - {uploadBatchId, files: [{name, size, mimeType, relativePath?, storedName}]}
+ * @param {string} cwd - Working directory for the project
+ * @param {string} userId - User ID (to locate the upload batch dir)
+ * @returns {Promise<Object>} {modifiedCommand, tempFilePaths, tempDir}
+ */
+async function handleFiles(command, fileData, cwd, userId) {
+  const tempFilePaths = [];
+  let tempDir = null;
+
+  if (!fileData || !fileData.uploadBatchId || !fileData.files || fileData.files.length === 0) {
+    return { modifiedCommand: command, tempFilePaths, tempDir };
+  }
+
+  try {
+    const workingDir = cwd || process.cwd();
+    tempDir = path.join(workingDir, '.tmp', 'uploads', Date.now().toString());
+    await fs.mkdir(tempDir, { recursive: true });
+
+    const batchDir = path.join(os.tmpdir(), 'claude-ui-uploads', String(userId), fileData.uploadBatchId);
+
+    for (const file of fileData.files) {
+      const sourcePath = path.join(batchDir, file.storedName);
+      // Preserve relative path structure for folder uploads
+      const destName = file.relativePath
+        ? file.relativePath.replace(/[^a-zA-Z0-9._/\\-]/g, '_')
+        : file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const destPath = path.join(tempDir, destName);
+
+      // Ensure parent directory exists (for nested folder uploads)
+      await fs.mkdir(path.dirname(destPath), { recursive: true });
+
+      try {
+        await fs.copyFile(sourcePath, destPath);
+        tempFilePaths.push(destPath);
+      } catch (err) {
+        console.error(`Failed to copy uploaded file ${file.name}:`, err);
+      }
+    }
+
+    // Clean up the upload batch directory
+    await fs.rm(batchDir, { recursive: true, force: true }).catch(() => {});
+
+    let modifiedCommand = command;
+    if (tempFilePaths.length > 0 && command && command.trim()) {
+      const fileNote = `\n\n[Files provided at the following paths:]\n${tempFilePaths.map((p, i) => `${i + 1}. ${p}`).join('\n')}`;
+      modifiedCommand = command + fileNote;
+    }
+
+    return { modifiedCommand, tempFilePaths, tempDir };
+  } catch (error) {
+    console.error('Error processing files for SDK:', error);
+    return { modifiedCommand: command, tempFilePaths, tempDir };
+  }
+}
+
+/**
  * Cleans up temporary image files
  * @param {Array<string>} tempImagePaths - Array of temp file paths to delete
  * @param {string} tempDir - Temp directory to remove
@@ -497,9 +557,16 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
     // Handle images - save to temp files and modify prompt
     const imageResult = await handleImages(command, options.images, options.cwd);
-    const finalCommand = imageResult.modifiedCommand;
+    let finalCommand = imageResult.modifiedCommand;
     tempImagePaths = imageResult.tempImagePaths;
     tempDir = imageResult.tempDir;
+
+    // Handle uploaded files - move from upload batch dir to project .tmp/uploads/
+    const fileResult = await handleFiles(finalCommand, options.fileData, options.cwd, ws?.userId);
+    finalCommand = fileResult.modifiedCommand;
+    // Track file temp paths for cleanup alongside images
+    tempImagePaths = [...tempImagePaths, ...fileResult.tempFilePaths];
+    if (!tempDir && fileResult.tempDir) tempDir = fileResult.tempDir;
 
     sdkOptions.hooks = {
       Notification: [{

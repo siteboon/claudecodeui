@@ -11,11 +11,13 @@ import type {
   SetStateAction,
   TouchEvent,
 } from 'react';
-import { ImageIcon, MessageSquareIcon, XIcon, ArrowDownIcon } from 'lucide-react';
+import { useState, type RefObject as InputRefObject } from 'react';
+import { ImageIcon, PaperclipIcon, FolderIcon, FileIcon, MessageSquareIcon, XIcon, ArrowDownIcon } from 'lucide-react';
 import type { PendingPermissionRequest, PermissionMode, Provider } from '../../types/types';
 import CommandMenu from './CommandMenu';
 import ClaudeStatus from './ClaudeStatus';
 import ImageAttachment from './ImageAttachment';
+import FileAttachment from './FileAttachment';
 import PermissionRequestsBanner from './PermissionRequestsBanner';
 import ThinkingModeSelector from './ThinkingModeSelector';
 import TokenUsagePie from './TokenUsagePie';
@@ -74,6 +76,14 @@ interface ChatComposerProps {
   onRemoveImage: (index: number) => void;
   uploadingImages: Map<string, number>;
   imageErrors: Map<string, string>;
+  attachedFiles: File[];
+  onRemoveFile: (index: number) => void;
+  fileErrors: Map<string, string>;
+  fileInputRef: InputRefObject<HTMLInputElement>;
+  folderInputRef: InputRefObject<HTMLInputElement>;
+  openFilePicker: () => void;
+  openFolderPicker: () => void;
+  onFileSelection: (files: File[]) => void;
   showFileDropdown: boolean;
   filteredFiles: MentionableFile[];
   selectedFileIndex: number;
@@ -129,6 +139,14 @@ export default function ChatComposer({
   onRemoveImage,
   uploadingImages,
   imageErrors,
+  attachedFiles,
+  onRemoveFile,
+  fileErrors,
+  fileInputRef,
+  folderInputRef,
+  openFilePicker,
+  openFolderPicker,
+  onFileSelection,
   showFileDropdown,
   filteredFiles,
   selectedFileIndex,
@@ -164,6 +182,8 @@ export default function ChatComposer({
     left: textareaRect ? textareaRect.left : 16,
     bottom: textareaRect ? window.innerHeight - textareaRect.top + 8 : 90,
   };
+
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
 
   // Detect if the AskUserQuestion interactive panel is active
   const hasQuestionPanel = pendingPermissionRequests.some(
@@ -261,22 +281,30 @@ export default function ChatComposer({
                     d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
                   />
                 </svg>
-                <p className="text-sm font-medium">Drop images here</p>
+                <p className="text-sm font-medium">Drop files here</p>
               </div>
             </div>
           )}
 
-          {attachedImages.length > 0 && (
+          {(attachedImages.length > 0 || attachedFiles.length > 0) && (
             <PromptInputHeader>
               <div className="rounded-xl bg-muted/40 p-2">
                 <div className="flex flex-wrap gap-2">
                   {attachedImages.map((file, index) => (
                     <ImageAttachment
-                      key={index}
+                      key={`img-${index}`}
                       file={file}
                       onRemove={() => onRemoveImage(index)}
                       uploadProgress={uploadingImages.get(file.name)}
                       error={imageErrors.get(file.name)}
+                    />
+                  ))}
+                  {attachedFiles.map((file, index) => (
+                    <FileAttachment
+                      key={`file-${index}`}
+                      file={file}
+                      onRemove={() => onRemoveFile(index)}
+                      error={fileErrors.get(file.name)}
                     />
                   ))}
                 </div>
@@ -285,6 +313,36 @@ export default function ChatComposer({
           )}
 
           <input {...getInputProps()} />
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files) {
+                onFileSelection(Array.from(e.target.files));
+                e.target.value = '';
+              }
+            }}
+          />
+          <input
+            ref={(el) => {
+              if (el) {
+                el.setAttribute('webkitdirectory', '');
+                // eslint-disable-next-line no-param-reassign
+                (folderInputRef as { current: HTMLInputElement | null }).current = el;
+              }
+            }}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files) {
+                onFileSelection(Array.from(e.target.files));
+                e.target.value = '';
+              }
+            }}
+          />
 
           <PromptInputBody>
             <div ref={inputHighlightRef} aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">
@@ -310,12 +368,45 @@ export default function ChatComposer({
 
         <PromptInputFooter>
           <PromptInputTools>
-            <PromptInputButton
-              tooltip={{ content: t('input.attachImages') }}
-              onClick={openImagePicker}
-            >
-              <ImageIcon />
-            </PromptInputButton>
+            <div className="relative">
+              <PromptInputButton
+                tooltip={{ content: t('input.attachImages', { defaultValue: 'Attach' }) }}
+                onClick={() => setShowAttachMenu((v) => !v)}
+              >
+                <PaperclipIcon />
+              </PromptInputButton>
+              {showAttachMenu && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowAttachMenu(false)} />
+                  <div className="absolute bottom-full left-0 z-50 mb-2 w-40 overflow-hidden rounded-lg border border-border/50 bg-card shadow-lg">
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground hover:bg-accent/50"
+                      onClick={() => { openImagePicker(); setShowAttachMenu(false); }}
+                    >
+                      <ImageIcon className="h-4 w-4" />
+                      Image
+                    </button>
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground hover:bg-accent/50"
+                      onClick={() => { openFilePicker(); setShowAttachMenu(false); }}
+                    >
+                      <FileIcon className="h-4 w-4" />
+                      File
+                    </button>
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground hover:bg-accent/50"
+                      onClick={() => { openFolderPicker(); setShowAttachMenu(false); }}
+                    >
+                      <FolderIcon className="h-4 w-4" />
+                      Folder
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
 
             <button
               type="button"
@@ -394,7 +485,7 @@ export default function ChatComposer({
               {sendByCtrlEnter ? t('input.hintText.ctrlEnter') : t('input.hintText.enter')}
             </div>
             <PromptInputSubmit
-              disabled={!input.trim() || isLoading}
+              disabled={(!input.trim() && attachedImages.length === 0 && attachedFiles.length === 0) || isLoading}
               className="h-10 w-10 sm:h-10 sm:w-10"
               onMouseDown={(event) => {
                 event.preventDefault();

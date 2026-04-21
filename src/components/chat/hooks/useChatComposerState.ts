@@ -15,6 +15,7 @@ import { thinkingModes } from '../constants/thinkingModes';
 import { grantClaudeToolPermission } from '../utils/chatPermissions';
 import { safeLocalStorage } from '../utils/chatStorage';
 import type {
+  ChatFile,
   ChatMessage,
   PendingPermissionRequest,
   PermissionMode,
@@ -142,6 +143,8 @@ export function useChatComposerState({
   const [attachedImages, setAttachedImages] = useState<File[]>([]);
   const [uploadingImages, setUploadingImages] = useState<Map<string, number>>(new Map());
   const [imageErrors, setImageErrors] = useState<Map<string, string>>(new Map());
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [fileErrors, setFileErrors] = useState<Map<string, string>>(new Map());
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
   const [thinkingMode, setThinkingMode] = useState('none');
 
@@ -421,6 +424,29 @@ export function useChatComposerState({
     }
   }, []);
 
+  const handleFileSelection = useCallback((files: File[]) => {
+    const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
+    const MAX_FILES = 50;
+
+    const validFiles = files.filter((file) => {
+      if (!file || typeof file !== 'object') return false;
+      if (!file.size || file.size > MAX_FILE_SIZE) {
+        const fileName = file.name || 'Unknown file';
+        setFileErrors((prev) => {
+          const next = new Map(prev);
+          next.set(fileName, 'File too large (max 25MB)');
+          return next;
+        });
+        return false;
+      }
+      return true;
+    });
+
+    if (validFiles.length > 0) {
+      setAttachedFiles((prev) => [...prev, ...validFiles].slice(0, MAX_FILES));
+    }
+  }, []);
+
   const handlePaste = useCallback(
     (event: ClipboardEvent<HTMLTextAreaElement>) => {
       const items = Array.from(event.clipboardData.items);
@@ -446,16 +472,31 @@ export function useChatComposerState({
     [handleImageFiles],
   );
 
+  const handleDroppedFiles = useCallback((files: File[]) => {
+    const imageFiles = files.filter((f) => f.type && f.type.startsWith('image/'));
+    const nonImageFiles = files.filter((f) => !f.type || !f.type.startsWith('image/'));
+    if (imageFiles.length > 0) handleImageFiles(imageFiles);
+    if (nonImageFiles.length > 0) handleFileSelection(nonImageFiles);
+  }, [handleImageFiles, handleFileSelection]);
+
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
-    accept: {
-      'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'],
-    },
-    maxSize: 5 * 1024 * 1024,
-    maxFiles: 5,
-    onDrop: handleImageFiles,
+    maxSize: 25 * 1024 * 1024,
+    maxFiles: 50,
+    onDrop: handleDroppedFiles,
     noClick: true,
     noKeyboard: true,
   });
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
+
+  const openFilePicker = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const openFolderPicker = useCallback(() => {
+    folderInputRef.current?.click();
+  }, []);
 
   const handleSubmit = useCallback(
     async (
@@ -463,7 +504,8 @@ export function useChatComposerState({
     ) => {
       event.preventDefault();
       const currentInput = inputValueRef.current;
-      if (!currentInput.trim() || isLoading || !selectedProject) {
+      const hasAttachments = attachedImages.length > 0 || attachedFiles.length > 0;
+      if ((!currentInput.trim() && !hasAttachments) || isLoading || !selectedProject) {
         return;
       }
 
@@ -480,6 +522,8 @@ export function useChatComposerState({
           setAttachedImages([]);
           setUploadingImages(new Map());
           setImageErrors(new Map());
+          setAttachedFiles([]);
+          setFileErrors(new Map());
           resetCommandMenuState();
           setIsTextareaExpanded(false);
           if (textareaRef.current) {
@@ -527,6 +571,40 @@ export function useChatComposerState({
         }
       }
 
+      let uploadedFileData: { uploadBatchId: string; files: ChatFile[] } | null = null;
+      if (attachedFiles.length > 0) {
+        const formData = new FormData();
+        const relativePaths: string[] = [];
+        attachedFiles.forEach((file) => {
+          formData.append('files', file);
+          relativePaths.push((file as any).webkitRelativePath || file.name);
+        });
+        formData.append('relativePaths', JSON.stringify(relativePaths));
+
+        try {
+          const response = await authenticatedFetch(`/api/projects/${selectedProject.name}/upload-files`, {
+            method: 'POST',
+            headers: {},
+            body: formData,
+          });
+
+          if (!response.ok) {
+            throw new Error('Failed to upload files');
+          }
+
+          uploadedFileData = await response.json();
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unknown error';
+          console.error('File upload failed:', error);
+          addMessage({
+            type: 'error',
+            content: `Failed to upload files: ${message}`,
+            timestamp: new Date(),
+          });
+          return;
+        }
+      }
+
       const effectiveSessionId =
         currentSessionId || selectedSession?.id || sessionStorage.getItem('cursorSessionId');
       const sessionToActivate = effectiveSessionId || `new-session-${Date.now()}`;
@@ -535,6 +613,8 @@ export function useChatComposerState({
         type: 'user',
         content: currentInput,
         images: uploadedImages as any,
+        files: uploadedFileData?.files,
+        uploadBatchId: uploadedFileData?.uploadBatchId,
         timestamp: new Date(),
       };
 
@@ -636,6 +716,7 @@ export function useChatComposerState({
             sessionSummary,
             permissionMode,
             toolsSettings,
+            fileData: uploadedFileData,
           },
         });
       } else {
@@ -652,6 +733,7 @@ export function useChatComposerState({
             model: claudeModel,
             sessionSummary,
             images: uploadedImages,
+            fileData: uploadedFileData,
           },
         });
       }
@@ -662,6 +744,8 @@ export function useChatComposerState({
       setAttachedImages([]);
       setUploadingImages(new Map());
       setImageErrors(new Map());
+      setAttachedFiles([]);
+      setFileErrors(new Map());
       setIsTextareaExpanded(false);
       setThinkingMode('none');
 
@@ -674,6 +758,7 @@ export function useChatComposerState({
     [
       selectedSession,
       attachedImages,
+      attachedFiles,
       claudeModel,
       codexModel,
       currentSessionId,
@@ -957,6 +1042,14 @@ export function useChatComposerState({
     setAttachedImages,
     uploadingImages,
     imageErrors,
+    attachedFiles,
+    setAttachedFiles,
+    fileErrors,
+    fileInputRef,
+    folderInputRef,
+    openFilePicker,
+    openFolderPicker,
+    handleFileSelection,
     getRootProps,
     getInputProps,
     isDragActive,

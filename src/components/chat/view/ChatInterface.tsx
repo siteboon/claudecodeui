@@ -155,6 +155,14 @@ function ChatInterface({
     setAttachedImages,
     uploadingImages,
     imageErrors,
+    attachedFiles,
+    setAttachedFiles,
+    fileErrors,
+    fileInputRef,
+    folderInputRef,
+    openFilePicker,
+    openFolderPicker,
+    handleFileSelection,
     getRootProps,
     getInputProps,
     isDragActive,
@@ -377,6 +385,18 @@ function ChatInterface({
           }
           uploadingImages={uploadingImages}
           imageErrors={imageErrors}
+          attachedFiles={attachedFiles}
+          onRemoveFile={(index) =>
+            setAttachedFiles((previous) =>
+              previous.filter((_, currentIndex) => currentIndex !== index),
+            )
+          }
+          fileErrors={fileErrors}
+          fileInputRef={fileInputRef}
+          folderInputRef={folderInputRef}
+          openFilePicker={openFilePicker}
+          openFolderPicker={openFolderPicker}
+          onFileSelection={handleFileSelection}
           showFileDropdown={showFileDropdown}
           filteredFiles={filteredFiles}
           selectedFileIndex={selectedFileIndex}
