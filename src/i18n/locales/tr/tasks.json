@@ -1,0 +1,142 @@
+{
+  "notConfigured": {
+    "title": "TaskMaster AI yapılandırılmamış",
+    "description": "TaskMaster, karmaşık projeleri AI destekli yardımla yönetilebilir görevlere böler",
+    "whatIsTitle": "🎯 TaskMaster nedir?",
+    "features": {
+      "aiPowered": "AI Destekli Görev Yönetimi: Karmaşık projeleri yönetilebilir alt görevlere böl",
+      "prdTemplates": "PRD Şablonları: Ürün Gereksinim Belgelerinden görev üret",
+      "dependencyTracking": "Bağımlılık Takibi: Görev ilişkilerini ve çalıştırma sırasını anla",
+      "progressVisualization": "İlerleme Görselleştirme: Kanban panoları ve detaylı görev analizleri",
+      "cliIntegration": "CLI Entegrasyonu: İleri seviye iş akışları için taskmaster komutlarını kullan"
+    },
+    "initializeButton": "TaskMaster AI'yi Başlat"
+  },
+  "gettingStarted": {
+    "title": "TaskMaster'a Başlarken",
+    "subtitle": "TaskMaster hazır! Sıradaki adımların:",
+    "steps": {
+      "createPRD": {
+        "title": "Ürün Gereksinim Belgesi (PRD) oluştur",
+        "description": "Proje fikrini konuş ve ne inşa etmek istediğini anlatan bir PRD yaz.",
+        "addButton": "PRD Ekle",
+        "existingPRDs": "Mevcut PRD'ler:"
+      },
+      "generateTasks": {
+        "title": "PRD'den Görev Üret",
+        "description": "PRD'n hazır olduğunda AI asistanına ayrıştırmasını söyle; TaskMaster bunu otomatik olarak uygulama detaylarıyla yönetilebilir görevlere bölecek."
+      },
+      "analyzeTasks": {
+        "title": "Görevleri Analiz Et ve Genişlet",
+        "description": "AI asistanına görev karmaşıklığını analiz etmesini ve uygulamayı kolaylaştırmak için detaylı alt görevlere ayırmasını söyle."
+      },
+      "startBuilding": {
+        "title": "İnşaya Başla",
+        "description": "AI asistanına görevler üzerinde çalışmaya başlamasını, durumlarını güncellemesini ve proje geliştikçe yeni görevler eklemesini söyle."
+      }
+    },
+    "tip": "💡 İpucu: TaskMaster'ın AI destekli görev üretiminden en iyi şekilde faydalanmak için bir PRD ile başla"
+  },
+  "setupModal": {
+    "title": "TaskMaster Kurulumu",
+    "subtitle": "{{projectName}} için interaktif CLI",
+    "willStart": "TaskMaster başlatma otomatik olarak başlayacak",
+    "completed": "TaskMaster kurulumu tamamlandı! Bu pencereyi kapatabilirsin.",
+    "closeButton": "Kapat",
+    "closeContinueButton": "Kapat ve Devam Et"
+  },
+  "helpGuide": {
+    "title": "TaskMaster'a Başlarken",
+    "subtitle": "Verimli görev yönetimi için rehberin",
+    "examples": {
+      "parsePRD": "💬 Örnek:\n\"Claude Task Master ile yeni bir proje başlattım. .taskmaster/docs/prd.txt altında bir PRD'm var. Bunu ayrıştırıp ilk görevleri kurmama yardım eder misin?\"",
+      "expandTask": "💬 Örnek:\n\"Görev 5 karmaşık görünüyor. Bunu alt görevlere bölebilir misin?\"",
+      "addTask": "💬 Örnek:\n\"Lütfen Cloudinary kullanarak kullanıcı profil resmi yükleme özelliği için yeni bir görev ekle, en iyi yaklaşımı araştır.\""
+    },
+    "moreExamples": "Daha fazla örnek ve kullanım deseni →",
+    "proTips": {
+      "title": "💡 Pro İpuçları",
+      "search": "Belirli görevleri hızlıca bulmak için arama çubuğunu kullan",
+      "views": "Kanban, Liste ve Izgara görünümleri arasında geçiş yapmak için görünüm düğmelerini kullan",
+      "filters": "Belirli görev durumlarına veya önceliklere odaklanmak için filtreleri kullan",
+      "details": "Detaylı bilgi görmek ve alt görevleri yönetmek için herhangi bir göreve tıkla"
+    },
+    "learnMore": {
+      "title": "📚 Daha Fazla Öğren",
+      "description": "TaskMaster AI, geliştiriciler için inşa edilmiş ileri seviye bir görev yönetim sistemidir. Dokümantasyona, örneklere bak ve projeye katkıda bulun.",
+      "githubButton": "GitHub'da Görüntüle"
+    }
+  },
+  "search": {
+    "placeholder": "Görevlerde ara..."
+  },
+  "filters": {
+    "button": "Filtreler",
+    "status": "Durum",
+    "priority": "Öncelik",
+    "sortBy": "Sıralama",
+    "allStatuses": "Tüm Durumlar",
+    "allPriorities": "Tüm Öncelikler",
+    "showing": "{{total}} görevin {{filtered}} tanesi gösteriliyor",
+    "clearFilters": "Filtreleri Temizle"
+  },
+  "sort": {
+    "id": "ID",
+    "status": "Durum",
+    "priority": "Öncelik",
+    "idAsc": "ID (Artan)",
+    "idDesc": "ID (Azalan)",
+    "titleAsc": "Başlık (A-Z)",
+    "titleDesc": "Başlık (Z-A)",
+    "statusAsc": "Durum (Önce Bekleyen)",
+    "statusDesc": "Durum (Önce Tamamlanan)",
+    "priorityAsc": "Öncelik (Önce Yüksek)",
+    "priorityDesc": "Öncelik (Önce Düşük)"
+  },
+  "views": {
+    "kanban": "Kanban görünümü",
+    "list": "Liste görünümü",
+    "grid": "Izgara görünümü"
+  },
+  "kanban": {
+    "pending": "📋 Yapılacak",
+    "inProgress": "🚀 Sürüyor",
+    "done": "✅ Tamamlandı",
+    "blocked": "🚫 Engellendi",
+    "deferred": "⏳ Ertelendi",
+    "cancelled": "❌ İptal Edildi",
+    "noTasksYet": "Henüz görev yok",
+    "tasksWillAppear": "Görevler burada görünecek",
+    "moveTasksHere": "Başlayan görevleri buraya taşı",
+    "completedTasksHere": "Tamamlanan görevler burada görünür",
+    "statusTasksHere": "Bu durumdaki görevler burada görünecek"
+  },
+  "buttons": {
+    "help": "TaskMaster Başlangıç Rehberi",
+    "prds": "PRD'ler",
+    "addPRD": "PRD Ekle",
+    "addTask": "Görev Ekle",
+    "createNewPRD": "Yeni PRD Oluştur",
+    "prdsAvailable": "{{count}} PRD mevcut"
+  },
+  "prd": {
+    "modified": "Değişiklik: {{date}}"
+  },
+  "statuses": {
+    "pending": "Beklemede",
+    "in-progress": "Sürüyor",
+    "done": "Tamamlandı",
+    "blocked": "Engellendi",
+    "deferred": "Ertelendi",
+    "cancelled": "İptal Edildi"
+  },
+  "priorities": {
+    "high": "Yüksek",
+    "medium": "Orta",
+    "low": "Düşük"
+  },
+  "noMatchingTasks": {
+    "title": "Filtrelerine uygun görev yok",
+    "description": "Arama veya filtre kriterlerini değiştirmeyi dene."
+  }
+}

@@ -148,9 +148,27 @@ export default tseslint.config(
       ],
       "boundaries/elements": [
         {
-          type: "backend-shared-types", // shared backend type contract that modules may consume without creating runtime coupling
-          pattern: ["server/shared/types.{js,ts}"], // support the current shared types path
-          mode: "file", // treat the types file itself as the boundary element instead of the whole folder
+          type: "backend-shared-type-contract", // shared backend type/interface contracts that modules may consume without creating runtime coupling
+          pattern: [
+            "server/shared/types.{js,ts}",
+            "server/shared/interfaces.{js,ts}",
+          ], // keep backend modules on explicit shared contract files for erased imports only
+          mode: "file", // treat each shared contract file itself as the boundary element instead of the whole folder
+        },
+        {
+          type: "backend-shared-utils", // shared backend runtime helpers that modules may import directly
+          pattern: ["server/shared/utils.{js,ts}"], // classify the shared utils file so modules can depend on it explicitly
+          mode: "file",
+        },
+        {
+          type: "backend-legacy-runtime", // legacy runtime persistence modules used while providers migrate into server/modules
+          pattern: [
+            "server/projects.js",
+            "server/sessionManager.js",
+            "server/database/*.{js,ts}",
+            "server/utils/runtime-paths.js",
+          ], // provider history loading still resolves session data through these legacy runtime/database files
+          mode: "file",
         },
         {
           type: "backend-module", // logical element name used by boundaries rules below
@@ -196,13 +214,13 @@ export default tseslint.config(
           checkInternals: false, // do not apply these cross-module rules to imports inside the same module
           rules: [
             {
-              from: { type: "backend-module" }, // modules may depend on the shared types contract only as erased type-only imports
-              to: { type: "backend-shared-types" },
+              from: { type: "backend-module" }, // modules may depend on shared type/interface contracts only as erased type-only imports
+              to: { type: "backend-shared-type-contract" },
               disallow: {
                 dependency: { kind: ["value", "typeof"] },
-              }, // block runtime imports so shared types stay a compile-time contract instead of a hidden shared module
+              }, // block runtime imports so shared contracts stay compile-time only instead of becoming hidden shared modules
               message:
-                "Backend modules may only use `import type` when importing from server/shared/types.ts (or server/types.ts).",
+                "Backend modules may only use `import type` when importing from server/shared/types.ts or server/shared/interfaces.ts.",
             },
             {
               to: { type: "backend-module" }, // when importing anything that belongs to another backend module
