@@ -46,55 +46,11 @@ type ProviderSelectionEmptyStateProps = {
   setInput: React.Dispatch<React.SetStateAction<string>>;
 };
 
-type ProviderDef = {
-  id: LLMProvider;
-  name: string;
-  infoKey: string;
-  accent: string;
-  ring: string;
-  check: string;
-};
-
 type ProviderGroup = {
   id: LLMProvider;
   name: string;
   models: { value: string; label: string }[];
 };
-
-const PROVIDERS: ProviderDef[] = [
-  {
-    id: "claude",
-    name: "Claude Code",
-    infoKey: "providerSelection.providerInfo.anthropic",
-    accent: "border-primary",
-    ring: "ring-primary/15",
-    check: "bg-primary text-primary-foreground",
-  },
-  {
-    id: "cursor",
-    name: "Cursor",
-    infoKey: "providerSelection.providerInfo.cursorEditor",
-    accent: "border-violet-500 dark:border-violet-400",
-    ring: "ring-violet-500/15",
-    check: "bg-violet-500 text-white",
-  },
-  {
-    id: "codex",
-    name: "Codex",
-    infoKey: "providerSelection.providerInfo.openai",
-    accent: "border-emerald-600 dark:border-emerald-400",
-    ring: "ring-emerald-600/15",
-    check: "bg-emerald-600 dark:bg-emerald-500 text-white",
-  },
-  {
-    id: "gemini",
-    name: "Gemini",
-    infoKey: "providerSelection.providerInfo.google",
-    accent: "border-blue-500 dark:border-blue-400",
-    ring: "ring-blue-500/15",
-    check: "bg-blue-500 text-white",
-  },
-];
 
 const PROVIDER_GROUPS: ProviderGroup[] = [
   { id: "claude", name: "Anthropic", models: CLAUDE_MODELS.OPTIONS },
@@ -153,11 +109,6 @@ export default function ProviderSelectionEmptyState({
   const { isWindowsServer } = useServerPlatform();
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  const visibleProviders = useMemo(
-    () => (isWindowsServer ? PROVIDERS.filter((p) => p.id !== "cursor") : PROVIDERS),
-    [isWindowsServer],
-  );
-
   const visibleProviderGroups = useMemo(
     () => (isWindowsServer ? PROVIDER_GROUPS.filter((p) => p.id !== "cursor") : PROVIDER_GROUPS),
     [isWindowsServer],
@@ -189,15 +140,6 @@ export default function ProviderSelectionEmptyState({
     );
     return found?.label || currentModel;
   }, [provider, currentModel]);
-
-  const selectProvider = useCallback(
-    (next: LLMProvider) => {
-      setProvider(next);
-      localStorage.setItem("selected-provider", next);
-      setTimeout(() => textareaRef.current?.focus(), 100);
-    },
-    [setProvider, textareaRef],
-  );
 
   const setModelForProvider = useCallback(
     (providerId: LLMProvider, modelValue: string) => {
@@ -240,50 +182,6 @@ export default function ProviderSelectionEmptyState({
             <p className="mt-1 text-[13px] text-muted-foreground">
               {t("providerSelection.description")}
             </p>
-          </div>
-
-          <div
-            className={`mb-6 grid grid-cols-2 gap-2 sm:gap-2.5 ${visibleProviders.length >= 4 ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}
-          >
-            {visibleProviders.map((p) => {
-              const active = provider === p.id;
-              return (
-                <button
-                  key={p.id}
-                  onClick={() => selectProvider(p.id)}
-                  className={`
-                    relative flex flex-col items-center gap-2.5 rounded-xl border-[1.5px] px-2
-                    pb-4 pt-5 transition-all duration-150
-                    active:scale-[0.97]
-                    ${
-                      active
-                        ? `${p.accent} ${p.ring} bg-card shadow-sm ring-2`
-                        : "border-border bg-card/60 hover:border-border/80 hover:bg-card"
-                    }
-                  `}
-                >
-                  <SessionProviderLogo
-                    provider={p.id}
-                    className={`h-9 w-9 transition-transform duration-150 ${active ? "scale-110" : ""}`}
-                  />
-                  <div className="text-center">
-                    <p className="text-[13px] font-semibold leading-none text-foreground">
-                      {p.name}
-                    </p>
-                    <p className="mt-1 text-[10px] leading-tight text-muted-foreground">
-                      {t(p.infoKey)}
-                    </p>
-                  </div>
-                  {active && (
-                    <div
-                      className={`absolute -right-1 -top-1 h-[18px] w-[18px] rounded-full ${p.check} flex items-center justify-center shadow-sm`}
-                    >
-                      <Check className="h-2.5 w-2.5" strokeWidth={3} />
-                    </div>
-                  )}
-                </button>
-              );
-            })}
           </div>
 
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
