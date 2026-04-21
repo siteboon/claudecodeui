@@ -4,10 +4,13 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "lib": ["ES2022"],
-    "baseUrl": ".",
+    // baseUrl is the project root (one level above this config file) so that tsc-alias
+    // resolves @/ imports relative to the compiled output structure in dist-server/server/.
+    // With rootDir ".." tsc emits server files under dist-server/server/, so paths must
+    // include the "server/" prefix to match that layout.
+    "baseUrl": "..",
     "paths": {
-      // In the backend config, "@" maps to the /server directory itself.
-      "@/*": ["*"]
+      "@/*": ["server/*"]
     },
     // The backend is still mostly JavaScript today, so allowJs lets us add a real
     // TypeScript build without forcing a large rename before the tooling is usable.
