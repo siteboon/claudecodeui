@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 This repo is the Startino fork of CloudCLI UI, deployed on Pluto from `/srv/claudecodeui`.
-Jorge can edit the same live checkout in the GUI at `/home/jorge/startino/claudecodeui`.
+The live checkout is also mounted into GUI workspaces, currently `/home/jorge/startino/claudecodeui` in `/jorge/`.
 Services are `claudecodeui@config`, `claudecodeui@jorge`, and `claudecodeui@jonas`.
 They serve `/config/`, `/jorge/`, and `/jonas/` through Tailscale Serve on Pluto.
 Frontend builds are per user: `dist-config`, `dist-jorge`, and `dist-jonas`.
