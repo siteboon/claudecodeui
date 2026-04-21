@@ -149,6 +149,10 @@ function mapCliOptionsToSDK(options = {}) {
 
   const sdkOptions = {};
 
+  // Forward all host env vars (e.g. ANTHROPIC_BASE_URL) to the subprocess.
+  // Since SDK 0.2.113, options.env replaces process.env instead of overlaying it.
+  sdkOptions.env = { ...process.env };
+
   if (process.env.CLAUDE_CLI_PATH) {
     sdkOptions.pathToClaudeCodeExecutable = process.env.CLAUDE_CLI_PATH;
   }
