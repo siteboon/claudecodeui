@@ -1,4 +1,5 @@
 import React from 'react';
+import { assetUrl } from '../../utils/basePath';
 
 type ClaudeLogoProps = {
   className?: string;
@@ -6,7 +7,7 @@ type ClaudeLogoProps = {
 
 const ClaudeLogo = ({ className = 'w-5 h-5' }: ClaudeLogoProps) => {
   return (
-    <img src="/icons/claude-ai-icon.svg" alt="Claude" className={className} />
+    <img src={assetUrl('/icons/claude-ai-icon.svg')} alt="Claude" className={className} />
   );
 };
 

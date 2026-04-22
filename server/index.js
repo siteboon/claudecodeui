@@ -13,6 +13,8 @@ const __dirname = getModuleDir(import.meta.url);
 // Resolving the app root once keeps every repo-level lookup below aligned across both layouts.
 const APP_ROOT = findAppRoot(__dirname);
 const installMode = fs.existsSync(path.join(APP_ROOT, '.git')) ? 'git' : 'npm';
+// BASE_PATH for subpath deployment (e.g. '/s/mealstead'). No trailing slash.
+const BASE_PATH = (process.env.BASE_PATH || '').replace(/\/+$/, '');
 
 import { c } from './utils/colors.js';
 
@@ -322,12 +324,37 @@ app.use('/api/providers', authenticateToken, providerRoutes);
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
 
+// Serve manifest.json dynamically with base-path-aware URLs
+app.get('/manifest.json', (req, res) => {
+    try {
+        const manifestPath = path.join(APP_ROOT, 'public', 'manifest.json');
+        const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+        if (BASE_PATH) {
+            manifest.start_url = BASE_PATH + '/';
+            manifest.scope = BASE_PATH + '/';
+            if (manifest.icons) {
+                manifest.icons = manifest.icons.map(icon => ({
+                    ...icon,
+                    src: BASE_PATH + icon.src,
+                }));
+            }
+        }
+        res.setHeader('Content-Type', 'application/manifest+json');
+        res.json(manifest);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to serve manifest' });
+    }
+});
+
 // Serve public files (like api-docs.html)
 app.use(express.static(path.join(APP_ROOT, 'public')));
 
 // Static files served after API routes
 // Add cache control: HTML files should not be cached, but assets can be cached
+// index: false prevents express.static from serving index.html for '/' —
+// the SPA catch-all handles it instead (with BASE_PATH injection).
 app.use(express.static(path.join(APP_ROOT, 'dist'), {
+    index: false,
     setHeaders: (res, filePath) => {
         if (filePath.endsWith('.html')) {
             // Prevent HTML caching to avoid service worker issues after builds
@@ -1339,9 +1366,12 @@ wss.on('connection', (ws, request) => {
     const url = request.url;
     console.log('[INFO] Client connected to:', url);
 
-    // Parse URL to get pathname without query parameters
+    // Parse URL to get pathname without query parameters, stripping BASE_PATH
     const urlObj = new URL(url, 'http://localhost');
-    const pathname = urlObj.pathname;
+    let pathname = urlObj.pathname;
+    if (BASE_PATH && pathname.startsWith(BASE_PATH)) {
+        pathname = pathname.slice(BASE_PATH.length) || '/';
+    }
 
     if (pathname === '/shell') {
         handleShellConnection(ws);
@@ -2185,7 +2215,14 @@ app.get('*', (req, res) => {
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
         res.setHeader('Pragma', 'no-cache');
         res.setHeader('Expires', '0');
-        res.sendFile(indexPath);
+        // Inject base path globals into index.html for subpath deployment
+        let html = fs.readFileSync(indexPath, 'utf8');
+        if (BASE_PATH) {
+            const injection = `<script>window.__CLOUDCLI_BASE_PATH__="${BASE_PATH}";window.__ROUTER_BASENAME__="${BASE_PATH}";</script>`;
+            html = html.replace('<head>', `<head>${injection}`);
+        }
+        res.setHeader('Content-Type', 'text/html');
+        res.send(html);
     } else {
         // In development, redirect to Vite dev server only if dist doesn't exist
         const redirectHost = getConnectableHost(req.hostname);
