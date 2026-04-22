@@ -828,5 +828,8 @@ export {
   getActiveClaudeSDKSessions,
   resolveToolApproval,
   getPendingApprovalsForSession,
-  reconnectSessionWriter
+  reconnectSessionWriter,
+  handleImages,
+  cleanupTempFiles,
+  loadMcpConfig
 };

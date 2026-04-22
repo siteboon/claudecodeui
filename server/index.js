@@ -30,6 +30,12 @@ import mime from 'mime-types';
 
 import { getProjects, getSessions, renameProject, deleteSession, deleteProject, extractProjectDirectory, clearProjectDirectoryCache, searchConversations } from './projects.js';
 import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions, resolveToolApproval, getPendingApprovalsForSession, reconnectSessionWriter } from './claude-sdk.js';
+import { queryClaudeStream, abortClaudeStreamSession, isClaudeStreamSessionActive, getActiveClaudeStreamSessions, reconnectStreamSessionWriter } from './claude-stream.js';
+
+// Feature flag: use long-lived CLI process per chat session instead of SDK per-message spawn.
+// First message pays cold start (~22s); subsequent messages in the same session are ~12s.
+// MVP: uses --dangerously-skip-permissions; no UI approval prompts.
+const CLAUDE_STREAM_MODE = process.env.CLAUDE_STREAM_MODE === '1';
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
 import { queryCodex, abortCodexSession, isCodexSessionActive, getActiveCodexSessions } from './openai-codex.js';
 import { spawnGemini, abortGeminiSession, isGeminiSessionActive, getActiveGeminiSessions } from './gemini-cli.js';
@@ -1408,8 +1414,21 @@ function handleChatConnection(ws, request) {
                 console.log('📁 Project:', data.options?.projectPath || 'Unknown');
                 console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
 
-                // Use Claude Agents SDK
-                await queryClaudeSDK(data.command, data.options, writer);
+                // Both handlers read `cwd` from options; fall back to
+                // `projectPath` so the Claude subprocess starts in the user's
+                // project dir and not in the server process cwd — the latter
+                // would be especially risky paired with skip-permissions.
+                // Use truthy check (`||` not `??`) so an empty-string `cwd`
+                // from a buggy client still falls through to `projectPath`.
+                const claudeOptions = {
+                    ...(data.options || {}),
+                    cwd: data.options?.cwd || data.options?.projectPath,
+                };
+                if (CLAUDE_STREAM_MODE) {
+                    await queryClaudeStream(data.command, claudeOptions, writer);
+                } else {
+                    await queryClaudeSDK(data.command, claudeOptions, writer);
+                }
             } else if (data.type === 'cursor-command') {
                 console.log('[DEBUG] Cursor message:', data.command || '[Continue/Resume]');
                 console.log('📁 Project:', data.options?.cwd || 'Unknown');
@@ -1447,8 +1466,9 @@ function handleChatConnection(ws, request) {
                     success = abortCodexSession(data.sessionId);
                 } else if (provider === 'gemini') {
                     success = abortGeminiSession(data.sessionId);
+                } else if (CLAUDE_STREAM_MODE && isClaudeStreamSessionActive(data.sessionId, writer.userId)) {
+                    success = await abortClaudeStreamSession(data.sessionId, writer.userId);
                 } else {
-                    // Use Claude Agents SDK
                     success = await abortClaudeSDKSession(data.sessionId);
                 }
 
@@ -1481,12 +1501,12 @@ function handleChatConnection(ws, request) {
                     isActive = isCodexSessionActive(sessionId);
                 } else if (provider === 'gemini') {
                     isActive = isGeminiSessionActive(sessionId);
+                } else if (CLAUDE_STREAM_MODE && isClaudeStreamSessionActive(sessionId, writer.userId)) {
+                    isActive = true;
+                    reconnectStreamSessionWriter(sessionId, ws, writer.userId);
                 } else {
-                    // Use Claude Agents SDK
                     isActive = isClaudeSDKSessionActive(sessionId);
                     if (isActive) {
-                        // Reconnect the session's writer to the new WebSocket so
-                        // subsequent SDK output flows to the refreshed client.
                         reconnectSessionWriter(sessionId, ws);
                     }
                 }
@@ -1509,9 +1529,16 @@ function handleChatConnection(ws, request) {
                     });
                 }
             } else if (data.type === 'get-active-sessions') {
-                // Get all currently active sessions
+                // Get all currently active sessions.
+                // Union assumes SDK and stream layers both key sessions by the CLI-assigned
+                // `session_id` (stream layer strips its pre-init `pending:*` keys in
+                // getActiveClaudeStreamSessions). If either ever emits provider-internal
+                // IDs the dedupe breaks — normalize the two shapes before merging.
+                const claudeSessions = CLAUDE_STREAM_MODE
+                    ? [...new Set([...getActiveClaudeSDKSessions(), ...getActiveClaudeStreamSessions(writer.userId)])]
+                    : getActiveClaudeSDKSessions();
                 const activeSessions = {
-                    claude: getActiveClaudeSDKSessions(),
+                    claude: claudeSessions,
                     cursor: getActiveCursorSessions(),
                     codex: getActiveCodexSessions(),
                     gemini: getActiveGeminiSessions()
