@@ -214,7 +214,7 @@ const server = http.createServer(app);
 // both behind a reverse proxy (which strips it) and with direct access.
 if (BASE_PATH) {
     app.use((req, res, next) => {
-        if (req.url === BASE_PATH || req.url.startsWith(`${BASE_PATH}/`)) {
+        if (req.url === BASE_PATH || req.url.startsWith(`${BASE_PATH}/`) || req.url.startsWith(`${BASE_PATH}?`)) {
             req.url = req.url.slice(BASE_PATH.length) || '/';
         }
         next();
