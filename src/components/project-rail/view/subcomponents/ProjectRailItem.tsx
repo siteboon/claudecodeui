@@ -10,6 +10,7 @@ import {
 type ProjectRailItemProps = {
   item: ProjectRailItemData;
   isActive: boolean;
+  isArchived: boolean;
   colorKey: ProjectColorKey;
   onClick: () => void;
   onRequestPicker: (rect: DOMRect) => void;
@@ -18,6 +19,7 @@ type ProjectRailItemProps = {
 export default function ProjectRailItem({
   item,
   isActive,
+  isArchived,
   colorKey,
   onClick,
   onRequestPicker,
@@ -33,8 +35,11 @@ export default function ProjectRailItem({
   };
 
   return (
-    <Tooltip content={item.displayName} position="right">
-      <div className="relative">
+    <Tooltip
+      content={`${item.displayName}${isArchived ? ' · archived' : ''}`}
+      position="right"
+    >
+      <div className={`relative ${isArchived ? 'opacity-55' : ''}`}>
         {isActive && (
           <div
             className="absolute -left-[10px] top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-sm"

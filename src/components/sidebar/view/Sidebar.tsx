@@ -10,6 +10,7 @@ import { useFlatSessionList, type FlatSession } from '../../../hooks/useFlatSess
 import { useProjectRail } from '../../project-rail/hooks/useProjectRail';
 import { useProjectColors } from '../../../hooks/useProjectColors';
 import { useArchivedSessions } from '../../../hooks/useArchivedSessions';
+import { useArchivedProjects } from '../../../hooks/useArchivedProjects';
 import { getProjectColor } from '../../project-rail/utils/projectColors';
 import type { Project } from '../../../types/app';
 import type { MCPServerStatus, SidebarProps } from '../types/types';
@@ -58,6 +59,7 @@ function Sidebar({
   const [activeProjectFilter, setActiveProjectFilter] = useState<string | null>(null);
   const { getColor, setColor } = useProjectColors();
   const { toggleArchived, isArchived } = useArchivedSessions();
+  const { toggleArchivedProject, isProjectArchived } = useArchivedProjects();
 
   const {
     isSidebarCollapsed,
@@ -121,6 +123,7 @@ function Sidebar({
     searchFilter,
     statusMap,
     additionalSessions,
+    isProjectArchived,
   });
 
   const openProjectName = useMemo<string | null>(() => {
@@ -204,6 +207,23 @@ function Sidebar({
         return;
       }
 
+      // Alt+1..9 — pick Nth session. Works inside inputs so you can jump
+      // from the search bar without losing typed text. Uses e.code to
+      // sidestep macOS Option-digit dead-keys (Alt+1 → ¡, Alt+2 → ™, ...).
+      if (
+        e.altKey &&
+        !e.metaKey &&
+        !e.ctrlKey &&
+        !e.shiftKey &&
+        /^Digit[1-9]$/.test(e.code)
+      ) {
+        e.preventDefault();
+        const idx = parseInt(e.code.slice(5), 10) - 1;
+        const target = flatSessions[idx];
+        if (target) handleFlatSessionSelect(target);
+        return;
+      }
+
       if (inInput) return;
 
       if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'w') {
@@ -259,12 +279,20 @@ function Sidebar({
           onProjectFilter={setActiveProjectFilter}
           getColor={getColor}
           setColor={setColor}
+          isProjectArchived={isProjectArchived}
+          onToggleArchivedProject={(name) => {
+            toggleArchivedProject(name);
+            if (activeProjectFilter === name) {
+              setActiveProjectFilter(null);
+            }
+          }}
+          onCreateProject={() => setShowNewProject(true)}
         />
       )}
       <div className={`flex min-h-0 flex-1 flex-col ${!isMobile ? 'w-72' : ''}`}>
         {isMobile && railItems.length > 0 && (
           <MobileProjectFilter
-            items={railItems}
+            items={railItems.filter((item) => !isProjectArchived(item.name))}
             activeFilter={activeProjectFilter}
             onFilter={setActiveProjectFilter}
             getColor={getColor}

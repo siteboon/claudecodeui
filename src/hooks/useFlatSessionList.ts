@@ -43,6 +43,7 @@ type UseFlatSessionListArgs = {
   searchFilter: string;
   statusMap: Map<string, SessionStatus>;
   additionalSessions: AdditionalSessionsByProject;
+  isProjectArchived?: (projectName: string) => boolean;
 };
 
 export function useFlatSessionList({
@@ -51,6 +52,7 @@ export function useFlatSessionList({
   searchFilter,
   statusMap,
   additionalSessions,
+  isProjectArchived,
 }: UseFlatSessionListArgs): FlatSession[] {
   return useMemo(() => {
     const flat: FlatSession[] = [];
@@ -58,7 +60,9 @@ export function useFlatSessionList({
 
     const filteredProjects = activeProjectFilter
       ? projects.filter((p) => p.name === activeProjectFilter)
-      : projects;
+      : isProjectArchived
+        ? projects.filter((p) => !isProjectArchived(p.name))
+        : projects;
 
     for (const project of filteredProjects) {
       const sessions = getAllSessions(project, additionalSessions);
@@ -103,5 +107,12 @@ export function useFlatSessionList({
     });
 
     return flat;
-  }, [projects, activeProjectFilter, searchFilter, statusMap, additionalSessions]);
+  }, [
+    projects,
+    activeProjectFilter,
+    searchFilter,
+    statusMap,
+    additionalSessions,
+    isProjectArchived,
+  ]);
 }

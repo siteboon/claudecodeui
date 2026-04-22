@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, X } from 'lucide-react';
+import { Archive, ArchiveRestore, Check, X } from 'lucide-react';
 import {
   PROJECT_PALETTE,
   PROJECT_PALETTE_ORDER,
@@ -18,8 +18,10 @@ type ProjectColorPickerProps = {
   projectName: string;
   displayName: string;
   currentColorKey: ProjectColorKey;
+  isArchived: boolean;
   anchorRect: AnchorRect;
   onSelect: (key: ProjectColorKey) => void;
+  onToggleArchived: () => void;
   onClose: () => void;
 };
 
@@ -27,8 +29,10 @@ export default function ProjectColorPicker({
   projectName,
   displayName,
   currentColorKey,
+  isArchived,
   anchorRect,
   onSelect,
+  onToggleArchived,
   onClose,
 }: ProjectColorPickerProps) {
   const ref = useRef<HTMLDivElement>(null);
@@ -53,8 +57,13 @@ export default function ProjectColorPicker({
     };
   }, [onClose]);
 
-  const handleSelect = (key: ProjectColorKey) => {
+  const handleSelectColor = (key: ProjectColorKey) => {
     onSelect(key);
+    onClose();
+  };
+
+  const handleArchiveClick = () => {
+    onToggleArchived();
     onClose();
   };
 
@@ -62,12 +71,12 @@ export default function ProjectColorPicker({
     <div
       ref={ref}
       role="dialog"
-      aria-label={`Color for ${displayName}`}
+      aria-label={`Project menu for ${displayName}`}
       style={{
         top: Math.max(8, anchorRect.top - 6),
         left: anchorRect.right + 8,
       }}
-      className="fixed z-[60] w-[184px] rounded-lg border border-border bg-popover p-2.5 shadow-xl"
+      className="fixed z-[60] w-[200px] rounded-lg border border-border bg-popover p-2.5 shadow-xl"
     >
       <div className="mb-2 flex items-baseline justify-between gap-2">
         <span className="truncate text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -81,7 +90,7 @@ export default function ProjectColorPicker({
           return (
             <button
               key={key}
-              onClick={() => handleSelect(key)}
+              onClick={() => handleSelectColor(key)}
               title={color.label}
               aria-label={color.label}
               aria-pressed={isActive}
@@ -100,10 +109,25 @@ export default function ProjectColorPicker({
         })}
       </div>
       <button
-        onClick={() => handleSelect('default')}
+        onClick={() => handleSelectColor('default')}
         className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
-        <X className="h-3 w-3" /> Reset
+        <X className="h-3 w-3" /> Reset color
+      </button>
+      <div className="my-2 h-px bg-border" />
+      <button
+        onClick={handleArchiveClick}
+        className="flex w-full items-center justify-center gap-1.5 rounded-md border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      >
+        {isArchived ? (
+          <>
+            <ArchiveRestore className="h-3 w-3" /> Unarchive project
+          </>
+        ) : (
+          <>
+            <Archive className="h-3 w-3" /> Archive project
+          </>
+        )}
       </button>
     </div>
   );
