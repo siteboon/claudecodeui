@@ -799,7 +799,8 @@ async function parseJsonlSessions(filePath) {
                 messageCount: 0,
                 lastActivity: new Date(),
                 cwd: entry.cwd || '',
-                firstUserMessage: null
+                firstUserMessage: null,
+                lastMessageRole: null
               });
             }
 
@@ -847,6 +848,22 @@ async function parseJsonlSessions(filePath) {
 
             if (entry.timestamp) {
               session.lastActivity = new Date(entry.timestamp);
+            }
+
+            // Track the last "real" message role so the UI can derive a
+            // stable "awaiting user reply" indicator without relying on
+            // transient browser-local state. Tool results are stored with
+            // role='user' in Claude's JSONL but aren't real user turns, so
+            // skip them — otherwise a session that ends mid-turn would
+            // incorrectly show as "user last spoke".
+            if (entry.message?.role === 'user' || entry.message?.role === 'assistant') {
+              const content = entry.message.content;
+              const isToolResult = Array.isArray(content) && content.some(
+                (c) => c && typeof c === 'object' && c.type === 'tool_result'
+              );
+              if (!isToolResult) {
+                session.lastMessageRole = entry.message.role;
+              }
             }
           }
         } catch (parseError) {
@@ -1200,7 +1217,11 @@ async function addProjectManually(projectPath, displayName = null) {
   const projectDir = path.join(os.homedir(), '.claude', 'projects', projectName);
 
   if (config[projectName]) {
-    throw new Error(`Project already configured for path: ${absolutePath}`);
+    const err = new Error(`Project already configured for path: ${absolutePath}`);
+    err.code = 'PROJECT_ALREADY_EXISTS';
+    err.projectName = projectName;
+    err.path = absolutePath;
+    throw err;
   }
 
   // Allow adding projects even if the directory exists - this enables tracking

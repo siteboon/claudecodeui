@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { Project, SessionStatus, LLMProvider } from '../types/app';
+import type { Project, ProjectSession, SessionStatus, LLMProvider } from '../types/app';
 import type { SessionWithProvider, AdditionalSessionsByProject } from '../components/sidebar/types/types';
 import { getAllSessions, getSessionDate } from '../components/sidebar/utils/utils';
 
@@ -14,9 +14,22 @@ function deriveStatus(
   sessionId: string,
   statusMap: Map<string, SessionStatus>,
   sessionDate: Date,
+  lastMessageRole: 'user' | 'assistant' | null | undefined,
 ): SessionStatus {
+  // Live signals (from activeSessions / processingSessions in this browser
+  // tab) always win — they reflect what's happening right now.
   const explicit = statusMap.get(sessionId);
-  if (explicit) return explicit;
+  if (explicit === 'running') return 'running';
+  if (explicit === 'waiting') return 'waiting';
+
+  // Persistent signal: if the conversation's last turn was Claude's, the
+  // session is stalled until the user replies. A 24h recency cap keeps the
+  // pink indicator from flooding the sidebar with long-dormant chats the
+  // user has mentally moved on from.
+  const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+  if (lastMessageRole === 'assistant' && sessionDate.getTime() > oneDayAgo) {
+    return 'waiting';
+  }
 
   // Sessions active within the last hour are "idle", older ones are "done"
   const oneHourAgo = Date.now() - 60 * 60 * 1000;
@@ -77,7 +90,12 @@ export function useFlatSessionList({
         if (seenIds.has(session.id)) continue;
 
         const sessionDate = getSessionDate(session);
-        const status = deriveStatus(session.id, statusMap, sessionDate);
+        const status = deriveStatus(
+          session.id,
+          statusMap,
+          sessionDate,
+          (session as ProjectSession).lastMessageRole,
+        );
         const rank = sortRank(status);
 
         const sessionName = (

@@ -9,6 +9,7 @@ export interface ProjectSession {
   title?: string;
   summary?: string;
   firstUserMessage?: string;
+  lastMessageRole?: 'user' | 'assistant' | null;
   name?: string;
   createdAt?: string;
   created_at?: string;
