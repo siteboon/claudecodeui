@@ -1,13 +1,24 @@
+import { useState } from 'react';
 import { ScrollArea } from '../../../shared/view/ui';
 import type { ProjectRailItemData } from '../types/types';
+import type { ProjectColorKey } from '../utils/projectColors';
 import ProjectRailAllProjects from './subcomponents/ProjectRailAllProjects';
 import ProjectRailItem from './subcomponents/ProjectRailItem';
+import ProjectColorPicker from './subcomponents/ProjectColorPicker';
+
+type PickerState = {
+  projectName: string;
+  displayName: string;
+  rect: DOMRect;
+};
 
 type ProjectRailProps = {
   railItems: ProjectRailItemData[];
   activeProjectFilter: string | null;
   totalAttentionCount: number;
   onProjectFilter: (projectName: string | null) => void;
+  getColor: (projectName: string | null | undefined) => ProjectColorKey;
+  setColor: (projectName: string, key: ProjectColorKey) => void;
 };
 
 export default function ProjectRail({
@@ -15,29 +26,53 @@ export default function ProjectRail({
   activeProjectFilter,
   totalAttentionCount,
   onProjectFilter,
+  getColor,
+  setColor,
 }: ProjectRailProps) {
+  const [picker, setPicker] = useState<PickerState | null>(null);
+
   return (
-    <div className="flex h-full w-rail flex-col items-center border-r border-border/50 bg-rail py-2.5">
-      <ProjectRailAllProjects
-        isActive={activeProjectFilter === null}
-        attentionCount={totalAttentionCount}
-        onClick={() => onProjectFilter(null)}
-      />
+    <>
+      <div className="flex h-full w-rail flex-col items-center border-r border-border/50 bg-rail py-2.5">
+        <ProjectRailAllProjects
+          isActive={activeProjectFilter === null}
+          attentionCount={totalAttentionCount}
+          onClick={() => onProjectFilter(null)}
+        />
 
-      <div className="mx-auto my-1.5 h-px w-5 bg-border" />
+        <div className="mx-auto my-1.5 h-px w-5 bg-border" />
 
-      <ScrollArea className="flex-1 overflow-y-auto">
-        <div className="flex flex-col items-center gap-1">
-          {railItems.map((item) => (
-            <ProjectRailItem
-              key={item.name}
-              item={item}
-              isActive={activeProjectFilter === item.name}
-              onClick={() => onProjectFilter(item.name)}
-            />
-          ))}
-        </div>
-      </ScrollArea>
-    </div>
+        <ScrollArea className="flex-1 overflow-y-auto">
+          <div className="flex flex-col items-center gap-1">
+            {railItems.map((item) => (
+              <ProjectRailItem
+                key={item.name}
+                item={item}
+                isActive={activeProjectFilter === item.name}
+                colorKey={getColor(item.name)}
+                onClick={() => onProjectFilter(item.name)}
+                onRequestPicker={(rect) =>
+                  setPicker({
+                    projectName: item.name,
+                    displayName: item.displayName,
+                    rect,
+                  })
+                }
+              />
+            ))}
+          </div>
+        </ScrollArea>
+      </div>
+      {picker && (
+        <ProjectColorPicker
+          projectName={picker.projectName}
+          displayName={picker.displayName}
+          currentColorKey={getColor(picker.projectName)}
+          anchorRect={picker.rect}
+          onSelect={(key) => setColor(picker.projectName, key)}
+          onClose={() => setPicker(null)}
+        />
+      )}
+    </>
   );
 }

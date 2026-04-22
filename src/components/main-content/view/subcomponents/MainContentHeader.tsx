@@ -38,7 +38,12 @@ export default function MainContentHeader({
   }, [updateScrollState]);
 
   return (
-    <div className="pwa-header-safe flex-shrink-0 border-b border-border/60 bg-background px-3 py-1.5 sm:px-4 sm:py-2">
+    <div className="pwa-header-safe relative flex-shrink-0 border-b border-border/60 bg-background px-3 py-1.5 sm:px-4 sm:py-2">
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 h-[2px]"
+        style={{ background: 'var(--project-accent)' }}
+        aria-hidden
+      />
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           {isMobile && <MobileMenuButton onMenuClick={onMenuClick} />}

@@ -8,6 +8,8 @@ import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { useSessionStatusMap } from '../../../hooks/useSessionStatusMap';
 import { useFlatSessionList, type FlatSession } from '../../../hooks/useFlatSessionList';
 import { useProjectRail } from '../../project-rail/hooks/useProjectRail';
+import { useProjectColors } from '../../../hooks/useProjectColors';
+import { getProjectColor } from '../../project-rail/utils/projectColors';
 import type { Project, LLMProvider } from '../../../types/app';
 import type { MCPServerStatus, SidebarProps } from '../types/types';
 import ProjectRail from '../../project-rail/view/ProjectRail';
@@ -61,6 +63,7 @@ function Sidebar({
   const { setCurrentProject } = useTaskMaster() as TaskMasterSidebarContext;
 
   const [activeProjectFilter, setActiveProjectFilter] = useState<string | null>(null);
+  const { getColor, setColor } = useProjectColors();
 
   const {
     isSidebarCollapsed,
@@ -123,6 +126,25 @@ function Sidebar({
     statusMap,
     additionalSessions,
   });
+
+  const openProjectName = useMemo<string | null>(() => {
+    const fromSession = (selectedSession?.__projectName as string | undefined) ?? null;
+    if (fromSession) return fromSession;
+    if (selectedProject) return selectedProject.name;
+    return activeProjectFilter;
+  }, [activeProjectFilter, selectedProject, selectedSession]);
+
+  const openColor = useMemo(
+    () => getProjectColor(getColor(openProjectName)),
+    [getColor, openProjectName],
+  );
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    root.style.setProperty('--project-accent', openColor.hex);
+    root.style.setProperty('--project-accent-foreground', openColor.fg);
+  }, [openColor.fg, openColor.hex]);
 
   const activeProjectName = useMemo(() => {
     if (activeProjectFilter) {
@@ -252,6 +274,8 @@ function Sidebar({
           activeProjectFilter={activeProjectFilter}
           totalAttentionCount={totalAttentionCount}
           onProjectFilter={setActiveProjectFilter}
+          getColor={getColor}
+          setColor={setColor}
         />
       )}
       <div className={`flex min-h-0 flex-1 flex-col ${!isMobile ? 'w-72' : ''}`}>
@@ -260,6 +284,7 @@ function Sidebar({
             items={railItems}
             activeFilter={activeProjectFilter}
             onFilter={setActiveProjectFilter}
+            getColor={getColor}
           />
         )}
         <CommandBar

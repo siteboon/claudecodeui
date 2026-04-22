@@ -59,6 +59,9 @@
     /* Project rail tokens */
     --rail-bg: 0 0% 96.1%;
     --rail-active-marker: 157 65% 57%;
+    /* Dynamic project accent — overridden from JS based on open project */
+    --project-accent: #2bb28d;
+    --project-accent-foreground: #062818;
 
     /* Sidebar tokens */
     --sidebar: 0 0% 98.7%;

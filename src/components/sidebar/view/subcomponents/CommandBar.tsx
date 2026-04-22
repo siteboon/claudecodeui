@@ -29,9 +29,12 @@ const CommandBar = forwardRef<CommandBarHandle, CommandBarProps>(function Comman
   return (
     <div className="border-b border-border/60 px-3 pb-2.5 pt-3">
       <div className="relative">
-        <span className="pointer-events-none absolute left-2.5 top-1/2 flex -translate-y-1/2 text-muted-foreground">
+        <span
+          className="pointer-events-none absolute left-2.5 top-1/2 flex -translate-y-1/2 text-muted-foreground"
+          style={showCreate ? { color: 'var(--project-accent)' } : undefined}
+        >
           {showCreate ? (
-            <Plus className="h-3.5 w-3.5 text-eucalyptus" />
+            <Plus className="h-3.5 w-3.5" />
           ) : (
             <Search className="h-3.5 w-3.5" />
           )}
@@ -49,9 +52,10 @@ const CommandBar = forwardRef<CommandBarHandle, CommandBarProps>(function Comman
             }
           }}
           placeholder={`Search or create in @${activeProjectName}...`}
-          className={`w-full rounded-md border bg-background py-1.5 pl-8 pr-10 text-[13px] text-foreground outline-none transition-colors placeholder:text-muted-foreground ${
-            focused ? 'border-eucalyptus/60' : 'border-border'
-          }`}
+          className="w-full rounded-md border bg-background py-1.5 pl-8 pr-10 text-[13px] text-foreground outline-none transition-colors placeholder:text-muted-foreground"
+          style={{
+            borderColor: focused ? 'var(--project-accent)' : 'hsl(var(--border))',
+          }}
         />
         <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded border border-border bg-muted/60 px-1 font-mono text-[10px] text-muted-foreground">
           {showCreate ? '⏎' : '⌘K'}
@@ -60,7 +64,9 @@ const CommandBar = forwardRef<CommandBarHandle, CommandBarProps>(function Comman
       {showCreate && (
         <div className="mt-1.5 pl-0.5 text-[11px] text-muted-foreground">
           ⏎ New session in{' '}
-          <span className="text-eucalyptus">@{activeProjectName}</span>
+          <span style={{ color: 'var(--project-accent)' }}>
+            @{activeProjectName}
+          </span>
         </div>
       )}
     </div>
