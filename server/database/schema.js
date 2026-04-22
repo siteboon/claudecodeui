@@ -28,7 +28,7 @@ export const PUSH_SUBSCRIPTIONS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS push_sub
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );`;
 
-export const SESSION_NAMES_TABLE_SQL = `CREATE TABLE IF NOT EXISTS session_names (
+export const SESSIONS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS sessions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   session_id TEXT NOT NULL,
   provider TEXT NOT NULL DEFAULT 'claude',
@@ -38,7 +38,7 @@ export const SESSION_NAMES_TABLE_SQL = `CREATE TABLE IF NOT EXISTS session_names
   UNIQUE(session_id, provider)
 );`;
 
-export const SESSION_NAMES_LOOKUP_INDEX_SQL = `CREATE INDEX IF NOT EXISTS idx_session_names_lookup ON session_names(session_id, provider);`;
+export const SESSIONS_LOOKUP_INDEX_SQL = `CREATE INDEX IF NOT EXISTS idx_sessions_lookup ON sessions(session_id, provider);`;
 
 export const DATABASE_SCHEMA_SQL = `PRAGMA foreign_keys = ON;
 
@@ -94,9 +94,9 @@ ${VAPID_KEYS_TABLE_SQL}
 
 ${PUSH_SUBSCRIPTIONS_TABLE_SQL}
 
-${SESSION_NAMES_TABLE_SQL}
+${SESSIONS_TABLE_SQL}
 
-${SESSION_NAMES_LOOKUP_INDEX_SQL}
+${SESSIONS_LOOKUP_INDEX_SQL}
 
 ${APP_CONFIG_TABLE_SQL}
 `;

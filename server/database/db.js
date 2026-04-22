@@ -8,8 +8,8 @@ import {
   USER_NOTIFICATION_PREFERENCES_TABLE_SQL,
   VAPID_KEYS_TABLE_SQL,
   PUSH_SUBSCRIPTIONS_TABLE_SQL,
-  SESSION_NAMES_TABLE_SQL,
-  SESSION_NAMES_LOOKUP_INDEX_SQL,
+  SESSIONS_TABLE_SQL,
+  SESSIONS_LOOKUP_INDEX_SQL,
   DATABASE_SCHEMA_SQL
 } from './schema.js';
 
@@ -109,8 +109,30 @@ const runMigrations = () => {
     db.exec(VAPID_KEYS_TABLE_SQL);
     db.exec(PUSH_SUBSCRIPTIONS_TABLE_SQL);
     db.exec(APP_CONFIG_TABLE_SQL);
-    db.exec(SESSION_NAMES_TABLE_SQL);
-    db.exec(SESSION_NAMES_LOOKUP_INDEX_SQL);
+    const hasLegacySessionNamesTable = Boolean(
+      db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get('session_names')
+    );
+    const hasSessionsTable = Boolean(
+      db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get('sessions')
+    );
+
+    if (hasLegacySessionNamesTable && hasSessionsTable) {
+      console.log('Running migration: Merging session_names into sessions');
+      db.exec(`
+        INSERT OR REPLACE INTO sessions (session_id, provider, custom_name, created_at, updated_at)
+        SELECT session_id, provider, custom_name, created_at, updated_at
+        FROM session_names
+      `);
+      db.exec('DROP TABLE session_names');
+    } else if (hasLegacySessionNamesTable && !hasSessionsTable) {
+      console.log('Running migration: Renaming session_names table to sessions');
+      db.exec('ALTER TABLE session_names RENAME TO sessions');
+    }
+
+    // Remove legacy index name if present and ensure the new index exists.
+    db.exec('DROP INDEX IF EXISTS idx_session_names_lookup');
+    db.exec(SESSIONS_TABLE_SQL);
+    db.exec(SESSIONS_LOOKUP_INDEX_SQL);
 
     console.log('Database migrations completed successfully');
   } catch (error) {
@@ -479,11 +501,11 @@ const pushSubscriptionsDb = {
 };
 
 // Session custom names database operations
-const sessionNamesDb = {
+const sessionsDb = {
   // Set (insert or update) a custom session name
   setName: (sessionId, provider, customName) => {
     db.prepare(`
-      INSERT INTO session_names (session_id, provider, custom_name)
+      INSERT INTO sessions (session_id, provider, custom_name)
       VALUES (?, ?, ?)
       ON CONFLICT(session_id, provider)
       DO UPDATE SET custom_name = excluded.custom_name, updated_at = CURRENT_TIMESTAMP
@@ -493,7 +515,7 @@ const sessionNamesDb = {
   // Get a single custom session name
   getName: (sessionId, provider) => {
     const row = db.prepare(
-      'SELECT custom_name FROM session_names WHERE session_id = ? AND provider = ?'
+      'SELECT custom_name FROM sessions WHERE session_id = ? AND provider = ?'
     ).get(sessionId, provider);
     return row?.custom_name || null;
   },
@@ -503,7 +525,7 @@ const sessionNamesDb = {
     if (!sessionIds.length) return new Map();
     const placeholders = sessionIds.map(() => '?').join(',');
     const rows = db.prepare(
-      `SELECT session_id, custom_name FROM session_names
+      `SELECT session_id, custom_name FROM sessions
        WHERE session_id IN (${placeholders}) AND provider = ?`
     ).all(...sessionIds, provider);
     return new Map(rows.map(r => [r.session_id, r.custom_name]));
@@ -512,7 +534,7 @@ const sessionNamesDb = {
   // Delete a custom session name
   deleteName: (sessionId, provider) => {
     return db.prepare(
-      'DELETE FROM session_names WHERE session_id = ? AND provider = ?'
+      'DELETE FROM sessions WHERE session_id = ? AND provider = ?'
     ).run(sessionId, provider).changes > 0;
   },
 };
@@ -522,7 +544,7 @@ function applyCustomSessionNames(sessions, provider) {
   if (!sessions?.length) return;
   try {
     const ids = sessions.map(s => s.id);
-    const customNames = sessionNamesDb.getNames(ids, provider);
+    const customNames = sessionsDb.getNames(ids, provider);
     for (const session of sessions) {
       const custom = customNames.get(session.id);
       if (custom) session.summary = custom;
@@ -586,7 +608,7 @@ export {
   credentialsDb,
   notificationPreferencesDb,
   pushSubscriptionsDb,
-  sessionNamesDb,
+  sessionsDb,
   applyCustomSessionNames,
   appConfigDb,
   githubTokensDb // Backward compatibility

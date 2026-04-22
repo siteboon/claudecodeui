@@ -1,5 +1,5 @@
 import webPush from 'web-push';
-import { notificationPreferencesDb, pushSubscriptionsDb, sessionNamesDb } from '../database/db.js';
+import { notificationPreferencesDb, pushSubscriptionsDb, sessionsDb } from '../database/db.js';
 
 const KIND_TO_PREF_KEY = {
   action_required: 'actionRequired',
@@ -107,7 +107,7 @@ function resolveSessionName(event) {
     return null;
   }
 
-  return normalizeSessionName(sessionNamesDb.getName(event.sessionId, event.provider));
+  return normalizeSessionName(sessionsDb.getName(event.sessionId, event.provider));
 }
 
 function buildPushBody(event) {
