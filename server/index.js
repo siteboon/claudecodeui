@@ -1369,7 +1369,7 @@ wss.on('connection', (ws, request) => {
     // Parse URL to get pathname without query parameters, stripping BASE_PATH
     const urlObj = new URL(url, 'http://localhost');
     let pathname = urlObj.pathname;
-    if (BASE_PATH && pathname.startsWith(BASE_PATH)) {
+    if (BASE_PATH && (pathname === BASE_PATH || pathname.startsWith(BASE_PATH + '/'))) {
         pathname = pathname.slice(BASE_PATH.length) || '/';
     }
 
@@ -2218,7 +2218,8 @@ app.get('*', (req, res) => {
         // Inject base path globals into index.html for subpath deployment
         let html = fs.readFileSync(indexPath, 'utf8');
         if (BASE_PATH) {
-            const injection = `<script>window.__CLOUDCLI_BASE_PATH__="${BASE_PATH}";window.__ROUTER_BASENAME__="${BASE_PATH}";</script>`;
+            const safeBase = JSON.stringify(BASE_PATH).replace(/</g, '\\u003c');
+            const injection = `<script>window.__CLOUDCLI_BASE_PATH__=${safeBase};window.__ROUTER_BASENAME__=${safeBase};</script>`;
             html = html.replace('<head>', `<head>${injection}`);
         }
         res.setHeader('Content-Type', 'text/html');

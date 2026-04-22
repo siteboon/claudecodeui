@@ -120,7 +120,7 @@ BASE_PATH=/s/myproject npm run server
 ```
 
 **Reverse proxy example (Caddy):**
-```
+```caddyfile
 :443 {
     handle /s/myproject/* {
         uri strip_prefix /s/myproject

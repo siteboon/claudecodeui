@@ -4,7 +4,7 @@ import { BASE_PATH } from "./basePath";
 // Utility function for authenticated API calls
 export const authenticatedFetch = (rawUrl, options = {}) => {
   // Auto-prepend BASE_PATH for root-relative URLs (e.g. '/api/...')
-  const url = rawUrl.startsWith('/') ? `${BASE_PATH}${rawUrl}` : rawUrl;
+  const url = (typeof rawUrl === 'string' && rawUrl.startsWith('/')) ? `${BASE_PATH}${rawUrl}` : rawUrl;
   const token = localStorage.getItem('auth-token');
 
   const defaultHeaders = {};
