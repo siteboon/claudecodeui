@@ -16,6 +16,16 @@ let activeGeminiProcesses = new Map(); // Track active processes by session ID
 
 async function spawnGemini(command, options = {}, ws) {
     const { sessionId, projectPath, cwd, toolsSettings, permissionMode, images, sessionSummary } = options;
+    
+    // Ensure session store is loaded (Issue #3)
+    await sessionManager.ready;
+
+    // Abort existing process for this session to prevent orphans (Issue #1)
+    if (sessionId && activeGeminiProcesses.has(sessionId)) {
+        console.log(`[Gemini] Aborting existing process for session ${sessionId} before starting new one`);
+        abortGeminiSession(sessionId);
+    }
+
     let capturedSessionId = sessionId; // Track session ID throughout the process
     let sessionCreatedSent = false; // Track if we've already sent session-created event
     let assistantBlocks = []; // Accumulate the full response blocks including tools
@@ -40,6 +50,10 @@ async function spawnGemini(command, options = {}, ws) {
         const session = sessionManager.getSession(sessionId);
         if (session && session.cliSessionId) {
             args.push('--resume', session.cliSessionId);
+        } else if (session) {
+            console.warn(`[Gemini] Session ${sessionId} found but missing cliSessionId. Resuming without --resume.`);
+        } else {
+            console.warn(`[Gemini] Session ${sessionId} not found in sessionManager. Resuming without --resume.`);
         }
     }
 
@@ -437,10 +451,21 @@ function abortGeminiSession(sessionId) {
     if (geminiProc) {
         try {
             geminiProc.kill('SIGTERM');
+            const targetProc = geminiProc; // Capture for closure
             setTimeout(() => {
-                if (activeGeminiProcesses.has(processKey)) {
+                // Check if the exact same process is still in the map (by value, not just by key)
+                // This ensures we don't SIGKILL a NEW process that might have taken the same key
+                let isStillActive = false;
+                for (const proc of activeGeminiProcesses.values()) {
+                    if (proc === targetProc) {
+                        isStillActive = true;
+                        break;
+                    }
+                }
+
+                if (isStillActive) {
                     try {
-                        geminiProc.kill('SIGKILL');
+                        targetProc.kill('SIGKILL');
                     } catch (e) { }
                 }
             }, 2000); // Wait 2 seconds before force kill
