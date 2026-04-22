@@ -8,7 +8,7 @@ import { normalizedToChatMessages } from './useChatMessages';
 import type { SessionStore, NormalizedMessage } from '../../../stores/useSessionStore';
 
 const MESSAGES_PER_PAGE = 20;
-const INITIAL_VISIBLE_MESSAGES = 100;
+const INITIAL_VISIBLE_MESSAGES = 30;
 
 type PendingViewSession = {
   sessionId: string | null;
