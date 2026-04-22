@@ -1,10 +1,23 @@
 # CLAUDE.md
 
-This is the Startino fork of CloudCLI UI, running on `<host>` from the shared checkout `<app_checkout>`.
-Production runs one `claudecodeui@<user>` systemd service per UI instance.
-Each instance has its own Unix user, `$HOME`, Claude sessions, CloudCLI auth DB, dist dir, and port.
-The reverse proxy exposes each instance at `/<user>/` on the private tailnet URL.
-The checkout visible in a GUI workspace may be a systemd `BindPaths` mount of the live shared checkout.
-Build outputs are per instance, for example `<dist_dir_for_user>`, while server code is shared.
-Use `scripts/deploy-pluto.sh` from this repo to run the host setup flow and restart UI services.
-Commit and push UI changes in this repo before deploying unless explicitly doing a dirty test deploy.
+Startino fork of CloudCLI UI. On Pluto, one `claudecodeui@<user>` systemd
+unit runs per UI instance — currently `config`, `jorge`, and `jonas`.
+
+Each unit runs from its own checkout at `/home/<user>/claudecodeui` via
+`npm run dev` (NODE_ENV=development), which concurrently runs:
+
+- `vite` for the client: full HMR — edits under `src/` reach the browser
+  without a restart.
+- `tsx server/index.js` for the Node server: no `--watch`, so server-side
+  changes need a restart to take effect.
+
+Each instance has its own `$HOME`, Claude sessions under `$HOME/.claude/`,
+CloudCLI auth DB at `$HOME/.cloudcli/auth.db`, and separate `SERVER_PORT` /
+`VITE_PORT`. The tailnet reverse proxy exposes each at `/<user>/`.
+
+Restart an instance to pick up server-side changes:
+
+    sudo systemctl restart claudecodeui@<user>
+
+Commit and push UI changes to `origin/main` before asking another instance
+to pull them.
