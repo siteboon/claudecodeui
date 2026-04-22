@@ -299,6 +299,14 @@ router.post('/create-workspace', async (req, res) => {
     }
 
   } catch (error) {
+    if (error && error.code === 'PROJECT_ALREADY_EXISTS') {
+      return res.status(409).json({
+        error: 'Workspace is already added',
+        code: error.code,
+        projectName: error.projectName,
+        path: error.path
+      });
+    }
     console.error('Error creating workspace:', error);
     res.status(500).json({
       error: error.message || 'Failed to create workspace',

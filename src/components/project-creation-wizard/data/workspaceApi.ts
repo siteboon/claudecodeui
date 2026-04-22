@@ -10,6 +10,22 @@ import type {
   TokenMode,
 } from '../types';
 
+export class CreateWorkspaceError extends Error {
+  code?: string;
+  projectName?: string;
+  path?: string;
+  status?: number;
+
+  constructor(message: string, info: { code?: string; projectName?: string; path?: string; status?: number }) {
+    super(message);
+    this.name = 'CreateWorkspaceError';
+    this.code = info.code;
+    this.projectName = info.projectName;
+    this.path = info.path;
+    this.status = info.status;
+  }
+}
+
 type CloneWorkspaceParams = {
   workspacePath: string;
   githubUrl: string;
@@ -69,7 +85,15 @@ export const createWorkspaceRequest = async (payload: CreateWorkspacePayload) =>
   const data = await parseJson<CreateWorkspaceResponse>(response);
 
   if (!response.ok) {
-    throw new Error(data.details || data.error || 'Failed to create workspace');
+    throw new CreateWorkspaceError(
+      data.details || data.error || 'Failed to create workspace',
+      {
+        code: data.code,
+        projectName: data.projectName,
+        path: data.path,
+        status: response.status,
+      },
+    );
   }
 
   return data.project;
