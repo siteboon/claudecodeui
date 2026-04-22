@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
 
 const STORAGE_KEY = 'archived-sessions';
 const LEGACY_STORAGE_KEY = 'hidden-sessions';
+
+let cached: Set<string> | null = null;
+const listeners = new Set<() => void>();
 
 function readFromStorage(): Set<string> {
   if (typeof window === 'undefined') return new Set();
@@ -37,30 +40,50 @@ function writeToStorage(ids: Set<string>) {
   }
 }
 
-export function useArchivedSessions() {
-  const [archived, setArchived] = useState<Set<string>>(() => readFromStorage());
+function emit() {
+  for (const listener of listeners) listener();
+}
 
-  useEffect(() => {
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEY || e.key === LEGACY_STORAGE_KEY) {
-        setArchived(readFromStorage());
-      }
-    };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
-  }, []);
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e: StorageEvent) => {
+    if (e.key === STORAGE_KEY || e.key === LEGACY_STORAGE_KEY) {
+      cached = readFromStorage();
+      emit();
+    }
+  });
+}
+
+function getSnapshot(): Set<string> {
+  if (!cached) cached = readFromStorage();
+  return cached;
+}
+
+const EMPTY_SET: Set<string> = new Set();
+function getServerSnapshot(): Set<string> {
+  return EMPTY_SET;
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+export function useArchivedSessions() {
+  const archived = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   const toggleArchived = useCallback((sessionId: string) => {
-    setArchived((prev) => {
-      const next = new Set(prev);
-      if (next.has(sessionId)) {
-        next.delete(sessionId);
-      } else {
-        next.add(sessionId);
-      }
-      writeToStorage(next);
-      return next;
-    });
+    const current = cached ?? readFromStorage();
+    const next = new Set(current);
+    if (next.has(sessionId)) {
+      next.delete(sessionId);
+    } else {
+      next.add(sessionId);
+    }
+    writeToStorage(next);
+    cached = next;
+    emit();
   }, []);
 
   const isArchived = useCallback(

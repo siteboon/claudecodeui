@@ -119,6 +119,8 @@ function Sidebar({
     statusMap,
     additionalSessions,
     excludeSessionId: selectedSession?.id ?? null,
+    isSessionArchived: isArchived,
+    isProjectArchived,
   });
 
   const flatSessions = useFlatSessionList({

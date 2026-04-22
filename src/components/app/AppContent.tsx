@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import Sidebar from '../sidebar/view/Sidebar';
@@ -8,6 +8,7 @@ import { useDeviceSettings } from '../../hooks/useDeviceSettings';
 import { useSessionProtection } from '../../hooks/useSessionProtection';
 import { useProjectsState } from '../../hooks/useProjectsState';
 import { useSessionStatusMap } from '../../hooks/useSessionStatusMap';
+import { useArchivedSessions } from '../../hooks/useArchivedSessions';
 import type { SessionStatus } from '../../types/app';
 
 export default function AppContent() {
@@ -128,20 +129,30 @@ export default function AppContent() {
   const sessionStatus: SessionStatus | undefined = selectedSession
     ? statusMap.get(selectedSession.id)
     : undefined;
-  const selectedIsProcessing =
-    selectedSession?.id != null && processingSessions.has(selectedSession.id);
-  const waitingCount = processingSessions.size - (selectedIsProcessing ? 1 : 0);
+  const { isArchived } = useArchivedSessions();
+  const waitingCount = useMemo(() => {
+    const currentId = selectedSession?.id ?? null;
+    let count = 0;
+    for (const id of processingSessions) {
+      if (id === currentId) continue;
+      if (isArchived(id)) continue;
+      count++;
+    }
+    return count;
+  }, [processingSessions, selectedSession?.id, isArchived]);
   const onJumpToNextWaiting = useCallback(() => {
     const currentId = selectedSession?.id ?? null;
+    let fallback: string | null = null;
     for (const id of processingSessions) {
+      if (isArchived(id)) continue;
       if (id !== currentId) {
         navigate(`/session/${id}`);
         return;
       }
+      if (fallback == null) fallback = id;
     }
-    const first = processingSessions.values().next().value;
-    if (first) navigate(`/session/${first}`);
-  }, [navigate, processingSessions, selectedSession?.id]);
+    if (fallback) navigate(`/session/${fallback}`);
+  }, [navigate, processingSessions, selectedSession?.id, isArchived]);
 
   // Adjust the app container to stay above the virtual keyboard on iOS Safari.
   // On Chrome for Android the layout viewport already shrinks when the keyboard opens,

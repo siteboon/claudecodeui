@@ -18,6 +18,8 @@ type UseProjectRailArgs = {
   statusMap: Map<string, SessionStatus>;
   additionalSessions: AdditionalSessionsByProject;
   excludeSessionId?: string | null;
+  isSessionArchived?: (sessionId: string) => boolean;
+  isProjectArchived?: (projectName: string) => boolean;
 };
 
 export function useProjectRail({
@@ -25,6 +27,8 @@ export function useProjectRail({
   statusMap,
   additionalSessions,
   excludeSessionId,
+  isSessionArchived,
+  isProjectArchived,
 }: UseProjectRailArgs): {
   railItems: ProjectRailItemData[];
   totalAttentionCount: number;
@@ -38,15 +42,19 @@ export function useProjectRail({
 
     const items: ProjectRailItemData[] = projects.map((project) => {
       const sessions = getAllSessions(project, additionalSessions);
+      const projectArchived = isProjectArchived?.(project.name) ?? false;
       let attn = 0;
 
-      for (const s of sessions) {
-        if (excludeSessionId && s.id === excludeSessionId) continue;
-        if (countedForAttention.has(s.id)) continue;
-        const st = statusMap.get(s.id);
-        if (st === 'waiting' || st === 'error') {
-          countedForAttention.add(s.id);
-          attn++;
+      if (!projectArchived) {
+        for (const s of sessions) {
+          if (excludeSessionId && s.id === excludeSessionId) continue;
+          if (isSessionArchived?.(s.id)) continue;
+          if (countedForAttention.has(s.id)) continue;
+          const st = statusMap.get(s.id);
+          if (st === 'waiting' || st === 'error') {
+            countedForAttention.add(s.id);
+            attn++;
+          }
         }
       }
 
@@ -65,5 +73,12 @@ export function useProjectRail({
     const filtered = items.filter((item) => item.sessionCount > 0);
 
     return { railItems: filtered, totalAttentionCount: totalAttention };
-  }, [projects, statusMap, additionalSessions, excludeSessionId]);
+  }, [
+    projects,
+    statusMap,
+    additionalSessions,
+    excludeSessionId,
+    isSessionArchived,
+    isProjectArchived,
+  ]);
 }
