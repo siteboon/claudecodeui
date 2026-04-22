@@ -26,8 +26,10 @@ type FlatSessionListProps = {
   sessions: FlatSession[];
   selectedSessionId: string | null;
   currentTime: Date;
+  searchActive: boolean;
+  isHidden: (sessionId: string) => boolean;
   onSessionSelect: (session: FlatSession) => void;
-  onSessionClose: (session: FlatSession) => void;
+  onToggleHidden: (sessionId: string) => void;
   activeProjectName: string;
   onCreateSession: () => void;
   showHotkeys?: boolean;
@@ -37,15 +39,41 @@ export default function FlatSessionList({
   sessions,
   selectedSessionId,
   currentTime,
+  searchActive,
+  isHidden,
   onSessionSelect,
-  onSessionClose,
+  onToggleHidden,
   activeProjectName,
   onCreateSession,
   showHotkeys = false,
 }: FlatSessionListProps) {
   const { t } = useTranslation('sidebar');
 
-  if (sessions.length === 0) {
+  // Filter hidden sessions out unless search is active or the session is selected.
+  const visibleSessions = sessions.filter((session) => {
+    if (!isHidden(session.id)) return true;
+    if (searchActive) return true;
+    if (session.id === selectedSessionId) return true;
+    return false;
+  });
+
+  const hiddenCount = sessions.filter((s) => isHidden(s.id)).length;
+
+  if (visibleSessions.length === 0) {
+    if (sessions.length > 0 && hiddenCount > 0 && !searchActive) {
+      return (
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 py-10 text-center">
+          <p className="text-xs text-muted-foreground">
+            {hiddenCount} hidden session{hiddenCount === 1 ? '' : 's'} in{' '}
+            <span className="text-foreground/80">@{activeProjectName}</span>
+          </p>
+          <span className="font-mono text-[10px] text-muted-foreground/60">
+            Type to search and reveal
+          </span>
+        </div>
+      );
+    }
+
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-10 text-center">
         <p className="text-sm text-muted-foreground">
@@ -72,16 +100,17 @@ export default function FlatSessionList({
   return (
     <ScrollArea className="flex-1 overflow-y-auto px-2 py-1.5">
       <div className="flex flex-col gap-0.5">
-        {sessions.map((session, index) => (
+        {visibleSessions.map((session, index) => (
           <FlatSessionItem
             key={session.id}
             session={session}
             isSelected={session.id === selectedSessionId}
+            isHidden={isHidden(session.id)}
             index={index}
             timeAgo={formatTimeAgo(getSessionDate(session), currentTime)}
             displayName={getDisplayName(session)}
             onSelect={() => onSessionSelect(session)}
-            onClose={() => onSessionClose(session)}
+            onToggleHidden={() => onToggleHidden(session.id)}
             showHotkey={showHotkeys}
           />
         ))}

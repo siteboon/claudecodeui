@@ -9,8 +9,9 @@ import { useSessionStatusMap } from '../../../hooks/useSessionStatusMap';
 import { useFlatSessionList, type FlatSession } from '../../../hooks/useFlatSessionList';
 import { useProjectRail } from '../../project-rail/hooks/useProjectRail';
 import { useProjectColors } from '../../../hooks/useProjectColors';
+import { useHiddenSessions } from '../../../hooks/useHiddenSessions';
 import { getProjectColor } from '../../project-rail/utils/projectColors';
-import type { Project, LLMProvider } from '../../../types/app';
+import type { Project } from '../../../types/app';
 import type { MCPServerStatus, SidebarProps } from '../types/types';
 import ProjectRail from '../../project-rail/view/ProjectRail';
 import SidebarCollapsed from './subcomponents/SidebarCollapsed';
@@ -24,14 +25,6 @@ type TaskMasterSidebarContext = {
   setCurrentProject: (project: Project) => void;
   mcpServerStatus: MCPServerStatus;
 };
-
-function getSessionDisplayName(session: {
-  summary?: string;
-  name?: string;
-  title?: string;
-}): string {
-  return session.summary || session.name || session.title || 'Session';
-}
 
 function Sidebar({
   projects,
@@ -64,6 +57,7 @@ function Sidebar({
 
   const [activeProjectFilter, setActiveProjectFilter] = useState<string | null>(null);
   const { getColor, setColor } = useProjectColors();
+  const { toggleHidden, isHidden } = useHiddenSessions();
 
   const {
     isSidebarCollapsed,
@@ -77,7 +71,6 @@ function Sidebar({
     showVersionModal,
     handleSessionClick,
     handleProjectSelect,
-    showDeleteSessionConfirmation,
     confirmDeleteSession,
     confirmDeleteProject,
     expandSidebar,
@@ -179,16 +172,6 @@ function Sidebar({
     handleSessionClick(session, session.__projectName);
   };
 
-  const handleFlatSessionClose = (session: FlatSession) => {
-    const provider = (session.__provider ?? 'claude') as LLMProvider;
-    showDeleteSessionConfirmation(
-      session.__projectName,
-      session.id,
-      getSessionDisplayName(session),
-      provider,
-    );
-  };
-
   const handleProjectCreated = () => {
     if (window.refreshProjects) {
       void window.refreshProjects();
@@ -224,16 +207,7 @@ function Sidebar({
       if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'w') {
         if (!selectedSession) return;
         e.preventDefault();
-        const projectName =
-          (selectedSession.__projectName as string | undefined) || selectedProject?.name;
-        if (!projectName) return;
-        const provider = (selectedSession.__provider ?? 'claude') as LLMProvider;
-        showDeleteSessionConfirmation(
-          projectName,
-          selectedSession.id,
-          getSessionDisplayName(selectedSession),
-          provider,
-        );
+        toggleHidden(selectedSession.id);
         return;
       }
 
@@ -314,8 +288,10 @@ function Sidebar({
             sessions={flatSessions}
             selectedSessionId={selectedSession?.id ?? null}
             currentTime={currentTime}
+            searchActive={searchFilter.trim().length > 0}
+            isHidden={isHidden}
             onSessionSelect={handleFlatSessionSelect}
-            onSessionClose={handleFlatSessionClose}
+            onToggleHidden={toggleHidden}
             activeProjectName={activeProjectName}
             onCreateSession={handleCreateSession}
           />

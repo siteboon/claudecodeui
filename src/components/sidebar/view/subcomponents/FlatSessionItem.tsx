@@ -1,15 +1,16 @@
 import { useState } from 'react';
-import { X } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 import type { FlatSession } from '../../../../hooks/useFlatSessionList';
 
 type FlatSessionItemProps = {
   session: FlatSession;
   isSelected: boolean;
+  isHidden: boolean;
   index: number;
   timeAgo: string;
   displayName: string;
   onSelect: () => void;
-  onClose: () => void;
+  onToggleHidden: () => void;
   showHotkey?: boolean;
 };
 
@@ -39,11 +40,12 @@ function StatusDot({ status }: { status: FlatSession['__status'] }) {
 export default function FlatSessionItem({
   session,
   isSelected,
+  isHidden,
   index,
   timeAgo,
   displayName,
   onSelect,
-  onClose,
+  onToggleHidden,
   showHotkey = false,
 }: FlatSessionItemProps) {
   const [hover, setHover] = useState(false);
@@ -56,7 +58,9 @@ export default function FlatSessionItem({
       onMouseLeave={() => setHover(false)}
       className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors ${
         isSelected ? 'bg-accent pl-2' : hover ? 'bg-accent/50' : ''
-      } ${isSelected ? 'border-l-2' : 'border-l-2 border-l-transparent'}`}
+      } ${isSelected ? 'border-l-2' : 'border-l-2 border-l-transparent'} ${
+        isHidden ? 'opacity-55' : ''
+      }`}
       style={
         isSelected
           ? { borderLeftColor: 'var(--project-accent)' }
@@ -66,8 +70,19 @@ export default function FlatSessionItem({
       <StatusDot status={session.__status} />
 
       <div className="min-w-0 flex-1">
-        <div className="truncate font-mono text-[10px] leading-tight text-muted-foreground/70">
-          @{session.__projectDisplayName} · {timeAgo}
+        <div className="flex items-center gap-1.5 truncate font-mono text-[10px] leading-tight text-muted-foreground/70">
+          <span className="truncate">
+            @{session.__projectDisplayName} · {timeAgo}
+          </span>
+          {isHidden && (
+            <span
+              className="flex h-3 items-center gap-0.5 rounded-sm bg-muted px-1 text-[9px] font-medium uppercase tracking-wider text-muted-foreground"
+              title="Hidden from list"
+            >
+              <EyeOff className="h-2.5 w-2.5" />
+              hidden
+            </span>
+          )}
         </div>
         <div
           className={`truncate text-[13px] leading-tight ${
@@ -81,16 +96,25 @@ export default function FlatSessionItem({
       </div>
 
       {hover && (
-        <button
+        <span
+          role="button"
+          tabIndex={0}
           onClick={(e) => {
             e.stopPropagation();
-            onClose();
+            onToggleHidden();
           }}
-          className="flex flex-shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:text-attention"
-          title="Close session"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.stopPropagation();
+              e.preventDefault();
+              onToggleHidden();
+            }
+          }}
+          className="flex flex-shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+          title={isHidden ? 'Unhide' : 'Hide (findable via search)'}
         >
-          <X className="h-3 w-3" />
-        </button>
+          {isHidden ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+        </span>
       )}
 
       {showHotkey && !hover && index < 8 && (
