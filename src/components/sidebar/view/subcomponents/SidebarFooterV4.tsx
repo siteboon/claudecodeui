@@ -1,4 +1,4 @@
-import { Settings } from 'lucide-react';
+import { RefreshCw, Settings } from 'lucide-react';
 import { Tooltip } from '../../../../shared/view/ui';
 
 type SidebarFooterV4Props = {
@@ -6,6 +6,8 @@ type SidebarFooterV4Props = {
   sessionCount: number;
   maxSessions?: number;
   onShowSettings: () => void;
+  onRefresh: () => void;
+  isRefreshing: boolean;
 };
 
 export default function SidebarFooterV4({
@@ -13,6 +15,8 @@ export default function SidebarFooterV4({
   sessionCount,
   maxSessions,
   onShowSettings,
+  onRefresh,
+  isRefreshing,
 }: SidebarFooterV4Props) {
   const initial = userName.charAt(0).toUpperCase();
 
@@ -34,10 +38,23 @@ export default function SidebarFooterV4({
         {sessionCount}
         {maxSessions ? `/${maxSessions}` : ''}
       </span>
+      <Tooltip content="Refresh projects" position="top">
+        <button
+          onClick={onRefresh}
+          disabled={isRefreshing}
+          className="flex rounded p-1 text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+          aria-label="Refresh projects"
+        >
+          <RefreshCw
+            className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`}
+          />
+        </button>
+      </Tooltip>
       <Tooltip content="Settings" position="top">
         <button
           onClick={onShowSettings}
           className="flex rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
+          aria-label="Settings"
         >
           <Settings className="h-3.5 w-3.5" />
         </button>

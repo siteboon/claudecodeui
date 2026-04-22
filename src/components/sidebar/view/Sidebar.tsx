@@ -69,6 +69,8 @@ function Sidebar({
     deleteConfirmation,
     sessionDeleteConfirmation,
     showVersionModal,
+    isRefreshing,
+    refreshProjects,
     handleSessionClick,
     handleProjectSelect,
     confirmDeleteSession,
@@ -300,6 +302,10 @@ function Sidebar({
           userName={userName}
           sessionCount={flatSessions.length}
           onShowSettings={onShowSettings}
+          onRefresh={() => {
+            void refreshProjects();
+          }}
+          isRefreshing={isRefreshing}
         />
       </div>
     </div>
