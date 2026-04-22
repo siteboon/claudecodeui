@@ -293,6 +293,15 @@ export function useChatRealtimeHandlers({
         accumulatedStreamRef.current = '';
         streamBufferRef.current = '';
 
+        if (msg.premature && !msg.aborted) {
+          console.warn('[chat] Claude session ended prematurely', {
+            sessionId: sid,
+            subtype: msg.subtype,
+            stopReason: msg.stopReason,
+            autoResumeAttempts: msg.autoResumeAttempts,
+          });
+        }
+
         setIsLoading(false);
         setCanAbortSession(false);
         setClaudeStatus(null);
