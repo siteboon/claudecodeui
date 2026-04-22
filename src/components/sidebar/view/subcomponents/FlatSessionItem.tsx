@@ -1,16 +1,16 @@
 import { useState } from 'react';
-import { Eye, EyeOff } from 'lucide-react';
+import { Archive, ArchiveRestore } from 'lucide-react';
 import type { FlatSession } from '../../../../hooks/useFlatSessionList';
 
 type FlatSessionItemProps = {
   session: FlatSession;
   isSelected: boolean;
-  isHidden: boolean;
+  isArchived: boolean;
   index: number;
   timeAgo: string;
   displayName: string;
   onSelect: () => void;
-  onToggleHidden: () => void;
+  onToggleArchived: () => void;
   showHotkey?: boolean;
 };
 
@@ -40,12 +40,12 @@ function StatusDot({ status }: { status: FlatSession['__status'] }) {
 export default function FlatSessionItem({
   session,
   isSelected,
-  isHidden,
+  isArchived,
   index,
   timeAgo,
   displayName,
   onSelect,
-  onToggleHidden,
+  onToggleArchived,
   showHotkey = false,
 }: FlatSessionItemProps) {
   const [hover, setHover] = useState(false);
@@ -59,7 +59,7 @@ export default function FlatSessionItem({
       className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors ${
         isSelected ? 'bg-accent pl-2' : hover ? 'bg-accent/50' : ''
       } ${isSelected ? 'border-l-2' : 'border-l-2 border-l-transparent'} ${
-        isHidden ? 'opacity-55' : ''
+        isArchived ? 'opacity-55' : ''
       }`}
       style={
         isSelected
@@ -74,13 +74,13 @@ export default function FlatSessionItem({
           <span className="truncate">
             @{session.__projectDisplayName} · {timeAgo}
           </span>
-          {isHidden && (
+          {isArchived && (
             <span
               className="flex h-3 items-center gap-0.5 rounded-sm bg-muted px-1 text-[9px] font-medium uppercase tracking-wider text-muted-foreground"
-              title="Hidden from list"
+              title="Archived — kept on disk, only visible via search"
             >
-              <EyeOff className="h-2.5 w-2.5" />
-              hidden
+              <Archive className="h-2.5 w-2.5" />
+              archived
             </span>
           )}
         </div>
@@ -101,19 +101,27 @@ export default function FlatSessionItem({
           tabIndex={0}
           onClick={(e) => {
             e.stopPropagation();
-            onToggleHidden();
+            onToggleArchived();
           }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.stopPropagation();
               e.preventDefault();
-              onToggleHidden();
+              onToggleArchived();
             }
           }}
           className="flex flex-shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
-          title={isHidden ? 'Unhide' : 'Hide (findable via search)'}
+          title={
+            isArchived
+              ? 'Unarchive'
+              : 'Archive (kept on disk, findable via search)'
+          }
         >
-          {isHidden ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+          {isArchived ? (
+            <ArchiveRestore className="h-3 w-3" />
+          ) : (
+            <Archive className="h-3 w-3" />
+          )}
         </span>
       )}
 

@@ -9,7 +9,7 @@ import { useSessionStatusMap } from '../../../hooks/useSessionStatusMap';
 import { useFlatSessionList, type FlatSession } from '../../../hooks/useFlatSessionList';
 import { useProjectRail } from '../../project-rail/hooks/useProjectRail';
 import { useProjectColors } from '../../../hooks/useProjectColors';
-import { useHiddenSessions } from '../../../hooks/useHiddenSessions';
+import { useArchivedSessions } from '../../../hooks/useArchivedSessions';
 import { getProjectColor } from '../../project-rail/utils/projectColors';
 import type { Project } from '../../../types/app';
 import type { MCPServerStatus, SidebarProps } from '../types/types';
@@ -57,7 +57,7 @@ function Sidebar({
 
   const [activeProjectFilter, setActiveProjectFilter] = useState<string | null>(null);
   const { getColor, setColor } = useProjectColors();
-  const { toggleHidden, isHidden } = useHiddenSessions();
+  const { toggleArchived, isArchived } = useArchivedSessions();
 
   const {
     isSidebarCollapsed,
@@ -207,7 +207,7 @@ function Sidebar({
       if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'w') {
         if (!selectedSession) return;
         e.preventDefault();
-        toggleHidden(selectedSession.id);
+        toggleArchived(selectedSession.id);
         return;
       }
 
@@ -289,9 +289,9 @@ function Sidebar({
             selectedSessionId={selectedSession?.id ?? null}
             currentTime={currentTime}
             searchActive={searchFilter.trim().length > 0}
-            isHidden={isHidden}
+            isArchived={isArchived}
             onSessionSelect={handleFlatSessionSelect}
-            onToggleHidden={toggleHidden}
+            onToggleArchived={toggleArchived}
             activeProjectName={activeProjectName}
             onCreateSession={handleCreateSession}
           />

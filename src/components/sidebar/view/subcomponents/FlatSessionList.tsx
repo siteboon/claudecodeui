@@ -27,9 +27,9 @@ type FlatSessionListProps = {
   selectedSessionId: string | null;
   currentTime: Date;
   searchActive: boolean;
-  isHidden: (sessionId: string) => boolean;
+  isArchived: (sessionId: string) => boolean;
   onSessionSelect: (session: FlatSession) => void;
-  onToggleHidden: (sessionId: string) => void;
+  onToggleArchived: (sessionId: string) => void;
   activeProjectName: string;
   onCreateSession: () => void;
   showHotkeys?: boolean;
@@ -40,31 +40,31 @@ export default function FlatSessionList({
   selectedSessionId,
   currentTime,
   searchActive,
-  isHidden,
+  isArchived,
   onSessionSelect,
-  onToggleHidden,
+  onToggleArchived,
   activeProjectName,
   onCreateSession,
   showHotkeys = false,
 }: FlatSessionListProps) {
   const { t } = useTranslation('sidebar');
 
-  // Filter hidden sessions out unless search is active or the session is selected.
+  // Archived sessions stay out of sight unless search is active or they're selected.
   const visibleSessions = sessions.filter((session) => {
-    if (!isHidden(session.id)) return true;
+    if (!isArchived(session.id)) return true;
     if (searchActive) return true;
     if (session.id === selectedSessionId) return true;
     return false;
   });
 
-  const hiddenCount = sessions.filter((s) => isHidden(s.id)).length;
+  const archivedCount = sessions.filter((s) => isArchived(s.id)).length;
 
   if (visibleSessions.length === 0) {
-    if (sessions.length > 0 && hiddenCount > 0 && !searchActive) {
+    if (sessions.length > 0 && archivedCount > 0 && !searchActive) {
       return (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 py-10 text-center">
           <p className="text-xs text-muted-foreground">
-            {hiddenCount} hidden session{hiddenCount === 1 ? '' : 's'} in{' '}
+            {archivedCount} archived session{archivedCount === 1 ? '' : 's'} in{' '}
             <span className="text-foreground/80">@{activeProjectName}</span>
           </p>
           <span className="font-mono text-[10px] text-muted-foreground/60">
@@ -105,12 +105,12 @@ export default function FlatSessionList({
             key={session.id}
             session={session}
             isSelected={session.id === selectedSessionId}
-            isHidden={isHidden(session.id)}
+            isArchived={isArchived(session.id)}
             index={index}
             timeAgo={formatTimeAgo(getSessionDate(session), currentTime)}
             displayName={getDisplayName(session)}
             onSelect={() => onSessionSelect(session)}
-            onToggleHidden={() => onToggleHidden(session.id)}
+            onToggleArchived={() => onToggleArchived(session.id)}
             showHotkey={showHotkeys}
           />
         ))}
