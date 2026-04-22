@@ -1,22 +1,35 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDeviceSettings } from '../../../hooks/useDeviceSettings';
 import { useVersionCheck } from '../../../hooks/useVersionCheck';
 import { useUiPreferences } from '../../../hooks/useUiPreferences';
 import { useSidebarController } from '../hooks/useSidebarController';
 import { useTaskMaster } from '../../../contexts/TaskMasterContext';
-import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
+import { useSessionStatusMap } from '../../../hooks/useSessionStatusMap';
+import { useFlatSessionList, type FlatSession } from '../../../hooks/useFlatSessionList';
+import { useProjectRail } from '../../project-rail/hooks/useProjectRail';
 import type { Project, LLMProvider } from '../../../types/app';
 import type { MCPServerStatus, SidebarProps } from '../types/types';
+import ProjectRail from '../../project-rail/view/ProjectRail';
 import SidebarCollapsed from './subcomponents/SidebarCollapsed';
-import SidebarContent from './subcomponents/SidebarContent';
 import SidebarModals from './subcomponents/SidebarModals';
-import type { SidebarProjectListProps } from './subcomponents/SidebarProjectList';
+import CommandBar, { type CommandBarHandle } from './subcomponents/CommandBar';
+import FlatSessionList from './subcomponents/FlatSessionList';
+import SidebarFooterV4 from './subcomponents/SidebarFooterV4';
+import MobileProjectFilter from './subcomponents/MobileProjectFilter';
 
 type TaskMasterSidebarContext = {
   setCurrentProject: (project: Project) => void;
   mcpServerStatus: MCPServerStatus;
 };
+
+function getSessionDisplayName(session: {
+  summary?: string;
+  name?: string;
+  title?: string;
+}): string {
+  return session.summary || session.name || session.title || 'Session';
+}
 
 function Sidebar({
   projects,
@@ -28,13 +41,14 @@ function Sidebar({
   onSessionDelete,
   onProjectDelete,
   isLoading,
-  loadingProgress,
   onRefresh,
   onShowSettings,
   showSettings,
   settingsInitialTab,
   onCloseSettings,
   isMobile,
+  activeSessions,
+  processingSessions,
 }: SidebarProps) {
   const { t } = useTranslation(['sidebar', 'common']);
   const { isPWA } = useDeviceSettings({ trackMobile: false });
@@ -44,56 +58,27 @@ function Sidebar({
   );
   const { preferences, setPreference } = useUiPreferences();
   const { sidebarVisible } = preferences;
-  const { setCurrentProject, mcpServerStatus } = useTaskMaster() as TaskMasterSidebarContext;
-  const { tasksEnabled } = useTasksSettings();
+  const { setCurrentProject } = useTaskMaster() as TaskMasterSidebarContext;
+
+  const [activeProjectFilter, setActiveProjectFilter] = useState<string | null>(null);
 
   const {
     isSidebarCollapsed,
-    expandedProjects,
-    editingProject,
     showNewProject,
-    editingName,
-    loadingSessions,
-    initialSessionsLoaded,
     currentTime,
-    isRefreshing,
-    editingSession,
-    editingSessionName,
     searchFilter,
-    searchMode,
-    setSearchMode,
-    conversationResults,
-    isSearching,
-    searchProgress,
-    clearConversationResults,
-    deletingProjects,
+    setSearchFilter,
+    additionalSessions,
     deleteConfirmation,
     sessionDeleteConfirmation,
     showVersionModal,
-    filteredProjects,
-    toggleProject,
     handleSessionClick,
-    toggleStarProject,
-    isProjectStarred,
-    getProjectSessions,
-    startEditing,
-    cancelEditing,
-    saveProjectName,
+    handleProjectSelect,
     showDeleteSessionConfirmation,
     confirmDeleteSession,
-    requestProjectDelete,
     confirmDeleteProject,
-    loadMoreSessions,
-    handleProjectSelect,
-    refreshProjects,
-    updateSessionSummary,
-    collapseSidebar: handleCollapseSidebar,
-    expandSidebar: handleExpandSidebar,
+    expandSidebar,
     setShowNewProject,
-    setEditingName,
-    setEditingSession,
-    setEditingSessionName,
-    setSearchFilter,
     setDeleteConfirmation,
     setSessionDeleteConfirmation,
     setShowVersionModal,
@@ -123,65 +108,193 @@ function Sidebar({
     document.body.classList.toggle('pwa-mode', isPWA);
   }, [isPWA]);
 
+  const statusMap = useSessionStatusMap({ activeSessions, processingSessions });
+
+  const { railItems, totalAttentionCount } = useProjectRail({
+    projects,
+    statusMap,
+    additionalSessions,
+  });
+
+  const flatSessions = useFlatSessionList({
+    projects,
+    activeProjectFilter,
+    searchFilter,
+    statusMap,
+    additionalSessions,
+  });
+
+  const activeProjectName = useMemo(() => {
+    if (activeProjectFilter) {
+      const p = projects.find((pp) => pp.name === activeProjectFilter);
+      return p ? p.displayName || p.name : 'project';
+    }
+    if (selectedProject) return selectedProject.displayName || selectedProject.name;
+    return projects[0]?.displayName || projects[0]?.name || 'project';
+  }, [activeProjectFilter, projects, selectedProject]);
+
+  const targetProject = useMemo(() => {
+    if (activeProjectFilter) {
+      return projects.find((p) => p.name === activeProjectFilter) ?? null;
+    }
+    return selectedProject ?? projects[0] ?? null;
+  }, [activeProjectFilter, projects, selectedProject]);
+
+  const commandBarRef = useRef<CommandBarHandle>(null);
+
+  const handleCreateSession = () => {
+    if (!targetProject) return;
+    handleProjectSelect(targetProject);
+    onNewSession(targetProject);
+  };
+
+  const handleFlatSessionSelect = (session: FlatSession) => {
+    const project = projects.find((p) => p.name === session.__projectName);
+    if (project) {
+      handleProjectSelect(project);
+    }
+    handleSessionClick(session, session.__projectName);
+  };
+
+  const handleFlatSessionClose = (session: FlatSession) => {
+    const provider = (session.__provider ?? 'claude') as LLMProvider;
+    showDeleteSessionConfirmation(
+      session.__projectName,
+      session.id,
+      getSessionDisplayName(session),
+      provider,
+    );
+  };
+
   const handleProjectCreated = () => {
     if (window.refreshProjects) {
       void window.refreshProjects();
       return;
     }
-
     window.location.reload();
   };
 
-  const projectListProps: SidebarProjectListProps = {
-    projects,
-    filteredProjects,
-    selectedProject,
-    selectedSession,
-    isLoading,
-    loadingProgress,
-    expandedProjects,
-    editingProject,
-    editingName,
-    loadingSessions,
-    initialSessionsLoaded,
-    currentTime,
-    editingSession,
-    editingSessionName,
-    deletingProjects,
-    tasksEnabled,
-    mcpServerStatus,
-    getProjectSessions,
-    isProjectStarred,
-    onEditingNameChange: setEditingName,
-    onToggleProject: toggleProject,
-    onProjectSelect: handleProjectSelect,
-    onToggleStarProject: toggleStarProject,
-    onStartEditingProject: startEditing,
-    onCancelEditingProject: cancelEditing,
-    onSaveProjectName: (projectName) => {
-      void saveProjectName(projectName);
-    },
-    onDeleteProject: requestProjectDelete,
-    onSessionSelect: handleSessionClick,
-    onDeleteSession: showDeleteSessionConfirmation,
-    onLoadMoreSessions: (project) => {
-      void loadMoreSessions(project);
-    },
-    onNewSession,
-    onEditingSessionNameChange: setEditingSessionName,
-    onStartEditingSession: (sessionId, initialName) => {
-      setEditingSession(sessionId);
-      setEditingSessionName(initialName);
-    },
-    onCancelEditingSession: () => {
-      setEditingSession(null);
-      setEditingSessionName('');
-    },
-    onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: LLMProvider) => {
-      void updateSessionSummary(projectName, sessionId, summary, provider);
-    },
-    t,
-  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const inInput = !!target && (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable
+      );
+      const mod = e.metaKey || e.ctrlKey;
+
+      if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        commandBarRef.current?.focus();
+        return;
+      }
+
+      if (inInput) return;
+
+      if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'w') {
+        if (!selectedSession) return;
+        e.preventDefault();
+        const projectName =
+          (selectedSession.__projectName as string | undefined) || selectedProject?.name;
+        if (!projectName) return;
+        const provider = (selectedSession.__provider ?? 'claude') as LLMProvider;
+        showDeleteSessionConfirmation(
+          projectName,
+          selectedSession.id,
+          getSessionDisplayName(selectedSession),
+          provider,
+        );
+        return;
+      }
+
+      if (mod && !e.shiftKey && !e.altKey && /^[1-8]$/.test(e.key)) {
+        e.preventDefault();
+        const idx = parseInt(e.key, 10) - 1;
+        const target = flatSessions[idx];
+        if (target) handleFlatSessionSelect(target);
+        return;
+      }
+
+      if (e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && e.key === '`') {
+        e.preventDefault();
+        setActiveProjectFilter(null);
+        return;
+      }
+
+      if (e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && /^[1-6]$/.test(e.key)) {
+        e.preventDefault();
+        const idx = parseInt(e.key, 10) - 1;
+        const item = railItems[idx];
+        if (item) setActiveProjectFilter(item.name);
+        return;
+      }
+    };
+
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flatSessions, railItems, selectedSession, selectedProject]);
+
+  const userName = useMemo(() => {
+    if (typeof window === 'undefined') return 'user';
+    const host = window.location?.hostname ?? '';
+    return host.split('.')[0] || 'user';
+  }, []);
+
+  const body = (
+    <div
+      className={`flex h-full ${isMobile ? 'flex-col' : 'flex-row'} bg-background/80 backdrop-blur-sm md:select-none`}
+    >
+      {!isMobile && (
+        <ProjectRail
+          railItems={railItems}
+          activeProjectFilter={activeProjectFilter}
+          totalAttentionCount={totalAttentionCount}
+          onProjectFilter={setActiveProjectFilter}
+        />
+      )}
+      <div className={`flex min-h-0 flex-1 flex-col ${!isMobile ? 'w-72' : ''}`}>
+        {isMobile && railItems.length > 0 && (
+          <MobileProjectFilter
+            items={railItems}
+            activeFilter={activeProjectFilter}
+            onFilter={setActiveProjectFilter}
+          />
+        )}
+        <CommandBar
+          ref={commandBarRef}
+          searchFilter={searchFilter}
+          onSearchFilterChange={setSearchFilter}
+          onCreateSession={handleCreateSession}
+          activeProjectName={activeProjectName}
+          resultCount={flatSessions.length}
+        />
+        {isLoading && flatSessions.length === 0 ? (
+          <div className="flex flex-1 items-center justify-center px-4 py-8 text-xs text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <div className="h-3.5 w-3.5 animate-spin rounded-full border-[1.5px] border-muted-foreground/40 border-t-primary" />
+              <span>Loading…</span>
+            </div>
+          </div>
+        ) : (
+          <FlatSessionList
+            sessions={flatSessions}
+            selectedSessionId={selectedSession?.id ?? null}
+            currentTime={currentTime}
+            onSessionSelect={handleFlatSessionSelect}
+            onSessionClose={handleFlatSessionClose}
+            activeProjectName={activeProjectName}
+          />
+        )}
+        <SidebarFooterV4
+          userName={userName}
+          sessionCount={flatSessions.length}
+          onShowSettings={onShowSettings}
+        />
+      </div>
+    </div>
+  );
 
   return (
     <>
@@ -210,71 +323,15 @@ function Sidebar({
 
       {isSidebarCollapsed ? (
         <SidebarCollapsed
-          onExpand={handleExpandSidebar}
+          onExpand={expandSidebar}
           onShowSettings={onShowSettings}
           updateAvailable={updateAvailable}
           onShowVersionModal={() => setShowVersionModal(true)}
           t={t}
         />
       ) : (
-        <>
-          <SidebarContent
-            isPWA={isPWA}
-            isMobile={isMobile}
-            isLoading={isLoading}
-            projects={projects}
-            searchFilter={searchFilter}
-            onSearchFilterChange={setSearchFilter}
-            onClearSearchFilter={() => setSearchFilter('')}
-            searchMode={searchMode}
-            onSearchModeChange={(mode: 'projects' | 'conversations') => {
-              setSearchMode(mode);
-              if (mode === 'projects') clearConversationResults();
-            }}
-            conversationResults={conversationResults}
-            isSearching={isSearching}
-            searchProgress={searchProgress}
-            onConversationResultClick={(projectName: string, sessionId: string, provider: string, messageTimestamp?: string | null, messageSnippet?: string | null) => {
-              const resolvedProvider = (provider || 'claude') as LLMProvider;
-              const project = projects.find(p => p.name === projectName);
-              const searchTarget = { __searchTargetTimestamp: messageTimestamp || null, __searchTargetSnippet: messageSnippet || null };
-              const sessionObj = {
-                id: sessionId,
-                __provider: resolvedProvider,
-                __projectName: projectName,
-                ...searchTarget,
-              };
-              if (project) {
-                handleProjectSelect(project);
-                const sessions = getProjectSessions(project);
-                const existing = sessions.find(s => s.id === sessionId);
-                if (existing) {
-                  handleSessionClick({ ...existing, ...searchTarget }, projectName);
-                } else {
-                  handleSessionClick(sessionObj, projectName);
-                }
-              } else {
-                handleSessionClick(sessionObj, projectName);
-              }
-            }}
-            onRefresh={() => {
-              void refreshProjects();
-            }}
-            isRefreshing={isRefreshing}
-            onCreateProject={() => setShowNewProject(true)}
-            onCollapseSidebar={handleCollapseSidebar}
-            updateAvailable={updateAvailable}
-            releaseInfo={releaseInfo}
-            latestVersion={latestVersion}
-            currentVersion={currentVersion}
-            onShowVersionModal={() => setShowVersionModal(true)}
-            onShowSettings={onShowSettings}
-            projectListProps={projectListProps}
-            t={t}
-          />
-        </>
+        body
       )}
-
     </>
   );
 }

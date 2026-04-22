@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import Sidebar from '../sidebar/view/Sidebar';
@@ -7,6 +7,8 @@ import { useWebSocket } from '../../contexts/WebSocketContext';
 import { useDeviceSettings } from '../../hooks/useDeviceSettings';
 import { useSessionProtection } from '../../hooks/useSessionProtection';
 import { useProjectsState } from '../../hooks/useProjectsState';
+import { useSessionStatusMap } from '../../hooks/useSessionStatusMap';
+import type { SessionStatus } from '../../types/app';
 
 export default function AppContent() {
   const navigate = useNavigate();
@@ -122,6 +124,23 @@ export default function AppContent() {
     }
   }, [isConnected, selectedSession?.id, sendMessage]);
 
+  const statusMap = useSessionStatusMap({ activeSessions, processingSessions });
+  const sessionStatus: SessionStatus | undefined = selectedSession
+    ? statusMap.get(selectedSession.id)
+    : undefined;
+  const waitingCount = processingSessions.size;
+  const onJumpToNextWaiting = useCallback(() => {
+    const currentId = selectedSession?.id ?? null;
+    for (const id of processingSessions) {
+      if (id !== currentId) {
+        navigate(`/session/${id}`);
+        return;
+      }
+    }
+    const first = processingSessions.values().next().value;
+    if (first) navigate(`/session/${first}`);
+  }, [navigate, processingSessions, selectedSession?.id]);
+
   // Adjust the app container to stay above the virtual keyboard on iOS Safari.
   // On Chrome for Android the layout viewport already shrinks when the keyboard opens,
   // so inset-0 adjusts automatically. On iOS the layout viewport stays full-height and
@@ -146,7 +165,11 @@ export default function AppContent() {
     <div className="fixed inset-0 flex bg-background" style={{ bottom: 'var(--keyboard-height, 0px)' }}>
       {!isMobile ? (
         <div className="h-full flex-shrink-0 border-r border-border/50">
-          <Sidebar {...sidebarSharedProps} />
+          <Sidebar
+            {...sidebarSharedProps}
+            activeSessions={activeSessions}
+            processingSessions={processingSessions}
+          />
         </div>
       ) : (
         <div
@@ -172,7 +195,11 @@ export default function AppContent() {
             onClick={(event) => event.stopPropagation()}
             onTouchStart={(event) => event.stopPropagation()}
           >
-            <Sidebar {...sidebarSharedProps} />
+            <Sidebar
+              {...sidebarSharedProps}
+              activeSessions={activeSessions}
+              processingSessions={processingSessions}
+            />
           </div>
         </div>
       )}
@@ -199,6 +226,9 @@ export default function AppContent() {
           onNavigateToSession={(targetSessionId: string) => navigate(`/session/${targetSessionId}`)}
           onShowSettings={() => setShowSettings(true)}
           externalMessageUpdate={externalMessageUpdate}
+          sessionStatus={sessionStatus}
+          waitingCount={waitingCount}
+          onJumpToNextWaiting={onJumpToNextWaiting}
         />
       </div>
 
