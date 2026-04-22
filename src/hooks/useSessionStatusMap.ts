@@ -9,9 +9,13 @@ type UseSessionStatusMapArgs = {
 /**
  * Derives a SessionStatus for each session id based on active/processing sets.
  *
- * - `activeSessions` tracks sessions with an open SSE connection (running).
- * - `processingSessions` tracks sessions awaiting user permission (waiting).
+ * - `activeSessions` → `running`: Claude is currently working (streaming a turn).
+ * - `processingSessions` → `waiting`: Claude finished a turn and is stalled
+ *   until the user replies. This is the "needs you" / pink-alert state.
  * - Everything else defaults to 'idle'.
+ *
+ * `running` wins over `waiting` if a session somehow appears in both — an active
+ * turn is the more urgent real-time signal than a stale awaiting-reply flag.
  *
  * Status derivation is approximate — only tracks sessions visible in the
  * current browser tab. Good enough for V1.
@@ -28,10 +32,7 @@ export function useSessionStatusMap({
     }
 
     for (const id of activeSessions) {
-      // Don't overwrite 'waiting' — permission requests take priority
-      if (!map.has(id)) {
-        map.set(id, 'running');
-      }
+      map.set(id, 'running');
     }
 
     return map;
