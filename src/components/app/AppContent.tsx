@@ -128,7 +128,9 @@ export default function AppContent() {
   const sessionStatus: SessionStatus | undefined = selectedSession
     ? statusMap.get(selectedSession.id)
     : undefined;
-  const waitingCount = processingSessions.size;
+  const selectedIsProcessing =
+    selectedSession?.id != null && processingSessions.has(selectedSession.id);
+  const waitingCount = processingSessions.size - (selectedIsProcessing ? 1 : 0);
   const onJumpToNextWaiting = useCallback(() => {
     const currentId = selectedSession?.id ?? null;
     for (const id of processingSessions) {

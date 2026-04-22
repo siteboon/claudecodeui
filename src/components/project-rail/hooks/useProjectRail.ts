@@ -17,12 +17,14 @@ type UseProjectRailArgs = {
   projects: Project[];
   statusMap: Map<string, SessionStatus>;
   additionalSessions: AdditionalSessionsByProject;
+  excludeSessionId?: string | null;
 };
 
 export function useProjectRail({
   projects,
   statusMap,
   additionalSessions,
+  excludeSessionId,
 }: UseProjectRailArgs): {
   railItems: ProjectRailItemData[];
   totalAttentionCount: number;
@@ -35,6 +37,7 @@ export function useProjectRail({
       let attn = 0;
 
       for (const s of sessions) {
+        if (excludeSessionId && s.id === excludeSessionId) continue;
         const st = statusMap.get(s.id);
         if (st === 'waiting' || st === 'error') attn++;
       }
@@ -54,5 +57,5 @@ export function useProjectRail({
     const filtered = items.filter((item) => item.sessionCount > 0);
 
     return { railItems: filtered, totalAttentionCount: totalAttention };
-  }, [projects, statusMap, additionalSessions]);
+  }, [projects, statusMap, additionalSessions, excludeSessionId]);
 }

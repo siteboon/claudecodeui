@@ -117,6 +117,7 @@ function Sidebar({
     projects,
     statusMap,
     additionalSessions,
+    excludeSessionId: selectedSession?.id ?? null,
   });
 
   const flatSessions = useFlatSessionList({
