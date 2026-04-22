@@ -13,6 +13,7 @@ const INITIAL_VISIBLE_MESSAGES = 100;
 type PendingViewSession = {
   sessionId: string | null;
   startedAt: number;
+  pendingMessage?: ChatMessage;
 };
 
 interface UseChatSessionStateArgs {
@@ -138,7 +139,11 @@ export function useChatSessionState({
   /*  Derive chatMessages from the store                              */
   /* ---------------------------------------------------------------- */
 
-  const activeSessionId = selectedSession?.id || currentSessionId || null;
+  // The session the user is viewing. Derive only from selectedSession so
+  // clicking "New Chat" clears the view on the same render. Falling back
+  // to currentSessionId leaves a one-frame ghost of the previous session
+  // because currentSessionId only clears in the effect below.
+  const activeSessionId = selectedSession?.id ?? null;
   const [pendingUserMessage, setPendingUserMessage] = useState<ChatMessage | null>(null);
 
   // Tell the store which session we're viewing so it only re-renders for this one
@@ -148,17 +153,27 @@ export function useChatSessionState({
     sessionStore.setActiveSession(activeSessionId);
   }
 
-  // When a real session ID arrives and we have a pending user message, flush it to the store
+  // When the viewed session changes, flush any outstanding pending user
+  // message into the store ONLY if we're now viewing the session the backend
+  // just created for it (tracked via pendingViewSessionRef). Otherwise keep
+  // pendingUserMessage in state — it may still resolve when session_created
+  // eventually navigates the user to the newly-made session. Display is gated
+  // below so it never leaks into an unrelated session's view.
   const prevActiveSessionRef = useRef<string | null>(null);
-  if (activeSessionId && activeSessionId !== prevActiveSessionRef.current && pendingUserMessage) {
-    const prov = (localStorage.getItem('selected-provider') as LLMProvider) || 'claude';
-    const normalized = chatMessageToNormalized(pendingUserMessage, activeSessionId, prov);
-    if (normalized) {
-      sessionStore.appendRealtime(activeSessionId, normalized);
+  if (activeSessionId !== prevActiveSessionRef.current) {
+    if (pendingUserMessage) {
+      const target = pendingViewSessionRef.current?.sessionId ?? null;
+      if (activeSessionId && target && activeSessionId === target) {
+        const prov = (localStorage.getItem('selected-provider') as LLMProvider) || 'claude';
+        const normalized = chatMessageToNormalized(pendingUserMessage, activeSessionId, prov);
+        if (normalized) {
+          sessionStore.appendRealtime(activeSessionId, normalized);
+        }
+        setPendingUserMessage(null);
+      }
     }
-    setPendingUserMessage(null);
+    prevActiveSessionRef.current = activeSessionId;
   }
-  prevActiveSessionRef.current = activeSessionId;
 
   const storeMessages = activeSessionId ? sessionStore.getMessages(activeSessionId) : [];
 
@@ -171,13 +186,21 @@ export function useChatSessionState({
 
   const chatMessages = useMemo(() => {
     const all = normalizedToChatMessages(storeMessages);
-    // Show pending user message when no session data exists yet (new session, pre-backend-response)
+    // Show the optimistic pending bubble only on the view it belongs to:
+    // either the pre-create "New Chat" view (both null) or the newly-created
+    // session once `session_created` has stamped its id onto pendingViewSessionRef.
+    // Prevents the bubble from leaking into an unrelated session the user
+    // clicked into before the backend responded.
     if (pendingUserMessage && all.length === 0) {
-      return [pendingUserMessage];
+      const pendingTarget = pendingViewSessionRef.current?.sessionId ?? null;
+      const matchesView = pendingTarget === null
+        ? activeSessionId === null
+        : activeSessionId === pendingTarget;
+      if (matchesView) return [pendingUserMessage];
     }
     if (viewHiddenCount > 0 && viewHiddenCount < all.length) return all.slice(0, -viewHiddenCount);
     return all;
-  }, [storeMessages, viewHiddenCount, pendingUserMessage]);
+  }, [storeMessages, viewHiddenCount, pendingUserMessage, activeSessionId, pendingViewSessionRef]);
 
   /* ---------------------------------------------------------------- */
   /*  addMessage / clearMessages / rewindMessages                     */
@@ -307,10 +330,19 @@ export function useChatSessionState({
   }, [chatMessages.length, isLoadingSessionMessages, scrollToBottom]);
 
   // Main session loading effect — store-based
+  // Clear the pending-view ref only if there's no in-flight send still
+  // awaiting `session_created`. An in-flight ref has `pendingMessage` set;
+  // zeroing it would orphan the optimistic user message (Bug B).
+  const clearPendingViewRefIfResolved = () => {
+    if (!pendingViewSessionRef.current?.pendingMessage) {
+      pendingViewSessionRef.current = null;
+    }
+  };
+
   useEffect(() => {
     if (!selectedSession || !selectedProject) {
       resetStreamingState();
-      pendingViewSessionRef.current = null;
+      clearPendingViewRefIfResolved();
       setClaudeStatus(null);
       setCanAbortSession(false);
       setIsLoading(false);
@@ -335,7 +367,7 @@ export function useChatSessionState({
     const sessionChanged = currentSessionId !== null && currentSessionId !== selectedSession.id;
     if (sessionChanged) {
       resetStreamingState();
-      pendingViewSessionRef.current = null;
+      clearPendingViewRefIfResolved();
       setClaudeStatus(null);
       setCanAbortSession(false);
     }
@@ -451,7 +483,10 @@ export function useChatSessionState({
   }, [selectedSession]);
 
   useEffect(() => {
-    if (selectedSession?.id) pendingViewSessionRef.current = null;
+    if (!selectedSession?.id) return;
+    if (!pendingViewSessionRef.current?.pendingMessage) {
+      pendingViewSessionRef.current = null;
+    }
   }, [pendingViewSessionRef, selectedSession?.id]);
 
   // Scroll to search target

@@ -28,6 +28,7 @@ import { type SlashCommand, useSlashCommands } from './useSlashCommands';
 type PendingViewSession = {
   sessionId: string | null;
   startedAt: number;
+  pendingMessage?: ChatMessage;
 };
 
 interface UseChatComposerStateArgs {
@@ -84,6 +85,32 @@ const createFakeSubmitEvent = () => {
 const isTemporarySessionId = (sessionId: string | null | undefined) =>
   Boolean(sessionId && sessionId.startsWith('new-session-'));
 
+// Messages live here between submit and the next mount. Consumed once, so a
+// page reload during a WS reconnect doesn't silently lose the user's message
+// even though the WS queue in WebSocketContext is in-memory only.
+const IN_FLIGHT_SEND_TTL_MS = 60_000;
+
+const readAndConsumeInFlightSend = (projectName: string): string | null => {
+  const key = `in_flight_send_${projectName}`;
+  const raw = safeLocalStorage.getItem(key);
+  if (!raw) return null;
+  safeLocalStorage.removeItem(key);
+  try {
+    const parsed = JSON.parse(raw);
+    if (
+      parsed &&
+      typeof parsed.content === 'string' &&
+      typeof parsed.timestamp === 'number' &&
+      Date.now() - parsed.timestamp < IN_FLIGHT_SEND_TTL_MS
+    ) {
+      return parsed.content;
+    }
+  } catch {
+    // corrupt entry, already removed
+  }
+  return null;
+};
+
 const getNotificationSessionSummary = (
   selectedSession: ProjectSession | null,
   fallbackInput: string,
@@ -136,7 +163,10 @@ export function useChatComposerState({
 }: UseChatComposerStateArgs) {
   const [input, setInput] = useState(() => {
     if (typeof window !== 'undefined' && selectedProject) {
-      return safeLocalStorage.getItem(`draft_input_${selectedProject.name}`) || '';
+      const draft = safeLocalStorage.getItem(`draft_input_${selectedProject.name}`) || '';
+      if (draft) return draft;
+      const recovered = readAndConsumeInFlightSend(selectedProject.name);
+      if (recovered) return recovered;
     }
     return '';
   });
@@ -146,7 +176,7 @@ export function useChatComposerState({
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [fileErrors, setFileErrors] = useState<Map<string, string>>(new Map());
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
-  const [thinkingMode, setThinkingMode] = useState('none');
+  const [thinkingMode, setThinkingMode] = useState('ultrathink');
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputHighlightRef = useRef<HTMLDivElement>(null);
@@ -635,7 +665,15 @@ export function useChatComposerState({
           // Reset stale pending IDs from previous interrupted runs before creating a new one.
           sessionStorage.removeItem('pendingSessionId');
         }
-        pendingViewSessionRef.current = { sessionId: null, startedAt: Date.now() };
+        // Attach the optimistic user message to the pending ref. The
+        // `session_created` handler flushes it into the new session's store
+        // as soon as the backend assigns a real id, so the message isn't
+        // lost if the user navigates away before the reply arrives.
+        pendingViewSessionRef.current = {
+          sessionId: null,
+          startedAt: Date.now(),
+          pendingMessage: userMessage,
+        };
       }
       onSessionActive?.(sessionToActivate);
       // User is replying — clear any "awaiting user reply" flag set by a prior turn's `complete`.
@@ -671,6 +709,19 @@ export function useChatComposerState({
       const toolsSettings = getToolsSettings();
       const resolvedProjectPath = selectedProject.fullPath || selectedProject.path || '';
       const sessionSummary = getNotificationSessionSummary(selectedSession, currentInput);
+
+      // Snapshot the outgoing text so it can be recovered on mount if the tab
+      // reloads before the WS flush completes. The WS queue in WebSocketContext
+      // handles the usual transient-disconnect case; this covers the page-reload
+      // race that the in-memory queue can't survive.
+      try {
+        safeLocalStorage.setItem(
+          `in_flight_send_${selectedProject.name}`,
+          JSON.stringify({ content: currentInput, timestamp: Date.now() }),
+        );
+      } catch {
+        // Quota or disabled storage — failure to snapshot is non-fatal.
+      }
 
       if (provider === 'cursor') {
         sendMessage({
@@ -748,7 +799,7 @@ export function useChatComposerState({
       setAttachedFiles([]);
       setFileErrors(new Map());
       setIsTextareaExpanded(false);
-      setThinkingMode('none');
+      setThinkingMode('ultrathink');
 
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
@@ -798,7 +849,10 @@ export function useChatComposerState({
     if (!selectedProject) {
       return;
     }
-    const savedInput = safeLocalStorage.getItem(`draft_input_${selectedProject.name}`) || '';
+    const savedInput =
+      safeLocalStorage.getItem(`draft_input_${selectedProject.name}`) ||
+      readAndConsumeInFlightSend(selectedProject.name) ||
+      '';
     setInput((previous) => {
       const next = previous === savedInput ? previous : savedInput;
       inputValueRef.current = next;
@@ -816,6 +870,19 @@ export function useChatComposerState({
       safeLocalStorage.removeItem(`draft_input_${selectedProject.name}`);
     }
   }, [input, selectedProject]);
+
+  // Clear the in-flight send snapshot once the backend has processed the turn
+  // (isLoading flips back to false after having been true). Otherwise the
+  // snapshot would keep restoring a successfully-delivered message on later
+  // mounts/project switches.
+  const wasLoadingRef = useRef(false);
+  useEffect(() => {
+    if (!selectedProject) return;
+    if (wasLoadingRef.current && !isLoading) {
+      safeLocalStorage.removeItem(`in_flight_send_${selectedProject.name}`);
+    }
+    wasLoadingRef.current = isLoading;
+  }, [isLoading, selectedProject?.name]);
 
   useEffect(() => {
     if (!textareaRef.current) {
