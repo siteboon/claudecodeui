@@ -2312,6 +2312,9 @@ async function startServer() {
         // Initialize authentication database
         await initializeDatabase();
 
+        // Ensure Gemini session store is loaded from disk before accepting requests
+        await sessionManager.ready;
+
         // Configure Web Push (VAPID keys)
         configureWebPush();
 
