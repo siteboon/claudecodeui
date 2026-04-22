@@ -13,8 +13,11 @@ const __dirname = getModuleDir(import.meta.url);
 // Resolving the app root once keeps every repo-level lookup below aligned across both layouts.
 const APP_ROOT = findAppRoot(__dirname);
 const installMode = fs.existsSync(path.join(APP_ROOT, '.git')) ? 'git' : 'npm';
-// BASE_PATH for subpath deployment (e.g. '/s/mealstead'). No trailing slash.
-const BASE_PATH = (process.env.BASE_PATH || '').replace(/\/+$/, '');
+// BASE_PATH for subpath deployment (e.g. '/s/mealstead'). Leading slash, no trailing slash.
+const BASE_PATH = (() => {
+    const trimmed = (process.env.BASE_PATH || '').trim().replace(/^\/+|\/+$/g, '');
+    return trimmed ? `/${trimmed}` : '';
+})();
 
 import { c } from './utils/colors.js';
 
