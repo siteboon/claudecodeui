@@ -148,3 +148,10 @@ tasks/
 /design-canvas.jsx
 /pluto/
 /uploads/
+
+# agent runtime artifacts
+.prose/
+
+# auth files
+AUTH.md
+AUTH.*.md
