@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { Plus } from 'lucide-react';
 import { ScrollArea } from '../../../../shared/view/ui';
 import type { FlatSession } from '../../../../hooks/useFlatSessionList';
 import { getSessionDate } from '../../utils/utils';
@@ -28,6 +29,7 @@ type FlatSessionListProps = {
   onSessionSelect: (session: FlatSession) => void;
   onSessionClose: (session: FlatSession) => void;
   activeProjectName: string;
+  onCreateSession: () => void;
   showHotkeys?: boolean;
 };
 
@@ -38,17 +40,31 @@ export default function FlatSessionList({
   onSessionSelect,
   onSessionClose,
   activeProjectName,
+  onCreateSession,
   showHotkeys = false,
 }: FlatSessionListProps) {
   const { t } = useTranslation('sidebar');
 
   if (sessions.length === 0) {
     return (
-      <div className="px-3 py-6 text-center text-xs leading-relaxed text-muted-foreground">
-        No sessions in <span className="text-foreground/80">@{activeProjectName}</span>{' '}
-        yet.
-        <br />
-        <span className="font-mono text-[10px]">Type above to create one.</span>
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-10 text-center">
+        <p className="text-sm text-muted-foreground">
+          No sessions in{' '}
+          <span className="text-foreground/80">@{activeProjectName}</span>
+        </p>
+        <button
+          type="button"
+          onClick={onCreateSession}
+          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors"
+          style={{
+            background: 'var(--project-accent)',
+            color: 'var(--project-accent-foreground)',
+          }}
+        >
+          <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+          New session
+        </button>
+        <span className="font-mono text-[10px] text-muted-foreground/60">⌘N</span>
       </div>
     );
   }

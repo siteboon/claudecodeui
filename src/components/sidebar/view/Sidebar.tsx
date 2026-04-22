@@ -212,6 +212,12 @@ function Sidebar({
         return;
       }
 
+      if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        handleCreateSession();
+        return;
+      }
+
       if (inInput) return;
 
       if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'w') {
@@ -310,6 +316,7 @@ function Sidebar({
             onSessionSelect={handleFlatSessionSelect}
             onSessionClose={handleFlatSessionClose}
             activeProjectName={activeProjectName}
+            onCreateSession={handleCreateSession}
           />
         )}
         <SidebarFooterV4
