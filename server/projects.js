@@ -799,8 +799,7 @@ async function parseJsonlSessions(filePath) {
                 messageCount: 0,
                 lastActivity: new Date(),
                 cwd: entry.cwd || '',
-                lastUserMessage: null,
-                lastAssistantMessage: null
+                firstUserMessage: null
               });
             }
 
@@ -816,11 +815,10 @@ async function parseJsonlSessions(filePath) {
               session.summary = entry.summary;
             }
 
-            // Track last user and assistant messages (skip system messages)
-            if (entry.message?.role === 'user' && entry.message?.content) {
+            // Capture the first real user message as a stable display fallback
+            if (session.firstUserMessage === null && entry.message?.role === 'user' && entry.message?.content) {
               const content = entry.message.content;
 
-              // Extract text from array format if needed
               let textContent = content;
               if (Array.isArray(content) && content.length > 0 && content[0].type === 'text') {
                 textContent = content[0].text;
@@ -835,42 +833,13 @@ async function parseJsonlSessions(filePath) {
                 textContent.startsWith('Caveat:') ||
                 textContent.startsWith('This session is being continued from a previous') ||
                 textContent.startsWith('Invalid API key') ||
-                textContent.includes('{"subtasks":') || // Filter Task Master prompts
-                textContent.includes('CRITICAL: You MUST respond with ONLY a JSON') || // Filter Task Master system prompts
-                textContent === 'Warmup' // Explicitly filter out "Warmup"
+                textContent.includes('{"subtasks":') ||
+                textContent.includes('CRITICAL: You MUST respond with ONLY a JSON') ||
+                textContent === 'Warmup'
               );
 
               if (typeof textContent === 'string' && textContent.length > 0 && !isSystemMessage) {
-                session.lastUserMessage = textContent;
-              }
-            } else if (entry.message?.role === 'assistant' && entry.message?.content) {
-              // Skip API error messages using the isApiErrorMessage flag
-              if (entry.isApiErrorMessage === true) {
-                // Skip this message entirely
-              } else {
-                // Track last assistant text message
-                let assistantText = null;
-
-                if (Array.isArray(entry.message.content)) {
-                  for (const part of entry.message.content) {
-                    if (part.type === 'text' && part.text) {
-                      assistantText = part.text;
-                    }
-                  }
-                } else if (typeof entry.message.content === 'string') {
-                  assistantText = entry.message.content;
-                }
-
-                // Additional filter for assistant messages with system content
-                const isSystemAssistantMessage = typeof assistantText === 'string' && (
-                  assistantText.startsWith('Invalid API key') ||
-                  assistantText.includes('{"subtasks":') ||
-                  assistantText.includes('CRITICAL: You MUST respond with ONLY a JSON')
-                );
-
-                if (assistantText && !isSystemAssistantMessage) {
-                  session.lastAssistantMessage = assistantText;
-                }
+                session.firstUserMessage = textContent;
               }
             }
 
@@ -882,17 +851,6 @@ async function parseJsonlSessions(filePath) {
           }
         } catch (parseError) {
           // Skip malformed lines silently
-        }
-      }
-    }
-
-    // After processing all entries, set final summary based on last message if no summary exists
-    for (const session of sessions.values()) {
-      if (session.summary === 'New Session') {
-        // Prefer last user message, fall back to last assistant message
-        const lastMessage = session.lastUserMessage || session.lastAssistantMessage;
-        if (lastMessage) {
-          session.summary = lastMessage.length > 50 ? lastMessage.substring(0, 50) + '...' : lastMessage;
         }
       }
     }

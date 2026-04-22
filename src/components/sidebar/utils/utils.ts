@@ -64,7 +64,8 @@ export const getSessionName = (session: SessionWithProvider, t: TFunction): stri
     return session.summary || session.name || t('projects.newSession');
   }
 
-  return session.summary || t('projects.newSession');
+  const claudeSummary = session.summary && session.summary !== 'New Session' ? session.summary : null;
+  return claudeSummary || session.firstUserMessage || t('projects.newSession');
 };
 
 export const getSessionTime = (session: SessionWithProvider): string => {

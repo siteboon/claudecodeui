@@ -8,6 +8,7 @@ export interface ProjectSession {
   id: string;
   title?: string;
   summary?: string;
+  firstUserMessage?: string;
   name?: string;
   createdAt?: string;
   created_at?: string;
