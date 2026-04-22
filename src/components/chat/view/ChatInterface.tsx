@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import PermissionContext from '../../../contexts/PermissionContext';
 import { QuickSettingsPanel } from '../../quick-settings-panel';
-import type { ChatInterfaceProps, Provider  } from '../types/types';
+import type { ChatInterfaceProps, ChatMessage, Provider  } from '../types/types';
 import type { LLMProvider } from '../../../types/app';
 import { useChatProviderState } from '../hooks/useChatProviderState';
 import { useChatSessionState } from '../hooks/useChatSessionState';
@@ -19,6 +19,11 @@ import ChatComposer from './subcomponents/ChatComposer';
 type PendingViewSession = {
   sessionId: string | null;
   startedAt: number;
+  // The user message that was optimistically rendered for this in-flight send.
+  // Attached here on submit so the session_created handler can flush it into
+  // the new session's store even if the user navigated to a different session
+  // before the backend replied.
+  pendingMessage?: ChatMessage;
 };
 
 function ChatInterface({

@@ -1,12 +1,13 @@
 import { useEffect, useRef } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
-import type { PendingPermissionRequest } from '../types/types';
+import type { ChatMessage, PendingPermissionRequest } from '../types/types';
 import type { Project, ProjectSession, LLMProvider } from '../../../types/app';
 import type { SessionStore, NormalizedMessage } from '../../../stores/useSessionStore';
 
 type PendingViewSession = {
   sessionId: string | null;
   startedAt: number;
+  pendingMessage?: ChatMessage;
 };
 
 type LatestChatMessage = {
@@ -234,11 +235,41 @@ export function useChatRealtimeHandlers({
         const newSessionId = msg.newSessionId;
         if (!newSessionId) break;
 
+        // Resolve the in-flight new-session ref and — critically — flush the
+        // optimistically-rendered user message into the new session's store,
+        // regardless of which session the user is currently viewing. Without
+        // this, navigating away from a new chat before `session_created`
+        // arrived left the composer-submitted message stranded (see Bug B
+        // in useChatSessionState).
+        const pending = pendingViewSessionRef.current;
+        if (pending && !pending.sessionId) {
+          pending.sessionId = newSessionId;
+          const pendingMsg = pending.pendingMessage;
+          if (pendingMsg) {
+            pending.pendingMessage = undefined;
+            const tsSource = pendingMsg.timestamp;
+            const timestamp = tsSource instanceof Date
+              ? tsSource.toISOString()
+              : typeof tsSource === 'number'
+                ? new Date(tsSource).toISOString()
+                : typeof tsSource === 'string' && tsSource
+                  ? tsSource
+                  : new Date().toISOString();
+            const normalized = {
+              id: `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+              sessionId: newSessionId,
+              timestamp,
+              provider,
+              kind: 'text',
+              role: 'user',
+              content: pendingMsg.content || '',
+            } as NormalizedMessage;
+            sessionStore.appendRealtime(newSessionId, normalized);
+          }
+        }
+
         if (!currentSessionId || currentSessionId.startsWith('new-session-')) {
           sessionStorage.setItem('pendingSessionId', newSessionId);
-          if (pendingViewSessionRef.current && !pendingViewSessionRef.current.sessionId) {
-            pendingViewSessionRef.current.sessionId = newSessionId;
-          }
           setCurrentSessionId(newSessionId);
           onReplaceTemporarySession?.(newSessionId);
           setPendingPermissionRequests((prev) =>
