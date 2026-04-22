@@ -1,11 +1,15 @@
-import { RefreshCw, Settings } from 'lucide-react';
+import { Keyboard, RefreshCw, Settings } from 'lucide-react';
+
 import { Tooltip } from '../../../../shared/view/ui';
+
+import { MOD_KEY } from './shortcuts';
 
 type SidebarFooterV4Props = {
   userName: string;
   sessionCount: number;
   maxSessions?: number;
   onShowSettings: () => void;
+  onShowShortcuts: () => void;
   onRefresh: () => void;
   isRefreshing: boolean;
 };
@@ -15,6 +19,7 @@ export default function SidebarFooterV4({
   sessionCount,
   maxSessions,
   onShowSettings,
+  onShowShortcuts,
   onRefresh,
   isRefreshing,
 }: SidebarFooterV4Props) {
@@ -48,6 +53,15 @@ export default function SidebarFooterV4({
           <RefreshCw
             className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`}
           />
+        </button>
+      </Tooltip>
+      <Tooltip content={`Keyboard shortcuts (${MOD_KEY}K for palette)`} position="top">
+        <button
+          onClick={onShowShortcuts}
+          className="flex rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
+          aria-label="Keyboard shortcuts"
+        >
+          <Keyboard className="h-3.5 w-3.5" />
         </button>
       </Tooltip>
       <Tooltip content="Settings" position="top">

@@ -64,9 +64,11 @@ const CommandBar = forwardRef<CommandBarHandle, CommandBarProps>(function Comman
               borderColor: focused ? 'var(--project-accent)' : 'hsl(var(--border))',
             }}
           />
-          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded border border-border bg-muted/60 px-1 font-mono text-[10px] text-muted-foreground">
-            {showCreateHint ? '⏎' : '⌘K'}
-          </span>
+          {showCreateHint && (
+            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded border border-border bg-muted/60 px-1 font-mono text-[10px] text-muted-foreground">
+              ⏎
+            </span>
+          )}
         </div>
         <button
           type="button"

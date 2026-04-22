@@ -18,6 +18,8 @@ import ProjectRail from '../../project-rail/view/ProjectRail';
 import SidebarCollapsed from './subcomponents/SidebarCollapsed';
 import SidebarModals from './subcomponents/SidebarModals';
 import CommandBar, { type CommandBarHandle } from './subcomponents/CommandBar';
+import CommandPalette from './subcomponents/CommandPalette';
+import ShortcutsDialog from './subcomponents/ShortcutsDialog';
 import FlatSessionList from './subcomponents/FlatSessionList';
 import SidebarFooterV4 from './subcomponents/SidebarFooterV4';
 import MobileProjectFilter from './subcomponents/MobileProjectFilter';
@@ -57,6 +59,8 @@ function Sidebar({
   const { setCurrentProject } = useTaskMaster() as TaskMasterSidebarContext;
 
   const [activeProjectFilter, setActiveProjectFilter] = useState<string | null>(null);
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const { getColor, setColor } = useProjectColors();
   const { toggleArchived, isArchived } = useArchivedSessions();
   const { toggleArchivedProject, isProjectArchived } = useArchivedProjects();
@@ -197,7 +201,7 @@ function Sidebar({
 
       if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        commandBarRef.current?.focus();
+        setShowCommandPalette((prev) => !prev);
         return;
       }
 
@@ -330,6 +334,7 @@ function Sidebar({
           userName={userName}
           sessionCount={flatSessions.length}
           onShowSettings={onShowSettings}
+          onShowShortcuts={() => setShowShortcuts(true)}
           onRefresh={() => {
             void refreshProjects();
           }}
@@ -341,6 +346,32 @@ function Sidebar({
 
   return (
     <>
+      <CommandPalette
+        open={showCommandPalette}
+        onOpenChange={setShowCommandPalette}
+        sessions={flatSessions}
+        railItems={railItems}
+        activeProjectName={activeProjectName}
+        hasSelectedSession={!!selectedSession}
+        hasActiveFilter={activeProjectFilter !== null}
+        onSelectSession={handleFlatSessionSelect}
+        onSelectProject={setActiveProjectFilter}
+        onNewSession={handleCreateSession}
+        onArchiveActiveSession={() => {
+          if (selectedSession) toggleArchived(selectedSession.id);
+        }}
+        onClearProjectFilter={() => setActiveProjectFilter(null)}
+        onRefresh={() => {
+          void refreshProjects();
+        }}
+        onShowSettings={onShowSettings}
+        onShowShortcuts={() => {
+          setShowCommandPalette(false);
+          setShowShortcuts(true);
+        }}
+      />
+      <ShortcutsDialog open={showShortcuts} onOpenChange={setShowShortcuts} />
+
       <SidebarModals
         projects={projects}
         showSettings={showSettings}
