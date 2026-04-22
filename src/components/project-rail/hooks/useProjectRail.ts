@@ -30,6 +30,10 @@ export function useProjectRail({
   totalAttentionCount: number;
 } {
   return useMemo(() => {
+    // Dedupe attention counts across projects — the backend groups sessions
+    // by .jsonl cwd, so overlapping project paths (repo + worktree, etc.)
+    // can surface the same session id in multiple buckets.
+    const countedForAttention = new Set<string>();
     let totalAttention = 0;
 
     const items: ProjectRailItemData[] = projects.map((project) => {
@@ -38,8 +42,12 @@ export function useProjectRail({
 
       for (const s of sessions) {
         if (excludeSessionId && s.id === excludeSessionId) continue;
+        if (countedForAttention.has(s.id)) continue;
         const st = statusMap.get(s.id);
-        if (st === 'waiting' || st === 'error') attn++;
+        if (st === 'waiting' || st === 'error') {
+          countedForAttention.add(s.id);
+          attn++;
+        }
       }
 
       totalAttention += attn;

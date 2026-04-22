@@ -56,6 +56,7 @@ export function useFlatSessionList({
 }: UseFlatSessionListArgs): FlatSession[] {
   return useMemo(() => {
     const flat: FlatSession[] = [];
+    const seenIds = new Set<string>();
     const normalizedSearch = searchFilter.trim().toLowerCase();
 
     const filteredProjects = activeProjectFilter
@@ -68,6 +69,13 @@ export function useFlatSessionList({
       const sessions = getAllSessions(project, additionalSessions);
 
       for (const session of sessions) {
+        // Sessions can appear under multiple project buckets when the backend
+        // groups by cwd and two project entries resolve to overlapping paths
+        // (e.g. a repo and its worktree). Keep only the first occurrence so
+        // clicking one row doesn't make its duplicate pop up from another
+        // project via the "selected session stays visible" rule.
+        if (seenIds.has(session.id)) continue;
+
         const sessionDate = getSessionDate(session);
         const status = deriveStatus(session.id, statusMap, sessionDate);
         const rank = sortRank(status);
@@ -87,6 +95,7 @@ export function useFlatSessionList({
           continue;
         }
 
+        seenIds.add(session.id);
         flat.push({
           ...session,
           __projectName: project.name,
