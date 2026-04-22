@@ -52,6 +52,14 @@ type ChatWebSocketDependencies = {
   getActiveCursorSessions: () => unknown;
   getActiveCodexSessions: () => unknown;
   getActiveGeminiSessions: () => unknown;
+  // Long-lived Claude CLI process path (opt-in via CLAUDE_STREAM_MODE=1).
+  // Optional so unit tests / older wiring without these stubs keep working.
+  claudeStreamMode?: boolean;
+  queryClaudeStream?: (command: string, options: unknown, writer: WebSocketWriter) => Promise<unknown>;
+  abortClaudeStreamSession?: (sessionId: string, userId?: string | number | null) => Promise<boolean>;
+  isClaudeStreamSessionActive?: (sessionId: string, userId?: string | number | null) => boolean;
+  getActiveClaudeStreamSessions?: (userId?: string | number | null) => unknown;
+  reconnectStreamSessionWriter?: (sessionId: string, ws: WebSocket, userId?: string | number | null) => boolean;
 };
 
 /**
@@ -115,7 +123,22 @@ export function handleChatConnection(
       }
 
       if (messageType === 'claude-command') {
-        await dependencies.queryClaudeSDK(data.command ?? '', data.options, writer);
+        // Both handlers read `cwd` from options; fall back to `projectPath`
+        // so the Claude subprocess starts in the user's project dir and not
+        // in the server process cwd — the latter is especially risky paired
+        // with skip-permissions. Use truthy check (`||` not `??`) so an
+        // empty-string `cwd` from a buggy client still falls through.
+        const optionsRecord = (data.options ?? {}) as AnyRecord;
+        const cwdCandidate =
+          (typeof optionsRecord.cwd === 'string' && optionsRecord.cwd) ||
+          (typeof optionsRecord.projectPath === 'string' && optionsRecord.projectPath) ||
+          undefined;
+        const claudeOptions = { ...optionsRecord, cwd: cwdCandidate };
+        if (dependencies.claudeStreamMode && dependencies.queryClaudeStream) {
+          await dependencies.queryClaudeStream(data.command ?? '', claudeOptions, writer);
+        } else {
+          await dependencies.queryClaudeSDK(data.command ?? '', claudeOptions, writer);
+        }
         return;
       }
 
@@ -158,6 +181,12 @@ export function handleChatConnection(
           success = dependencies.abortCodexSession(sessionId);
         } else if (provider === 'gemini') {
           success = dependencies.abortGeminiSession(sessionId);
+        } else if (
+          dependencies.claudeStreamMode &&
+          dependencies.isClaudeStreamSessionActive?.(sessionId, writer.userId) &&
+          dependencies.abortClaudeStreamSession
+        ) {
+          success = await dependencies.abortClaudeStreamSession(sessionId, writer.userId);
         } else {
           success = await dependencies.abortClaudeSDKSession(sessionId);
         }
@@ -214,6 +243,12 @@ export function handleChatConnection(
           isActive = dependencies.isCodexSessionActive(sessionId);
         } else if (provider === 'gemini') {
           isActive = dependencies.isGeminiSessionActive(sessionId);
+        } else if (
+          dependencies.claudeStreamMode &&
+          dependencies.isClaudeStreamSessionActive?.(sessionId, writer.userId)
+        ) {
+          isActive = true;
+          dependencies.reconnectStreamSessionWriter?.(sessionId, ws, writer.userId);
         } else {
           isActive = dependencies.isClaudeSDKSessionActive(sessionId);
           if (isActive) {
@@ -244,10 +279,23 @@ export function handleChatConnection(
       }
 
       if (messageType === 'get-active-sessions') {
+        // Union assumes SDK and stream layers both key sessions by the
+        // CLI-assigned `session_id` (the stream layer strips its pre-init
+        // `pending:*` keys in getActiveClaudeStreamSessions). If either
+        // ever emits provider-internal IDs the dedupe breaks — normalize
+        // the two shapes before merging.
+        const sdkSessions = dependencies.getActiveClaudeSDKSessions();
+        let claudeSessions: unknown = sdkSessions;
+        if (dependencies.claudeStreamMode && dependencies.getActiveClaudeStreamSessions) {
+          const streamSessions = dependencies.getActiveClaudeStreamSessions(writer.userId);
+          if (Array.isArray(sdkSessions) && Array.isArray(streamSessions)) {
+            claudeSessions = [...new Set([...sdkSessions, ...streamSessions])];
+          }
+        }
         writer.send({
           type: 'active-sessions',
           sessions: {
-            claude: dependencies.getActiveClaudeSDKSessions(),
+            claude: claudeSessions,
             cursor: dependencies.getActiveCursorSessions(),
             codex: dependencies.getActiveCodexSessions(),
             gemini: dependencies.getActiveGeminiSessions(),
