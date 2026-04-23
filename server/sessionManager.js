@@ -8,6 +8,7 @@ class SessionManager {
     this.sessions = new Map();
     this.maxSessions = 100;
     this.sessionsDir = path.join(os.homedir(), '.gemini', 'sessions');
+    this.saveQueues = new Map(); // Track active write operations per session
     this.ready = this.init();
   }
 
@@ -34,10 +35,13 @@ class SessionManager {
       lastActivity: new Date()
     };
 
-    // Evict oldest session from memory if we exceed limit
+    // Evict oldest session from memory if we exceed limit (LRU - Issue #7)
     if (this.sessions.size >= this.maxSessions) {
-      const oldestKey = this.sessions.keys().next().value;
-      if (oldestKey) this.sessions.delete(oldestKey);
+      const oldestSession = Array.from(this.sessions.values())
+        .sort((a, b) => new Date(a.lastActivity) - new Date(b.lastActivity))[0];
+      if (oldestSession) {
+        this.sessions.delete(oldestSession.id);
+      }
     }
 
     this.sessions.set(sessionId, session);
@@ -142,17 +146,32 @@ class SessionManager {
     return path.join(this.sessionsDir, `${safeId}.json`);
   }
 
-  // Save session to disk
+  // Save session to disk (Issue #5 - added queuing to prevent concurrent writes)
   async saveSession(sessionId) {
     const session = this.sessions.get(sessionId);
     if (!session) return;
 
-    try {
-      const filePath = this._safeFilePath(sessionId);
-      await fs.writeFile(filePath, JSON.stringify(session, null, 2));
-    } catch (error) {
-      // console.error('Error saving session:', error);
-    }
+    // Get current queue for this session or create new one
+    let currentQueue = this.saveQueues.get(sessionId) || Promise.resolve();
+
+    // Chain the new write operation
+    const nextQueue = currentQueue.then(async () => {
+      try {
+        const filePath = this._safeFilePath(sessionId);
+        const data = JSON.stringify(session, null, 2);
+        await fs.writeFile(filePath, data);
+      } catch (error) {
+        // console.error('Error saving session:', error);
+      }
+    }).finally(() => {
+      // If no other operations are pending, remove the queue reference
+      if (this.saveQueues.get(sessionId) === nextQueue) {
+        this.saveQueues.delete(sessionId);
+      }
+    });
+
+    this.saveQueues.set(sessionId, nextQueue);
+    return nextQueue;
   }
 
   // Load sessions from disk
@@ -181,10 +200,16 @@ class SessionManager {
         }
       }
 
-      // Enforce eviction after loading to prevent massive memory usage
-      while (this.sessions.size > this.maxSessions) {
-        const oldestKey = this.sessions.keys().next().value;
-        if (oldestKey) this.sessions.delete(oldestKey);
+      // Enforce eviction after loading to prevent massive memory usage (LRU - Issue #8)
+      if (this.sessions.size > this.maxSessions) {
+        const sortedSessions = Array.from(this.sessions.values())
+          .sort((a, b) => new Date(b.lastActivity) - new Date(a.lastActivity));
+
+        const keptSessions = sortedSessions.slice(0, this.maxSessions); // Take the newest ones
+        this.sessions.clear();
+        for (const s of keptSessions) {
+          this.sessions.set(s.id, s);
+        }
       }
     } catch (error) {
       // console.error('Error loading sessions:', error);
