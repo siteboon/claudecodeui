@@ -7,6 +7,7 @@ All notable changes to CloudCLI UI will be documented in this file.
 ### Bug Fixes
 
 * Claude auth status now treats `ANTHROPIC_AUTH_TOKEN` from the server process environment as an authenticated session
+* add `npm run test:provider-auth` so the Claude auth regression test always rebuilds `dist-server` before execution
 
 
 ## [1.30.0](https://github.com/siteboon/claudecodeui/compare/v1.29.5...v1.30.0) (2026-04-21)

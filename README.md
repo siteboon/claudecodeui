@@ -94,6 +94,7 @@ cloudcli
 Open `http://localhost:3001` — all your existing sessions are discovered automatically.
 
 Claude auth status detection also recognizes `ANTHROPIC_AUTH_TOKEN` from the server process environment, alongside `~/.claude/settings.json` and `~/.claude/.credentials.json`.
+The regression check for this path is available via `npm run test:provider-auth`, which rebuilds the server artifact before running the auth status test.
 
 Visit the **[documentation →](https://cloudcli.ai/docs)** for full configuration options, PM2, remote server setup and more.
 

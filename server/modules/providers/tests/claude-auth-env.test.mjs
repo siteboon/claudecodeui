@@ -6,6 +6,8 @@ import test from 'node:test';
 
 import { ClaudeProviderAuth } from '../../../../dist-server/server/modules/providers/list/claude/claude-auth.provider.js';
 
+// This test validates the compiled server artifact, so it should be run via
+// `npm run test:provider-auth`, which rebuilds dist-server first.
 test('ClaudeProviderAuth treats ANTHROPIC_AUTH_TOKEN in process env as authenticated', async () => {
   const tempHome = await fs.mkdtemp(path.join(os.tmpdir(), 'claude-auth-env-'));
   const previousHome = process.env.HOME;
