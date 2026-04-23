@@ -84,6 +84,7 @@ function ChatInterface({
     pendingPermissionRequests,
     setPendingPermissionRequests,
     cyclePermissionMode,
+    selectPermissionMode,
   } = useChatProviderState({
     selectedSession,
   });
@@ -371,7 +372,7 @@ function ChatInterface({
           onAbortSession={handleAbortSession}
           provider={provider}
           permissionMode={permissionMode}
-          onModeSwitch={cyclePermissionMode}
+          onPermissionModeSelect={selectPermissionMode}
           thinkingMode={thinkingMode}
           setThinkingMode={setThinkingMode}
           tokenBudget={tokenBudget}

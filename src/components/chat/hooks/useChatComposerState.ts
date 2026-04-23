@@ -11,7 +11,7 @@ import type {
 } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { authenticatedFetch } from '../../../utils/api';
-import { thinkingModes } from '../constants/thinkingModes';
+import { DEFAULT_THINKING_MODE_ID, getEffortForModeId } from '../constants/thinkingModes';
 import { grantClaudeToolPermission } from '../utils/chatPermissions';
 import { safeLocalStorage } from '../utils/chatStorage';
 import type {
@@ -178,7 +178,7 @@ export function useChatComposerState({
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [fileErrors, setFileErrors] = useState<Map<string, string>>(new Map());
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
-  const [thinkingMode, setThinkingMode] = useState('ultrathink');
+  const [thinkingMode, setThinkingMode] = useState(DEFAULT_THINKING_MODE_ID);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputHighlightRef = useRef<HTMLDivElement>(null);
@@ -565,11 +565,8 @@ export function useChatComposerState({
         }
       }
 
-      let messageContent = currentInput;
-      const selectedThinkingMode = thinkingModes.find((mode: { id: string; prefix?: string }) => mode.id === thinkingMode);
-      if (selectedThinkingMode && selectedThinkingMode.prefix) {
-        messageContent = `${selectedThinkingMode.prefix}: ${currentInput}`;
-      }
+      const messageContent = currentInput;
+      const selectedEffort = getEffortForModeId(thinkingMode);
 
       let uploadedImages: unknown[] = [];
       if (attachedImages.length > 0) {
@@ -795,6 +792,7 @@ export function useChatComposerState({
             sessionSummary,
             images: uploadedImages,
             fileData: uploadedFileData,
+            ...(selectedEffort ? { effort: selectedEffort } : {}),
           },
         });
       }
@@ -808,7 +806,6 @@ export function useChatComposerState({
       setAttachedFiles([]);
       setFileErrors(new Map());
       setIsTextareaExpanded(false);
-      setThinkingMode('ultrathink');
 
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';

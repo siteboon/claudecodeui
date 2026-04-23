@@ -9,7 +9,7 @@ interface UseChatProviderStateArgs {
 }
 
 export function useChatProviderState({ selectedSession }: UseChatProviderStateArgs) {
-  const [permissionMode, setPermissionMode] = useState<PermissionMode>('default');
+  const [permissionMode, setPermissionMode] = useState<PermissionMode>('bypassPermissions');
   const [pendingPermissionRequests, setPendingPermissionRequests] = useState<PendingPermissionRequest[]>([]);
   const [provider, setProvider] = useState<LLMProvider>(() => {
     return (localStorage.getItem('selected-provider') as LLMProvider) || 'claude';
@@ -35,7 +35,11 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
     }
 
     const savedMode = localStorage.getItem(`permissionMode-${selectedSession.id}`);
-    setPermissionMode((savedMode as PermissionMode) || 'default');
+    const validModes: PermissionMode[] = ['bypassPermissions', 'plan'];
+    const nextMode = validModes.includes(savedMode as PermissionMode)
+      ? (savedMode as PermissionMode)
+      : 'bypassPermissions';
+    setPermissionMode(nextMode);
   }, [selectedSession?.id]);
 
   useEffect(() => {
@@ -46,6 +50,16 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
     setProvider(selectedSession.__provider);
     localStorage.setItem('selected-provider', selectedSession.__provider);
   }, [provider, selectedSession]);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const next = (event as CustomEvent<LLMProvider>).detail;
+      if (!next || selectedSession) return;
+      setProvider((prev) => (prev === next ? prev : next));
+    };
+    window.addEventListener('selected-provider-changed', handler as EventListener);
+    return () => window.removeEventListener('selected-provider-changed', handler as EventListener);
+  }, [selectedSession]);
 
   useEffect(() => {
     if (lastProviderRef.current === provider) {
@@ -85,10 +99,11 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
 
   const cyclePermissionMode = useCallback(() => {
     const modes: PermissionMode[] =
-      provider === 'codex'
-        ? ['default', 'acceptEdits', 'bypassPermissions']
-        : ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
+      provider === 'codex' ? ['bypassPermissions'] : ['bypassPermissions', 'plan'];
 
+    if (modes.length <= 1) {
+      return;
+    }
     const currentIndex = modes.indexOf(permissionMode);
     const nextIndex = (currentIndex + 1) % modes.length;
     const nextMode = modes[nextIndex];
@@ -98,6 +113,16 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
       localStorage.setItem(`permissionMode-${selectedSession.id}`, nextMode);
     }
   }, [permissionMode, provider, selectedSession?.id]);
+
+  const selectPermissionMode = useCallback(
+    (mode: PermissionMode) => {
+      setPermissionMode(mode);
+      if (selectedSession?.id) {
+        localStorage.setItem(`permissionMode-${selectedSession.id}`, mode);
+      }
+    },
+    [selectedSession?.id],
+  );
 
   return {
     provider,
@@ -112,6 +137,7 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
     setGeminiModel,
     permissionMode,
     setPermissionMode,
+    selectPermissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
     cyclePermissionMode,
