@@ -1,0 +1,295 @@
+/**
+ * Auto-naming worker for Claude sessions.
+ *
+ * Watches `~/.claude/projects/**\/*.jsonl`, waits 60s of idle per file, then
+ * asks Haiku for a 3-5 word title and stores the result in the existing
+ * `session_names.custom_name` column (provider='claude'). Backfills any
+ * already-present JSONL on boot.
+ *
+ * Self-starts on import so server/index.js only needs a bare `import` line.
+ * Exports `start` / `stop` for tests and orderly shutdown.
+ */
+
+import fsp from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
+
+import { sessionNamesDb } from '../database/db.js';
+import { TITLE_PROMPT, extractFirstUserTexts, normalizeTitle } from './title-prompt.js';
+
+const PROJECTS_DIR = path.join(os.homedir(), '.claude', 'projects');
+const DEBOUNCE_MS = 60 * 1000;
+const MAX_CONTENT_CHARS = 1500;
+const CALL_TIMEOUT_MS = 30 * 1000;
+const TITLE_MODEL = 'claude-haiku-4-5';
+const PROVIDER = 'claude';
+const DEFAULT_TITLE = 'Untitled';
+
+const state = {
+  started: false,
+  watcher: null,
+  debounceTimers: new Map(),
+  queue: [],
+  queued: new Set(),
+  processing: false,
+  sdkLoader: null,
+};
+
+function loadSdk() {
+  if (!state.sdkLoader) {
+    state.sdkLoader = import('@anthropic-ai/claude-agent-sdk')
+      .then((mod) => mod.query)
+      .catch((err) => {
+        console.warn('[session-titler] Failed to load Claude Agent SDK:', err?.message || err);
+        return null;
+      });
+  }
+  return state.sdkLoader;
+}
+
+function sessionIdFromPath(filePath) {
+  return path.basename(filePath, '.jsonl');
+}
+
+async function buildTitlingInput(filePath) {
+  let content;
+  try {
+    content = await fsp.readFile(filePath, 'utf8');
+  } catch (err) {
+    console.warn(`[session-titler] Failed to read ${filePath}: ${err.message}`);
+    return null;
+  }
+  const lines = content.split('\n');
+  const texts = extractFirstUserTexts(lines, 2);
+  if (!texts.length) return null;
+  return texts.join('\n\n').slice(0, MAX_CONTENT_CHARS);
+}
+
+async function callHaiku(prompt) {
+  const query = await loadSdk();
+  if (!query) return null;
+
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), CALL_TIMEOUT_MS);
+
+  try {
+    const instance = query({
+      prompt,
+      options: {
+        model: TITLE_MODEL,
+        systemPrompt: TITLE_PROMPT,
+        maxTurns: 1,
+        tools: [],
+        permissionMode: 'dontAsk',
+        includePartialMessages: false,
+        abortController: abort,
+      },
+    });
+
+    for await (const msg of instance) {
+      if (msg?.type === 'result' && msg.subtype === 'success') {
+        return typeof msg.result === 'string' ? msg.result : null;
+      }
+      if (msg?.type === 'result' && msg.subtype !== 'success') {
+        return null;
+      }
+    }
+    return null;
+  } catch (err) {
+    if (err?.name !== 'AbortError') {
+      console.warn('[session-titler] Haiku call failed:', err?.message || err);
+    }
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Appends a trailing newline to the JSONL after a successful title write. The
+ * existing projects watcher in server/index.js treats this as a change event
+ * and re-broadcasts `projects_updated`, which makes the new custom_name flow
+ * through to the sidebar live. JSONL readers skip blank lines so this is a
+ * semantic no-op.
+ */
+async function signalUpdate(filePath) {
+  try {
+    await fsp.appendFile(filePath, '\n');
+  } catch (err) {
+    console.warn(`[session-titler] Failed to signal update for ${filePath}: ${err.message}`);
+  }
+}
+
+async function processTitle(filePath) {
+  const sessionId = sessionIdFromPath(filePath);
+  try {
+    if (sessionNamesDb.getName(sessionId, PROVIDER)) return;
+  } catch (err) {
+    console.warn(`[session-titler] DB lookup failed for ${sessionId}: ${err.message}`);
+    return;
+  }
+
+  const input = await buildTitlingInput(filePath);
+  if (!input) return;
+
+  const raw = await callHaiku(input);
+  const title = normalizeTitle(raw) || DEFAULT_TITLE;
+
+  try {
+    sessionNamesDb.setName(sessionId, PROVIDER, title);
+  } catch (err) {
+    console.warn(`[session-titler] Failed to save title for ${sessionId}: ${err.message}`);
+    return;
+  }
+
+  await signalUpdate(filePath);
+}
+
+async function runQueue() {
+  if (state.processing) return;
+  state.processing = true;
+  try {
+    while (state.queue.length) {
+      const filePath = state.queue.shift();
+      state.queued.delete(filePath);
+      try {
+        await processTitle(filePath);
+      } catch (err) {
+        console.warn(`[session-titler] processTitle threw for ${filePath}: ${err.message}`);
+      }
+    }
+  } finally {
+    state.processing = false;
+  }
+}
+
+function enqueue(filePath) {
+  if (state.queued.has(filePath)) return;
+  state.queued.add(filePath);
+  state.queue.push(filePath);
+  runQueue().catch((err) => console.warn('[session-titler] Queue error:', err.message));
+}
+
+function scheduleTitle(filePath) {
+  const existing = state.debounceTimers.get(filePath);
+  if (existing) clearTimeout(existing);
+  const timer = setTimeout(() => {
+    state.debounceTimers.delete(filePath);
+    enqueue(filePath);
+  }, DEBOUNCE_MS);
+  state.debounceTimers.set(filePath, timer);
+}
+
+async function scanExistingFiles() {
+  let entries;
+  try {
+    entries = await fsp.readdir(PROJECTS_DIR, { withFileTypes: true });
+  } catch (err) {
+    if (err.code !== 'ENOENT') {
+      console.warn('[session-titler] Scan failed:', err.message);
+    }
+    return;
+  }
+
+  let enqueued = 0;
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const slugDir = path.join(PROJECTS_DIR, entry.name);
+    let files;
+    try {
+      files = await fsp.readdir(slugDir);
+    } catch {
+      continue;
+    }
+    for (const f of files) {
+      if (!f.endsWith('.jsonl')) continue;
+      const sessionId = f.replace(/\.jsonl$/, '');
+      try {
+        if (sessionNamesDb.getName(sessionId, PROVIDER)) continue;
+      } catch {
+        continue;
+      }
+      enqueue(path.join(slugDir, f));
+      enqueued++;
+    }
+  }
+
+  if (enqueued) {
+    console.log(`[session-titler] Backfilling ${enqueued} session title(s)`);
+  }
+}
+
+async function setupWatcher() {
+  let chokidarModule;
+  try {
+    chokidarModule = await import('chokidar');
+  } catch (err) {
+    console.warn('[session-titler] chokidar unavailable:', err.message);
+    return;
+  }
+
+  try {
+    state.watcher = chokidarModule.default.watch(PROJECTS_DIR, {
+      ignored: ['**/*.tmp', '**/*.swp', '**/.DS_Store'],
+      persistent: true,
+      ignoreInitial: true,
+      followSymlinks: false,
+      depth: 10,
+    });
+
+    const onEvent = (filePath) => {
+      if (!filePath.endsWith('.jsonl')) return;
+      scheduleTitle(filePath);
+    };
+
+    state.watcher
+      .on('add', onEvent)
+      .on('change', onEvent)
+      .on('error', (err) => console.warn('[session-titler] Watcher error:', err.message));
+  } catch (err) {
+    console.warn('[session-titler] Failed to set up watcher:', err.message);
+  }
+}
+
+export async function start() {
+  if (state.started) return;
+  state.started = true;
+  try {
+    await fsp.mkdir(PROJECTS_DIR, { recursive: true });
+  } catch (err) {
+    console.warn('[session-titler] Failed to ensure projects dir:', err.message);
+    return;
+  }
+  await setupWatcher();
+  scanExistingFiles().catch((err) =>
+    console.warn('[session-titler] Initial scan failed:', err.message),
+  );
+}
+
+export async function stop() {
+  if (!state.started) return;
+  state.started = false;
+  if (state.watcher) {
+    try {
+      await state.watcher.close();
+    } catch {
+      /* ignore */
+    }
+    state.watcher = null;
+  }
+  for (const timer of state.debounceTimers.values()) clearTimeout(timer);
+  state.debounceTimers.clear();
+  state.queue.length = 0;
+  state.queued.clear();
+}
+
+start().catch((err) => console.warn('[session-titler] Start failed:', err?.message || err));
+
+export const __internal = {
+  state,
+  buildTitlingInput,
+  callHaiku,
+  processTitle,
+  enqueue,
+  scheduleTitle,
+};
