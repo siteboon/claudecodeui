@@ -23,7 +23,6 @@ interface UseChatSessionStateArgs {
   sendMessage: (message: unknown) => void;
   autoScrollToBottom?: boolean;
   externalMessageUpdate?: number;
-  processingSessions?: Set<string>;
   resetStreamingState: () => void;
   pendingViewSessionRef: MutableRefObject<PendingViewSession | null>;
   sessionStore: SessionStore;
@@ -96,7 +95,6 @@ export function useChatSessionState({
   sendMessage,
   autoScrollToBottom,
   externalMessageUpdate,
-  processingSessions,
   resetStreamingState,
   pendingViewSessionRef,
   sessionStore,
@@ -635,16 +633,6 @@ export function useChatSessionState({
     container.addEventListener('scroll', handleScroll);
     return () => container.removeEventListener('scroll', handleScroll);
   }, [handleScroll]);
-
-  useEffect(() => {
-    const activeViewSessionId = selectedSession?.id || currentSessionId;
-    if (!activeViewSessionId || !processingSessions) return;
-    const shouldBeProcessing = processingSessions.has(activeViewSessionId);
-    if (shouldBeProcessing && !isLoading) {
-      setIsLoading(true);
-      setCanAbortSession(true);
-    }
-  }, [currentSessionId, isLoading, processingSessions, selectedSession?.id]);
 
   // "Load all" overlay
   const prevLoadingRef = useRef(false);
