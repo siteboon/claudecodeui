@@ -186,6 +186,15 @@ async function spawnGemini(command, options = {}, ws) {
     }
 
     return new Promise((resolve, reject) => {
+        let settled = false;
+
+        const settleOnce = (callback) => {
+            if (settled) return;
+            settled = true;
+            if (timeout) clearTimeout(timeout);
+            callback();
+        };
+
         const geminiProcess = spawnFunction(spawnCmd, spawnArgs, {
             cwd: workingDir,
             stdio: ['pipe', 'pipe', 'pipe'],
@@ -244,11 +253,12 @@ async function spawnGemini(command, options = {}, ws) {
             if (timeout) clearTimeout(timeout);
             timeout = setTimeout(() => {
                 const socketSessionId = typeof ws.getSessionId === 'function' ? ws.getSessionId() : (capturedSessionId || sessionId || processKey);
-                terminalFailureReason = `Gemini CLI timeout - no response received for ${timeoutMs / 1000} seconds`;
+                terminalFailureReason = 'Gemini CLI process timed out';
                 ws.send(createNormalizedMessage({ kind: 'error', content: terminalFailureReason, sessionId: socketSessionId, provider: 'gemini' }));
                 try {
                     geminiProcess.kill('SIGTERM');
                 } catch (e) { }
+                settleOnce(() => reject(new Error(terminalFailureReason)));
             }, timeoutMs);
         };
 
@@ -433,7 +443,7 @@ async function spawnGemini(command, options = {}, ws) {
 
             if (code === 0) {
                 notifyTerminalState({ code });
-                resolve();
+                settleOnce(() => resolve());
             } else {
                 // code 127 = shell "command not found" — check installation
                 if (code === 127) {
@@ -448,7 +458,7 @@ async function spawnGemini(command, options = {}, ws) {
                     code,
                     error: code === null ? 'Gemini CLI process was terminated or timed out' : null
                 });
-                reject(new Error(code === null ? 'Gemini CLI process was terminated or timed out' : `Gemini CLI exited with code ${code}`));
+                settleOnce(() => reject(new Error(code === null ? 'Gemini CLI process was terminated or timed out' : `Gemini CLI exited with code ${code}`))));
             }
         });
 
@@ -468,7 +478,7 @@ async function spawnGemini(command, options = {}, ws) {
             ws.send(createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: errorSessionId, provider: 'gemini' }));
             notifyTerminalState({ error });
 
-            reject(error);
+            settleOnce(() => reject(error));
         });
 
     });
