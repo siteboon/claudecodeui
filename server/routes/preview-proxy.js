@@ -19,10 +19,47 @@ const HOP_BY_HOP_HEADERS = new Set([
   'upgrade',
 ]);
 
+// Default-deny common service ports even within the dev range. Postgres,
+// MySQL, Redis, MongoDB, Memcached, Elasticsearch, Kafka, the CDP itself,
+// and a few other infra defaults — proxying to them via an authenticated
+// browser session is an SSRF foothold, not a developer convenience.
+const DEFAULT_BLOCKED_PORTS = new Set([
+  3306, 5432, 6379, 9092, 9200, 9300, 11211, 27017, 28017, 9222, 9223, 5984, 8086,
+]);
+
+const DEFAULT_PORT_ALLOWLIST = new Set([
+  3000, 3001, 3002, 3003, 3030, 3333,
+  4000, 4173, 4200,
+  5000, 5001, 5173, 5174, 5500, 5555,
+  6000, 6006,
+  7000, 7777,
+  8000, 8001, 8080, 8081, 8888,
+  9000, 9001, 9090, 9876,
+]);
+
+function parsePortListEnv(value) {
+  if (!value) return null;
+  const out = new Set();
+  for (const piece of value.split(',')) {
+    const n = Number(piece.trim());
+    if (Number.isInteger(n) && n >= 1 && n <= 65535) out.add(n);
+  }
+  return out.size > 0 ? out : null;
+}
+
+const ENV_ALLOWLIST = parsePortListEnv(process.env.DISPATCH_PREVIEW_PORTS);
+const ALLOW_ANY_HIGH_PORT = process.env.DISPATCH_PREVIEW_ALLOW_ANY_HIGH_PORT === 'true';
+
 function isValidPort(portStr) {
   if (!PORT_PATTERN.test(portStr)) return false;
   const port = Number(portStr);
-  return port >= 1 && port <= 65535;
+  if (port < 1 || port > 65535) return false;
+  if (DEFAULT_BLOCKED_PORTS.has(port)) return false;
+  if (ENV_ALLOWLIST) return ENV_ALLOWLIST.has(port);
+  if (DEFAULT_PORT_ALLOWLIST.has(port)) return true;
+  // Opt-in escape hatch for users running dev servers on uncommon ports.
+  if (ALLOW_ANY_HIGH_PORT && port >= 1024) return true;
+  return false;
 }
 
 function stripHopByHop(headers) {
@@ -49,7 +86,10 @@ router.use('/:port', (req, res) => {
   const { port } = req.params;
 
   if (!isValidPort(port)) {
-    res.status(400).json({ error: 'Invalid port' });
+    res.status(400).json({
+      error: 'Port not allowed for preview proxy',
+      hint: 'Set DISPATCH_PREVIEW_PORTS or DISPATCH_PREVIEW_ALLOW_ANY_HIGH_PORT=true to allow custom ports.',
+    });
     return;
   }
 

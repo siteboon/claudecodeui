@@ -8,6 +8,15 @@ import { authenticateWebSocket } from '../middleware/auth.js';
 const CDP_HOST = process.env.CHROME_CDP_HOST || '127.0.0.1';
 const CDP_PORT = Number(process.env.CHROME_CDP_PORT || 9222);
 
+// Opt-in flags. The screencast attaches to the operator's REAL Chrome over
+// CDP — any authenticated Dispatch user could otherwise read cookies via
+// Runtime.evaluate or drive the host browser (steal sessions, navigate to
+// attacker URLs, etc.). Default is fully off; operator must explicitly enable.
+//   DISPATCH_CHROME_VIEW_ENABLED=true        — turn the feature on (view-only)
+//   DISPATCH_CHROME_VIEW_ALLOW_INPUT=true    — additionally accept Input.* events
+const CHROME_VIEW_ENABLED = process.env.DISPATCH_CHROME_VIEW_ENABLED === 'true';
+const CHROME_VIEW_ALLOW_INPUT = process.env.DISPATCH_CHROME_VIEW_ALLOW_INPUT === 'true';
+
 function fetchChromeVersion() {
   return new Promise((resolve, reject) => {
     const req = http.get(
@@ -212,6 +221,16 @@ async function handleChromeScreencastConnection(clientWs) {
 
   clientWs.on('message', async (raw) => {
     if (!cdp) return;
+    if (!CHROME_VIEW_ALLOW_INPUT) {
+      // View-only mode (default). Drop any Input.* dispatch attempts so a
+      // logged-in user cannot drive the operator's real browser. The first
+      // such message gets an explicit notice; subsequent ones are silent.
+      safeSend(clientWs, {
+        type: 'input-disabled',
+        error: 'Input forwarding disabled. Set DISPATCH_CHROME_VIEW_ALLOW_INPUT=true to enable.',
+      });
+      return;
+    }
     let msg;
     try {
       msg = JSON.parse(raw.toString());
@@ -296,6 +315,12 @@ export function attachChromeScreencast(httpServer, rootWss) {
     const rawUrl = req.url || '';
     if (!rawUrl.startsWith('/ws/chrome-view')) return;
 
+    if (!CHROME_VIEW_ENABLED) {
+      socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
     const parsed = new URL(rawUrl, 'http://localhost');
     const token =
       parsed.searchParams.get('token') ||
@@ -319,16 +344,26 @@ export function attachChromeScreencast(httpServer, rootWss) {
 const router = express.Router();
 
 router.get('/status', async (_req, res) => {
+  if (!CHROME_VIEW_ENABLED) {
+    return res.status(503).json({
+      ok: false,
+      enabled: false,
+      hint: 'Chrome viewer disabled. Set DISPATCH_CHROME_VIEW_ENABLED=true to opt in.',
+    });
+  }
   try {
     const version = await fetchChromeVersion();
     res.json({
       ok: true,
+      enabled: true,
+      inputEnabled: CHROME_VIEW_ALLOW_INPUT,
       browser: version.Browser,
       protocolVersion: version['Protocol-Version'],
     });
   } catch (err) {
     res.status(503).json({
       ok: false,
+      enabled: true,
       error: err && err.message ? err.message : 'CDP unreachable',
       hint: 'Launch Chrome with --remote-debugging-port=9222',
     });
@@ -336,6 +371,12 @@ router.get('/status', async (_req, res) => {
 });
 
 router.get('/tabs', async (_req, res) => {
+  if (!CHROME_VIEW_ENABLED) {
+    return res.status(503).json({
+      enabled: false,
+      hint: 'Chrome viewer disabled. Set DISPATCH_CHROME_VIEW_ENABLED=true to opt in.',
+    });
+  }
   try {
     const tabs = await fetchChromeTabs();
     res.json(

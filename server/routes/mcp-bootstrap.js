@@ -80,6 +80,68 @@ async function readClaudeConfig() {
     return (await readJsonIfExists(CLAUDE_CONFIG_PATH)) || {};
 }
 
+// Returns true only when ~/.claude.json already exists. Bootstrap refuses to
+// materialize a brand-new config for users who have never run Claude — the
+// recommended-MCPs entries would be the *only* keys in that file, which the
+// user did not opt into. Once Claude itself is installed, the file appears
+// and the bootstrap may run on the next boot.
+async function claudeConfigExists() {
+    try {
+        await fs.access(CLAUDE_CONFIG_PATH);
+        return true;
+    } catch (err) {
+        if (err && err.code === 'ENOENT') return false;
+        throw err;
+    }
+}
+
+const ALLOWED_WORKING_DIR_ROOTS = (() => {
+    const roots = [os.homedir()];
+    if (process.env.DISPATCH_PROJECT_ROOTS) {
+        for (const candidate of process.env.DISPATCH_PROJECT_ROOTS.split(path.delimiter)) {
+            const trimmed = candidate.trim();
+            if (trimmed) roots.push(path.resolve(trimmed));
+        }
+    }
+    return roots.map((p) => path.resolve(p));
+})();
+
+const SENSITIVE_HOME_SUBDIRS = ['.ssh', '.aws', '.gnupg', '.config/gh', 'Library/Keychains'];
+
+// Returns the resolved absolute path if `input` is a usable working dir for a
+// sub-agent spawn, or { error } describing why it isn't. Conservative gate:
+// must be absolute, must resolve under HOME (or DISPATCH_PROJECT_ROOTS), and
+// must not point at well-known credential stores.
+async function resolveSafeWorkingDir(input) {
+    if (typeof input !== 'string' || !input.trim()) {
+        return { error: 'workingDir must be a non-empty string' };
+    }
+    if (input.includes('\0')) {
+        return { error: 'workingDir contains a null byte' };
+    }
+    const resolved = path.resolve(input);
+    const homeDir = path.resolve(os.homedir());
+    const underAllowedRoot = ALLOWED_WORKING_DIR_ROOTS.some((root) => {
+        return resolved === root || resolved.startsWith(root + path.sep);
+    });
+    if (!underAllowedRoot) {
+        return { error: 'workingDir must be under $HOME or DISPATCH_PROJECT_ROOTS' };
+    }
+    for (const subdir of SENSITIVE_HOME_SUBDIRS) {
+        const sensitive = path.resolve(homeDir, subdir);
+        if (resolved === sensitive || resolved.startsWith(sensitive + path.sep)) {
+            return { error: `workingDir resolves to a sensitive directory (${subdir})` };
+        }
+    }
+    try {
+        const stat = await fs.stat(resolved);
+        if (!stat.isDirectory()) return { error: 'workingDir is not a directory' };
+    } catch {
+        return { error: 'workingDir does not exist' };
+    }
+    return { path: resolved };
+}
+
 async function writeClaudeConfig(config) {
     await writeJsonAtomic(CLAUDE_CONFIG_PATH, config);
 }
@@ -98,6 +160,12 @@ function installedInConfig(config, name) {
  */
 export async function ensureRecommendedMCPs() {
     const state = await readDispatchState();
+    if (!(await claudeConfigExists())) {
+        // First-run users without Claude installed — do not materialize a
+        // ~/.claude.json containing only Dispatch's two MCPs. They get added
+        // on a later boot once the user has actually run Claude.
+        return { added: [], state, skipped: 'no-claude-config' };
+    }
     let config;
     try {
         config = await readClaudeConfig();
@@ -226,9 +294,15 @@ router.post('/recommended/:name/toggle', async (req, res) => {
 router.post('/spawn-sub-agent', async (req, res) => {
     const subAgentType = typeof req.body?.subAgentType === 'string' ? req.body.subAgentType : 'general-purpose';
     const userPrompt = typeof req.body?.prompt === 'string' ? req.body.prompt : '';
-    const workingDir = typeof req.body?.workingDir === 'string' && req.body.workingDir
+    const requestedWorkingDir = typeof req.body?.workingDir === 'string' && req.body.workingDir
         ? req.body.workingDir
         : process.cwd();
+
+    const validated = await resolveSafeWorkingDir(requestedWorkingDir);
+    if (validated.error) {
+        return res.status(400).json({ error: `Invalid workingDir: ${validated.error}` });
+    }
+    const workingDir = validated.path;
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -352,9 +426,13 @@ router.get('/session-files-touched/:projectName/:sessionId', async (req, res) =>
 });
 
 // Kick off bootstrap as a module-level side-effect so `import` in server/index.js
-// registers the MCPs without needing a second wiring line.
-ensureRecommendedMCPs().catch((err) => {
-    console.error('[mcp-bootstrap] ensureRecommendedMCPs failed:', err.message);
+// registers the MCPs without needing a second wiring line. Deferred via
+// setImmediate so the import chain is not blocked by file IO, and skipped when
+// ~/.claude.json doesn't yet exist (see ensureRecommendedMCPs).
+setImmediate(() => {
+    ensureRecommendedMCPs().catch((err) => {
+        console.error('[mcp-bootstrap] ensureRecommendedMCPs failed:', err.message);
+    });
 });
 
 export default router;

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -9,6 +9,7 @@ import MobileTabBar from '../layout/MobileTabBar';
 import MobileSidebarSheet from '../layout/MobileSidebarSheet';
 import type { AppNavSlot } from '../layout/useAppNavItems';
 import { useWebSocket } from '../../contexts/WebSocketContext';
+import { SessionActivityProvider } from '../../contexts/SessionActivityContext';
 import { useDeviceSettings } from '../../hooks/useDeviceSettings';
 import { useSessionProtection } from '../../hooks/useSessionProtection';
 import { useProjectsState } from '../../hooks/useProjectsState';
@@ -136,6 +137,21 @@ export default function AppContent() {
     return () => vv.removeEventListener('resize', update);
   }, []);
 
+  // Best-effort worktree → sessionId map for live activity dots in
+  // WorktreeList. We can confidently attribute the *currently selected*
+  // session to its project's fullPath; cross-worktree resolution requires a
+  // future server endpoint that returns the active session per worktree
+  // (tracked in docs/follow-ups.md).
+  const worktreeSessionMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    const path = selectedProject?.fullPath;
+    const id = selectedSession?.id;
+    if (path && id && selectedProject?.isWorktree) {
+      map[path] = id;
+    }
+    return map;
+  }, [selectedProject?.fullPath, selectedProject?.isWorktree, selectedSession?.id]);
+
   const handleNavSelect = useCallback((slot: AppNavSlot) => {
     switch (slot) {
       case 'chat':
@@ -163,6 +179,11 @@ export default function AppContent() {
   }, [isMobile, openSettings, setActiveTab, setSidebarOpen]);
 
   return (
+    <SessionActivityProvider
+      activeSessions={activeSessions}
+      processingSessions={processingSessions}
+      worktreeSessionMap={worktreeSessionMap}
+    >
     <div
       className="fixed inset-0 flex bg-background"
       style={{ bottom: 'var(--keyboard-height, 0px)' }}
@@ -236,5 +257,6 @@ export default function AppContent() {
         onSelect={handleNavSelect}
       />
     </div>
+    </SessionActivityProvider>
   );
 }

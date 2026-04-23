@@ -6,7 +6,12 @@ import express from 'express';
 
 const router = express.Router();
 
-const CLAUDE_PROJECTS_DIR = path.join(os.homedir(), '.claude', 'projects');
+const CLAUDE_PROJECTS_DIR = path.resolve(os.homedir(), '.claude', 'projects');
+
+// Reject anything that looks like path traversal or a separator before we
+// try to open a file. Defense-in-depth: the resolved path is also prefix-
+// checked against CLAUDE_PROJECTS_DIR below.
+const UNSAFE_PATH_SEGMENT = /[\\/]|\0|\.\./;
 
 function slugFromProjectName(projectName) {
   // Claude stores JSONLs in `~/.claude/projects/<slug>/`. The slug is the
@@ -16,7 +21,13 @@ function slugFromProjectName(projectName) {
 
 async function readSessionFile(projectSlug, sessionId) {
   if (!projectSlug || !sessionId) return null;
-  const jsonlPath = path.join(CLAUDE_PROJECTS_DIR, projectSlug, `${sessionId}.jsonl`);
+  if (UNSAFE_PATH_SEGMENT.test(projectSlug) || UNSAFE_PATH_SEGMENT.test(sessionId)) {
+    return null;
+  }
+  const jsonlPath = path.resolve(CLAUDE_PROJECTS_DIR, projectSlug, `${sessionId}.jsonl`);
+  if (!jsonlPath.startsWith(CLAUDE_PROJECTS_DIR + path.sep)) {
+    return null;
+  }
   try {
     const raw = await fs.readFile(jsonlPath, 'utf8');
     return raw.split('\n').filter(Boolean);

@@ -15,7 +15,9 @@ import EditorSidebar from '../../code-editor/view/EditorSidebar';
 import type { Project } from '../../../types/app';
 import { TaskMasterPanel } from '../../task-master';
 import PreviewPane from '../../preview/PreviewPane';
+import PreviewModal from '../../preview/PreviewModal';
 import BrowserPane from '../../browser/BrowserPane';
+import BrowserModal from '../../browser/BrowserModal';
 import TasksPane from '../../tasks/TasksPane';
 import TasksModal from '../../tasks/TasksModal';
 
@@ -172,12 +174,12 @@ function MainContent({
 
           {shouldShowTasksTab && <TaskMasterPanel isVisible={activeTab === 'tasks'} />}
 
-          <div className={`h-full overflow-hidden ${activeTab === 'preview' ? 'block' : 'hidden'}`}>
-            {activeTab === 'preview' && <PreviewPane />}
+          <div className={`h-full overflow-hidden ${activeTab === 'preview' && !isMobile ? 'block' : 'hidden'}`}>
+            {activeTab === 'preview' && !isMobile && <PreviewPane />}
           </div>
 
-          <div className={`h-full overflow-hidden ${activeTab === 'browser' ? 'block' : 'hidden'}`}>
-            {activeTab === 'browser' && <BrowserPane />}
+          <div className={`h-full overflow-hidden ${activeTab === 'browser' && !isMobile ? 'block' : 'hidden'}`}>
+            {activeTab === 'browser' && !isMobile && <BrowserPane />}
           </div>
 
           {activeTab.startsWith('plugin:') && (
@@ -242,6 +244,16 @@ function MainContent({
         projectName={selectedProject?.name ?? null}
         sessionId={selectedSession?.id ?? null}
         ws={ws}
+      />
+
+      <PreviewModal
+        open={isMobile && activeTab === 'preview'}
+        onClose={() => setActiveTab('chat')}
+      />
+
+      <BrowserModal
+        open={isMobile && activeTab === 'browser'}
+        onClose={() => setActiveTab('chat')}
       />
     </div>
   );

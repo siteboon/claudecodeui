@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Trash2, GitBranch, Loader2 } from 'lucide-react';
 
+import { useSessionActivity } from '../../../contexts/SessionActivityContext';
+
 export type Worktree = {
   path: string;
   branch: string | null;
@@ -98,12 +100,21 @@ function dotAria(status: WorktreeStatus): string {
 
 export default function WorktreeList({
   repoPath,
-  activeSessions,
-  processingSessions,
-  blockedSessions,
-  worktreeSessionMap = {},
+  activeSessions: activeSessionsProp,
+  processingSessions: processingSessionsProp,
+  blockedSessions: blockedSessionsProp,
+  worktreeSessionMap: worktreeSessionMapProp,
   onSelect,
 }: WorktreeListProps) {
+  // Activity sets are normally piped through the SessionActivityProvider in
+  // AppContent — SidebarProjectItem (parent of this list) is a no-edit churn
+  // file per docs/CLAUDE.md, so the props can't be threaded through it.
+  const ctx = useSessionActivity();
+  const activeSessions = activeSessionsProp ?? ctx.activeSessions;
+  const processingSessions = processingSessionsProp ?? ctx.processingSessions;
+  const blockedSessions = blockedSessionsProp ?? ctx.blockedSessions;
+  const worktreeSessionMap = worktreeSessionMapProp ?? ctx.worktreeSessionMap;
+
   const [worktrees, setWorktrees] = useState<Worktree[]>([]);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
