@@ -1,8 +1,13 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+
 import Sidebar from '../sidebar/view/Sidebar';
 import MainContent from '../main-content/view/MainContent';
+import DesktopRail from '../layout/DesktopRail';
+import MobileTabBar from '../layout/MobileTabBar';
+import MobileSidebarSheet from '../layout/MobileSidebarSheet';
+import type { AppNavSlot } from '../layout/useAppNavItems';
 import { useWebSocket } from '../../contexts/WebSocketContext';
 import { useDeviceSettings } from '../../hooks/useDeviceSettings';
 import { useSessionProtection } from '../../hooks/useSessionProtection';
@@ -12,7 +17,10 @@ export default function AppContent() {
   const navigate = useNavigate();
   const { sessionId } = useParams<{ sessionId?: string }>();
   const { t } = useTranslation('common');
-  const { isMobile } = useDeviceSettings({ trackPWA: false });
+  // `isMobile` drives the mobile tab bar + bottom-sheet sidebar. At lg+ the
+  // persistent rail + in-column sidebar render regardless, so the existing
+  // 768-consumers keep their threshold and only layout-level code uses 1024.
+  const { isMobile } = useDeviceSettings({ mobileBreakpoint: 1024, trackPWA: false });
   const { ws, sendMessage, latestMessage, isConnected } = useWebSocket();
   const wasConnectedRef = useRef(false);
 
@@ -49,10 +57,7 @@ export default function AppContent() {
   });
 
   useEffect(() => {
-    // Expose a non-blocking refresh for chat/session flows.
-    // Full loading refreshes are still available through direct fetchProjects calls.
     window.refreshProjects = refreshProjectsSilently;
-
     return () => {
       if (window.refreshProjects === refreshProjectsSilently) {
         delete window.refreshProjects;
@@ -62,7 +67,6 @@ export default function AppContent() {
 
   useEffect(() => {
     window.openSettings = openSettings;
-
     return () => {
       if (window.openSettings === openSettings) {
         delete window.openSettings;
@@ -104,7 +108,6 @@ export default function AppContent() {
     };
   }, [navigate, refreshProjectsSilently, setActiveTab, setSidebarOpen]);
 
-  // Permission recovery: query pending permissions on WebSocket reconnect or session change
   useEffect(() => {
     const isReconnect = isConnected && !wasConnectedRef.current;
 
@@ -122,19 +125,10 @@ export default function AppContent() {
     }
   }, [isConnected, selectedSession?.id, sendMessage]);
 
-  // Adjust the app container to stay above the virtual keyboard on iOS Safari.
-  // On Chrome for Android the layout viewport already shrinks when the keyboard opens,
-  // so inset-0 adjusts automatically. On iOS the layout viewport stays full-height and
-  // the keyboard overlays it — we use the Visual Viewport API to track keyboard height
-  // and apply it as a CSS variable that shifts the container's bottom edge up.
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
     const update = () => {
-      // Only resize matters — keyboard open/close changes vv.height.
-      // Do NOT listen to scroll: on iOS Safari, scrolling content changes
-      // vv.offsetTop which would make --keyboard-height fluctuate during
-      // normal scrolling, causing the container to bounce up and down.
       const kb = Math.max(0, window.innerHeight - vv.height);
       document.documentElement.style.setProperty('--keyboard-height', `${kb}px`);
     };
@@ -142,42 +136,70 @@ export default function AppContent() {
     return () => vv.removeEventListener('resize', update);
   }, []);
 
+  const handleNavSelect = useCallback((slot: AppNavSlot) => {
+    switch (slot) {
+      case 'chat':
+        setSidebarOpen(false);
+        setActiveTab('chat');
+        break;
+      case 'sessions':
+        // Mobile: open bottom sheet. Desktop: sidebar is already persistent —
+        // toggling ensures the rail tap feels responsive.
+        setSidebarOpen((prev) => (isMobile ? !prev : prev));
+        break;
+      case 'preview':
+        setSidebarOpen(false);
+        setActiveTab('preview');
+        break;
+      case 'browser':
+        // Browser viewport arrives in Phase 5; for now, keep on chat so the
+        // rail doesn't lead to a broken state. Flagged in the PR.
+        setSidebarOpen(false);
+        setActiveTab('chat');
+        break;
+      case 'more':
+        setSidebarOpen(false);
+        openSettings();
+        break;
+    }
+  }, [isMobile, openSettings, setActiveTab, setSidebarOpen]);
+
   return (
-    <div className="fixed inset-0 flex bg-background" style={{ bottom: 'var(--keyboard-height, 0px)' }}>
-      {!isMobile ? (
-        <div className="h-full flex-shrink-0 border-r border-border/50">
-          <Sidebar {...sidebarSharedProps} />
-        </div>
-      ) : (
-        <div
-          className={`fixed inset-0 z-50 flex transition-all duration-150 ease-out ${sidebarOpen ? 'visible opacity-100' : 'invisible opacity-0'
-            }`}
+    <div
+      className="fixed inset-0 flex bg-background"
+      style={{ bottom: 'var(--keyboard-height, 0px)' }}
+    >
+      <DesktopRail
+        activeTab={activeTab}
+        sidebarOpen={sidebarOpen}
+        onSelect={handleNavSelect}
+      />
+
+      {!isMobile && (
+        <aside
+          data-accent="lavender"
+          className="h-full w-[340px] shrink-0 overflow-hidden border-r border-midnight-border"
+          style={{ background: 'var(--midnight-surface-1)' }}
         >
-          <button
-            className="fixed inset-0 bg-background/60 backdrop-blur-sm transition-opacity duration-150 ease-out"
-            onClick={(event) => {
-              event.stopPropagation();
-              setSidebarOpen(false);
-            }}
-            onTouchStart={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              setSidebarOpen(false);
-            }}
-            aria-label={t('versionUpdate.ariaLabels.closeSidebar')}
-          />
-          <div
-            className={`relative h-full w-[85vw] max-w-sm transform border-r border-border/40 bg-card transition-transform duration-150 ease-out sm:w-80 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-              }`}
-            onClick={(event) => event.stopPropagation()}
-            onTouchStart={(event) => event.stopPropagation()}
-          >
-            <Sidebar {...sidebarSharedProps} />
-          </div>
-        </div>
+          <Sidebar {...sidebarSharedProps} />
+        </aside>
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      {isMobile && (
+        <MobileSidebarSheet
+          open={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          ariaLabel={t('versionUpdate.ariaLabels.closeSidebar') || 'Sessions'}
+        >
+          <Sidebar {...sidebarSharedProps} />
+        </MobileSidebarSheet>
+      )}
+
+      <div
+        data-accent={activeTab === 'preview' ? 'mint' : 'sky'}
+        className="flex min-w-0 flex-1 flex-col"
+        style={{ paddingBottom: 'var(--mobile-nav-total, 0px)' }}
+      >
         <MainContent
           selectedProject={selectedProject}
           selectedSession={selectedSession}
@@ -202,6 +224,11 @@ export default function AppContent() {
         />
       </div>
 
+      <MobileTabBar
+        activeTab={activeTab}
+        sidebarOpen={sidebarOpen}
+        onSelect={handleNavSelect}
+      />
     </div>
   );
 }
