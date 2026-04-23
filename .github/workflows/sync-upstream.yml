@@ -18,6 +18,16 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Ensure upstream-sync branch exists
+        run: |
+          if ! git ls-remote --exit-code --heads origin upstream-sync >/dev/null 2>&1; then
+            echo "Creating upstream-sync branch from main."
+            git branch upstream-sync main
+            git push origin upstream-sync
+          else
+            echo "upstream-sync branch already exists on origin."
+          fi
+
       - name: Sync upstream
         id: sync
         uses: aormsby/Fork-Sync-With-Upstream-action@v3.4

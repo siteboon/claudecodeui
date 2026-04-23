@@ -96,6 +96,7 @@
     "tasks": "Tasks",
     "notifications": "Notifications",
     "plugins": "Plugins",
+    "mcp": "MCP",
     "about": "About"
   },
   "notifications": {

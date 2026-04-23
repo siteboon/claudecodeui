@@ -4,6 +4,7 @@ import { Button } from '../../../../shared/view/ui';
 import type { Project, ProjectSession, LLMProvider } from '../../../../types/app';
 import type { SessionWithProvider } from '../../types/types';
 import SidebarSessionItem from './SidebarSessionItem';
+import SessionFilesTouchedChips from './SessionFilesTouchedChips';
 
 type SidebarProjectSessionsProps = {
   project: Project;
@@ -111,23 +112,25 @@ export default function SidebarProjectSessions({
         </div>
       ) : (
         sessions.map((session) => (
-          <SidebarSessionItem
-            key={session.id}
-            project={project}
-            session={session}
-            selectedSession={selectedSession}
-            currentTime={currentTime}
-            editingSession={editingSession}
-            editingSessionName={editingSessionName}
-            onEditingSessionNameChange={onEditingSessionNameChange}
-            onStartEditingSession={onStartEditingSession}
-            onCancelEditingSession={onCancelEditingSession}
-            onSaveEditingSession={onSaveEditingSession}
-            onProjectSelect={onProjectSelect}
-            onSessionSelect={onSessionSelect}
-            onDeleteSession={onDeleteSession}
-            t={t}
-          />
+          <div key={session.id}>
+            <SidebarSessionItem
+              project={project}
+              session={session}
+              selectedSession={selectedSession}
+              currentTime={currentTime}
+              editingSession={editingSession}
+              editingSessionName={editingSessionName}
+              onEditingSessionNameChange={onEditingSessionNameChange}
+              onStartEditingSession={onStartEditingSession}
+              onCancelEditingSession={onCancelEditingSession}
+              onSaveEditingSession={onSaveEditingSession}
+              onProjectSelect={onProjectSelect}
+              onSessionSelect={onSessionSelect}
+              onDeleteSession={onDeleteSession}
+              t={t}
+            />
+            <SessionFilesTouchedChips projectName={project.name} sessionId={session.id} />
+          </div>
         ))
       )}
 

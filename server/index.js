@@ -39,6 +39,7 @@ import authRoutes from './routes/auth.js';
 import cursorRoutes from './routes/cursor.js';
 import taskmasterRoutes from './routes/taskmaster.js';
 import mcpUtilsRoutes from './routes/mcp-utils.js';
+import mcpBootstrapRoutes from './routes/mcp-bootstrap.js';
 import commandsRoutes from './routes/commands.js';
 import settingsRoutes from './routes/settings.js';
 import agentRoutes from './routes/agent.js';
@@ -294,6 +295,7 @@ app.use('/api/taskmaster', authenticateToken, taskmasterRoutes);
 
 // MCP utilities
 app.use('/api/mcp-utils', authenticateToken, mcpUtilsRoutes);
+app.use('/api/mcp-bootstrap', authenticateToken, mcpBootstrapRoutes);
 
 // Commands API Routes (protected)
 app.use('/api/commands', authenticateToken, commandsRoutes);

@@ -1,4 +1,4 @@
-import { GitBranch, Info, Key, Puzzle } from 'lucide-react';
+import { GitBranch, Info, Key, Puzzle, Server } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { SettingsMainTab } from '../types/types';
 
@@ -22,6 +22,7 @@ const TAB_CONFIG: MainTabConfig[] = [
   { id: 'tasks', labelKey: 'mainTabs.tasks' },
   { id: 'notifications', labelKey: 'mainTabs.notifications' },
   { id: 'plugins', labelKey: 'mainTabs.plugins', icon: Puzzle },
+  { id: 'mcp', labelKey: 'mainTabs.mcp', label: 'MCP', icon: Server },
   { id: 'about', labelKey: 'mainTabs.about', icon: Info },
 ];
 
@@ -48,7 +49,7 @@ export default function SettingsMainTabs({ activeTab, onChange }: SettingsMainTa
               }`}
             >
               {Icon && <Icon className="mr-2 inline h-4 w-4" />}
-              {tab.labelKey ? t(tab.labelKey) : tab.label}
+              {tab.labelKey ? t(tab.labelKey, { defaultValue: tab.label ?? tab.labelKey }) : tab.label}
             </button>
           );
         })}

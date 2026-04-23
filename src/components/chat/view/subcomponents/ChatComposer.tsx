@@ -17,6 +17,7 @@ import CommandMenu from './CommandMenu';
 import ClaudeStatus from './ClaudeStatus';
 import ImageAttachment from './ImageAttachment';
 import PermissionRequestsBanner from './PermissionRequestsBanner';
+import SpawnSubAgentButton from './SpawnSubAgentButton';
 import ThinkingModeSelector from './ThinkingModeSelector';
 import TokenUsagePie from './TokenUsagePie';
 import {
@@ -382,6 +383,8 @@ export default function ChatComposer({
                 <XIcon />
               </PromptInputButton>
             )}
+
+            <SpawnSubAgentButton />
 
           </PromptInputTools>
 
