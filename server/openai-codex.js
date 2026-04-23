@@ -240,7 +240,8 @@ export async function queryCodex(command, options = {}, ws) {
       codex,
       status: 'running',
       abortController,
-      startedAt: new Date().toISOString()
+      startedAt: new Date().toISOString(),
+      ws: ws && ws.isWebSocketWriter ? ws.ws : ws
     });
 
     // Send session created event
@@ -362,6 +363,23 @@ export function abortCodexSession(sessionId) {
 }
 
 /**
+ * Abort all Codex sessions associated with a specific WebSocket
+ * @param {WebSocket} ws - The WebSocket to match
+ * @returns {number} - Number of sessions aborted
+ */
+export function abortCodexSessionsForWebSocket(ws) {
+  let count = 0;
+  for (const [id, session] of activeCodexSessions.entries()) {
+    if (session.ws === ws && session.status === 'running') {
+      console.log(`[Codex] Aborting orphaned session ${id} due to WebSocket disconnect`);
+      abortCodexSession(id);
+      count++;
+    }
+  }
+  return count;
+}
+
+/**
  * Check if a session is active
  * @param {string} sessionId - Session ID to check
  * @returns {boolean} - Whether session is active
@@ -391,6 +409,13 @@ export function getActiveCodexSessions() {
   return sessions;
 }
 
+export {
+  queryCodex,
+  abortCodexSession,
+  isCodexSessionActive,
+  getActiveCodexSessions
+};
+
 /**
  * Helper to send message via WebSocket or writer
  * @param {WebSocket|object} ws - WebSocket or response writer
@@ -398,12 +423,14 @@ export function getActiveCodexSessions() {
  */
 function sendMessage(ws, data) {
   try {
-    if (ws.isSSEStreamWriter || ws.isWebSocketWriter) {
+    if (ws && (ws.isSSEStreamWriter || ws.isWebSocketWriter)) {
       // Writer handles stringification (SSEStreamWriter or WebSocketWriter)
       ws.send(data);
-    } else if (typeof ws.send === 'function') {
+    } else if (ws && typeof ws.send === 'function') {
       // Raw WebSocket - stringify here
-      ws.send(JSON.stringify(data));
+      if (ws.readyState === 1) { // WebSocket.OPEN
+        ws.send(JSON.stringify(data));
+      }
     }
   } catch (error) {
     console.error('[Codex] Error sending message:', error);

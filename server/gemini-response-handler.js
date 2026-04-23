@@ -34,7 +34,7 @@ class GeminiResponseHandler {
   }
 
   handleEvent(event) {
-    const sid = typeof this.ws.getSessionId === 'function' ? this.ws.getSessionId() : null;
+    const sid = this.ws && typeof this.ws.getSessionId === 'function' ? this.ws.getSessionId() : null;
 
     if (event.type === 'init') {
       if (this.onInit) {
@@ -58,7 +58,9 @@ class GeminiResponseHandler {
     // Normalize via adapter and send all resulting messages
     const normalized = sessionsService.normalizeMessage('gemini', event, sid);
     for (const msg of normalized) {
-      this.ws.send(msg);
+      if (this.ws) {
+        this.ws.send(msg);
+      }
     }
   }
 
