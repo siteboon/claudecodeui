@@ -1,5 +1,6 @@
 import { spawn } from 'child_process';
 import crossSpawn from 'cross-spawn';
+import { StringDecoder } from 'string_decoder';
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
@@ -228,9 +229,12 @@ async function spawnCursor(command, options = {}, writer) {
         }
       };
 
+      const stdoutDecoder = new StringDecoder('utf8');
+      const stderrDecoder = new StringDecoder('utf8');
+
       // Handle stdout (streaming JSON responses)
       cursorProcess.stdout.on('data', (data) => {
-        const rawOutput = data.toString();
+        const rawOutput = stdoutDecoder.write(data);
         console.log('Cursor CLI stdout:', rawOutput);
 
         // Stream chunks can split JSON objects across packets; keep trailing partial line.
@@ -245,7 +249,7 @@ async function spawnCursor(command, options = {}, writer) {
 
       // Handle stderr
       cursorProcess.stderr.on('data', (data) => {
-        const stderrText = data.toString();
+        const stderrText = stderrDecoder.write(data);
         console.error('Cursor CLI stderr:', stderrText);
 
         if (shouldSuppressForTrustRetry(stderrText)) {

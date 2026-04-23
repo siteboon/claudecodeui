@@ -1,5 +1,6 @@
 import { spawn } from 'child_process';
 import crossSpawn from 'cross-spawn';
+import { StringDecoder } from 'string_decoder';
 
 // Use cross-spawn on Windows for correct .cmd resolution (same pattern as cursor-cli.js)
 const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
@@ -292,9 +293,12 @@ async function spawnGemini(command, options = {}, writer) {
             });
         }
 
+        const stdoutDecoder = new StringDecoder('utf8');
+        const stderrDecoder = new StringDecoder('utf8');
+
         // Handle stdout
         geminiProcess.stdout.on('data', (data) => {
-            const rawOutput = data.toString();
+            const rawOutput = stdoutDecoder.write(data);
             startTimeout(); // Re-arm the timeout
 
             // For new sessions, create a session ID FIRST
@@ -337,7 +341,7 @@ async function spawnGemini(command, options = {}, writer) {
 
         // Handle stderr
         geminiProcess.stderr.on('data', (data) => {
-            const errorMsg = data.toString();
+            const errorMsg = stderrDecoder.write(data);
 
             // Filter out deprecation warnings and "Loaded cached credentials" message
             if (errorMsg.includes('[DEP0040]') ||
