@@ -73,7 +73,13 @@ export default function MobileSidebarSheet({ open, onClose, children, ariaLabel 
         ref={sheetRef}
         data-accent="lavender"
         className="ds-sheet"
-        style={{ transform: dragY ? `translateY(${dragY}px)` : undefined, transition: dragState.current.active ? 'none' : undefined, height: '80vh' }}
+        style={{
+          transform: dragY ? `translateY(${dragY}px)` : undefined,
+          transition: dragState.current.active ? 'none' : undefined,
+          // Sheet height: 80vh, but subtract visible keyboard so iOS doesn't
+          // clip the list when a text field inside focuses.
+          height: 'calc(min(80vh, 80svh) - var(--keyboard-height, 0px))',
+        }}
       >
         <div
           className="-mx-5 -mt-[10px] touch-none px-5 pb-2 pt-3"
@@ -84,7 +90,7 @@ export default function MobileSidebarSheet({ open, onClose, children, ariaLabel 
         >
           <div className="ds-sheet-handle" />
         </div>
-        <div className="h-[calc(80vh-60px)] overflow-hidden">{children}</div>
+        <div className="h-[calc(100%-60px)] overflow-hidden">{children}</div>
       </section>
     </div>
   );
