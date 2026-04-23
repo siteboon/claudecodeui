@@ -33,5 +33,6 @@ export type AppNavState = {
 export function resolveActiveSlot({ activeTab, sidebarOpen }: AppNavState): AppNavSlot {
   if (sidebarOpen) return 'sessions';
   if (activeTab === 'preview') return 'preview';
+  if (activeTab === 'browser') return 'browser';
   return 'chat';
 }

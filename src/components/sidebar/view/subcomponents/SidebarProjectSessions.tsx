@@ -4,6 +4,7 @@ import { Button } from '../../../../shared/view/ui';
 import type { Project, ProjectSession, LLMProvider } from '../../../../types/app';
 import type { SessionWithProvider } from '../../types/types';
 import SidebarSessionItem from './SidebarSessionItem';
+import WorktreeList from '../../worktrees/WorktreeList';
 
 type SidebarProjectSessionsProps = {
   project: Project;
@@ -152,6 +153,8 @@ export default function SidebarProjectSessions({
           )}
         </Button>
       )}
+
+      <WorktreeList repoPath={project.fullPath} />
     </div>
   );
 }

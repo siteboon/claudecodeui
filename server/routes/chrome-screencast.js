@@ -1,5 +1,7 @@
-import WebSocket, { WebSocketServer } from 'ws';
 import http from 'http';
+
+import express from 'express';
+import WebSocket, { WebSocketServer } from 'ws';
 
 const CDP_HOST = process.env.CHROME_CDP_HOST || '127.0.0.1';
 const CDP_PORT = Number(process.env.CHROME_CDP_PORT || 9222);
@@ -284,7 +286,6 @@ export function attachChromeScreencast(httpServer) {
 }
 
 // HTTP helper route: GET /api/chrome-view/status → is CDP reachable?
-import express from 'express';
 const router = express.Router();
 
 router.get('/status', async (_req, res) => {
