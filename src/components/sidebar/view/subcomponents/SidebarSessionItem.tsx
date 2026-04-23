@@ -1,5 +1,7 @@
 import { Check, Clock, Edit2, Trash2, X } from 'lucide-react';
+import { useDraggable } from '@dnd-kit/core';
 import type { TFunction } from 'i18next';
+
 import { Badge, Button } from '../../../../shared/view/ui';
 import { cn } from '../../../../lib/utils';
 import { formatTimeAgo } from '../../../../utils/dateUtils';
@@ -62,8 +64,22 @@ export default function SidebarSessionItem({
     onDeleteSession(project.name, session.id, sessionView.sessionName, session.__provider);
   };
 
+  // dnd-kit wiring — gracefully no-ops when no enclosing DndContext.
+  // activationConstraint on the sensors (PointerSensor.distance + TouchSensor.delay)
+  // prevents drag from swallowing tap/click.
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `session:${session.id}`,
+    data: { type: 'session', sessionId: session.id, projectName: project.name },
+  });
+
   return (
-    <div className="group relative">
+    <div
+      ref={setNodeRef}
+      data-session-id={session.id}
+      className={cn('group relative touch-manipulation', isDragging && 'opacity-40')}
+      {...attributes}
+      {...listeners}
+    >
       {sessionView.isActive && (
         <div className="absolute left-0 top-1/2 -translate-x-1 -translate-y-1/2 transform">
           <div className="h-2 w-2 animate-pulse rounded-full bg-green-500" />
