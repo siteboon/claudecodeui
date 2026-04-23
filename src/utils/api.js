@@ -160,6 +160,21 @@ export const api = {
       headers: {}, // Let browser set Content-Type for FormData
     }),
 
+  uploadProjectIcon: (projectName, file) => {
+    const formData = new FormData();
+    formData.append('icon', file);
+    return authenticatedFetch(withBasePath(`/api/projects/${projectName}/icon`), {
+      method: 'POST',
+      body: formData,
+      headers: {},
+    });
+  },
+
+  deleteProjectIcon: (projectName) =>
+    authenticatedFetch(withBasePath(`/api/projects/${projectName}/icon`), {
+      method: 'DELETE',
+    }),
+
   // TaskMaster endpoints
   taskmaster: {
     // Initialize TaskMaster in a project

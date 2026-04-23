@@ -29,7 +29,7 @@ import { spawn } from 'child_process';
 import pty from 'node-pty';
 import mime from 'mime-types';
 
-import { getProjects, getSessions, renameProject, deleteSession, deleteProject, extractProjectDirectory, clearProjectDirectoryCache, searchConversations } from './projects.js';
+import { getProjects, getSessions, renameProject, deleteSession, deleteProject, extractProjectDirectory, clearProjectDirectoryCache, searchConversations, loadProjectConfig, saveProjectConfig } from './projects.js';
 import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions, resolveToolApproval, getPendingApprovalsForSession, reconnectSessionWriter } from './claude-sdk.js';
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
 import { queryCodex, abortCodexSession, isCodexSessionActive, getActiveCodexSessions } from './openai-codex.js';
@@ -2049,6 +2049,180 @@ app.post('/api/projects/:projectName/upload-files', authenticateToken, async (re
         });
     } catch (error) {
         console.error('Error in file upload endpoint:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// ---- Project icon endpoints ----
+// Storage: ~/.claude/project-icons/<projectName>.<ext> (one active file per project).
+// Metadata lives in ~/.claude/project-config.json under config[name].icon.
+
+const PROJECT_ICON_MIME_TO_EXT = {
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/webp': 'webp',
+    'image/gif': 'gif',
+    'image/svg+xml': 'svg',
+};
+
+function validateProjectNameParam(name) {
+    return typeof name === 'string' && /^[A-Za-z0-9._-]+$/.test(name);
+}
+
+function projectIconsDir() {
+    return path.join(os.homedir(), '.claude', 'project-icons');
+}
+
+async function removeProjectIconFile(filename) {
+    if (!filename) return;
+    const dir = projectIconsDir();
+    const target = path.join(dir, filename);
+    // Guard: ensure the resolved path stays inside the icons dir.
+    if (!path.resolve(target).startsWith(path.resolve(dir) + path.sep)) return;
+    try {
+        await fsPromises.unlink(target);
+    } catch (err) {
+        if (err.code !== 'ENOENT') {
+            console.warn(`Failed to remove project icon ${filename}:`, err.message);
+        }
+    }
+}
+
+// Serve the raw icon bytes. Token is accepted via query param (?token=...) so
+// <img src> tags work without a custom fetch.
+app.get('/api/projects/:projectName/icon', authenticateToken, async (req, res) => {
+    try {
+        const { projectName } = req.params;
+        if (!validateProjectNameParam(projectName)) {
+            return res.status(400).json({ error: 'Invalid projectName' });
+        }
+        const config = await loadProjectConfig();
+        const iconMeta = config[projectName]?.icon;
+        if (!iconMeta || !iconMeta.filename) {
+            return res.status(404).json({ error: 'No icon set for project' });
+        }
+        const dir = projectIconsDir();
+        const filePath = path.join(dir, iconMeta.filename);
+        if (!path.resolve(filePath).startsWith(path.resolve(dir) + path.sep)) {
+            return res.status(400).json({ error: 'Invalid icon path' });
+        }
+        try {
+            await fsPromises.access(filePath);
+        } catch {
+            return res.status(404).json({ error: 'Icon file missing' });
+        }
+        res.setHeader('Content-Type', iconMeta.mimeType || 'application/octet-stream');
+        res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
+        if (iconMeta.updatedAt) {
+            res.setHeader('ETag', `W/"icon-${iconMeta.updatedAt}"`);
+        }
+        fs.createReadStream(filePath).pipe(res);
+    } catch (error) {
+        console.error('Error serving project icon:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Upload (or replace) a project icon.
+app.post('/api/projects/:projectName/icon', authenticateToken, async (req, res) => {
+    try {
+        const { projectName } = req.params;
+        if (!validateProjectNameParam(projectName)) {
+            return res.status(400).json({ error: 'Invalid projectName' });
+        }
+
+        const multer = (await import('multer')).default;
+
+        const iconsDir = projectIconsDir();
+        await fsPromises.mkdir(iconsDir, { recursive: true });
+
+        const storage = multer.memoryStorage();
+        const fileFilter = (req, file, cb) => {
+            if (PROJECT_ICON_MIME_TO_EXT[file.mimetype]) {
+                cb(null, true);
+            } else {
+                cb(new Error('Invalid file type. Allowed: png, jpg, webp, gif, svg.'));
+            }
+        };
+        const upload = multer({
+            storage,
+            fileFilter,
+            limits: { fileSize: 512 * 1024, files: 1 },
+        }).single('icon');
+
+        upload(req, res, async (err) => {
+            if (err) {
+                return res.status(400).json({ error: err.message });
+            }
+            if (!req.file) {
+                return res.status(400).json({ error: 'No icon file provided' });
+            }
+
+            try {
+                const ext = PROJECT_ICON_MIME_TO_EXT[req.file.mimetype];
+                const filename = `${projectName}.${ext}`;
+                const target = path.join(iconsDir, filename);
+                if (!path.resolve(target).startsWith(path.resolve(iconsDir) + path.sep)) {
+                    return res.status(400).json({ error: 'Invalid icon path' });
+                }
+
+                const config = await loadProjectConfig();
+                const prevFilename = config[projectName]?.icon?.filename;
+                // If the prior icon used a different extension, remove the old file so we
+                // don't leave an orphan.
+                if (prevFilename && prevFilename !== filename) {
+                    await removeProjectIconFile(prevFilename);
+                }
+
+                await fsPromises.writeFile(target, req.file.buffer);
+
+                const updatedAt = Date.now();
+                config[projectName] = {
+                    ...config[projectName],
+                    icon: {
+                        filename,
+                        mimeType: req.file.mimetype,
+                        updatedAt,
+                    },
+                };
+                await saveProjectConfig(config);
+
+                res.json({ success: true, iconUpdatedAt: updatedAt });
+            } catch (error) {
+                console.error('Error saving project icon:', error);
+                res.status(500).json({ error: 'Failed to save project icon' });
+            }
+        });
+    } catch (error) {
+        console.error('Error in project icon upload endpoint:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Remove a project icon.
+app.delete('/api/projects/:projectName/icon', authenticateToken, async (req, res) => {
+    try {
+        const { projectName } = req.params;
+        if (!validateProjectNameParam(projectName)) {
+            return res.status(400).json({ error: 'Invalid projectName' });
+        }
+        const config = await loadProjectConfig();
+        const prevFilename = config[projectName]?.icon?.filename;
+        if (prevFilename) {
+            await removeProjectIconFile(prevFilename);
+        }
+        if (config[projectName]) {
+            const { icon: _icon, ...rest } = config[projectName];
+            if (Object.keys(rest).length === 0) {
+                delete config[projectName];
+            } else {
+                config[projectName] = rest;
+            }
+            await saveProjectConfig(config);
+        }
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error deleting project icon:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });

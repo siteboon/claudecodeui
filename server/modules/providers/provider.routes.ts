@@ -153,6 +153,22 @@ router.get(
 );
 
 router.get(
+  '/:provider/usage',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    if (provider !== 'claude' && provider !== 'codex') {
+      throw new AppError(`Usage snapshots are not supported for ${provider}.`, {
+        code: 'USAGE_NOT_SUPPORTED',
+        statusCode: 400,
+      });
+    }
+    const force = readOptionalQueryString(req.query.refresh) === 'true';
+    const usage = await providerAuthService.getProviderUsage(provider, { force });
+    res.json(createApiSuccessResponse(usage));
+  }),
+);
+
+router.get(
   '/:provider/mcp/servers',
   asyncHandler(async (req: Request, res: Response) => {
     const provider = parseProvider(req.params.provider);

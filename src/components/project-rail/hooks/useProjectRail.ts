@@ -66,11 +66,15 @@ export function useProjectRail({
         abbreviation: abbreviate(project.displayName || project.name),
         attentionCount: attn,
         sessionCount: sessions.length,
+        iconDataUrl: project.iconDataUrl ?? null,
       };
     });
 
-    // Only show projects that have sessions
-    const filtered = items.filter((item) => item.sessionCount > 0);
+    // Show projects with sessions, plus manually-added workspaces — otherwise
+    // a freshly-created empty workspace is invisible the moment it's added.
+    const filtered = items.filter(
+      (item, idx) => item.sessionCount > 0 || projects[idx]?.isManuallyAdded === true,
+    );
 
     return { railItems: filtered, totalAttentionCount: totalAttention };
   }, [

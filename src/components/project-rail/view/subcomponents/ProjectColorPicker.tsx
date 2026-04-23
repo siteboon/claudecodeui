@@ -1,6 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { Archive, ArchiveRestore, Check, X } from 'lucide-react';
+import { Archive, ArchiveRestore, Check, ImagePlus, ImageOff, X } from 'lucide-react';
+import { api } from '../../../../utils/api';
 import {
   PROJECT_PALETTE,
   PROJECT_PALETTE_ORDER,
@@ -19,9 +20,11 @@ type ProjectColorPickerProps = {
   displayName: string;
   currentColorKey: ProjectColorKey;
   isArchived: boolean;
+  hasIcon: boolean;
   anchorRect: AnchorRect;
   onSelect: (key: ProjectColorKey) => void;
   onToggleArchived: () => void;
+  onIconChanged: () => void;
   onClose: () => void;
 };
 
@@ -30,12 +33,17 @@ export default function ProjectColorPicker({
   displayName,
   currentColorKey,
   isArchived,
+  hasIcon,
   anchorRect,
   onSelect,
   onToggleArchived,
+  onIconChanged,
   onClose,
 }: ProjectColorPickerProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [iconBusy, setIconBusy] = useState(false);
+  const [iconError, setIconError] = useState<string | null>(null);
 
   useEffect(() => {
     const onPointerDown = (event: MouseEvent | TouchEvent) => {
@@ -65,6 +73,50 @@ export default function ProjectColorPicker({
   const handleArchiveClick = () => {
     onToggleArchived();
     onClose();
+  };
+
+  const handleUploadClick = () => {
+    setIconError(null);
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setIconBusy(true);
+    setIconError(null);
+    try {
+      const response = await api.uploadProjectIcon(projectName, file);
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({ error: 'Upload failed' }));
+        throw new Error(body.error || 'Upload failed');
+      }
+      onIconChanged();
+      onClose();
+    } catch (err) {
+      setIconError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setIconBusy(false);
+    }
+  };
+
+  const handleRemoveIcon = async () => {
+    setIconBusy(true);
+    setIconError(null);
+    try {
+      const response = await api.deleteProjectIcon(projectName);
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({ error: 'Remove failed' }));
+        throw new Error(body.error || 'Remove failed');
+      }
+      onIconChanged();
+      onClose();
+    } catch (err) {
+      setIconError(err instanceof Error ? err.message : 'Remove failed');
+    } finally {
+      setIconBusy(false);
+    }
   };
 
   const popover = (
@@ -114,6 +166,35 @@ export default function ProjectColorPicker({
       >
         <X className="h-3 w-3" /> Reset color
       </button>
+      <div className="my-2 h-px bg-border" />
+      <div className="flex flex-col gap-1">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+        <button
+          onClick={handleUploadClick}
+          disabled={iconBusy}
+          className="flex w-full items-center justify-center gap-1.5 rounded-md border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+        >
+          <ImagePlus className="h-3 w-3" /> {hasIcon ? 'Change icon' : 'Upload icon'}
+        </button>
+        {hasIcon && (
+          <button
+            onClick={handleRemoveIcon}
+            disabled={iconBusy}
+            className="flex w-full items-center justify-center gap-1.5 rounded-md border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+          >
+            <ImageOff className="h-3 w-3" /> Remove icon
+          </button>
+        )}
+        {iconError && (
+          <p className="px-1 text-[10px] leading-tight text-destructive">{iconError}</p>
+        )}
+      </div>
       <div className="my-2 h-px bg-border" />
       <button
         onClick={handleArchiveClick}

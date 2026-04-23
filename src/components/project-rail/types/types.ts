@@ -4,4 +4,5 @@ export type ProjectRailItemData = {
   abbreviation: string;
   attentionCount: number;
   sessionCount: number;
+  iconDataUrl?: string | null;
 };

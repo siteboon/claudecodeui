@@ -230,6 +230,24 @@ function Sidebar({
         return;
       }
 
+      // Alt+Shift+1..6 — switch project filter. Also works inside inputs so
+      // it fires from the command palette search bar. Plain Ctrl+digit was
+      // avoided because browsers consume it for tab switching; plain Alt+digit
+      // is taken by the session-jump handler above.
+      if (
+        e.altKey &&
+        e.shiftKey &&
+        !e.metaKey &&
+        !e.ctrlKey &&
+        /^Digit[1-6]$/.test(e.code)
+      ) {
+        e.preventDefault();
+        const idx = parseInt(e.code.slice(5), 10) - 1;
+        const item = railItems[idx];
+        if (item) setActiveProjectFilter(item.name);
+        return;
+      }
+
       if (inInput) return;
 
       if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'w') {
@@ -239,25 +257,9 @@ function Sidebar({
         return;
       }
 
-      if (mod && !e.shiftKey && !e.altKey && /^[1-8]$/.test(e.key)) {
-        e.preventDefault();
-        const idx = parseInt(e.key, 10) - 1;
-        const target = flatSessions[idx];
-        if (target) handleFlatSessionSelect(target);
-        return;
-      }
-
       if (e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && e.key === '`') {
         e.preventDefault();
         setActiveProjectFilter(null);
-        return;
-      }
-
-      if (e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && /^[1-6]$/.test(e.key)) {
-        e.preventDefault();
-        const idx = parseInt(e.key, 10) - 1;
-        const item = railItems[idx];
-        if (item) setActiveProjectFilter(item.name);
         return;
       }
     };
@@ -266,12 +268,6 @@ function Sidebar({
     return () => document.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flatSessions, railItems, selectedSession, selectedProject]);
-
-  const userName = useMemo(() => {
-    if (typeof window === 'undefined') return 'user';
-    const host = window.location?.hostname ?? '';
-    return host.split('.')[0] || 'user';
-  }, []);
 
   const body = (
     <div
@@ -293,6 +289,7 @@ function Sidebar({
             }
           }}
           onCreateProject={() => setShowNewProject(true)}
+          onIconChanged={refreshProjects}
         />
       )}
       <div className={`flex min-h-0 flex-1 flex-col ${!isMobile ? 'w-72' : ''}`}>
@@ -333,7 +330,6 @@ function Sidebar({
           />
         )}
         <SidebarFooterV4
-          userName={userName}
           sessionCount={flatSessions.length}
           onShowSettings={onShowSettings}
           onShowShortcuts={() => setShowShortcuts(true)}

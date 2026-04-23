@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import type { ProjectRailItemData } from '../../../project-rail/types/types';
 import {
   getProjectColor,
@@ -35,6 +36,34 @@ export default function MobileProjectFilter({
         const colorKey = getColor(item.name);
         const color = getProjectColor(colorKey);
         const hasCustomColor = colorKey !== 'default';
+        const hasIcon = !!item.iconDataUrl;
+
+        if (hasIcon) {
+          return (
+            <button
+              key={item.name}
+              onClick={() => onFilter(item.name)}
+              className={`relative flex h-7 w-7 flex-shrink-0 items-center justify-center overflow-hidden rounded-full transition-all ${
+                isActive ? 'ring-2 ring-offset-1 ring-offset-background' : ''
+              }`}
+              style={
+                isActive
+                  ? ({ '--tw-ring-color': color.hex } as CSSProperties)
+                  : undefined
+              }
+            >
+              <img
+                src={item.iconDataUrl as string}
+                alt=""
+                className="h-full w-full rounded-full object-cover"
+                draggable={false}
+              />
+              {item.attentionCount > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-attention" />
+              )}
+            </button>
+          );
+        }
 
         const style = isActive
           ? hasCustomColor

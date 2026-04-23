@@ -51,6 +51,8 @@ export interface Project {
   displayName: string;
   fullPath: string;
   path?: string;
+  iconDataUrl?: string | null;
+  iconUpdatedAt?: number | null;
   sessions?: ProjectSession[];
   cursorSessions?: ProjectSession[];
   codexSessions?: ProjectSession[];

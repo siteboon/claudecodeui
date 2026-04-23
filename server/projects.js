@@ -232,6 +232,27 @@ async function saveProjectConfig(config) {
   await fs.writeFile(configPath, JSON.stringify(config, null, 2), 'utf8');
 }
 
+// Read a project's icon file (if any) and return a data URL + updatedAt,
+// or null if the project has no icon configured or the file is missing.
+async function loadProjectIcon(projectConfigEntry) {
+  const iconMeta = projectConfigEntry?.icon;
+  if (!iconMeta || !iconMeta.filename || !iconMeta.mimeType) return null;
+  const iconPath = path.join(os.homedir(), '.claude', 'project-icons', iconMeta.filename);
+  try {
+    const buf = await fs.readFile(iconPath);
+    const base64 = buf.toString('base64');
+    return {
+      dataUrl: `data:${iconMeta.mimeType};base64,${base64}`,
+      updatedAt: iconMeta.updatedAt || 0,
+    };
+  } catch (err) {
+    if (err.code !== 'ENOENT') {
+      console.warn(`Failed to read project icon for ${iconMeta.filename}:`, err.message);
+    }
+    return null;
+  }
+}
+
 // Generate better display name from path
 async function generateDisplayName(projectName, actualProjectDir = null) {
   // Use actual project directory if provided, otherwise decode from project name
@@ -429,12 +450,15 @@ async function getProjects(progressCallback = null) {
       const autoDisplayName = await generateDisplayName(entry.name, actualProjectDir);
       const fullPath = actualProjectDir;
 
+      const icon = await loadProjectIcon(config[entry.name]);
       const project = {
         name: entry.name,
         path: actualProjectDir,
         displayName: customName || autoDisplayName,
         fullPath: fullPath,
         isCustomName: !!customName,
+        iconDataUrl: icon?.dataUrl || null,
+        iconUpdatedAt: icon?.updatedAt || null,
         sessions: [],
         geminiSessions: [],
         sessionMeta: {
@@ -552,6 +576,7 @@ async function getProjects(progressCallback = null) {
         }
       }
 
+      const icon = await loadProjectIcon(projectConfig);
       const project = {
         name: projectName,
         path: actualProjectDir,
@@ -559,6 +584,8 @@ async function getProjects(progressCallback = null) {
         fullPath: actualProjectDir,
         isCustomName: !!projectConfig.displayName,
         isManuallyAdded: true,
+        iconDataUrl: icon?.dataUrl || null,
+        iconUpdatedAt: icon?.updatedAt || null,
         sessions: [],
         geminiSessions: [],
         sessionMeta: {

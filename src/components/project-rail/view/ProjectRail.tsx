@@ -10,6 +10,7 @@ import ProjectColorPicker from './subcomponents/ProjectColorPicker';
 type PickerState = {
   projectName: string;
   displayName: string;
+  hasIcon: boolean;
   rect: DOMRect;
 };
 
@@ -23,6 +24,7 @@ type ProjectRailProps = {
   isProjectArchived: (projectName: string) => boolean;
   onToggleArchivedProject: (projectName: string) => void;
   onCreateProject: () => void;
+  onIconChanged: () => void;
 };
 
 export default function ProjectRail({
@@ -35,6 +37,7 @@ export default function ProjectRail({
   isProjectArchived,
   onToggleArchivedProject,
   onCreateProject,
+  onIconChanged,
 }: ProjectRailProps) {
   const [picker, setPicker] = useState<PickerState | null>(null);
   const [showArchived, setShowArchived] = useState(false);
@@ -78,6 +81,7 @@ export default function ProjectRail({
                   setPicker({
                     projectName: item.name,
                     displayName: item.displayName,
+                    hasIcon: !!item.iconDataUrl,
                     rect,
                   })
                 }
@@ -132,9 +136,11 @@ export default function ProjectRail({
           displayName={picker.displayName}
           currentColorKey={getColor(picker.projectName)}
           isArchived={isProjectArchived(picker.projectName)}
+          hasIcon={picker.hasIcon}
           anchorRect={picker.rect}
           onSelect={(key) => setColor(picker.projectName, key)}
           onToggleArchived={() => onToggleArchivedProject(picker.projectName)}
+          onIconChanged={onIconChanged}
           onClose={() => setPicker(null)}
         />
       )}

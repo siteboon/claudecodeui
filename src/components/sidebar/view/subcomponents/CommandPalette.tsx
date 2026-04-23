@@ -27,7 +27,7 @@ import type { ProjectRailItemData } from '../../../project-rail/types/types';
 import { useTranscriptSearch, type TranscriptSessionResult } from '../../hooks/useTranscriptSearch';
 
 import { KbdCombo } from './Kbd';
-import { MOD_KEY, ALT_KEY } from './shortcuts';
+import { MOD_KEY, ALT_KEY, SHIFT_KEY } from './shortcuts';
 import TranscriptMatchRow from './TranscriptMatchRow';
 
 const TRANSCRIPT_MIN_CHARS = 3;
@@ -133,18 +133,12 @@ export default function CommandPalette({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl overflow-hidden p-0">
         <DialogTitle>Command Palette</DialogTitle>
-        <Command>
+        <Command tabCategory="project">
           <CommandInput
             placeholder="Type a command or search sessions and transcripts…"
             autoFocus
             onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
             onKeyDown={(e) => {
-              // F1: when only transcript rows match (no visible CommandItems),
-              // Command's own Enter handler becomes a no-op because transcript
-              // rows live outside its selection model. Activate the first
-              // transcript here so Enter keeps working on the keyboard path.
-              // Stop propagation before Command's onKeyDown runs (which would
-              // preventDefault Enter and then return due to entries.length===0).
               if (
                 e.key === 'Enter' &&
                 !showActionsGroup &&
@@ -231,13 +225,14 @@ export default function CommandPalette({
                     <CommandItem
                       key={project.name}
                       value={`project ${project.displayName || project.name}`}
+                      category="project"
                       onSelect={run(() => onSelectProject(project.name))}
                     >
                       <Folder className="h-4 w-4 text-muted-foreground" />
                       <span className="truncate">{project.displayName || project.name}</span>
                       {index < 6 && (
                         <div className="ml-auto">
-                          <KbdCombo keys={['Ctrl', String(index + 1)]} />
+                          <KbdCombo keys={[ALT_KEY, SHIFT_KEY, String(index + 1)]} />
                         </div>
                       )}
                     </CommandItem>
