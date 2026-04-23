@@ -476,7 +476,7 @@ async function loadMcpConfig(cwd) {
  * @param {Object} ws - WebSocket connection
  * @returns {Promise<void>}
  */
-export async function queryClaudeSDK(command, options = {}, writer) {
+async function queryClaudeSDK(command, options = {}, writer) {
   const { sessionId, sessionSummary } = options;
   let capturedSessionId = sessionId;
   let sessionCreatedSent = false;
@@ -843,7 +843,7 @@ function reconnectSessionWriter(sessionId, newRawWs) {
   return true;
 }
 
-// Export public API
+// Export public API - Fixed duplicate export issue
 export {
   queryClaudeSDK,
   abortClaudeSDKSession,

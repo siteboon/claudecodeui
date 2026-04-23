@@ -192,7 +192,7 @@ function mapPermissionModeToCodexOptions(permissionMode) {
  * @param {object} options - Options including cwd, sessionId, model, permissionMode
  * @param {WebSocket|object} ws - WebSocket connection or response writer
  */
-export async function queryCodex(command, options = {}, ws) {
+async function queryCodex(command, options = {}, ws) {
   const {
     sessionId,
     sessionSummary,
@@ -345,7 +345,7 @@ export async function queryCodex(command, options = {}, ws) {
  * @param {string} sessionId - Session ID to abort
  * @returns {boolean} - Whether abort was successful
  */
-export function abortCodexSession(sessionId) {
+function abortCodexSession(sessionId) {
   const session = activeCodexSessions.get(sessionId);
 
   if (!session) {
@@ -384,7 +384,7 @@ export function abortCodexSessionsForWebSocket(ws) {
  * @param {string} sessionId - Session ID to check
  * @returns {boolean} - Whether session is active
  */
-export function isCodexSessionActive(sessionId) {
+function isCodexSessionActive(sessionId) {
   const session = activeCodexSessions.get(sessionId);
   return session?.status === 'running';
 }
@@ -393,7 +393,7 @@ export function isCodexSessionActive(sessionId) {
  * Get all active sessions
  * @returns {Array} - Array of active session info
  */
-export function getActiveCodexSessions() {
+function getActiveCodexSessions() {
   const sessions = [];
 
   for (const [id, session] of activeCodexSessions.entries()) {
