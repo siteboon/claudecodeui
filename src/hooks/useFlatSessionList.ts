@@ -90,12 +90,16 @@ export function useFlatSessionList({
         if (seenIds.has(session.id)) continue;
 
         const sessionDate = getSessionDate(session);
-        const status = deriveStatus(
-          session.id,
-          statusMap,
-          sessionDate,
-          (session as ProjectSession).lastMessageRole,
-        );
+        // Optimistic placeholders are always "running" — the user just fired a
+        // send and is watching for the real session to land.
+        const status = (session as ProjectSession).__pending
+          ? 'running'
+          : deriveStatus(
+              session.id,
+              statusMap,
+              sessionDate,
+              (session as ProjectSession).lastMessageRole,
+            );
         const rank = sortRank(status);
 
         const sessionName = (

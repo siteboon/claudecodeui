@@ -19,7 +19,7 @@ function formatTimeAgo(date: Date, now: Date): string {
 }
 
 function getDisplayName(session: FlatSession): string {
-  return session.summary || session.name || session.title || 'New Session';
+  return session.customName || session.summary || session.name || session.title || 'New Session';
 }
 
 type FlatSessionListProps = {

@@ -50,6 +50,7 @@ export type MainContentProps = {
   onSessionNotProcessing: SessionLifecycleHandler;
   processingSessions: Set<string>;
   onReplaceTemporarySession: SessionLifecycleHandler;
+  onAddPendingNewSession?: (projectName: string, firstMessage: string) => void;
   onNavigateToSession: (targetSessionId: string) => void;
   onShowSettings: () => void;
   externalMessageUpdate: number;

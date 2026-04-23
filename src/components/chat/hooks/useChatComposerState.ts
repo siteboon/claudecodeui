@@ -48,6 +48,7 @@ interface UseChatComposerStateArgs {
   sendMessage: (message: unknown) => void;
   sendByCtrlEnter?: boolean;
   onSessionActive?: (sessionId?: string | null) => void;
+  onAddPendingNewSession?: (projectName: string, firstMessage: string) => void;
   onSessionNotProcessing?: (sessionId?: string | null) => void;
   onInputFocusChange?: (focused: boolean) => void;
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
@@ -146,6 +147,7 @@ export function useChatComposerState({
   sendMessage,
   sendByCtrlEnter,
   onSessionActive,
+  onAddPendingNewSession,
   onSessionNotProcessing,
   onInputFocusChange,
   onFileOpen,
@@ -674,6 +676,13 @@ export function useChatComposerState({
           startedAt: Date.now(),
           pendingMessage: userMessage,
         };
+        // Tell the sidebar to show an optimistic "in-flight" row for this
+        // project. It's removed when the real session shows up in the next
+        // `projects_updated` broadcast (see useProjectsState), or evicted
+        // on TTL if the send never lands.
+        if (selectedProject) {
+          onAddPendingNewSession?.(selectedProject.name, currentInput);
+        }
       }
       onSessionActive?.(sessionToActivate);
       // User is replying — clear any "awaiting user reply" flag set by a prior turn's `complete`.
@@ -818,6 +827,7 @@ export function useChatComposerState({
       executeCommand,
       geminiModel,
       isLoading,
+      onAddPendingNewSession,
       onSessionActive,
       onSessionNotProcessing,
       pendingViewSessionRef,

@@ -114,6 +114,7 @@ export interface ChatInterfaceProps {
   onSessionNotProcessing?: (sessionId?: string | null) => void;
   processingSessions?: Set<string>;
   onReplaceTemporarySession?: (sessionId?: string | null) => void;
+  onAddPendingNewSession?: (projectName: string, firstMessage: string) => void;
   onNavigateToSession?: (targetSessionId: string) => void;
   onShowSettings?: () => void;
   autoExpandTools?: boolean;

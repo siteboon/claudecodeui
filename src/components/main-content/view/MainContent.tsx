@@ -45,6 +45,7 @@ function MainContent({
   onSessionNotProcessing,
   processingSessions,
   onReplaceTemporarySession,
+  onAddPendingNewSession,
   onNavigateToSession,
   onShowSettings,
   externalMessageUpdate,
@@ -131,6 +132,7 @@ function MainContent({
                 onSessionNotProcessing={onSessionNotProcessing}
                 processingSessions={processingSessions}
                 onReplaceTemporarySession={onReplaceTemporarySession}
+                onAddPendingNewSession={onAddPendingNewSession}
                 onNavigateToSession={onNavigateToSession}
                 onShowSettings={onShowSettings}
                 autoExpandTools={autoExpandTools}
