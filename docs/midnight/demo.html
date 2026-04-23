@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#05060A" />
+  <meta name="color-scheme" content="dark" />
+  <title>MIDNIGHT Design System — Demo</title>
+
+  <!-- Tailwind Play CDN (for utility classes only) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            midnight: {
+              bg: '#05060A', 'bg-pure': '#000000', bg2: '#070709',
+              'surface-1': '#0A0A0C', 'surface-2': '#0B0C11', 'surface-3': '#16181E',
+              tile: 'rgba(255,255,255,0.04)', 'tile-hover': 'rgba(255,255,255,0.07)',
+              border: 'rgba(255,255,255,0.08)', 'border-bright': 'rgba(255,255,255,0.14)',
+              text: '#FFFFFF', 'text-soft': '#F3F4F7',
+              text2: 'rgba(255,255,255,0.60)', text3: 'rgba(255,255,255,0.40)',
+              text4: 'rgba(255,255,255,0.22)', 'text-muted': '#A8ACB6',
+              accent: 'var(--midnight-accent)',
+            },
+            mint:     { DEFAULT: '#A8E6CE', deep: '#0F4A2E' },
+            peach:    { DEFAULT: '#FFC5A0', deep: '#4A2108' },
+            lavender: { DEFAULT: '#C7B9F0', deep: '#2A1A5C' },
+            butter:   { DEFAULT: '#F3DF93', deep: '#3D2E08' },
+            blush:    { DEFAULT: '#F4B5BD', deep: '#511622' },
+            sky:      { DEFAULT: '#B5D3F0', deep: '#0F2A4D' },
+          },
+        },
+      },
+    };
+  </script>
+
+  <!-- MIDNIGHT component styles -->
+  <link rel="stylesheet" href="./midnight.css" />
+</head>
+
+<body class="bg-noise">
+  <div class="page-container page-enter">
+
+    <!-- ── Hero ─────────────────────────────────────────────── -->
+    <div class="page-header">
+      <div>
+        <div class="eyebrow mb-3">MIDNIGHT · v1.1</div>
+        <h1 class="date-hero">Design <span class="text-gradient">System</span></h1>
+        <p class="text-midnight-text2 mt-4 max-w-xl">
+          Dark-first UI components. Warm near-black canvas, frosted glass tiles with inner
+          light, pastel pops, Inter type. Live preview of every primitive.
+        </p>
+      </div>
+      <div class="flex gap-2">
+        <button class="btn btn-ghost">Docs</button>
+        <button class="btn-primary">Get started →</button>
+      </div>
+    </div>
+
+    <!-- ── Surfaces ─────────────────────────────────────────── -->
+    <section class="mb-16">
+      <h2 class="eyebrow mb-4">Surfaces</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+        <div class="ds-tile ds-tile-hover p-6">
+          <div class="text-midnight-text3 text-xs mb-1 uppercase tracking-wider">ds-tile</div>
+          <div class="font-display text-2xl mb-3">Glass tile</div>
+          <p class="text-midnight-text2 text-sm">
+            Frosted backdrop blur, hairline border, inner top-light, edge sheen.
+            Hover lifts it; press scales it.
+          </p>
+        </div>
+
+        <div class="ds-tile p-6">
+          <div class="text-midnight-text3 text-xs mb-1 uppercase tracking-wider">nested</div>
+          <div class="font-display text-2xl mb-3">Inset section</div>
+          <div class="ds-tile-inset p-4 mt-2">
+            <div class="text-midnight-text2 text-sm">ds-tile-inset · no blur stacking</div>
+          </div>
+          <div class="ds-tile-plain p-4 mt-3">
+            <code class="text-midnight-text-soft font-mono text-sm">
+              const x = 42
+            </code>
+          </div>
+        </div>
+
+        <div class="ds-tile p-6">
+          <div class="text-midnight-text3 text-xs mb-1 uppercase tracking-wider">stat</div>
+          <div class="stat-hero mb-2">$184,203</div>
+          <div class="flex items-center gap-2">
+            <span class="badge badge-trend-up">▲ 12.4%</span>
+            <span class="text-midnight-text2 text-sm">vs last month</span>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── Pastel cards ────────────────────────────────────── -->
+    <section class="mb-16">
+      <h2 class="eyebrow mb-4">Pastel cards</h2>
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div class="ds-pastel ds-mint p-6">
+          <div class="text-xs uppercase tracking-wider opacity-60 mb-2">Mint</div>
+          <div class="font-display text-2xl">42 jobs</div>
+          <div class="text-sm opacity-70 mt-1">completed this week</div>
+        </div>
+        <div class="ds-pastel ds-peach p-6">
+          <div class="text-xs uppercase tracking-wider opacity-60 mb-2">Peach</div>
+          <div class="font-display text-2xl">$12,400</div>
+          <div class="text-sm opacity-70 mt-1">pending invoices</div>
+        </div>
+        <div class="ds-pastel ds-lavender p-6">
+          <div class="text-xs uppercase tracking-wider opacity-60 mb-2">Lavender</div>
+          <div class="font-display text-2xl">8 deals</div>
+          <div class="text-sm opacity-70 mt-1">in negotiation</div>
+        </div>
+        <div class="ds-pastel ds-butter p-6">
+          <div class="text-xs uppercase tracking-wider opacity-60 mb-2">Butter</div>
+          <div class="font-display text-2xl">96%</div>
+          <div class="text-sm opacity-70 mt-1">customer satisfaction</div>
+        </div>
+        <div class="ds-pastel ds-blush p-6">
+          <div class="text-xs uppercase tracking-wider opacity-60 mb-2">Blush</div>
+          <div class="font-display text-2xl">3 alerts</div>
+          <div class="text-sm opacity-70 mt-1">needs attention</div>
+        </div>
+        <div class="ds-pastel ds-sky p-6">
+          <div class="text-xs uppercase tracking-wider opacity-60 mb-2">Sky</div>
+          <div class="font-display text-2xl">1,284</div>
+          <div class="text-sm opacity-70 mt-1">active contacts</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Buttons ─────────────────────────────────────────── -->
+    <section class="mb-16">
+      <h2 class="eyebrow mb-4">Buttons</h2>
+      <div class="ds-tile p-8 flex flex-wrap gap-3">
+        <button class="btn-primary">Primary CTA</button>
+        <button class="btn btn-secondary">Secondary</button>
+        <button class="btn btn-ghost">Ghost</button>
+        <button class="btn btn-danger">Delete</button>
+        <button class="btn btn-pill">Dark pill</button>
+        <button class="btn btn-pill btn-pill-light">Light pill</button>
+        <button class="btn-primary" disabled>Disabled</button>
+      </div>
+      <div class="text-midnight-text3 text-xs mt-3">Every button presses to 0.97 scale on active.</div>
+    </section>
+
+    <!-- ── Per-screen accent demo ──────────────────────────── -->
+    <section class="mb-16">
+      <h2 class="eyebrow mb-4">Per-screen accent</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div data-accent="mint" class="ds-tile p-6">
+          <div class="eyebrow mb-2">data-accent="mint"</div>
+          <input class="ds-input mb-3" placeholder="Focus me" />
+          <div class="flex gap-2">
+            <button class="btn btn-ghost">Ghost</button>
+            <button class="btn btn-secondary">Action</button>
+          </div>
+        </div>
+        <div data-accent="peach" class="ds-tile p-6">
+          <div class="eyebrow mb-2">data-accent="peach"</div>
+          <input class="ds-input mb-3" placeholder="Focus me" />
+          <div class="flex gap-2">
+            <button class="btn btn-ghost">Ghost</button>
+            <button class="btn btn-secondary">Action</button>
+          </div>
+        </div>
+        <div data-accent="lavender" class="ds-tile p-6">
+          <div class="eyebrow mb-2">data-accent="lavender"</div>
+          <input class="ds-input mb-3" placeholder="Focus me" />
+          <div class="flex gap-2">
+            <button class="btn btn-ghost">Ghost</button>
+            <button class="btn btn-secondary">Action</button>
+          </div>
+        </div>
+      </div>
+      <div class="text-midnight-text3 text-xs mt-3">Input focus border + selection inherit the current --midnight-accent.</div>
+    </section>
+
+    <!-- ── Inputs ──────────────────────────────────────────── -->
+    <section class="mb-16">
+      <h2 class="eyebrow mb-4">Inputs</h2>
+      <div class="ds-tile p-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <input class="ds-input" type="email" placeholder="your@email.com" />
+        <input class="ds-input" type="text" placeholder="Search…" />
+        <input class="ds-input" type="text" value="Filled state" />
+        <input class="ds-input" type="text" placeholder="Disabled" disabled />
+      </div>
+    </section>
+
+    <!-- ── Chips + Segmented control ───────────────────────── -->
+    <section class="mb-16">
+      <h2 class="eyebrow mb-4">Chips & Segmented</h2>
+      <div class="ds-tile p-8 space-y-6">
+
+        <div class="flex flex-wrap gap-2">
+          <button class="ds-chip ds-chip-active">All</button>
+          <button class="ds-chip">Inbox</button>
+          <button class="ds-chip">Sent</button>
+          <button class="ds-chip">Drafts</button>
+          <button class="ds-chip">Archived</button>
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+          <span class="ds-chip ds-chip-mint">Paid</span>
+          <span class="ds-chip ds-chip-sky">Pending</span>
+          <span class="ds-chip ds-chip-butter">Quote sent</span>
+          <span class="ds-chip ds-chip-lavender">Booked</span>
+          <span class="ds-chip ds-chip-blush">Overdue</span>
+          <span class="ds-chip ds-chip-peach">Review</span>
+        </div>
+
+        <div class="ds-segment">
+          <button class="ds-segment-item ds-segment-item-active">Day</button>
+          <button class="ds-segment-item">Week</button>
+          <button class="ds-segment-item">Month</button>
+          <button class="ds-segment-item">Year</button>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── Badges (status + trend) ─────────────────────────── -->
+    <section class="mb-16">
+      <h2 class="eyebrow mb-4">Badges</h2>
+      <div class="ds-tile p-8 space-y-4">
+        <div class="flex flex-wrap gap-2">
+          <span class="badge badge-mint">● Active</span>
+          <span class="badge badge-butter">● Pending</span>
+          <span class="badge badge-sky">● Info</span>
+          <span class="badge badge-lavender">● Scheduled</span>
+          <span class="badge badge-peach">● Review</span>
+          <span class="badge badge-blush">● Failed</span>
+          <span class="badge badge-neutral">● Draft</span>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <span class="badge badge-trend-up">▲ 12.4%</span>
+          <span class="badge badge-trend-down">▼ 3.1%</span>
+          <span class="badge badge-trend-flat">— 0.0%</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Typography ──────────────────────────────────────── -->
+    <section class="mb-16">
+      <h2 class="eyebrow mb-4">Typography</h2>
+      <div class="ds-tile p-8 space-y-6">
+        <div>
+          <div class="eyebrow mb-2">date-hero</div>
+          <div class="date-hero">Tue · Apr 22</div>
+        </div>
+        <div>
+          <div class="eyebrow mb-2">stat-hero</div>
+          <div class="stat-hero">$1,284,920</div>
+        </div>
+        <div>
+          <div class="eyebrow mb-2">font-display</div>
+          <div class="font-display text-3xl">The quick brown fox jumps over the lazy dog.</div>
+        </div>
+        <div>
+          <div class="eyebrow mb-2">text-gradient</div>
+          <div class="font-display text-3xl text-gradient">Butter to sky gradient</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Bottom tab bar ──────────────────────────────────── -->
+    <section class="mb-16">
+      <h2 class="eyebrow mb-4">Tab bar (mobile)</h2>
+      <div class="flex justify-center">
+        <nav class="ds-tabbar w-full max-w-md">
+          <button class="ds-tabbar-item ds-tabbar-item-active">
+            <span class="ds-tabbar-pill">🏠</span>
+            <span class="ds-tabbar-label">Home</span>
+          </button>
+          <button class="ds-tabbar-item">
+            <span class="ds-tabbar-pill">💼</span>
+            <span class="ds-tabbar-label">Work</span>
+          </button>
+          <button class="ds-tabbar-item">
+            <span class="ds-tabbar-pill">📅</span>
+            <span class="ds-tabbar-label">Calendar</span>
+          </button>
+          <button class="ds-tabbar-item">
+            <span class="ds-tabbar-pill">💬</span>
+            <span class="ds-tabbar-label">Inbox</span>
+          </button>
+          <button class="ds-tabbar-item">
+            <span class="ds-tabbar-pill">⚙️</span>
+            <span class="ds-tabbar-label">Settings</span>
+          </button>
+        </nav>
+      </div>
+    </section>
+
+    <!-- ── Bottom sheet preview ────────────────────────────── -->
+    <section class="mb-16">
+      <h2 class="eyebrow mb-4">Bottom sheet</h2>
+      <div class="relative ds-tile-plain p-0 overflow-hidden" style="height: 360px;">
+        <div class="absolute inset-0 bg-black/40"></div>
+        <div class="absolute left-0 right-0 bottom-0 p-5 pt-3"
+             style="background: var(--midnight-surface-1);
+                    border-top-left-radius: var(--midnight-r-2xl);
+                    border-top-right-radius: var(--midnight-r-2xl);
+                    border-top: 0.5px solid var(--midnight-border);
+                    box-shadow: 0 -20px 60px rgba(0,0,0,0.70), var(--midnight-inner-light);">
+          <div class="ds-sheet-handle"></div>
+          <div class="font-display text-xl mb-1">New contact</div>
+          <div class="text-midnight-text2 text-sm mb-4">Quick add form</div>
+          <input class="ds-input mb-3" placeholder="Name" />
+          <input class="ds-input mb-3" placeholder="Phone" />
+          <div class="flex gap-2">
+            <button class="btn btn-ghost flex-1">Cancel</button>
+            <button class="btn-primary flex-1">Save</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Footer ──────────────────────────────────────────── -->
+    <footer class="mt-20 pt-8 hairline-t">
+      <div class="flex items-center justify-between text-midnight-text3 text-sm">
+        <div>MIDNIGHT · v1.1</div>
+        <div class="flex gap-4">
+          <span class="badge badge-neutral">Dark-only</span>
+          <span class="badge badge-neutral">Tailwind v3+</span>
+          <span class="badge badge-neutral">Inter + Geist Mono</span>
+        </div>
+      </div>
+    </footer>
+
+  </div>
+</body>
+</html>

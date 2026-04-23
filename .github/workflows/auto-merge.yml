@@ -1,0 +1,23 @@
+name: Auto-merge green PRs
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
+  check_suite:
+    types: [completed]
+
+jobs:
+  auto-merge:
+    if: github.actor == '4Gaige' || github.event.pull_request.user.login == '4Gaige'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Enable auto-merge on this PR
+        uses: peter-evans/enable-pull-request-automerge@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          pull-request-number: ${{ github.event.pull_request.number }}
+          merge-method: squash
+        continue-on-error: true

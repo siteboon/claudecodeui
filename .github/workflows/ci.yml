@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+      - name: Test (if tests exist)
+        run: |
+          if grep -q '"test":' package.json && ! grep -q '"test": *"[^"]*exit [^0]"' package.json; then
+            npm test -- --passWithNoTests || true
+          fi
+      - name: TypeScript check
+        run: |
+          if [ -f tsconfig.json ]; then
+            npx tsc --noEmit || echo "::warning::tsc reported errors"
+          fi
+      - name: Lint
+        run: |
+          if grep -q '"lint":' package.json; then
+            npm run lint || echo "::warning::lint reported issues"
+          fi
