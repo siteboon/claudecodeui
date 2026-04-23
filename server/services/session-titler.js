@@ -15,7 +15,10 @@ import path from 'node:path';
 import os from 'node:os';
 
 import { sessionNamesDb } from '../database/db.js';
+
 import { TITLE_PROMPT, extractFirstUserTexts, normalizeTitle } from './title-prompt.js';
+
+const SETTINGS_PATH = path.join(os.homedir(), '.claude', 'settings.json');
 
 const PROJECTS_DIR = path.join(os.homedir(), '.claude', 'projects');
 const DEBOUNCE_MS = 60 * 1000;
@@ -33,9 +36,51 @@ const state = {
   queued: new Set(),
   processing: false,
   sdkLoader: null,
+  directClientLoader: null,
+  apiKeyResolved: false,
+  apiKey: null,
 };
 
-function loadSdk() {
+async function resolveApiKey() {
+  if (state.apiKeyResolved) return state.apiKey;
+  state.apiKeyResolved = true;
+  const envKey = process.env.ANTHROPIC_API_KEY;
+  if (envKey && envKey.trim()) {
+    state.apiKey = envKey.trim();
+    return state.apiKey;
+  }
+  try {
+    const raw = await fsp.readFile(SETTINGS_PATH, 'utf8');
+    const parsed = JSON.parse(raw);
+    const candidate = parsed?.env?.ANTHROPIC_API_KEY;
+    if (typeof candidate === 'string' && candidate.trim()) {
+      state.apiKey = candidate.trim();
+    }
+  } catch {
+    /* settings.json absent or unparseable — fine, we'll fall back */
+  }
+  return state.apiKey;
+}
+
+function loadDirectClient() {
+  if (!state.directClientLoader) {
+    state.directClientLoader = (async () => {
+      const apiKey = await resolveApiKey();
+      if (!apiKey) return null;
+      try {
+        const mod = await import('@anthropic-ai/sdk');
+        const Anthropic = mod.default || mod.Anthropic;
+        return new Anthropic({ apiKey });
+      } catch (err) {
+        console.warn('[session-titler] Direct Anthropic SDK unavailable:', err?.message || err);
+        return null;
+      }
+    })();
+  }
+  return state.directClientLoader;
+}
+
+function loadAgentSdk() {
   if (!state.sdkLoader) {
     state.sdkLoader = import('@anthropic-ai/claude-agent-sdk')
       .then((mod) => mod.query)
@@ -65,8 +110,28 @@ async function buildTitlingInput(filePath) {
   return texts.join('\n\n').slice(0, MAX_CONTENT_CHARS);
 }
 
-async function callHaiku(prompt) {
-  const query = await loadSdk();
+async function callHaikuDirect(prompt) {
+  const client = await loadDirectClient();
+  if (!client) return null;
+  try {
+    const result = await client.messages.create({
+      model: TITLE_MODEL,
+      max_tokens: 20,
+      system: TITLE_PROMPT,
+      messages: [{ role: 'user', content: prompt }],
+    });
+    const block = Array.isArray(result?.content)
+      ? result.content.find((b) => b?.type === 'text')
+      : null;
+    return typeof block?.text === 'string' ? block.text : null;
+  } catch (err) {
+    console.warn('[session-titler] Direct Haiku call failed:', err?.message || err);
+    return null;
+  }
+}
+
+async function callHaikuAgent(prompt) {
+  const query = await loadAgentSdk();
   if (!query) return null;
 
   const abort = new AbortController();
@@ -87,22 +152,33 @@ async function callHaiku(prompt) {
     });
 
     for await (const msg of instance) {
-      if (msg?.type === 'result' && msg.subtype === 'success') {
-        return typeof msg.result === 'string' ? msg.result : null;
-      }
-      if (msg?.type === 'result' && msg.subtype !== 'success') {
+      if (msg?.type === 'result') {
+        if (msg.subtype === 'success' && typeof msg.result === 'string') {
+          return msg.result;
+        }
         return null;
       }
     }
     return null;
   } catch (err) {
     if (err?.name !== 'AbortError') {
-      console.warn('[session-titler] Haiku call failed:', err?.message || err);
+      console.warn('[session-titler] Agent Haiku call failed:', err?.message || err);
     }
     return null;
   } finally {
     clearTimeout(timer);
   }
+}
+
+// Prefer the direct SDK when an API key is available (faster, no subprocess).
+// Fall back to the Claude Agent SDK for OAuth-only environments.
+async function callHaiku(prompt) {
+  const apiKey = await resolveApiKey();
+  if (apiKey) {
+    const direct = await callHaikuDirect(prompt);
+    if (direct) return direct;
+  }
+  return callHaikuAgent(prompt);
 }
 
 /**

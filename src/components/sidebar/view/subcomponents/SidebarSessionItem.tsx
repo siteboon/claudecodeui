@@ -50,6 +50,14 @@ export default function SidebarSessionItem({
 }: SidebarSessionItemProps) {
   const sessionView = createSessionViewModel(session, currentTime, t);
   const isSelected = selectedSession?.id === session.id;
+  const isTitlePending = session.pendingTitle === true;
+  const titleClassName = cn(
+    'truncate text-xs font-medium text-foreground',
+    isTitlePending && 'shimmer rounded-sm px-1 -mx-1',
+  );
+  const titleAriaProps = isTitlePending
+    ? { 'aria-busy': true, 'aria-label': 'Generating title' }
+    : {};
 
   const selectMobileSession = () => {
     onProjectSelect(project);
@@ -108,7 +116,7 @@ export default function SidebarSessionItem({
             </div>
 
             <div className="min-w-0 flex-1">
-              <div className="truncate text-xs font-medium text-foreground">{sessionView.sessionName}</div>
+              <div className={titleClassName} {...titleAriaProps}>{sessionView.sessionName}</div>
               <div className="mt-0.5 flex items-center gap-1">
                 <Clock className="h-2.5 w-2.5 text-muted-foreground" />
                 <span className="text-xs text-muted-foreground">
@@ -152,7 +160,7 @@ export default function SidebarSessionItem({
           <div className="flex w-full min-w-0 items-start gap-2">
             <SessionProviderLogo provider={session.__provider} className="mt-0.5 h-3 w-3 flex-shrink-0" />
             <div className="min-w-0 flex-1">
-              <div className="truncate text-xs font-medium text-foreground">{sessionView.sessionName}</div>
+              <div className={titleClassName} {...titleAriaProps}>{sessionView.sessionName}</div>
               <div className="mt-0.5 flex items-center gap-1">
                 <Clock className="h-2.5 w-2.5 text-muted-foreground" />
                 <span className="text-xs text-muted-foreground">

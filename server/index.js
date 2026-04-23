@@ -57,6 +57,7 @@ import tasksRoutes from './routes/tasks.js';
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
 import { initializeDatabase, sessionNamesDb, applyCustomSessionNames } from './database/db.js';
 import { configureWebPush } from './services/vapid-keys.js';
+import './services/session-titler.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { IS_PLATFORM } from './constants/config.js';
 import { getConnectableHost } from '../shared/networkHosts.js';
